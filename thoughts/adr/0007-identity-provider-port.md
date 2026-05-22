@@ -1,27 +1,20 @@
-# ADR-0007 — Identity & auth: magic-link + optional OIDC via narrow `IdentityProvider` port
+# ADR-0007 — `IdentityProvider` port: contract + §6.6 normalization invariant
 
 **Date:** 2026-05-22
-**Status:** accepted
+**Status:** accepted (rewritten 2026-05-22 to drop service-specific prescription; see web ADR-0009)
+**Subordinate to:** web ADR-0009
 
 ## Context
 
-The MVP slice (web ADR-0005) ships login. The journey corpus covers identity at multiple levels:
+formspec-web rendered forms can be filled with or without authentication. The architecture must accommodate every reasonable auth backend an adopter brings — Firebase / Supabase / Clerk / Auth0 / Okta / Azure AD / Entra / Keycloak / login.gov / ID.me / NHS login / gov.uk One Login / WorkOS / AWS Cognito / custom OIDC / anonymous / passkey-only / magic-link / etc.
 
-- **J-019** (public terminal): no email, no account, ephemeral session, receipt via SMS / print.
-- **J-032** (sign in with something I already have): multi-IdP picker, no oversharing.
-- **J-033** (humane bot protection): invisible-first, accessible alternatives, no puzzle CAPTCHAs.
-- **J-034** (already-proved identity): use existing IdP-proofed identity; targeted step-up only the missing factor; never silently downgrade.
-- **J-035** (passkey-bound signing): WebAuthn for both sign-in and per-document signature assertion.
+A first-attempt draft of this ADR prescribed "magic-link + optional OIDC" as the MVP auth posture. That was a UX/onboarding choice masquerading as architecture. Under hexagonal DI discipline (web ADR-0009), the architecture is the **port** plus a **normalization invariant**; specific adapter choice is per-deployment.
 
-The cross-stack scout walk confirmed that identity-provider integration is **deployment-shaped**: every adopter has different identity infrastructure (login.gov for US federal, ID.me for VA, NHS login for UK, gov.uk One Login for UK central, generic OIDC for everything else). Per web ADR-0004 (consume, don't invent), formspec-web does NOT spec identity provider integration — OIDC is OIDC, no Formspec sidecar required.
-
-The Respondent Ledger spec already provides the canonical landing surface. `formspec/specs/audit/respondent-ledger-spec.md` §6.6 "Identity attestation object" defines a **provider-neutral** identity shape with explicit guidance (§6.6.1 final paragraph) that integrators MUST normalize provider-native payloads (OIDC `acr`/`amr`, ID.me sessions, wallet presentations) into the spec's canonical fields **through an adapter boundary** before writing to the ledger. §6.6A separates three concerns: response state and audit continuity; subject continuity (`subjectRef`); identity proofing. formspec-web must honor that separation — the port output cannot leak provider-native vocabulary into the ledger.
-
-The user's MVP login decision: magic-link as the default low-friction path; OIDC as opt-in per-form when assurance is required. Both behind one port.
+The Respondent Ledger spec already provides the normalization shape. `formspec/specs/audit/respondent-ledger-spec.md` §6.6 ("Identity attestation object") defines a provider-neutral identity record. The spec uses **SHOULD** for adapter-boundary normalization (§6.6 and §6.6.1 final paragraph); **this ADR elevates that SHOULD to MUST** as a port-level invariant for all `IdentityProvider` adapters in formspec-web — provider-native payloads (OIDC `acr`/`amr`, Firebase user/token, Cognito assertion, ID.me result, wallet presentation, magic-link consumption, etc.) MUST be normalized into the canonical field set **before** returning from `authenticate()`. §6.6A separates response continuity, subject continuity (`subjectRef`), and identity proofing as three concerns that must not collapse.
 
 ## Decision
 
-formspec-web hosts an `IdentityProvider` port. The port's output (`IdentityClaim`) mirrors the **provider-neutral** field set defined in `respondent-ledger-spec.md` §6.6 — adapters normalize provider-native payloads into this shape **before** any ledger or Response write.
+formspec-web defines an `IdentityProvider` port with the following contract.
 
 ```ts
 interface IdentityProvider {
@@ -30,79 +23,80 @@ interface IdentityProvider {
   revoke(claim: IdentityClaim): Promise<void>;
 }
 
-// Mirror of respondent-ledger-spec.md §6.6 identityAttestation field set.
-// Spec field names — not OIDC-native vocabulary.
+// Spec-aligned with respondent-ledger-spec.md §6.6 identityAttestation field set.
+// Enums match respondent-ledger-event.schema.json; expiresAt + nistAssurance are
+// port-level extensions beyond §6.6.
 type IdentityClaim = {
-  provider: string;              // e.g. "login.gov", "idme", "magic-link"
-  adapter: string;               // e.g. "oidc-client-ts@2", "magic-link-v1"
+  provider: string;              // e.g. "firebase", "auth0", "login.gov", "anonymous"
+  adapter: string;               // e.g. "firebase-auth@10", "oidc-client-ts@2"
   subjectRef: string;            // stable pseudonymous subject reference
-  did?: string;                  // when the flow issues or binds one
-  verificationMethod?: string;   // DID URL / key id / method reference
-  credentialType: string;        // "oidc-token" | "verifiable-credential" | "proof-of-personhood" | "magic-link"
-  credentialRef?: string;        // reference to envelope, not raw secret
-  personhoodCheck?: "passed" | "failed" | "not-performed";
-  subjectBinding: "respondent" | "subject" | "delegate" | "other";
-  assuranceLevel: "L1" | "L2" | "L3" | "L4";  // spec §6.6.1 four-level taxonomy
+  did?: string;
+  verificationMethod?: string;
+  credentialType:                // values match respondent-ledger-event.schema.json enum
+    | "oidc-token"
+    | "verifiable-credential"
+    | "proof-of-personhood"
+    | "delegation-assertion"
+    | "provider-assertion"
+    | "other";
+  credentialRef?: string;
+  personhoodCheck?: "passed" | "failed" | "inconclusive" | "not-performed";
+  subjectBinding: "respondent" | "subject" | "delegate" | "other" | "unknown";
+  assuranceLevel: "L1" | "L2" | "L3" | "L4";  // §6.6.1
   privacyTier?: "anonymous" | "pseudonymous" | "identified" | "public";
   selectiveDisclosureProfile?: string;
   evidenceRef?: string;
-  expiresAt?: string;
+  expiresAt?: string;             // port-level extension (session expiry; not in §6.6 schema)
+  nistAssurance?: { ial?: string; aal?: string; fal?: string };  // port-level extension (ADR-0140 alignment; queue EXT-8a)
 };
-
-type IdpOption =
-  | { kind: "magic-link"; channel: "email" | "sms"; minAssurance: "L2" }
-  | { kind: "oidc"; issuer: string; displayName: string; minAssurance: AssuranceLevel };
 ```
 
-Reference adapters in formspec-web for MVP:
+### Normalization invariant (load-bearing)
 
-- **`MagicLinkAdapter`** — email + token delivered via the `NotificationDelivery` port (also adopter-side; reference wiring uses host SMTP). Default low-friction path. Issues an `IdentityClaim` with `provider: "magic-link"`, `credentialType: "magic-link"`, `assuranceLevel: "L2"` (corroborated, per §6.6.1).
-- **`OidcAdapter`** — wraps a browser OIDC client. Recommended: [`oidc-client-ts`](https://github.com/authts/oidc-client-ts) (community-maintained, widely deployed). Consumes raw OIDC `acr`/`amr`/`id_token` claims, **normalizes to `IdentityClaim` mirror of §6.6 fields**, then returns. Per-deployment OIDC issuer config wires login.gov / ID.me / NHS login / etc.
+Every adapter MUST normalize provider-native payloads into the spec field set above **before returning from `authenticate`**. The conformance suite verifies this for any adapter — first-party or third-party. Provider-native fields (e.g., raw OIDC `acr`/`amr` strings, raw Firebase tokens, raw Auth0 claims) MUST NOT leak into the ledger, the Response, or anything downstream of the port.
 
-The `IdentityClaim` is written to the Respondent Ledger as `identityAttestation` on `identity-verified` / `attestation.captured` events. **It does NOT land on Response.** Response carries `displayedIssuer` per web ADR-0006 — distinct concept: what was *shown* at submit time. The §6.6A separation of "response state" from "identity proofing" is normative; conflating them violates the spec.
+This is the only architectural commitment this ADR makes. Everything else is per-deployment.
 
-Login is **per-form**, not per-deployment:
+### Form-side assurance declaration
 
-- Forms that declare an assurance requirement get OIDC (filtered by IdPs meeting the requirement).
-- Forms that do not declare a requirement get magic-link OR anonymous (respondent choice).
-- Forms that explicitly opt out of login get no login surface at all.
+When a form's Definition declares a required assurance level (tracked as queue EXT-8 — verification pending), `discover()` filters `IdpOption[]` to adapters whose `minAssurance` meets the requirement. When no requirement is declared, anonymous + low-friction adapters are valid options.
 
-### Reaching upstream services: formspec-server primary, WOS secondary
+### Reference adapters
 
-formspec-web's HTTP boundary lands at two upstream services. See web ADR-0008 for the full map.
+Specific reference adapters are documented in [web ADR-0008 (reference deployment composition)](0008-reference-deployment-composition.md). Custom adapters from adopters are first-class as long as they pass the conformance suite. The port spec deliberately does not enumerate adapters here — that would privilege some over others, contradicting the architectural posture in web ADR-0009.
 
-- **`formspec-server` (primary).** MVP submit (produces `IntakeHandoff` per `formspec/schemas/intake-handoff.schema.json`), magic-link delivery (`formspec-server-email`), OIDC callback handling, draft persistence, Issuer document fetch via server cache. Post-MVP: signature ceremony, signed receipts, PDF rendering ([stack-root ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) rendering service), verifier projection (`formspec-server-verifier-integrity`).
-- **WOS / workspec-server (secondary, post-MVP).** Applicant-status reads (`GET /api/v1/applicant/cases/{id}` for J-021 / FW-0039) **proxied through formspec-server** — WOS does NOT learn that magic-link was the respondent-side auth method; it sees the OIDC-compatible token its existing `LoginKind` enum already accepts.
+Post-MVP additions to the same port (not new ports): `PasskeyAdapter` (WebAuthn, FW-0031, depends on SC-4); `VcPresenterAdapter` (W3C VC + OpenID4VP, J-013, depends on SC-4).
 
-Net result: no WOS `LoginKind` extension is needed. The earlier upstream-extension proposal (`EXT-9`) is dropped. The proxy pattern keeps formspec-web's auth methods inside its own contract.
+### What this port does NOT cover
 
-Authorization at the upstream services follows stack-root [ADR-0117 (authorization engine selection)](../../../thoughts/adr/0117-authorization-engine-selection.md) — OpenFGA is the seed adapter for the auth port. formspec-web does NOT implement Zanzibar checks directly; it calls `formspec-server-ports`' auth port, which dispatches to whatever auth engine the deployment configures.
-
-**Explicitly NOT in formspec-web for MVP:**
-
-- WebAuthn / passkey-bound signing (deferred per web ADR-0005 — cryptographic substrate work).
-- Wallet / Verifiable Credentials presentation (deferred — Phase-3 selective-disclosure dependency).
-- SMS OTP as a primary second factor (violates AP-021 when phishing-resistant alternatives exist on the device).
-- Google reCAPTCHA, Microsoft-only, Apple-only, or any single-IdP lock-in (violates AP-020).
-- Cross-form, cross-sender identity federation (J-039 / J-042 / J-043 trio is post-MVP, lives in the respondent-library sidecar work).
+- **Bot protection / proof-of-personhood.** Separate concern (`BotProtection` port, scoped in a sibling ADR when needed). One proves "I am a person"; this port proves "I am this person."
+- **Authorization (who-can-do-what).** Per stack-root [ADR-0117](../../../thoughts/adr/0117-authorization-engine-selection.md), authorization is its own engine. formspec-web doesn't implement authorization; upstream services call their own auth engine via their own port.
 
 ## Rationale
 
-1. **§6.6 is the right vocabulary.** OIDC `acr`/`amr` strings are non-portable across IdPs (login.gov ACR ≠ ID.me ACR ≠ NHS ACR). The spec's normalized fields (`provider`, `assuranceLevel`, `subjectRef`, `personhoodCheck`, etc.) survive adapter changes, exports, and future credential families (wallet-presented VCs). Letting OIDC vocabulary leak into the ledger or the port output would re-couple formspec-web to one provider family.
-2. **AP-001 / AP-006 honored.** Anonymous fill stays a first-class path. Magic-link adds resume and receipt retrieval without a password gauntlet. No account creation required to read one's own record.
-3. **AP-020 honored.** Multi-IdP at the per-form layer. Deployments can ship login.gov + ID.me + generic OIDC together; the picker filters by required assurance. No forced single-IdP path.
-4. **AP-022 honored.** The §6.6 `assuranceLevel` (L1–L4 per §6.6.1) is recorded in the ledger as the level actually achieved — not the level the form wanted. No silent downgrade.
-5. **Bias to consume (web ADR-0004).** OIDC is OIDC; magic-link is generic. The port and adapters live in formspec-web; the contract is industry standards. The proxy pattern keeps formspec-web's auth choices from leaking into upstream service specs.
-6. **Substrate-deferral compatibility (web ADR-0005).** Identity is not cryptographic substrate (it's an external assertion). The port shape stays stable when WebAuthn-bound signing lands later — it adds a `PasskeyAdapter` to the same port, not a new port. FW-0031 / J-035 unblocked when substrate lands.
+1. **The port is the architecture; adapters are deployment choices.** Per web ADR-0009, formspec-web cannot pick "magic-link" or "OIDC" or "Firebase" as architecture — those are deployment compositions. The architecture is the port + the §6.6 normalization invariant.
+2. **§6.6 is the right vocabulary.** OIDC `acr`/`amr` strings are non-portable across IdPs; Firebase tokens are non-portable across vendors; etc. The spec's normalized fields survive adapter changes, exports, audits, future credential families. Letting provider-native vocabulary leak into the ledger re-couples formspec-web to one provider family — exactly what the architecture forbids.
+3. **AP-001 / AP-006 / AP-020 / AP-022 honored at the port layer, not the adapter layer.** Anonymous fill stays a first-class adapter. Multi-IdP per-form via `discover()` filtering. Assurance level recorded as actually achieved (never silently downgraded). The JOURNEYS anti-patterns are honored as port invariants, not adapter-specific behavior.
+4. **Adapter swap is real because the conformance suite makes it so.** A custom `OktaAdapter` or `CognitoAdapter` written by an adopter drops in if and only if it passes the suite.
+5. **Substrate-deferral compatibility.** Identity is not cryptographic substrate (it's an external assertion). The port shape stays stable when WebAuthn-bound signing lands later — it adds an adapter, not a new port.
 
 ## Consequences
 
-- A browser OIDC client is a formspec-web dependency (recommended `oidc-client-ts`, swappable behind the adapter).
-- A `NotificationDelivery` port also lives in formspec-web (magic-link requires email send; future SMS / push). Per web ADR-0004, NotificationDelivery is adopter-side. Reference adapter wires to host SMTP; production deployments swap to Twilio / SES / SendGrid / etc.
-- The Respondent Ledger receives `identityAttestation` (in `respondent-ledger-event.schema.json`) populated when login occurred. The Response itself does NOT carry `identityAttestation` — it lives in the ledger event stream per `respondent-ledger-spec.md` §6.6A.
-- Form-side declaration of required assurance level is a small `formspec` Definition extension (tracked as EXT-8 in [`../specs/2026-05-22-upstream-extension-queue.md`](../specs/2026-05-22-upstream-extension-queue.md); verification still pending whether `definition.schema.json` already has an `assurance` annotation slot).
-- **`IdentityClaim` shape alignment with `wos-events::IdentityAttestation`.** Stack-root [ADR-0140 (identity-attestation shape)](../../../thoughts/adr/0140-identity-attestation-shape.md) ratifies a cross-stack identity-attestation record with NIST IAL/AAL/FAL axes. The current `IdentityClaim` field set (above) mirrors `respondent-ledger-spec.md` §6.6 and is MVP-correct, but the NIST-axis block should be added once `wos-events` PLN-0384 closes. Tracked as queue EXT-8a.
-- WOS reads happen through formspec-web's authenticated proxy via formspec-server — no WOS `LoginKind` extension needed (EXT-9 is removed). See web ADR-0008 for the full upstream-services map.
-- The identity layer lives as MVP row FW-0063 in `PLANNING.md`.
-- Post-MVP additions to the same port: `PasskeyAdapter` (WebAuthn — J-035), `VcPresenterAdapter` (W3C VC + OpenID4VP — J-013), `WalletAdapter` (J-042 respondent library handshake). Each is an adapter, not a new port — the DI shape is forward-compatible.
-- Bot protection (J-033) gets its own port (`BotProtection`) in a sibling ADR when scoped; it is logically separate from identity (one proves "I am a person," the other proves "I am this person").
+- `IdentityProvider` port + conformance suite live in `src/ports/identity-provider.ts` + `tests/adapter-conformance/identity-provider/` per web ADR-0009.
+- The Respondent Ledger receives `identityAttestation` in §6.6 shape, regardless of which adapter resolved. The Response itself does NOT carry `identityAttestation` (§6.6A separation; ledger event stream is the home).
+- Form-side declaration of required assurance level is upstream extension EXT-8 in [`../specs/2026-05-22-upstream-extension-queue.md`](../specs/2026-05-22-upstream-extension-queue.md). Until EXT-8 lands, adapters' `minAssurance` declarations are honored by the port but cannot be filtered against form requirements.
+- `IdentityClaim` alignment with `wos-events::IdentityAttestation` per stack-root [ADR-0140](../../../thoughts/adr/0140-identity-attestation-shape.md) is tracked as queue EXT-8a — the optional `nistAssurance` block is the alignment surface.
+- Adapters that need to talk to a backend (e.g., `MagicLinkAdapter` needs email send; `OidcAdapter` needs the issuer's discovery doc; `FirebaseAuthAdapter` needs Firebase project config) do so via other ports (`NotificationDelivery`) or directly to the IdP. **No specific backend is named in the port contract.** Whether a deployment proxies through formspec-stack services or talks directly to Firebase / Auth0 / login.gov is a composition choice (see web ADR-0008 for the formspec-stack reference composition).
+- **Cross-port composition is explicit.** Per web ADR-0009 §"Composition lifecycle and cross-port coordination," adapters that legitimately consume multiple ports (canonical example: `MagicLinkAdapter` consumes both `IdentityProvider` and `NotificationDelivery` for email send) do so via constructor injection — `new MagicLinkAdapter({ notificationDelivery })`. The shell does NOT pass the entire Composition to adapters; only specific dependencies they declare. Adapter cross-port consumption is documented in the adapter's own contract and is bounded (no transitive Composition reference).
+- **Session lifecycle.** `IdentityProvider` is one of two MVP ports with state (per web ADR-0009). It exposes `subscribe(listener: (claim: IdentityClaim | null) => void) => Unsubscribe` so the React shell can orchestrate cross-port effects on login / logout / revoke (e.g., clearing `DraftStore` subject cache, resetting in-flight `SubmitTransport` retries, navigating to anonymous state). Adapters MUST emit `subscribe` events when their underlying provider's session changes (e.g., Firebase `onAuthStateChanged`, OIDC silent-refresh failure, magic-link revocation by issuer).
+- PLANNING row FW-0063 delivers the port + conformance suite + at least one reference adapter — NOT a specific auth UX.
+
+## Related decisions
+
+- web ADR-0009 — hexagonal architecture (constitutional; this ADR is one port instance)
+- web ADR-0004 — consume the SPEC, not specific services (§6.6 is the SPEC for identity)
+- web ADR-0008 — reference deployment composition (worked example of which adapter the formspec-stack composition wires)
+- stack-root [ADR-0117](../../../thoughts/adr/0117-authorization-engine-selection.md) — authorization engine selection (distinct from identity)
+- stack-root [ADR-0140](../../../thoughts/adr/0140-identity-attestation-shape.md) — cross-stack identity attestation shape
+- queue EXT-8 — form-side assurance annotation
+- queue EXT-8a — `IdentityClaim` NIST-axis alignment

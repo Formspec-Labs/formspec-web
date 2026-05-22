@@ -35,7 +35,7 @@ The MVP slice of formspec-web ships:
 | FW-0017 | A11y automation in CI (`axe-core`) |
 | FW-0018 | License decision (web ADR-0003) |
 | FW-0019 | Multilingual form (basic — no certified-translator attribution) |
-| FW-0063 | Identity layer per web ADR-0007 (magic-link + optional OIDC via `IdentityProvider` port) |
+| FW-0063 | Identity layer per [web ADR-0007](0007-identity-provider-port.md) (`IdentityProvider` port + conformance suite + ≥1 reference adapter) |
 
 The MVP slice **deliberately defers**:
 
@@ -74,6 +74,6 @@ Cross-stack inventory (2026-05-22) confirmed several substrate-adjacent primitiv
 - **Browser COSE_Sign1 verifier** — `@integrity-stack/signature-adapter-webcrypto`, `@integrity-stack/cose`, plus Formspec wrappers `@formspec/signature-{port,cose,adapter-webcrypto}`. Production-grade: ed25519 / P-256 / RSA-PSS, kid binding (fs-skj0), method-URI binding ([ADR-0109](../../../thoughts/adr/0109-cose-protected-header-map3.md)), three-way outcome taxonomy, sanitized reasons. The post-MVP FW-0003 verifier consumes these directly; no new substrate work needed for Phase-1.
 - **`@formspec-org/assist`** (BUSL-1.1) — 14-tool MCP-compatible surface, WebMCP shim, ProfileMatcher. Closes FW-0045 and FW-0062 substrate side. The BUSL-1.1 license is a flag: it collides with the permissive license preference for formspec-web (FW-0018 needs to factor this in).
 - **`<FormspecScreener>`** in `@formspec-org/react` — closes FW-0046 substrate side; ships fully.
-- **`stack-common-proof::ProofRelyingPartyResult`** — four-dimensional verifier verdict (`{cryptographic_integrity, projection_integrity, domain_admissibility, relying_party_result, blocking_reasons}`) is the rendering vocabulary the post-MVP verifier UI consumes. No new spec work; verdict shape already typed.
+- **`stack-common-proof::ProofReportVerdict`** — four-dimensional verifier verdict (`{cryptographic_integrity, projection_integrity, domain_admissibility, relying_party_result, blocking_reasons}`) is the rendering vocabulary the post-MVP verifier UI consumes. No new spec work; verdict shape already typed.
 
 These shipped-but-deferred items are tracked in the upstream extension queue under "Shipped but deferred for MVP scope" — they are not new gaps.

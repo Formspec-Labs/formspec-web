@@ -36,6 +36,8 @@ If the primitive is missing, the work is **upstream-first**: file an ADR or spec
 
 formspec-web is the canonical *consumer* of the formspec stack, not a new producer of stack-level primitives.
 
+**The consumed thing is the SPEC.** What "consume not invent" applies to is **specs** (`Definition`, `Response`, `IntakeHandoff`, `Issuer`, FEL semantics, `respondent-ledger §6.6`, `validation-mapping`). We do NOT architecturally consume specific backend services. Our backend services (formspec-server, workspec-server, the Trellis substrate) are themselves consumers of the same specs — formspec-web's relationship to them is **symmetric**, not parent-child. The fact that they exist in the same formspec-stack means a default deployment can wire them as reference adapters (see web ADR-0008), but the architecture treats them as one possible composition. See web ADR-0009 for the hexagonal-architecture invariant that makes this real.
+
 **Adopter-side ports are excepted.** Identity providers, payment rails, bot protection, notification delivery, and embed transports are deployment-shaped (country-specific, regulator-specific, infrastructure-specific). They live inside formspec-web as narrow ports with reference adapters; they are NOT upstream-spec candidates because there is no portable primitive to spec — only the port shape. The distinction is **primitive vs. port**: primitives describe what the form means (Definition, Response, Issuer, Locale, References, Ontology); ports describe deployment seams formspec-web crosses (identity, payment, notification). The consume-not-invent rule applies to primitives; ports are formspec-web's by construction. See web ADR-0007 for the worked example.
 
 ## Rationale

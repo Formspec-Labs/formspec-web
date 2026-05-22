@@ -1,7 +1,7 @@
 # formspec-web PLANNING.md — cross-repo placement and reframe context
 
 **Date:** 2026-05-21
-**Status:** SUPERSEDED 2026-05-22 by [web ADR-0004](../adr/0004-cross-repo-placement-consume-not-invent.md), [web ADR-0005](../adr/0005-mvp-scope-defer-cryptographic-substrate.md), [web ADR-0006](../adr/0006-issuer-sidecar-spec-request.md), [web ADR-0007](../adr/0007-identity-auth-magic-link-and-oidc.md), and [`2026-05-22-upstream-extension-queue.md`](2026-05-22-upstream-extension-queue.md). Preserved for historical context — the analytical work that led to those decisions. Do NOT use this doc as the source of truth for current architecture, scope, or backlog; use the ADRs and the queue.
+**Status:** SUPERSEDED 2026-05-22 by [web ADR-0004](../adr/0004-cross-repo-placement-consume-not-invent.md), [web ADR-0005](../adr/0005-mvp-scope-defer-cryptographic-substrate.md), [web ADR-0006](../adr/0006-issuer-sidecar-spec-request.md), [web ADR-0007](../adr/0007-identity-provider-port.md), [web ADR-0008](../adr/0008-reference-deployment-composition.md), [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md), and [`2026-05-22-upstream-extension-queue.md`](2026-05-22-upstream-extension-queue.md). Preserved for historical context — the analytical work that led to those decisions. Do NOT use this doc as the source of truth for current architecture, scope, or backlog; use the ADRs and the queue.
 **Reader cold-start test:** open this six weeks from now and you should know what we're trying to do, why the current PLANNING.md isn't right yet, and what the next step is.
 
 ## What we are trying to do

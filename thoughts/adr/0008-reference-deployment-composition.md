@@ -1,84 +1,108 @@
-# ADR-0008 — Upstream services map: formspec-server primary, WOS secondary
+# ADR-0008 — Reference deployment composition: formspec-stack adapter set
 
 **Date:** 2026-05-22
-**Status:** accepted
-**Builds on:** web ADR-0005, web ADR-0007
+**Status:** accepted (renamed 2026-05-22 from `0008-upstream-services-map.md`; reframed under web ADR-0009)
+**Subordinate to:** web ADR-0009
 
 ## Context
 
-MVP scope (web ADR-0005) ships submit + login + a11y. ADR-0007 names the identity adapter shape but is silent on which upstream services formspec-web actually calls. Cross-stack inventory (2026-05-22) surfaced `formspec-server` as a sibling backend repo with crates that map directly to MVP and post-MVP HTTP boundaries:
+Per web ADR-0009, formspec-web's architecture is the **ports**; specific backend services are reference adapters. This ADR documents the composition the **formspec-stack reference deployment** uses — one worked example of how the ports wire up against the formspec-stack's own backend services (formspec-server, workspec-server, the Trellis substrate). It is illustrative for adopters running the same stack and pedagogical for adopters running their own.
 
-| Crate | What it owns |
-|---|---|
-| `formspec-server-email` | Email delivery (magic-link send, notifications) |
-| `formspec-server-ports` | Port traits the formspec-web shell calls against (auth, signature, idempotency, outbox, proof) |
-| `formspec-server-verifier-integrity` | Server-side proof projection (per stack-root ADR-0107) for heavy bundle verifications |
-| `formspec-server-substrate-trellis` | Trellis integration for signed envelopes |
-| `formspec-server-pdf` | PDF rendering (per stack-root ADR-0141 rendering service) |
-| `formspec-server-object-s3`, `-postgres`, `-worker-pg`, `-common`, `-auth-jwt` | Infrastructure |
+**This composition is NOT formspec-web's architecture.** It is one composition. Adopters running Firebase + Resend + Cloudflare Workers compose differently; adopters running on AWS GovCloud with login.gov compose differently again. The OSS charter (web ADR-0001) commits to making all such compositions equally viable; this ADR documents one.
 
-ADR-0007 mentioned WOS proxy. WOS / workspec-server is the secondary backend for applicant-status reads (per `work-spec/specs/api/applicant.md`). The split needs to be normative so the MVP build sequence is unambiguous: where does the form submit go? where does magic-link email send come from? where does the post-submit status read come from?
+## Decision: per-port wiring in the formspec-stack composition
 
-## Decision
+### `DefinitionSource`
 
-formspec-web's HTTP boundary lands at **two upstream services**.
+- **Reference adapter:** `HttpDefinitionAdapter` fronted by a CDN (Cache-Control + ETag for content-addressed URL+version pairs).
+- **Talks to:** formspec-server's definition endpoint.
+- **Alternate compositions:** static bundle (forms shipped in build), headless CMS (Contentful, Sanity), Firestore document, GraphQL endpoint.
 
-### formspec-server (primary)
+### Issuer resolution (engine-owned; not a formspec-web port)
 
-Every MVP backend interaction:
+Per web ADR-0009 §"Not in the constitutional inventory" (a), issuer resolution lives upstream in `formspec/packages/formspec-engine/src/issuer/IssuerStore.ts`. The composition root wires a `FetchIssuerFetcher` strategy into `IssuerStore` at boot — there is no formspec-web port to re-implement.
 
-- **Form definition fetch** (or static-bundled per deployment).
-- **Draft persistence** (cross-session / cross-device resume per FW-0001 / J-002).
-- **Submit** — produces an `IntakeHandoff` per `formspec/schemas/intake-handoff.schema.json`, `initiationMode: "publicIntake"`. Lands the response in the ledger, returns the reference number.
-- **Validation report** on submit.
-- **Magic-link send** (per web ADR-0007, via `formspec-server-email`).
-- **OIDC callback handling** (server-side token exchange so client never holds raw IdP tokens).
-- **Issuer document fetch** (via formspec-server's caching layer — avoids browser-side CORS issues with arbitrary issuer URLs).
+- **formspec-stack composition's fetcher:** routes issuer-document fetches through formspec-server's caching proxy (avoids browser-side CORS issues with arbitrary issuer URLs).
+- **Alternate composition fetchers:** direct browser fetch (when CORS is configured at the issuer); inline issuer (declared in Definition); host-injected (white-label per [web ADR-0006](0006-issuer-sidecar-spec-request.md)).
 
-Post-MVP:
+### `DraftStore`
 
-- **Signature ceremony** + signed receipts (`formspec-server-substrate-trellis`).
-- **PDF rendering** for trail-sign cover (FW-0006), signed receipt paper (FW-0009), deletion receipt (FW-0043) — via `formspec-server-pdf`, per stack-root [ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md).
-- **Verifier projection** — heavy bundle verifications offloaded to `formspec-server-verifier-integrity` per stack-root ADR-0107. Browser-side `@integrity-stack/signature-adapter-webcrypto` handles the lightweight COSE_Sign1 path; large bundles route to the server projector.
+- **Reference adapter:** `HttpDraftAdapter` against formspec-server's draft endpoint.
+- **Talks to:** formspec-server's draft persistence (backed by `stack-common-postgres`).
+- **Alternate compositions:** Firestore, Supabase, IndexedDB-only (offline single-device), session-only (no cross-session resume).
 
-### WOS / workspec-server (secondary, post-MVP)
+### `SubmitTransport`
 
-Applicant-status reads only:
+- **Reference adapter:** `HttpSubmitAdapter` POSTing an `IntakeHandoff` per `formspec/schemas/intake-handoff.schema.json` (`initiationMode: "publicIntake"`).
+- **Talks to:** formspec-server's submit endpoint (which lands the response in the Respondent Ledger and may emit downstream events).
+- **Alternate compositions:** Firebase Functions / AWS Lambda / Cloudflare Workers, custom webhook, queued-replay (offline submit per FW-0044).
 
-- `GET /api/v1/applicant/cases/{id}` (FW-0039 / J-021 post-submit status)
-- `GET /api/v1/applicant/notifications`
-- `GET /api/v1/applicant/cases` (list)
+### `IdentityProvider`
 
-**These reads proxy through formspec-server**, not directly browser-to-WOS. The proxy enforces:
-- formspec-web's session (magic-link or OIDC) translates server-side into the OIDC-compatible token WOS's existing `LoginKind` enum already accepts.
-- No WOS spec amendment is needed (EXT-9 is removed).
-- Cross-tenant boundary enforcement per stack-root ADR-0068 D-1 + D-3 stays at WOS — formspec-server proxies one tenant at a time.
+- **Reference adapters in the formspec-stack composition** (illustrative — not architectural):
+  - `OidcAdapter` against an OIDC issuer configured per-deployment (login.gov, ID.me, Auth0, Okta, Entra, etc.).
+  - `MagicLinkAdapter` for deployments that want passwordless email without a third-party IdP — uses the `NotificationDelivery` port wired to `formspec-server-email`.
+  - `AnonymousAdapter` for forms not requiring auth.
+- **Alternate compositions:** `FirebaseAuthAdapter`, `SupabaseAuthAdapter`, `ClerkAdapter`, custom adopter adapter against Cognito / Keycloak / Azure AD / etc.
+- See web ADR-0007 for the port contract and §6.6 normalization invariant.
 
-## Rationale
+### `NotificationDelivery` (transport-only)
 
-1. **`formspec-server` already owns the form-side backend.** The `SAAS-UI-HANDOFF.md`, `ARCH.md`, and the crate cluster name it as the form-side backend explicitly. Inventing a separate backend for formspec-web would duplicate `formspec-server-email`, `formspec-server-ports`, `formspec-server-substrate-trellis`. Per web ADR-0004 (consume, don't invent).
-2. **WOS proxy is the right split for respondent-side reads.** ADR-0007's proxy pattern keeps formspec-web's auth methods (magic-link, OIDC) from leaking into WOS's `LoginKind` contract. The proxy ALSO scopes formspec-web's WOS surface to the read endpoints — no respondent-side write path against WOS in MVP.
-3. **PDF and heavy verification offload.** Stack-root [ADR-0141 (rendering service architecture)](../../../thoughts/adr/0141-rendering-service-architecture.md) names a rendering-service port with center-declared I/O. Chromium-based headless renderer is the seed; formspec-web does not invent a UI-side PDF renderer. Per stack-root [ADR-0131 (verifier distribution)](../../../thoughts/adr/0131-verifier-distribution.md), browser is one of four verification modes — heavy bundles legitimately offload server-side.
-4. **Authorization engine choice.** Stack-root [ADR-0117 (authorization engine selection)](../../../thoughts/adr/0117-authorization-engine-selection.md) names OpenFGA as the seed adapter for the auth port. `formspec-server-ports`' auth port is what formspec-web's session calls against; formspec-web does not implement Zanzibar checks directly.
-5. **Frontend surface architecture.** Per stack-root [ADR-0128 (frontend surface architecture)](../../../thoughts/adr/0128-frontend-surface-architecture.md), formspec-web is one of multiple frontend surfaces (Studio, Caseworker, Admin live elsewhere). The upstream-services split here is consistent with the three-app model — formspec-web is the public form-shell, and its backend boundary is formspec-server.
+Per web ADR-0009, `NotificationDelivery` is a transport port — it sends a message via a channel and is opaque to formspec-web. Template authoring (audience, copy, scheduling) lives upstream; the formspec-stack composition consumes `work-spec/schemas/sidecars/wos-delivery.schema.json#/$defs/NotificationsBlock` for that.
+
+- **Reference adapter:** `HttpNotificationAdapter` against `formspec-server-email` (sends the rendered message).
+- **Talks to:** formspec-server's email send endpoint (`formspec-server-email` crate; backend is adopter-pluggable — host SMTP, SES, SendGrid, Twilio, etc.).
+- **Alternate compositions:** Resend, SendGrid, SES, Twilio (SMS), Postmark, Mailgun direct from the browser (with API key proxying), Firebase Cloud Messaging.
+
+When wired into the formspec-stack composition, `MagicLinkAdapter` (an `IdentityProvider` adapter — see web ADR-0008's `IdentityProvider` section) consumes this port via constructor injection per web ADR-0009 §"Composition lifecycle." The cross-port composition is explicit; the shell does not orchestrate it.
+
+### `StatusReader` (post-MVP — port shape pending per-port ratification)
+
+Per web ADR-0009 §"Not in the constitutional inventory" (b), the `StatusReader` port shape will be ratified as its own ADR when consumer code (FW-0039) lands. This section documents the formspec-stack composition's intended adapter when that happens.
+
+- **Intended reference adapter:** `ProxiedApplicantStatusAdapter` that reads from WOS's `applicant.schema.json` surface (per `work-spec/specs/api/applicant.md`) via a formspec-server proxy.
+- **Why proxy:** keeps formspec-web's auth methods from leaking into WOS's `LoginKind` contract (per web ADR-0007); cross-tenant boundary enforced server-side per stack-root [ADR-0068](../../../thoughts/adr/0068-stack-tenant-and-scope-composition.md) D-1 + D-3.
+- **Alternate compositions:** direct adopter case-management API, polling endpoint, webhook subscription, no-op.
+
+### `BundleSource` (post-MVP — port shape pending per-port ratification)
+
+Per web ADR-0009 §"Not in the constitutional inventory" (b), the `BundleSource` port shape will be ratified as its own ADR when consumer code (FW-0003 / FW-0052) lands. This section documents the formspec-stack composition's intended adapters when that happens.
+
+- **Intended reference adapters:** `HttpBundleAdapter` for fetching from any Trellis store URL; `FileDropAdapter` for drag-drop (primary verifier path — preserves J-007's "verify without contacting us" promise per web `CLAUDE.md`).
+- **Why direct:** the verifier MUST NOT depend on a single service for bundle access — the bundle is content-addressed and self-verifying.
+- **Alternate compositions:** IPFS, S3 with signed URLs, peer-to-peer.
+
+### `Verifier` (post-MVP — port shape pending per-port ratification)
+
+Per web ADR-0009 §"Not in the constitutional inventory" (b), the `Verifier` port shape will be ratified as its own ADR when consumer code (FW-0003) lands. Output is expected to conform to `stack-common-proof::ProofReportVerdict` — the TS mirror of this Rust type is tracked in the upstream extension queue (EXT-11).
+
+- **Intended reference adapter:** `WebCryptoVerifierAdapter` wrapping `@formspec/signature-adapter-webcrypto` + `@integrity-stack/cose`. Pure-TS, no WASM, COSE_Sign1 + ed25519 / P-256 / RSA-PSS.
+- **Talks to:** browser's native Web Crypto API. No service.
+- **Alternate compositions:** WASM-bundled `trellis-verify-wos` (post-Phase-2, when BBS+ / SD-JWT selective-disclosure ships); `ServerProjectedAdapter` against `formspec-server-verifier-integrity` for heavy bundles.
+
+## Authorization at upstream services
+
+Per stack-root [ADR-0117](../../../thoughts/adr/0117-authorization-engine-selection.md), OpenFGA is the seed adapter for the auth-engine port. The formspec-stack composition's upstream services (formspec-server's auth port) dispatch to whatever auth engine the deployment configures. formspec-web does NOT implement Zanzibar checks directly — that lives in the upstream service.
+
+## Frontend surface architecture (cross-stack consistency)
+
+Per stack-root [ADR-0128](../../../thoughts/adr/0128-frontend-surface-architecture.md), formspec-web is one of multiple frontend surfaces (Studio / Caseworker / Admin live elsewhere). This composition does not consolidate roles into formspec-web.
+
+## Verifier distribution
+
+Per stack-root [ADR-0131](../../../thoughts/adr/0131-verifier-distribution.md), the browser verifier in formspec-web is one of four distribution modes. The other three (CLI `integrity-verify-cli`, embedded-library `@integrity-stack/signature-*`, reproducible bundle) are sibling deliverables; formspec-web does not own the verifier exclusively.
 
 ## Consequences
 
-- formspec-web has TWO HTTP base URLs at deploy time: `FORMSPEC_SERVER_URL` (primary), `WORKSPEC_SERVER_URL` (secondary, post-MVP). Reference dev deployment co-locates them.
-- The submit boundary is the `IntakeHandoff` schema (`formspec/schemas/intake-handoff.schema.json`). FW-0001 cites this as its submit contract.
-- The Issuer fetch path goes through formspec-server's cache (configurable in the engine's `IssuerStore.FetchIssuerFetcher`) — avoids browser-side CORS issues and the browser's lack of integrity validation on arbitrary issuer URLs.
-- Magic-link delivery is via `formspec-server-email`'s reference adapter. Production deployments swap the email backend per `formspec-server`'s adapter shape (Twilio / SES / SendGrid / etc.), not per formspec-web's.
-- The four-dimensional verifier verdict from `stack-common-proof::ProofRelyingPartyResult` (`{cryptographic_integrity, projection_integrity, domain_admissibility, relying_party_result, blocking_reasons}`) is what formspec-web renders for FW-0003 (post-MVP).
-- PDF rendering for FW-0006 / FW-0009 / FW-0043 all go through `formspec-server-pdf` per stack-root ADR-0141.
-- formspec-web does NOT have a direct database. It is a browser shell + (optional) thin BFF talking to formspec-server + (post-MVP) WOS through the proxy.
-- The MVP build sequence is unambiguous: FW-0001 (thin-slice) is wired to `formspec-server`; FW-0063 (identity) consumes `formspec-server-email` for magic-link send and `formspec-server-ports` auth port; FW-0039 (post-submit status) is wired to the WOS proxy at formspec-server.
+- **The formspec-stack reference deployment has two HTTP base URLs at deploy time:** `FORMSPEC_SERVER_URL` (primary), `WORKSPEC_SERVER_URL` (secondary, post-MVP).
+- **No HTTP base URL is hardcoded into the composition** — environment variables drive the wiring; the composition root reads them.
+- **PDF rendering** for trail-sign cover (FW-0006), signed receipt paper (FW-0009), deletion receipt (FW-0043) — in this composition — routes through `formspec-server-pdf` per stack-root [ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) (rendering service).
+- **The four-dimensional verifier verdict** from `stack-common-proof::ProofReportVerdict` is rendered for FW-0003 (post-MVP).
+- **Adopters running a different stack** swap any port's adapter without forking formspec-web. The composition root is the only file they touch.
 
 ## Related decisions
 
-- web ADR-0004 — placement lens (formspec-server is the consumed backend, not a new primitive)
-- web ADR-0005 — MVP scope (defers signature / verifier; formspec-server-substrate-trellis lands then)
-- web ADR-0007 — identity adapter (consumes `formspec-server-email` + `formspec-server-ports` auth port)
-- stack-root [ADR-0117](../../../thoughts/adr/0117-authorization-engine-selection.md) — authorization engine selection (OpenFGA)
-- stack-root [ADR-0128](../../../thoughts/adr/0128-frontend-surface-architecture.md) — frontend surface architecture (three-app model; formspec-web is the public form-shell)
-- stack-root [ADR-0131](../../../thoughts/adr/0131-verifier-distribution.md) — verifier distribution (browser is one of four modes; offload is legitimate)
-- stack-root [ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) — rendering service architecture (PDF via port, not invented)
+- web ADR-0009 — hexagonal architecture (constitutional)
+- web ADR-0004 — consume the SPEC, not specific services
+- web ADR-0007 — `IdentityProvider` port contract
+- stack-root [ADR-0117](../../../thoughts/adr/0117-authorization-engine-selection.md), [ADR-0128](../../../thoughts/adr/0128-frontend-surface-architecture.md), [ADR-0131](../../../thoughts/adr/0131-verifier-distribution.md), [ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) — cross-stack architectural constraints this composition honors
