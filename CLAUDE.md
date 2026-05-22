@@ -65,6 +65,14 @@ The bet is **staged**, per [web ADR-0005](thoughts/adr/0005-mvp-scope-defer-cryp
 
 The bet is preserved, not killed. The MVP gets formspec-web to a deployable demonstrable state so the verifier work proceeds against a real consumer rather than in isolation. Contributors landing during MVP should understand: respondent renderer first, verifier second, both essential.
 
+## Frontend surface architecture (cross-stack)
+
+formspec-web is **one of multiple frontend surfaces** per stack-root [ADR-0128 (frontend surface architecture)](../thoughts/adr/0128-frontend-surface-architecture.md). The three-app model + hosted form + webcomponent split means: formspec-web is the public form-shell (respondent renderer; post-MVP verifier; post-MVP selective-proof viewer); Studio, Caseworker, and Admin apps live elsewhere. **Do not consolidate** these roles into a single SPA — app separation is the enforcement boundary for independent-first review.
+
+The verifier in formspec-web is **one of four distribution modes** per stack-root [ADR-0131 (verifier distribution)](../thoughts/adr/0131-verifier-distribution.md): browser (this repo, post-MVP per web ADR-0005), CLI (`integrity-verify-cli`), embedded-library (`@integrity-stack/signature-*`), reproducible-bundle (deferred). All four are open forks until a trigger fires; formspec-web does not own the verifier surface exclusively.
+
+The upstream services formspec-web talks to are mapped in [web ADR-0008](thoughts/adr/0008-upstream-services-map.md): `formspec-server` (primary backend) and WOS / workspec-server (secondary, post-MVP, proxied through formspec-server).
+
 ## Anti-Clippy applies here too
 
 The cloud's anti-Clippy constraints (ambient never interruptive, pull not push, no persona, no avatar, keyboard-first, etc.) apply equally to any AI surface that lands in this repo. See [`../formspec-cloud/CLAUDE.md`](../formspec-cloud/CLAUDE.md) for the full constraint set. Today none of this repo's three surfaces ship AI; if that changes, the constraints port verbatim.

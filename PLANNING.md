@@ -26,10 +26,10 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 ### FW-0014 — Ratify UI framework choice (ADR-0002)
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** closed (2026-05-22)
 - **Persona:** Platform
 - **Journey:** (none — platform)
-- **Done:** web ADR-0002 documents the UI framework decision with alternatives considered and consequences. **Gated by FW-0001 evidence** — do not pick framework before FW-0001 surfaces actual constraints (server-side rendering need, islands, in-browser cryptography for the post-MVP verifier, search indexing for the post-MVP Trust Center).
+- **Done:** [web ADR-0002](thoughts/adr/0002-ui-framework-react.md) documents React (with Vite, client-only for MVP) as the UI framework, consuming the existing `@formspec-org/react` package (`<FormspecProvider>` + `<FormspecForm />` + hooks) as the engine consumer. Web Components and Preact considered; tradeoffs explicit. The `<formspec-render>` web component stays as the framework-agnostic conformance surface for non-React adopters.
 
 ### FW-0018 — License decision and LICENSE file (ADR-0003)
 
@@ -38,6 +38,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Persona:** Platform
 - **Journey:** (none — platform)
 - **Done:** web ADR-0003 documents the open-source license choice (MIT vs Apache-2.0) with rationale. LICENSE file added at repo root; per-file headers added per the chosen convention. Reference-implementation positioning favors permissive.
+- **Flag for review:** `@formspec-org/assist` is BUSL-1.1 (per cross-stack inventory 2026-05-22). It would be a post-MVP dependency for FW-0045 / FW-0062, but the license collision with a permissive formspec-web license needs ADR-0003 to address explicitly — either (a) accept that post-MVP rows requiring `@formspec-org/assist` carry a dual-license consideration, (b) require relicensing of `@formspec-org/assist` to permissive before consumption, or (c) reimplement the consumed slice. Decide as part of ADR-0003.
 
 ### FW-0015 — Design tokens to a structured token file
 
@@ -45,7 +46,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Status:** open
 - **Persona:** Platform
 - **Journey:** (none — platform)
-- **Done:** Color, typography, spacing, and motion tokens are extracted to a single structured token file referenced by every production surface. Cloud's white-label respondent shell can theme over the same vocabulary without per-component rework.
+- **Done:** Extend `@formspec-org/layout/token-registry` and `@formspec-org/layout/default-theme` with formspec-web-specific brand overrides (colors, typography, spacing, motion). The token vocabulary is the upstream-shipped registry; formspec-web does NOT author a new vocabulary. Adopt `@formspec-org/adapters` `tailwind-formspec-core.css` as the Tailwind integration baseline. White-label respondent shells can theme over the same vocabulary without per-component rework.
 
 ### FW-0016 — Build and test pipeline producing a deployable artifact
 
@@ -63,7 +64,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Journey:** [J-002](JOURNEYS.md#j-002--respondent-fills-out-a-form-recovers-from-validation-and-never-loses-work)
 - **Done:** A real respondent can open a form URL, fill required fields, hit a validation error, recover, submit, and see a confirmation — backed by a real backend wire. Closing the tab and returning later (on the same or a different device) leaves every answer where it was. Errors read in plain English with a reference number the user can quote to support, never "something went wrong."
 - **Anti-patterns:** AP-001, AP-013, AP-015.
-- **Note:** Leads the backlog deliberately. Forces framework, design tokens, build, and accessibility-baseline decisions to fall out as evidence (FW-0014..0018), not as whiteboard rows. Migrated from `formspec-cloud/PLANNING.md` CLD-0001.
+- **Note:** Leads the backlog deliberately. Forces framework, design tokens, build, and accessibility-baseline decisions to fall out as evidence (FW-0014..0018), not as whiteboard rows. Submit boundary contract: `formspec/schemas/intake-handoff.schema.json` with `initiationMode: "publicIntake"`. Backend wire goes to `formspec-server` per [web ADR-0008](thoughts/adr/0008-upstream-services-map.md). Migrated from `formspec-cloud/PLANNING.md` CLD-0001.
 
 ### FW-0004 — First-paint legitimacy: the sender's brand, what this is, who's asking
 
@@ -73,7 +74,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Journey:** [J-001](JOURNEYS.md#j-001--first-impression-is-this-legitimate-and-can-i-trust-it-for-the-next-ten-minutes)
 - **Done:** First paint shows the sender's brand front and center, the platform's brand subordinate, and a one-line statement of who is asking and why — all above the fold on a phone, with no popup, no consent wall, and no humanity gauntlet between the click and the form. The user can decide "this is legitimate" without scrolling.
 - **Anti-patterns:** AP-012.
-- **Note:** Consumes the Issuer Sidecar (per [web ADR-0006](thoughts/adr/0006-issuer-sidecar-spec-request.md)) via an `IssuerProvider` port. Unbranded fallback (title + description only) is acceptable when no Issuer is declared. Trust-on-first-paint is a hard prerequisite for every later journey.
+- **Note:** Substrate ships. Consume `<Issuer>` from `@formspec-org/react` (`packages/formspec-react/src/issuer.tsx`) for the cover; the cascade + chain walk + cycle guard + ETag fetch run inside the engine's `IssuerStore` (`packages/formspec-engine/src/issuer/IssuerStore.ts`, `MAX_CHAIN_DEPTH=8`). formspec-web work here is styling + integration, not port design. Issuer fetch path goes through `formspec-server` cache per [web ADR-0008](thoughts/adr/0008-upstream-services-map.md). Unbranded fallback (title + description) is acceptable when no Issuer is declared.
 
 ### FW-0005 — Phone-first form-fill, one-handed
 
@@ -93,7 +94,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Journey:** [J-002](JOURNEYS.md#j-002--respondent-fills-out-a-form-recovers-from-validation-and-never-loses-work) (deep cut)
 - **Done:** Every error the user sees says what went wrong in plain English, names whether it's something they need to fix or something the system needs to fix, and carries a short reference ID the user can quote. Cross-field contradictions ("your dependent's birthdate makes them 19 but you marked them as a child under 17") are stated in those terms, not as code names.
 - **Anti-patterns:** AP-013.
-- **Note:** Uses `stack-common` Problem JSON for the typed-error envelope and `stack-common` request-id middleware for reference numbers. FW-0001 carries the minimum bar; this row carries the depth — every error class catalogued, every message reviewed for plain language.
+- **Note:** Substrate ships. Consume `<ValidationSummary>` from `@formspec-org/react` for the validation-render surface; use `stack-common` Problem JSON (`stack-common-error::StackError::into_problem()`) for the typed-error envelope and `stack-common` request-id middleware for reference numbers. Submit-gate semantics follow `formspec/specs/core/validation-mapping.md` (landed 2026-05-22 — `complete-response` requires `ValidationReport.valid === true`). FW-0001 carries the minimum bar; this row carries the depth — every error class catalogued, every message reviewed for plain language.
 
 ### FW-0012 — Accessibility: WCAG 2.1 AA across every production surface
 
@@ -477,7 +478,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Persona:** Respondent
 - **Journey:** [J-047](JOURNEYS.md#j-047--three-questions-instead-of-four-hundred--figure-out-which-form-i-actually-need)
 - **Done:** A respondent who doesn't know which form applies answers a short, plain-language check — three to ten questions — and gets sent to the right one. The decision is shown to them: these questions, these answers, this reasoning.
-- **Blocked on:** existing `formspec/specs/screener/screener-spec.md` + `determination.schema.json` cover the contract fully. Post-MVP for scope; pure UI work over upstream primitives.
+- **Blocked on:** nothing upstream — `<FormspecScreener>` + `useScreener()` from `@formspec-org/react` (`packages/formspec-react/src/screener/`) ship the full consumer surface over `formspec/specs/screener/screener-spec.md` + `determination.schema.json`. Post-MVP for scope only; the work is "import + style" not "design + build."
 - **Anti-patterns:** AP-006, AP-008, AP-022.
 
 ### FW-0047 — Respondent-side place: design investigation

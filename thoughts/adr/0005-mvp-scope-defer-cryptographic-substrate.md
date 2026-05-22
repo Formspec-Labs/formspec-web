@@ -9,10 +9,10 @@
 
 Realizing that triple end-to-end pulls in:
 
-- WYSIWYS signer ceremony spec (gap — implicit, not normative; web ADR-0006-adjacent finding)
+- WYSIWYS signer ceremony — narrows to a UI-annex over existing stack-root [ADR-0083](../../../thoughts/adr/0083-authored-signatures-document-hash.md) + [ADR-0136](../../../thoughts/adr/0136-signature-artifact-dependency-inversion.md) + [ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) (queue SC-5, narrowed 2026-05-22)
 - Signature method registry binding for WebAuthn passkey-bound signing
-- Trellis verifier WASM build + size budget for browser hosting
-- Selective-proof viewer mechanics (gated on Phase-3 BBS+ / ECDSA-SD per `trellis-operational-companion.md` OC-31, currently deferred)
+- **Browser verifier:** the Phase-1 COSE_Sign1 verifier ships pure-TS, no WASM (`@integrity-stack/signature-adapter-webcrypto` + `@integrity-stack/cose` + Formspec wrappers `@formspec/signature-*`). The originally-feared "Trellis verifier WASM build + size budget" concern applies only to BBS+ / ECDSA-SD selective-disclosure cryptography, not to MVP-era verification.
+- **Selective-proof viewer:** SD-JWT is the default per stack-root [ADR-0116 (selective disclosure: SD-JWT default, BBS+ profile)](../../../thoughts/adr/0116-selective-disclosure-sd-jwt-default-and-bbs-profile.md), not BBS+ as initially framed. SD-JWT is tractable with existing libraries; BBS+ is trigger-gated and dormant. FW-0010 is closer to "vector landing" than "Phase-3 cryptography."
 - Respondent Ledger event taxonomy expansion (withdrawn / dispute-attached / consent.revoked / duress-signaled — multiple gaps per scout walk)
 - Receipt-domain prose disagreement (`signature-method-registry.md:99` vs `integrity-signature/src/lib.rs:155` — known drift, low-cost fix but not zero-cost)
 
@@ -66,3 +66,14 @@ These are all **deferred, not rejected**. Each survives in `PLANNING.md` as an u
 - `PLANNING.md` is restructured into two phases: **MVP** (the rows above) and **post-MVP** (everything else). The post-MVP rows carry explicit `blocked on:` annotations naming the upstream dependency (e.g., "blocked on Trellis Phase-3 BBS+", "blocked on `respondent-ledger-spec.md` decline event extension").
 - The Trust Center (J-006) post-MVP placement is documented separately in web ADR-0002 (Trust Center placement) when written.
 - Reviewers and contributors must resist scope-creep into substrate work during MVP. Any PR adding signature-method binding, verifier mechanics, or selective-disclosure UI is rejected during MVP phase with reference to this ADR.
+
+### Shipped today, deferred for scope (not blocked on substrate)
+
+Cross-stack inventory (2026-05-22) confirmed several substrate-adjacent primitives that already ship and could be consumed sooner if MVP scope expanded. These are deferred for **scope** (size of work + UX design), not for **substrate readiness**:
+
+- **Browser COSE_Sign1 verifier** — `@integrity-stack/signature-adapter-webcrypto`, `@integrity-stack/cose`, plus Formspec wrappers `@formspec/signature-{port,cose,adapter-webcrypto}`. Production-grade: ed25519 / P-256 / RSA-PSS, kid binding (fs-skj0), method-URI binding ([ADR-0109](../../../thoughts/adr/0109-cose-protected-header-map3.md)), three-way outcome taxonomy, sanitized reasons. The post-MVP FW-0003 verifier consumes these directly; no new substrate work needed for Phase-1.
+- **`@formspec-org/assist`** (BUSL-1.1) — 14-tool MCP-compatible surface, WebMCP shim, ProfileMatcher. Closes FW-0045 and FW-0062 substrate side. The BUSL-1.1 license is a flag: it collides with the permissive license preference for formspec-web (FW-0018 needs to factor this in).
+- **`<FormspecScreener>`** in `@formspec-org/react` — closes FW-0046 substrate side; ships fully.
+- **`stack-common-proof::ProofRelyingPartyResult`** — four-dimensional verifier verdict (`{cryptographic_integrity, projection_integrity, domain_admissibility, relying_party_result, blocking_reasons}`) is the rendering vocabulary the post-MVP verifier UI consumes. No new spec work; verdict shape already typed.
+
+These shipped-but-deferred items are tracked in the upstream extension queue under "Shipped but deferred for MVP scope" — they are not new gaps.

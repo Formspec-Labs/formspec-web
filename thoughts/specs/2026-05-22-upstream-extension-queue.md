@@ -104,6 +104,15 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Fixture status:** none. Verification step is a prerequisite: confirm `definition.schema.json` doesn't already have an assurance annotation in some form. Dispatch `formspec-specs:spec-expert` before authoring.
 **Status:** verification pending.
 
+### EXT-8a: Align IdentityClaim TS shape with `wos-events::IdentityAttestation` (ADR-0140)
+
+**Owning repo:** formspec-web (consumer side); upstream source is `work-spec/crates/wos-events/`
+**Closes:** alignment between web ADR-0007's `IdentityClaim` and stack-root [ADR-0140 (identity-attestation shape)](../../../thoughts/adr/0140-identity-attestation-shape.md) (the cross-stack identity-attestation record with NIST IAL / AAL / FAL axes)
+**FW rows blocked:** none directly; aligning the TS shape now prevents drift when PLN-0384 (wos-events identity schema) closes.
+**Shape:** extend `IdentityClaim` (web ADR-0007 §Decision) with a `nistAssurance: { ial?, aal?, fal? }` block. Mirror `wos-events::IdentityAttestationInput` field-for-field. The current `respondent-ledger-spec.md` §6.6 L1–L4 taxonomy remains the formspec-side fallback for MVP; the NIST-axis block is the cross-stack alignment.
+**Fixture status:** none. Awaiting `wos-events` PLN-0384 close; until then, the alignment shape is provisional.
+**Status:** awaiting upstream.
+
 ### EXT-10: Receipt-domain prose update (drift fix)
 
 **Owning repo:** formspec
@@ -119,14 +128,7 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 
 ## Class 2 — New sidecars (formspec)
 
-### SC-1: Notification Template Sidecar
-
-**Owning repo:** formspec
-**Closes:** J-036 (pre-click trust — help senders write notifications recipients can verify)
-**FW rows blocked:** FW-0032
-**Shape:** `formspec/specs/notification/notification-spec.md` + `notification-template.schema.json`. Defines form-author-declared notification template: case-ref placeholder, sender-domain claim, QR payload format, "verify before clicking" copy. Binds to Definition via `$ref` like References. Renders via a pre-click verifier page at `/verify/notification/<id>` (consumes the same `<formspec-verifier>` widget as J-007 — post-MVP, gated on substrate).
-**Fixture status:** none. ADR proposal in formspec/ needed before schema.
-**Status:** not yet filed.
+> **SC-1 (Notification Template Sidecar) — REMOVED 2026-05-22.** The notification-template surface already ships at `work-spec/schemas/sidecars/wos-delivery.schema.json#/$defs/NotificationsBlock`, absorbed into the WOS delivery sidecar per WOS ADR-0076 D-3. FW-0032 (J-036 pre-click trust) consumes the WOS notifications block via formspec-server proxy (per web ADR-0008); the remaining work is the pre-click verifier rendering surface in formspec-web, which is a UI build over the existing substrate, not a new spec.
 
 ### SC-2: Deletion Receipt Sidecar
 
@@ -154,17 +156,17 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Owning repo:** formspec
 **Closes:** J-013 (don't re-prove identity — wallet path), J-031 (professional / pseudonymous signing — cryptographic side), J-035 (passkey-bound signing)
 **FW rows blocked:** FW-0020, FW-0030, FW-0031, FW-0035
-**Shape:** extends `formspec/specs/registry/signature-method-registry.md` with normative bindings: `urn:formspec:presentation-method:openid4vp@1` (W3C VC Data Model 2.0 + OpenID4VP), `urn:formspec:sig-method:webauthn-passkey-cose-sign1@1` (WebAuthn + COSE Sign1 with per-act challenge equal to canonical signed-bytes preimage). Adopts external standards verbatim. Anonymous mode (J-031) honest interim is contractual escrow until Trellis Phase-3 BBS+ / ECDSA-SD lands per `trellis-operational-companion.md` OC-31.
+**Shape:** extends `formspec/specs/registry/signature-method-registry.md` with normative bindings: `urn:formspec:presentation-method:openid4vp@1` (W3C VC Data Model 2.0 + OpenID4VP), `urn:formspec:sig-method:webauthn-passkey-cose-sign1@1` (WebAuthn + COSE Sign1 with per-act challenge equal to canonical signed-bytes preimage). Adopts external standards verbatim. **Selective disclosure is SD-JWT-first per stack-root [ADR-0116](../../../thoughts/adr/0116-selective-disclosure-sd-jwt-default-and-bbs-profile.md)** — SD-JWT is the default path, tractable today with `sd-jwt-rs` / `@sd-jwt/core`-class libraries; BBS+ is profile-gated and dormant per ADR-0116. The earlier "Phase-3 BBS+ / ECDSA-SD" framing in ADR-0005 was wrong. Anonymous mode (J-031) interim is contractual escrow only when the SD-JWT route doesn't satisfy the unlinkability requirement.
 **Fixture status:** none. Post-MVP per web ADR-0005; tracked here for visibility.
 **Status:** not yet filed.
 
-### SC-5: WYSIWYS Ceremony Contract (annex to signature-method-registry)
+### SC-5: WYSIWYS Ceremony UI Annex (narrowed)
 
 **Owning repo:** formspec
 **Closes:** J-008 (sign here — but first show me exactly what I'm signing)
 **FW rows blocked:** FW-0008
-**Shape:** small new spec section (annex to `formspec/specs/registry/signature-method-registry.md` or new file under `formspec/specs/registry/`) that normatively pins: rendering pipeline producing signed-bytes preimage, requirement that the same bytes be shown to signer pre-commit, per-field affirmative-action requirement (covers AP-002), prohibition of single-click adopt-and-sign (AP-011).
-**Fixture status:** none. Post-MVP per web ADR-0005; needed to prevent ceremony drift across renderers.
+**Shape:** **narrowed 2026-05-22.** The signed-bytes preimage discipline already exists upstream: stack-root [ADR-0083](../../../thoughts/adr/0083-authored-signatures-document-hash.md) defines `authoredSignatures[*].documentHash`; [ADR-0136](../../../thoughts/adr/0136-signature-artifact-dependency-inversion.md) defines `SignatureArtifact` / `ValidationArtifact` / `DocumentArtifact` / `SignatureSurface` as center types; [ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) defines the rendering-service port (Chromium-based headless renderer is the seed) that produces the bytes the signer commits to. The remaining gap is a small UI-requirements annex over those center contracts: per-field affirmative-action requirement (covers AP-002), prohibition of single-click adopt-and-sign (AP-011), scroll-to-end gate, signature-surface naming. Authored as an annex to `formspec/specs/registry/signature-method-registry.md` or a small new file under `formspec/specs/registry/`.
+**Fixture status:** none (the byte-level discipline already has fixture coverage upstream; new annex needs fixture cases for the UI requirements).
 **Status:** not yet filed.
 
 ---
@@ -203,7 +205,12 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 
 - web ADR-0004 — placement lens (governs every entry here)
 - web ADR-0005 — MVP scope (which entries are post-MVP)
-- web ADR-0006 — Issuer Sidecar (worked example of an entry that landed)
-- web ADR-0007 — Identity & auth (consumes EXT-8 form-side assurance annotation when verified; supersedes the removed EXT-9 with the proxy pattern)
+- web ADR-0006 — Issuer Sidecar (worked example of an entry that landed; engine ships IssuerStore + React `<Issuer>` per cross-stack inventory 2026-05-22)
+- web ADR-0007 — Identity & auth (consumes EXT-8 form-side assurance annotation when verified; supersedes the removed EXT-9 with the proxy pattern; aligned with stack-root ADR-0140 via EXT-8a)
+- web ADR-0008 — Upstream services map (formspec-server primary, WOS secondary)
 - `JOURNEYS.md` — source of the journey IDs cited per entry
 - `PLANNING.md` — source of the FW row IDs cited per entry
+
+## Operational notes
+
+- **Reference-map regen needed.** `validation-mapping.md` + `validation-mapping.schema.json` landed 2026-05-22 and `experience-spec.md` landed 2026-05-21. Neither is yet in `.claude-plugin/skills/formspec-specs/references/`. Until regenerated (`make` target in `.claude-plugin/skills/formspec-specs/`), the `formspec-specs:spec-expert` agent may give incomplete answers about submit-gate semantics and step/unit organization. Action lives in formspec/ — flag for the next stack-side maintenance pass.

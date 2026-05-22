@@ -67,16 +67,16 @@ Login is **per-form**, not per-deployment:
 - Forms that do not declare a requirement get magic-link OR anonymous (respondent choice).
 - Forms that explicitly opt out of login get no login surface at all.
 
-### Reaching upstream services (WOS, future): proxy pattern
+### Reaching upstream services: formspec-server primary, WOS secondary
 
-For respondent-side reads against upstream services — notably WOS's `applicant.schema.json` surface for J-021 post-submit status — formspec-web acts as a **thin authenticated proxy**, not as a direct client with arbitrary auth methods. The flow:
+formspec-web's HTTP boundary lands at two upstream services. See web ADR-0008 for the full map.
 
-1. Respondent authenticates to formspec-web via `IdentityProvider` (magic-link or OIDC).
-2. formspec-web holds the session.
-3. Reads to WOS happen through formspec-web's authenticated surface; formspec-web translates the respondent's session into whatever the upstream service expects (an OIDC-compatible token or session) on the server side.
-4. WOS does NOT learn that magic-link was the respondent-side auth method. It sees a token shape its existing `LoginKind` enum already accepts.
+- **`formspec-server` (primary).** MVP submit (produces `IntakeHandoff` per `formspec/schemas/intake-handoff.schema.json`), magic-link delivery (`formspec-server-email`), OIDC callback handling, draft persistence, Issuer document fetch via server cache. Post-MVP: signature ceremony, signed receipts, PDF rendering ([stack-root ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) rendering service), verifier projection (`formspec-server-verifier-integrity`).
+- **WOS / workspec-server (secondary, post-MVP).** Applicant-status reads (`GET /api/v1/applicant/cases/{id}` for J-021 / FW-0039) **proxied through formspec-server** — WOS does NOT learn that magic-link was the respondent-side auth method; it sees the OIDC-compatible token its existing `LoginKind` enum already accepts.
 
-Net result: no WOS `LoginKind` extension is needed. The earlier upstream-extension proposal (`EXT-9`) is dropped — it would have leaked formspec-web's auth choices into WOS's contract, violating the deployment-shaped vs. deployment-neutral split. The proxy pattern keeps formspec-web's auth methods inside its own contract and presents upstream services with their existing token shape.
+Net result: no WOS `LoginKind` extension is needed. The earlier upstream-extension proposal (`EXT-9`) is dropped. The proxy pattern keeps formspec-web's auth methods inside its own contract.
+
+Authorization at the upstream services follows stack-root [ADR-0117 (authorization engine selection)](../../../thoughts/adr/0117-authorization-engine-selection.md) — OpenFGA is the seed adapter for the auth port. formspec-web does NOT implement Zanzibar checks directly; it calls `formspec-server-ports`' auth port, which dispatches to whatever auth engine the deployment configures.
 
 **Explicitly NOT in formspec-web for MVP:**
 
@@ -101,7 +101,8 @@ Net result: no WOS `LoginKind` extension is needed. The earlier upstream-extensi
 - A `NotificationDelivery` port also lives in formspec-web (magic-link requires email send; future SMS / push). Per web ADR-0004, NotificationDelivery is adopter-side. Reference adapter wires to host SMTP; production deployments swap to Twilio / SES / SendGrid / etc.
 - The Respondent Ledger receives `identityAttestation` (in `respondent-ledger-event.schema.json`) populated when login occurred. The Response itself does NOT carry `identityAttestation` — it lives in the ledger event stream per `respondent-ledger-spec.md` §6.6A.
 - Form-side declaration of required assurance level is a small `formspec` Definition extension (tracked as EXT-8 in [`../specs/2026-05-22-upstream-extension-queue.md`](../specs/2026-05-22-upstream-extension-queue.md); verification still pending whether `definition.schema.json` already has an `assurance` annotation slot).
-- WOS reads happen through formspec-web's authenticated proxy — no WOS `LoginKind` extension needed (EXT-9 is removed from the queue).
+- **`IdentityClaim` shape alignment with `wos-events::IdentityAttestation`.** Stack-root [ADR-0140 (identity-attestation shape)](../../../thoughts/adr/0140-identity-attestation-shape.md) ratifies a cross-stack identity-attestation record with NIST IAL/AAL/FAL axes. The current `IdentityClaim` field set (above) mirrors `respondent-ledger-spec.md` §6.6 and is MVP-correct, but the NIST-axis block should be added once `wos-events` PLN-0384 closes. Tracked as queue EXT-8a.
+- WOS reads happen through formspec-web's authenticated proxy via formspec-server — no WOS `LoginKind` extension needed (EXT-9 is removed). See web ADR-0008 for the full upstream-services map.
 - The identity layer lives as MVP row FW-0063 in `PLANNING.md`.
 - Post-MVP additions to the same port: `PasskeyAdapter` (WebAuthn — J-035), `VcPresenterAdapter` (W3C VC + OpenID4VP — J-013), `WalletAdapter` (J-042 respondent library handshake). Each is an adapter, not a new port — the DI shape is forward-compatible.
 - Bot protection (J-033) gets its own port (`BotProtection`) in a sibling ADR when scoped; it is logically separate from identity (one proves "I am a person," the other proves "I am this person").
