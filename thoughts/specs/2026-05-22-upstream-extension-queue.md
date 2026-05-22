@@ -140,6 +140,47 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Fixture status:** none. Land alongside FW-0013 build; one round-trip fixture per `ErrorCode` variant is a reasonable minimum.
 **Status:** not yet filed.
 
+### EXT-18: `@integrity-stack/hpke` — TS wrapper around `hpke-js`
+
+**Owning repo:** integrity-stack (TS package addition); formspec-web (consumer)
+**Closes:** RFC 9180 HPKE Base mode wrap/unwrap for client-side encryption (J-042 respondent-library: clients encrypt library contents with a passkey-derived key before upload; only the respondent can decrypt). Mirror of `integrity-stack/crates/integrity-hpke` (Trellis Core §9.4 suite 1: `DHKEM(X25519, HKDF-SHA256)` / `HKDF-SHA256` / `ChaCha20-Poly1305`).
+**FW rows blocked:** FW-0056 (respondent-side document library build)
+**Shape:** thin TS wrapper around [`hpke-js`](https://github.com/dajiaji/hpke-js) (mature, RFC 9180-spec'd, ChaCha20-Poly1305 support). Wrapper matches `integrity-hpke` API surface (`wrap(plaintext, recipient_public_key) → ciphertext`; `unwrap(ciphertext, recipient_private_key) → plaintext`). Conformance fixtures pulled from `integrity-bundle-fixtures` Rust corpus.
+**Per ADR-0009 §(d) hybrid principle:** pure TS path because (a) `hpke-js` is mature and RFC-spec'd, (b) HPKE Base mode is well-tested across implementations, (c) no signature-determinative byte-exactness risk.
+**Fixture status:** none. Sequenced with FW-0047 design (respondent-library trust model) ahead of FW-0056 build.
+**Status:** not yet filed.
+
+### EXT-17: `@integrity-stack/event` — TS event-sequence mirror
+
+**Owning repo:** integrity-stack (TS package addition); formspec-web (consumer)
+**Closes:** TS mirror for `integrity-stack/crates/integrity-event` — domain-neutral event sequence number primitives consumed by the verifier orchestrator (EXT-16) when walking the Trellis chain.
+**FW rows blocked:** FW-0003 (verifier — depends on EXT-16 which depends on this)
+**Shape:** tiny TS package (~30 lines) mirroring the Rust event-sequence helpers. Pure TS — no byte-exact risk; composition primitive only.
+**Per ADR-0009 §(d) hybrid principle:** pure TS — composition primitive, no byte-exactness.
+**Fixture status:** none. One round-trip test against Rust corpus is sufficient.
+**Status:** not yet filed.
+
+### EXT-16: `@integrity-stack/verify` — TS verifier orchestrator
+
+**Owning repo:** integrity-stack (TS package addition); formspec-web (consumer)
+**Closes:** the post-MVP universal verifier orchestrator that composes (a) WASM byte primitives (EXT-15), (b) TS COSE decode (`@integrity-stack/cose`, shipped), (c) WebCrypto signature verify (`@integrity-stack/signature-adapter-webcrypto`, shipped), (d) chain-hash continuity walking, (e) bundle structural checks, (f) profile-verifier dispatch. Mirror of `integrity-stack/crates/integrity-verify` orchestrator role. Outputs conform to `stack-common-proof::ProofReportVerdict` (TS mirror per EXT-11).
+**FW rows blocked:** FW-0003 (verifier UI consumer), FW-0010 (selective-proof viewer — adds SD-JWT profile dispatch per ADR-0116), FW-0052 (offline verifier bundle)
+**Shape:** pure TS package that imports `@integrity-stack/bytes-wasm` (EXT-15), `@integrity-stack/cose`, `@integrity-stack/signature-port` + adapter. Exposes `verifyBundle(bytes, profileRegistry) → ProofReportVerdict`. Mirrors the Rust `integrity-verify` Surface (universal phase + profile dispatch). Profile verifiers (WOS event vocabularies, Formspec response shapes, Trellis posture transitions, FactsTier overlays) register against a `ProfileRegistry`.
+**Per ADR-0009 §(d) hybrid principle:** pure TS — composition only, no byte work in this layer; calls into WASM for byte-exact primitives.
+**Fixture status:** none. Conformance via `integrity-bundle-fixtures` corpus + `integrity-verify-parity` harness extended TS-side.
+**Status:** not yet filed.
+
+### EXT-15: `@integrity-stack/bytes-wasm` — WASM bundle for byte-exact primitives
+
+**Owning repo:** integrity-stack (TS package addition with WASM build); formspec-web (consumer via EXT-16)
+**Closes:** the byte-exact-encoding gap for the post-MVP verifier. WASM-bundles `integrity-stack/crates/integrity-canonical` (RFC 8785 JCS + `domain ‖ NUL ‖ json` framing), `integrity-stack/crates/integrity-cbor` (CBOR encode/decode + map lookup + byte-digest), `integrity-stack/crates/integrity-bundle` (deterministic ZIP read/write — fixed version 20, fixed time, STORED compression, sorted entries) into a single WASM build target.
+**FW rows blocked:** FW-0003, FW-0010, FW-0052 (via EXT-16 dependency)
+**Shape:** Rust workspace gains a WASM build target consolidating the three byte-exact crates (the crates themselves are NOT combined — bundling is a build choice). TS package exposes typed helpers calling into WASM: `canonicalizeJson(value, domain?) → Uint8Array`, `cborEncode(value) → Uint8Array` / `cborDecode(bytes) → value`, `readZipEntries(bytes) → Map<string, Uint8Array>` / `writeZipDeterministic(entries) → Uint8Array`.
+**Per ADR-0009 §(d) hybrid principle:** WASM single-authority because (a) JS-vs-Rust numerical encoding drift would break signatures (decimal floats, key sort order, integer width are all byte-exact), (b) CBOR has many valid encoding choices and pure-TS libs vary, (c) deterministic ZIP requires bit-exact output for hash equality, (d) the Rust crates are the authority — a second TS authority would mean ongoing drift cost via the existing `integrity-verify-parity` harness pattern.
+**Why bundle three crates into one WASM target:** they're always consumed together by the verifier; one WASM payload amortizes load cost; the Rust crate split stays intact for Rust-side consumers (cleaner modular reuse).
+**Fixture status:** none. WASM target should pass `integrity-verify-parity` byte-exact harness against the Rust integrity-canonical / integrity-cbor / integrity-bundle reference outputs.
+**Status:** not yet filed.
+
 ### EXT-11: TS mirror for `stack-common-proof::ProofReportVerdict`
 
 **Owning repo:** formspec-web (consumer side); upstream source is `stack-common/crates/stack-common-proof/`
