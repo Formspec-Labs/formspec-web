@@ -6,8 +6,10 @@ Format reference: [`CLAUDE.md`](CLAUDE.md). Person-need source: [`JOURNEYS.md`](
 
 ## Phases
 
-- **MVP** — the slice that ships first. Respondent fill + validate + submit + login + a11y. No cryptographic substrate. See [web ADR-0005](thoughts/adr/0005-mvp-scope-defer-cryptographic-substrate.md).
+- **MVP** — the slice that ships first. Respondent fill + validate + submit + identity + a11y. No cryptographic substrate. See [web ADR-0005](thoughts/adr/0005-mvp-scope-defer-cryptographic-substrate.md).
 - **Post-MVP** — every other row. Each carries a `Blocked on:` annotation naming the upstream extension (EXT-*), new sidecar (SC-*), or cross-stack ADR (XS-*) it depends on. Cross-reference target: [`thoughts/specs/2026-05-22-upstream-extension-queue.md`](thoughts/specs/2026-05-22-upstream-extension-queue.md).
+
+**Port-shape framing.** Per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md), every row that touches a backend concern is expressed in terms of the **port** it consumes (`DefinitionSource`, `DraftStore`, `SubmitTransport`, `IdentityProvider`, `NotificationDelivery`, `StatusReader`, `BundleSource`, `Verifier`). Specific backend services appear only as reference adapters in the formspec-stack composition ([web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)). Adopter compositions wire different adapters.
 
 ## Status vocabulary
 
@@ -64,7 +66,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Journey:** [J-002](JOURNEYS.md#j-002--respondent-fills-out-a-form-recovers-from-validation-and-never-loses-work)
 - **Done:** A real respondent can open a form URL, fill required fields, hit a validation error, recover, submit, and see a confirmation — backed by a real backend wire. Closing the tab and returning later (on the same or a different device) leaves every answer where it was. Errors read in plain English with a reference number the user can quote to support, never "something went wrong."
 - **Anti-patterns:** AP-001, AP-013, AP-015.
-- **Note:** Leads the backlog deliberately. Forces framework, design tokens, build, and accessibility-baseline decisions to fall out as evidence (FW-0014..0018), not as whiteboard rows. Submit boundary contract: `formspec/schemas/intake-handoff.schema.json` with `initiationMode: "publicIntake"`. Backend wire goes to `formspec-server` per [web ADR-0008](thoughts/adr/0008-upstream-services-map.md). Migrated from `formspec-cloud/PLANNING.md` CLD-0001.
+- **Note:** Leads the backlog deliberately. Forces framework, design tokens, build, and accessibility-baseline decisions to fall out as evidence (FW-0014..0018), not as whiteboard rows. Consumes ports `DefinitionSource` (read), `DraftStore` (read+write), `SubmitTransport` (write). Issuer resolution is engine-owned (`IssuerStore` per web ADR-0006); composition wires a `FetchIssuerFetcher`, not a port. Submit boundary contract: `formspec/schemas/intake-handoff.schema.json` with `initiationMode: "publicIntake"`. Per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) the row delivers the port-consuming React shell + at least stub adapters that demonstrate the seam is real (typically swapped for HTTP adapters in the formspec-stack reference composition — see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)). Migrated from `formspec-cloud/PLANNING.md` CLD-0001.
 
 ### FW-0004 — First-paint legitimacy: the sender's brand, what this is, who's asking
 
@@ -74,7 +76,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Journey:** [J-001](JOURNEYS.md#j-001--first-impression-is-this-legitimate-and-can-i-trust-it-for-the-next-ten-minutes)
 - **Done:** First paint shows the sender's brand front and center, the platform's brand subordinate, and a one-line statement of who is asking and why — all above the fold on a phone, with no popup, no consent wall, and no humanity gauntlet between the click and the form. The user can decide "this is legitimate" without scrolling.
 - **Anti-patterns:** AP-012.
-- **Note:** Substrate ships. Consume `<Issuer>` from `@formspec-org/react` (`packages/formspec-react/src/issuer.tsx`) for the cover; the cascade + chain walk + cycle guard + ETag fetch run inside the engine's `IssuerStore` (`packages/formspec-engine/src/issuer/IssuerStore.ts`, `MAX_CHAIN_DEPTH=8`). formspec-web work here is styling + integration, not port design. Issuer fetch path goes through `formspec-server` cache per [web ADR-0008](thoughts/adr/0008-upstream-services-map.md). Unbranded fallback (title + description) is acceptable when no Issuer is declared.
+- **Note:** Substrate ships. Consume `<Issuer>` from `@formspec-org/react` (`packages/formspec-react/src/issuer.tsx`) for the cover; the cascade + chain walk + cycle guard + ETag fetch run inside the engine's `IssuerStore` (`packages/formspec-engine/src/issuer/IssuerStore.ts`, `MAX_CHAIN_DEPTH=8`). formspec-web work is styling + integration; the `IssuerSource` port wraps `IssuerStore`, configured per composition. The formspec-stack reference composition routes the fetch path through a server cache (see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)); other adopters wire direct browser fetch or static-inline. Unbranded fallback (title + description) is acceptable when no Issuer is declared.
 
 ### FW-0005 — Phone-first form-fill, one-handed
 
@@ -124,15 +126,15 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Anti-patterns:** —
 - **Note:** Worked from scratch — no in-place retrofit of an English-only form layer. Consumes existing Locale spec. Certified-translator attribution on narrative translations is post-MVP (see queue EXT-2 for the Response per-value provenance dependency).
 
-### FW-0063 — Identity layer: magic-link + optional OIDC
+### FW-0063 — `IdentityProvider` port + conformance suite + ≥1 reference adapter
 
 - **Phase:** MVP
 - **Status:** open
 - **Persona:** Respondent / Signer
 - **Journey:** [J-019](JOURNEYS.md#j-019--im-on-a-public-library-terminal-with-twenty-minutes-and-no-email), [J-032](JOURNEYS.md#j-032--sign-in-with-something-i-already-have-not-yet-another-password), [J-034](JOURNEYS.md#j-034--i-already-proved-who-i-am-to-logingov--idme--nhs--dont-make-me-do-it-again) (basic slices)
-- **Done:** A respondent can authenticate to a form via magic-link (default low-friction path) or OIDC (when the form declares an assurance requirement). Login is optional; anonymous fill remains a first-class path. The identity claim is normalized to `respondent-ledger-spec.md` §6.6 shape before any ledger write. WOS reads (when wired for J-021) go through formspec-web's authenticated proxy — no WOS spec amendment needed.
+- **Done:** Ship the `IdentityProvider` port (`src/ports/identity-provider.ts`) per [web ADR-0007](thoughts/adr/0007-identity-provider-port.md) + its conformance suite (`tests/adapter-conformance/identity-provider/`) + at least one production-grade reference adapter (specific adapter choice for the formspec-stack composition is in [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md); other compositions wire `FirebaseAuthAdapter` / `SupabaseAuthAdapter` / `ClerkAdapter` / `Auth0Adapter` / etc.). Anonymous fill remains a first-class path. Adapter `authenticate()` output MUST be normalized to `respondent-ledger-spec.md` §6.6 shape before any ledger write — the conformance suite verifies this for any adapter.
 - **Anti-patterns:** AP-001, AP-006, AP-020, AP-022.
-- **Note:** Architecture per [web ADR-0007](thoughts/adr/0007-identity-auth-magic-link-and-oidc.md). FW-0028 (multi-IdP picker with assurance filtering) is post-MVP; this row delivers the `IdentityProvider` port + two reference adapters (`MagicLinkAdapter`, `OidcAdapter`). Adopter-side per [web ADR-0004](thoughts/adr/0004-cross-repo-placement-consume-not-invent.md) — no upstream spec.
+- **Note:** Adopter-side per [web ADR-0004](thoughts/adr/0004-cross-repo-placement-consume-not-invent.md) — no upstream spec. Architecture per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md). Specific adapter choice for the OSS reference deployment is a composition decision (see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)), separate from this row. FW-0028 (multi-IdP picker with assurance filtering) is post-MVP and consumes the same port.
 
 ---
 
@@ -156,8 +158,9 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Status:** open
 - **Persona:** Evaluator
 - **Journey:** [J-007](JOURNEYS.md#j-007--evaluator-verifier-validates-a-receipt--without-an-account-without-trusting-us)
-- **Done:** Drag-drop, paste, or follow-a-link gets the receipt onto the page. Within seconds the page shows pass or fail, who signed, when, what they signed (verbatim), and whether anything has been changed since. No login, no account, no tracking. A skeptic can explain it to their boss in one sentence and drill deeper if they want to.
-- **Blocked on:** trellis cryptographic substrate (post-MVP phase per web ADR-0005). Reuses `trellis/crates/trellis-verify-wos` compiled to WASM. Migrated from CLD-0008. Offline-bundle version is FW-0052; plain-paper version is FW-0009.
+- **Done:** Drag-drop, paste, or follow-a-link gets the receipt onto the page. Within seconds the page shows pass or fail, who signed, when, what they signed (verbatim), and whether anything has been changed since. No login, no account, no tracking, no service dependency.
+- **Consumes ports:** `BundleSource` (drag-drop / HTTP / file / IPFS — content-addressed) + `Verifier` (pure-TS WebCrypto by default). **Port shapes are post-MVP per web ADR-0009 §"Not in the constitutional inventory" (b) — each will be ratified as its own ADR when this row's consumer code lands.**
+- **Blocked on:** none for Phase-1 COSE_Sign1 substrate — `@formspec/signature-adapter-webcrypto` + `@integrity-stack/cose` already ship pure-TS, no WASM. Post-MVP for scope only (per web ADR-0005). WASM verifier needed only for Phase-3 BBS+ / SD-JWT selective-disclosure (per stack-root [ADR-0116](thoughts/adr/0116-selective-disclosure-sd-jwt-default-and-bbs-profile.md), SD-JWT is default and tractable; BBS+ profile-gated). Verifier output expected to conform to `stack-common-proof::ProofReportVerdict` — TS mirror tracked as queue EXT-11. Migrated from CLD-0008. Offline-bundle version is FW-0052; plain-paper version is FW-0009.
 - **Anti-patterns:** AP-003, AP-006, AP-023.
 
 ### FW-0006 — Trail-sign cover page: time, cost, what to bring
@@ -305,7 +308,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Persona:** Respondent / Signer
 - **Journey:** [J-032](JOURNEYS.md#j-032--sign-in-with-something-i-already-have-not-yet-another-password)
 - **Done:** When more than one identity provider can satisfy the form's required assurance, the user picks from the issuer's configured list. The user can decline a provider that asks for more than the form actually needs (contact list, social graph) and pick a different one that still meets the bar.
-- **Blocked on:** queue EXT-8 (form-side assurance annotation). FW-0063 ships the `OidcAdapter` and `MagicLinkAdapter`; this row adds the picker UX + per-assurance filtering.
+- **Blocked on:** queue EXT-8 (form-side assurance annotation). FW-0063 ships the `IdentityProvider` port + conformance suite + ≥1 reference adapter; this row adds the multi-IdP picker UX + per-assurance filtering, regardless of which adapters the composition wires.
 - **Anti-patterns:** AP-020.
 
 ### FW-0029 — Cross-agency referral warning at the moment it fires
@@ -410,8 +413,9 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Status:** open
 - **Persona:** Respondent
 - **Journey:** [J-021](JOURNEYS.md#j-021--i-hit-submit-where-is-it-now-and-what-do-i-owe-next)
-- **Done:** After submit, the user has a real status page: received, queued, in review with which unit, decision drafted, issued — with timing drawn from actual recent throughput, not vendor estimates. Reachable without an account, via the formspec-web authenticated proxy (per web ADR-0007 — no WOS spec change needed).
-- **Blocked on:** `workspec-server` applicant-API implementation pair (schema is authored per `work-spec/specs/api/applicant.md`; reference impl pending).
+- **Done:** After submit, the user has a real status page: received, queued, in review with which unit, decision drafted, issued — with timing drawn from actual recent throughput, not vendor estimates. Reachable without an account.
+- **Consumes ports:** `StatusReader` (returns case-status shape conforming to the `work-spec/schemas/api/applicant.schema.json` contract). **Port shape is post-MVP per web ADR-0009 §"Not in the constitutional inventory" (b) — will be ratified as its own ADR when this row's consumer code lands.**
+- **Blocked on:** at least one `StatusReader` reference adapter implementation. The formspec-stack reference composition ships `ProxiedApplicantStatusAdapter` (proxies through formspec-server to WOS — see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)), which depends on `workspec-server`'s applicant-API implementation landing (schema is authored per `work-spec/specs/api/applicant.md`; reference impl pending). Adopters running their own case-management backend wire a different adapter against the same `StatusReader` port.
 - **Anti-patterns:** AP-006, AP-013.
 
 ### FW-0040 — Embed: form lives in the host's page

@@ -12,7 +12,7 @@ Three surfaces live here:
 - **Verifier** — validates a Formspec/Trellis receipt; renders the claim graph; works offline.
 - **Selective-proof viewer** — renders selective-disclosure proofs without revealing redacted fields.
 
-Scope is **public UI only**. Anything tenant-bound (Studio, admin, billing, dev keys) lives in [`../formspec-cloud/`](../formspec-cloud/). Server endpoints live in [`../formspec-server/`](../formspec-server/).
+Scope is **public UI only**. Anything tenant-bound (Studio, admin, billing, dev keys) lives in [`../formspec-cloud/`](../formspec-cloud/). Backend services are pluggable per port (web ADR-0009); the formspec-stack reference composition wires [`../formspec-server/`](../formspec-server/) for several ports (see web ADR-0008). Adopters compose differently per their infrastructure.
 
 ## Why this repo exists separately from formspec-cloud
 
@@ -54,16 +54,16 @@ The cloud's other personas (Form Author, Tenant Admin, Integrator, Owner moment)
 - **Status:** *open* | *in design* | *in build* | *live* | *closed*.
 - **Vocabulary firewall:** never leak spec/server vocabulary into public-facing chrome. `$bind.name`, `def_id`, lint codes, substrate terminology (Trellis, COSE, HPKE, anchor), FEL syntax — all forbidden in default views. Lives behind Developer view toggle.
 
-## The positioning bet (staged)
+## The positioning bet (staged, OSS-shaped)
 
-The repo's long-term load-bearing demo is the **public verifier**: a non-cryptographer validating a Formspec/Trellis receipt in under 30 seconds without contacting Formspec. That demo is what makes "verify without us" real and the trust-as-moat story experienceable on an open-source URL.
+The repo's long-term load-bearing demo is the **OSS reference verifier**: a non-cryptographer validating a Formspec/Trellis receipt in under 30 seconds with **no service dependency on Formspec or any other specific backend**. The verifier code is auditable, forkable, and self-hostable. The bundle source is open — drag-drop from disk, fetch from any Trellis store (the issuer's, an archival mirror, the user's own backup), IPFS, S3. The trust argument holds because verification has no required service in the loop. It does NOT hold if the verifier UI ships from a closed-source SaaS or talks to a single service.
 
 The bet is **staged**, per [web ADR-0005](thoughts/adr/0005-mvp-scope-defer-cryptographic-substrate.md):
 
-- **MVP** delivers the respondent renderer end-to-end: fill, validate, submit, basic login. No cryptographic substrate.
-- **Post-MVP** delivers the verifier, signer ceremony, selective-proof viewer, and the rest of the cryptographic surface — when the upstream substrate (trellis Phase-3 selective-disclosure, signature-method-registry bindings, WYSIWYS ceremony contract) is ready to consume.
+- **MVP** delivers the respondent renderer end-to-end: fill, validate, submit, basic identity. No cryptographic substrate.
+- **Post-MVP** delivers the verifier, signer ceremony, selective-proof viewer, and the rest of the cryptographic surface — when the upstream substrate is ready to consume. Browser-side TS verification (`@formspec/signature-adapter-webcrypto`) is the MVP-relevant primitive already shipped; the WASM Phase-3 selective-disclosure work follows later.
 
-The bet is preserved, not killed. The MVP gets formspec-web to a deployable demonstrable state so the verifier work proceeds against a real consumer rather than in isolation. Contributors landing during MVP should understand: respondent renderer first, verifier second, both essential.
+The bet is preserved, not killed. Contributors landing during MVP should understand: respondent renderer first, verifier second, both essential, both shaped under hexagonal DI per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) — every backend-shaped concern is a port, every reference adapter is one of many.
 
 ## Frontend surface architecture (cross-stack)
 
@@ -71,7 +71,7 @@ formspec-web is **one of multiple frontend surfaces** per stack-root [ADR-0128 (
 
 The verifier in formspec-web is **one of four distribution modes** per stack-root [ADR-0131 (verifier distribution)](../thoughts/adr/0131-verifier-distribution.md): browser (this repo, post-MVP per web ADR-0005), CLI (`integrity-verify-cli`), embedded-library (`@integrity-stack/signature-*`), reproducible-bundle (deferred). All four are open forks until a trigger fires; formspec-web does not own the verifier surface exclusively.
 
-The upstream services formspec-web talks to are mapped in [web ADR-0008](thoughts/adr/0008-upstream-services-map.md): `formspec-server` (primary backend) and WOS / workspec-server (secondary, post-MVP, proxied through formspec-server).
+The architecture is hexagonal per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) — every backend concern is a port, every backend service is a reference adapter. The formspec-stack reference composition wires `formspec-server` and (post-MVP) WOS for several ports; see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md) for the worked example. Adopters wire whatever they use (Firebase / Supabase / Cloudflare Workers / custom backend / static-only).
 
 ## Anti-Clippy applies here too
 
