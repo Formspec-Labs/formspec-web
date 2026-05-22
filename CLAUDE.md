@@ -54,9 +54,16 @@ The cloud's other personas (Form Author, Tenant Admin, Integrator, Owner moment)
 - **Status:** *open* | *in design* | *in build* | *live* | *closed*.
 - **Vocabulary firewall:** never leak spec/server vocabulary into public-facing chrome. `$bind.name`, `def_id`, lint codes, substrate terminology (Trellis, COSE, HPKE, anchor), FEL syntax — all forbidden in default views. Lives behind Developer view toggle.
 
-## The single positioning bet
+## The positioning bet (staged)
 
-**The public verifier must make selective-proof verifiability legible to a non-cryptographer in under 30 seconds.** That is *this repo's* load-bearing demo, not the cloud's. If the verifier works, the regulated-buyer wedge is real and the entire trust-as-moat story becomes something a buyer can experience in one demo on an open-source URL.
+The repo's long-term load-bearing demo is the **public verifier**: a non-cryptographer validating a Formspec/Trellis receipt in under 30 seconds without contacting Formspec. That demo is what makes "verify without us" real and the trust-as-moat story experienceable on an open-source URL.
+
+The bet is **staged**, per [web ADR-0005](thoughts/adr/0005-mvp-scope-defer-cryptographic-substrate.md):
+
+- **MVP** delivers the respondent renderer end-to-end: fill, validate, submit, basic login. No cryptographic substrate.
+- **Post-MVP** delivers the verifier, signer ceremony, selective-proof viewer, and the rest of the cryptographic surface — when the upstream substrate (trellis Phase-3 selective-disclosure, signature-method-registry bindings, WYSIWYS ceremony contract) is ready to consume.
+
+The bet is preserved, not killed. The MVP gets formspec-web to a deployable demonstrable state so the verifier work proceeds against a real consumer rather than in isolation. Contributors landing during MVP should understand: respondent renderer first, verifier second, both essential.
 
 ## Anti-Clippy applies here too
 
