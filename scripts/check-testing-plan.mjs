@@ -10,6 +10,7 @@ const requiredCommands = [
   'npm run typecheck',
   'npm run lint',
   'npm run check:testing-plan',
+  'npm run check:release-docs',
   'npm run test:conformance',
   'npm run test:unit',
   'npm run check:vendor-leaks',
@@ -25,6 +26,7 @@ const requiredCommands = [
 ];
 const expectedScriptBodies = new Map([
   ['check:testing-plan', 'node scripts/check-testing-plan.mjs'],
+  ['check:release-docs', 'node scripts/check-release-docs.mjs'],
   ['check:bundle-budget', 'node scripts/check-bundle-budget.mjs'],
   ['check:compose-config', 'docker compose config --quiet'],
   ['test:compose-quickstart', 'node scripts/check-compose-quickstart.mjs'],

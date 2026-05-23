@@ -29,6 +29,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check:testing-plan": "node scripts/check-testing-plan.mjs",
+    "check:release-docs": "node scripts/check-release-docs.mjs",
     "check:bundle-budget": "node scripts/check-bundle-budget.mjs",
     "check:compose-config": "docker compose config --quiet",
     "test:compose-quickstart": "node scripts/check-compose-quickstart.mjs",
@@ -36,7 +37,7 @@
     "test:multi-deployment": "node scripts/check-multi-deployment.mjs",
     "check:vendor-leaks": "scripts/check-vendor-leaks.sh",
     "check:upstream-theme": "node scripts/check-upstream-theme-assets.mjs",
-    "ci": "npm run typecheck && npm run lint && npm run check:testing-plan && npm run test:conformance && npm run test:unit && npm run check:vendor-leaks && npm run check:upstream-theme && npm run test:e2e && npm run build && npm run check:bundle-budget && npm run check:compose-config && npm run test:compose-quickstart && npm run test:deployment && npm run test:multi-deployment"
+    "ci": "npm run typecheck && npm run lint && npm run check:testing-plan && npm run check:release-docs && npm run test:conformance && npm run test:unit && npm run check:vendor-leaks && npm run check:upstream-theme && npm run test:e2e && npm run build && npm run check:bundle-budget && npm run check:compose-config && npm run test:compose-quickstart && npm run test:deployment && npm run test:multi-deployment"
   },
   "dependencies": {
     "@formspec-org/engine": "file:vendor/formspec-engine",
