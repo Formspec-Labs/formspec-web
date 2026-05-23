@@ -57,7 +57,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Status:** closed (2026-05-22)
 - **Persona:** Platform
 - **Journey:** (none — platform)
-- **Done:** Local and CI build paths run `npm run ci`: typecheck (`tsc --noEmit`), lint (`eslint .` with `no-restricted-paths` enforcing web ADR-0009 §Discipline boundary), port conformance, unit/smoke tests, vendor-leak grep, upstream-theme sync, Playwright + axe, and production build. The Docker image builds static assets into nginx and writes runtime config from `FORMSPEC_WEB_*` environment variables at container start. Current suite: 18 test files / 96 tests plus 3 Playwright Chromium checks. The comprehensive gate matrix lives in `docs/testing-plan.md`.
+- **Done:** Local and CI build paths run `npm run ci`: typecheck (`tsc --noEmit`), lint (`eslint .` with `no-restricted-paths` enforcing web ADR-0009 §Discipline boundary), testing-plan integrity, port conformance, unit/smoke tests, vendor-leak grep, upstream-theme sync, Playwright + axe, production build, and bundle budget. The Docker image builds static assets into nginx and writes runtime config from `FORMSPEC_WEB_*` environment variables at container start. Current suite: 20 Vitest files / 110 tests plus 4 Playwright Chromium checks. The comprehensive gate matrix lives in `docs/testing-plan.md` and is enforced by `npm run check:testing-plan`.
 
 ### FW-0001 — End-to-end Respondent thin-slice (deployable)
 

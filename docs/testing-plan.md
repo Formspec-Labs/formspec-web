@@ -11,6 +11,7 @@ the proof that covers it.
 | --- | --- | --- | --- |
 | Type contract | `npm run typecheck` | Yes | TypeScript public surface, port shapes, profile config, adapter call sites. |
 | Layering and imports | `npm run lint` | Yes | ADR-0009 boundary rules, restricted backend/provider imports, general lint. |
+| Testing-plan integrity | `npm run check:testing-plan` | Yes | Ensures this plan stays wired to package scripts, CI workflow steps, and referenced test/script/doc paths. |
 | Port conformance | `npm run test:conformance` | Yes | First-party adapters for `DefinitionSource`, `DraftStore`, `SubmitTransport`, `IdentityProvider`, and `NotificationDelivery`. |
 | Unit and smoke tests | `npm run test:unit` | Yes | HTTP adapters, identity adapters, respondent flow helpers, runtime config, sample form, composition smoke, idempotency, Problem JSON. |
 | Vendor firewall | `npm run check:vendor-leaks` | Yes | Prevents provider-native vocabulary and disallowed vendor names from leaking through portable surfaces. |
@@ -28,7 +29,7 @@ separately so conformance failures are visible as their own class.
 
 | Surface | Required evidence | Current implementation |
 | --- | --- | --- |
-| M0-M1 scaffold and build | Typecheck, lint, unit smoke, production build. | `npm run ci`; `.github/workflows/ci.yml`. |
+| M0-M1 scaffold and build | Typecheck, lint, testing-plan integrity, unit smoke, production build. | `npm run ci`; `.github/workflows/ci.yml`; `scripts/check-testing-plan.mjs`; `tests/scripts/check-testing-plan.test.mjs`. |
 | M1 theme/token consumption | Source license and byte sync check. | `scripts/check-upstream-theme-assets.mjs`; `npm run check:upstream-theme`. |
 | M2 profile model | Unit tests for tenant headers, runtime env normalization, brand isolation, and `reference-http` port switching. | `src/profiles/profiles.test.ts`. |
 | M3 port contracts | One conformance suite per MVP port, with every first-party adapter registered. | `tests/adapter-conformance/`. |
