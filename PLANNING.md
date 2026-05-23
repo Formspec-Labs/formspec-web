@@ -13,6 +13,30 @@ Format reference: [`CLAUDE.md`](CLAUDE.md). Person-need source: [`JOURNEYS.md`](
 
 **Runtime feature framing.** Per [web ADR-0011](thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md), post-MVP respondent features resolve from instance capabilities, org runtime policy, and form runtime policy into one read-only runtime profile. A form that requires a feature the instance cannot support, or that the org forbids, fails at load time with a typed configuration error. Optional features resolve off without silently downgrading required behavior.
 
+## User-value sequencing lens
+
+This is a prioritization overlay, not a replacement for the `FW-*` rows. Treat a row as a feature when it changes what a respondent, signer, issuer, or evaluator can actually do or prove. Treat copy polish, explanation-only surfaces, and alternate presentation modes as lower priority unless a specific deployment marks them required through ADR-0011 runtime policy.
+
+| Priority | Feature tier | Rows | Why it is not sugar | Configuration lens |
+|---:|---|---|---|---|
+| 1 | Production status surface | FW-0039 | Gives the respondent a real answer after submit: received, queued, reviewed, issued, or blocked. | Requires `StatusReader`; form/org may require or forbid status exposure. |
+| 2 | Respondent-owned obligations stream | FW-0055 | Turns scattered issuer tasks into "what do I owe next?" across senders. | Requires respondent-place storage, token bag, issuer participation, and org policy. |
+| 3 | Respondent document library and selective presentation | FW-0056 | Lets the respondent reuse evidence and choose what to share instead of re-uploading per form. | Requires encrypted wallet/storage and selective-presentation policy. |
+| 4 | Cross-issuer respondent history | FW-0057 | Gives durable memory of drafts, submissions, and signed records. | Requires production FW-0055/FW-0056 foundations plus persistence/export policy. |
+| 5 | Signed receipt and long-life receipt access | FW-0009, FW-0054 | Gives the respondent durable proof they can keep, print, and verify later. | Requires receipt/export/verifier capability and org retention policy. |
+| 6 | Abandon-and-erase with deletion receipt | FW-0043 | Makes deletion a provable user action, not a best-effort privacy claim. | Requires deletion sidecar, erasure hooks, legal-hold policy, and typed failure when unsupported. |
+| 7 | Correction, amendment, withdrawal, and dispute lifecycle | FW-0034, FW-0038 | Covers the real life of a submitted record after mistakes, changed intent, or disputes. | Requires ledger lifecycle events and org/form action windows. |
+| 8 | Offline-capable fill with deferred submit | FW-0044 | Lets respondents finish despite unreliable connectivity and prevents duplicate submits. | Requires browser queue, idempotent submit transport, and form offline-safety declaration. |
+| 9 | Identity continuity and stronger auth/signing paths | FW-0020, FW-0028, FW-0030, FW-0031 | Avoids repeated identity proofing and supports assurance-dependent forms. | Requires identity/session adapters, assurance floors, and org IdP policy. |
+| 10 | File upload as a primary act | FW-0033 | Supports evidence-heavy forms where the upload is part of the submission, not decoration. | Requires object storage, attachment binding, file limits, and redaction/capture policy. |
+| 11 | Payments with atomic submit | FW-0027 | Makes fee-bearing submissions safe: pay and submit succeed or fail as one transaction. | Requires payment rail, merchant/org policy, and form fee declaration. |
+| 12 | Embed and third-party host widget | FW-0040, FW-0053 | Lets trusted hosts collect forms without sending users to an unfamiliar domain. | Requires embed transport, allowed origins, CSP policy, and form embeddability. |
+| 13 | Multi-party submission | FW-0050, FW-0061 | Supports joint legal, tax, immigration, custody, and financial workflows. | Requires party/session orchestration, per-party visibility, and party model policy. |
+| 14 | Safe-address handling | FW-0049, FW-0060 | Protects survivors and protected parties without breaking verification. | Requires privacy/redaction substrate, jurisdiction policy, and protected-field declarations. |
+| 15 | Trusted reviewer and preparer flows | FW-0042, FW-0037 | Lets lawyers, advocates, family, and preparers help without taking over the respondent's identity or signature. | Requires sharing/role sidecar, permissions, and org/form role policy. |
+
+The next coherent post-MVP tier is FW-0039 + FW-0055 + FW-0056 + FW-0057: finish the respondent-place promise before adding adjacent capabilities. Each tier still needs the ADR-0011 resolution surface before production enablement.
+
 ## Status vocabulary
 
 *open* | *in design* | *in build* | *live* | *closed*. Same set as JOURNEYS.
