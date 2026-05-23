@@ -88,6 +88,8 @@ const requiredMilestones = new Map([
       'docs/identity/integration.md',
       'docs/identity/multi-flow.md',
       'thoughts/specs/2026-05-22-upstream-extension-queue.md',
+      'npm run check:upstream-blockers',
+      'scripts/check-upstream-blockers.mjs',
     ],
   ],
   [
@@ -99,11 +101,13 @@ const requiredMilestones = new Map([
       'npm run test:deployment',
       'npm run test:multi-deployment',
       'npm run check:release-docs',
+      'npm run check:upstream-blockers',
       'docker-compose.yml',
       'docs/deployment.md',
       'docs/operations.md',
       'docs/multi-deployment.md',
       'thoughts/specs/2026-05-22-upstream-extension-queue.md',
+      'scripts/check-upstream-blockers.mjs',
     ],
   ],
 ]);
@@ -125,6 +129,7 @@ const requiredBoundaries = new Map([
       'docs/identity/integration.md',
       'thoughts/specs/2026-05-22-upstream-extension-queue.md',
       'docs/testing-plan.md',
+      'npm run check:upstream-blockers',
     ],
   ],
   [
@@ -134,6 +139,7 @@ const requiredBoundaries = new Map([
       'docs/adapters/draft-store.md',
       'thoughts/specs/2026-05-22-upstream-extension-queue.md',
       'docs/testing-plan.md',
+      'npm run check:upstream-blockers',
     ],
   ],
   [
@@ -143,6 +149,7 @@ const requiredBoundaries = new Map([
       'docs/adapters/draft-store.md',
       'thoughts/specs/2026-05-22-upstream-extension-queue.md',
       'docs/testing-plan.md',
+      'npm run check:upstream-blockers',
     ],
   ],
   ['Hosted demo URL', ['Deferred to user action', 'docs/deployment.md', 'docs/operations.md', 'README.md']],
@@ -166,6 +173,7 @@ export function checkMvpAudit(rootDir) {
   assertPhrase(audit, 'Local web MVP proof is implemented and gated by `npm run ci`');
   assertPhrase(audit, 'Do not describe M6, M7b, cross-device draft resume, session-bound anonymous');
   assertPhrase(audit, '`npm run check:mvp-audit` verifies this file');
+  assertPhrase(audit, '`npm run check:upstream-blockers`');
 
   for (const [milestone, requiredEvidence] of requiredMilestones) {
     const row = milestoneRows.get(milestone);

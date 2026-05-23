@@ -26,8 +26,8 @@ signed until their blocker rows close.
 | M4 reference adapters | HTTP and identity adapters are covered by adapter unit tests, conformance registration, Problem JSON handling, tenant/auth headers, idempotency, and docs. | `tests/adapters/http/definition-source.test.ts`; `tests/adapters/http/draft-store.test.ts`; `tests/adapters/http/submit-transport.test.ts`; `tests/adapters/http/http-client.test.ts`; `tests/adapters/http/anonymous-session.test.ts`; `tests/adapters/identity/anonymous.test.ts`; `tests/adapters/identity/oidc.test.ts`; `tests/adapters/identity/magic-link.test.ts`; `docs/adapters/definition-source.md`; `docs/adapters/draft-store.md`; `docs/adapters/submit-transport.md`; `docs/adapters/identity-provider.md`; `docs/adapters/notification-delivery.md`. |
 | M5 default composition | Demo composition, sample form, production composition switch, quickstart docs, and Chromium quickstart smoke are automated. | `tests/demo/sample-form.test.ts`; `tests/smoke/composition.test.ts`; `docs/getting-started.md`; `npm run test:compose-quickstart`; `npm run check:release-docs`. |
 | M6 respondent runtime | Runtime helpers, explicit OIDC sign-in state, error/no-JS/mobile/a11y smoke, bundle budget, and deployment headers are automated; manual AT and production Locale Documents remain blockers. | `tests/app/respondent-flow.test.ts`; `tests/app/respondent-runtime.test.tsx`; `tests/e2e/placeholder-a11y.spec.ts`; `npm run check:bundle-budget`; `npm run test:deployment`; `docs/ux/accessibility.md`; `docs/ux/i18n.md`; `docs/testing-plan.md`. |
-| M7 identity close | M7a anonymous/multi-flow client proof is automated; M7b server-backed OIDC validation remains blocked by EXT-23. | `tests/adapter-conformance/identity-provider/conformance.test.ts`; `tests/adapters/http/anonymous-session.test.ts`; `tests/adapters/identity/oidc.test.ts`; `tests/smoke/composition.test.ts`; `docs/identity/integration.md`; `docs/identity/multi-flow.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`. |
-| M8 deployment closeout | Local Docker/nginx deployment, runtime config, compression/cache headers, compose config, quickstart, multi-deployment brand isolation, deferred hosted-demo decision, and EXT-19..27 migration are gated. | `npm run build`; `npm run check:compose-config`; `npm run test:compose-quickstart`; `npm run test:deployment`; `npm run test:multi-deployment`; `npm run check:release-docs`; `docker-compose.yml`; `docs/deployment.md`; `docs/operations.md`; `docs/multi-deployment.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`. |
+| M7 identity close | M7a anonymous/multi-flow client proof is automated; M7b server-backed OIDC validation remains blocked by EXT-23. | `tests/adapter-conformance/identity-provider/conformance.test.ts`; `tests/adapters/http/anonymous-session.test.ts`; `tests/adapters/identity/oidc.test.ts`; `tests/smoke/composition.test.ts`; `docs/identity/integration.md`; `docs/identity/multi-flow.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `npm run check:upstream-blockers`; `scripts/check-upstream-blockers.mjs`. |
+| M8 deployment closeout | Local Docker/nginx deployment, runtime config, compression/cache headers, compose config, quickstart, multi-deployment brand isolation, deferred hosted-demo decision, and EXT-19..27 migration are gated. | `npm run build`; `npm run check:compose-config`; `npm run test:compose-quickstart`; `npm run test:deployment`; `npm run test:multi-deployment`; `npm run check:release-docs`; `npm run check:upstream-blockers`; `docker-compose.yml`; `docs/deployment.md`; `docs/operations.md`; `docs/multi-deployment.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `scripts/check-upstream-blockers.mjs`. |
 
 ## Release Sign-Off Boundaries
 
@@ -37,13 +37,17 @@ signed until their blocker rows close.
 | NVDA sweep | Pending manual run. | `docs/ux/accessibility.md`; `docs/testing-plan.md`. |
 | Lighthouse mobile refresh | Passes on local Docker/nginx evidence; refresh before release tag. | `docs/ux/responsive.md`; `docs/testing-plan.md`. |
 | Production Locale Documents from server | Demo-proven only until server emits concrete Locale Documents. | `docs/ux/i18n.md`; `docs/testing-plan.md`. |
-| Full OIDC server validation | Blocked by EXT-23. | `docs/identity/integration.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`. |
-| Cross-reload or cross-device draft resume | Blocked by EXT-26. | `docs/adapters/draft-store.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`. |
-| Session-bound anonymous draft update | Blocked by EXT-27. | `docs/adapters/draft-store.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`. |
+| Full OIDC server validation | Blocked by EXT-23. | `docs/identity/integration.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`; `npm run check:upstream-blockers`. |
+| Cross-reload or cross-device draft resume | Blocked by EXT-26. | `docs/adapters/draft-store.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`; `npm run check:upstream-blockers`. |
+| Session-bound anonymous draft update | Blocked by EXT-27. | `docs/adapters/draft-store.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`; `npm run check:upstream-blockers`. |
 | Hosted demo URL | Deferred to user action. | `docs/deployment.md`; `docs/operations.md`; `README.md`. |
 
 ## Audit Gate
 
 `npm run check:mvp-audit` verifies this file still names every M0-M8 milestone,
 keeps the release sign-off boundaries explicit, and points each cited evidence
-path at a real local file or package script.
+path at a real local file or package script. `npm run check:upstream-blockers`
+checks the sibling `formspec-server` checkout for the current blocker
+indicators and documented alternate landing shapes for EXT-23, EXT-26, and
+EXT-27. It is a local stack gate, not a substitute for reviewing new server
+architecture after those upstream extensions land.

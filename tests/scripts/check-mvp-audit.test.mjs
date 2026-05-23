@@ -110,6 +110,7 @@ function createFixture(options = {}) {
     'check:conformance-coverage',
     'test:compose-quickstart',
     'check:release-docs',
+    'check:upstream-blockers',
     'check:bundle-budget',
     'test:deployment',
     'build',
@@ -216,6 +217,8 @@ function mvpAuditDoc(options = {}) {
         'docs/identity/integration.md',
         'docs/identity/multi-flow.md',
         'thoughts/specs/2026-05-22-upstream-extension-queue.md',
+        'npm run check:upstream-blockers',
+        'scripts/check-upstream-blockers.mjs',
       ],
     ],
     [
@@ -227,11 +230,13 @@ function mvpAuditDoc(options = {}) {
         'npm run test:deployment',
         'npm run test:multi-deployment',
         'npm run check:release-docs',
+        'npm run check:upstream-blockers',
         'docker-compose.yml',
         'docs/deployment.md',
         'docs/operations.md',
         'docs/multi-deployment.md',
         'thoughts/specs/2026-05-22-upstream-extension-queue.md',
+        'scripts/check-upstream-blockers.mjs',
       ],
     ],
   ];
@@ -255,6 +260,7 @@ function mvpAuditDoc(options = {}) {
         'docs/identity/integration.md',
         'thoughts/specs/2026-05-22-upstream-extension-queue.md',
         'docs/testing-plan.md',
+        'npm run check:upstream-blockers',
       ],
     ],
     [
@@ -264,6 +270,7 @@ function mvpAuditDoc(options = {}) {
         'docs/adapters/draft-store.md',
         'thoughts/specs/2026-05-22-upstream-extension-queue.md',
         'docs/testing-plan.md',
+        'npm run check:upstream-blockers',
       ],
     ],
     [
@@ -273,6 +280,7 @@ function mvpAuditDoc(options = {}) {
         'docs/adapters/draft-store.md',
         'thoughts/specs/2026-05-22-upstream-extension-queue.md',
         'docs/testing-plan.md',
+        'npm run check:upstream-blockers',
       ],
     ],
     ['Hosted demo URL', 'Deferred to user action.', ['docs/deployment.md', 'docs/operations.md', 'README.md']],
@@ -307,6 +315,7 @@ function mvpAuditDoc(options = {}) {
     '## Audit Gate',
     '',
     '`npm run check:mvp-audit` verifies this file.',
+    '`npm run check:upstream-blockers` keeps server blockers current.',
   ].join('\n');
 }
 
@@ -357,6 +366,7 @@ function evidencePaths() {
     'docs/ux/i18n.md',
     'docs/ux/responsive.md',
     'package.json',
+    'scripts/check-upstream-blockers.mjs',
     'src/adapter-conformance/index.ts',
     'src/profiles/profiles.test.ts',
     'tests/adapter-conformance/',

@@ -11,6 +11,7 @@ const requiredCommands = [
   'npm run lint',
   'npm run check:testing-plan',
   'npm run check:mvp-audit',
+  'npm run check:upstream-blockers',
   'npm run check:release-docs',
   'npm run check:conformance-coverage',
   'npm run test:conformance',
@@ -26,9 +27,11 @@ const requiredCommands = [
   'npm run test:multi-deployment',
   'npm run ci',
 ];
+const ciRunValues = new Set(['Yes', 'No', 'Local stack']);
 const expectedScriptBodies = new Map([
   ['check:testing-plan', 'node scripts/check-testing-plan.mjs'],
   ['check:mvp-audit', 'node scripts/check-mvp-audit.mjs'],
+  ['check:upstream-blockers', 'node scripts/check-upstream-blockers.mjs'],
   ['check:release-docs', 'node scripts/check-release-docs.mjs'],
   ['check:conformance-coverage', 'node scripts/check-conformance-coverage.mjs'],
   ['check:bundle-budget', 'node scripts/check-bundle-budget.mjs'],
@@ -93,6 +96,8 @@ const requiredCoverageRows = new Map([
       'scripts/check-mvp-audit.mjs',
       'tests/scripts/check-mvp-audit.test.mjs',
       'docs/mvp-audit.md',
+      'scripts/check-upstream-blockers.mjs',
+      'tests/scripts/check-upstream-blockers.test.mjs',
     ],
   ],
   [
@@ -177,6 +182,9 @@ const requiredCoverageRows = new Map([
       'tests/smoke/composition.test.ts',
       'docs/identity/integration.md',
       'docs/identity/multi-flow.md',
+      'npm run check:upstream-blockers',
+      'scripts/check-upstream-blockers.mjs',
+      'tests/scripts/check-upstream-blockers.test.mjs',
     ],
   ],
   [
@@ -195,6 +203,7 @@ const requiredCoverageRows = new Map([
     [
       'npm run build',
       'npm run check:mvp-audit',
+      'npm run check:upstream-blockers',
       'npm run check:release-docs',
       'npm run check:compose-config',
       'npm run test:compose-quickstart',
@@ -203,6 +212,8 @@ const requiredCoverageRows = new Map([
       'scripts/check-mvp-audit.mjs',
       'tests/scripts/check-mvp-audit.test.mjs',
       'docs/mvp-audit.md',
+      'scripts/check-upstream-blockers.mjs',
+      'tests/scripts/check-upstream-blockers.test.mjs',
       'scripts/check-release-docs.mjs',
       'tests/scripts/check-release-docs.test.mjs',
       'thoughts/specs/2026-05-22-upstream-extension-queue.md',
@@ -265,6 +276,9 @@ export function checkTestingPlan(rootDir) {
     if (!script) {
       fail(`testing plan check failed: "${gate}" command is not an npm run command: ${command}`);
     }
+    if (!ciRunValues.has(runsInCi)) {
+      fail(`testing plan check failed: "${gate}" has unsupported Runs in CI value "${runsInCi}"`);
+    }
 
     if (!packageJson.scripts?.[script]) {
       fail(`testing plan check failed: package.json is missing script "${script}" for "${gate}"`);
@@ -277,8 +291,10 @@ export function checkTestingPlan(rootDir) {
       );
     }
 
-    if (runsInCi === 'Yes' && script !== 'ci') {
+    if ((runsInCi === 'Yes' || runsInCi === 'Local stack') && script !== 'ci') {
       assertCommandPresent(ciCommands, command, `package scripts.ci does not run "${command}" for "${gate}"`);
+    }
+    if (runsInCi === 'Yes' && script !== 'ci') {
       assertCommandPresent(
         workflowRunCommands,
         command,
@@ -287,11 +303,17 @@ export function checkTestingPlan(rootDir) {
     }
   }
 
-  const documentedCiCommands = commandGates
-    .filter(({ command }) => command !== 'npm run ci')
+  const documentedPackageCiCommands = commandGates
+    .filter(
+      ({ command, runsInCi }) =>
+        command !== 'npm run ci' && (runsInCi === 'Yes' || runsInCi === 'Local stack'),
+    )
     .map(({ command }) => command);
-  assertCommandOrder(documentedCiCommands, ciCommands, 'package scripts.ci');
-  assertCommandOrder(documentedCiCommands, workflowRunCommands, '.github/workflows/ci.yml');
+  const documentedWorkflowCommands = commandGates
+    .filter(({ command, runsInCi }) => command !== 'npm run ci' && runsInCi === 'Yes')
+    .map(({ command }) => command);
+  assertCommandOrder(documentedPackageCiCommands, ciCommands, 'package scripts.ci');
+  assertCommandOrder(documentedWorkflowCommands, workflowRunCommands, '.github/workflows/ci.yml');
 
   const coverageRows = markdownRowsBetween(testingPlan, '## Coverage Matrix', '## Adapter Rules');
   const coverageRowsBySurface = new Map();

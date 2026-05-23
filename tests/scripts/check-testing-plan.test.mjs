@@ -37,6 +37,15 @@ describe('check-testing-plan', () => {
     expect(result.stderr).toContain('.github/workflows/ci.yml does not run "npm run check:testing-plan"');
   });
 
+  it('rejects local stack gates that are absent from package ci', () => {
+    const result = runCheck(createFixture({ omitCiCommand: 'npm run check:upstream-blockers' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'package scripts.ci does not run "npm run check:upstream-blockers"',
+    );
+  });
+
   it('rejects missing implementation paths from the coverage matrix', () => {
     const result = runCheck(createFixture({ omitPath: 'scripts/check-testing-plan.mjs' }));
 
@@ -208,6 +217,7 @@ function createFixture(options = {}) {
     'npm run lint',
     'npm run check:testing-plan',
     'npm run check:mvp-audit',
+    'npm run check:upstream-blockers',
     'npm run check:release-docs',
     'npm run check:conformance-coverage',
     'npm run test:conformance',
@@ -221,13 +231,17 @@ function createFixture(options = {}) {
     'npm run test:compose-quickstart',
     'npm run test:deployment',
     'npm run test:multi-deployment',
-  ];
+  ].filter((command) => command !== options.omitCiCommand);
+  const workflowCommands = ciCommands.filter(
+    (command) => command !== 'npm run check:upstream-blockers',
+  );
 
   const scripts = {
     typecheck: 'tsc --noEmit',
     lint: 'eslint .',
     'check:testing-plan': 'node scripts/check-testing-plan.mjs',
     'check:mvp-audit': 'node scripts/check-mvp-audit.mjs',
+    'check:upstream-blockers': 'node scripts/check-upstream-blockers.mjs',
     'check:release-docs': 'node scripts/check-release-docs.mjs',
     'check:conformance-coverage': 'node scripts/check-conformance-coverage.mjs',
     'test:conformance': 'vitest run tests/adapter-conformance',
@@ -258,12 +272,13 @@ function createFixture(options = {}) {
   };
 
   write(root, 'package.json', JSON.stringify({ exports: exportsMap, scripts }));
-  write(root, '.github/workflows/ci.yml', workflow(ciCommands, options.commentOnlyWorkflowCommand));
+  write(root, '.github/workflows/ci.yml', workflow(workflowCommands, options.commentOnlyWorkflowCommand));
   write(root, 'docs/testing-plan.md', testingPlan(options));
 
   for (const path of [
     'scripts/check-testing-plan.mjs',
     'scripts/check-mvp-audit.mjs',
+    'scripts/check-upstream-blockers.mjs',
     'scripts/check-upstream-theme-assets.mjs',
     'scripts/check-bundle-budget.mjs',
     'scripts/check-conformance-coverage.mjs',
@@ -279,6 +294,7 @@ function createFixture(options = {}) {
     'tests/e2e/placeholder-a11y.spec.ts',
     'tests/scripts/check-testing-plan.test.mjs',
     'tests/scripts/check-mvp-audit.test.mjs',
+    'tests/scripts/check-upstream-blockers.test.mjs',
     'tests/scripts/check-conformance-coverage.test.mjs',
     'tests/scripts/check-release-docs.test.mjs',
     'tests/adapter-conformance/README.md',
@@ -360,6 +376,7 @@ function testingPlan(options = {}) {
     ['Layering and imports', 'npm run lint'],
     ['Testing-plan integrity', 'npm run check:testing-plan'],
     ['MVP audit integrity', 'npm run check:mvp-audit'],
+    ['Upstream blocker integrity', 'npm run check:upstream-blockers'],
     ['Release docs', 'npm run check:release-docs'],
     ['Conformance coverage', 'npm run check:conformance-coverage'],
     ['Port conformance', 'npm run test:conformance'],
@@ -383,7 +400,10 @@ function testingPlan(options = {}) {
     '',
     '| Gate | Command | Runs in CI | Covers |',
     '| --- | --- | --- | --- |',
-    ...rows.map(([gate, command]) => `| ${gate} | \`${command}\` | Yes | Fixture coverage. |`),
+    ...rows.map(([gate, command]) => {
+      const runsInCi = command === 'npm run check:upstream-blockers' ? 'Local stack' : 'Yes';
+      return `| ${gate} | \`${command}\` | ${runsInCi} | Fixture coverage. |`;
+    }),
     '',
     '## Coverage Matrix',
     '',
@@ -415,6 +435,8 @@ function coverageMatrixRows(options = {}) {
         'scripts/check-mvp-audit.mjs',
         'tests/scripts/check-mvp-audit.test.mjs',
         'docs/mvp-audit.md',
+        'scripts/check-upstream-blockers.mjs',
+        'tests/scripts/check-upstream-blockers.test.mjs',
       ],
     ],
     [
@@ -499,6 +521,9 @@ function coverageMatrixRows(options = {}) {
         'tests/smoke/composition.test.ts',
         'docs/identity/integration.md',
         'docs/identity/multi-flow.md',
+        'npm run check:upstream-blockers',
+        'scripts/check-upstream-blockers.mjs',
+        'tests/scripts/check-upstream-blockers.test.mjs',
       ],
     ],
     [
@@ -517,6 +542,7 @@ function coverageMatrixRows(options = {}) {
       [
         'npm run build',
         'npm run check:mvp-audit',
+        'npm run check:upstream-blockers',
         'npm run check:release-docs',
         'npm run check:compose-config',
         'npm run test:compose-quickstart',
@@ -525,6 +551,8 @@ function coverageMatrixRows(options = {}) {
         'scripts/check-mvp-audit.mjs',
         'tests/scripts/check-mvp-audit.test.mjs',
         'docs/mvp-audit.md',
+        'scripts/check-upstream-blockers.mjs',
+        'tests/scripts/check-upstream-blockers.test.mjs',
         'scripts/check-release-docs.mjs',
         'tests/scripts/check-release-docs.test.mjs',
         'thoughts/specs/2026-05-22-upstream-extension-queue.md',
