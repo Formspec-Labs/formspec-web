@@ -87,6 +87,54 @@ describe('check-testing-plan', () => {
     );
   });
 
+  it('rejects missing manual release gates', () => {
+    const result = runCheck(createFixture({ omitManualGate: 'Full OIDC server validation' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'manual release gate is missing "Full OIDC server validation"',
+    );
+  });
+
+  it('rejects manual release gate statuses that drop blocker IDs', () => {
+    const result = runCheck(
+      createFixture({
+        manualStatusOverrides: {
+          'Full OIDC server validation': 'Pending.',
+        },
+      }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'manual release gate "Full OIDC server validation" status must be "Blocked by EXT-23"',
+    );
+  });
+
+  it('rejects manual release gate statuses that contradict release blocking posture', () => {
+    const result = runCheck(
+      createFixture({
+        manualStatusOverrides: {
+          'Full OIDC server validation': 'Blocked by EXT-23; advisory only, not a release blocker.',
+        },
+      }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'manual release gate "Full OIDC server validation" status must be "Blocked by EXT-23"',
+    );
+  });
+
+  it('rejects missing manual release gate evidence paths', () => {
+    const result = runCheck(createFixture({ omitPath: 'docs/ux/accessibility.md' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'manual release gate "VoiceOver sweep" references missing evidence path "docs/ux/accessibility.md"',
+    );
+  });
+
   it('rejects missing root-level documentation paths from the coverage matrix', () => {
     const result = runCheck(createFixture({ omitPath: 'README.md' }));
 
@@ -168,7 +216,7 @@ function createFixture(options = {}) {
 
   write(root, 'package.json', JSON.stringify({ exports: exportsMap, scripts }));
   write(root, '.github/workflows/ci.yml', workflow(ciCommands, options.commentOnlyWorkflowCommand));
-  write(root, 'docs/testing-plan.md', testingPlan(options.omitCommand));
+  write(root, 'docs/testing-plan.md', testingPlan(options));
 
   for (const path of [
     'scripts/check-testing-plan.mjs',
@@ -186,6 +234,11 @@ function createFixture(options = {}) {
     'src/ports/index.ts',
     'src/profiles/index.ts',
     'src/shared/index.ts',
+    'docs/adapters/draft-store.md',
+    'docs/identity/integration.md',
+    'docs/ux/accessibility.md',
+    'docs/ux/i18n.md',
+    'docs/ux/responsive.md',
     'scripts/check-deployment-headers.mjs',
     'scripts/check-release-docs.mjs',
     'scripts/check-compose-quickstart.mjs',
@@ -212,7 +265,7 @@ function workflow(commands, commentOnlyCommand) {
   ].join('\n');
 }
 
-function testingPlan(omitCommand) {
+function testingPlan(options = {}) {
   const rows = [
     ['Type contract', 'npm run typecheck'],
     ['Layering and imports', 'npm run lint'],
@@ -230,7 +283,7 @@ function testingPlan(omitCommand) {
     ['Deployment headers', 'npm run test:deployment'],
     ['Multi-deployment smoke', 'npm run test:multi-deployment'],
     ['Full local gate', 'npm run ci'],
-  ].filter(([, command]) => command !== omitCommand);
+  ].filter(([, command]) => command !== options.omitCommand);
 
   return [
     '# Testing Plan',
@@ -248,7 +301,47 @@ function testingPlan(omitCommand) {
     '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `tests/scripts/check-release-docs.test.mjs`; `docs/testing-plan.md`; `src/adapter-conformance/index.ts`; `scripts/check-testing-plan.mjs`; `scripts/check-release-docs.mjs`; `scripts/check-deployment-headers.mjs`; `scripts/check-compose-quickstart.mjs`; `scripts/check-multi-deployment.mjs`; `README.md`; `package.json`. |',
     '',
     '## Adapter Rules',
+    '',
+    '## Manual Release Gates',
+    '',
+    '| Gate | Evidence location | Status |',
+    '| --- | --- | --- |',
+    ...manualReleaseRows(options),
   ].join('\n');
+}
+
+function manualReleaseRows(options = {}) {
+  return [
+    ['VoiceOver sweep', 'docs/ux/accessibility.md', 'Pending manual run.'],
+    ['NVDA sweep', 'docs/ux/accessibility.md', 'Pending manual run.'],
+    [
+      'Lighthouse mobile >= 90 and FCP < 1.5 s',
+      'docs/ux/responsive.md',
+      'Passes on local Docker/nginx evidence; refresh before release tag.',
+    ],
+    [
+      'Production Locale Documents from server',
+      'docs/ux/i18n.md',
+      'Demo-proven only until server emits concrete Locale Documents.',
+    ],
+    ['Full OIDC server validation', 'docs/identity/integration.md', 'Blocked by EXT-23.'],
+    [
+      'Cross-reload or cross-device draft resume',
+      'docs/adapters/draft-store.md',
+      'Blocked by EXT-26.',
+    ],
+    [
+      'Session-bound anonymous draft update',
+      'docs/adapters/draft-store.md',
+      'Blocked by EXT-27.',
+    ],
+  ]
+    .filter(([gate]) => gate !== options.omitManualGate)
+    .map(([gate, evidence, status]) => {
+      const evidenceValue = options.manualEvidenceOverrides?.[gate] ?? evidence;
+      const statusValue = options.manualStatusOverrides?.[gate] ?? status;
+      return `| ${gate} | \`${evidenceValue}\` | ${statusValue} |`;
+    });
 }
 
 function write(root, path, contents) {

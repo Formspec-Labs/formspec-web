@@ -11,7 +11,7 @@ the proof that covers it.
 | --- | --- | --- | --- |
 | Type contract | `npm run typecheck` | Yes | TypeScript public surface, port shapes, profile config, adapter call sites. |
 | Layering and imports | `npm run lint` | Yes | ADR-0009 boundary rules, restricted backend/provider imports, general lint. |
-| Testing-plan integrity | `npm run check:testing-plan` | Yes | Ensures this plan stays wired to package scripts, CI workflow steps, public package exports, and referenced test/script/doc paths. |
+| Testing-plan integrity | `npm run check:testing-plan` | Yes | Ensures this plan stays wired to package scripts, CI workflow steps, public package exports, manual release gates, and referenced test/script/doc paths. |
 | Release docs | `npm run check:release-docs` | Yes | Ensures M5 quickstart proof, M8 hosted-demo deferral, static-export recipes, Docker reverse-proxy recipe, README release state, and server-stack blockers stay documented. |
 | Port conformance | `npm run test:conformance` | Yes | First-party adapters for `DefinitionSource`, `DraftStore`, `SubmitTransport`, `IdentityProvider`, and `NotificationDelivery`. |
 | Unit and smoke tests | `npm run test:unit` | Yes | HTTP adapters, identity adapters, respondent flow helpers, runtime config, sample form, composition smoke, idempotency, Problem JSON. |

@@ -46,6 +46,36 @@ const expectedPackageExports = new Map([
   ['./profiles', './src/profiles/index.ts'],
   ['./shared', './src/shared/index.ts'],
 ]);
+const requiredManualGates = new Map([
+  ['VoiceOver sweep', { evidence: 'docs/ux/accessibility.md', status: 'Pending manual run' }],
+  ['NVDA sweep', { evidence: 'docs/ux/accessibility.md', status: 'Pending manual run' }],
+  [
+    'Lighthouse mobile >= 90 and FCP < 1.5 s',
+    {
+      evidence: 'docs/ux/responsive.md',
+      status: 'Passes on local Docker/nginx evidence; refresh before release tag',
+    },
+  ],
+  [
+    'Production Locale Documents from server',
+    {
+      evidence: 'docs/ux/i18n.md',
+      status: 'Demo-proven only until server emits concrete Locale Documents',
+    },
+  ],
+  [
+    'Full OIDC server validation',
+    { evidence: 'docs/identity/integration.md', status: 'Blocked by EXT-23' },
+  ],
+  [
+    'Cross-reload or cross-device draft resume',
+    { evidence: 'docs/adapters/draft-store.md', status: 'Blocked by EXT-26' },
+  ],
+  [
+    'Session-bound anonymous draft update',
+    { evidence: 'docs/adapters/draft-store.md', status: 'Blocked by EXT-27' },
+  ],
+]);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const rootDir = rootDirFromArgs(process.argv.slice(2)) ?? defaultRootDir;
@@ -90,6 +120,7 @@ export function checkTestingPlan(rootDir) {
   const ciCommands = parseCiScriptCommands(ciScript);
   const workflowRunCommands = parseWorkflowRunCommands(ciWorkflow);
   assertPackageExports(packageJson.exports, rootDir);
+  assertManualReleaseGates(testingPlan, rootDir);
 
   for (const { gate, command, runsInCi } of commandGates) {
     const script = npmRunScript(command);
@@ -174,6 +205,14 @@ function readFile(rootDir, relativePath) {
 
 function markdownRowsBetween(text, startHeading, endHeading) {
   const section = between(text, startHeading, endHeading);
+  return markdownRows(section);
+}
+
+function markdownRowsInSection(text, startHeading) {
+  return markdownRows(sectionAfterHeading(text, startHeading));
+}
+
+function markdownRows(section) {
   return section
     .split('\n')
     .map((line) => line.trim())
@@ -200,6 +239,24 @@ function between(text, startMarker, endMarker) {
   }
 
   return text.slice(start + startMarker.length, end);
+}
+
+function sectionAfterHeading(text, heading) {
+  const marker = `${heading}\n`;
+  const start = text.startsWith(marker) ? 0 : text.indexOf(`\n${marker}`);
+  if (start === -1) {
+    fail(`testing plan check failed: missing section "${heading}"`);
+  }
+
+  const headingLevel = heading.match(/^#+/)?.[0].length;
+  if (!headingLevel) {
+    fail(`testing plan check failed: invalid heading "${heading}"`);
+  }
+
+  const contentStart = start + (start === 0 ? marker.length : marker.length + 1);
+  const rest = text.slice(contentStart);
+  const nextHeading = new RegExp(`\\n#{1,${headingLevel}}\\s`).exec(rest);
+  return nextHeading ? rest.slice(0, nextHeading.index) : rest;
 }
 
 function unwrapCode(cell) {
@@ -277,6 +334,45 @@ function assertPackageExports(exportsMap, rootDir) {
   }
 }
 
+function assertManualReleaseGates(testingPlan, rootDir) {
+  const manualGateRows = markdownRowsInSection(testingPlan, '## Manual Release Gates');
+  const manualGates = new Map(
+    manualGateRows.map(([gate, evidence, status]) => [
+      gate,
+      { evidence: unwrapCode(evidence), status: status ?? '' },
+    ]),
+  );
+
+  if (manualGates.size === 0) {
+    fail('testing plan check failed: no manual release gates found in docs/testing-plan.md');
+  }
+
+  for (const [gate, expected] of requiredManualGates) {
+    const actual = manualGates.get(gate);
+    if (!actual) {
+      fail(`testing plan check failed: manual release gate is missing "${gate}"`);
+    }
+
+    if (actual.evidence !== expected.evidence) {
+      fail(
+        `testing plan check failed: manual release gate "${gate}" evidence must be "${expected.evidence}"`,
+      );
+    }
+
+    if (!existsSync(join(rootDir, actual.evidence))) {
+      fail(
+        `testing plan check failed: manual release gate "${gate}" references missing evidence path "${actual.evidence}"`,
+      );
+    }
+
+    if (normalizeStatus(actual.status) !== expected.status) {
+      fail(
+        `testing plan check failed: manual release gate "${gate}" status must be "${expected.status}"`,
+      );
+    }
+  }
+}
+
 function testRootsFromCiCommands(commands, scripts) {
   const roots = new Set();
   for (const command of commands) {
@@ -327,6 +423,10 @@ function isCoveredByRoot(path, roots) {
 
 function normalizePath(path) {
   return path.replace(/^\.\//, '').replace(/\/+$/, '');
+}
+
+function normalizeStatus(status) {
+  return status.trim().replace(/\.$/, '');
 }
 
 function codeSpans(text) {
