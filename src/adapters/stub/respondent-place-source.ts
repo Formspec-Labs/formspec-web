@@ -3,6 +3,7 @@ import type {
   RespondentPlaceSource,
 } from '../../ports/respondent-place-source.ts';
 import { isRespondentPlaceSnapshot } from '../../shared/respondent-place.ts';
+import { markDemoStubAdapter } from '../../policy/sentinel.ts';
 
 export function stubRespondentPlaceSource(
   initialSnapshot: RespondentPlaceSnapshot = emptyRespondentPlaceSnapshot(),
@@ -12,7 +13,9 @@ export function stubRespondentPlaceSource(
   let snapshot = cloneJson(initialSnapshot);
   assertRespondentPlaceSnapshot(snapshot);
 
-  return {
+  const adapter: RespondentPlaceSource & {
+    replaceSnapshot(snapshot: RespondentPlaceSnapshot): void;
+  } = {
     replaceSnapshot(nextSnapshot) {
       assertRespondentPlaceSnapshot(nextSnapshot);
       snapshot = cloneJson(nextSnapshot);
@@ -21,6 +24,11 @@ export function stubRespondentPlaceSource(
       return cloneJson(snapshot);
     },
   };
+  markDemoStubAdapter(adapter, {
+    featureKey: 'respondentPlace',
+    reason: 'demo-only respondent-place fixture; not valid for production',
+  });
+  return adapter;
 }
 
 export function emptyRespondentPlaceSnapshot(subjectRef = 'respondent:anonymous'): RespondentPlaceSnapshot {

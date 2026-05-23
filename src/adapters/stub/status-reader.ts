@@ -4,6 +4,7 @@ import type {
   StatusRequest,
 } from '../../ports/status-reader.ts';
 import { isApplicantStatusResource } from '../../shared/respondent-place.ts';
+import { markDemoStubAdapter } from '../../policy/sentinel.ts';
 
 export function stubStatusReader(
   initialRecords: Iterable<readonly [string, ApplicantStatusResource]> = [],
@@ -16,7 +17,9 @@ export function stubStatusReader(
     records.set(key, cloneJson(resource));
   }
 
-  return {
+  const adapter: StatusReader & {
+    registerStatus(key: string, resource: ApplicantStatusResource): void;
+  } = {
     registerStatus(key, resource) {
       assertApplicantStatusResource(resource);
       records.set(key, cloneJson(resource));
@@ -26,6 +29,11 @@ export function stubStatusReader(
       return key ? cloneJson(records.get(key)) : undefined;
     },
   };
+  markDemoStubAdapter(adapter, {
+    featureKey: 'status',
+    reason: 'demo-only status fixture; not valid for production',
+  });
+  return adapter;
 }
 
 function assertApplicantStatusResource(value: unknown): asserts value is ApplicantStatusResource {
