@@ -182,6 +182,18 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Done:** `HttpDraftStore` and `HttpSubmitTransport` share draft binding through an adapter-owned registry or composition helper instead of passing a web-runtime draft key through `IntakeHandoff.extensions` and resolving it back through `HttpDraftStore.draftIdFor()`. The port contracts stay unchanged; the cleanup is entirely inside the formspec-stack reference adapter composition.
 - **Blocked on:** no upstream block. Internal refactor filed from M8 closeout. The original milestone note called this "localStorage prefix coupling"; the landed implementation uses in-memory draft binding rather than localStorage, but the cleanup target is the same adapter-boundary coupling between draft persistence and submit.
 
+### FW-0065 — Runtime feature resolver scaffold + policy gates
+
+- **Phase:** Post-MVP
+- **Status:** in build
+- **Persona:** Platform
+- **Journey:** (none — platform; backs every post-MVP feature row)
+- **What:** Land the `RuntimeFeatureResolver`, typed configuration error classes, the `ResolvedRuntimeProfile` context, both adapter provenance markers (unavailable + demo-stub), the composition coherence assertion, the form-load error boundary that renders a plain-language unavailable page, and **the gating of the two seeded callsites (`respondentPlaceSource.readPlace`, `statusReader.readStatus`) on the resolved profile**. Seeded with `respondentPlace` and `status` capability keys; future feature ADRs extend the taxonomy.
+- **Done:** (a) resolver + typed errors + fixture cases + form-load error gate compile and ship green via `npm run ci`; (b) every shipped composition passes `assertCompositionCoherence` (covering BOTH unavailable + demo-stub provenance, mode-aware) at construction; (c) `RespondentRuntime` catches `RuntimePolicyError` and renders the unavailable page with the typed code as the support reference (proved via fault-injection test); (d) locale-recompute discipline wired with tripwire test; (e) the two seeded callsites are gated — production composition with both disabled triggers ZERO adapter calls and renders no respondent-place panel, proved via `tests/app/runtime-feature-gating.test.tsx`; (f) `package.json` `test:unit` includes `src/policy`, `tests/policy-resolution`, and `tests/profiles` so the suite ships to CI; (g) adopter doc at `docs/policy/runtime-feature-resolution.md` covers the extension protocol.
+- **User-visible behavior change:** today's demo composition is unchanged (both features enabled, panel renders). Today's production composition (both features `unavailable`) now correctly **hides** the respondent-place panel and never invokes the unavailable adapters — closing the production-bug Codex flagged where the unconditional `loadRespondentPlace` would throw.
+- **Consumes ports:** none (pure resolver) — but extends the Composition surface every port consumer ultimately reads.
+- **Note:** Closes the ADR-0011 Follow-on Work items (RuntimeFeatureResolver design/impl, typed errors, plain-language rendering, fixtures) AND closes Codex red-team findings on CI inclusion, seeded-callsite gating, and demo-stub provenance. Per ADR-0011 Non-goals, no canonical JSON schema for policy documents is defined here. Per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) the resolver lives in `src/policy/` (pure core).
+
 ### FW-0002 — Trust Center browseable without sign-in
 
 - **Phase:** Post-MVP

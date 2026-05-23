@@ -193,3 +193,4 @@ This extends web ADR-0009 and ADR-0010:
 - web ADR-0009 - hexagonal architecture, ports, adapters, and conformance suites
 - web ADR-0010 - respondent place trust model and DI consumption
 - stack-root ADR-0068 - tenant and scope composition
+- Implementation plan: [`thoughts/plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md`](../plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md) — landed FW-0065 scaffolding
