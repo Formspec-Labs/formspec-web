@@ -56,10 +56,11 @@ Per web ADR-0009, `NotificationDelivery` is a transport port — it sends a mess
 
 When wired into the formspec-stack composition, `MagicLinkAdapter` (an `IdentityProvider` adapter — see web ADR-0008's `IdentityProvider` section) consumes this port via constructor injection per web ADR-0009 §"Composition lifecycle." The cross-port composition is explicit; the shell does not orchestrate it. Until EXT-19 lands, do not claim production magic-link email delivery from the reference composition.
 
-### `StatusReader` (post-MVP — port shape pending per-port ratification)
+### `StatusReader` (active per ADR-0010 — reference adapter pending)
 
-Per web ADR-0009 §"Not in the constitutional inventory" (b), the `StatusReader` port shape will be ratified as its own ADR when consumer code (FW-0039) lands. This section documents the formspec-stack composition's intended adapter when that happens.
+Web ADR-0010 ratifies the `StatusReader` port after the FW-0039 consumer slice landed. This section documents the formspec-stack composition's intended production adapter; the current production composition uses an unavailable sentinel and fails closed until the proxy path exists.
 
+- **Current reference composition:** unavailable sentinel; no fake empty status is rendered as production truth.
 - **Intended reference adapter:** `ProxiedApplicantStatusAdapter` that reads from WOS's `applicant.schema.json` surface (per `work-spec/specs/api/applicant.md`) via a formspec-server proxy.
 - **Why proxy:** keeps formspec-web's auth methods from leaking into WOS's `LoginKind` contract (per web ADR-0007); cross-tenant boundary enforced server-side per stack-root [ADR-0068](../../../thoughts/adr/0068-stack-tenant-and-scope-composition.md) D-1 + D-3.
 - **Alternate compositions:** direct adopter case-management API, polling endpoint, webhook subscription, no-op.
