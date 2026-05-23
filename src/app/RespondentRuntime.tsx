@@ -1,4 +1,12 @@
-import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useState } from 'react';
+import {
+  Component,
+  type ErrorInfo,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   createDemoSubmitResponseActions,
   createFormEngine,
@@ -37,6 +45,14 @@ import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
 import {
+  anyEnabledFeatureIsLocaleConditional,
+  isRuntimePolicyError,
+  resolveRuntimeFeatures,
+  type ResolvedRuntimeProfile,
+  type RuntimePolicyError,
+} from '../policy/index.ts';
+import { RuntimeProfileProvider } from './RuntimeProfileProvider.tsx';
+import {
   assertIdentityPolicySatisfied,
   buildIntakeHandoff,
   hydrateEngineFromResponse,
@@ -71,6 +87,7 @@ type RespondentState =
       resolvedIssuer: ResolvedIssuer;
       activeLocale: string;
       draftLoaded: boolean;
+      runtimeProfile: ResolvedRuntimeProfile;
     }
   | { status: 'error'; error: unknown };
 
@@ -101,6 +118,13 @@ export function RespondentRuntime({
   const [respondentPlaceState, setRespondentPlaceState] = useState<RespondentPlaceState>({
     status: 'loading',
   });
+  // applyReadyState is constructed inside the bootstrap useEffect (it closes
+  // over the cancel/sequence state). Expose it via ref so locale-recompute
+  // (ADR-0011 §Resolution) and any future identity-refresh path can reach it
+  // without lifting bootstrap state to the render closure.
+  const applyReadyStateRef = useRef<
+    ((claim: IdentityClaim | null, options?: { locale?: string }) => Promise<void>) | null
+  >(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,13 +135,19 @@ export function RespondentRuntime({
     setRespondentState({ status: 'loading' });
     setSubmitState({ status: 'idle' });
 
-    const applyReadyState = async (claim: IdentityClaim | null): Promise<void> => {
+    const applyReadyState = async (
+      claim: IdentityClaim | null,
+      options: { locale?: string } = {},
+    ): Promise<void> => {
+      // applyReadyStateRef set below so render-time callers (handleLocaleChange)
+      // can restart this bootstrap when a locale-conditional feature key needs
+      // a new ResolvedRuntimeProfile.
       const sequence = ++reloadSequence;
       setRespondentState({ status: 'loading' });
       setSubmitState({ status: 'idle' });
       try {
         await engineReady;
-        const readyState = await createReadyState(composition, config, claim);
+        const readyState = await createReadyState(composition, config, claim, options);
 
         if (cancelled || sequence !== reloadSequence) {
           readyState.engine.dispose();
@@ -134,6 +164,7 @@ export function RespondentRuntime({
         }
       }
     };
+    applyReadyStateRef.current = applyReadyState;
 
     void (async () => {
       const boot = await bootIdentity(composition.identityProvider);
@@ -189,6 +220,7 @@ export function RespondentRuntime({
       cancelled = true;
       unsubscribe?.();
       engine?.dispose();
+      applyReadyStateRef.current = null;
     };
   }, [composition]);
 
@@ -273,6 +305,9 @@ export function RespondentRuntime({
   }
 
   if (respondentState.status === 'error') {
+    if (isRuntimePolicyError(respondentState.error)) {
+      return <RuntimePolicyErrorPage error={respondentState.error} />;
+    }
     return (
       <FriendlyError
         error={respondentState.error}
@@ -287,6 +322,13 @@ export function RespondentRuntime({
   });
 
   const handleLocaleChange = (locale: string): void => {
+    if (anyEnabledFeatureIsLocaleConditional(respondentState.runtimeProfile.enabled)) {
+      // A future feature ADR registered a locale-conditional key; the resolved
+      // profile may differ under the new locale, so restart the form-load
+      // boundary per ADR-0011 §Resolution.
+      void applyReadyStateRef.current?.(respondentState.claim, { locale });
+      return;
+    }
     respondentState.engine.setLocale(locale);
     setRespondentState({ ...respondentState, activeLocale: locale });
   };
@@ -338,25 +380,27 @@ export function RespondentRuntime({
 
   return (
     <AppErrorBoundary>
-      <FormspecProvider
-        engine={respondentState.engine}
-        responseActionsDocument={responseActionsDocument}
-        onSubmit={(result) => {
-          void handleSubmit(result);
-        }}
-      >
-        <RespondentSurface
-          activeLocale={respondentState.activeLocale}
-          brandName={config.brand.name}
-          definition={respondentState.definition}
-          draftLoaded={respondentState.draftLoaded}
-          mode={composition.mode}
-          respondentPlaceState={respondentPlaceState}
-          resolvedIssuer={respondentState.resolvedIssuer}
-          submitState={submitState}
-          onLocaleChange={handleLocaleChange}
-        />
-      </FormspecProvider>
+      <RuntimeProfileProvider value={respondentState.runtimeProfile}>
+        <FormspecProvider
+          engine={respondentState.engine}
+          responseActionsDocument={responseActionsDocument}
+          onSubmit={(result) => {
+            void handleSubmit(result);
+          }}
+        >
+          <RespondentSurface
+            activeLocale={respondentState.activeLocale}
+            brandName={config.brand.name}
+            definition={respondentState.definition}
+            draftLoaded={respondentState.draftLoaded}
+            mode={composition.mode}
+            respondentPlaceState={respondentPlaceState}
+            resolvedIssuer={respondentState.resolvedIssuer}
+            submitState={submitState}
+            onLocaleChange={handleLocaleChange}
+          />
+        </FormspecProvider>
+      </RuntimeProfileProvider>
     </AppErrorBoundary>
   );
 }
@@ -376,6 +420,7 @@ async function createReadyState(
   composition: Composition,
   config: FormspecWebConfig,
   claim: IdentityClaim | null,
+  options: { locale?: string } = {},
 ): Promise<ReadyRespondentState> {
   assertIdentityPolicySatisfied({
     claim,
@@ -385,13 +430,23 @@ async function createReadyState(
   const definition = await composition.definitionSource.getDefinition(
     composition.initialDefinitionUrl,
   );
+  // ADR-0011 §Resolution: resolve once per (definition × identity × locale)
+  // combination, before any side effects. Throws typed RuntimePolicyError
+  // when the form/org/instance triple is incoherent; the catch in
+  // applyReadyState routes the error to the form-load boundary.
+  const runtimeProfile = resolveRuntimeFeatures({
+    mode: composition.mode,
+    instance: composition.instanceCapabilities,
+    org: composition.orgRuntimePolicy,
+    form: composition.getFormRuntimePolicy(definition),
+  });
   const draftKey: DraftKey = {
     formUrl: definition.url,
     formVersion: definition.version,
     subjectRef: claim?.subjectRef,
   };
   const draft = await composition.draftStore.load(draftKey);
-  const activeLocale = defaultLocaleForDefinition(definition);
+  const activeLocale = options.locale ?? defaultLocaleForDefinition(definition);
 
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
@@ -414,6 +469,7 @@ async function createReadyState(
     resolvedIssuer,
     activeLocale,
     draftLoaded: draft !== undefined,
+    runtimeProfile,
   };
 }
 
@@ -803,6 +859,19 @@ function ConfirmationPanel({ confirmation }: { confirmation: SubmitConfirmation 
         <a href={confirmation.trackingUri}>Track this submission</a>
       ) : null}
     </section>
+  );
+}
+
+function RuntimePolicyErrorPage({ error }: { error: RuntimePolicyError }) {
+  return (
+    <div className="shell__status shell__status--error" role="alert">
+      <h1>This form cannot be loaded.</h1>
+      <p>
+        This form requires a capability this site does not currently support.
+        Try again later, or contact the sender for help.
+      </p>
+      <p className="support-code">Support reference: {error.code}</p>
+    </div>
   );
 }
 

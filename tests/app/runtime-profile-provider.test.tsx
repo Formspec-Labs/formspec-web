@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { RuntimeProfileProvider } from '../../src/app/RuntimeProfileProvider.tsx';
 import { useResolvedRuntimeProfile } from '../../src/app/hooks/useResolvedRuntimeProfile.ts';
-import type { ResolvedRuntimeProfile } from '../../src/policy/index.ts';
+import type {
+  ResolvedRuntimeProfile,
+  RuntimeFeatureKey,
+} from '../../src/policy/index.ts';
 
 function ProbeEnabled() {
   const profile = useResolvedRuntimeProfile();
@@ -12,8 +15,8 @@ function ProbeEnabled() {
 describe('RuntimeProfileProvider', () => {
   it('exposes the resolved profile to children via useResolvedRuntimeProfile', () => {
     const profile: ResolvedRuntimeProfile = Object.freeze({
-      mode: 'production',
-      enabled: new Set(['status']),
+      mode: 'production' as const,
+      enabled: new Set<RuntimeFeatureKey>(['status']),
       disabled: new Map(),
       limits: {},
     });
