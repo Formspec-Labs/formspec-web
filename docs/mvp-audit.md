@@ -42,12 +42,24 @@ signed until their blocker rows close.
 | Session-bound anonymous draft update | Blocked by EXT-27. | `docs/adapters/draft-store.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`; `npm run check:upstream-blockers`. |
 | Hosted demo URL | Deferred to user action. | `docs/deployment.md`; `docs/operations.md`; `README.md`. |
 
+## Completion Audit
+
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| Testing plan implementation | Proven. | `docs/testing-plan.md`; `scripts/check-testing-plan.mjs`; `tests/scripts/check-testing-plan.test.mjs`; `npm run check:testing-plan`; `package.json`. |
+| M0-M8 local web proof | Proven. | `npm run ci`; `docs/mvp-audit.md`; `npm run check:mvp-audit`; `scripts/check-mvp-audit.mjs`. |
+| Port conformance and reference adapters | Proven. | `npm run test:conformance`; `npm run check:conformance-coverage`; `tests/adapter-conformance/`; `docs/architecture.md`. |
+| Docker quickstart and multi-deployment | Proven. | `npm run test:compose-quickstart`; `npm run test:deployment`; `npm run test:multi-deployment`; `docker-compose.yml`; `docs/multi-deployment.md`. |
+| Full release sign-off | Blocked by manual and upstream evidence. | `docs/testing-plan.md`; `docs/ux/accessibility.md`; `docs/identity/integration.md`; `docs/adapters/draft-store.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `npm run check:upstream-blockers`. |
+| Owner-hosted demo URL | Deferred to user action. | `docs/deployment.md`; `docs/operations.md`; `README.md`. |
+
 ## Audit Gate
 
 `npm run check:mvp-audit` verifies this file still names every M0-M8 milestone,
-keeps the release sign-off boundaries explicit, and points each cited evidence
-path at a real local file or package script. `npm run check:upstream-blockers`
-checks the sibling `formspec-server` checkout for the current blocker
-indicators and documented alternate landing shapes for EXT-23, EXT-26, and
-EXT-27. It is a local stack gate, not a substitute for reviewing new server
-architecture after those upstream extensions land.
+keeps the release sign-off boundaries explicit, verifies the completion-audit
+rows above, and points each cited evidence path at a real local file or package
+script. `npm run check:upstream-blockers` checks the sibling `formspec-server`
+checkout for the current blocker indicators and documented alternate landing
+shapes for EXT-23, EXT-26, and EXT-27. It is a local stack gate, not a
+substitute for reviewing new server architecture after those upstream
+extensions land.

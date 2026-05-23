@@ -76,6 +76,37 @@ describe('check-mvp-audit', () => {
     );
   });
 
+  it('rejects missing completion audit rows', () => {
+    const result = runCheck(createFixture({ omitCompletion: 'Full release sign-off' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('missing completion audit row "Full release sign-off"');
+  });
+
+  it('rejects completion audit status drift', () => {
+    const result = runCheck(
+      createFixture({
+        completionStatusOverrides: {
+          'Full release sign-off': 'Proven.',
+        },
+      }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'completion audit "Full release sign-off" status must be "Blocked by manual and upstream evidence"',
+    );
+  });
+
+  it('rejects missing completion audit evidence', () => {
+    const result = runCheck(createFixture({ omitCompletionEvidence: 'npm run check:testing-plan' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'completion audit row "Testing plan implementation" is missing evidence "npm run check:testing-plan"',
+    );
+  });
+
   it('rejects evidence paths that do not exist', () => {
     const result = runCheck(createFixture({ omitPath: 'docs/identity/integration.md' }));
 
@@ -104,6 +135,8 @@ function createFixture(options = {}) {
   const scripts = [
     'typecheck',
     'ci',
+    'check:testing-plan',
+    'check:mvp-audit',
     'check:upstream-theme',
     'test:unit',
     'test:conformance',
@@ -285,6 +318,62 @@ function mvpAuditDoc(options = {}) {
     ],
     ['Hosted demo URL', 'Deferred to user action.', ['docs/deployment.md', 'docs/operations.md', 'README.md']],
   ];
+  const completionRows = [
+    [
+      'Testing plan implementation',
+      options.completionStatusOverrides?.['Testing plan implementation'] ?? 'Proven.',
+      [
+        'docs/testing-plan.md',
+        'scripts/check-testing-plan.mjs',
+        'tests/scripts/check-testing-plan.test.mjs',
+        'npm run check:testing-plan',
+        'package.json',
+      ],
+    ],
+    [
+      'M0-M8 local web proof',
+      'Proven.',
+      ['npm run ci', 'docs/mvp-audit.md', 'npm run check:mvp-audit', 'scripts/check-mvp-audit.mjs'],
+    ],
+    [
+      'Port conformance and reference adapters',
+      'Proven.',
+      [
+        'npm run test:conformance',
+        'npm run check:conformance-coverage',
+        'tests/adapter-conformance/',
+        'docs/architecture.md',
+      ],
+    ],
+    [
+      'Docker quickstart and multi-deployment',
+      'Proven.',
+      [
+        'npm run test:compose-quickstart',
+        'npm run test:deployment',
+        'npm run test:multi-deployment',
+        'docker-compose.yml',
+        'docs/multi-deployment.md',
+      ],
+    ],
+    [
+      'Full release sign-off',
+      options.completionStatusOverrides?.['Full release sign-off'] ?? 'Blocked by manual and upstream evidence.',
+      [
+        'docs/testing-plan.md',
+        'docs/ux/accessibility.md',
+        'docs/identity/integration.md',
+        'docs/adapters/draft-store.md',
+        'thoughts/specs/2026-05-22-upstream-extension-queue.md',
+        'npm run check:upstream-blockers',
+      ],
+    ],
+    [
+      'Owner-hosted demo URL',
+      'Deferred to user action.',
+      ['docs/deployment.md', 'docs/operations.md', 'README.md'],
+    ],
+  ];
 
   return [
     '# MVP Audit',
@@ -312,9 +401,18 @@ function mvpAuditDoc(options = {}) {
     '| --- | --- | --- |',
     ...boundaries.map(([boundary, status, references]) => boundaryRow(boundary, status, references, options)),
     '',
+    '## Completion Audit',
+    '',
+    '| Requirement | Status | Evidence |',
+    '| --- | --- | --- |',
+    ...completionRows
+      .filter(([requirement]) => requirement !== options.omitCompletion)
+      .map(([requirement, status, references]) => completionRow(requirement, status, references, options)),
+    '',
     '## Audit Gate',
     '',
     '`npm run check:mvp-audit` verifies this file.',
+    'Blocked by manual and upstream evidence.',
     '`npm run check:upstream-blockers` keeps server blockers current.',
   ].join('\n');
 }
@@ -328,6 +426,12 @@ function milestoneRow(milestone, references, options) {
 function boundaryRow(boundary, status, references, options) {
   return `| ${boundary} | ${status} | ${formatEvidence(
     references.filter((reference) => reference !== options.omitBoundaryEvidence),
+  )}. |`;
+}
+
+function completionRow(requirement, status, references, options) {
+  return `| ${requirement} | ${status} | ${formatEvidence(
+    references.filter((reference) => reference !== options.omitCompletionEvidence),
   )}. |`;
 }
 
@@ -348,6 +452,7 @@ function evidencePaths() {
     'docs/adapters/identity-provider.md',
     'docs/adapters/notification-delivery.md',
     'docs/adapters/submit-transport.md',
+    'docs/architecture.md',
     'docs/configuration.md',
     'docs/deployment.md',
     'docs/getting-started.md',
@@ -367,9 +472,12 @@ function evidencePaths() {
     'docs/ux/responsive.md',
     'package.json',
     'scripts/check-upstream-blockers.mjs',
+    'scripts/check-mvp-audit.mjs',
+    'scripts/check-testing-plan.mjs',
     'src/adapter-conformance/index.ts',
     'src/profiles/profiles.test.ts',
     'tests/adapter-conformance/',
+    'tests/scripts/check-testing-plan.test.mjs',
     'tests/adapter-conformance/identity-provider/conformance.test.ts',
     'tests/adapters/http/anonymous-session.test.ts',
     'tests/adapters/http/definition-source.test.ts',

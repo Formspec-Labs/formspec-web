@@ -154,12 +154,69 @@ const requiredBoundaries = new Map([
   ],
   ['Hosted demo URL', ['Deferred to user action', 'docs/deployment.md', 'docs/operations.md', 'README.md']],
 ]);
+const requiredCompletionRows = new Map([
+  [
+    'Testing plan implementation',
+    [
+      'Proven',
+      'docs/testing-plan.md',
+      'scripts/check-testing-plan.mjs',
+      'tests/scripts/check-testing-plan.test.mjs',
+      'npm run check:testing-plan',
+      'package.json',
+    ],
+  ],
+  [
+    'M0-M8 local web proof',
+    [
+      'Proven',
+      'npm run ci',
+      'docs/mvp-audit.md',
+      'npm run check:mvp-audit',
+      'scripts/check-mvp-audit.mjs',
+    ],
+  ],
+  [
+    'Port conformance and reference adapters',
+    [
+      'Proven',
+      'npm run test:conformance',
+      'npm run check:conformance-coverage',
+      'tests/adapter-conformance/',
+      'docs/architecture.md',
+    ],
+  ],
+  [
+    'Docker quickstart and multi-deployment',
+    [
+      'Proven',
+      'npm run test:compose-quickstart',
+      'npm run test:deployment',
+      'npm run test:multi-deployment',
+      'docker-compose.yml',
+      'docs/multi-deployment.md',
+    ],
+  ],
+  [
+    'Full release sign-off',
+    [
+      'Blocked by manual and upstream evidence',
+      'docs/testing-plan.md',
+      'docs/ux/accessibility.md',
+      'docs/identity/integration.md',
+      'docs/adapters/draft-store.md',
+      'thoughts/specs/2026-05-22-upstream-extension-queue.md',
+      'npm run check:upstream-blockers',
+    ],
+  ],
+  ['Owner-hosted demo URL', ['Deferred to user action', 'docs/deployment.md', 'docs/operations.md', 'README.md']],
+]);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const rootDir = rootDirFromArgs(process.argv.slice(2)) ?? defaultRootDir;
   const result = checkMvpAudit(rootDir);
   console.log(
-    `mvp audit check passed: ${result.milestoneCount} milestone row(s), ${result.boundaryCount} boundary row(s), ${result.evidenceCount} evidence reference(s)`,
+    `mvp audit check passed: ${result.milestoneCount} milestone row(s), ${result.boundaryCount} boundary row(s), ${result.completionCount} completion row(s), ${result.evidenceCount} evidence reference(s)`,
   );
 }
 
@@ -167,13 +224,15 @@ export function checkMvpAudit(rootDir) {
   const audit = readFile(rootDir, 'docs/mvp-audit.md');
   const packageJson = JSON.parse(readFile(rootDir, 'package.json'));
   const milestoneRows = rowsByFirstColumn(sectionRows(audit, '## Milestone Evidence', '## Release Sign-Off Boundaries'));
-  const boundaryRows = rowsByFirstColumn(sectionRows(audit, '## Release Sign-Off Boundaries', '## Audit Gate'));
+  const boundaryRows = rowsByFirstColumn(sectionRows(audit, '## Release Sign-Off Boundaries', '## Completion Audit'));
+  const completionRows = rowsByFirstColumn(sectionRows(audit, '## Completion Audit', '## Audit Gate'));
   const evidence = new Set();
 
   assertPhrase(audit, 'Local web MVP proof is implemented and gated by `npm run ci`');
   assertPhrase(audit, 'Do not describe M6, M7b, cross-device draft resume, session-bound anonymous');
   assertPhrase(audit, '`npm run check:mvp-audit` verifies this file');
   assertPhrase(audit, '`npm run check:upstream-blockers`');
+  assertPhrase(audit, 'Blocked by manual and upstream evidence');
 
   for (const [milestone, requiredEvidence] of requiredMilestones) {
     const row = milestoneRows.get(milestone);
@@ -204,6 +263,23 @@ export function checkMvpAudit(rootDir) {
     }
   }
 
+  for (const [requirement, [status, ...requiredEvidence]] of requiredCompletionRows) {
+    const row = completionRows.get(requirement);
+    if (!row) {
+      fail(`mvp audit check failed: missing completion audit row "${requirement}"`);
+    }
+    if (normalizeStatus(row[1] ?? '') !== status) {
+      fail(
+        `mvp audit check failed: completion audit "${requirement}" status must be "${status}"`,
+      );
+    }
+    const evidenceCell = row[2] ?? '';
+    for (const reference of requiredEvidence) {
+      assertReferencePresent(evidenceCell, reference, `completion audit row "${requirement}"`);
+      evidence.add(reference);
+    }
+  }
+
   for (const reference of evidence) {
     assertEvidenceExists(rootDir, packageJson, reference);
   }
@@ -211,6 +287,7 @@ export function checkMvpAudit(rootDir) {
   return {
     milestoneCount: requiredMilestones.size,
     boundaryCount: requiredBoundaries.size,
+    completionCount: requiredCompletionRows.size,
     evidenceCount: evidence.size,
   };
 }
@@ -239,7 +316,7 @@ function markdownRows(section) {
     .map((line) => line.trim())
     .filter((line) => line.startsWith('|') && line.endsWith('|'))
     .filter((line) => !line.includes('---'))
-    .filter((line) => !line.startsWith('| Milestone |') && !line.startsWith('| Boundary |'))
+    .filter((line) => !line.startsWith('| Milestone |') && !line.startsWith('| Boundary |') && !line.startsWith('| Requirement |'))
     .map((line) =>
       line
         .slice(1, -1)
