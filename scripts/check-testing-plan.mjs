@@ -10,6 +10,7 @@ const requiredCommands = [
   'npm run typecheck',
   'npm run lint',
   'npm run check:testing-plan',
+  'npm run check:mvp-audit',
   'npm run check:release-docs',
   'npm run check:conformance-coverage',
   'npm run test:conformance',
@@ -27,6 +28,7 @@ const requiredCommands = [
 ];
 const expectedScriptBodies = new Map([
   ['check:testing-plan', 'node scripts/check-testing-plan.mjs'],
+  ['check:mvp-audit', 'node scripts/check-mvp-audit.mjs'],
   ['check:release-docs', 'node scripts/check-release-docs.mjs'],
   ['check:conformance-coverage', 'node scripts/check-conformance-coverage.mjs'],
   ['check:bundle-budget', 'node scripts/check-bundle-budget.mjs'],
@@ -88,6 +90,9 @@ const requiredCoverageRows = new Map([
       'CONTRIBUTING.md',
       'scripts/check-testing-plan.mjs',
       'tests/scripts/check-testing-plan.test.mjs',
+      'scripts/check-mvp-audit.mjs',
+      'tests/scripts/check-mvp-audit.test.mjs',
+      'docs/mvp-audit.md',
     ],
   ],
   [
@@ -189,11 +194,15 @@ const requiredCoverageRows = new Map([
     'M8 deployment closeout',
     [
       'npm run build',
+      'npm run check:mvp-audit',
       'npm run check:release-docs',
       'npm run check:compose-config',
       'npm run test:compose-quickstart',
       'npm run test:deployment',
       'npm run test:multi-deployment',
+      'scripts/check-mvp-audit.mjs',
+      'tests/scripts/check-mvp-audit.test.mjs',
+      'docs/mvp-audit.md',
       'scripts/check-release-docs.mjs',
       'tests/scripts/check-release-docs.test.mjs',
       'thoughts/specs/2026-05-22-upstream-extension-queue.md',
