@@ -19,6 +19,7 @@ the proof that covers it.
 | Browser accessibility | `npm run test:e2e` | Yes | Playwright Chromium smoke with axe checks for demo, load-error, OIDC sign-in, and mobile tap-target surfaces. |
 | Production build | `npm run build` | Yes | Vite production bundle and TypeScript build. |
 | Bundle budget | `npm run check:bundle-budget` | Yes | Initial JS <=200 KiB gzip and each lazy JS chunk <=200 KiB gzip after production build. |
+| Deployment headers | `npm run test:deployment` | Yes | Docker/nginx image serves JS/CSS/WASM with gzip and immutable asset caching, keeps HTML revalidated, and keeps runtime config no-store. |
 | Full local gate | `npm run ci` | Yes | Runs all automated gates above in release order. |
 
 CI uses the same commands as the local gate. `npm test` remains a convenient
@@ -35,10 +36,10 @@ separately so conformance failures are visible as their own class.
 | M3 port contracts | One conformance suite per MVP port, with every first-party adapter registered. | `tests/adapter-conformance/`. |
 | M4 HTTP adapters | Adapter unit tests for definition fetch, draft create/update/load/delete behavior, submit idempotency, Problem JSON, tenant headers, and anonymous session handling. | `tests/adapters/http/`. |
 | M5 demo composition | Demo definition load, sample form shape, composition root smoke, and Playwright render. | `tests/demo/`, `tests/smoke/`, `tests/e2e/`. |
-| M6 respondent runtime | Hydration helpers, intake handoff shape, invalid submit behavior, Problem JSON rendering, mobile smoke, axe checks, and JS bundle budget. | `tests/app/respondent-flow.test.ts`, `tests/e2e/placeholder-a11y.spec.ts`, `scripts/check-bundle-budget.mjs`. |
+| M6 respondent runtime | Hydration helpers, intake handoff shape, invalid submit behavior, Problem JSON rendering, mobile smoke, axe checks, JS bundle budget, and production asset compression. | `tests/app/respondent-flow.test.ts`, `tests/e2e/placeholder-a11y.spec.ts`, `scripts/check-bundle-budget.mjs`, `scripts/check-deployment-headers.mjs`. |
 | M7 identity | Anonymous, HTTP anonymous session, OIDC, and magic-link conformance; OIDC ACR L1-L4 and downgrade failures; runtime fail-closed policy, explicit sign-in, redirect-started handling, and bearer-token bridge for `oidc-required`. | `tests/adapter-conformance/identity-provider/`, `tests/adapters/identity/`, `tests/app/respondent-flow.test.ts`, `tests/app/respondent-runtime.test.tsx`, `tests/smoke/composition.test.ts`. |
 | M7a multi-instance demo | Runtime config per container, profile/brand isolation, and submit smoke on ports 8080 and 8081. | `docker compose up --build` plus the manual smoke in `docs/multi-deployment.md`. |
-| M8 deployment closeout | Docker build, runtime config emission, compose config, docs for deferred server stack, operations, deployment, and multi-deployment. | `npm run build`, `docker compose config`, `docs/deployment.md`, `docs/operations.md`, `docs/multi-deployment.md`. |
+| M8 deployment closeout | Docker build, runtime config emission, nginx compression/cache headers, compose config, docs for deferred server stack, operations, deployment, and multi-deployment. | `npm run build`, `npm run test:deployment`, `docker compose config`, `docs/deployment.md`, `docs/operations.md`, `docs/multi-deployment.md`. |
 
 ## Adapter Rules
 
@@ -70,7 +71,7 @@ These checks are not automated yet and block release sign-off:
 | --- | --- | --- |
 | VoiceOver sweep | `docs/ux/accessibility.md` | Pending manual run. |
 | NVDA sweep | `docs/ux/accessibility.md` | Pending manual run. |
-| Lighthouse mobile >= 90 and FCP < 1.5 s | `docs/ux/responsive.md` | Open performance work. |
+| Lighthouse mobile >= 90 and FCP < 1.5 s | `docs/ux/responsive.md` | Score passes on Docker/nginx; FCP still open. |
 | Production Locale Documents from server | `docs/ux/i18n.md` | Demo-proven only until server emits concrete Locale Documents. |
 | Full OIDC server validation | `docs/identity/integration.md` | Blocked by EXT-23. |
 | Cross-reload or cross-device draft resume | `docs/adapters/draft-store.md` | Blocked by EXT-26. |

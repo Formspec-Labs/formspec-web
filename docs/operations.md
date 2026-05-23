@@ -38,6 +38,16 @@ Not exposed by this image:
 - Credential secrets or raw OIDC tokens.
 - Server-side draft storage.
 
+## Static Asset Policy
+
+- Fingerprinted `/assets/*` files are gzip-compressed when the client sends
+  `Accept-Encoding: gzip` and are served with
+  `Cache-Control: public, max-age=31536000, immutable`.
+- `/` and SPA fallback routes serve `index.html` with `Cache-Control: no-cache`
+  so rollouts can replace the fingerprinted asset graph safely.
+- `/formspec-runtime-config.js` is generated at container start and served with
+  `Cache-Control: no-store`.
+
 ## Current Operational Gaps
 
 - No hosted demo URL is selected. Local Docker compose is the release proof for

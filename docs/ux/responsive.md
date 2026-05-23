@@ -35,8 +35,21 @@ Native numeric/date controls continue to use browser-native input types.
 `npm run build`: initial JS must stay at or below 200 KiB gzip, and each lazy JS
 chunk must stay at or below 200 KiB gzip.
 
-The Lighthouse mobile budget is not closed: latest local production-preview
-measurement on 2026-05-22 scored about 74 with FCP about 1.7 s and LCP about
-12.3 s on simulated 3G. The runtime WASM and first form hydration dominate that
-miss. Treat Lighthouse mobile >=90 and FCP <1.5 s as open performance work, not
-as M6 release sign-off.
+`npm run test:deployment` verifies the Docker/nginx image serves fingerprinted
+JS, CSS, and WASM assets with gzip plus immutable cache headers. HTML routes
+revalidate, and `/formspec-runtime-config.js` is `no-store`.
+
+The Lighthouse mobile budget is measured against the Docker/nginx image, not
+Vite preview. Vite preview is useful for diagnostics, but it serves the runtime
+WASM uncompressed and is not the M8 deployment target.
+
+Latest local Docker/nginx Lighthouse measurement on 2026-05-23 scored 93 with
+FCP/LCP about 1.8 s, TBT 0 ms, Speed Index about 5.8 s, and total transfer
+about 959 KiB. The runtime WASM transfer dropped from about 2.1 MB uncompressed
+under Vite preview to about 800 KiB gzip under nginx. Performance score now
+meets the >=90 budget, but FCP still misses the <1.5 s release budget; keep the
+Lighthouse row open until that is closed.
+
+For comparison, the same build under local Vite preview on 2026-05-23 scored
+88 with FCP/LCP about 1.8 s, TBT 0 ms, and the uncompressed 2.1 MB runtime WASM
+dominating network transfer.

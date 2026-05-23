@@ -21,6 +21,11 @@ The image writes `/formspec-runtime-config.js` at container start from
 `FORMSPEC_WEB_*` environment variables. Without `FORMSPEC_WEB_SERVER_URL`, the
 app stays in demo mode and uses the bundled sample form with stub adapters.
 
+The reference nginx image serves fingerprinted `/assets/*` files with gzip and
+long immutable cache headers. HTML routes revalidate on every visit, and
+`/formspec-runtime-config.js` is marked `no-store` because it is generated from
+deploy-time environment variables.
+
 ## Runtime Variables
 
 | Variable | Purpose |

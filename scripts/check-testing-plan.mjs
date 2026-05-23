@@ -17,6 +17,7 @@ const requiredCommands = [
   'npm run test:e2e',
   'npm run build',
   'npm run check:bundle-budget',
+  'npm run test:deployment',
   'npm run ci',
 ];
 

@@ -77,6 +77,7 @@ function createFixture(options = {}) {
     'npm run test:e2e',
     'npm run build',
     'npm run check:bundle-budget',
+    'npm run test:deployment',
   ];
 
   write(root, 'package.json', JSON.stringify({
@@ -91,6 +92,7 @@ function createFixture(options = {}) {
       'test:e2e': 'playwright test',
       build: 'tsc --noEmit && vite build',
       'check:bundle-budget': 'node scripts/check-bundle-budget.mjs',
+      'test:deployment': 'node scripts/check-deployment-headers.mjs',
       ci: ciCommands.join(' && '),
     },
   }));
@@ -103,6 +105,7 @@ function createFixture(options = {}) {
     'tests/app/respondent-flow.test.ts',
     'tests/e2e/placeholder-a11y.spec.ts',
     'tests/scripts/check-testing-plan.test.mjs',
+    'scripts/check-deployment-headers.mjs',
   ]) {
     if (path !== options.omitPath) {
       write(root, path, '');
@@ -136,6 +139,7 @@ function testingPlan(omitCommand) {
     ['Browser accessibility', 'npm run test:e2e'],
     ['Production build', 'npm run build'],
     ['Bundle budget', 'npm run check:bundle-budget'],
+    ['Deployment headers', 'npm run test:deployment'],
     ['Full local gate', 'npm run ci'],
   ].filter(([, command]) => command !== omitCommand);
 
@@ -152,7 +156,7 @@ function testingPlan(omitCommand) {
     '',
     '| Surface | Required evidence | Current implementation |',
     '| --- | --- | --- |',
-    '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `docs/testing-plan.md`; `scripts/check-testing-plan.mjs`. |',
+    '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `docs/testing-plan.md`; `scripts/check-testing-plan.mjs`; `scripts/check-deployment-headers.mjs`. |',
     '',
     '## Adapter Rules',
   ].join('\n');
