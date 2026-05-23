@@ -10,8 +10,11 @@ Current automated checks:
 - `@axe-core/playwright` scans the initial form surface.
 - The same test scans the validation alert surface after an empty submit.
 - A separate test scans the load-error surface.
+- The OIDC-required sign-in surface is scanned.
 - The confirmation surface is scanned after a successful submit.
 - Mobile viewport smoke verifies primary tap targets are at least 44 px high.
+- Static first-paint removal is checked on demo, load-error, and OIDC-required
+  routes; the no-JavaScript fallback is checked separately.
 
 ## Manual Screen-Reader Sweep
 

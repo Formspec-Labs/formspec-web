@@ -42,6 +42,7 @@ deploy-time environment variables.
 Run the local multi-instance demo:
 
 ```bash
+npm run check:compose-config
 docker compose up --build
 ```
 
