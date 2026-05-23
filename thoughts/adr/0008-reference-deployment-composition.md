@@ -94,7 +94,7 @@ Per stack-root [ADR-0131](../../../thoughts/adr/0131-verifier-distribution.md), 
 
 ## Consequences
 
-- **The formspec-stack reference deployment has two HTTP base URLs at deploy time:** `FORMSPEC_SERVER_URL` (primary), `WORKSPEC_SERVER_URL` (secondary, post-MVP).
+- **The formspec-stack reference deployment has two HTTP base URLs at deploy time:** `FORMSPEC_WEB_SERVER_URL` for the formspec-server base URL, plus a future workspec-server URL when post-MVP status surfaces land.
 - **No HTTP base URL is hardcoded into the composition** — environment variables drive the wiring; the composition root reads them.
 - **PDF rendering** for trail-sign cover (FW-0006), signed receipt paper (FW-0009), deletion receipt (FW-0043) — in this composition — routes through `formspec-server-pdf` per stack-root [ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) (rendering service).
 - **The four-dimensional verifier verdict** from `stack-common-proof::ProofReportVerdict` is rendered for FW-0003 (post-MVP).
