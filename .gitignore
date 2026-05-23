@@ -22,3 +22,11 @@ test-results/
 .env.local
 *.log
 formspec-source/
+
+# Claude Code project config (ignore contents, track shared config)
+.claude/*
+!.claude/settings.json
+!.claude/mcp.json
+
+# TypeScript incremental build info
+*.tsbuildinfo
