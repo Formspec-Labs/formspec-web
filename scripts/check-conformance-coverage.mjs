@@ -12,6 +12,8 @@ const portSuites = new Map([
   ['SubmitTransport', 'tests/adapter-conformance/submit-transport/conformance.test.ts'],
   ['IdentityProvider', 'tests/adapter-conformance/identity-provider/conformance.test.ts'],
   ['NotificationDelivery', 'tests/adapter-conformance/notification-delivery/conformance.test.ts'],
+  ['RespondentPlaceSource', 'tests/adapter-conformance/respondent-place-source/conformance.test.ts'],
+  ['StatusReader', 'tests/adapter-conformance/status-reader/conformance.test.ts'],
 ]);
 const stubPortsByPath = new Map([
   ['src/adapters/stub/definition-source.ts', 'DefinitionSource'],
@@ -19,6 +21,8 @@ const stubPortsByPath = new Map([
   ['src/adapters/stub/submit-transport.ts', 'SubmitTransport'],
   ['src/adapters/stub/identity-provider.ts', 'IdentityProvider'],
   ['src/adapters/stub/notification-delivery.ts', 'NotificationDelivery'],
+  ['src/adapters/stub/respondent-place-source.ts', 'RespondentPlaceSource'],
+  ['src/adapters/stub/status-reader.ts', 'StatusReader'],
 ]);
 const requiredHarnessExports = [
   'defineDefinitionSourceConformance',
@@ -26,6 +30,8 @@ const requiredHarnessExports = [
   'defineSubmitTransportConformance',
   'defineIdentityProviderConformance',
   'defineNotificationDeliveryConformance',
+  'defineRespondentPlaceSourceConformance',
+  'defineStatusReaderConformance',
 ];
 const requiredReadmePhrases = [
   'formspec-web/adapter-conformance',
@@ -172,7 +178,7 @@ function portImplementedBy(classHeader) {
   }
   return (
     implementsMatch[1].match(
-      /\b(DefinitionSource|DraftStore|SubmitTransport|IdentityProvider|NotificationDelivery)\b/,
+      /\b(DefinitionSource|DraftStore|SubmitTransport|IdentityProvider|NotificationDelivery|RespondentPlaceSource|StatusReader)\b/,
     )?.[1] ?? null
   );
 }

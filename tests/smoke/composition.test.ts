@@ -20,13 +20,15 @@ describe('composition root smoke', () => {
     vi.unstubAllGlobals();
   });
 
-  it('createStubComposition wires all 5 MVP ports', () => {
+  it('createStubComposition wires all current ports', () => {
     const c = createStubComposition();
     expect(c.definitionSource).toBeDefined();
     expect(c.draftStore).toBeDefined();
     expect(c.submitTransport).toBeDefined();
     expect(c.identityProvider).toBeDefined();
     expect(c.notificationDelivery).toBeDefined();
+    expect(c.respondentPlaceSource).toBeDefined();
+    expect(c.statusReader).toBeDefined();
   });
 
   it('createDemoComposition wires stubs and registers the sample form fixture', async () => {

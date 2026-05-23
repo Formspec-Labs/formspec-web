@@ -6,6 +6,7 @@ import type { Composition } from '../../src/composition/types.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import type { IdentityClaim, IdentityProvider, IdpOption } from '../../src/ports/identity-provider.ts';
+import type { RespondentPlaceSnapshot } from '../../src/ports/index.ts';
 
 describe('RespondentRuntime identity sign-in', () => {
   let root: Root | undefined;
@@ -167,6 +168,31 @@ function testComposition(identityProvider: IdentityProvider): Composition {
       })),
     },
     identityProvider,
+    respondentPlaceSource: {
+      readPlace: vi.fn(async (): Promise<RespondentPlaceSnapshot> => ({
+        $formspecRespondentLibrary: '1.0',
+        version: '1.0.0',
+        libraryId: 'urn:formspec:respondent-library:test',
+        subject: {
+          subjectRef: 'oidc:test-subject',
+          privacyTier: 'pseudonymous',
+        },
+        aggregationMode: 'client-wallet',
+        trustModel: {
+          storagePosture: 'client-local-only',
+          issuerIsolation: 'per-issuer',
+          serverAggregation: 'forbidden',
+          presentationDefault: 'explicit-consent',
+        },
+        obligations: [],
+        documents: [],
+        submissions: [],
+        presentationPolicies: [],
+      })),
+    },
+    statusReader: {
+      readStatus: vi.fn(async () => undefined),
+    },
   };
 }
 

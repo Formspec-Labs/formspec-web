@@ -1,5 +1,9 @@
 import type { FormDefinition, FormResponse, IntakeHandoff } from '@formspec-org/types';
 import type { IdentityClaim } from '../ports/identity-provider.ts';
+export {
+  isApplicantStatusProjection,
+  isRespondentPlaceSnapshot,
+} from '../shared/respondent-place.ts';
 
 export const providerNativeIdentityKeys = [
   'acr',

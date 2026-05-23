@@ -4,6 +4,14 @@ import type { DefinitionSource } from '../ports/definition-source.ts';
 import type { DraftStore } from '../ports/draft-store.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import type { NotificationDelivery, NotificationMessage } from '../ports/notification-delivery.ts';
+import type {
+  RespondentPlaceSnapshot,
+  RespondentPlaceSource,
+} from '../ports/respondent-place-source.ts';
+import type {
+  ApplicantStatusProjection,
+  StatusReader,
+} from '../ports/status-reader.ts';
 import type { SubmitTransport } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import {
@@ -11,6 +19,8 @@ import {
   isFormDefinition,
   isFormResponse,
   isIntakeHandoff,
+  isApplicantStatusProjection,
+  isRespondentPlaceSnapshot,
   leakedProviderNativeIdentityKeys,
 } from './assertions.ts';
 import {
@@ -18,7 +28,9 @@ import {
   sampleFormDefinition,
   sampleFormResponse,
   sampleIntakeHandoff,
+  sampleApplicantStatusProjection,
   sampleNotificationMessage,
+  sampleRespondentPlaceSnapshot,
 } from './fixtures.ts';
 
 export interface DefinitionSourceConformanceSubject {
@@ -41,6 +53,16 @@ export interface IdentityProviderConformanceSubject {
 export interface NotificationDeliveryConformanceSubject {
   adapter: NotificationDelivery;
   deliveries(): ReadonlyArray<{ key: string; message: NotificationMessage }>;
+}
+
+export interface StatusReaderConformanceSubject {
+  adapter: StatusReader;
+  registerStatus(key: string, projection: ApplicantStatusProjection): void | Promise<void>;
+}
+
+export interface RespondentPlaceSourceConformanceSubject {
+  adapter: RespondentPlaceSource;
+  replaceSnapshot(snapshot: RespondentPlaceSnapshot): void | Promise<void>;
 }
 
 export function defineDefinitionSourceConformance(
@@ -215,6 +237,79 @@ export function defineNotificationDeliveryConformance(
     it('rejects non-UUIDv7 idempotency keys', async () => {
       const subject = setup();
       await expect(subject.adapter.send(sampleNotificationMessage, 'not-a-uuid-v7')).rejects.toThrow();
+    });
+  });
+}
+
+export function defineStatusReaderConformance(
+  name: string,
+  setup: () => StatusReaderConformanceSubject,
+): void {
+  describe(name, () => {
+    it('round-trips a WOS applicant status projection', async () => {
+      const subject = setup();
+      const resourceRef = sampleApplicantStatusProjection.resourceRef;
+      if (!resourceRef) throw new Error('sample status projection needs resourceRef');
+      await subject.registerStatus(resourceRef, sampleApplicantStatusProjection);
+      const found = await subject.adapter.readStatus({ resourceRef });
+      expect(isApplicantStatusProjection(roundTripJson(found))).toBe(true);
+      expect(found).toEqual(sampleApplicantStatusProjection);
+    });
+
+    it('returns undefined for unknown status requests', async () => {
+      const subject = setup();
+      await expect(subject.adapter.readStatus({ resourceRef: 'urn:wos:missing' })).resolves
+        .toBeUndefined();
+    });
+
+    it('rejects projections that do not name the WOS applicant schema', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleApplicantStatusProjection,
+        sourceSchema: 'https://example.test/status',
+      } as unknown as ApplicantStatusProjection;
+      await expect(Promise.resolve().then(() => subject.registerStatus('bad', invalid))).rejects
+        .toThrow();
+    });
+  });
+}
+
+export function defineRespondentPlaceSourceConformance(
+  name: string,
+  setup: () => RespondentPlaceSourceConformanceSubject,
+): void {
+  describe(name, () => {
+    it('round-trips a Respondent Library snapshot', async () => {
+      const subject = setup();
+      await subject.replaceSnapshot(sampleRespondentPlaceSnapshot);
+      const found = await subject.adapter.readPlace({ subjectRef: 'respondent:conformance' });
+      expect(isRespondentPlaceSnapshot(roundTripJson(found))).toBe(true);
+      expect(found).toEqual(sampleRespondentPlaceSnapshot);
+    });
+
+    it('rejects server-side aggregation mode', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleRespondentPlaceSnapshot,
+        aggregationMode: 'server-cross-tenant',
+      } as unknown as RespondentPlaceSnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects
+        .toThrow();
+    });
+
+    it('rejects document kinds outside the sidecar taxonomy', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleRespondentPlaceSnapshot,
+        documents: [
+          {
+            ...sampleRespondentPlaceSnapshot.documents?.[0],
+            kind: 'passport',
+          },
+        ],
+      } as unknown as RespondentPlaceSnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects
+        .toThrow();
     });
   });
 }

@@ -1,18 +1,22 @@
 # Architecture
 
 `formspec-web` is a hexagonal React shell. The app imports a deployment config,
-builds a `Composition`, and renders only against five MVP ports:
+builds a `Composition`, and renders against typed ports:
 
 - `DefinitionSource`
 - `DraftStore`
 - `SubmitTransport`
 - `IdentityProvider`
 - `NotificationDelivery`
+- `RespondentPlaceSource`
+- `StatusReader`
 
 Port interfaces live in `src/ports/`. They consume canonical schema types from
-`@formspec-org/types`: `FormDefinition`, `FormResponse`, and `IntakeHandoff`.
-Reference and stub adapters live outside the port contract and are wired only by
-the composition root.
+`@formspec-org/types` where generated types exist. `RespondentPlaceSource`
+mirrors `formspec/specs/respondent-library/library-spec.md`; `StatusReader`
+returns WOS applicant API projections without defining a web-owned status
+vocabulary. Reference and stub adapters live outside the port contract and are
+wired only by the composition root.
 
 The public adapter contract is executable. Adapter authors import
 `formspec-web/adapter-conformance` and run the per-port Vitest harness against

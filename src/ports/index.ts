@@ -3,8 +3,8 @@
  *
  * Five ports total. Issuer resolution is engine-owned (formspec-engine
  * IssuerStore); composition wires a FetchIssuerFetcher, not a port.
- * Post-MVP ports (StatusReader, BundleSource, Verifier) ratified per-port
- * when consumer code lands.
+ * Post-MVP ports are ratified per-port when consumer code lands. ADR-0010
+ * adds respondent-place ports for stub-backed consumer surfaces.
  */
 
 export type { DefinitionSource, FormDefinition } from './definition-source.ts';
@@ -22,3 +22,24 @@ export type {
   NotificationMessage,
   NotificationChannel,
 } from './notification-delivery.ts';
+export type {
+  StatusReader,
+  StatusRequest,
+  ApplicantStatusProjection,
+  ApplicantStatusProjectionKind,
+} from './status-reader.ts';
+export { WOS_APPLICANT_SCHEMA_ID } from './status-reader.ts';
+export type {
+  RespondentPlaceSource,
+  RespondentPlaceQuery,
+  RespondentPlaceSnapshot,
+  RespondentSubjectBinding,
+  RespondentIssuerRef,
+  RespondentDefinitionRef,
+  RespondentObligation,
+  RespondentDocumentRecord,
+  RespondentSubmissionRecord,
+  RespondentPresentationPolicy,
+  RespondentTrustModel,
+  RespondentDocumentKind,
+} from './respondent-place-source.ts';

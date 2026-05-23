@@ -3,6 +3,8 @@ import type {
   DraftStore,
   IdentityProvider,
   NotificationDelivery,
+  RespondentPlaceSource,
+  StatusReader,
   SubmitTransport,
 } from '../ports/index.ts';
 
@@ -31,4 +33,8 @@ export interface Composition {
   identityProvider: IdentityProvider;
   /** Optional — only required when an adapter consumes it (e.g., MagicLinkAdapter). */
   notificationDelivery?: NotificationDelivery;
+  /** ADR-0010: respondent-held obligations, documents, and history. */
+  respondentPlaceSource: RespondentPlaceSource;
+  /** ADR-0010/FW-0039: WOS applicant API projection, not a web status vocabulary. */
+  statusReader: StatusReader;
 }

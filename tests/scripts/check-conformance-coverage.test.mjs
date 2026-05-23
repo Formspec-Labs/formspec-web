@@ -248,6 +248,24 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/respondent-place-source/conformance.test.ts',
+    suiteText(
+      'RespondentPlaceSource',
+      [['stub RespondentPlaceSource conformance', 'stubRespondentPlaceSource']],
+      options,
+    ),
+  );
+  write(
+    root,
+    'tests/adapter-conformance/status-reader/conformance.test.ts',
+    suiteText(
+      'StatusReader',
+      [['stub StatusReader conformance', 'stubStatusReader']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -259,6 +277,8 @@ function writeAdapterFiles(root, extraAdapters) {
     ['src/adapters/stub/submit-transport.ts', 'export function stubSubmitTransport() {}'],
     ['src/adapters/stub/identity-provider.ts', 'export function stubIdentityProvider() {}'],
     ['src/adapters/stub/notification-delivery.ts', 'export function stubNotificationDelivery() {}'],
+    ['src/adapters/stub/respondent-place-source.ts', 'export function stubRespondentPlaceSource() {}'],
+    ['src/adapters/stub/status-reader.ts', 'export function stubStatusReader() {}'],
     [
       'src/adapters/http/definition-source.ts',
       'export class HttpDefinitionSource implements DefinitionSource {}',
@@ -296,6 +316,8 @@ function publicIndex() {
     '  defineSubmitTransportConformance,',
     '  defineIdentityProviderConformance,',
     '  defineNotificationDeliveryConformance,',
+    '  defineRespondentPlaceSourceConformance,',
+    '  defineStatusReaderConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }

@@ -3,11 +3,15 @@ export {
   defineDraftStoreConformance,
   defineIdentityProviderConformance,
   defineNotificationDeliveryConformance,
+  defineRespondentPlaceSourceConformance,
+  defineStatusReaderConformance,
   defineSubmitTransportConformance,
   type DefinitionSourceConformanceSubject,
   type DraftStoreConformanceSubject,
   type IdentityProviderConformanceSubject,
   type NotificationDeliveryConformanceSubject,
+  type RespondentPlaceSourceConformanceSubject,
+  type StatusReaderConformanceSubject,
   type SubmitTransportConformanceSubject,
 } from './conformance.ts';
 export {
@@ -15,6 +19,8 @@ export {
   isFormDefinition,
   isFormResponse,
   isIntakeHandoff,
+  isApplicantStatusProjection,
+  isRespondentPlaceSnapshot,
   leakedProviderNativeIdentityKeys,
   providerNativeIdentityKeys,
 } from './assertions.ts';
@@ -23,5 +29,7 @@ export {
   sampleFormDefinition,
   sampleFormResponse,
   sampleIntakeHandoff,
+  sampleApplicantStatusProjection,
   sampleNotificationMessage,
+  sampleRespondentPlaceSnapshot,
 } from './fixtures.ts';

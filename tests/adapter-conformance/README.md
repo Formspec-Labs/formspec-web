@@ -16,9 +16,11 @@ harness and local suites exercise the same schema-shaped examples.
 
 The per-port suite *shape* is defined in ADR-0009; the per-port suite *content* (specific fixtures) lands alongside each port spec ADR or its first consumer FW row.
 
-Directory skeleton (one per MVP port):
+Directory skeleton (one per current port):
 - `definition-source/`
 - `draft-store/`
 - `submit-transport/`
 - `identity-provider/`
 - `notification-delivery/`
+- `respondent-place-source/`
+- `status-reader/`

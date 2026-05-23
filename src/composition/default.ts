@@ -9,6 +9,11 @@ import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
+import {
+  emptyRespondentPlaceSnapshot,
+  stubRespondentPlaceSource,
+} from '../adapters/stub/respondent-place-source.ts';
+import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import { demoSampleFormUrl } from '../demo/index.ts';
 import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
@@ -62,6 +67,8 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     }),
     identityProvider: identityBinding.provider,
     notificationDelivery,
+    respondentPlaceSource: stubRespondentPlaceSource(emptyRespondentPlaceSnapshot()),
+    statusReader: stubStatusReader(),
   };
 }
 
