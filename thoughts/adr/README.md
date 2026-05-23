@@ -13,3 +13,4 @@ Public reference UI architecture decisions. Numbered `NNNN-kebab-slug.md` starti
 - [ADR-0007 - IdentityProvider port](0007-identity-provider-port.md)
 - [ADR-0008 - Reference deployment composition](0008-reference-deployment-composition.md)
 - [ADR-0009 - Hexagonal architecture](0009-hexagonal-architecture-ports-and-adapters.md)
+- [ADR-0010 - Respondent place trust model](0010-respondent-place-trust-model.md)

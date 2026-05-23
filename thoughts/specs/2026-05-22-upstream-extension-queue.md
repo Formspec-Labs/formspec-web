@@ -222,11 +222,11 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Owning repo:** formspec
 **Closes:** J-039 (cross-sender obligations), J-042 (cross-form document library), J-043 (cross-issuer history)
 **FW rows blocked:** FW-0047 (design row — the trio), FW-0055, FW-0056, FW-0057
-**Shape:** `formspec/specs/respondent-library/library-spec.md` + `respondent-library.schema.json`. Document-kind taxonomy (passport, license, W-2, lease, medical record, professional credential). Per-presentation policy (`full / redacted / derived-claim-only`). Library export / portability format. Trust model (respondent-controlled — platform hosts on user's behalf, cannot read without authentication; client-side encryption with passkey-derived key via integrity-stack HPKE).
+**Shape:** `formspec/specs/respondent-library/library-spec.md` + `respondent-library.schema.json`. Document-kind taxonomy; per-presentation policy; library export / portability format. Trust model from [web ADR-0010](../adr/0010-respondent-place-trust-model.md): respondent-held, client-side aggregation only, server readable cross-tenant aggregation forbidden, production client-side encryption with passkey-derived key via integrity-stack HPKE. Applicant status is a WOS applicant API projection reference/cache, not a new Formspec status vocabulary.
 **Adopts:** W3C Verifiable Credentials Data Model 2.0; OpenID4VP for verifiable presentation.
 **Hard constraint:** **must not** be invented inside formspec-web — would create a UI-side primitive other consumers cannot reach. Cross-tenant aggregation is structurally forbidden server-side per stack-root ADR-0068 D-1 + D-3 (tenant boundary at runtime + per-tenant identity attestation); aggregation must be client-side, in the wallet.
-**Fixture status:** none. FW-0047 ADR-grade design row in formspec-web must produce a trust-model output before the sidecar can be authored.
-**Status:** not yet filed.
+**Fixture status:** authored in `formspec/tests/conformance/fixtures/respondent-library/` with positive library, selective-presentation, and export fixtures plus negative schema cases.
+**Status:** filed 2026-05-23; consumes FW-0047/web ADR-0010 trust-model output.
 
 ### SC-4: Verifiable Presentation Profile / Identity Binding Profile
 
@@ -265,9 +265,9 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Spans:** formspec-web (UI-side fan-out pattern)
 **Closes:** J-039 (cross-sender obligations stream) — the client-side aggregation pattern.
 **FW rows blocked:** FW-0055
-**Shape:** new ADR in `formspec-web/thoughts/adr/` documenting that cross-tenant aggregation is structurally forbidden server-side (stack-root ADR-0068 D-1 + D-3, jointly: tenant boundary at runtime + per-tenant identity attestation), therefore must be client-side. Names the token-bag storage model, fan-out pattern, per-tenant failure modes, persistence of mute / batch / escalate preferences client-side (since no single tenant can store cross-tenant prefs).
+**Shape:** [web ADR-0010](../adr/0010-respondent-place-trust-model.md) documents that cross-tenant aggregation is structurally forbidden server-side (stack-root ADR-0068 D-1 + D-3, jointly: tenant boundary at runtime + per-tenant identity attestation), therefore must be client-side. Token-bag and cross-issuer preferences live at the wallet/respondent-place boundary; formspec-web adapters may keep per-issuer handles only as deployment details.
 **Fixture status:** n/a (architectural ADR, not a schema change).
-**Status:** post-MVP; sequenced after the Respondent Library sidecar (SC-3) decides whether token bag lives in formspec-web session or in the wallet.
+**Status:** decided 2026-05-23 by web ADR-0010; implementation remains post-MVP and follows the respondent-place DI ports.
 
 ---
 

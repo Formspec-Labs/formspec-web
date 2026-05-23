@@ -502,11 +502,12 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 ### FW-0047 — Respondent-side place: design investigation
 
 - **Phase:** Post-MVP (design row)
-- **Status:** open
+- **Status:** done 2026-05-23 — see [web ADR-0010](thoughts/adr/0010-respondent-place-trust-model.md)
 - **Persona:** Respondent / Platform
 - **Journey:** [J-039](JOURNEYS.md#j-039--show-me-what-i-owe-whom-across-every-form-ive-ever-filled-out), [J-042](JOURNEYS.md#j-042--my-documents-are-in-my-library--i-share-them-with-each-form-on-my-terms), [J-043](JOURNEYS.md#j-043--show-me-every-form-ive-ever-submitted-started-or-signed)
 - **Done:** An ADR-grade design output that names how the platform would host a respondent-controlled view across all senders — what's coming (obligations), what I have (documents), what I've done (history). Trust model, data ownership, encryption-at-rest posture, export and deletion guarantees, who-can-read-what defaults.
-- **Blocked on:** queue SC-3 (Respondent Library Sidecar) prerequisite + queue XS-2 (multi-tenant token bag — client-side per stack-root ADR-0068 D-1 + D-3). The trust model output blocks every downstream build (FW-0055..0057).
+- **Delivered:** Trust model, data-ownership boundary, encryption posture, status ownership, and DI-consumption rule in web ADR-0010. SC-3 now consumes this output in `formspec/specs/respondent-library/library-spec.md`; XS-2 token-bag ownership is wallet/client-side per ADR-0010.
+- **Deviations:** This row was unblocked by resolving the SC-3/FW-0047 circular gate: ADR-0010 is the trust-model output first, then SC-3 sidecar authoring, then web DI consumption.
 - **Anti-patterns:** AP-006, AP-024.
 
 ### FW-0048 — Coercion-aware signing: research and threat-model row
