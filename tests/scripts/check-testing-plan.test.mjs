@@ -44,6 +44,44 @@ describe('check-testing-plan', () => {
     expect(result.stderr).toContain('coverage matrix references missing path "scripts/check-testing-plan.mjs"');
   });
 
+  it('rejects missing milestone coverage matrix rows', () => {
+    const result = runCheck(createFixture({ omitCoverageRow: 'M4 HTTP adapters' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('coverage matrix is missing row "M4 HTTP adapters"');
+  });
+
+  it('rejects milestone coverage rows that omit required evidence', () => {
+    const result = runCheck(
+      createFixture({ omitCoverageEvidence: 'tests/adapters/http/anonymous-session.test.ts' }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'coverage matrix row "M4 HTTP adapters" is missing required evidence "tests/adapters/http/anonymous-session.test.ts"',
+    );
+  });
+
+  it('rejects required evidence that is not listed as current implementation', () => {
+    const result = runCheck(
+      createFixture({
+        requiredColumnOnlyEvidence: 'tests/adapters/http/anonymous-session.test.ts',
+      }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'coverage matrix row "M4 HTTP adapters" is missing required evidence "tests/adapters/http/anonymous-session.test.ts"',
+    );
+  });
+
+  it('rejects duplicate milestone coverage matrix rows', () => {
+    const result = runCheck(createFixture({ duplicateCoverageRow: 'M7 identity' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('duplicate coverage matrix row "M7 identity"');
+  });
+
   it('rejects release gate scripts that drift away from the expected implementation', () => {
     const result = runCheck(
       createFixture({
@@ -163,7 +201,8 @@ function createFixture(options = {}) {
   tempRoots.push(root);
 
   const unitScript =
-    options.unitScript ?? 'vitest run src/profiles tests/app tests/scripts';
+    options.unitScript ??
+    'vitest run src/profiles tests/adapters tests/app tests/demo tests/scripts tests/shared tests/smoke';
   const ciCommands = [
     'npm run typecheck',
     'npm run lint',
@@ -222,13 +261,38 @@ function createFixture(options = {}) {
 
   for (const path of [
     'scripts/check-testing-plan.mjs',
+    'scripts/check-upstream-theme-assets.mjs',
+    'scripts/check-bundle-budget.mjs',
+    'scripts/check-conformance-coverage.mjs',
+    'scripts/check-deployment-headers.mjs',
+    'scripts/check-release-docs.mjs',
+    'scripts/check-compose-quickstart.mjs',
+    'scripts/check-multi-deployment.mjs',
+    'CONTRIBUTING.md',
+    'docker-compose.yml',
     'src/profiles/profiles.test.ts',
     'tests/app/respondent-flow.test.ts',
+    'tests/app/respondent-runtime.test.tsx',
     'tests/e2e/placeholder-a11y.spec.ts',
     'tests/scripts/check-testing-plan.test.mjs',
     'tests/scripts/check-conformance-coverage.test.mjs',
     'tests/scripts/check-release-docs.test.mjs',
     'tests/adapter-conformance/README.md',
+    'tests/adapter-conformance/definition-source/conformance.test.ts',
+    'tests/adapter-conformance/draft-store/conformance.test.ts',
+    'tests/adapter-conformance/submit-transport/conformance.test.ts',
+    'tests/adapter-conformance/identity-provider/conformance.test.ts',
+    'tests/adapter-conformance/notification-delivery/conformance.test.ts',
+    'tests/adapters/http/definition-source.test.ts',
+    'tests/adapters/http/draft-store.test.ts',
+    'tests/adapters/http/submit-transport.test.ts',
+    'tests/adapters/http/http-client.test.ts',
+    'tests/adapters/http/anonymous-session.test.ts',
+    'tests/adapters/identity/anonymous.test.ts',
+    'tests/adapters/identity/oidc.test.ts',
+    'tests/adapters/identity/magic-link.test.ts',
+    'tests/demo/sample-form.test.ts',
+    'tests/smoke/composition.test.ts',
     'src/adapter-conformance/index.ts',
     'src/adapters/http/index.ts',
     'src/adapters/identity/index.ts',
@@ -238,16 +302,31 @@ function createFixture(options = {}) {
     'src/ports/index.ts',
     'src/profiles/index.ts',
     'src/shared/index.ts',
+    'docs/architecture.md',
+    'docs/configuration.md',
+    'docs/profiles.md',
+    'docs/getting-started.md',
+    'docs/deployment.md',
+    'docs/operations.md',
+    'docs/multi-deployment.md',
+    'docs/ports/definition-source.md',
+    'docs/ports/draft-store.md',
+    'docs/ports/submit-transport.md',
+    'docs/ports/identity-provider.md',
+    'docs/ports/notification-delivery.md',
+    'docs/adapters/definition-source.md',
     'docs/adapters/draft-store.md',
+    'docs/adapters/submit-transport.md',
+    'docs/adapters/identity-provider.md',
+    'docs/adapters/notification-delivery.md',
     'docs/identity/integration.md',
+    'docs/identity/multi-flow.md',
     'docs/ux/accessibility.md',
+    'docs/ux/branding.md',
+    'docs/ux/errors.md',
     'docs/ux/i18n.md',
     'docs/ux/responsive.md',
-    'scripts/check-conformance-coverage.mjs',
-    'scripts/check-deployment-headers.mjs',
-    'scripts/check-release-docs.mjs',
-    'scripts/check-compose-quickstart.mjs',
-    'scripts/check-multi-deployment.mjs',
+    'thoughts/specs/2026-05-22-upstream-extension-queue.md',
     'README.md',
   ]) {
     if (path !== options.omitPath) {
@@ -304,7 +383,7 @@ function testingPlan(options = {}) {
     '',
     '| Surface | Required evidence | Current implementation |',
     '| --- | --- | --- |',
-    '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `tests/scripts/check-conformance-coverage.test.mjs`; `tests/scripts/check-release-docs.test.mjs`; `docs/testing-plan.md`; `tests/adapter-conformance/README.md`; `src/adapter-conformance/index.ts`; `scripts/check-testing-plan.mjs`; `scripts/check-conformance-coverage.mjs`; `scripts/check-release-docs.mjs`; `scripts/check-deployment-headers.mjs`; `scripts/check-compose-quickstart.mjs`; `scripts/check-multi-deployment.mjs`; `README.md`; `package.json`. |',
+    ...coverageMatrixRows(options),
     '',
     '## Adapter Rules',
     '',
@@ -314,6 +393,162 @@ function testingPlan(options = {}) {
     '| --- | --- | --- |',
     ...manualReleaseRows(options),
   ].join('\n');
+}
+
+function coverageMatrixRows(options = {}) {
+  const rows = [
+    [
+      'M0-M1 scaffold and build',
+      [
+        'npm run ci',
+        '.github/workflows/ci.yml',
+        'README.md',
+        'CONTRIBUTING.md',
+        'scripts/check-testing-plan.mjs',
+        'tests/scripts/check-testing-plan.test.mjs',
+      ],
+    ],
+    [
+      'M1 theme/token consumption',
+      ['scripts/check-upstream-theme-assets.mjs', 'npm run check:upstream-theme'],
+    ],
+    [
+      'M2 profile model',
+      ['src/profiles/profiles.test.ts', 'docs/configuration.md', 'docs/profiles.md'],
+    ],
+    [
+      'M3 port contracts',
+      [
+        'npm run check:conformance-coverage',
+        'scripts/check-conformance-coverage.mjs',
+        'tests/scripts/check-conformance-coverage.test.mjs',
+        'tests/adapter-conformance/definition-source/conformance.test.ts',
+        'tests/adapter-conformance/draft-store/conformance.test.ts',
+        'tests/adapter-conformance/submit-transport/conformance.test.ts',
+        'tests/adapter-conformance/identity-provider/conformance.test.ts',
+        'tests/adapter-conformance/notification-delivery/conformance.test.ts',
+        'src/adapter-conformance/index.ts',
+        'package.json',
+        'docs/architecture.md',
+        'docs/ports/definition-source.md',
+        'docs/ports/draft-store.md',
+        'docs/ports/submit-transport.md',
+        'docs/ports/identity-provider.md',
+        'docs/ports/notification-delivery.md',
+      ],
+    ],
+    [
+      'M4 HTTP adapters',
+      [
+        'tests/adapters/http/definition-source.test.ts',
+        'tests/adapters/http/draft-store.test.ts',
+        'tests/adapters/http/submit-transport.test.ts',
+        'tests/adapters/http/http-client.test.ts',
+        'tests/adapters/http/anonymous-session.test.ts',
+        'docs/adapters/definition-source.md',
+        'docs/adapters/draft-store.md',
+        'docs/adapters/submit-transport.md',
+        'docs/adapters/identity-provider.md',
+        'docs/adapters/notification-delivery.md',
+      ],
+    ],
+    [
+      'M5 demo composition',
+      [
+        'tests/demo/sample-form.test.ts',
+        'tests/smoke/composition.test.ts',
+        'tests/e2e/placeholder-a11y.spec.ts',
+        'docs/getting-started.md',
+        'npm run check:release-docs',
+      ],
+    ],
+    [
+      'M6 respondent runtime',
+      [
+        'tests/app/respondent-flow.test.ts',
+        'tests/app/respondent-runtime.test.tsx',
+        'tests/e2e/placeholder-a11y.spec.ts',
+        'scripts/check-bundle-budget.mjs',
+        'scripts/check-deployment-headers.mjs',
+        'docs/ux/branding.md',
+        'docs/ux/errors.md',
+        'docs/ux/responsive.md',
+        'docs/ux/accessibility.md',
+        'docs/ux/i18n.md',
+      ],
+    ],
+    [
+      'M7 identity',
+      [
+        'tests/adapter-conformance/identity-provider/conformance.test.ts',
+        'tests/adapters/http/anonymous-session.test.ts',
+        'tests/adapters/identity/anonymous.test.ts',
+        'tests/adapters/identity/oidc.test.ts',
+        'tests/adapters/identity/magic-link.test.ts',
+        'tests/app/respondent-flow.test.ts',
+        'tests/app/respondent-runtime.test.tsx',
+        'tests/smoke/composition.test.ts',
+        'docs/identity/integration.md',
+        'docs/identity/multi-flow.md',
+      ],
+    ],
+    [
+      'M7a multi-instance demo',
+      [
+        'npm run test:compose-quickstart',
+        'npm run test:multi-deployment',
+        'scripts/check-compose-quickstart.mjs',
+        'scripts/check-multi-deployment.mjs',
+        'docker-compose.yml',
+        'docs/multi-deployment.md',
+      ],
+    ],
+    [
+      'M8 deployment closeout',
+      [
+        'npm run build',
+        'npm run check:release-docs',
+        'npm run check:compose-config',
+        'npm run test:compose-quickstart',
+        'npm run test:deployment',
+        'npm run test:multi-deployment',
+        'scripts/check-release-docs.mjs',
+        'tests/scripts/check-release-docs.test.mjs',
+        'thoughts/specs/2026-05-22-upstream-extension-queue.md',
+        'docker-compose.yml',
+        'README.md',
+        'docs/deployment.md',
+        'docs/operations.md',
+        'docs/multi-deployment.md',
+      ],
+    ],
+  ];
+
+  const selectedRows = rows
+    .filter(([surface]) => surface !== options.omitCoverageRow)
+    .flatMap(([surface, references]) => {
+      const requiredReferences = references.filter(
+        (reference) => reference === options.requiredColumnOnlyEvidence,
+      );
+      const implementationReferences = references.filter(
+        (reference) =>
+          reference !== options.omitCoverageEvidence &&
+          reference !== options.requiredColumnOnlyEvidence,
+      );
+      const row = formatCoverageRow(surface, requiredReferences, implementationReferences);
+      return surface === options.duplicateCoverageRow ? [row, row] : [row];
+    });
+
+  return selectedRows;
+}
+
+function formatCoverageRow(surface, requiredReferences, implementationReferences) {
+  const requiredEvidence =
+    requiredReferences.length > 0
+      ? requiredReferences.map((reference) => `\`${reference}\``).join('; ')
+      : 'Test evidence';
+  const implementation = implementationReferences.map((reference) => `\`${reference}\``).join('; ');
+  return `| ${surface} | ${requiredEvidence}. | ${implementation}. |`;
 }
 
 function manualReleaseRows(options = {}) {

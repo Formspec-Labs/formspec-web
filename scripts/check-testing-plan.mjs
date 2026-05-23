@@ -78,6 +78,133 @@ const requiredManualGates = new Map([
     { evidence: 'docs/adapters/draft-store.md', status: 'Blocked by EXT-27' },
   ],
 ]);
+const requiredCoverageRows = new Map([
+  [
+    'M0-M1 scaffold and build',
+    [
+      'npm run ci',
+      '.github/workflows/ci.yml',
+      'README.md',
+      'CONTRIBUTING.md',
+      'scripts/check-testing-plan.mjs',
+      'tests/scripts/check-testing-plan.test.mjs',
+    ],
+  ],
+  [
+    'M1 theme/token consumption',
+    ['scripts/check-upstream-theme-assets.mjs', 'npm run check:upstream-theme'],
+  ],
+  [
+    'M2 profile model',
+    ['src/profiles/profiles.test.ts', 'docs/configuration.md', 'docs/profiles.md'],
+  ],
+  [
+    'M3 port contracts',
+    [
+      'npm run check:conformance-coverage',
+      'scripts/check-conformance-coverage.mjs',
+      'tests/scripts/check-conformance-coverage.test.mjs',
+      'tests/adapter-conformance/definition-source/conformance.test.ts',
+      'tests/adapter-conformance/draft-store/conformance.test.ts',
+      'tests/adapter-conformance/submit-transport/conformance.test.ts',
+      'tests/adapter-conformance/identity-provider/conformance.test.ts',
+      'tests/adapter-conformance/notification-delivery/conformance.test.ts',
+      'src/adapter-conformance/index.ts',
+      'package.json',
+      'docs/architecture.md',
+      'docs/ports/definition-source.md',
+      'docs/ports/draft-store.md',
+      'docs/ports/submit-transport.md',
+      'docs/ports/identity-provider.md',
+      'docs/ports/notification-delivery.md',
+    ],
+  ],
+  [
+    'M4 HTTP adapters',
+    [
+      'tests/adapters/http/definition-source.test.ts',
+      'tests/adapters/http/draft-store.test.ts',
+      'tests/adapters/http/submit-transport.test.ts',
+      'tests/adapters/http/http-client.test.ts',
+      'tests/adapters/http/anonymous-session.test.ts',
+      'docs/adapters/definition-source.md',
+      'docs/adapters/draft-store.md',
+      'docs/adapters/submit-transport.md',
+      'docs/adapters/identity-provider.md',
+      'docs/adapters/notification-delivery.md',
+    ],
+  ],
+  [
+    'M5 demo composition',
+    [
+      'tests/demo/sample-form.test.ts',
+      'tests/smoke/composition.test.ts',
+      'tests/e2e/placeholder-a11y.spec.ts',
+      'docs/getting-started.md',
+      'npm run check:release-docs',
+    ],
+  ],
+  [
+    'M6 respondent runtime',
+    [
+      'tests/app/respondent-flow.test.ts',
+      'tests/app/respondent-runtime.test.tsx',
+      'tests/e2e/placeholder-a11y.spec.ts',
+      'scripts/check-bundle-budget.mjs',
+      'scripts/check-deployment-headers.mjs',
+      'docs/ux/branding.md',
+      'docs/ux/errors.md',
+      'docs/ux/responsive.md',
+      'docs/ux/accessibility.md',
+      'docs/ux/i18n.md',
+    ],
+  ],
+  [
+    'M7 identity',
+    [
+      'tests/adapter-conformance/identity-provider/conformance.test.ts',
+      'tests/adapters/http/anonymous-session.test.ts',
+      'tests/adapters/identity/anonymous.test.ts',
+      'tests/adapters/identity/oidc.test.ts',
+      'tests/adapters/identity/magic-link.test.ts',
+      'tests/app/respondent-flow.test.ts',
+      'tests/app/respondent-runtime.test.tsx',
+      'tests/smoke/composition.test.ts',
+      'docs/identity/integration.md',
+      'docs/identity/multi-flow.md',
+    ],
+  ],
+  [
+    'M7a multi-instance demo',
+    [
+      'npm run test:compose-quickstart',
+      'npm run test:multi-deployment',
+      'scripts/check-compose-quickstart.mjs',
+      'scripts/check-multi-deployment.mjs',
+      'docker-compose.yml',
+      'docs/multi-deployment.md',
+    ],
+  ],
+  [
+    'M8 deployment closeout',
+    [
+      'npm run build',
+      'npm run check:release-docs',
+      'npm run check:compose-config',
+      'npm run test:compose-quickstart',
+      'npm run test:deployment',
+      'npm run test:multi-deployment',
+      'scripts/check-release-docs.mjs',
+      'tests/scripts/check-release-docs.test.mjs',
+      'thoughts/specs/2026-05-22-upstream-extension-queue.md',
+      'docker-compose.yml',
+      'README.md',
+      'docs/deployment.md',
+      'docs/operations.md',
+      'docs/multi-deployment.md',
+    ],
+  ],
+]);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const rootDir = rootDirFromArgs(process.argv.slice(2)) ?? defaultRootDir;
@@ -158,13 +285,37 @@ export function checkTestingPlan(rootDir) {
   assertCommandOrder(documentedCiCommands, workflowRunCommands, '.github/workflows/ci.yml');
 
   const coverageRows = markdownRowsBetween(testingPlan, '## Coverage Matrix', '## Adapter Rules');
+  const coverageRowsBySurface = new Map();
   const referencedPaths = new Set();
 
   for (const row of coverageRows) {
-    const implementationCell = row[2] ?? '';
+    const [surface, , implementationCell = ''] = row;
+    if (coverageRowsBySurface.has(surface)) {
+      fail(`testing plan check failed: duplicate coverage matrix row "${surface}"`);
+    }
+    const implementationSpans = new Set(codeSpans(implementationCell));
+    coverageRowsBySurface.set(surface, implementationSpans);
     for (const reference of codeSpans(implementationCell)) {
       if (looksLikePath(reference)) {
         referencedPaths.add(reference);
+      }
+    }
+  }
+
+  for (const [surface, requiredEvidence] of requiredCoverageRows) {
+    const evidenceSpans = coverageRowsBySurface.get(surface);
+    if (!evidenceSpans) {
+      fail(`testing plan check failed: coverage matrix is missing row "${surface}"`);
+    }
+
+    for (const evidence of requiredEvidence) {
+      if (!evidenceSpans.has(evidence)) {
+        fail(
+          `testing plan check failed: coverage matrix row "${surface}" is missing required evidence "${evidence}"`,
+        );
+      }
+      if (looksLikePath(evidence)) {
+        referencedPaths.add(evidence);
       }
     }
   }
