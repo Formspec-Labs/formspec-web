@@ -52,6 +52,12 @@ export interface Composition {
    * declaration from the loaded Definition. Default extractors return {} (no
    * requirements); feature ADRs that add a form-policy field define their own
    * extractor.
+   *
+   * Today shipped as a closure on Composition rather than a full port with
+   * conformance suite. Promote to `FormRuntimePolicyExtractor` port (with
+   * conformance fixtures under `tests/adapter-conformance/`) the moment the
+   * first feature ADR ships a non-trivial extractor — scout flag HIGH-1
+   * (2026-05-23 architecture review).
    */
   getFormRuntimePolicy: (definition: FormDefinition) => FormRuntimePolicy;
 }

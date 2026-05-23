@@ -48,3 +48,10 @@ export {
   resolveRuntimeFeatures,
   type ResolveRuntimeFeaturesInput,
 } from './resolver.ts';
+export { FEATURE_PORT_MAP, type CompositionPortName } from './feature-port-map.ts';
+export {
+  CompositionIncoherenceError,
+  assertCompositionCoherence,
+  type CompositionIncoherenceKind,
+  type CompositionLike,
+} from './composition-coherence.ts';

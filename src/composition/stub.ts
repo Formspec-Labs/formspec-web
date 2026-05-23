@@ -10,10 +10,11 @@ import {
   demoApplicantStatusResource,
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
-import type {
-  FormRuntimePolicy,
-  InstanceCapabilities,
-  OrgRuntimePolicy,
+import {
+  assertCompositionCoherence,
+  type FormRuntimePolicy,
+  type InstanceCapabilities,
+  type OrgRuntimePolicy,
 } from '../policy/index.ts';
 import type { Composition } from './types.ts';
 
@@ -27,7 +28,7 @@ export function createStubComposition(): Composition {
   definitionSource.registerDefinition(demoSampleForm.url, demoSampleForm, demoSampleForm.version);
   definitionSource.registerDefinition(demoSampleForm.url, demoSampleForm);
 
-  return {
+  const composition: Composition = {
     mode: 'demo',
     initialDefinitionUrl: demoSampleFormUrl,
     definitionSource,
@@ -48,4 +49,6 @@ export function createStubComposition(): Composition {
     } satisfies OrgRuntimePolicy,
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
+  assertCompositionCoherence(composition);
+  return composition;
 }

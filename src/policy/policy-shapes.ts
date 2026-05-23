@@ -8,6 +8,15 @@
  */
 import type { RuntimeFeatureKey } from './feature-keys.ts';
 
+/**
+ * Closed-set decision: an instance capability is exactly one of three states.
+ * No `'degraded'` value today — operational degradation (e.g., a status reader
+ * returning stale cached values) is per-adapter runtime state, not a
+ * composition-declaration concern. If a future feature ADR proves otherwise,
+ * widening this union is a non-backwards-compatible change for every adopter
+ * fork that exhaustive-checks the value; pin the decision in ADR-0011 before
+ * expanding.
+ */
 export type CapabilityAvailability = 'available' | 'demo-stub' | 'unavailable';
 
 const CAPABILITY_AVAILABILITY: ReadonlySet<string> = new Set([
@@ -64,7 +73,26 @@ export interface FormRuntimePolicy {
   readonly features: Readonly<Partial<Record<RuntimeFeatureKey, FormFeaturePolicyMode>>>;
 }
 
-/** ADR-0011 §Failure Semantics. Optional features record why they fell off. */
+/**
+ * ADR-0011 §Failure Semantics. Optional features record why they fell off.
+ *
+ * Today's resolver emits five of these seven causes — `form-forbidden`,
+ * `org-forbidden`, `optional-no-instance`, `default-on-no-instance`,
+ * `not-requested`. The two others are reserved for future feature-ADR fan-out:
+ *   - `instance-unavailable` — adopter-facing diagnostic when a feature is
+ *     wired as `unavailable` but the form/org didn't request it and we want
+ *     to surface "the instance can't do this" separately from "nothing
+ *     asked." Today both collapse to `not-requested` / `optional-no-instance`.
+ *   - `production-rejects-demo-stub` — reserved for a future production-mode
+ *     resolver that records "demo-stub rejected" as a disabled-cause for
+ *     optional/default-on paths rather than a typed throw. Today the
+ *     production-rejects-demo-stub case for *required* features throws
+ *     UnsupportedRequiredFeatureError; the optional/default-on case collapses
+ *     to `optional-no-instance` / `default-on-no-instance`.
+ *
+ * Keep both reserved: deleting them now would force a non-backwards-compatible
+ * widening the moment we want richer diagnostics.
+ */
 export type DisabledCause =
   | 'instance-unavailable'
   | 'org-forbidden'

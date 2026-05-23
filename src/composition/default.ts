@@ -12,10 +12,11 @@ import { stubNotificationDelivery } from '../adapters/stub/notification-delivery
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
-import type {
-  FormRuntimePolicy,
-  InstanceCapabilities,
-  OrgRuntimePolicy,
+import {
+  assertCompositionCoherence,
+  type FormRuntimePolicy,
+  type InstanceCapabilities,
+  type OrgRuntimePolicy,
 } from '../policy/index.ts';
 import { demoSampleFormUrl } from '../demo/index.ts';
 import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
@@ -57,7 +58,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     anonymousSessionToken: (key) => anonymousSessions.tokenForDraftKey(key),
   });
 
-  return {
+  const composition: Composition = {
     mode: 'production',
     initialDefinitionUrl,
     definitionSource: new HttpDefinitionSource(httpConfig),
@@ -71,6 +72,12 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
+    // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
+    // production composition wires the unavailable* sentinels and declares
+    // `unavailable` to match. Adopters who need the capability swap BOTH —
+    // the wired adapter (per web ADR-0010 for respondent-place, FW-0039 for
+    // status) AND the declaration. assertCompositionCoherence (Task 10b)
+    // catches forks that update only one half.
     instanceCapabilities: {
       respondentPlace: 'unavailable',
       status: 'unavailable',
@@ -80,6 +87,8 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     } satisfies OrgRuntimePolicy,
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
+  assertCompositionCoherence(composition);
+  return composition;
 }
 
 function assertReferenceHttpDataPorts(config: FormspecWebConfig): void {

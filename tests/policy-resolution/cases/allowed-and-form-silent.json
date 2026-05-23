@@ -1,0 +1,13 @@
+{
+  "name": "allowed-and-form-silent",
+  "description": "org allowed + form silent -> not-requested (the production-default code path on a form that requests nothing)",
+  "mode": "production",
+  "instance": { "respondentPlace": "available", "status": "available" },
+  "org": { "features": { "respondentPlace": "allowed", "status": "allowed" } },
+  "form": { "features": {} },
+  "expect": {
+    "kind": "profile",
+    "enabled": [],
+    "disabled": { "respondentPlace": "not-requested", "status": "not-requested" }
+  }
+}
