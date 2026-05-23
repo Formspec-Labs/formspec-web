@@ -6,7 +6,7 @@ import type {
 } from '@formspec-org/types';
 import type { IFormEngine } from '@formspec-org/engine';
 import type { DraftKey } from '../ports/draft-store.ts';
-import type { IdentityClaim } from '../ports/identity-provider.ts';
+import type { IdentityClaim, IdpOption } from '../ports/identity-provider.ts';
 import type { IdempotencyKey } from '../shared/idempotency-key.ts';
 
 export function hydrateEngineFromResponse(engine: IFormEngine, response?: FormResponse): void {
@@ -39,6 +39,28 @@ export function hydrateEngineFromData(engine: IFormEngine, data: Record<string, 
 
     engine.setValue(path, value as Parameters<IFormEngine['setValue']>[1]);
   }
+}
+
+export function selectBootIdentityOption(options: readonly IdpOption[]): IdpOption | undefined {
+  return options.find((option) => option.kind === 'anonymous');
+}
+
+export function subjectRefInvalidatedByIdentityChange(
+  previous: IdentityClaim | null,
+  next: IdentityClaim | null,
+): string | undefined {
+  const previousSubjectRef = previous?.subjectRef;
+  if (!previousSubjectRef || previousSubjectRef === next?.subjectRef) {
+    return undefined;
+  }
+  return previousSubjectRef;
+}
+
+export function identitySubjectChanged(
+  previous: IdentityClaim | null,
+  next: IdentityClaim | null,
+): boolean {
+  return previous?.subjectRef !== next?.subjectRef;
 }
 
 export async function buildIntakeHandoff({

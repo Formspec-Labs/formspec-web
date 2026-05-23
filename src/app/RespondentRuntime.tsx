@@ -25,13 +25,16 @@ import {
 } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
-import type { IdentityClaim } from '../ports/identity-provider.ts';
+import type { IdentityClaim, IdentityProvider } from '../ports/identity-provider.ts';
 import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
 import {
   buildIntakeHandoff,
   hydrateEngineFromResponse,
+  identitySubjectChanged,
+  selectBootIdentityOption,
+  subjectRefInvalidatedByIdentityChange,
 } from './respondent-flow.ts';
 
 interface RespondentRuntimeProps {
@@ -55,6 +58,8 @@ type RespondentState =
     }
   | { status: 'error'; error: unknown };
 
+type ReadyRespondentState = Extract<RespondentState, { status: 'ready' }>;
+
 type SubmitState =
   | { status: 'idle' }
   | { status: 'submitting' }
@@ -72,63 +77,76 @@ export function RespondentRuntime({
   useEffect(() => {
     let cancelled = false;
     let engine: IFormEngine | undefined;
+    let unsubscribe: (() => void) | undefined;
+    let activeClaim: IdentityClaim | null = null;
+    let reloadSequence = 0;
     setRespondentState({ status: 'loading' });
     setSubmitState({ status: 'idle' });
 
-    void (async () => {
+    const applyReadyState = async (claim: IdentityClaim | null): Promise<void> => {
+      const sequence = ++reloadSequence;
+      setRespondentState({ status: 'loading' });
+      setSubmitState({ status: 'idle' });
       try {
         await engineReady;
-        const definition = await composition.definitionSource.getDefinition(
-          composition.initialDefinitionUrl,
-        );
-        const [identityOption] = await composition.identityProvider.discover();
-        const claim = identityOption
-          ? await composition.identityProvider.authenticate(identityOption)
-          : null;
-        const draftKey: DraftKey = {
-          formUrl: definition.url,
-          formVersion: definition.version,
-          subjectRef: claim?.subjectRef,
-        };
-        const draft = await composition.draftStore.load(draftKey);
-        const activeLocale = defaultLocaleForDefinition(definition);
+        const readyState = await createReadyState(composition, claim);
 
-        engine = createFormEngine(definition, {
-          runtimeContext: { locale: activeLocale },
-        });
-        for (const localeDocument of demoLocaleDocuments) {
-          if (localeDocument.targetDefinition.url === definition.url) {
-            engine.loadLocale(localeDocument);
-          }
-        }
-        engine.setLocale(activeLocale);
-        hydrateEngineFromResponse(engine, draft);
-        const resolvedIssuer = await engine.getResolvedIssuer();
-
-        if (cancelled) {
-          engine.dispose();
+        if (cancelled || sequence !== reloadSequence) {
+          readyState.engine.dispose();
           return;
         }
 
-        setRespondentState({
-          status: 'ready',
-          definition,
-          engine,
-          draftKey,
-          claim,
-          resolvedIssuer,
-          activeLocale,
-          draftLoaded: draft !== undefined,
-        });
+        engine?.dispose();
+        engine = readyState.engine;
+        activeClaim = claim;
+        setRespondentState(readyState);
       } catch (error) {
-        if (!cancelled) {
+        if (!cancelled && sequence === reloadSequence) {
           setRespondentState({ status: 'error', error });
         }
       }
-    })();
+    };
+
+    void (async () => {
+      const claim = await bootClaim(composition.identityProvider);
+      if (cancelled) {
+        return;
+      }
+      await applyReadyState(claim);
+      if (cancelled) {
+        return;
+      }
+      unsubscribe = composition.identityProvider.subscribe((nextClaim) => {
+        const invalidatedSubjectRef = subjectRefInvalidatedByIdentityChange(activeClaim, nextClaim);
+        if (!identitySubjectChanged(activeClaim, nextClaim)) {
+          activeClaim = nextClaim;
+          setRespondentState((current) =>
+            current.status === 'ready' ? { ...current, claim: nextClaim } : current,
+          );
+          return;
+        }
+        void (async () => {
+          try {
+            if (invalidatedSubjectRef) {
+              await composition.draftStore.invalidateSubject(invalidatedSubjectRef);
+            }
+            await applyReadyState(nextClaim);
+          } catch (error) {
+            if (!cancelled) {
+              setRespondentState({ status: 'error', error });
+            }
+          }
+        })();
+      });
+    })().catch((error: unknown) => {
+      if (!cancelled) {
+        setRespondentState({ status: 'error', error });
+      }
+    });
 
     return () => {
       cancelled = true;
+      unsubscribe?.();
       engine?.dispose();
     };
   }, [composition]);
@@ -227,6 +245,51 @@ export function RespondentRuntime({
       </FormspecProvider>
     </AppErrorBoundary>
   );
+}
+
+async function bootClaim(identityProvider: IdentityProvider): Promise<IdentityClaim | null> {
+  const options = await identityProvider.discover();
+  const option = selectBootIdentityOption(options);
+  return option ? identityProvider.authenticate(option) : null;
+}
+
+async function createReadyState(
+  composition: Composition,
+  claim: IdentityClaim | null,
+): Promise<ReadyRespondentState> {
+  const definition = await composition.definitionSource.getDefinition(
+    composition.initialDefinitionUrl,
+  );
+  const draftKey: DraftKey = {
+    formUrl: definition.url,
+    formVersion: definition.version,
+    subjectRef: claim?.subjectRef,
+  };
+  const draft = await composition.draftStore.load(draftKey);
+  const activeLocale = defaultLocaleForDefinition(definition);
+
+  const engine = createFormEngine(definition, {
+    runtimeContext: { locale: activeLocale },
+  });
+  for (const localeDocument of demoLocaleDocuments) {
+    if (localeDocument.targetDefinition.url === definition.url) {
+      engine.loadLocale(localeDocument);
+    }
+  }
+  engine.setLocale(activeLocale);
+  hydrateEngineFromResponse(engine, draft);
+  const resolvedIssuer = await engine.getResolvedIssuer();
+
+  return {
+    status: 'ready',
+    definition,
+    engine,
+    draftKey,
+    claim,
+    resolvedIssuer,
+    activeLocale,
+    draftLoaded: draft !== undefined,
+  };
 }
 
 function RespondentSurface({

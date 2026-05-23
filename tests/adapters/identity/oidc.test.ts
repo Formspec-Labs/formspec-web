@@ -52,6 +52,49 @@ describe('OidcAdapter', () => {
     expect(() => assuranceLevelFromAcr('unknown-acr', {})).toThrow(/ACR/);
   });
 
+  it.each([
+    ['urn:formspec:assurance:l1', 'L1'],
+    ['urn:formspec:assurance:l2', 'L2'],
+    ['urn:formspec:assurance:l3', 'L3'],
+    ['urn:formspec:assurance:l4', 'L4'],
+  ] as const)('maps fixture ACR %s to assuranceLevel %s', async (acr, assuranceLevel) => {
+    const adapter = new OidcAdapter({
+      issuer: 'https://idp.example.test',
+      clientId: 'formspec-web',
+      minAssurance: assuranceLevel,
+      subjectRefFactory: () => `oidc:${assuranceLevel.toLowerCase()}-subject`,
+      driver: {
+        getUser: async () => ({
+          access_token: 'access-token',
+          profile: { sub: 'subject', acr },
+        }),
+      },
+    });
+    const [option] = await adapter.discover(assuranceLevel);
+    if (!option) throw new Error('expected OIDC option');
+
+    await expect(adapter.authenticate(option)).resolves.toMatchObject({ assuranceLevel });
+  });
+
+  it('fails instead of silently satisfying a stronger option with weaker ACR', async () => {
+    const adapter = new OidcAdapter({
+      issuer: 'https://idp.example.test',
+      clientId: 'formspec-web',
+      minAssurance: 'L3',
+      subjectRefFactory: () => 'oidc:l2-subject',
+      driver: {
+        getUser: async () => ({
+          access_token: 'access-token',
+          profile: { sub: 'subject', acr: 'urn:formspec:assurance:l2' },
+        }),
+      },
+    });
+    const [option] = await adapter.discover('L3');
+    if (!option) throw new Error('expected OIDC option');
+
+    await expect(adapter.authenticate(option)).rejects.toThrow(/below required L3/);
+  });
+
   it('enforces the adopter-overridable ACR mapping table', async () => {
     const adapter = new OidcAdapter({
       issuer: 'https://idp.example.test',

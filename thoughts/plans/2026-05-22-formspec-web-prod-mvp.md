@@ -379,6 +379,12 @@ Locale Documents instead of only `locale_refs`.
 
 **Documentation exit gate:** `docs/identity/integration.md` — "swap in your OIDC provider" recipe (configuration, ACR mapping, assurance gate, JWKS distribution to formspec-server); `docs/identity/multi-flow.md` — running multiple identity flows against one backend.
 
+**Gate note (2026-05-22):** M7 is split. M7a may close anonymous-only client
+identity lifecycle and multi-instance proof. Full M7 / M7b remains blocked by
+EXT-23 in `formspec-server`, and the web composition still needs a bounded
+access-token provider bridge for `HttpClient.accessToken` before OIDC bearer
+tokens can reach the reference server without leaking into `IdentityClaim`.
+
 ---
 
 ### M8 — Deployment ergonomics + multi-instance demo + closeout

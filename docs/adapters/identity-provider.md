@@ -14,6 +14,10 @@ All adapters use `subscribe()` to emit authenticate and revoke transitions. OIDC
 bearer tokens for HTTP adapters are passed by the composition through
 `HttpClient.accessToken`; invalid upstream tokens surface as Problem JSON.
 
+The respondent runtime only auto-authenticates anonymous identity at boot. OIDC
+redirects and magic-link sends are side-effectful and are reserved for an
+explicit sign-in surface.
+
 Run:
 
 ```bash
