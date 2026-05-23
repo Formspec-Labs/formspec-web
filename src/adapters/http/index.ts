@@ -1,4 +1,11 @@
 export {
+  AnonymousSessionBridge,
+  HttpAnonymousIdentityProvider,
+  createAnonymousSessionBridge,
+  type AnonymousSession,
+  type AnonymousSessionBridgeConfig,
+} from './anonymous-session.ts';
+export {
   HttpDefinitionSource,
   createHttpDefinitionSource,
   type HttpDefinitionSourceConfig,

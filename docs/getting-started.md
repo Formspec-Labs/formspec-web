@@ -19,11 +19,15 @@ docker compose up --build
 Open `http://localhost:8080` for `publicPortal` and
 `http://localhost:8081` for `departmentApp`. The default image also starts in
 demo mode. To run against a real `formspec-server`, set
-`FORMSPEC_WEB_SERVER_URL`:
+`FORMSPEC_WEB_SERVER_URL`; `docker-compose.yml` forwards it to both containers:
 
 ```bash
 FORMSPEC_WEB_SERVER_URL=https://formspec-server.example.test docker compose up --build
 ```
+
+With a server URL, `publicPortal` uses the reference anonymous-session draft and
+submit path. `departmentApp` is OIDC-required and fails closed until the explicit
+sign-in surface and M7b bearer-token bridge land.
 
 Production runtime config is emitted by `docker/40-formspec-runtime-config.sh`
 from `FORMSPEC_WEB_*` environment variables.

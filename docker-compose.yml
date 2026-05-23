@@ -6,6 +6,7 @@ services:
       - "8080:80"
     environment:
       FORMSPEC_WEB_PROFILE: publicPortal
+      FORMSPEC_WEB_SERVER_URL: ${FORMSPEC_WEB_SERVER_URL:-}
 
   formspec-web-department:
     image: formspec-web:local
@@ -15,3 +16,4 @@ services:
       - "8081:80"
     environment:
       FORMSPEC_WEB_PROFILE: departmentApp
+      FORMSPEC_WEB_SERVER_URL: ${FORMSPEC_WEB_SERVER_URL:-}

@@ -3,6 +3,7 @@ import { createFormEngine } from '@formspec-org/engine';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
 import {
+  assertIdentityPolicySatisfied,
   buildIntakeHandoff,
   hydrateEngineFromData,
   identitySubjectChanged,
@@ -107,6 +108,30 @@ describe('respondent flow helpers', () => {
     expect(identitySubjectChanged(null, previous)).toBe(true);
     expect(identitySubjectChanged(previous, claim('subject-1'))).toBe(false);
     expect(identitySubjectChanged(previous, null)).toBe(true);
+  });
+
+  it('fails closed for production OIDC-required profiles without a claim', () => {
+    expect(() =>
+      assertIdentityPolicySatisfied({
+        claim: null,
+        identityMode: 'oidc-required',
+        runtimeMode: 'production',
+      }),
+    ).toThrow(/requires sign-in/);
+    expect(() =>
+      assertIdentityPolicySatisfied({
+        claim: null,
+        identityMode: 'oidc-required',
+        runtimeMode: 'demo',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertIdentityPolicySatisfied({
+        claim: claim('subject-1'),
+        identityMode: 'oidc-required',
+        runtimeMode: 'production',
+      }),
+    ).not.toThrow();
   });
 });
 

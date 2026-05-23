@@ -116,6 +116,16 @@ export function defineSubmitTransportConformance(
       expect(second).toEqual(first);
     });
 
+    it('returns the same confirmation for concurrent same-key submissions', async () => {
+      const subject = setup();
+      const key = generateIdempotencyKey();
+      const [first, second] = await Promise.all([
+        subject.adapter.submit(sampleIntakeHandoff, key),
+        subject.adapter.submit(sampleIntakeHandoff, key),
+      ]);
+      expect(second).toEqual(first);
+    });
+
     it('returns distinct confirmations for distinct UUIDv7 idempotency keys', async () => {
       const subject = setup();
       const first = await subject.adapter.submit(sampleIntakeHandoff, generateIdempotencyKey());

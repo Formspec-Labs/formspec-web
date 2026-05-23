@@ -10,9 +10,10 @@ The reference identity set contains three adapters:
 - `MagicLinkAdapter` consumes `NotificationDelivery` to send a link, then calls
   an injected exchange callback that mints the canonical claim.
 
-All adapters use `subscribe()` to emit authenticate and revoke transitions. OIDC
-bearer tokens for HTTP adapters are passed by the composition through
-`HttpClient.accessToken`; invalid upstream tokens surface as Problem JSON.
+All adapters use `subscribe()` to emit authenticate and revoke transitions.
+`HttpClient` supports an `accessToken` provider, but the default formspec-stack
+composition does not yet bridge OIDC bearer tokens into HTTP adapters. That
+bridge remains part of the M7b close slice after server-side EXT-23 lands.
 
 The respondent runtime only auto-authenticates anonymous identity at boot. OIDC
 redirects and magic-link sends are side-effectful and are reserved for an

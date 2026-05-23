@@ -45,9 +45,12 @@ Open:
 - `http://localhost:8080` for `publicPortal`.
 - `http://localhost:8081` for `departmentApp`.
 
-Both services intentionally omit `FORMSPEC_WEB_SERVER_URL` in M7a/M8 local
-compose, so they prove static deployment, profile selection, and brand
-isolation without claiming server-backed OIDC.
+Both services leave `FORMSPEC_WEB_SERVER_URL` empty in M7a/M8 local compose, so
+they prove static deployment, profile selection, and brand isolation without
+claiming server-backed OIDC. When the variable is provided, compose forwards it
+to both services: `publicPortal` uses the reference anonymous-session draft and
+submit path, while `departmentApp` fails closed until the M7b OIDC sign-in and
+bearer-token bridge land.
 
 ## Deferred Server Stack
 

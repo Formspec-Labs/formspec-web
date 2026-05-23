@@ -1,14 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { createDefaultComposition } from '../../src/composition/default.ts';
 import { createDemoComposition } from '../../src/composition/demo.ts';
 import { applyBrandTheme, getUpstreamTokenRegistry } from '../../src/theme/theme.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
-import { sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
-import { departmentAppProfile } from '../../src/profiles/profiles.ts';
+import {
+  sampleFormResponse,
+  sampleIntakeHandoff,
+} from '../../src/adapter-conformance/fixtures.ts';
+import { buildIntakeHandoff } from '../../src/app/respondent-flow.ts';
+import { departmentAppProfile, publicPortalProfile } from '../../src/profiles/profiles.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
+import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
 
 describe('composition root smoke', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('createStubComposition wires all 5 MVP ports', () => {
     const c = createStubComposition();
     expect(c.definitionSource).toBeDefined();
@@ -47,6 +56,91 @@ describe('composition root smoke', () => {
     expect(c.initialDefinitionUrl).toBe(
       'https://formspec-server.example.test/runtime/forms/demo-intake',
     );
+  });
+
+  it('production publicPortal composition carries server anonymous sessions through draft submit', async () => {
+    const { fetch, requests } = recordingFetch((request) => {
+      const path = new URL(request.url).pathname;
+      if (request.method === 'POST' && path === '/runtime/forms/demo-intake/sessions/anonymous') {
+        return jsonResponse({
+          session_token: 'anonymous-token-1',
+          subject_ref: 'anon:server-subject',
+          form_id: 'demo-intake',
+          expires_at: '2099-01-01T00:00:00.000Z',
+        });
+      }
+      if (request.method === 'GET' && path === '/runtime/forms/demo-intake') {
+        return jsonResponse({ definition: demoSampleForm });
+      }
+      if (request.method === 'POST' && path === '/runtime/forms/demo-intake/drafts') {
+        return jsonResponse({ draft_id: 'draft-http-1', draft_version: 1 });
+      }
+      if (request.method === 'POST' && path === '/drafts/draft-http-1/submit') {
+        return jsonResponse({ response_id: 'response-http-1', status: 'accepted' });
+      }
+      return jsonResponse({ title: `unexpected ${request.method} ${path}` }, 500);
+    });
+    vi.stubGlobal('fetch', fetch);
+    const c = createDefaultComposition({
+      ...publicPortalProfile,
+      referenceAdapters: {
+        formspecStack: {
+          ...publicPortalProfile.referenceAdapters?.formspecStack,
+          tenantHeaderDialect: 'formspec',
+          formspecServerUrl: 'https://formspec-server.example.test',
+        },
+      },
+    });
+
+    const [option] = await c.identityProvider.discover();
+    if (!option) throw new Error('expected anonymous identity option');
+    const claim = await c.identityProvider.authenticate(option);
+    const definition = await c.definitionSource.getDefinition(c.initialDefinitionUrl);
+    await c.draftStore.save(
+      {
+        formUrl: definition.url,
+        formVersion: definition.version,
+        subjectRef: claim.subjectRef,
+      },
+      sampleFormResponse,
+    );
+    const idempotencyKey = generateIdempotencyKey();
+    const handoff = await buildIntakeHandoff({
+      definition,
+      response: sampleFormResponse,
+      validationReport: null,
+      draftKey: {
+        formUrl: definition.url,
+        formVersion: definition.version,
+        subjectRef: claim.subjectRef,
+      },
+      claim,
+      idempotencyKey,
+    });
+
+    await expect(c.submitTransport.submit(handoff, idempotencyKey)).resolves.toMatchObject({
+      referenceNumber: 'response-http-1',
+      status: 'accepted',
+    });
+
+    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`))
+      .toEqual([
+        'POST /runtime/forms/demo-intake/sessions/anonymous',
+        'GET /runtime/forms/demo-intake',
+        'POST /runtime/forms/demo-intake/drafts',
+        'POST /drafts/draft-http-1/submit',
+      ]);
+    expect(requests[0]?.body).toMatchObject({ session_id: expect.stringMatching(/^web-/) });
+    expect(requests[2]?.body).toMatchObject({
+      anonymous_session_token: 'anonymous-token-1',
+      anonymous_subject_ref: 'anon:server-subject',
+      draft_state: sampleFormResponse.data,
+    });
+    expect(requests[3]?.body).toMatchObject({
+      anonymous_session_token: 'anonymous-token-1',
+      subject_ref: 'anon:server-subject',
+      response_data: sampleFormResponse.data,
+    });
   });
 
   it('SubmitTransport is idempotent on the same key', async () => {

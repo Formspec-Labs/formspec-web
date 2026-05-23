@@ -26,7 +26,7 @@ export class HttpSubmitTransport implements SubmitTransport {
   private readonly responseDataResolver?: HttpSubmitTransportConfig['responseDataResolver'];
   private readonly anonymousSessionToken?: HttpSubmitTransportConfig['anonymousSessionToken'];
   private readonly signingRequested?: HttpSubmitTransportConfig['signingRequested'];
-  private readonly replay = new Map<string, SubmitConfirmation>();
+  private readonly replay = new Map<string, Promise<SubmitConfirmation>>();
 
   constructor(config: HttpSubmitTransportConfig) {
     this.client = new HttpClient(config);
@@ -43,6 +43,20 @@ export class HttpSubmitTransport implements SubmitTransport {
     if (existing) {
       return existing;
     }
+    const submission = this.submitOnce(handoff, idempotencyKey);
+    this.replay.set(idempotencyKey, submission);
+    try {
+      return await submission;
+    } catch (error) {
+      this.replay.delete(idempotencyKey);
+      throw error;
+    }
+  }
+
+  private async submitOnce(
+    handoff: IntakeHandoff,
+    idempotencyKey: string,
+  ): Promise<SubmitConfirmation> {
     const draftId = await this.draftIdResolver(handoff);
     if (!draftId) {
       throw new Error('HTTP SubmitTransport requires a draft id for formspec-server submission');
@@ -63,7 +77,6 @@ export class HttpSubmitTransport implements SubmitTransport {
       referenceNumber: response.response_id,
       status: response.status,
     };
-    this.replay.set(idempotencyKey, confirmation);
     return confirmation;
   }
 

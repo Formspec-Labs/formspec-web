@@ -30,6 +30,7 @@ import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
 import {
+  assertIdentityPolicySatisfied,
   buildIntakeHandoff,
   hydrateEngineFromResponse,
   identitySubjectChanged,
@@ -89,7 +90,7 @@ export function RespondentRuntime({
       setSubmitState({ status: 'idle' });
       try {
         await engineReady;
-        const readyState = await createReadyState(composition, claim);
+        const readyState = await createReadyState(composition, config, claim);
 
         if (cancelled || sequence !== reloadSequence) {
           readyState.engine.dispose();
@@ -255,8 +256,14 @@ async function bootClaim(identityProvider: IdentityProvider): Promise<IdentityCl
 
 async function createReadyState(
   composition: Composition,
+  config: FormspecWebConfig,
   claim: IdentityClaim | null,
 ): Promise<ReadyRespondentState> {
+  assertIdentityPolicySatisfied({
+    claim,
+    identityMode: config.identity.mode,
+    runtimeMode: composition.mode,
+  });
   const definition = await composition.definitionSource.getDefinition(
     composition.initialDefinitionUrl,
   );

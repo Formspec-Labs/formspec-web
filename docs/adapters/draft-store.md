@@ -15,7 +15,8 @@ the local key-to-`draft_id` mapping, so callers never handle server draft IDs.
 so `delete()` and `invalidateSubject()` clear only the adapter-local mapping.
 The server also returns `DraftView` metadata, not `draft_state`; this adapter
 keeps the latest saved response locally for same-session hydration until the
-server read shape expands.
+server read shape expands (EXT-26). Cross-reload or cross-device draft resume is
+not server-backed yet.
 
 Run:
 

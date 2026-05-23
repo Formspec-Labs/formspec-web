@@ -300,6 +300,15 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Fixture status:** none.
 **Status:** not yet filed.
 
+### EXT-26: Server-backed draft state read and resume
+
+**Owning repo:** formspec-server
+**Closes:** cross-reload and cross-device draft hydration for the formspec-stack reference composition.
+**FW rows blocked:** FW-0001 (server-backed draft resume) and production release sign-off for the M6 draft-hydration claim.
+**Shape:** expand the draft read surface so web can recover a draft without an in-memory key-to-`draft_id` binding. Acceptable shapes include `DraftView` carrying `draft_state`, a dedicated `GET /drafts/{draft_id}/state`, plus a scoped lookup/list route by form and verified subject. The route must preserve tenant scope and anonymous-session verification.
+**Fixture status:** none.
+**Status:** not yet filed.
+
 ### EXT-22: Nested-path draft hydration
 
 **Owning repo:** formspec

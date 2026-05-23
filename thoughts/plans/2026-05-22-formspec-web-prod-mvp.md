@@ -355,7 +355,9 @@ misses the default budget: latest local production-preview run scored about 74
 with FCP about 1.7 s and LCP about 12.3 s on simulated 3G, despite initial JS
 chunks staying under 200 KB gzip after lazy splitting. Production Locale
 Document loading is demo-proven only until the reference server serves concrete
-Locale Documents instead of only `locale_refs`.
+Locale Documents instead of only `locale_refs`. HTTP draft hydration is
+same-session only until EXT-26 adds a server-backed draft state read/resume
+surface.
 
 ---
 

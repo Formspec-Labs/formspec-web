@@ -80,4 +80,42 @@ describe('HttpSubmitTransport', () => {
     expect(second).toEqual(first);
     expect(requests).toHaveLength(1);
   });
+
+  it('coalesces concurrent submissions with the same idempotency key', async () => {
+    let releaseResponse: (() => void) | undefined;
+    const responseGate = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    const { fetch, requests } = recordingFetch(async () => {
+      await responseGate;
+      return jsonResponse({ response_id: 'response-concurrent', status: 'accepted' });
+    });
+    const adapter = new HttpSubmitTransport({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+      draftIdResolver: () => 'draft-http-1',
+    });
+    const key = generateIdempotencyKey();
+
+    const first = adapter.submit(sampleIntakeHandoff, key);
+    const second = adapter.submit(sampleIntakeHandoff, key);
+    await waitForRequests(requests, 1);
+    expect(requests).toHaveLength(1);
+
+    releaseResponse?.();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { referenceNumber: 'response-concurrent', status: 'accepted' },
+      { referenceNumber: 'response-concurrent', status: 'accepted' },
+    ]);
+    expect(requests).toHaveLength(1);
+  });
 });
+
+async function waitForRequests(requests: unknown[], count: number): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (requests.length >= count) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}

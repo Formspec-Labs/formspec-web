@@ -5,6 +5,7 @@ import type {
   ValidationReport,
 } from '@formspec-org/types';
 import type { IFormEngine } from '@formspec-org/engine';
+import type { IdentityPolicyConfig } from '../config/types.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityClaim, IdpOption } from '../ports/identity-provider.ts';
 import type { IdempotencyKey } from '../shared/idempotency-key.ts';
@@ -61,6 +62,20 @@ export function identitySubjectChanged(
   next: IdentityClaim | null,
 ): boolean {
   return previous?.subjectRef !== next?.subjectRef;
+}
+
+export function assertIdentityPolicySatisfied({
+  claim,
+  identityMode,
+  runtimeMode,
+}: {
+  claim: IdentityClaim | null;
+  identityMode: IdentityPolicyConfig['mode'];
+  runtimeMode: 'demo' | 'production';
+}): void {
+  if (runtimeMode === 'production' && identityMode === 'oidc-required' && !claim) {
+    throw new Error('This deployment requires sign-in before the form can be loaded.');
+  }
 }
 
 export async function buildIntakeHandoff({

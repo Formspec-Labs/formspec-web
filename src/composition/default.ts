@@ -1,6 +1,10 @@
 import { HttpDefinitionSource } from '../adapters/http/definition-source.ts';
 import { HttpDraftStore } from '../adapters/http/draft-store.ts';
 import { HttpSubmitTransport } from '../adapters/http/submit-transport.ts';
+import {
+  AnonymousSessionBridge,
+  HttpAnonymousIdentityProvider,
+} from '../adapters/http/anonymous-session.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
@@ -30,18 +34,27 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     baseUrl: serverUrl,
     tenantBinding: config.tenantBinding,
   };
-  const draftStore = new HttpDraftStore(httpConfig);
+  const initialDefinitionUrl = productionInitialDefinitionUrl(serverUrl);
+  const anonymousSessions = new AnonymousSessionBridge(httpConfig);
+  const draftStore = new HttpDraftStore({
+    ...httpConfig,
+    anonymousSessionToken: (key) => anonymousSessions.tokenForDraftKey(key),
+  });
 
   return {
     mode: 'production',
-    initialDefinitionUrl: productionInitialDefinitionUrl(serverUrl),
+    initialDefinitionUrl,
     definitionSource: new HttpDefinitionSource(httpConfig),
     draftStore,
     submitTransport: new HttpSubmitTransport({
       ...httpConfig,
       draftIdResolver: (handoff) => draftIdFromHandoff(handoff, draftStore),
+      anonymousSessionToken: (handoff) => anonymousSessions.tokenForHandoff(handoff),
     }),
-    identityProvider: identityProviderFor(config, notificationDelivery),
+    identityProvider: identityProviderFor(config, notificationDelivery, {
+      anonymousSessions,
+      initialDefinitionUrl,
+    }),
     notificationDelivery,
   };
 }
@@ -49,8 +62,18 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
 function identityProviderFor(
   config: FormspecWebConfig,
   notificationDelivery: ReturnType<typeof stubNotificationDelivery>,
+  productionContext?: {
+    anonymousSessions: AnonymousSessionBridge;
+    initialDefinitionUrl: string;
+  },
 ): IdentityProvider {
   if (config.ports.identityProvider === 'anonymous') {
+    if (productionContext) {
+      return new HttpAnonymousIdentityProvider({
+        bridge: productionContext.anonymousSessions,
+        formUrl: productionContext.initialDefinitionUrl,
+      });
+    }
     return new AnonymousAdapter();
   }
 
