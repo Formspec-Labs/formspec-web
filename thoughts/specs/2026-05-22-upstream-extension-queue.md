@@ -309,6 +309,15 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Fixture status:** none.
 **Status:** not yet filed.
 
+### EXT-27: Session-bound anonymous draft update
+
+**Owning repo:** formspec-server
+**Closes:** in-place anonymous draft updates for the formspec-stack reference composition.
+**FW rows blocked:** storage-efficient anonymous autosave for FW-0001 and external-audit sign-off of anonymous draft update semantics.
+**Shape:** extend `PATCH /drafts/{draft_id}` or add an equivalent update route that accepts `anonymous_session_token`, verifies it against the draft's form and subject, and rejects mismatches. Until this lands, `HttpDraftStore` creates a fresh anonymous server draft on each save and submits the latest binding instead of using the unbound PATCH route.
+**Fixture status:** none.
+**Status:** not yet filed.
+
 ### EXT-22: Nested-path draft hydration
 
 **Owning repo:** formspec

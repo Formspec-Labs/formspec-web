@@ -24,7 +24,10 @@ dev/build fallbacks and normalize into the same runtime config shape.
 When no server URL is provided, `createDefaultComposition()` selects demo mode:
 stub adapters plus `src/demo/sample-form.json`. Setting `FORMSPEC_WEB_SERVER_URL`
 or `VITE_FORMSPEC_WEB_SERVER_URL` selects production mode and wires the HTTP
-reference adapters to that base URL.
+reference adapters to that base URL. Runtime resolution also switches
+`definitionSource`, `draftStore`, and `submitTransport` port choices to
+`reference-http`; constructing a production composition while those data ports
+still say `stub` is a configuration error.
 
 Supported runtime variables:
 

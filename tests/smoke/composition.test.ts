@@ -9,6 +9,7 @@ import {
   sampleIntakeHandoff,
 } from '../../src/adapter-conformance/fixtures.ts';
 import { buildIntakeHandoff } from '../../src/app/respondent-flow.ts';
+import type { PortCompositionConfig } from '../../src/config/types.ts';
 import { departmentAppProfile, publicPortalProfile } from '../../src/profiles/profiles.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
@@ -44,6 +45,7 @@ describe('composition root smoke', () => {
   it('createDefaultComposition wires HTTP adapters when server env is present', () => {
     const c = createDefaultComposition({
       ...departmentAppProfile,
+      ports: referenceHttpDataPorts(departmentAppProfile.ports),
       referenceAdapters: {
         formspecStack: {
           ...departmentAppProfile.referenceAdapters?.formspecStack,
@@ -58,7 +60,23 @@ describe('composition root smoke', () => {
     );
   });
 
+  it('createDefaultComposition rejects server URLs without reference HTTP data ports', () => {
+    expect(() =>
+      createDefaultComposition({
+        ...departmentAppProfile,
+        referenceAdapters: {
+          formspecStack: {
+            ...departmentAppProfile.referenceAdapters?.formspecStack,
+            tenantHeaderDialect: 'formspec',
+            formspecServerUrl: 'https://formspec-server.example.test',
+          },
+        },
+      }),
+    ).toThrow(/requires reference-http data ports/);
+  });
+
   it('production publicPortal composition carries server anonymous sessions through draft submit', async () => {
+    let draftCounter = 0;
     const { fetch, requests } = recordingFetch((request) => {
       const path = new URL(request.url).pathname;
       if (request.method === 'POST' && path === '/runtime/forms/demo-intake/sessions/anonymous') {
@@ -73,9 +91,10 @@ describe('composition root smoke', () => {
         return jsonResponse({ definition: demoSampleForm });
       }
       if (request.method === 'POST' && path === '/runtime/forms/demo-intake/drafts') {
-        return jsonResponse({ draft_id: 'draft-http-1', draft_version: 1 });
+        draftCounter += 1;
+        return jsonResponse({ draft_id: `draft-http-${draftCounter}`, draft_version: 1 });
       }
-      if (request.method === 'POST' && path === '/drafts/draft-http-1/submit') {
+      if (request.method === 'POST' && path === '/drafts/draft-http-2/submit') {
         return jsonResponse({ response_id: 'response-http-1', status: 'accepted' });
       }
       return jsonResponse({ title: `unexpected ${request.method} ${path}` }, 500);
@@ -83,6 +102,7 @@ describe('composition root smoke', () => {
     vi.stubGlobal('fetch', fetch);
     const c = createDefaultComposition({
       ...publicPortalProfile,
+      ports: referenceHttpDataPorts(publicPortalProfile.ports),
       referenceAdapters: {
         formspecStack: {
           ...publicPortalProfile.referenceAdapters?.formspecStack,
@@ -91,6 +111,10 @@ describe('composition root smoke', () => {
         },
       },
     });
+    const completedResponse = {
+      ...sampleFormResponse,
+      data: { fullName: 'Grace Hopper' },
+    };
 
     const [option] = await c.identityProvider.discover();
     if (!option) throw new Error('expected anonymous identity option');
@@ -105,9 +129,17 @@ describe('composition root smoke', () => {
       sampleFormResponse,
     );
     const idempotencyKey = generateIdempotencyKey();
+    await c.draftStore.save(
+      {
+        formUrl: definition.url,
+        formVersion: definition.version,
+        subjectRef: claim.subjectRef,
+      },
+      completedResponse,
+    );
     const handoff = await buildIntakeHandoff({
       definition,
-      response: sampleFormResponse,
+      response: completedResponse,
       validationReport: null,
       draftKey: {
         formUrl: definition.url,
@@ -128,7 +160,8 @@ describe('composition root smoke', () => {
         'POST /runtime/forms/demo-intake/sessions/anonymous',
         'GET /runtime/forms/demo-intake',
         'POST /runtime/forms/demo-intake/drafts',
-        'POST /drafts/draft-http-1/submit',
+        'POST /runtime/forms/demo-intake/drafts',
+        'POST /drafts/draft-http-2/submit',
       ]);
     expect(requests[0]?.body).toMatchObject({ session_id: expect.stringMatching(/^web-/) });
     expect(requests[2]?.body).toMatchObject({
@@ -138,8 +171,13 @@ describe('composition root smoke', () => {
     });
     expect(requests[3]?.body).toMatchObject({
       anonymous_session_token: 'anonymous-token-1',
+      anonymous_subject_ref: 'anon:server-subject',
+      draft_state: completedResponse.data,
+    });
+    expect(requests[4]?.body).toMatchObject({
+      anonymous_session_token: 'anonymous-token-1',
       subject_ref: 'anon:server-subject',
-      response_data: sampleFormResponse.data,
+      response_data: completedResponse.data,
     });
   });
 
@@ -188,3 +226,12 @@ describe('composition root smoke', () => {
     expect(target.style.getPropertyValue('--formspec-color-warning-border')).toBe('#946112');
   });
 });
+
+function referenceHttpDataPorts(ports: PortCompositionConfig): PortCompositionConfig {
+  return {
+    ...ports,
+    definitionSource: 'reference-http',
+    draftStore: 'reference-http',
+    submitTransport: 'reference-http',
+  };
+}

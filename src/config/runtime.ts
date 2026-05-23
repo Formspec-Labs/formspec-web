@@ -91,12 +91,28 @@ function applyRuntimeOverrides(
   return {
     ...profileConfig,
     identity: applyIdentityRuntimeOverrides(profileConfig.identity, oidc, magicLink),
+    ports: portsForRuntime(profileConfig.ports, formspecStack?.formspecServerUrl),
     referenceAdapters: formspecStack
       ? {
           ...profileConfig.referenceAdapters,
           formspecStack,
         }
       : profileConfig.referenceAdapters,
+  };
+}
+
+function portsForRuntime(
+  ports: FormspecWebConfig['ports'],
+  formspecServerUrl: string | undefined,
+): FormspecWebConfig['ports'] {
+  if (!formspecServerUrl) {
+    return ports;
+  }
+  return {
+    ...ports,
+    definitionSource: 'reference-http',
+    draftStore: 'reference-http',
+    submitTransport: 'reference-http',
   };
 }
 

@@ -41,7 +41,7 @@ Per web ADR-0009 §"Not in the constitutional inventory" (a), issuer resolution 
 
 - **Reference adapters in the formspec-stack composition** (illustrative — not architectural):
   - `OidcAdapter` against an OIDC issuer configured per-deployment (login.gov, ID.me, Auth0, Okta, Entra, etc.).
-  - `MagicLinkAdapter` for deployments that want passwordless email without a third-party IdP — uses the `NotificationDelivery` port wired to `formspec-server-email`.
+  - `MagicLinkAdapter` for deployments that want passwordless email without a third-party IdP — uses the `NotificationDelivery` port. The MVP formspec-stack composition wires the stub notification adapter because `formspec-server` does not yet expose the notification endpoint tracked as EXT-19.
   - `AnonymousAdapter` for forms not requiring auth.
 - **Alternate compositions:** `FirebaseAuthAdapter`, `SupabaseAuthAdapter`, `ClerkAdapter`, custom adopter adapter against Cognito / Keycloak / Azure AD / etc.
 - See web ADR-0007 for the port contract and §6.6 normalization invariant.
@@ -50,11 +50,11 @@ Per web ADR-0009 §"Not in the constitutional inventory" (a), issuer resolution 
 
 Per web ADR-0009, `NotificationDelivery` is a transport port — it sends a message via a channel and is opaque to formspec-web. Template authoring (audience, copy, scheduling) lives upstream; the formspec-stack composition consumes `work-spec/schemas/sidecars/wos-delivery.schema.json#/$defs/NotificationsBlock` for that.
 
-- **Reference adapter:** `HttpNotificationAdapter` against `formspec-server-email` (sends the rendered message).
-- **Talks to:** formspec-server's email send endpoint (`formspec-server-email` crate; backend is adopter-pluggable — host SMTP, SES, SendGrid, Twilio, etc.).
+- **MVP reference adapter:** stub notification delivery for local magic-link development; the generated link is observable locally and no external message is sent.
+- **Intended reference adapter after EXT-19:** `HttpNotificationAdapter` against a formspec-server notification endpoint backed by `formspec-server-email` or another adopter-pluggable provider (host SMTP, SES, SendGrid, Twilio, etc.).
 - **Alternate compositions:** Resend, SendGrid, SES, Twilio (SMS), Postmark, Mailgun direct from the browser (with API key proxying), Firebase Cloud Messaging.
 
-When wired into the formspec-stack composition, `MagicLinkAdapter` (an `IdentityProvider` adapter — see web ADR-0008's `IdentityProvider` section) consumes this port via constructor injection per web ADR-0009 §"Composition lifecycle." The cross-port composition is explicit; the shell does not orchestrate it.
+When wired into the formspec-stack composition, `MagicLinkAdapter` (an `IdentityProvider` adapter — see web ADR-0008's `IdentityProvider` section) consumes this port via constructor injection per web ADR-0009 §"Composition lifecycle." The cross-port composition is explicit; the shell does not orchestrate it. Until EXT-19 lands, do not claim production magic-link email delivery from the reference composition.
 
 ### `StatusReader` (post-MVP — port shape pending per-port ratification)
 

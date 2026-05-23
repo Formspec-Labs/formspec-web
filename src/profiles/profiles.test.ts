@@ -58,6 +58,11 @@ describe('reference profiles', () => {
     expect(activeConfig.referenceAdapters?.formspecStack?.formspecServerUrl).toBe(
       'https://runtime.example.test/formspec',
     );
+    expect(activeConfig.ports).toMatchObject({
+      definitionSource: 'reference-http',
+      draftStore: 'reference-http',
+      submitTransport: 'reference-http',
+    });
     expect(activeConfig.referenceAdapters?.formspecStack?.oidc?.issuer).toBe(
       'https://runtime-idp.example.test',
     );

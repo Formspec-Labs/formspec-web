@@ -313,7 +313,7 @@ ls docs/adapters/{definition-source,draft-store,submit-transport,identity-provid
 
 **Acceptance:**
 - `createDefaultComposition(config)` produces a Composition from the active profile + config + env.
-- `createDemoComposition()` wires stubs + the sample-form fixture; falls back to demo mode automatically when `VITE_FORMSPEC_SERVER_URL` is unset.
+- `createDemoComposition()` wires stubs + the sample-form fixture; falls back to demo mode automatically when `VITE_FORMSPEC_WEB_SERVER_URL` is unset.
 - App boots, awaits `initFormspecEngine()` per `formspec/CLAUDE.md` (top-level await acceptable on Vite 7; post-MVP WASM additions must remain compatible).
 - Sample form fixture ships at `src/demo/sample-form.json` — branded (uses a demo Issuer document), multilingual (English + one other), covers required + optional + repeat-group + conditional fields.
 - `npm run dev` from a fresh clone renders the sample form in under 5 minutes (clock starts at `git clone`).
@@ -403,7 +403,7 @@ tokens can reach the reference server without leaking into `IdentityClaim`.
 - EXT-19, EXT-20, EXT-21, EXT-22, EXT-23, EXT-24, EXT-25 migrated into [`2026-05-22-upstream-extension-queue.md`](../specs/2026-05-22-upstream-extension-queue.md) with owning repo, FW rows blocked, fixture status, status (`not yet filed` / `filed` / `landed` / `gates M7` for EXT-23). Owners named where known.
 - Internal-refactor debt (localStorage prefix coupling between `HttpDraftStore` and `HttpSubmitTransport`) filed as an `FW-NNNN` row in `formspec-web/PLANNING.md` for post-MVP cleanup.
 - Stack-root submodule pointer bumps verified at each cohort boundary (Cohort 1 = M1; Cohort 2 = M5; Cohort 3 = M7; Cohort 4 = M8).
-- All gates green: typecheck + lint + vendor-leak + unit + Playwright a11y + build under bundle budget.
+- Automated code gates green: typecheck + lint + vendor-leak + unit + Playwright a11y + production build. Release sign-off remains bounded by the M6 gate note for Lighthouse/mobile/FCP and manual screen-reader sweeps.
 - A stable internet-reachable demo URL is named and live, OR the hosting decision is recorded as a deferred follow-up (see §10).
 
 **FW rows closed:** plan itself; MVP closeout.

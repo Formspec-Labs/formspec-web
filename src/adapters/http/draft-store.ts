@@ -51,22 +51,15 @@ export class HttpDraftStore implements DraftStore {
   async save(key: DraftKey, response: FormResponse): Promise<void> {
     const storageKey = keyString(key);
     const existing = this.bindings.get(storageKey);
-    if (!existing) {
-      const formId = this.formIdResolver(key.formUrl, key.formVersion);
-      const draft = await this.client.postJson<DraftView>(
-        `/runtime/forms/${encodeURIComponent(formId)}/drafts`,
-        {
-          anonymous_session_token: await this.resolveAnonymousSessionToken(key),
-          anonymous_subject_ref: anonymousSubjectRef(key),
-          respondent_subject_ref: respondentSubjectRef(key),
-          draft_state: response.data,
-        },
-      );
-      this.bindings.set(storageKey, {
-        key: { ...key },
-        draftId: draft.draft_id,
-        draftVersion: draft.draft_version,
-        response,
+    const respondentSubject = respondentSubjectRef(key);
+    const anonymousSessionToken = respondentSubject
+      ? undefined
+      : await this.resolveAnonymousSessionToken(key);
+    if (!existing || isAnonymousDraftKey(key)) {
+      await this.createDraft(key, response, {
+        anonymousSessionToken,
+        respondentSubject,
+        storageKey,
       });
       return;
     }
@@ -107,6 +100,37 @@ export class HttpDraftStore implements DraftStore {
     return this.bindings.get(keyString(key))?.draftId;
   }
 
+  private async createDraft(
+    key: DraftKey,
+    response: FormResponse,
+    {
+      anonymousSessionToken,
+      respondentSubject,
+      storageKey,
+    }: {
+      anonymousSessionToken?: string;
+      respondentSubject?: string;
+      storageKey: string;
+    },
+  ): Promise<void> {
+    const formId = this.formIdResolver(key.formUrl, key.formVersion);
+    const draft = await this.client.postJson<DraftView>(
+      `/runtime/forms/${encodeURIComponent(formId)}/drafts`,
+      {
+        anonymous_session_token: anonymousSessionToken,
+        anonymous_subject_ref: anonymousSubjectRef(key),
+        respondent_subject_ref: anonymousSessionToken ? undefined : respondentSubject,
+        draft_state: response.data,
+      },
+    );
+    this.bindings.set(storageKey, {
+      key: { ...key },
+      draftId: draft.draft_id,
+      draftVersion: draft.draft_version,
+      response,
+    });
+  }
+
   private async resolveAnonymousSessionToken(key: DraftKey): Promise<string | undefined> {
     if (typeof this.anonymousSessionToken === 'function') {
       return this.anonymousSessionToken(key);
@@ -129,6 +153,10 @@ function keyString(key: DraftKey): string {
 
 function anonymousSubjectRef(key: DraftKey): string | undefined {
   return key.subjectRef?.startsWith('anon:') ? key.subjectRef : undefined;
+}
+
+function isAnonymousDraftKey(key: DraftKey): boolean {
+  return !key.subjectRef || key.subjectRef.startsWith('anon:');
 }
 
 function respondentSubjectRef(key: DraftKey): string | undefined {

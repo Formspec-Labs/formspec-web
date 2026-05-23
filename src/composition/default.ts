@@ -28,6 +28,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
   if (!serverUrl) {
     return createDemoComposition();
   }
+  assertReferenceHttpDataPorts(config);
 
   const notificationDelivery = stubNotificationDelivery();
   const httpConfig = {
@@ -57,6 +58,16 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     }),
     notificationDelivery,
   };
+}
+
+function assertReferenceHttpDataPorts(config: FormspecWebConfig): void {
+  const mismatches = (['definitionSource', 'draftStore', 'submitTransport'] as const)
+    .filter((portName) => config.ports[portName] !== 'reference-http');
+  if (mismatches.length > 0) {
+    throw new Error(
+      `formspecServerUrl requires reference-http data ports: ${mismatches.join(', ')}`,
+    );
+  }
 }
 
 function identityProviderFor(

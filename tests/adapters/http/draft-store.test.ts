@@ -67,4 +67,54 @@ describe('HttpDraftStore', () => {
     await expect(adapter.load(key)).resolves.toBeUndefined();
     expect(requests.map((request) => request.method)).toEqual(['POST']);
   });
+
+  it('creates a fresh anonymous server draft on repeated saves until PATCH is session-bound', async () => {
+    let draftCounter = 0;
+    const { fetch, requests } = recordingFetch((request) => {
+      if (
+        request.method === 'POST' &&
+        request.url.endsWith('/runtime/forms/conformance/drafts')
+      ) {
+        draftCounter += 1;
+        return jsonResponse({ draft_id: `draft-http-${draftCounter}`, draft_version: 1 });
+      }
+      if (request.method === 'GET' && request.url.endsWith('/drafts/draft-http-2')) {
+        return jsonResponse({ draft_id: 'draft-http-2', draft_version: 1 });
+      }
+      return jsonResponse({ title: 'unexpected' }, 500);
+    });
+    const adapter = new HttpDraftStore({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+      anonymousSessionToken: 'anonymous-token-1',
+    });
+    const key = {
+      formUrl: sampleFormDefinition.url,
+      formVersion: '1.0.0',
+      subjectRef: 'anon:server-subject',
+    };
+
+    await adapter.save(key, sampleFormResponse);
+    await adapter.save(key, { ...sampleFormResponse, data: { fullName: 'Grace Hopper' } });
+    expect(adapter.draftIdFor(key)).toBe('draft-http-2');
+    await expect(adapter.load(key)).resolves.toMatchObject({
+      data: { fullName: 'Grace Hopper' },
+    });
+
+    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`))
+      .toEqual([
+        'POST /runtime/forms/conformance/drafts',
+        'POST /runtime/forms/conformance/drafts',
+        'GET /drafts/draft-http-2',
+      ]);
+    expect(requests[0]?.body).toMatchObject({
+      anonymous_session_token: 'anonymous-token-1',
+      anonymous_subject_ref: 'anon:server-subject',
+    });
+    expect(requests[1]?.body).toMatchObject({
+      anonymous_session_token: 'anonymous-token-1',
+      anonymous_subject_ref: 'anon:server-subject',
+      draft_state: { fullName: 'Grace Hopper' },
+    });
+  });
 });
