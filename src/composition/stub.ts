@@ -3,6 +3,7 @@ import { stubDraftStore } from '../adapters/stub/draft-store.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { stubSubmitTransport } from '../adapters/stub/submit-transport.ts';
+import { demoSampleForm, demoSampleFormUrl } from '../demo/index.ts';
 import type { Composition } from './types.ts';
 
 /**
@@ -11,8 +12,14 @@ import type { Composition } from './types.ts';
  * place adapters are wired into ports.
  */
 export function createStubComposition(): Composition {
+  const definitionSource = stubDefinitionSource();
+  definitionSource.registerDefinition(demoSampleForm.url, demoSampleForm, demoSampleForm.version);
+  definitionSource.registerDefinition(demoSampleForm.url, demoSampleForm);
+
   return {
-    definitionSource: stubDefinitionSource(),
+    mode: 'demo',
+    initialDefinitionUrl: demoSampleFormUrl,
+    definitionSource,
     draftStore: stubDraftStore(),
     submitTransport: stubSubmitTransport(),
     identityProvider: stubIdentityProvider(),

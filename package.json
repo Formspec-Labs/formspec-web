@@ -9,6 +9,7 @@
     "./adapter-conformance": "./src/adapter-conformance/index.ts",
     "./adapters/http": "./src/adapters/http/index.ts",
     "./adapters/identity": "./src/adapters/identity/index.ts",
+    "./composition": "./src/composition/index.ts",
     "./config": "./src/config/index.ts",
     "./ports": "./src/ports/index.ts",
     "./shared": "./src/shared/index.ts",
@@ -30,6 +31,7 @@
     "ci": "npm run typecheck && npm run lint && npm test && npm run check:vendor-leaks && npm run check:upstream-theme && npm run test:e2e && npm run build"
   },
   "dependencies": {
+    "@formspec-org/engine": "file:vendor/formspec-engine",
     "@formspec-org/types": "file:vendor/formspec-types",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.0.0",

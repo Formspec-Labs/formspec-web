@@ -1,0 +1,200 @@
+/** @filedesc Runtime WASM — init, accessors, and wrappers that use only the runtime `formspec_wasm_runtime` module. */
+/** Parsed JSON from `fel_analysis_to_json_value` (Rust) — pass through to {@link normalizeFelAnalysisError}. */
+export type WasmFelAnalysisResultJson = {
+    valid: boolean;
+    errors: Array<string | {
+        message: string;
+        span?: {
+            start: number;
+            end: number;
+        } | null;
+    }>;
+    warnings: string[];
+    references: string[];
+    variables: string[];
+    functions: string[];
+};
+export type WasmModule = typeof import('../wasm-pkg-runtime/formspec_wasm_runtime.js');
+/** Whether the WASM module has been initialized and is ready for use. */
+export declare function isWasmReady(): boolean;
+/**
+ * Initialize the WASM module. Safe to call multiple times — subsequent calls
+ * return the same promise. Resolves when WASM is ready; rejects on failure.
+ *
+ * In Node.js, uses `initSync()` with bytes read from disk.
+ * In browsers, the generated wasm-bindgen loader fetches the sibling `.wasm` asset via URL.
+ */
+export declare function initWasm(): Promise<void>;
+/**
+ * Initialized runtime module — for `wasm-bridge-tools` only (ABI check).
+ * Not re-exported from the public `wasm-bridge` barrel.
+ */
+export declare function getWasmModule(): WasmModule;
+/** In-band result from `evalFEL` / `evalFELWithContext` (Locale §3.3.1 rule 2). */
+export interface FelEvalResult {
+    value: unknown;
+    hasErrorDiagnostics: boolean;
+}
+/** Evaluate a FEL expression with optional field values. Returns the evaluated value. */
+export declare function wasmEvalFEL(expression: string, fields?: Record<string, any>): any;
+/** FEL evaluation context for the richer WASM evaluator. */
+export interface WasmFelContext {
+    fields: Record<string, any>;
+    variables?: Record<string, any>;
+    mipStates?: Record<string, {
+        valid?: boolean;
+        relevant?: boolean;
+        readonly?: boolean;
+        required?: boolean;
+    }>;
+    repeatContext?: {
+        current: any;
+        index: number;
+        count: number;
+        collection?: any[];
+        parent?: WasmFelContext['repeatContext'];
+    };
+    instances?: Record<string, any>;
+    nowIso?: string;
+    /** Active locale code (BCP 47) — backs `locale()` and default for `pluralCategory()`. */
+    locale?: string;
+    /** Runtime metadata bag — backs `runtimeMeta(key)`. */
+    meta?: Record<string, string | number | boolean>;
+}
+/** Evaluate a FEL expression with full FormspecEnvironment context (value + diagnostics flag). */
+export declare function wasmEvalFELWithContextEnvelope(expression: string, context: WasmFelContext): FelEvalResult;
+/** Evaluate a FEL expression with full FormspecEnvironment context. Returns the value only. */
+export declare function wasmEvalFELWithContext(expression: string, context: WasmFelContext): any;
+/**
+ * A single recorded event during FEL evaluation.
+ *
+ * Mirrors `fel_core::TraceStep` verbatim — the `kind` discriminant is the
+ * PascalCase Rust variant name. Extend this union only when the Rust enum
+ * grows a new variant; every variant here must exist in Rust.
+ */
+export type FelTraceStep = {
+    /** A `$field` reference was resolved against the environment. */
+    kind: 'FieldResolved';
+    /** Dotted path as written in source (e.g. `foo`, `items[2].amount`). */
+    path: string;
+    /** Value returned by the environment, projected to JSON. */
+    value: unknown;
+} | {
+    /** A function call completed and returned a value. */
+    kind: 'FunctionCalled';
+    /** Function name as written in source. */
+    name: string;
+    /** Argument values, in order. */
+    args: unknown[];
+    /** Return value. */
+    result: unknown;
+} | {
+    /** A binary operator produced a result from two operand values. */
+    kind: 'BinaryOp';
+    /** Operator symbol (`+`, `==`, `and`, ...). */
+    op: string;
+    /** Left-hand value. */
+    lhs: unknown;
+    /** Right-hand value. */
+    rhs: unknown;
+    /** Result value. */
+    result: unknown;
+} | {
+    /** A conditional selected a branch. */
+    kind: 'IfBranch';
+    /** The evaluated condition value. */
+    condition_value: unknown;
+    /** Which branch was taken: `"then"` or `"else"`. */
+    branch_taken: 'then' | 'else';
+} | {
+    /** A logical operator short-circuited; the right-hand side was not evaluated. */
+    kind: 'ShortCircuit';
+    /** Operator symbol (`and` or `or`). */
+    op: string;
+    /** Human-readable reason. */
+    reason: string;
+};
+/** Result of a traced FEL evaluation. */
+export interface FelTraceResult {
+    /** Evaluated value (JSON-projected — no FEL type tags). */
+    value: unknown;
+    /** True when error-severity diagnostics were recorded (Locale §3.3.1 rule 2). */
+    hasErrorDiagnostics: boolean;
+    /** Diagnostics emitted during evaluation. */
+    diagnostics: Array<Record<string, unknown>>;
+    /** Ordered trace steps, appended in evaluation order. */
+    trace: FelTraceStep[];
+}
+/**
+ * Evaluate a FEL expression with a structured trace of evaluation steps.
+ *
+ * Opt-in tracing path — use when surfacing evaluation to humans or LLMs
+ * (MCP tools, error explainers). Values in the trace are projected to JSON,
+ * losing FEL type fidelity (money/date) but gaining universal readability.
+ */
+export declare function wasmEvalFELWithTrace(expression: string, fields?: Record<string, unknown>): FelTraceResult;
+/** Locale §3.3.1 — true if the expression AST is only literals and unary `not` / `!` / `-`. */
+export declare function wasmFelExprIsInterpolationStaticLiteral(expression: string): boolean;
+/** Normalize FEL source before evaluation (bare `$`, repeat qualifiers, repeat aliases). */
+export declare function wasmPrepareFelExpression(optionsJson: string): string;
+/** Inline `optionSet` references from `optionSets` on a definition JSON document. */
+export declare function wasmResolveOptionSetsOnDefinition(definitionJson: string): string;
+/** Apply `migrations` on a definition to flat response data (FEL transforms in Rust). */
+export declare function wasmApplyMigrationsToResponseData(definitionJson: string, responseDataJson: string, fromVersion: string, nowIso: string): string;
+/** Coerce an inbound field value (whitespace, numeric strings, money, precision). */
+export declare function wasmCoerceFieldValue(itemJson: string, bindJson: string, definitionJson: string, valueJson: string): string;
+/** Extract field path dependencies from a FEL expression. Returns an array of path strings. */
+export declare function wasmGetFELDependencies(expression: string): string[];
+/** Normalize a dotted path by stripping repeat indices. */
+export declare function wasmNormalizeIndexedPath(path: string): string;
+/** Resolve an item in a nested item tree by dotted path. */
+export declare function wasmItemAtPath<T = any>(items: unknown[], path: string): T | undefined;
+/** Resolve an item's parent path, index, and value in a nested item tree. */
+export declare function wasmItemLocationAtPath<T = any>(items: unknown[], path: string): {
+    parentPath: string;
+    index: number;
+    item: T;
+} | undefined;
+/** Evaluate a Formspec definition against provided data. */
+export declare function wasmEvaluateDefinition(definition: unknown, data: Record<string, unknown>, context?: {
+    nowIso?: string;
+    trigger?: 'continuous' | 'submit' | 'demand' | 'disabled';
+    previousValidations?: Array<{
+        path: string;
+        severity: string;
+        constraintKind: string;
+        code: string;
+        message: string;
+        source: string;
+        shapeId?: string;
+        context?: Record<string, unknown>;
+    }>;
+    previousNonRelevant?: string[];
+    instances?: Record<string, unknown>;
+    registryDocuments?: unknown[];
+    /** Repeat row counts by group base path (authoritative for min/max repeat cardinality). */
+    repeatCounts?: Record<string, number>;
+}): {
+    values: any;
+    validations: any[];
+    nonRelevant: string[];
+    variables: any;
+    required: Record<string, boolean>;
+    readonly: Record<string, boolean>;
+};
+/** Evaluate a standalone Screener Document against respondent inputs.
+ *  Returns a Determination Record (always non-null). */
+export declare function wasmEvaluateScreenerDocument(screener: unknown, answers: Record<string, unknown>, context?: Record<string, unknown>): import('@formspec-org/types').DeterminationRecord;
+/** Analyze a FEL expression and return structural info. */
+export declare function wasmAnalyzeFEL(expression: string): WasmFelAnalysisResultJson;
+/** Analyze a FEL expression with field data type context for type-mismatch warnings. */
+export declare function wasmAnalyzeFELWithFieldTypes(expression: string, fieldTypes: Record<string, string>): WasmFelAnalysisResultJson;
+/** Check if a string is a valid FEL identifier. */
+export declare function wasmIsValidFelIdentifier(s: string): boolean;
+/** Sanitize a string into a valid FEL identifier. */
+export declare function wasmSanitizeFelIdentifier(s: string): string;
+/** Compute dependency groups from recorded changeset entries (JSON round-trip to Rust). */
+export declare function wasmComputeDependencyGroups(entriesJson: string): Array<{
+    entries: number[];
+    reason: string;
+}>;

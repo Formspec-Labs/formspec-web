@@ -1,0 +1,37 @@
+{
+  "name": "@formspec-org/engine",
+  "description": "Client-side form state engine with FEL expression language, reactive signals, and validation",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./init-formspec-engine": {
+      "types": "./dist/init-formspec-engine.d.ts",
+      "default": "./dist/init-formspec-engine.js"
+    },
+    "./render": {
+      "types": "./dist/engine-render-entry.d.ts",
+      "default": "./dist/engine-render-entry.js"
+    },
+    "./demo-fixtures": {
+      "types": "./dist/demo-submit-response-actions.d.ts",
+      "default": "./dist/demo-submit-response-actions.js"
+    }
+  },
+  "sideEffects": [
+    "./dist/init-formspec-engine.js",
+    "./dist/wasm-bridge-runtime.js",
+    "./dist/wasm-bridge-tools.js"
+  ],
+  "files": ["dist", "wasm-pkg-runtime", "wasm-pkg-tools"],
+  "dependencies": {
+    "@preact/signals-core": "^1.8.0",
+    "@formspec-org/types": "*"
+  }
+}

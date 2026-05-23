@@ -21,6 +21,11 @@ bootstraps. The Docker/nginx image writes that file from deploy-time
 `FORMSPEC_WEB_*` environment variables. Vite `VITE_*` variables are only
 dev/build fallbacks and normalize into the same runtime config shape.
 
+When no server URL is provided, `createDefaultComposition()` selects demo mode:
+stub adapters plus `src/demo/sample-form.json`. Setting `FORMSPEC_WEB_SERVER_URL`
+or `VITE_FORMSPEC_WEB_SERVER_URL` selects production mode and wires the HTTP
+reference adapters to that base URL.
+
 Supported runtime variables:
 
 | Runtime config key | Docker env | Vite fallback |

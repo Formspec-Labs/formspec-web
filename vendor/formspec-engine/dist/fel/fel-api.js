@@ -1,0 +1,3 @@
+/** @filedesc Full FEL facade — re-exports runtime + tools modules (ADR 0050). */
+export { analyzeFEL, evaluateDefinition, getFELDependencies, isValidFELIdentifier, itemAtPath, itemLocationAtPath, lineColumnAtCharOffset, normalizeFelAnalysisError, normalizeIndexedPath, normalizePathSegment, sanitizeFELIdentifier, splitNormalizedPath, } from './fel-api-runtime.js';
+export { createSchemaValidator, findRegistryEntry, generateChangelog, getBuiltinFELFunctionCatalog, lintDocument, parseRegistry, printFEL, rewriteFEL, rewriteFELReferences, rewriteMessageTemplate, tokenizeFEL, tryLiftConditionGroup, validateExtensionUsage, validateLifecycleTransition, wellKnownRegistryUrl, } from './fel-api-tools.js';

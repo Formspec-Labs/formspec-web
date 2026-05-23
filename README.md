@@ -19,7 +19,16 @@ npm ci
 npm run dev
 ```
 
-The current app boots a provisional branded, accessible placeholder shell through the same `Composition` boundary the production respondent renderer will use.
+The app boots in demo mode and renders the bundled sample form when
+`VITE_FORMSPEC_WEB_SERVER_URL` is unset.
+
+Docker quickstart:
+
+```sh
+docker compose up --build
+```
+
+See [docs/getting-started.md](docs/getting-started.md).
 
 Local gates:
 

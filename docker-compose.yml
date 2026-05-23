@@ -1,0 +1,8 @@
+services:
+  formspec-web:
+    build: .
+    image: formspec-web:local
+    ports:
+      - "8080:80"
+    environment:
+      FORMSPEC_WEB_PROFILE: publicPortal

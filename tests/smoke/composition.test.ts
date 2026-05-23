@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { createDefaultComposition } from '../../src/composition/default.ts';
+import { createDemoComposition } from '../../src/composition/demo.ts';
 import { applyBrandTheme, getUpstreamTokenRegistry } from '../../src/theme/theme.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
+import { departmentAppProfile } from '../../src/profiles/profiles.ts';
+import { demoSampleForm } from '../../src/demo/index.ts';
 
 describe('composition root smoke', () => {
   it('createStubComposition wires all 5 MVP ports', () => {
@@ -15,10 +18,35 @@ describe('composition root smoke', () => {
     expect(c.notificationDelivery).toBeDefined();
   });
 
-  it('createDefaultComposition produces a Composition (currently delegates to stub)', () => {
+  it('createDemoComposition wires stubs and registers the sample form fixture', async () => {
+    const c = createDemoComposition();
+    const definition = await c.definitionSource.getDefinition(demoSampleForm.url, demoSampleForm.version);
+    expect(c.mode).toBe('demo');
+    expect(definition.title).toBe('Demo Benefits Intake');
+  });
+
+  it('createDefaultComposition falls back to demo mode without server env', () => {
     const c = createDefaultComposition();
     expect(c.definitionSource).toBeDefined();
     expect(c.identityProvider).toBeDefined();
+    expect(c.mode).toBe('demo');
+  });
+
+  it('createDefaultComposition wires HTTP adapters when server env is present', () => {
+    const c = createDefaultComposition({
+      ...departmentAppProfile,
+      referenceAdapters: {
+        formspecStack: {
+          ...departmentAppProfile.referenceAdapters?.formspecStack,
+          tenantHeaderDialect: 'formspec',
+          formspecServerUrl: 'https://formspec-server.example.test',
+        },
+      },
+    });
+    expect(c.mode).toBe('production');
+    expect(c.initialDefinitionUrl).toBe(
+      'https://formspec-server.example.test/runtime/forms/demo-intake',
+    );
   });
 
   it('SubmitTransport is idempotent on the same key', async () => {

@@ -1,0 +1,154 @@
+{
+  "$formspec": "1.0",
+  "url": "https://demo.formspec.org/runtime/forms/demo-intake",
+  "version": "1.0.0",
+  "versionAlgorithm": "semver",
+  "status": "active",
+  "name": "demo-intake",
+  "title": "Demo Benefits Intake",
+  "description": "A compact public-intake form used by the zero-config Formspec Web demo.",
+  "date": "2026-05-22",
+  "issuer": {
+    "$formspecIssuer": "1.0",
+    "url": "https://demo.formspec.org/issuers/benefits-office",
+    "version": "1.0.0",
+    "name": {
+      "en": "Demo Benefits Office",
+      "es": "Oficina de Beneficios Demo"
+    },
+    "kind": "department",
+    "displayName": {
+      "en": "Demo Benefits Office",
+      "es": "Oficina de Beneficios Demo"
+    },
+    "shortName": "DBO",
+    "jurisdiction": {
+      "level": "state",
+      "name": "Demo State",
+      "code": "US-DS"
+    },
+    "defaultLanguage": "en"
+  },
+  "extensions": {
+    "x-formspec-locales": {
+      "default": "en",
+      "available": ["en", "es"],
+      "labels": {
+        "en": "English",
+        "es": "Spanish"
+      }
+    }
+  },
+  "formPresentation": {
+    "pageMode": "single",
+    "density": "comfortable",
+    "direction": "ltr"
+  },
+  "optionSets": {
+    "languages": {
+      "options": [
+        { "value": "en", "label": "English" },
+        { "value": "es", "label": "Spanish" },
+        { "value": "other", "label": "Another language" }
+      ]
+    },
+    "contactMethods": {
+      "options": [
+        { "value": "email", "label": "Email" },
+        { "value": "phone", "label": "Phone" },
+        { "value": "mail", "label": "Mail" }
+      ]
+    }
+  },
+  "items": [
+    {
+      "key": "applicant",
+      "type": "group",
+      "label": "Applicant",
+      "description": "Primary contact for this intake.",
+      "children": [
+        {
+          "key": "fullName",
+          "type": "field",
+          "label": "Full name",
+          "dataType": "string",
+          "hint": "As it appears on your ID."
+        },
+        {
+          "key": "email",
+          "type": "field",
+          "label": "Email address",
+          "dataType": "string"
+        },
+        {
+          "key": "phone",
+          "type": "field",
+          "label": "Phone number",
+          "dataType": "string",
+          "hint": "Optional."
+        },
+        {
+          "key": "preferredContact",
+          "type": "field",
+          "label": "Preferred contact method",
+          "dataType": "choice",
+          "optionSet": "contactMethods"
+        },
+        {
+          "key": "needsInterpreter",
+          "type": "field",
+          "label": "I need language help",
+          "dataType": "boolean"
+        },
+        {
+          "key": "preferredLanguage",
+          "type": "field",
+          "label": "Preferred language",
+          "dataType": "choice",
+          "optionSet": "languages"
+        }
+      ]
+    },
+    {
+      "key": "household",
+      "type": "group",
+      "label": "Household members",
+      "description": "Repeat group example.",
+      "repeatable": true,
+      "minRepeat": 1,
+      "maxRepeat": 6,
+      "children": [
+        {
+          "key": "memberName",
+          "type": "field",
+          "label": "Member name",
+          "dataType": "string"
+        },
+        {
+          "key": "memberAge",
+          "type": "field",
+          "label": "Member age",
+          "dataType": "integer"
+        }
+      ]
+    },
+    {
+      "key": "notes",
+      "type": "field",
+      "label": "Anything else we should know?",
+      "dataType": "text",
+      "hint": "Optional."
+    }
+  ],
+  "binds": [
+    { "path": "applicant.fullName", "required": "true" },
+    { "path": "applicant.email", "required": "true" },
+    { "path": "applicant.preferredContact", "required": "true" },
+    {
+      "path": "applicant.preferredLanguage",
+      "relevant": "$applicant.needsInterpreter = true",
+      "required": "$applicant.needsInterpreter = true"
+    },
+    { "path": "household[*].memberName", "required": "true" }
+  ]
+}

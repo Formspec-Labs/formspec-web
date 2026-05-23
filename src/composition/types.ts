@@ -23,6 +23,8 @@ import type {
  *      in the upstream extension queue.
  */
 export interface Composition {
+  mode: 'demo' | 'production';
+  initialDefinitionUrl: string;
   definitionSource: DefinitionSource;
   draftStore: DraftStore;
   submitTransport: SubmitTransport;

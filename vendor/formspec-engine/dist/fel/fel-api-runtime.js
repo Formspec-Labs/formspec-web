@@ -1,0 +1,63 @@
+/** @filedesc Path helpers and runtime-WASM FEL surface (`wasm-bridge-runtime` only; ADR 0050). */
+import { wasmAnalyzeFEL, wasmAnalyzeFELWithFieldTypes, wasmComputeDependencyGroups, wasmEvalFELWithTrace, wasmEvaluateDefinition, wasmGetFELDependencies, wasmIsValidFelIdentifier, wasmItemAtPath, wasmNormalizeIndexedPath, wasmSanitizeFelIdentifier, } from '../wasm-bridge-runtime.js';
+import { lineColumnAtCharOffset, normalizeFelAnalysisError, } from './normalize-fel-analysis-error.js';
+export { lineColumnAtCharOffset, normalizeFelAnalysisError };
+export const normalizeIndexedPath = wasmNormalizeIndexedPath;
+export const itemAtPath = wasmItemAtPath;
+export function analyzeFEL(expression) {
+    const raw = wasmAnalyzeFEL(expression);
+    return {
+        ...raw,
+        errors: raw.errors.map(e => normalizeFelAnalysisError(expression, e)),
+    };
+}
+/** Analyze a FEL expression with field data type context for type-mismatch warnings. */
+export function analyzeFELWithFieldTypes(expression, fieldTypes) {
+    const raw = wasmAnalyzeFELWithFieldTypes(expression, fieldTypes);
+    return {
+        ...raw,
+        errors: raw.errors.map(e => normalizeFelAnalysisError(expression, e)),
+    };
+}
+/** Remove repeat indices/wildcards from a path segment. */
+export function normalizePathSegment(segment) {
+    return segment.replace(/\[(?:\d+|\*)\]/g, '');
+}
+/** Split a dotted path into normalized (index-free) segments. */
+export function splitNormalizedPath(path) {
+    if (!path)
+        return [];
+    return wasmNormalizeIndexedPath(path).split('.').filter(Boolean);
+}
+/** Find the mutable parent/index/item triple for a dotted tree path. */
+export function itemLocationAtPath(items, path) {
+    const parts = splitNormalizedPath(path);
+    if (parts.length === 0)
+        return undefined;
+    let currentItems = items;
+    for (let i = 0; i < parts.length - 1; i++) {
+        const found = currentItems.find(item => item.key === parts[i]);
+        if (!found?.children)
+            return undefined;
+        currentItems = found.children;
+    }
+    const index = currentItems.findIndex(item => item.key === parts[parts.length - 1]);
+    if (index < 0)
+        return undefined;
+    return { parent: currentItems, index, item: currentItems[index] };
+}
+export function getFELDependencies(expression) {
+    return wasmGetFELDependencies(expression);
+}
+/**
+ * Evaluate a FEL expression and return a structured trace of evaluation steps.
+ * See `FelTraceStep` for the step variants; wire format matches Rust `fel_core::TraceStep`.
+ */
+export const evalFELWithTrace = wasmEvalFELWithTrace;
+export const evaluateDefinition = wasmEvaluateDefinition;
+/** Check if a string is a valid FEL identifier (canonical Rust lexer rule). */
+export const isValidFELIdentifier = wasmIsValidFelIdentifier;
+/** Sanitize a string into a valid FEL identifier (strips invalid chars, escapes keywords). */
+export const sanitizeFELIdentifier = wasmSanitizeFelIdentifier;
+/** Compute dependency groups from recorded changeset entries (delegates to Rust/WASM). */
+export const computeDependencyGroups = wasmComputeDependencyGroups;

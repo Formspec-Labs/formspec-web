@@ -3,6 +3,12 @@ node_modules/
 dist/
 !vendor/formspec-types/dist/
 !vendor/formspec-types/dist/**
+!vendor/formspec-engine/dist/
+!vendor/formspec-engine/dist/**
+!vendor/formspec-engine/wasm-pkg-runtime/
+!vendor/formspec-engine/wasm-pkg-runtime/**
+!vendor/formspec-engine/wasm-pkg-tools/
+!vendor/formspec-engine/wasm-pkg-tools/**
 build/
 coverage/
 playwright-report/

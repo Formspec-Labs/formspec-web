@@ -63,7 +63,6 @@ export const departmentAppProfile = {
   },
   referenceAdapters: {
     formspecStack: {
-      formspecServerUrl: '/api/formspec',
       tenantHeaderDialect: 'formspec',
       oidc: {
         issuer: 'https://idp.example.gov/realms/formspec',
@@ -111,7 +110,6 @@ export const publicPortalProfile = {
   },
   referenceAdapters: {
     formspecStack: {
-      formspecServerUrl: '/api/formspec',
       tenantHeaderDialect: 'formspec',
       magicLinkCallbackPath: '/magic-link/callback',
     },
