@@ -194,6 +194,15 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Consumes ports:** none (pure resolver) — but extends the Composition surface every port consumer ultimately reads.
 - **Note:** Closes the ADR-0011 Follow-on Work items (RuntimeFeatureResolver design/impl, typed errors, plain-language rendering, fixtures) AND closes Codex red-team findings on CI inclusion, seeded-callsite gating, and demo-stub provenance. Per ADR-0011 Non-goals, no canonical JSON schema for policy documents is defined here. Per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) the resolver lives in `src/policy/` (pure core).
 
+### FW-0066 — Promote `getFormRuntimePolicy` to a `FormRuntimePolicyExtractor` port
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Platform
+- **Journey:** (none — platform; backs every feature row whose form-policy extractor carries non-trivial logic)
+- **Done:** `Composition.getFormRuntimePolicy(definition) => FormRuntimePolicy` is promoted to a named `FormRuntimePolicyExtractor` port with an `adapter-conformance` suite (per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md)). The inline TODO in `src/composition/types.ts` is removed; `docs/policy/runtime-feature-resolution.md` updates to describe the port rather than the function-typed slot. Trigger: the moment the first feature ADR ships a non-trivial extractor — anything more than `() => ({ features: {} })` or a URL-keyed literal switch.
+- **Blocked on:** no upstream block. Filed from web ADR-0011 / FW-0065 closeout (scout HIGH-1 + arch HIGH-1, 2026-05-23). The function-typed slot shipped because no extractor today carries logic worth conformance-testing; per ADR-0011 §Non-goals, "this ADR does not add every future feature port now." The first feature ADR with real extractor logic (e.g., a locale-conditional or definition-introspective extractor) trips this row.
+
 ### FW-0002 — Trust Center browseable without sign-in
 
 - **Phase:** Post-MVP
