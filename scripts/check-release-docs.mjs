@@ -8,6 +8,11 @@ import process from 'node:process';
 const defaultRootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const requiredSections = [
   {
+    path: 'docs/getting-started.md',
+    heading: '# Getting Started',
+    phrases: ['docker compose up --build', 'npm run test:compose-quickstart', 'EXT-23'],
+  },
+  {
     path: 'docs/deployment.md',
     heading: '## Hosted Demo Decision',
     phrases: ['deferred to user action', 'Local Docker compose'],
@@ -45,6 +50,11 @@ const requiredSections = [
       'documented compose quickstart smoke',
       'npm run check:release-docs',
     ],
+  },
+  {
+    path: 'README.md',
+    heading: '## Release State',
+    phrases: ['release-docs integrity', 'compose quickstart plus multi-deployment smoke'],
   },
 ];
 const requiredExtensionQueueEntries = [

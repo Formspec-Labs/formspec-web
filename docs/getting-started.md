@@ -16,6 +16,17 @@ Docker path:
 docker compose up --build
 ```
 
+Automated proof for the Docker path:
+
+```bash
+npm run check:compose-config
+npm run test:compose-quickstart
+```
+
+`test:compose-quickstart` runs the documented `docker compose up --build`
+path on ports 8080/8081, verifies the isolated runtime profiles and brands, and
+submits both demo forms in Chromium.
+
 Open `http://localhost:8080` for `publicPortal` and
 `http://localhost:8081` for `departmentApp`. The default image also starts in
 demo mode. To run against a real `formspec-server`, set

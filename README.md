@@ -59,9 +59,9 @@ conformance requirements, and manual release blockers.
 
 The current MVP proof is a local web deployment: Docker/nginx serves the static
 respondent shell, `docker-compose.yml` boots the `publicPortal` and
-`departmentApp` web instances, and `npm run ci` gates the port conformance,
-browser accessibility smoke, bundle budget, deployment headers, and
-compose quickstart plus multi-deployment smoke.
+`departmentApp` web instances, and `npm run ci` gates release-docs integrity,
+port conformance, browser accessibility smoke, bundle budget, deployment
+headers, and compose quickstart plus multi-deployment smoke.
 
 Do not treat this as full production release sign-off yet. Manual VoiceOver and
 NVDA sweeps are pending, production Locale Documents still depend on the

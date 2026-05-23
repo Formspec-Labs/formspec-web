@@ -50,6 +50,24 @@ describe('check-release-docs', () => {
     );
   });
 
+  it('rejects getting-started docs that stop naming the automated quickstart proof', () => {
+    const result = runCheck(createFixture({ omitQuickstartSmoke: true }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'docs/getting-started.md # Getting Started is missing "npm run test:compose-quickstart"',
+    );
+  });
+
+  it('rejects README release state that omits release-docs integrity', () => {
+    const result = runCheck(createFixture({ omitReadmeReleaseDocsGate: true }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'README.md ## Release State is missing "release-docs integrity"',
+    );
+  });
+
   it('rejects stale pipeline tracker prose', () => {
     const result = runCheck(createFixture({ omitPlanningReleaseDocsGate: true }));
 
@@ -119,7 +137,9 @@ function createFixture(options = {}) {
   tempRoots.push(root);
 
   write(root, 'docs/deployment.md', deploymentDoc(options));
+  write(root, 'docs/getting-started.md', gettingStartedDoc(options));
   write(root, 'docs/operations.md', operationsDoc(options));
+  write(root, 'README.md', readmeDoc(options));
   write(root, 'PLANNING.md', planningDoc(options));
   write(
     root,
@@ -164,6 +184,30 @@ function deploymentDoc(options) {
   ].join('\n');
 }
 
+function gettingStartedDoc(options) {
+  return [
+    '# Getting Started',
+    '',
+    'Docker path:',
+    '',
+    '```bash',
+    'docker compose up --build',
+    '```',
+    '',
+    ...(options.omitQuickstartSmoke
+      ? []
+      : [
+          'Automated proof:',
+          '',
+          '```bash',
+          'npm run test:compose-quickstart',
+          '```',
+          '',
+        ]),
+    'Full server-backed OIDC validation waits for EXT-23.',
+  ].join('\n');
+}
+
 function operationsDoc(options) {
   return [
     '# Operations',
@@ -176,6 +220,18 @@ function operationsDoc(options) {
           '- No hosted demo URL is selected. Local Docker compose is the release proof for now.',
           '- Full server-backed OIDC operations wait for EXT-23 server validation.',
         ]),
+  ].join('\n');
+}
+
+function readmeDoc(options) {
+  return [
+    '# Formspec Web',
+    '',
+    '## Release State',
+    '',
+    options.omitReadmeReleaseDocsGate
+      ? 'The current MVP proof gates port conformance and compose quickstart plus multi-deployment smoke.'
+      : 'The current MVP proof gates release-docs integrity, port conformance, and compose quickstart plus multi-deployment smoke.',
   ].join('\n');
 }
 
