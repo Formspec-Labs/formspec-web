@@ -4,6 +4,11 @@ The reference identity set contains three adapters:
 
 - `AnonymousAdapter` mints an L1 anonymous claim with `provider: "anonymous"` and
   a `crypto.randomUUID()`-keyed `subjectRef`.
+- `HttpAnonymousIdentityProvider` uses `AnonymousSessionBridge` to call
+  `POST /runtime/forms/{form_id}/sessions/anonymous`, then normalizes the
+  server-issued session into the same canonical `IdentityClaim` shape. The
+  bridge also supplies anonymous session tokens to `HttpDraftStore` and
+  `HttpSubmitTransport` without exposing them through `IdentityClaim`.
 - `OidcAdapter` wraps an `oidc-client-ts` driver and normalizes OIDC users into
   the §6.6 `IdentityClaim` shape. ACR values must map to Formspec L1-L4
   assurance levels; unknown ACR values fail instead of silently downgrading.
@@ -24,5 +29,6 @@ Run:
 
 ```bash
 npm test -- tests/adapter-conformance/identity-provider
+npm test -- tests/adapters/http/anonymous-session.test.ts
 npm test -- tests/adapters/identity
 ```
