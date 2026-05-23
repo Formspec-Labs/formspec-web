@@ -47,7 +47,14 @@ export function createStubComposition(): Composition {
     orgRuntimePolicy: {
       features: { respondentPlace: 'allowed', status: 'allowed' },
     } satisfies OrgRuntimePolicy,
-    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
+    // The demo form opts into both seeded features. In demo mode the
+    // demo-stub adapters can satisfy them; the resolver enables them and the
+    // shell renders the respondent-place panel. Without this opt-in the
+    // resolver would mark both `not-requested` (org=allowed + form=silent)
+    // and Task 12b's gating would hide the panel.
+    getFormRuntimePolicy: (): FormRuntimePolicy => ({
+      features: { respondentPlace: 'optional', status: 'optional' },
+    }),
   };
   assertCompositionCoherence(composition);
   return composition;

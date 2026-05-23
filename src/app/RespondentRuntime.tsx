@@ -102,6 +102,7 @@ type SubmitState =
 
 type RespondentPlaceState =
   | { status: 'loading' }
+  | { status: 'disabled' }
   | {
       status: 'ready';
       snapshot: RespondentPlaceSnapshot;
@@ -234,9 +235,18 @@ export function RespondentRuntime({
       return;
     }
 
+    // ADR-0011 §Failure Semantics: disabled features render hidden, not as
+    // adapter errors. With both seeded features disabled the panel is
+    // suppressed entirely; with respondentPlace disabled we don't call the
+    // (potentially unavailable) adapter at all.
+    if (!respondentState.runtimeProfile.enabled.has('respondentPlace')) {
+      setRespondentPlaceState({ status: 'disabled' });
+      return;
+    }
+
     let cancelled = false;
     setRespondentPlaceState({ status: 'loading' });
-    void loadRespondentPlace(composition, placeSubjectRef)
+    void loadRespondentPlace(composition, placeSubjectRef, respondentState.runtimeProfile)
       .then((state) => {
         if (!cancelled) {
           setRespondentPlaceState(state);
@@ -251,7 +261,7 @@ export function RespondentRuntime({
     return () => {
       cancelled = true;
     };
-  }, [composition, placeSubjectRef, respondentState.status]);
+  }, [composition, placeSubjectRef, respondentState]);
 
   const handleSignIn = async (option: IdpOption): Promise<void> => {
     setRespondentState((current) =>
@@ -476,9 +486,10 @@ async function createReadyState(
 async function loadRespondentPlace(
   composition: Composition,
   subjectRef: string | undefined,
+  profile: ResolvedRuntimeProfile,
 ): Promise<RespondentPlaceState> {
   const snapshot = await composition.respondentPlaceSource.readPlace({ subjectRef });
-  const submissionStatuses = await readSubmissionStatuses(composition, snapshot);
+  const submissionStatuses = await readSubmissionStatuses(composition, snapshot, profile);
   return {
     status: 'ready',
     snapshot,
@@ -489,7 +500,14 @@ async function loadRespondentPlace(
 async function readSubmissionStatuses(
   composition: Composition,
   snapshot: RespondentPlaceSnapshot,
+  profile: ResolvedRuntimeProfile,
 ): Promise<Record<string, ApplicantStatusResource>> {
+  // ADR-0011 §Failure Semantics: status disabled -> skip per-submission fetches.
+  // SubmissionItem already handles `status: undefined` via the "Status pending"
+  // affordance the respondent already has context for; no new copy needed.
+  if (!profile.enabled.has('status')) {
+    return {};
+  }
   const entries = await Promise.all(
     (snapshot.submissions ?? []).map(async (submission) => {
       if (!submission.applicantStatus) {
@@ -590,6 +608,11 @@ function RespondentSurface({
 }
 
 function RespondentPlacePanel({ state }: { state: RespondentPlaceState }) {
+  if (state.status === 'disabled') {
+    // Hidden per ADR-0011 §Failure Semantics — the respondent never had
+    // context for the panel, so there's no "unavailable" state to surface.
+    return null;
+  }
   if (state.status === 'loading') {
     return (
       <section className="respondent-place" aria-labelledby="respondent-place-title">

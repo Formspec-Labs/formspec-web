@@ -251,7 +251,10 @@ function testComposition(
       readStatus: vi.fn(async () => options.applicantStatus),
     },
     // ADR-0011: production-mode composition with both seeded capabilities
-    // available so the test inherits the pre-policy enablement.
+    // available and the form opting both in. Without the form opt-in the
+    // resolver would mark both `not-requested` (org=allowed + form=silent)
+    // and Task 12b's gating would hide the panel — these tests assert on
+    // panel content, so they need the features enabled.
     instanceCapabilities: {
       respondentPlace: 'available',
       status: 'available',
@@ -259,7 +262,9 @@ function testComposition(
     orgRuntimePolicy: {
       features: { respondentPlace: 'allowed', status: 'allowed' },
     },
-    getFormRuntimePolicy: () => ({ features: {} }),
+    getFormRuntimePolicy: () => ({
+      features: { respondentPlace: 'optional', status: 'optional' },
+    }),
   };
 }
 

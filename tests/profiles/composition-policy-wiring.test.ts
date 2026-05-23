@@ -14,9 +14,12 @@ describe('Composition declares runtime-feature policy seams', () => {
     expect(c.orgRuntimePolicy.features.status).toBe('allowed');
   });
 
-  it('stub composition exposes a form-policy extractor that defaults to no requirements', () => {
+  it('stub composition opts the demo form into both seeded features as optional', () => {
     const c = createStubComposition();
     const policy = c.getFormRuntimePolicy({ url: 'urn:demo', version: '1' } as never);
-    expect(policy.features).toEqual({});
+    expect(policy.features).toEqual({
+      respondentPlace: 'optional',
+      status: 'optional',
+    });
   });
 });
