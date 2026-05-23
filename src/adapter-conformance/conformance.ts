@@ -338,6 +338,24 @@ export function defineRespondentPlaceSourceConformance(
         .toThrow();
     });
 
+    it('rejects Respondent Library status projections with extra properties', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleRespondentPlaceSnapshot,
+        submissions: [
+          {
+            ...sampleRespondentPlaceSnapshot.submissions?.[0],
+            applicantStatus: {
+              ...sampleApplicantStatusProjection,
+              webStatus: 'received',
+            },
+          },
+        ],
+      } as unknown as RespondentPlaceSnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects
+        .toThrow();
+    });
+
     it('rejects incomplete passkey-hpke encryption envelopes', async () => {
       const subject = setup();
       const invalid = {

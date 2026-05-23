@@ -1,6 +1,6 @@
 /* global console */
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
@@ -24,6 +24,10 @@ const stubPortsByPath = new Map([
   ['src/adapters/stub/respondent-place-source.ts', 'RespondentPlaceSource'],
   ['src/adapters/stub/status-reader.ts', 'StatusReader'],
 ]);
+const unavailableSentinelFactoriesByPath = new Map([
+  ['src/adapters/unavailable/respondent-place-source.ts', 'unavailableRespondentPlaceSource'],
+  ['src/adapters/unavailable/status-reader.ts', 'unavailableStatusReader'],
+]);
 const requiredHarnessExports = [
   'defineDefinitionSourceConformance',
   'defineDraftStoreConformance',
@@ -43,7 +47,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const rootDir = rootDirFromArgs(process.argv.slice(2)) ?? defaultRootDir;
   const result = checkConformanceCoverage(rootDir);
   console.log(
-    `conformance coverage check passed: ${result.portSuiteCount} port suite(s), ${result.registrationCount} adapter registration(s)`,
+    `conformance coverage check passed: ${result.portSuiteCount} port suite(s), ${result.registrationCount} adapter registration(s), ${result.sentinelCount} unavailable sentinel(s)`,
   );
 }
 
@@ -51,7 +55,9 @@ export function checkConformanceCoverage(rootDir) {
   const framework = readFile(rootDir, 'tests/adapter-conformance/_framework/conformance.ts');
   const publicIndex = readFile(rootDir, 'src/adapter-conformance/index.ts');
   const readme = readFile(rootDir, 'tests/adapter-conformance/README.md');
+  const defaultComposition = readFile(rootDir, 'src/composition/default.ts');
   let registrationCount = 0;
+  let sentinelCount = 0;
 
   if (!hasPublicHarnessReExport(framework)) {
     fail(
@@ -98,9 +104,35 @@ export function checkConformanceCoverage(rootDir) {
     }
   }
 
+  for (const [path, factoryName] of unavailableSentinelFactoriesByPath) {
+    if (!existsSync(join(rootDir, path))) {
+      fail(
+        `conformance coverage check failed: unavailable sentinel "${factoryName}" is missing from "${path}"`,
+      );
+    }
+    const text = stripComments(readFile(rootDir, path));
+    if (!new RegExp(`export\\s+function\\s+${factoryName}\\b`).test(text)) {
+      fail(
+        `conformance coverage check failed: unavailable sentinel "${factoryName}" is missing from "${path}"`,
+      );
+    }
+    if (/\bimplements\s+(RespondentPlaceSource|StatusReader)\b/.test(text)) {
+      fail(
+        `conformance coverage check failed: unavailable sentinel "${factoryName}" must not masquerade as a conforming adapter class`,
+      );
+    }
+    if (!new RegExp(`\\b${factoryName}\\s*\\(`).test(stripComments(defaultComposition))) {
+      fail(
+        `conformance coverage check failed: production composition does not use unavailable sentinel "${factoryName}"`,
+      );
+    }
+    sentinelCount += 1;
+  }
+
   return {
     portSuiteCount: portSuites.size,
     registrationCount,
+    sentinelCount,
   };
 }
 

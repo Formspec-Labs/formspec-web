@@ -55,6 +55,9 @@ visible as their own class.
 
 - Every first-party adapter must be registered in the relevant conformance
   suite before it is used by `createDefaultComposition()`.
+- Fail-closed unavailable sentinels are the only exception: they are not
+  conforming data adapters, must not return data, and are covered by
+  `npm run check:conformance-coverage` plus composition smoke tests.
 - Every production HTTP path needs both an adapter-level unit test and a
   composition smoke test when the path crosses more than one port.
 - Same-key idempotency must be tested for sequential and concurrent calls.

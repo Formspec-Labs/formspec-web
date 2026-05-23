@@ -23,6 +23,17 @@ describe('check-conformance-coverage', () => {
     expect(result.stdout).toContain('conformance coverage check passed');
   });
 
+  it('rejects missing unavailable sentinels used by production composition', () => {
+    const result = runCheck(createFixture({
+      omitPath: 'src/adapters/unavailable/status-reader.ts',
+    }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'unavailable sentinel "unavailableStatusReader" is missing',
+    );
+  });
+
   it('rejects a missing adapter registration', () => {
     const result = runCheck(createFixture({ omitRegistration: 'OIDC IdentityProvider conformance' }));
 
@@ -202,8 +213,9 @@ function createFixture(options = {}) {
       `export * from '${options.frameworkImport ?? '../../../src/adapter-conformance/index.ts'}';`,
   );
   write(root, 'src/adapter-conformance/index.ts', publicIndex());
+  write(root, 'src/composition/default.ts', defaultComposition());
   write(root, 'tests/adapter-conformance/README.md', conformanceReadme(options));
-  writeAdapterFiles(root, options.extraAdapters ?? []);
+  writeAdapterFiles(root, options);
   write(
     root,
     'tests/adapter-conformance/definition-source/conformance.test.ts',
@@ -270,7 +282,7 @@ function createFixture(options = {}) {
   return root;
 }
 
-function writeAdapterFiles(root, extraAdapters) {
+function writeAdapterFiles(root, options) {
   for (const [path, text] of [
     ['src/adapters/stub/definition-source.ts', 'export function stubDefinitionSource() {}'],
     ['src/adapters/stub/draft-store.ts', 'export function stubDraftStore() {}'],
@@ -279,6 +291,11 @@ function writeAdapterFiles(root, extraAdapters) {
     ['src/adapters/stub/notification-delivery.ts', 'export function stubNotificationDelivery() {}'],
     ['src/adapters/stub/respondent-place-source.ts', 'export function stubRespondentPlaceSource() {}'],
     ['src/adapters/stub/status-reader.ts', 'export function stubStatusReader() {}'],
+    [
+      'src/adapters/unavailable/respondent-place-source.ts',
+      'export function unavailableRespondentPlaceSource() {}',
+    ],
+    ['src/adapters/unavailable/status-reader.ts', 'export function unavailableStatusReader() {}'],
     [
       'src/adapters/http/definition-source.ts',
       'export class HttpDefinitionSource implements DefinitionSource {}',
@@ -300,12 +317,27 @@ function writeAdapterFiles(root, extraAdapters) {
     ],
     ['src/adapters/identity/assurance.ts', 'export class IdentitySession {}'],
   ]) {
-    write(root, path, text);
+    if (path !== options.omitPath) {
+      write(root, path, text);
+    }
   }
 
-  for (const adapter of extraAdapters) {
+  for (const adapter of options.extraAdapters ?? []) {
     write(root, adapter.path, adapter.text);
   }
+}
+
+function defaultComposition() {
+  return [
+    'import { unavailableRespondentPlaceSource } from "../adapters/unavailable/respondent-place-source.ts";',
+    'import { unavailableStatusReader } from "../adapters/unavailable/status-reader.ts";',
+    'export function createDefaultComposition() {',
+    '  return {',
+    '    respondentPlaceSource: unavailableRespondentPlaceSource(),',
+    '    statusReader: unavailableStatusReader(),',
+    '  };',
+    '}',
+  ].join('\n');
 }
 
 function publicIndex() {

@@ -100,10 +100,27 @@ const agentRoles = new Set(['advisory', 'primary', 'fallback']);
 export function isApplicantStatusProjection(value: unknown): value is ApplicantStatusProjection {
   if (!isRecord(value)) return false;
   return (
+    hasOnlyKeys(value, [
+      'sourceSchema',
+      'projectionKind',
+      'resourceRef',
+      'endpoint',
+      'updatedAt',
+      'headline',
+      'summary',
+      'payloadDigest',
+      'extensions',
+    ]) &&
     value.sourceSchema === WOS_APPLICANT_SCHEMA_ID &&
     typeof value.projectionKind === 'string' &&
     applicantProjectionKinds.has(value.projectionKind as ApplicantStatusProjectionKind) &&
-    typeof value.updatedAt === 'string'
+    typeof value.updatedAt === 'string' &&
+    (value.resourceRef === undefined || typeof value.resourceRef === 'string') &&
+    (value.endpoint === undefined || typeof value.endpoint === 'string') &&
+    (value.headline === undefined || typeof value.headline === 'string') &&
+    (value.summary === undefined || typeof value.summary === 'string') &&
+    (value.payloadDigest === undefined || typeof value.payloadDigest === 'string') &&
+    (value.extensions === undefined || isExtensions(value.extensions))
   );
 }
 
@@ -127,14 +144,28 @@ export function isRespondentPlaceSnapshot(value: unknown): value is RespondentPl
     return false;
   }
   if (
+    !hasOnlyKeys(value, [
+      '$formspecRespondentLibrary',
+      'version',
+      'libraryId',
+      'subject',
+      'aggregationMode',
+      'trustModel',
+      'encryption',
+      'obligations',
+      'documents',
+      'submissions',
+      'presentationPolicies',
+      'export',
+      'extensions',
+    ]) ||
     value.$formspecRespondentLibrary !== '1.0' ||
     typeof value.version !== 'string' ||
     typeof value.libraryId !== 'string' ||
     value.aggregationMode !== 'client-wallet' ||
+    !isSubjectBinding(value.subject) ||
     !isRespondentTrustModel(value.trustModel) ||
-    typeof value.subject.subjectRef !== 'string' ||
-    typeof value.subject.privacyTier !== 'string' ||
-    !privacyTiers.has(value.subject.privacyTier)
+    (value.extensions !== undefined && !isExtensions(value.extensions))
   ) {
     return false;
   }
@@ -164,54 +195,139 @@ export function isRespondentPlaceSnapshot(value: unknown): value is RespondentPl
 function isRespondentTrustModel(value: unknown): value is Record<string, unknown> {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, [
+      'storagePosture',
+      'issuerIsolation',
+      'serverAggregation',
+      'presentationDefault',
+      'extensions',
+    ]) &&
     typeof value.storagePosture === 'string' &&
     storagePostures.has(value.storagePosture) &&
     typeof value.issuerIsolation === 'string' &&
     issuerIsolationModes.has(value.issuerIsolation) &&
     value.serverAggregation === 'forbidden' &&
     typeof value.presentationDefault === 'string' &&
-    presentationDefaults.has(value.presentationDefault)
+    presentationDefaults.has(value.presentationDefault) &&
+    (value.extensions === undefined || isExtensions(value.extensions))
+  );
+}
+
+function isSubjectBinding(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ['subjectRef', 'privacyTier', 'assuranceRef', 'extensions']) &&
+    typeof value.subjectRef === 'string' &&
+    typeof value.privacyTier === 'string' &&
+    privacyTiers.has(value.privacyTier) &&
+    (value.assuranceRef === undefined || typeof value.assuranceRef === 'string') &&
+    (value.extensions === undefined || isExtensions(value.extensions))
   );
 }
 
 function isRespondentObligation(value: unknown): boolean {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, [
+      'id',
+      'issuer',
+      'title',
+      'description',
+      'state',
+      'dueAt',
+      'formRef',
+      'submissionRef',
+      'extensions',
+    ]) &&
     typeof value.id === 'string' &&
     isIssuerRef(value.issuer) &&
     typeof value.title === 'string' &&
+    (value.description === undefined || typeof value.description === 'string') &&
     typeof value.state === 'string' &&
-    obligationStates.has(value.state)
+    obligationStates.has(value.state) &&
+    (value.dueAt === undefined || typeof value.dueAt === 'string') &&
+    (value.formRef === undefined || isDefinitionRef(value.formRef)) &&
+    (value.submissionRef === undefined || typeof value.submissionRef === 'string') &&
+    (value.extensions === undefined || isExtensions(value.extensions))
   );
 }
 
 function isRespondentDocumentRecord(value: unknown): boolean {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, [
+      'id',
+      'kind',
+      'displayName',
+      'issuer',
+      'capturedAt',
+      'expiresAt',
+      'contentRef',
+      'sourceSubmissionRef',
+      'presentationPolicyRef',
+      'extensions',
+    ]) &&
     typeof value.id === 'string' &&
     typeof value.kind === 'string' &&
     respondentDocumentKinds.has(value.kind) &&
     typeof value.displayName === 'string' &&
+    (value.issuer === undefined || isIssuerRef(value.issuer)) &&
     typeof value.capturedAt === 'string' &&
-    isRecord(value.contentRef) &&
-    typeof value.contentRef.uri === 'string' &&
-    typeof value.contentRef.mediaType === 'string'
+    (value.expiresAt === undefined || typeof value.expiresAt === 'string') &&
+    isContentRef(value.contentRef) &&
+    (value.sourceSubmissionRef === undefined || typeof value.sourceSubmissionRef === 'string') &&
+    (
+      value.presentationPolicyRef === undefined ||
+      typeof value.presentationPolicyRef === 'string'
+    ) &&
+    (value.extensions === undefined || isExtensions(value.extensions))
   );
 }
 
 function isRespondentSubmissionRecord(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return (
+    hasOnlyKeys(value, [
+      'id',
+      'issuer',
+      'definitionRef',
+      'submittedAt',
+      'applicantStatus',
+      'receiptRef',
+      'documentRefs',
+      'extensions',
+    ]) &&
     typeof value.id === 'string' &&
     isIssuerRef(value.issuer) &&
     isDefinitionRef(value.definitionRef) &&
     typeof value.submittedAt === 'string' &&
-    (value.applicantStatus === undefined || isApplicantStatusProjection(value.applicantStatus))
+    (value.applicantStatus === undefined || isApplicantStatusProjection(value.applicantStatus)) &&
+    (value.receiptRef === undefined || typeof value.receiptRef === 'string') &&
+    (
+      value.documentRefs === undefined ||
+      (
+        Array.isArray(value.documentRefs) &&
+        value.documentRefs.every((documentRef) => typeof documentRef === 'string')
+      )
+    ) &&
+    (value.extensions === undefined || isExtensions(value.extensions))
   );
 }
 
 function isPresentationPolicy(value: unknown): boolean {
   if (!isRecord(value) || typeof value.id !== 'string' || typeof value.scope !== 'string') {
+    return false;
+  }
+  if (!hasOnlyKeys(value, [
+    'id',
+    'scope',
+    'documentRefs',
+    'allowedPurposes',
+    'recipientIssuer',
+    'protocolHints',
+    'expiresAt',
+    'extensions',
+  ])) {
     return false;
   }
   if (!presentationScopes.has(value.scope)) {
@@ -238,6 +354,12 @@ function isPresentationPolicy(value: unknown): boolean {
   if (value.recipientIssuer !== undefined && !isIssuerRef(value.recipientIssuer)) {
     return false;
   }
+  if (value.expiresAt !== undefined && typeof value.expiresAt !== 'string') {
+    return false;
+  }
+  if (value.extensions !== undefined && !isExtensions(value.extensions)) {
+    return false;
+  }
   if (value.scope === 'selected-documents') {
     return (
       Array.isArray(value.documentRefs) &&
@@ -249,21 +371,39 @@ function isPresentationPolicy(value: unknown): boolean {
 }
 
 function isEncryptionEnvelope(value: unknown): boolean {
-  if (!isRecord(value) || (value.mode !== 'none' && value.mode !== 'passkey-hpke')) {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, [
+      'mode',
+      'keyDerivation',
+      'recipientKeyRef',
+      'cipherSuite',
+      'extensions',
+    ]) ||
+    (value.mode !== 'none' && value.mode !== 'passkey-hpke')
+  ) {
     return false;
   }
   if (value.mode === 'passkey-hpke') {
     return (
       (value.keyDerivation === 'passkey-derived' || value.keyDerivation === 'external-key') &&
-      typeof value.recipientKeyRef === 'string'
+      typeof value.recipientKeyRef === 'string' &&
+      (value.cipherSuite === undefined || typeof value.cipherSuite === 'string') &&
+      (value.extensions === undefined || isExtensions(value.extensions))
     );
   }
-  return true;
+  return (
+    value.keyDerivation === undefined &&
+    value.recipientKeyRef === undefined &&
+    (value.cipherSuite === undefined || typeof value.cipherSuite === 'string') &&
+    (value.extensions === undefined || isExtensions(value.extensions))
+  );
 }
 
 function isExportPackage(value: unknown): boolean {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, ['id', 'format', 'createdAt', 'includes', 'encryption', 'extensions']) &&
     typeof value.id === 'string' &&
     typeof value.format === 'string' &&
     exportFormats.has(value.format) &&
@@ -271,7 +411,8 @@ function isExportPackage(value: unknown): boolean {
     Array.isArray(value.includes) &&
     value.includes.length > 0 &&
     value.includes.every((entry) => typeof entry === 'string' && exportIncludes.has(entry)) &&
-    (value.encryption === undefined || isEncryptionEnvelope(value.encryption))
+    (value.encryption === undefined || isEncryptionEnvelope(value.encryption)) &&
+    (value.extensions === undefined || isExtensions(value.extensions))
   );
 }
 
@@ -458,11 +599,34 @@ function isApplicantAgentSummary(value: unknown): value is ApplicantAgentSummary
 }
 
 function isIssuerRef(value: unknown): boolean {
-  return isRecord(value) && typeof value.name === 'string';
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ['name', 'url', 'identifier', 'extensions']) &&
+    typeof value.name === 'string' &&
+    (value.url === undefined || typeof value.url === 'string') &&
+    (value.identifier === undefined || typeof value.identifier === 'string') &&
+    (value.extensions === undefined || isExtensions(value.extensions))
+  );
 }
 
 function isDefinitionRef(value: unknown): boolean {
-  return isRecord(value) && typeof value.url === 'string';
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ['url', 'version']) &&
+    typeof value.url === 'string' &&
+    (value.version === undefined || typeof value.version === 'string')
+  );
+}
+
+function isContentRef(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ['uri', 'mediaType', 'sha256', 'extensions']) &&
+    typeof value.uri === 'string' &&
+    typeof value.mediaType === 'string' &&
+    (value.sha256 === undefined || typeof value.sha256 === 'string') &&
+    (value.extensions === undefined || isExtensions(value.extensions))
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -483,4 +647,11 @@ function isOptionalArray(
 function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
   const allowed = new Set(allowedKeys);
   return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function isExtensions(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Object.keys(value).every((key) => /^x-[a-z][a-z0-9-]*$/.test(key))
+  );
 }
