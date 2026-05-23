@@ -14,6 +14,15 @@ import type {
 export function stubIdentityProvider(): IdentityProvider {
   const listeners = new Set<(claim: IdentityClaim | null) => void>();
   let current: IdentityClaim | null = null;
+  const options: IdpOption[] = [
+    { kind: 'anonymous', minAssurance: 'L1' },
+    {
+      kind: 'oidc',
+      issuer: 'https://stub-idp.example.test',
+      displayName: 'Stub high assurance identity',
+      minAssurance: 'L3',
+    },
+  ];
 
   const setCurrent = (claim: IdentityClaim | null): void => {
     current = claim;
@@ -23,23 +32,17 @@ export function stubIdentityProvider(): IdentityProvider {
   };
 
   return {
-    async discover(_formAssuranceRequirements?: AssuranceLevel) {
-      const option: IdpOption = { kind: 'anonymous', minAssurance: 'L1' };
-      return [option];
+    async discover(formAssuranceRequirements?: AssuranceLevel) {
+      if (!formAssuranceRequirements) {
+        return options;
+      }
+      return options.filter(
+        (option) =>
+          assuranceRank(option.minAssurance) >= assuranceRank(formAssuranceRequirements),
+      );
     },
     async authenticate(option: IdpOption) {
-      if (option.kind !== 'anonymous') {
-        throw new Error(`stub IdentityProvider only supports anonymous; got ${option.kind}`);
-      }
-      const claim: IdentityClaim = {
-        provider: 'stub-anonymous',
-        adapter: 'stub-identity-provider@0',
-        subjectRef: `stub-${Math.random().toString(36).slice(2, 10)}`,
-        credentialType: 'other',
-        subjectBinding: 'respondent',
-        assuranceLevel: 'L1',
-        privacyTier: 'anonymous',
-      };
+      const claim = claimForOption(option);
       setCurrent(claim);
       return claim;
     },
@@ -53,4 +56,47 @@ export function stubIdentityProvider(): IdentityProvider {
       return () => listeners.delete(listener);
     },
   };
+}
+
+function claimForOption(option: IdpOption): IdentityClaim {
+  if (option.kind === 'anonymous') {
+    return {
+      provider: 'stub-anonymous',
+      adapter: 'stub-identity-provider@0',
+      subjectRef: `stub-${Math.random().toString(36).slice(2, 10)}`,
+      credentialType: 'other',
+      subjectBinding: 'respondent',
+      assuranceLevel: 'L1',
+      privacyTier: 'anonymous',
+    };
+  }
+
+  if (option.kind === 'oidc') {
+    return {
+      provider: option.issuer,
+      adapter: 'stub-identity-provider@0',
+      subjectRef: `stub-oidc-${Math.random().toString(36).slice(2, 10)}`,
+      credentialType: 'oidc-token',
+      credentialRef: 'stub:credential',
+      subjectBinding: 'respondent',
+      assuranceLevel: option.minAssurance,
+      privacyTier: 'pseudonymous',
+      evidenceRef: 'stub:evidence:l3',
+    };
+  }
+
+  return {
+    provider: 'stub-magic-link',
+    adapter: 'stub-identity-provider@0',
+    subjectRef: `stub-magic-${Math.random().toString(36).slice(2, 10)}`,
+    credentialType: 'provider-assertion',
+    credentialRef: 'stub:magic-link',
+    subjectBinding: 'respondent',
+    assuranceLevel: option.minAssurance,
+    privacyTier: 'pseudonymous',
+  };
+}
+
+function assuranceRank(level: AssuranceLevel): number {
+  return Number(level.slice(1));
 }

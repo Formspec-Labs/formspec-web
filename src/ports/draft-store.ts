@@ -9,7 +9,9 @@
  * React shell (cleared on `IdentityProvider.revoke()`).
  */
 
-export type Response = unknown;
+import type { FormResponse } from '@formspec-org/types';
+
+export type { FormResponse } from '@formspec-org/types';
 
 /** Opaque identifier scoping drafts (form + user/subject). */
 export interface DraftKey {
@@ -19,8 +21,8 @@ export interface DraftKey {
 }
 
 export interface DraftStore {
-  load(key: DraftKey): Promise<Response | undefined>;
-  save(key: DraftKey, response: Response): Promise<void>;
+  load(key: DraftKey): Promise<FormResponse | undefined>;
+  save(key: DraftKey, response: FormResponse): Promise<void>;
   list(subjectRef: string): Promise<DraftKey[]>;
   delete(key: DraftKey): Promise<void>;
   /** Called by the shell when identity changes (revoke / logout). */

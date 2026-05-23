@@ -1,11 +1,11 @@
-import type { DraftKey, DraftStore, Response } from '../../ports/draft-store.ts';
+import type { DraftKey, DraftStore, FormResponse } from '../../ports/draft-store.ts';
 
 /**
  * Stub DraftStore — in-memory; per-subject + per-form keying.
  * For tests + scaffold smoke test.
  */
 export function stubDraftStore(): DraftStore {
-  const store = new Map<string, Response>();
+  const store = new Map<string, FormResponse>();
   const keyStr = (key: DraftKey): string =>
     `${key.subjectRef ?? '<anon>'}|${key.formUrl}|${key.formVersion ?? 'latest'}`;
 

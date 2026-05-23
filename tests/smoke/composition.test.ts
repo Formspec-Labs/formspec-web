@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { createDefaultComposition } from '../../src/composition/default.ts';
 import { applyBrandTheme, getUpstreamTokenRegistry } from '../../src/theme/theme.ts';
+import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
+import { sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
 
 describe('composition root smoke', () => {
   it('createStubComposition wires all 5 MVP ports', () => {
@@ -21,15 +23,16 @@ describe('composition root smoke', () => {
 
   it('SubmitTransport is idempotent on the same key', async () => {
     const { submitTransport } = createStubComposition();
-    const first = await submitTransport.submit({}, 'key-1');
-    const second = await submitTransport.submit({}, 'key-1');
+    const key = generateIdempotencyKey();
+    const first = await submitTransport.submit(sampleIntakeHandoff, key);
+    const second = await submitTransport.submit(sampleIntakeHandoff, key);
     expect(second.referenceNumber).toBe(first.referenceNumber);
   });
 
   it('SubmitTransport returns a new reference number on a new key', async () => {
     const { submitTransport } = createStubComposition();
-    const first = await submitTransport.submit({}, 'key-A');
-    const second = await submitTransport.submit({}, 'key-B');
+    const first = await submitTransport.submit(sampleIntakeHandoff, generateIdempotencyKey());
+    const second = await submitTransport.submit(sampleIntakeHandoff, generateIdempotencyKey());
     expect(second.referenceNumber).not.toBe(first.referenceNumber);
   });
 

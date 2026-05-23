@@ -1,6 +1,8 @@
 .DS_Store
 node_modules/
 dist/
+!vendor/formspec-types/dist/
+!vendor/formspec-types/dist/**
 build/
 coverage/
 playwright-report/

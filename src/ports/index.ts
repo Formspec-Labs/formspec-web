@@ -7,8 +7,8 @@
  * when consumer code lands.
  */
 
-export type { DefinitionSource, Definition } from './definition-source.ts';
-export type { DraftStore, DraftKey, Response } from './draft-store.ts';
+export type { DefinitionSource, FormDefinition } from './definition-source.ts';
+export type { DraftStore, DraftKey, FormResponse } from './draft-store.ts';
 export type { SubmitTransport, IntakeHandoff, SubmitConfirmation } from './submit-transport.ts';
 export type {
   IdentityProvider,

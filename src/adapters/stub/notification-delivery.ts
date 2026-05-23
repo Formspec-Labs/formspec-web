@@ -2,6 +2,7 @@ import type {
   NotificationDelivery,
   NotificationMessage,
 } from '../../ports/notification-delivery.ts';
+import { assertUuidV7IdempotencyKey } from '../../shared/idempotency-key.ts';
 
 /**
  * Stub NotificationDelivery — no-op with replay-key dedup.
@@ -18,6 +19,7 @@ export function stubNotificationDelivery(): StubNotificationDelivery {
   return {
     sent,
     async send(message, idempotencyKey) {
+      assertUuidV7IdempotencyKey(idempotencyKey);
       if (seen.has(idempotencyKey)) {
         return;
       }

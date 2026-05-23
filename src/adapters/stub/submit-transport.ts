@@ -3,6 +3,7 @@ import type {
   SubmitConfirmation,
   SubmitTransport,
 } from '../../ports/submit-transport.ts';
+import { assertUuidV7IdempotencyKey } from '../../shared/idempotency-key.ts';
 
 /**
  * Stub SubmitTransport — idempotent in-memory.
@@ -15,6 +16,7 @@ export function stubSubmitTransport(): SubmitTransport {
 
   return {
     async submit(_handoff: IntakeHandoff, idempotencyKey: string) {
+      assertUuidV7IdempotencyKey(idempotencyKey);
       const existing = replay.get(idempotencyKey);
       if (existing) {
         return existing;

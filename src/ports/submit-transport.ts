@@ -8,7 +8,9 @@
  * same key returns same response.
  */
 
-export type IntakeHandoff = unknown;
+import type { IntakeHandoff } from '@formspec-org/types';
+
+export type { IntakeHandoff } from '@formspec-org/types';
 
 export interface SubmitConfirmation {
   /** Human-displayable reference number (per FW-0013 plain-language errors). */

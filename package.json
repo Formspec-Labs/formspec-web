@@ -6,7 +6,10 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./adapter-conformance": "./src/adapter-conformance/index.ts",
     "./config": "./src/config/index.ts",
+    "./ports": "./src/ports/index.ts",
+    "./shared": "./src/shared/index.ts",
     "./profiles": "./src/profiles/index.ts"
   },
   "license": "Apache-2.0",
@@ -25,8 +28,10 @@
     "ci": "npm run typecheck && npm run lint && npm test && npm run check:vendor-leaks && npm run check:upstream-theme && npm run test:e2e && npm run build"
   },
   "dependencies": {
+    "@formspec-org/types": "file:vendor/formspec-types",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
