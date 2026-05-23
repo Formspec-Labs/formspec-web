@@ -37,12 +37,14 @@ See [docs/getting-started.md](docs/getting-started.md).
 Automated multi-deployment smoke:
 
 ```sh
+npm run test:compose-quickstart
 npm run test:multi-deployment
 ```
 
-That gate builds the nginx image, starts both reference profiles with isolated
-runtime config, checks brand isolation, submits the demo form in Chromium, and
-fails on browser warnings/errors.
+The compose quickstart gate runs the documented `docker compose up --build`
+path on ports 8080/8081. The multi-deployment gate repeats the same profile,
+brand, and submit checks with Docker-assigned local ports. Both gates open the
+instances in Chromium and fail on browser warnings/errors.
 
 Local gates:
 
@@ -59,7 +61,7 @@ The current MVP proof is a local web deployment: Docker/nginx serves the static
 respondent shell, `docker-compose.yml` boots the `publicPortal` and
 `departmentApp` web instances, and `npm run ci` gates the port conformance,
 browser accessibility smoke, bundle budget, deployment headers, and
-multi-deployment smoke.
+compose quickstart plus multi-deployment smoke.
 
 Do not treat this as full production release sign-off yet. Manual VoiceOver and
 NVDA sweeps are pending, production Locale Documents still depend on the

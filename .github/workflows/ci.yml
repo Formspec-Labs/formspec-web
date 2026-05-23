@@ -34,5 +34,6 @@ jobs:
       - run: npm run build
       - run: npm run check:bundle-budget
       - run: npm run check:compose-config
+      - run: npm run test:compose-quickstart
       - run: npm run test:deployment
       - run: npm run test:multi-deployment

@@ -18,10 +18,21 @@ const requiredCommands = [
   'npm run build',
   'npm run check:bundle-budget',
   'npm run check:compose-config',
+  'npm run test:compose-quickstart',
   'npm run test:deployment',
   'npm run test:multi-deployment',
   'npm run ci',
 ];
+const expectedScriptBodies = new Map([
+  ['check:testing-plan', 'node scripts/check-testing-plan.mjs'],
+  ['check:bundle-budget', 'node scripts/check-bundle-budget.mjs'],
+  ['check:compose-config', 'docker compose config --quiet'],
+  ['test:compose-quickstart', 'node scripts/check-compose-quickstart.mjs'],
+  ['test:deployment', 'node scripts/check-deployment-headers.mjs'],
+  ['test:multi-deployment', 'node scripts/check-multi-deployment.mjs'],
+  ['check:vendor-leaks', 'scripts/check-vendor-leaks.sh'],
+  ['check:upstream-theme', 'node scripts/check-upstream-theme-assets.mjs'],
+]);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const rootDir = rootDirFromArgs(process.argv.slice(2)) ?? defaultRootDir;
@@ -74,6 +85,13 @@ export function checkTestingPlan(rootDir) {
 
     if (!packageJson.scripts?.[script]) {
       fail(`testing plan check failed: package.json is missing script "${script}" for "${gate}"`);
+    }
+
+    const expectedScriptBody = expectedScriptBodies.get(script);
+    if (expectedScriptBody && packageJson.scripts[script] !== expectedScriptBody) {
+      fail(
+        `testing plan check failed: package.json script "${script}" must be "${expectedScriptBody}" for "${gate}"`,
+      );
     }
 
     if (runsInCi === 'Yes' && script !== 'ci') {

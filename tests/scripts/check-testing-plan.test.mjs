@@ -44,6 +44,21 @@ describe('check-testing-plan', () => {
     expect(result.stderr).toContain('coverage matrix references missing path "scripts/check-testing-plan.mjs"');
   });
 
+  it('rejects release gate scripts that drift away from the expected implementation', () => {
+    const result = runCheck(
+      createFixture({
+        scriptOverrides: {
+          'test:compose-quickstart': 'node scripts/noop-compose-quickstart.mjs',
+        },
+      }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'package.json script "test:compose-quickstart" must be "node scripts/check-compose-quickstart.mjs"',
+    );
+  });
+
   it('rejects missing root-level documentation paths from the coverage matrix', () => {
     const result = runCheck(createFixture({ omitPath: 'README.md' }));
 
@@ -85,28 +100,31 @@ function createFixture(options = {}) {
     'npm run build',
     'npm run check:bundle-budget',
     'npm run check:compose-config',
+    'npm run test:compose-quickstart',
     'npm run test:deployment',
     'npm run test:multi-deployment',
   ];
 
-  write(root, 'package.json', JSON.stringify({
-    scripts: {
-      typecheck: 'tsc --noEmit',
-      lint: 'eslint .',
-      'check:testing-plan': 'node scripts/check-testing-plan.mjs',
-      'test:conformance': 'vitest run tests/adapter-conformance',
-      'test:unit': unitScript,
-      'check:vendor-leaks': 'scripts/check-vendor-leaks.sh',
-      'check:upstream-theme': 'node scripts/check-upstream-theme-assets.mjs',
-      'test:e2e': 'playwright test',
-      build: 'tsc --noEmit && vite build',
-      'check:bundle-budget': 'node scripts/check-bundle-budget.mjs',
-      'check:compose-config': 'docker compose config --quiet',
-      'test:deployment': 'node scripts/check-deployment-headers.mjs',
-      'test:multi-deployment': 'node scripts/check-multi-deployment.mjs',
-      ci: ciCommands.join(' && '),
-    },
-  }));
+  const scripts = {
+    typecheck: 'tsc --noEmit',
+    lint: 'eslint .',
+    'check:testing-plan': 'node scripts/check-testing-plan.mjs',
+    'test:conformance': 'vitest run tests/adapter-conformance',
+    'test:unit': unitScript,
+    'check:vendor-leaks': 'scripts/check-vendor-leaks.sh',
+    'check:upstream-theme': 'node scripts/check-upstream-theme-assets.mjs',
+    'test:e2e': 'playwright test',
+    build: 'tsc --noEmit && vite build',
+    'check:bundle-budget': 'node scripts/check-bundle-budget.mjs',
+    'check:compose-config': 'docker compose config --quiet',
+    'test:compose-quickstart': 'node scripts/check-compose-quickstart.mjs',
+    'test:deployment': 'node scripts/check-deployment-headers.mjs',
+    'test:multi-deployment': 'node scripts/check-multi-deployment.mjs',
+    ci: ciCommands.join(' && '),
+    ...options.scriptOverrides,
+  };
+
+  write(root, 'package.json', JSON.stringify({ scripts }));
   write(root, '.github/workflows/ci.yml', workflow(ciCommands, options.commentOnlyWorkflowCommand));
   write(root, 'docs/testing-plan.md', testingPlan(options.omitCommand));
 
@@ -117,6 +135,7 @@ function createFixture(options = {}) {
     'tests/e2e/placeholder-a11y.spec.ts',
     'tests/scripts/check-testing-plan.test.mjs',
     'scripts/check-deployment-headers.mjs',
+    'scripts/check-compose-quickstart.mjs',
     'scripts/check-multi-deployment.mjs',
     'README.md',
   ]) {
@@ -153,6 +172,7 @@ function testingPlan(omitCommand) {
     ['Production build', 'npm run build'],
     ['Bundle budget', 'npm run check:bundle-budget'],
     ['Compose config', 'npm run check:compose-config'],
+    ['Compose quickstart', 'npm run test:compose-quickstart'],
     ['Deployment headers', 'npm run test:deployment'],
     ['Multi-deployment smoke', 'npm run test:multi-deployment'],
     ['Full local gate', 'npm run ci'],
@@ -171,7 +191,7 @@ function testingPlan(omitCommand) {
     '',
     '| Surface | Required evidence | Current implementation |',
     '| --- | --- | --- |',
-    '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `docs/testing-plan.md`; `scripts/check-testing-plan.mjs`; `scripts/check-deployment-headers.mjs`; `scripts/check-multi-deployment.mjs`; `README.md`. |',
+    '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `docs/testing-plan.md`; `scripts/check-testing-plan.mjs`; `scripts/check-deployment-headers.mjs`; `scripts/check-compose-quickstart.mjs`; `scripts/check-multi-deployment.mjs`; `README.md`. |',
     '',
     '## Adapter Rules',
   ].join('\n');

@@ -10,13 +10,16 @@ The release gate is:
 
 ```bash
 npm run check:compose-config
+npm run test:compose-quickstart
 npm run test:multi-deployment
 ```
 
-It builds the nginx image, starts two containers with isolated runtime
-profiles, verifies each `/formspec-runtime-config.js`, renders each instance in
-Chromium, checks the applied brand token target, submits the demo form, and
-fails on browser warnings/errors.
+The compose quickstart gate runs the documented `docker compose up --build`
+path on ports 8080/8081. The multi-deployment gate repeats the same profile,
+brand, and submit checks with Docker-assigned local ports. Both verify
+`/formspec-runtime-config.js`, render each instance in Chromium, check the
+applied brand token target, submit the demo form, and fail on browser
+warnings/errors.
 
 ## Local Smoke
 

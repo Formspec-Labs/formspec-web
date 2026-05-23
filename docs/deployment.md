@@ -43,6 +43,7 @@ Run the local multi-instance demo:
 
 ```bash
 npm run check:compose-config
+npm run test:compose-quickstart
 docker compose up --build
 ```
 
