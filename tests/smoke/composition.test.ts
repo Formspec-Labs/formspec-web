@@ -4,6 +4,7 @@ import { createDefaultComposition } from '../../src/composition/default.ts';
 import { createDemoComposition } from '../../src/composition/demo.ts';
 import { applyBrandTheme, getUpstreamTokenRegistry } from '../../src/theme/theme.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
+import type { OidcClientDriver } from '../../src/adapters/identity/oidc.ts';
 import {
   sampleFormResponse,
   sampleIntakeHandoff,
@@ -73,6 +74,55 @@ describe('composition root smoke', () => {
         },
       }),
     ).toThrow(/requires reference-http data ports/);
+  });
+
+  it('production OIDC composition bridges the current access token into HTTP adapters', async () => {
+    const oidcDriver: OidcClientDriver = {
+      getUser: vi.fn(async () => ({
+        access_token: 'oidc-access-token',
+        id_token: 'oidc-id-token',
+        profile: {
+          sub: 'provider-native-subject',
+          acr: 'urn:formspec:assurance:l3',
+        },
+        expires_at: 4_100_000_000,
+      })),
+    };
+    const { fetch, requests } = recordingFetch((request) => {
+      const path = new URL(request.url).pathname;
+      if (request.method === 'GET' && path === '/runtime/forms/demo-intake') {
+        return jsonResponse({ definition: demoSampleForm });
+      }
+      return jsonResponse({ title: `unexpected ${request.method} ${path}` }, 500);
+    });
+    vi.stubGlobal('fetch', fetch);
+    const c = createDefaultComposition({
+      ...departmentAppProfile,
+      identity: {
+        ...departmentAppProfile.identity,
+        oidc: {
+          ...departmentAppProfile.identity.oidc,
+          driver: oidcDriver,
+          subjectRefFactory: () => 'oidc:subject-hash',
+        },
+      },
+      ports: referenceHttpDataPorts(departmentAppProfile.ports),
+      referenceAdapters: {
+        formspecStack: {
+          ...departmentAppProfile.referenceAdapters?.formspecStack,
+          tenantHeaderDialect: 'formspec',
+          formspecServerUrl: 'https://formspec-server.example.test',
+        },
+      },
+    } as unknown as Parameters<typeof createDefaultComposition>[0]);
+    const [option] = await c.identityProvider.discover('L2');
+    if (!option) throw new Error('expected OIDC option');
+
+    const claim = await c.identityProvider.authenticate(option);
+    await c.definitionSource.getDefinition(c.initialDefinitionUrl);
+
+    expect(JSON.stringify(claim)).not.toContain('oidc-access-token');
+    expect(requests[0]?.headers.get('authorization')).toBe('Bearer oidc-access-token');
   });
 
   it('production publicPortal composition carries server anonymous sessions through draft submit', async () => {

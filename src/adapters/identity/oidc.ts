@@ -123,6 +123,19 @@ export class OidcAdapter implements IdentityProvider {
     this.session.set(null);
   }
 
+  async currentAccessToken(): Promise<string | undefined> {
+    const current = await this.driver.getUser();
+    const token = accessTokenFromUser(current);
+    if (token || !this.driver.signinSilent || !tokenNeedsSilentRenewal(current)) {
+      return token;
+    }
+    try {
+      return accessTokenFromUser(await this.driver.signinSilent());
+    } catch {
+      return undefined;
+    }
+  }
+
   subscribe(listener: (claim: IdentityClaim | null) => void): Unsubscribe {
     return this.session.subscribe(listener);
   }
@@ -185,6 +198,20 @@ async function defaultSubjectRefFactory(issuer: string, subject: string): Promis
 
 function expiresAt(user: OidcUserLike): string | undefined {
   return user.expires_at ? new Date(user.expires_at * 1000).toISOString() : undefined;
+}
+
+function accessTokenFromUser(user: OidcUserLike | null | undefined): string | undefined {
+  if (!user?.access_token || tokenNeedsSilentRenewal(user)) {
+    return undefined;
+  }
+  return user.access_token;
+}
+
+function tokenNeedsSilentRenewal(user: OidcUserLike | null | undefined): boolean {
+  if (!user?.expires_at) {
+    return false;
+  }
+  return user.expires_at * 1000 <= Date.now();
 }
 
 function hex(bytes: Uint8Array): string {

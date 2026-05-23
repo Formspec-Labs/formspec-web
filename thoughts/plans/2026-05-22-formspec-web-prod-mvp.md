@@ -383,9 +383,10 @@ surface.
 
 **Gate note (2026-05-22):** M7 is split. M7a may close anonymous-only client
 identity lifecycle and multi-instance proof. Full M7 / M7b remains blocked by
-EXT-23 in `formspec-server`, and the web composition still needs a bounded
-access-token provider bridge for `HttpClient.accessToken` before OIDC bearer
-tokens can reach the reference server without leaking into `IdentityClaim`.
+EXT-23 in `formspec-server`. The web composition now has the bounded
+access-token provider bridge for `HttpClient.accessToken`, so OIDC bearer tokens
+can reach the reference server without leaking into `IdentityClaim`; M7b still
+needs the explicit OIDC sign-in flow and server-side verifier before sign-off.
 
 ---
 

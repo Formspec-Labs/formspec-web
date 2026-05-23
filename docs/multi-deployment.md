@@ -41,4 +41,4 @@ nginx containers and observed zero console warnings/errors.
 M7a compose is anonymous-only. The respondent runtime only auto-authenticates
 anonymous identity at boot; OIDC redirects and magic-link sends require an
 explicit sign-in surface. Full side-by-side OIDC isolation waits for EXT-23 and
-the web access-token bridge described in `docs/identity/integration.md`.
+the explicit sign-in/server-validation proof.

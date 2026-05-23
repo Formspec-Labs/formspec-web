@@ -332,7 +332,7 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Owning repo:** formspec-server
 **Closes:** direct token trust decision for the formspec-stack OIDC reference composition.
 **FW rows blocked:** FW-0063 (full M7/M7b production identity close)
-**Shape:** per-tenant trusted issuer config, JWKS client, RS256 verifier, and middleware path that accepts `Authorization: Bearer ...` from formspec-web after the web-side access-token bridge lands.
+**Shape:** per-tenant trusted issuer config, JWKS client, RS256 verifier, and middleware path that accepts `Authorization: Bearer ...` from formspec-web. The web-side access-token bridge has landed; server validation remains the gating work.
 **Fixture status:** none.
 **Status:** filed; gates M7.
 

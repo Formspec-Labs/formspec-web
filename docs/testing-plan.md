@@ -70,7 +70,7 @@ These checks are not automated yet and block release sign-off:
 | NVDA sweep | `docs/ux/accessibility.md` | Pending manual run. |
 | Lighthouse mobile >= 90 and FCP < 1.5 s | `docs/ux/responsive.md` | Open performance work. |
 | Production Locale Documents from server | `docs/ux/i18n.md` | Demo-proven only until server emits concrete Locale Documents. |
-| Full OIDC server validation | `docs/identity/integration.md` | Blocked by EXT-23 and web access-token bridge. |
+| Full OIDC server validation | `docs/identity/integration.md` | Blocked by EXT-23 and explicit OIDC sign-in flow. |
 | Cross-reload or cross-device draft resume | `docs/adapters/draft-store.md` | Blocked by EXT-26. |
 | Session-bound anonymous draft update | `docs/adapters/draft-store.md` | Blocked by EXT-27. |
 

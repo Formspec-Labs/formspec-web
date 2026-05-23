@@ -26,9 +26,12 @@ Full side-by-side OIDC proof waits for two prerequisites:
 
 - EXT-23 lands in `formspec-server` so the backend can validate per-tenant OIDC
   tokens against JWKS with RS256.
-- `formspec-web` wires a bounded access-token provider into the HTTP adapter
-  composition so `Authorization: Bearer ...` is available to the reference
-  server without putting raw tokens in `IdentityClaim`.
+- The respondent shell grows the explicit OIDC sign-in flow needed to start the
+  redirect deliberately.
+
+The bounded access-token provider is already wired into the HTTP adapter
+composition, so `Authorization: Bearer ...` is available to the reference server
+after an OIDC claim exists without putting raw tokens in `IdentityClaim`.
 
 Until both are done, do not treat `departmentApp` as an end-to-end production
 OIDC demonstration. It remains a configuration profile and architecture target.

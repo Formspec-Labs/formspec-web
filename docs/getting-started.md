@@ -27,7 +27,7 @@ FORMSPEC_WEB_SERVER_URL=https://formspec-server.example.test docker compose up -
 
 With a server URL, `publicPortal` uses the reference anonymous-session draft and
 submit path. `departmentApp` is OIDC-required and fails closed until the explicit
-sign-in surface and M7b bearer-token bridge land.
+sign-in surface and EXT-23 server validation land.
 
 Production runtime config is emitted by `docker/40-formspec-runtime-config.sh`
 from `FORMSPEC_WEB_*` environment variables.

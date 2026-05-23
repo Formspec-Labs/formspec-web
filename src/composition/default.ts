@@ -11,6 +11,7 @@ import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import { demoSampleFormUrl } from '../demo/index.ts';
+import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import type { IntakeHandoff } from '../ports/submit-transport.ts';
@@ -31,12 +32,19 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
   assertReferenceHttpDataPorts(config);
 
   const notificationDelivery = stubNotificationDelivery();
-  const httpConfig = {
+  const baseHttpConfig = {
     baseUrl: serverUrl,
     tenantBinding: config.tenantBinding,
   };
   const initialDefinitionUrl = productionInitialDefinitionUrl(serverUrl);
-  const anonymousSessions = new AnonymousSessionBridge(httpConfig);
+  const anonymousSessions = new AnonymousSessionBridge(baseHttpConfig);
+  const identityBinding = identityProviderFor(config, notificationDelivery, {
+    anonymousSessions,
+    initialDefinitionUrl,
+  });
+  const httpConfig = identityBinding.accessToken
+    ? { ...baseHttpConfig, accessToken: identityBinding.accessToken }
+    : baseHttpConfig;
   const draftStore = new HttpDraftStore({
     ...httpConfig,
     anonymousSessionToken: (key) => anonymousSessions.tokenForDraftKey(key),
@@ -52,10 +60,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       draftIdResolver: (handoff) => draftIdFromHandoff(handoff, draftStore),
       anonymousSessionToken: (handoff) => anonymousSessions.tokenForHandoff(handoff),
     }),
-    identityProvider: identityProviderFor(config, notificationDelivery, {
-      anonymousSessions,
-      initialDefinitionUrl,
-    }),
+    identityProvider: identityBinding.provider,
     notificationDelivery,
   };
 }
@@ -70,6 +75,11 @@ function assertReferenceHttpDataPorts(config: FormspecWebConfig): void {
   }
 }
 
+interface IdentityBinding {
+  provider: IdentityProvider;
+  accessToken?: AccessTokenProvider;
+}
+
 function identityProviderFor(
   config: FormspecWebConfig,
   notificationDelivery: ReturnType<typeof stubNotificationDelivery>,
@@ -77,42 +87,50 @@ function identityProviderFor(
     anonymousSessions: AnonymousSessionBridge;
     initialDefinitionUrl: string;
   },
-): IdentityProvider {
+): IdentityBinding {
   if (config.ports.identityProvider === 'anonymous') {
     if (productionContext) {
-      return new HttpAnonymousIdentityProvider({
-        bridge: productionContext.anonymousSessions,
-        formUrl: productionContext.initialDefinitionUrl,
-      });
+      return {
+        provider: new HttpAnonymousIdentityProvider({
+          bridge: productionContext.anonymousSessions,
+          formUrl: productionContext.initialDefinitionUrl,
+        }),
+      };
     }
-    return new AnonymousAdapter();
+    return { provider: new AnonymousAdapter() };
   }
 
   if (config.ports.identityProvider === 'oidc' && config.identity.oidc) {
-    return new OidcAdapter(config.identity.oidc);
+    const provider = new OidcAdapter(config.identity.oidc);
+    return {
+      provider,
+      accessToken: () => provider.currentAccessToken(),
+    };
   }
 
   const magicLink =
     config.identity.mode === 'anonymous-allowed' ? config.identity.magicLink : undefined;
   if (config.ports.identityProvider === 'magic-link' && magicLink) {
-    return new MagicLinkAdapter({
-      notificationDelivery,
-      callbackUrl: magicLink.callbackPath,
-      to: 'respondent@example.test',
-      minAssurance: magicLink.minAssurance,
-      exchange: async () => ({
-        provider: 'magic-link',
-        adapter: 'magic-link@0',
-        subjectRef: 'magic-link:pending',
-        credentialType: 'provider-assertion',
-        subjectBinding: 'respondent',
-        assuranceLevel: magicLink.minAssurance,
-        privacyTier: 'pseudonymous',
+    return {
+      provider: new MagicLinkAdapter({
+        notificationDelivery,
+        callbackUrl: magicLink.callbackPath,
+        to: 'respondent@example.test',
+        minAssurance: magicLink.minAssurance,
+        exchange: async () => ({
+          provider: 'magic-link',
+          adapter: 'magic-link@0',
+          subjectRef: 'magic-link:pending',
+          credentialType: 'provider-assertion',
+          subjectBinding: 'respondent',
+          assuranceLevel: magicLink.minAssurance,
+          privacyTier: 'pseudonymous',
+        }),
       }),
-    });
+    };
   }
 
-  return new AnonymousAdapter();
+  return { provider: new AnonymousAdapter() };
 }
 
 function draftIdFromHandoff(

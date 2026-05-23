@@ -48,6 +48,72 @@ describe('OidcAdapter', () => {
     expect('sub' in claim).toBe(false);
   });
 
+  it('exposes the current bearer token without leaking it into the identity claim', async () => {
+    const driver: OidcClientDriver = {
+      getUser: vi.fn(async () => ({
+        access_token: 'access-token',
+        id_token: 'id-token',
+        profile: {
+          sub: 'provider-native-subject',
+          acr: 'urn:formspec:assurance:l3',
+        },
+        expires_at: 1_800_000_000,
+      })),
+    };
+    const adapter = new OidcAdapter({
+      issuer: 'https://idp.example.test',
+      clientId: 'formspec-web',
+      minAssurance: 'L3',
+      driver,
+      subjectRefFactory: () => 'oidc:subject-hash',
+    });
+    const [option] = await adapter.discover('L3');
+    if (!option) throw new Error('expected OIDC option');
+
+    await expect(adapter.currentAccessToken()).resolves.toBe('access-token');
+    const claim = await adapter.authenticate(option);
+
+    expect(JSON.stringify(claim)).not.toContain('access-token');
+    expect(claim).toMatchObject({
+      credentialRef: 'oidc:https://idp.example.test:id-token',
+      subjectRef: 'oidc:subject-hash',
+    });
+  });
+
+  it('uses non-interactive silent renewal for expired access tokens', async () => {
+    const signinRedirect = vi.fn(async () => undefined);
+    const driver: OidcClientDriver = {
+      getUser: vi.fn(async () => ({
+        access_token: 'expired-token',
+        profile: {
+          sub: 'provider-native-subject',
+          acr: 'urn:formspec:assurance:l3',
+        },
+        expires_at: 1,
+      })),
+      signinSilent: vi.fn(async () => ({
+        access_token: 'renewed-token',
+        profile: {
+          sub: 'provider-native-subject',
+          acr: 'urn:formspec:assurance:l3',
+        },
+        expires_at: 4_100_000_000,
+      })),
+      signinRedirect,
+    };
+    const adapter = new OidcAdapter({
+      issuer: 'https://idp.example.test',
+      clientId: 'formspec-web',
+      minAssurance: 'L3',
+      driver,
+      subjectRefFactory: () => 'oidc:subject-hash',
+    });
+
+    await expect(adapter.currentAccessToken()).resolves.toBe('renewed-token');
+    expect(driver.signinSilent).toHaveBeenCalledOnce();
+    expect(signinRedirect).not.toHaveBeenCalled();
+  });
+
   it('fails instead of silently downgrading unknown ACR values', () => {
     expect(() => assuranceLevelFromAcr('unknown-acr', {})).toThrow(/ACR/);
   });

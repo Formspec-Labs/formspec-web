@@ -33,6 +33,7 @@ below the selected option's `minAssurance` also fails.
 ## Current Gate
 
 Full OIDC production close is blocked by EXT-23 in `formspec-server`: per-tenant
-trusted issuer config, JWKS client, and RS256 verifier. There is also a web-side
-follow-up to bridge the current OIDC access token into `HttpClient.accessToken`
-without leaking raw tokens into `IdentityClaim`.
+trusted issuer config, JWKS client, and RS256 verifier. The web-side bridge now
+passes the current OIDC access token into `HttpClient.accessToken` without
+leaking raw tokens into `IdentityClaim`; end-to-end sign-off still waits for the
+server verifier and explicit OIDC sign-in flow.
