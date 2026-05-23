@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { freezeComposition, CompositionIncoherenceError } from './composition-coherence.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
-import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 
