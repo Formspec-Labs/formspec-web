@@ -28,7 +28,7 @@ The respondent library primitive belongs in `formspec`. The web app may render o
 - Cross-issuer aggregation is client-side only. A server may store encrypted material for the respondent, but it MUST NOT readably aggregate obligations, documents, or history across tenants or issuers.
 - Production storage is client-encrypted. The intended production path is passkey-derived key material with integrity-stack HPKE primitives.
 - Presentation is deny-by-default / explicit-consent. OpenID4VP and W3C VC Data Model 2.0 are protocol/data-model profiles, not implicit grants.
-- Applicant status remains WOS-owned. formspec-web `StatusReader` consumes the WOS applicant API projection; the respondent library may reference or cache that projection, but it does not redefine its vocabulary.
+- Applicant status remains WOS-owned. formspec-web `StatusReader` consumes WOS applicant API resource shapes; the respondent library may reference or cache a projection, but it does not redefine its vocabulary.
 
 ### DI shape
 

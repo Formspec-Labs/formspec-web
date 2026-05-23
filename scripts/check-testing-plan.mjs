@@ -119,6 +119,8 @@ const requiredCoverageRows = new Map([
       'tests/adapter-conformance/submit-transport/conformance.test.ts',
       'tests/adapter-conformance/identity-provider/conformance.test.ts',
       'tests/adapter-conformance/notification-delivery/conformance.test.ts',
+      'tests/adapter-conformance/respondent-place-source/conformance.test.ts',
+      'tests/adapter-conformance/status-reader/conformance.test.ts',
       'src/adapter-conformance/index.ts',
       'package.json',
       'docs/architecture.md',
@@ -127,6 +129,8 @@ const requiredCoverageRows = new Map([
       'docs/ports/submit-transport.md',
       'docs/ports/identity-provider.md',
       'docs/ports/notification-delivery.md',
+      'docs/ports/respondent-place-source.md',
+      'docs/ports/status-reader.md',
     ],
   ],
   [

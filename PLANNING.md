@@ -429,6 +429,8 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Journey:** [J-021](JOURNEYS.md#j-021--i-hit-submit-where-is-it-now-and-what-do-i-owe-next)
 - **Done:** After submit, the user has a real status page: received, queued, in review with which unit, decision drafted, issued — with timing drawn from actual recent throughput, not vendor estimates. Reachable without an account.
 - **Consumes ports:** `StatusReader` (returns case-status shape conforming to the `work-spec/schemas/api/applicant.schema.json` contract). **Port shape is post-MVP per web ADR-0009 §"Not in the constitutional inventory" (b) — will be ratified as its own ADR when this row's consumer code lands.**
+- **Progress (stub-backed DI slice 2026-05-23):** `StatusReader` is ratified as a WOS applicant API resource port with a stub adapter and conformance suite. `RespondentRuntime` reads WOS-shaped status feedback for submissions referenced by the Respondent Library sidecar and renders it in the respondent-place panel.
+- **Deviations:** The current surface is an in-form status/history panel, not the standalone no-account status page with realistic throughput timing. The full production page remains blocked on a real applicant-API reference adapter.
 - **Blocked on:** at least one `StatusReader` reference adapter implementation. The formspec-stack reference composition ships `ProxiedApplicantStatusAdapter` (proxies through formspec-server to WOS — see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)), which depends on `workspec-server`'s applicant-API implementation landing (schema is authored per `work-spec/specs/api/applicant.md`; reference impl pending). Adopters running their own case-management backend wire a different adapter against the same `StatusReader` port.
 - **Anti-patterns:** AP-006, AP-013.
 
@@ -587,6 +589,8 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Persona:** Respondent
 - **Journey:** [J-039](JOURNEYS.md#j-039--show-me-what-i-owe-whom-across-every-form-ive-ever-filled-out)
 - **Done:** A cross-sender view the respondent owns: what's due, to whom, by when, across every issuer using the platform.
+- **Progress (stub-backed DI slice 2026-05-23):** `RespondentPlaceSource` now exposes sidecar obligations through a stub/reference interface, adapter conformance, composition wiring, and the visible `RespondentRuntime` respondent-place panel.
+- **Deviations:** This slice proves the DI seam and visible obligations stream with demo/stub data. Production cross-issuer fan-out and token-bag aggregation remain post-MVP adapter work.
 - **Blocked on:** queue SC-3 (Respondent Library Sidecar) + XS-2 (client-side multi-tenant token bag per ADR-0068 D-1 + D-3) + FW-0047 design output.
 - **Anti-patterns:** AP-006, AP-014.
 
@@ -597,6 +601,8 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Persona:** Respondent
 - **Journey:** [J-042](JOURNEYS.md#j-042--my-documents-are-in-my-library--i-share-them-with-each-form-on-my-terms)
 - **Done:** The respondent's documents — passport, license, tax forms, medical records, professional credentials — live on their side and are recognized by what they are, not by what each form happens to call them. When a new form asks for one, the user chooses how much to share. Permissions are revocable per presentation.
+- **Progress (stub-backed DI slice 2026-05-23):** `RespondentPlaceSource` renders saved document metadata from the Respondent Library sidecar in the respondent-place panel, with document-kind taxonomy guarded by conformance tests.
+- **Deviations:** Selective-presentation ceremony, revocation controls, VC/OpenID4VP adapters, and real encrypted wallet storage are not implemented in this slice; the reference interface and stub make those integrations explicit.
 - **Blocked on:** queue SC-3 (Respondent Library Sidecar) + FW-0047 design output. Adopts W3C Verifiable Credentials Data Model 2.0 + OpenID4VP via `@spruceid/didkit-wasm` + `@sphereon/oid4vc`.
 - **Anti-patterns:** AP-006, AP-024.
 
@@ -607,6 +613,8 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Persona:** Respondent
 - **Journey:** [J-043](JOURNEYS.md#j-043--show-me-every-form-ive-ever-submitted-started-or-signed)
 - **Done:** A searchable, filterable, exportable view of every draft, submission, and signed record the user has on the platform.
+- **Progress (stub-backed DI slice 2026-05-23):** `RespondentRuntime` now renders prior submissions from `RespondentPlaceSource`, links each known submission to WOS applicant status through `StatusReader`, and test-covers the visible history/feedback path.
+- **Deviations:** Search, filters, export, draft history, signed-record detail, and production persistence remain post-MVP. This slice implements the respondent-history interface and visible stub-backed submission feedback.
 - **Blocked on:** queue SC-3 + FW-0047 design + FW-0055 + FW-0056. Together, this trio is the architectural shift from transit to place.
 - **Anti-patterns:** AP-006.
 
