@@ -15,7 +15,7 @@ the proof that covers it.
 | Unit and smoke tests | `npm run test:unit` | Yes | HTTP adapters, identity adapters, respondent flow helpers, runtime config, sample form, composition smoke, idempotency, Problem JSON. |
 | Vendor firewall | `npm run check:vendor-leaks` | Yes | Prevents provider-native vocabulary and disallowed vendor names from leaking through portable surfaces. |
 | Upstream theme sync | `npm run check:upstream-theme` | Yes | Verifies copied upstream theme assets are byte-for-byte synced and sourced from Apache-2.0 manifests. |
-| Browser accessibility | `npm run test:e2e` | Yes | Playwright Chromium smoke with axe checks for demo, load-error, and mobile tap-target surfaces. |
+| Browser accessibility | `npm run test:e2e` | Yes | Playwright Chromium smoke with axe checks for demo, load-error, OIDC sign-in, and mobile tap-target surfaces. |
 | Production build | `npm run build` | Yes | Vite production bundle and TypeScript build. |
 | Full local gate | `npm run ci` | Yes | Runs all automated gates above in release order. |
 

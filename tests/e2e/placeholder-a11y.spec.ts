@@ -47,6 +47,21 @@ test('load error surface has no automated accessibility violations', async ({ pa
   expect(accessibilityScanResults.violations).toEqual([]);
 });
 
+test('oidc-required sign-in surface has no automated accessibility violations', async ({ page }) => {
+  await page.route('**/formspec-runtime-config.js', async (route) => {
+    await route.fulfill({
+      contentType: 'application/javascript',
+      body: 'window.__FORMSPEC_RUNTIME_CONFIG__ = { profileName: "departmentApp", formspecServerUrl: "https://formspec-server.example.test" };',
+    });
+  });
+
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in with https://idp.example.gov/realms/formspec' })).toBeVisible();
+  const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScanResults.violations).toEqual([]);
+});
+
 test('mobile viewport keeps primary controls at tap-target size', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
