@@ -44,6 +44,13 @@ describe('check-testing-plan', () => {
     expect(result.stderr).toContain('coverage matrix references missing path "scripts/check-testing-plan.mjs"');
   });
 
+  it('rejects missing root-level documentation paths from the coverage matrix', () => {
+    const result = runCheck(createFixture({ omitPath: 'README.md' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('coverage matrix references missing path "README.md"');
+  });
+
   it('rejects referenced test evidence that is not covered by CI test commands', () => {
     const result = runCheck(createFixture({ unitScript: 'vitest run tests/app tests/scripts' }));
 
@@ -111,6 +118,7 @@ function createFixture(options = {}) {
     'tests/scripts/check-testing-plan.test.mjs',
     'scripts/check-deployment-headers.mjs',
     'scripts/check-multi-deployment.mjs',
+    'README.md',
   ]) {
     if (path !== options.omitPath) {
       write(root, path, '');
@@ -163,7 +171,7 @@ function testingPlan(omitCommand) {
     '',
     '| Surface | Required evidence | Current implementation |',
     '| --- | --- | --- |',
-    '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `docs/testing-plan.md`; `scripts/check-testing-plan.mjs`; `scripts/check-deployment-headers.mjs`; `scripts/check-multi-deployment.mjs`. |',
+    '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `docs/testing-plan.md`; `scripts/check-testing-plan.mjs`; `scripts/check-deployment-headers.mjs`; `scripts/check-multi-deployment.mjs`; `README.md`. |',
     '',
     '## Adapter Rules',
   ].join('\n');

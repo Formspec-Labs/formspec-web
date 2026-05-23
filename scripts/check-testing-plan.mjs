@@ -286,7 +286,8 @@ function looksLikePath(reference) {
     reference.startsWith('docs/') ||
     reference.startsWith('scripts/') ||
     reference.startsWith('src/') ||
-    reference.startsWith('tests/')
+    reference.startsWith('tests/') ||
+    /^[A-Za-z0-9_.-]+\.(?:json|md|toml|ya?ml)$/.test(reference)
   );
 }
 

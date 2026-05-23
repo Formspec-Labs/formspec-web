@@ -25,6 +25,7 @@ The app boots in demo mode and renders the bundled sample form when
 Docker quickstart:
 
 ```sh
+npm run check:compose-config
 docker compose up --build
 ```
 
@@ -32,6 +33,16 @@ The compose file starts the public portal on `http://localhost:8080` and the
 department profile on `http://localhost:8081`.
 
 See [docs/getting-started.md](docs/getting-started.md).
+
+Automated multi-deployment smoke:
+
+```sh
+npm run test:multi-deployment
+```
+
+That gate builds the nginx image, starts both reference profiles with isolated
+runtime config, checks brand isolation, submits the demo form in Chromium, and
+fails on browser warnings/errors.
 
 Local gates:
 
@@ -41,6 +52,19 @@ npm run ci
 
 See [docs/testing-plan.md](docs/testing-plan.md) for the full gate matrix,
 conformance requirements, and manual release blockers.
+
+## Release State
+
+The current MVP proof is a local web deployment: Docker/nginx serves the static
+respondent shell, `docker-compose.yml` boots the `publicPortal` and
+`departmentApp` web instances, and `npm run ci` gates the port conformance,
+browser accessibility smoke, bundle budget, deployment headers, and
+multi-deployment smoke.
+
+Do not treat this as full production release sign-off yet. Manual VoiceOver and
+NVDA sweeps are pending, production Locale Documents still depend on the
+reference server, full OIDC server validation is blocked by EXT-23, and
+server-backed draft resume/update semantics are blocked by EXT-26 and EXT-27.
 
 Container smoke:
 
