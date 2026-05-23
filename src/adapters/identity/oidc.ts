@@ -59,6 +59,13 @@ export const defaultAcrAssuranceMap: AcrAssuranceMap = {
   'urn:formspec:assurance:l4': 'L4',
 };
 
+class IdentityInteractionStartedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'IdentityInteractionStartedError';
+  }
+}
+
 export class OidcAdapter implements IdentityProvider {
   private readonly config: OidcAdapterConfig;
   private readonly driver: OidcClientDriver;
@@ -146,8 +153,13 @@ export class OidcAdapter implements IdentityProvider {
     if (user) {
       return user;
     }
-    await this.driver.signinRedirect?.();
-    throw new Error('OIDC authentication redirect started before a user claim was available');
+    if (!this.driver.signinRedirect) {
+      throw new Error('OIDC authentication redirect is not configured');
+    }
+    await this.driver.signinRedirect();
+    throw new IdentityInteractionStartedError(
+      'OIDC authentication redirect started before a user claim was available',
+    );
   }
 }
 

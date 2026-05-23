@@ -37,7 +37,7 @@ test('load error surface has no automated accessibility violations', async ({ pa
   await page.route('**/formspec-runtime-config.js', async (route) => {
     await route.fulfill({
       contentType: 'application/javascript',
-      body: 'window.__FORMSPEC_RUNTIME_CONFIG__ = { formspecServerUrl: "http://127.0.0.1:59999" };',
+      body: 'window.__FORMSPEC_RUNTIME_CONFIG__ = { profileName: "publicPortal", formspecServerUrl: "http://127.0.0.1:59999" };',
     });
   });
 

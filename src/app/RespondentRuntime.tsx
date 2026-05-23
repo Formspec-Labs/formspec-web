@@ -25,7 +25,7 @@ import {
 } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
-import type { IdentityClaim, IdentityProvider } from '../ports/identity-provider.ts';
+import type { IdentityClaim, IdentityProvider, IdpOption } from '../ports/identity-provider.ts';
 import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
@@ -34,7 +34,9 @@ import {
   buildIntakeHandoff,
   hydrateEngineFromResponse,
   identitySubjectChanged,
+  isIdentityInteractionStarted,
   selectBootIdentityOption,
+  signInOptionsForIdentityPolicy,
   subjectRefInvalidatedByIdentityChange,
 } from './respondent-flow.ts';
 
@@ -47,6 +49,12 @@ const engineReady = initFormspecEngine();
 
 type RespondentState =
   | { status: 'loading' }
+  | {
+      status: 'auth-required';
+      options: IdpOption[];
+      authenticating: boolean;
+      error?: unknown;
+    }
   | {
       status: 'ready';
       definition: FormDefinition;
@@ -109,13 +117,26 @@ export function RespondentRuntime({
     };
 
     void (async () => {
-      const claim = await bootClaim(composition.identityProvider);
+      const boot = await bootIdentity(composition.identityProvider);
       if (cancelled) {
         return;
       }
-      await applyReadyState(claim);
-      if (cancelled) {
-        return;
+      const signInOptions = signInOptionsForIdentityPolicy({
+        options: boot.options,
+        identityMode: config.identity.mode,
+        runtimeMode: composition.mode,
+      });
+      if (boot.claim || signInOptions.length === 0) {
+        await applyReadyState(boot.claim);
+        if (cancelled) {
+          return;
+        }
+      } else {
+        setRespondentState({
+          status: 'auth-required',
+          options: signInOptions,
+          authenticating: false,
+        });
       }
       unsubscribe = composition.identityProvider.subscribe((nextClaim) => {
         const invalidatedSubjectRef = subjectRefInvalidatedByIdentityChange(activeClaim, nextClaim);
@@ -152,11 +173,54 @@ export function RespondentRuntime({
     };
   }, [composition]);
 
+  const handleSignIn = async (option: IdpOption): Promise<void> => {
+    setRespondentState((current) =>
+      current.status === 'auth-required'
+        ? { ...current, authenticating: true, error: undefined }
+        : current,
+    );
+    try {
+      await composition.identityProvider.authenticate(option);
+    } catch (error) {
+      if (isIdentityInteractionStarted(error)) {
+        setRespondentState((current) =>
+          current.status === 'auth-required'
+            ? { ...current, authenticating: true, error: undefined }
+            : current,
+        );
+        return;
+      }
+      setRespondentState((current) =>
+        current.status === 'auth-required'
+          ? { ...current, authenticating: false, error }
+          : {
+              status: 'auth-required',
+              options: [option],
+              authenticating: false,
+              error,
+            },
+      );
+    }
+  };
+
   if (respondentState.status === 'loading') {
     return (
       <div className="submit-notice" role="status">
         Loading form
       </div>
+    );
+  }
+
+  if (respondentState.status === 'auth-required') {
+    return (
+      <AuthRequiredSurface
+        authenticating={respondentState.authenticating}
+        error={respondentState.error}
+        options={respondentState.options}
+        onSignIn={(option) => {
+          void handleSignIn(option);
+        }}
+      />
     );
   }
 
@@ -248,10 +312,15 @@ export function RespondentRuntime({
   );
 }
 
-async function bootClaim(identityProvider: IdentityProvider): Promise<IdentityClaim | null> {
+async function bootIdentity(
+  identityProvider: IdentityProvider,
+): Promise<{ claim: IdentityClaim | null; options: IdpOption[] }> {
   const options = await identityProvider.discover();
   const option = selectBootIdentityOption(options);
-  return option ? identityProvider.authenticate(option) : null;
+  return {
+    options,
+    claim: option ? await identityProvider.authenticate(option) : null,
+  };
 }
 
 async function createReadyState(
@@ -390,6 +459,64 @@ function UnbrandedCover({
       {description ? <p>{description}</p> : null}
     </header>
   );
+}
+
+function AuthRequiredSurface({
+  authenticating,
+  error,
+  options,
+  onSignIn,
+}: {
+  authenticating: boolean;
+  error?: unknown;
+  options: IdpOption[];
+  onSignIn: (option: IdpOption) => void;
+}) {
+  const detail = error ? problemDetail(error) : undefined;
+  return (
+    <section className="auth-required" aria-labelledby="auth-required-title">
+      <p className="respondent-header__kicker">Sign in required</p>
+      <h1 id="auth-required-title">Sign in to continue</h1>
+      <p>This form requires a verified sign-in before it can be loaded.</p>
+      <div className="auth-required__actions">
+        {options.map((option) => (
+          <button
+            disabled={authenticating}
+            key={idpOptionKey(option)}
+            type="button"
+            onClick={() => onSignIn(option)}
+          >
+            {authenticating ? 'Opening sign-in' : `Sign in with ${idpOptionLabel(option)}`}
+          </button>
+        ))}
+      </div>
+      {detail ? (
+        <div className="submit-notice submit-notice--error" role="alert">
+          {detail.message}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function idpOptionKey(option: IdpOption): string {
+  if (option.kind === 'oidc') {
+    return `${option.kind}:${option.issuer}`;
+  }
+  if (option.kind === 'magic-link') {
+    return `${option.kind}:${option.channel}`;
+  }
+  return option.kind;
+}
+
+function idpOptionLabel(option: IdpOption): string {
+  if (option.kind === 'oidc') {
+    return option.displayName;
+  }
+  if (option.kind === 'magic-link') {
+    return option.channel === 'sms' ? 'SMS link' : 'email link';
+  }
+  return 'anonymous access';
 }
 
 function SubmitNotice({ state }: { state: SubmitState }) {

@@ -22,16 +22,16 @@ Both omit `FORMSPEC_WEB_SERVER_URL`, so the reference app stays in demo mode
 and uses the anonymous boot path. This proves profile and brand isolation for
 two deployed web instances without asserting server-backed OIDC.
 
-Full side-by-side OIDC proof waits for two prerequisites:
+Full side-by-side OIDC proof waits for the server prerequisite:
 
 - EXT-23 lands in `formspec-server` so the backend can validate per-tenant OIDC
   tokens against JWKS with RS256.
-- The respondent shell grows the explicit OIDC sign-in flow needed to start the
-  redirect deliberately.
 
 The bounded access-token provider is already wired into the HTTP adapter
 composition, so `Authorization: Bearer ...` is available to the reference server
 after an OIDC claim exists without putting raw tokens in `IdentityClaim`.
 
-Until both are done, do not treat `departmentApp` as an end-to-end production
-OIDC demonstration. It remains a configuration profile and architecture target.
+The respondent shell also renders explicit sign-in for production OIDC-required
+profiles. Until EXT-23 lands, do not treat `departmentApp` as an end-to-end
+production OIDC demonstration. It remains a configuration profile and
+architecture target.

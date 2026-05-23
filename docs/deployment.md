@@ -49,8 +49,8 @@ Both services leave `FORMSPEC_WEB_SERVER_URL` empty in M7a/M8 local compose, so
 they prove static deployment, profile selection, and brand isolation without
 claiming server-backed OIDC. When the variable is provided, compose forwards it
 to both services: `publicPortal` uses the reference anonymous-session draft and
-submit path, while `departmentApp` fails closed until the M7b OIDC sign-in flow
-and EXT-23 server validation land.
+submit path, while `departmentApp` renders explicit sign-in and remains blocked
+from full server-backed OIDC proof until EXT-23 server validation lands.
 
 ## Deferred Server Stack
 

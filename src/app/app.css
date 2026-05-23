@@ -201,6 +201,50 @@ select {
   color: #7f1d1d;
 }
 
+.auth-required {
+  display: grid;
+  gap: 0.85rem;
+  width: min(100% - 2rem, 34rem);
+  margin: 4rem auto;
+  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border-radius: 8px;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  background: var(--formspec-color-card, #fff);
+}
+
+.auth-required h1,
+.auth-required p {
+  margin: 0;
+}
+
+.auth-required h1 {
+  color: var(--formspec-color-foreground, #1f2933);
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+.auth-required__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.auth-required__actions button {
+  min-height: 44px;
+  border: 1px solid var(--formspec-color-primary, #155e56);
+  border-radius: 8px;
+  padding: 0.65rem 0.95rem;
+  background: var(--formspec-color-primary, #155e56);
+  color: var(--formspec-color-primary-foreground, #fff);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.auth-required__actions button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
 .respondent-flow .formspec-field,
 .respondent-flow .formspec-fieldset {
   border-radius: 8px;

@@ -7,7 +7,9 @@ import {
   buildIntakeHandoff,
   hydrateEngineFromData,
   identitySubjectChanged,
+  isIdentityInteractionStarted,
   selectBootIdentityOption,
+  signInOptionsForIdentityPolicy,
   subjectRefInvalidatedByIdentityChange,
 } from '../../src/app/respondent-flow.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
@@ -92,6 +94,44 @@ describe('respondent flow helpers', () => {
         { kind: 'anonymous', minAssurance: 'L1' },
       ]),
     ).toMatchObject({ kind: 'anonymous' });
+  });
+
+  it('offers explicit sign-in options only for production OIDC-required profiles', () => {
+    const options = [
+      { kind: 'oidc', issuer: 'https://idp.example.test', displayName: 'IdP', minAssurance: 'L3' },
+      { kind: 'magic-link', channel: 'email', minAssurance: 'L2' },
+      { kind: 'anonymous', minAssurance: 'L1' },
+    ] as const;
+
+    expect(
+      signInOptionsForIdentityPolicy({
+        options,
+        identityMode: 'oidc-required',
+        runtimeMode: 'production',
+      }),
+    ).toEqual([options[0]]);
+    expect(
+      signInOptionsForIdentityPolicy({
+        options,
+        identityMode: 'oidc-required',
+        runtimeMode: 'demo',
+      }),
+    ).toEqual([]);
+    expect(
+      signInOptionsForIdentityPolicy({
+        options,
+        identityMode: 'anonymous-allowed',
+        runtimeMode: 'production',
+      }),
+    ).toEqual([]);
+  });
+
+  it('recognizes the narrow identity redirect-started signal', () => {
+    const redirectStarted = new Error('redirect started');
+    redirectStarted.name = 'IdentityInteractionStartedError';
+
+    expect(isIdentityInteractionStarted(redirectStarted)).toBe(true);
+    expect(isIdentityInteractionStarted(new Error('OIDC unavailable'))).toBe(false);
   });
 
   it('invalidates the prior draft subject when identity changes or revokes', () => {

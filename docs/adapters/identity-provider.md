@@ -14,12 +14,11 @@ All adapters use `subscribe()` to emit authenticate and revoke transitions.
 The default formspec-stack composition bridges OIDC bearer tokens into
 `HttpClient.accessToken` through the concrete `OidcAdapter`, not through the
 `IdentityProvider` port or `IdentityClaim`. The token lookup is lazy and
-non-interactive; full M7b still waits for server-side EXT-23 and the explicit
-OIDC sign-in flow.
+non-interactive; full M7b still waits for server-side EXT-23 validation.
 
-The respondent runtime only auto-authenticates anonymous identity at boot. OIDC
-redirects and magic-link sends are side-effectful and are reserved for an
-explicit sign-in surface.
+The respondent runtime only auto-authenticates anonymous identity at boot. For
+production OIDC-required profiles, it renders an explicit sign-in surface and
+starts OIDC only from user action.
 
 Run:
 

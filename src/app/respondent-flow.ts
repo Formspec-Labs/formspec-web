@@ -46,6 +46,21 @@ export function selectBootIdentityOption(options: readonly IdpOption[]): IdpOpti
   return options.find((option) => option.kind === 'anonymous');
 }
 
+export function signInOptionsForIdentityPolicy({
+  options,
+  identityMode,
+  runtimeMode,
+}: {
+  options: readonly IdpOption[];
+  identityMode: IdentityPolicyConfig['mode'];
+  runtimeMode: 'demo' | 'production';
+}): IdpOption[] {
+  if (runtimeMode !== 'production' || identityMode !== 'oidc-required') {
+    return [];
+  }
+  return options.filter((option) => option.kind === 'oidc');
+}
+
 export function subjectRefInvalidatedByIdentityChange(
   previous: IdentityClaim | null,
   next: IdentityClaim | null,
@@ -76,6 +91,10 @@ export function assertIdentityPolicySatisfied({
   if (runtimeMode === 'production' && identityMode === 'oidc-required' && !claim) {
     throw new Error('This deployment requires sign-in before the form can be loaded.');
   }
+}
+
+export function isIdentityInteractionStarted(error: unknown): boolean {
+  return error instanceof Error && error.name === 'IdentityInteractionStartedError';
 }
 
 export async function buildIntakeHandoff({

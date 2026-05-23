@@ -385,8 +385,9 @@ surface.
 identity lifecycle and multi-instance proof. Full M7 / M7b remains blocked by
 EXT-23 in `formspec-server`. The web composition now has the bounded
 access-token provider bridge for `HttpClient.accessToken`, so OIDC bearer tokens
-can reach the reference server without leaking into `IdentityClaim`; M7b still
-needs the explicit OIDC sign-in flow and server-side verifier before sign-off.
+can reach the reference server without leaking into `IdentityClaim`. The
+respondent shell also renders explicit sign-in for production OIDC-required
+profiles. M7b still needs the server-side verifier before sign-off.
 
 ---
 

@@ -114,6 +114,22 @@ describe('OidcAdapter', () => {
     expect(signinRedirect).not.toHaveBeenCalled();
   });
 
+  it('fails visibly when no current user exists and redirect is not configured', async () => {
+    const adapter = new OidcAdapter({
+      issuer: 'https://idp.example.test',
+      clientId: 'formspec-web',
+      minAssurance: 'L3',
+      driver: {
+        getUser: vi.fn(async () => null),
+      },
+      subjectRefFactory: () => 'oidc:subject-hash',
+    });
+    const [option] = await adapter.discover('L3');
+    if (!option) throw new Error('expected OIDC option');
+
+    await expect(adapter.authenticate(option)).rejects.toThrow(/redirect is not configured/);
+  });
+
   it('fails instead of silently downgrading unknown ACR values', () => {
     expect(() => assuranceLevelFromAcr('unknown-acr', {})).toThrow(/ACR/);
   });
