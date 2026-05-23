@@ -37,6 +37,15 @@ const requiredSections = [
     heading: '## Current Operational Gaps',
     phrases: ['No hosted demo URL is selected', 'EXT-23'],
   },
+  {
+    path: 'PLANNING.md',
+    heading: '### FW-0016 — Build and test pipeline producing a deployable artifact',
+    phrases: [
+      'release-docs integrity',
+      'documented compose quickstart smoke',
+      'npm run check:release-docs',
+    ],
+  },
 ];
 const requiredExtensionQueueEntries = [
   {
@@ -160,14 +169,20 @@ function readCached(fileCache, rootDir, relativePath) {
 
 function markdownSection(text, heading, path) {
   const marker = `${heading}\n`;
+  const headingLevel = heading.match(/^#+/)?.[0].length;
+  if (!headingLevel) {
+    fail(`release docs check failed: invalid heading "${heading}"`);
+  }
+
   const start = text.startsWith(marker) ? 0 : text.indexOf(`\n${marker}`);
   if (start === -1) {
     fail(`release docs check failed: ${path} is missing section "${heading}"`);
   }
 
   const contentStart = start + (start === 0 ? marker.length : marker.length + 1);
-  const nextHeading = text.indexOf('\n## ', contentStart);
-  return nextHeading === -1 ? text.slice(contentStart) : text.slice(contentStart, nextHeading);
+  const rest = text.slice(contentStart);
+  const nextHeading = new RegExp(`\\n#{1,${headingLevel}}\\s`).exec(rest);
+  return nextHeading ? rest.slice(0, nextHeading.index) : rest;
 }
 
 function extensionSection(text, id, path) {

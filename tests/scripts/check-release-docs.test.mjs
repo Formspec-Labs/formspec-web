@@ -50,6 +50,15 @@ describe('check-release-docs', () => {
     );
   });
 
+  it('rejects stale pipeline tracker prose', () => {
+    const result = runCheck(createFixture({ omitPlanningReleaseDocsGate: true }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'PLANNING.md ### FW-0016 — Build and test pipeline producing a deployable artifact is missing "release-docs integrity"',
+    );
+  });
+
   it('rejects missing reference-deployment extension queue entries', () => {
     const result = runCheck(createFixture({ omitExtension: 'EXT-26' }));
 
@@ -111,6 +120,7 @@ function createFixture(options = {}) {
 
   write(root, 'docs/deployment.md', deploymentDoc(options));
   write(root, 'docs/operations.md', operationsDoc(options));
+  write(root, 'PLANNING.md', planningDoc(options));
   write(
     root,
     'thoughts/specs/2026-05-22-upstream-extension-queue.md',
@@ -166,6 +176,24 @@ function operationsDoc(options) {
           '- No hosted demo URL is selected. Local Docker compose is the release proof for now.',
           '- Full server-backed OIDC operations wait for EXT-23 server validation.',
         ]),
+  ].join('\n');
+}
+
+function planningDoc(options) {
+  return [
+    '# Web Planning',
+    '',
+    '## MVP',
+    '',
+    '### FW-0016 — Build and test pipeline producing a deployable artifact',
+    '',
+    options.omitPlanningReleaseDocsGate
+      ? 'The build pipeline runs testing-plan integrity and documented compose quickstart smoke.'
+      : 'The build pipeline runs testing-plan integrity, release-docs integrity, documented compose quickstart smoke, and `npm run check:release-docs`.',
+    '',
+    '### FW-0001 — End-to-end Respondent thin-slice (deployable)',
+    '',
+    'Next row.',
   ].join('\n');
 }
 
