@@ -1,26 +1,25 @@
 import type {
-  ApplicantStatusProjection,
+  ApplicantStatusResource,
   StatusReader,
   StatusRequest,
 } from '../../ports/status-reader.ts';
-import { isApplicantStatusProjection } from '../../shared/respondent-place.ts';
+import { isApplicantStatusResource } from '../../shared/respondent-place.ts';
 
 export function stubStatusReader(
-  initialRecords: Iterable<ApplicantStatusProjection> = [],
+  initialRecords: Iterable<readonly [string, ApplicantStatusResource]> = [],
 ): StatusReader & {
-  registerStatus(key: string, projection: ApplicantStatusProjection): void;
+  registerStatus(key: string, resource: ApplicantStatusResource): void;
 } {
-  const records = new Map<string, ApplicantStatusProjection>();
-  for (const record of initialRecords) {
-    if (record.resourceRef) {
-      records.set(record.resourceRef, cloneJson(record));
-    }
+  const records = new Map<string, ApplicantStatusResource>();
+  for (const [key, resource] of initialRecords) {
+    assertApplicantStatusResource(resource);
+    records.set(key, cloneJson(resource));
   }
 
   return {
-    registerStatus(key, projection) {
-      assertApplicantStatusProjection(projection);
-      records.set(key, cloneJson(projection));
+    registerStatus(key, resource) {
+      assertApplicantStatusResource(resource);
+      records.set(key, cloneJson(resource));
     },
     async readStatus(request: StatusRequest) {
       const key = request.resourceRef ?? request.submissionId ?? request.trackingUri;
@@ -29,9 +28,9 @@ export function stubStatusReader(
   };
 }
 
-function assertApplicantStatusProjection(value: unknown): asserts value is ApplicantStatusProjection {
-  if (!isApplicantStatusProjection(value)) {
-    throw new Error('stub StatusReader: invalid WOS applicant status projection');
+function assertApplicantStatusResource(value: unknown): asserts value is ApplicantStatusResource {
+  if (!isApplicantStatusResource(value)) {
+    throw new Error('stub StatusReader: invalid WOS applicant API resource');
   }
 }
 

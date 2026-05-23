@@ -5,7 +5,7 @@
  * normative contract lives in formspec/specs/respondent-library/library-spec.md.
  */
 
-import type { ApplicantStatusProjection } from './status-reader.ts';
+import type { WOS_APPLICANT_SCHEMA_ID } from './status-reader.ts';
 
 export type RespondentPrivacyTier = 'anonymous' | 'pseudonymous' | 'verified';
 export type RespondentAggregationMode = 'client-wallet';
@@ -45,6 +45,25 @@ export type PresentationProtocolHint =
   | 'w3c-vc-data-model-2.0'
   | 'download'
   | 'copy-link';
+
+export type ApplicantStatusProjectionKind =
+  | 'ApplicantCaseSummary'
+  | 'ApplicantCaseDetail'
+  | 'ApplicantTaskSummary'
+  | 'ApplicantNotificationListItem'
+  | 'ApplicantStatusTimelineEntry';
+
+export interface ApplicantStatusProjection {
+  sourceSchema: typeof WOS_APPLICANT_SCHEMA_ID;
+  projectionKind: ApplicantStatusProjectionKind;
+  resourceRef?: string;
+  endpoint?: string;
+  updatedAt: string;
+  headline?: string;
+  summary?: string;
+  payloadDigest?: string;
+  extensions?: RespondentExtensions;
+}
 
 export interface RespondentSubjectBinding {
   subjectRef: string;

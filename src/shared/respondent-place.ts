@@ -1,8 +1,21 @@
-import type { RespondentPlaceSnapshot } from '../ports/respondent-place-source.ts';
+import type {
+  ApplicantAgentSummary,
+  ApplicantAiInvolvementSummary,
+  ApplicantCaseDetail,
+  ApplicantCaseSummary,
+  ApplicantCaseSummaryPage,
+  ApplicantNotificationListItem,
+  ApplicantNotificationPage,
+  ApplicantStatusResource,
+  ApplicantStatusTimelineEntry,
+  ApplicantTaskPage,
+  ApplicantTaskSummary,
+} from '../ports/status-reader.ts';
 import type {
   ApplicantStatusProjection,
   ApplicantStatusProjectionKind,
-} from '../ports/status-reader.ts';
+  RespondentPlaceSnapshot,
+} from '../ports/respondent-place-source.ts';
 import { WOS_APPLICANT_SCHEMA_ID } from '../ports/status-reader.ts';
 
 const applicantProjectionKinds = new Set<ApplicantStatusProjectionKind>([
@@ -54,6 +67,34 @@ const presentationProtocols = new Set([
 ]);
 const exportFormats = new Set(['portable-json', 'encrypted-portable-json']);
 const exportIncludes = new Set(['documents', 'submissions', 'obligations', 'presentation-policies']);
+const lifecycleStates = new Set([
+  'active',
+  'suspended',
+  'migrating',
+  'completed',
+  'terminated',
+  'stalled',
+]);
+const taskKinds = new Set(['intake', 'correspondence-response', 'signature', 'verification']);
+const taskStatuses = new Set(['pending', 'drafted', 'submitted', 'dismissed', 'expired']);
+const notificationKinds = new Set([
+  'task-assigned',
+  'task-deadline-approaching',
+  'case-update',
+  'correspondence-received',
+  'decision-reached',
+]);
+const notificationStatuses = new Set(['unread', 'read', 'archived']);
+const timelineEvents = new Set([
+  'case-created',
+  'lifecycle-changed',
+  'applicant-task-assigned',
+  'applicant-task-submitted',
+  'decision-reached',
+  'correspondence-sent',
+  'correspondence-received',
+]);
+const agentRoles = new Set(['advisory', 'primary', 'fallback']);
 
 export function isApplicantStatusProjection(value: unknown): value is ApplicantStatusProjection {
   if (!isRecord(value)) return false;
@@ -62,6 +103,21 @@ export function isApplicantStatusProjection(value: unknown): value is ApplicantS
     typeof value.projectionKind === 'string' &&
     applicantProjectionKinds.has(value.projectionKind as ApplicantStatusProjectionKind) &&
     typeof value.updatedAt === 'string'
+  );
+}
+
+export function isApplicantStatusResource(value: unknown): value is ApplicantStatusResource {
+  return (
+    isApplicantCaseDetail(value) ||
+    isApplicantCaseSummaryPage(value) ||
+    isApplicantTaskPage(value) ||
+    isApplicantNotificationPage(value) ||
+    isApplicantCaseSummary(value) ||
+    isApplicantTaskSummary(value) ||
+    isApplicantNotificationListItem(value) ||
+    isApplicantStatusTimelineEntry(value) ||
+    isApplicantAiInvolvementSummary(value) ||
+    isApplicantAgentSummary(value)
   );
 }
 
@@ -213,6 +269,122 @@ function isExportPackage(value: unknown): boolean {
   );
 }
 
+function isApplicantCaseDetail(value: unknown): value is ApplicantCaseDetail {
+  return (
+    isRecord(value) &&
+    isApplicantCaseSummary(value.summary) &&
+    Array.isArray(value.openTasks) &&
+    value.openTasks.every(isApplicantTaskSummary) &&
+    Array.isArray(value.recentNotifications) &&
+    value.recentNotifications.every(isApplicantNotificationListItem) &&
+    Array.isArray(value.statusTimeline) &&
+    value.statusTimeline.every(isApplicantStatusTimelineEntry) &&
+    (value.aiInvolvement === undefined || isApplicantAiInvolvementSummary(value.aiInvolvement))
+  );
+}
+
+function isApplicantCaseSummary(value: unknown): value is ApplicantCaseSummary {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.workflowUrl === 'string' &&
+    typeof value.lifecycleState === 'string' &&
+    lifecycleStates.has(value.lifecycleState) &&
+    typeof value.actionNeeded === 'boolean' &&
+    typeof value.createdAt === 'string' &&
+    typeof value.updatedAt === 'string'
+  );
+}
+
+function isApplicantCaseSummaryPage(value: unknown): value is ApplicantCaseSummaryPage {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.every(isApplicantCaseSummary) &&
+    typeof value.hasMore === 'boolean'
+  );
+}
+
+function isApplicantTaskSummary(value: unknown): value is ApplicantTaskSummary {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.processId === 'string' &&
+    typeof value.kind === 'string' &&
+    isReservedOrExtension(value.kind, taskKinds) &&
+    typeof value.status === 'string' &&
+    isReservedOrExtension(value.status, taskStatuses) &&
+    typeof value.title === 'string' &&
+    typeof value.createdAt === 'string'
+  );
+}
+
+function isApplicantTaskPage(value: unknown): value is ApplicantTaskPage {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.every(isApplicantTaskSummary) &&
+    typeof value.hasMore === 'boolean'
+  );
+}
+
+function isApplicantNotificationListItem(value: unknown): value is ApplicantNotificationListItem {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.kind === 'string' &&
+    isReservedOrExtension(value.kind, notificationKinds) &&
+    typeof value.status === 'string' &&
+    notificationStatuses.has(value.status) &&
+    typeof value.title === 'string' &&
+    typeof value.body === 'string' &&
+    typeof value.createdAt === 'string'
+  );
+}
+
+function isApplicantNotificationPage(value: unknown): value is ApplicantNotificationPage {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.every(isApplicantNotificationListItem) &&
+    typeof value.hasMore === 'boolean'
+  );
+}
+
+function isApplicantStatusTimelineEntry(value: unknown): value is ApplicantStatusTimelineEntry {
+  return (
+    isRecord(value) &&
+    typeof value.event === 'string' &&
+    isReservedOrExtension(value.event, timelineEvents) &&
+    typeof value.occurredAt === 'string'
+  );
+}
+
+function isApplicantAiInvolvementSummary(value: unknown): value is ApplicantAiInvolvementSummary {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.agentsInvolved) &&
+    value.agentsInvolved.every(isApplicantAgentSummary) &&
+    typeof value.narrativeRecordCount === 'number' &&
+    Number.isInteger(value.narrativeRecordCount) &&
+    value.narrativeRecordCount >= 0 &&
+    typeof value.humanReviewedAllAgentDecisions === 'boolean'
+  );
+}
+
+function isApplicantAgentSummary(value: unknown): value is ApplicantAgentSummary {
+  return (
+    isRecord(value) &&
+    typeof value.displayName === 'string' &&
+    typeof value.roleInDecision === 'string' &&
+    agentRoles.has(value.roleInDecision) &&
+    (
+      value.confidence === undefined ||
+      (typeof value.confidence === 'number' && value.confidence >= 0 && value.confidence <= 1)
+    )
+  );
+}
+
 function isIssuerRef(value: unknown): boolean {
   return isRecord(value) && typeof value.name === 'string';
 }
@@ -223,4 +395,8 @@ function isDefinitionRef(value: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isReservedOrExtension(value: string, reserved: Set<string>): boolean {
+  return reserved.has(value) || /^x-[a-z][a-z0-9-]*$/.test(value);
 }

@@ -9,7 +9,7 @@ import type {
   RespondentPlaceSource,
 } from '../ports/respondent-place-source.ts';
 import type {
-  ApplicantStatusProjection,
+  ApplicantStatusResource,
   StatusReader,
 } from '../ports/status-reader.ts';
 import type { SubmitTransport } from '../ports/submit-transport.ts';
@@ -19,7 +19,7 @@ import {
   isFormDefinition,
   isFormResponse,
   isIntakeHandoff,
-  isApplicantStatusProjection,
+  isApplicantStatusResource,
   isRespondentPlaceSnapshot,
   leakedProviderNativeIdentityKeys,
 } from './assertions.ts';
@@ -28,6 +28,7 @@ import {
   sampleFormDefinition,
   sampleFormResponse,
   sampleIntakeHandoff,
+  sampleApplicantStatusResource,
   sampleApplicantStatusProjection,
   sampleNotificationMessage,
   sampleRespondentPlaceSnapshot,
@@ -57,7 +58,7 @@ export interface NotificationDeliveryConformanceSubject {
 
 export interface StatusReaderConformanceSubject {
   adapter: StatusReader;
-  registerStatus(key: string, projection: ApplicantStatusProjection): void | Promise<void>;
+  registerStatus(key: string, resource: ApplicantStatusResource): void | Promise<void>;
 }
 
 export interface RespondentPlaceSourceConformanceSubject {
@@ -246,14 +247,14 @@ export function defineStatusReaderConformance(
   setup: () => StatusReaderConformanceSubject,
 ): void {
   describe(name, () => {
-    it('round-trips a WOS applicant status projection', async () => {
+    it('round-trips a WOS applicant API status resource', async () => {
       const subject = setup();
       const resourceRef = sampleApplicantStatusProjection.resourceRef;
-      if (!resourceRef) throw new Error('sample status projection needs resourceRef');
-      await subject.registerStatus(resourceRef, sampleApplicantStatusProjection);
+      if (!resourceRef) throw new Error('sample status resource needs resourceRef');
+      await subject.registerStatus(resourceRef, sampleApplicantStatusResource);
       const found = await subject.adapter.readStatus({ resourceRef });
-      expect(isApplicantStatusProjection(roundTripJson(found))).toBe(true);
-      expect(found).toEqual(sampleApplicantStatusProjection);
+      expect(isApplicantStatusResource(roundTripJson(found))).toBe(true);
+      expect(found).toEqual(sampleApplicantStatusResource);
     });
 
     it('returns undefined for unknown status requests', async () => {
@@ -262,12 +263,9 @@ export function defineStatusReaderConformance(
         .toBeUndefined();
     });
 
-    it('rejects projections that do not name the WOS applicant schema', async () => {
+    it('rejects sidecar projection wrappers as StatusReader resources', async () => {
       const subject = setup();
-      const invalid = {
-        ...sampleApplicantStatusProjection,
-        sourceSchema: 'https://example.test/status',
-      } as unknown as ApplicantStatusProjection;
+      const invalid = sampleApplicantStatusProjection as unknown as ApplicantStatusResource;
       await expect(Promise.resolve().then(() => subject.registerStatus('bad', invalid))).rejects
         .toThrow();
     });

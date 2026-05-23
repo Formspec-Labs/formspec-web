@@ -11,8 +11,8 @@ Adapter contract:
   `trustModel.serverAggregation: "forbidden"`.
 - Use the sidecar document-kind and presentation-policy vocabularies; do not
   invent web-only kinds.
-- Treat applicant status as a WOS applicant API projection, not as a web status
-  enum.
+- Treat applicant status as a WOS applicant API projection reference/cache, not
+  as a web status enum. Fetch live WOS-shaped resources through `StatusReader`.
 
 Run the conformance suite with:
 

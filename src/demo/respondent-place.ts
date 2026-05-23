@@ -1,5 +1,6 @@
 import type {
   ApplicantStatusProjection,
+  ApplicantStatusResource,
   RespondentPlaceSnapshot,
 } from '../ports/index.ts';
 import { WOS_APPLICANT_SCHEMA_ID } from '../ports/index.ts';
@@ -11,6 +12,14 @@ export function demoApplicantStatusProjection(): ApplicantStatusProjection {
     resourceRef: 'urn:wos:case_demo_0001',
     updatedAt: '2026-05-23T12:00:00.000Z',
     headline: 'Received',
+    summary: 'Your demo intake was received and is waiting for review.',
+  };
+}
+
+export function demoApplicantStatusResource(): ApplicantStatusResource {
+  return {
+    event: 'applicant-task-submitted',
+    occurredAt: '2026-05-23T12:00:00.000Z',
     summary: 'Your demo intake was received and is waiting for review.',
   };
 }

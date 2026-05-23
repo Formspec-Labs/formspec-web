@@ -2,6 +2,7 @@ import type { FormDefinition, FormResponse, IntakeHandoff } from '@formspec-org/
 import type { NotificationMessage } from '../ports/notification-delivery.ts';
 import type {
   ApplicantStatusProjection,
+  ApplicantStatusResource,
   RespondentPlaceSnapshot,
 } from '../ports/index.ts';
 import { WOS_APPLICANT_SCHEMA_ID } from '../ports/index.ts';
@@ -61,6 +62,12 @@ export const sampleApplicantStatusProjection: ApplicantStatusProjection = {
   resourceRef: 'urn:wos:case_conformance_0001',
   updatedAt: '2026-05-23T00:00:00.000Z',
   headline: 'Received',
+  summary: 'The applicant projection is sourced from the WOS applicant API.',
+};
+
+export const sampleApplicantStatusResource: ApplicantStatusResource = {
+  event: 'applicant-task-submitted',
+  occurredAt: '2026-05-23T00:00:00.000Z',
   summary: 'The applicant projection is sourced from the WOS applicant API.',
 };
 
