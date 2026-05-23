@@ -11,6 +11,10 @@
  */
 import type { RuntimeFeatureKey } from './feature-keys.ts';
 
+// `Symbol.for` registry identity is load-bearing: the guard `SYM in adapter`
+// works because the same string key always resolves to the same Symbol, even
+// across module realms. Switching to `Symbol(...)` (non-registry) would break
+// the marker contract across dynamic-import boundaries.
 export const UNAVAILABLE_ADAPTER = Symbol.for('formspec-web/unavailable-adapter');
 export const DEMO_STUB_ADAPTER = Symbol.for('formspec-web/demo-stub-adapter');
 
@@ -62,19 +66,9 @@ export function markDemoStubAdapter<T extends object>(
 }
 
 export function isUnavailableAdapter(value: unknown): value is Unavailable<object> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    UNAVAILABLE_ADAPTER in value &&
-    typeof (value as Record<symbol, unknown>)[UNAVAILABLE_ADAPTER] === 'object'
-  );
+  return typeof value === 'object' && value !== null && UNAVAILABLE_ADAPTER in value;
 }
 
 export function isDemoStubAdapter(value: unknown): value is DemoStub<object> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    DEMO_STUB_ADAPTER in value &&
-    typeof (value as Record<symbol, unknown>)[DEMO_STUB_ADAPTER] === 'object'
-  );
+  return typeof value === 'object' && value !== null && DEMO_STUB_ADAPTER in value;
 }

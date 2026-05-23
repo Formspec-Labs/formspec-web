@@ -18,6 +18,9 @@
  * LOCALE_CONDITIONAL_FEATURE_KEYS. The shell's locale-change handler checks
  * the set before restarting the form-load boundary.
  */
+// Append-only ordering. Feature ADRs add their key at the end of the tuple;
+// re-sorting alphabetically would silently change the iteration order of the
+// resolver loop and the contract of `RUNTIME_FEATURE_KEYS.toEqual(...)` tests.
 export const RUNTIME_FEATURE_KEYS = ['respondentPlace', 'status'] as const;
 
 export type RuntimeFeatureKey = (typeof RUNTIME_FEATURE_KEYS)[number];
