@@ -189,7 +189,7 @@ capabilities with shipped ports. Future feature ADRs extend the set."
 - Create: `src/policy/policy-shapes.ts`
 - Test: `src/policy/policy-shapes.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // src/policy/policy-shapes.test.ts
@@ -240,12 +240,12 @@ describe('policy-shapes guards', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/policy/policy-shapes.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/policy/policy-shapes.ts
@@ -339,12 +339,12 @@ export interface ResolvedRuntimeProfile {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/policy/policy-shapes.test.ts`
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/policy/policy-shapes.ts src/policy/policy-shapes.test.ts -m "feat(policy): declare runtime policy shapes (web ADR-0011 §Decision)
@@ -362,7 +362,7 @@ Non-goals, JSON Schema for policy docs is deliberately not defined here."
 - Create: `src/policy/errors.ts`
 - Test: `src/policy/errors.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // src/policy/errors.test.ts
@@ -410,12 +410,12 @@ describe('typed configuration errors (ADR-0011 §Failure Semantics)', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/policy/errors.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/policy/errors.ts
@@ -494,12 +494,12 @@ export function isRuntimePolicyError(value: unknown): value is RuntimePolicyErro
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/policy/errors.test.ts`
 Expected: PASS (5 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/policy/errors.ts src/policy/errors.test.ts -m "feat(policy): typed configuration errors (web ADR-0011 §Failure Semantics)
@@ -519,7 +519,7 @@ the typed code."
 
 **Why two markers, not one:** ADR-0011 §Instance capabilities makes two parallel honesty claims — production unavailable sentinels record "known absent," and demo stubs satisfy "demo capabilities only." Without a demo-stub marker, a production composition can wire `stubStatusReader()` and declare `instanceCapabilities.status = 'available'`; the resolver sees only the declaration string and treats the stub as a real production capability. Two markers + the Task 10b coherence assertion catch both drift directions.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // src/policy/sentinel.test.ts
@@ -576,12 +576,12 @@ describe('adapter provenance markers (ADR-0011 §Instance capabilities)', () => 
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/policy/sentinel.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/policy/sentinel.ts
@@ -665,12 +665,12 @@ export function isDemoStubAdapter(value: unknown): value is DemoStub<object> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/policy/sentinel.test.ts`
 Expected: PASS (5 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/policy/sentinel.ts src/policy/sentinel.test.ts -m "feat(policy): adapter provenance markers — unavailable + demo-stub
@@ -692,7 +692,7 @@ unavailable adapter declared available."
 - Modify: `src/adapters/unavailable/status-reader.ts`
 - Test: `tests/adapters/unavailable-sentinel.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/adapters/unavailable-sentinel.test.ts
@@ -725,12 +725,12 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/adapters/unavailable-sentinel.test.ts`
 Expected: FAIL — adapters are not marked.
 
-- [ ] **Step 3: Modify the unavailable adapters**
+- [x] **Step 3: Modify the unavailable adapters**
 
 ```ts
 // src/adapters/unavailable/respondent-place-source.ts
@@ -772,12 +772,12 @@ export function unavailableStatusReader(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/adapters/unavailable-sentinel.test.ts`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/adapters/unavailable/respondent-place-source.ts src/adapters/unavailable/status-reader.ts tests/adapters/unavailable-sentinel.test.ts -m "feat(adapters): mark unavailable adapters with policy sentinel
@@ -798,7 +798,7 @@ runtime throw-on-call semantics."
 
 **Why:** Codex red-team Finding 3 — without marking the stub adapters that back demo capabilities, a production composition could wire `stubStatusReader()` and declare `instanceCapabilities.status = 'available'`; nothing catches the drift. Marking the two stubs that map to seeded feature keys closes that hole. (Other stub adapters that don't map to a feature key — `stubDefinitionSource`, `stubDraftStore`, `stubSubmitTransport`, `stubIdentityProvider`, `stubNotificationDelivery` — are MVP-port adapters not gated by the runtime feature resolver and stay unmarked.)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/adapters/demo-stub-marker.test.ts
@@ -824,12 +824,12 @@ describe('stub adapters that back runtime feature keys carry the demo-stub marke
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/adapters/demo-stub-marker.test.ts`
 Expected: FAIL — stubs are unmarked.
 
-- [ ] **Step 3: Modify the two stub adapters**
+- [x] **Step 3: Modify the two stub adapters**
 
 First read each file to confirm the current factory signature, then wrap the return with `markDemoStubAdapter`. Pattern:
 
@@ -856,14 +856,14 @@ return markDemoStubAdapter(adapter, {
 
 If the existing factories return inline object literals, lift them into a `const adapter = ...` before marking; the marker requires an object reference.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/adapters/demo-stub-marker.test.ts`
 Expected: PASS (2 tests).
 
 Run: `npx vitest run tests/adapter-conformance` — confirm the stub conformance suites still pass; the marker is a non-enumerable property so it does not affect serialization or the port contract.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/adapters/stub/respondent-place-source.ts src/adapters/stub/status-reader.ts tests/adapters/demo-stub-marker.test.ts -m "feat(adapters): mark seeded-feature stub adapters with demo-stub provenance
@@ -883,7 +883,7 @@ construction."
 - Create: `src/policy/resolver.ts`
 - Test: `src/policy/resolver.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // src/policy/resolver.test.ts
@@ -956,12 +956,12 @@ describe('resolveRuntimeFeatures (happy path)', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run src/policy/resolver.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/policy/resolver.ts
@@ -1188,12 +1188,12 @@ function freezeMap<K, V>(map: Map<K, V>): ReadonlyMap<K, V> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/policy/resolver.test.ts`
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/policy/resolver.ts src/policy/resolver.test.ts -m "feat(policy): resolveRuntimeFeatures happy path (web ADR-0011 §Resolution)
@@ -1211,7 +1211,7 @@ extracted to follow-up tasks."
 **Files:**
 - Test: `src/policy/resolver-failure-semantics.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // src/policy/resolver-failure-semantics.test.ts
@@ -1344,21 +1344,21 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails or passes**
+- [x] **Step 2: Run test to verify it fails or passes**
 
 Run: `npx vitest run src/policy/resolver-failure-semantics.test.ts`
 Expected: most tests pass already because Task 6 implemented the failure paths. Any failures here indicate a bug — fix the resolver, not the test.
 
-- [ ] **Step 3: Fix the resolver if needed**
+- [x] **Step 3: Fix the resolver if needed**
 
 If any failure-semantics test fails, fix `src/policy/resolver.ts`. The test list above is the canonical map of ADR-0011 §Failure Semantics rows; the resolver must satisfy all of them.
 
-- [ ] **Step 4: Re-run the full policy test suite**
+- [x] **Step 4: Re-run the full policy test suite**
 
 Run: `npx vitest run src/policy`
 Expected: PASS (all suites).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/policy/resolver-failure-semantics.test.ts src/policy/resolver.ts -m "test(policy): cover every ADR-0011 §Failure Semantics row
@@ -1377,7 +1377,7 @@ mode-gate, default-on degradation, and the InvalidRuntimePolicy edges."
 - Modify: `package.json`
 - Test: `tests/smoke/policy-exports.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/smoke/policy-exports.test.ts
@@ -1406,12 +1406,12 @@ describe('policy package exports', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/smoke/policy-exports.test.ts`
 Expected: FAIL — `src/policy/index.ts` does not exist.
 
-- [ ] **Step 3: Write the barrel and wire it through the package**
+- [x] **Step 3: Write the barrel and wire it through the package**
 
 ```ts
 // src/policy/index.ts
@@ -1484,7 +1484,7 @@ Modify `package.json` in two places.
 
 (Maintain alphabetical order within `src/` and `tests/` groupings to match the rest of the script style.)
 
-- [ ] **Step 4: Verify the script change runs the policy suites**
+- [x] **Step 4: Verify the script change runs the policy suites**
 
 Run: `npm run test:unit`
 Expected: every policy test from Tasks 1–7 + the smoke export test from this task PASS. If any directory misses, the run reports zero tests in that path; tighten the script before continuing.
@@ -1492,7 +1492,7 @@ Expected: every policy test from Tasks 1–7 + the smoke export test from this t
 Run: `npx vitest run tests/smoke/policy-exports.test.ts`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/policy/index.ts src/index.ts package.json tests/smoke/policy-exports.test.ts -m "feat(policy): export resolver surface + include policy suites in CI
@@ -1521,7 +1521,7 @@ otherwise CI silently ignores the load-bearing policy suite
 - Create: `tests/policy-resolution/cases/demo-stub-fails-production.json`
 - Create: `tests/policy-resolution/resolve-cases.test.ts`
 
-- [ ] **Step 1: Write the failing test runner**
+- [x] **Step 1: Write the failing test runner**
 
 ```ts
 // tests/policy-resolution/resolve-cases.test.ts
@@ -1582,7 +1582,7 @@ describe('runtime feature resolution — fixture cases', () => {
 });
 ```
 
-- [ ] **Step 2: Write the eleven fixture files**
+- [x] **Step 2: Write the eleven fixture files**
 
 Create each JSON case file under `tests/policy-resolution/cases/`. Each file is one ADR-0011 §Failure Semantics row or a happy path.
 
@@ -1745,12 +1745,12 @@ Create each JSON case file under `tests/policy-resolution/cases/`. Each file is 
 }
 ```
 
-- [ ] **Step 3: Run the fixture suite**
+- [x] **Step 3: Run the fixture suite**
 
 Run: `npx vitest run tests/policy-resolution/resolve-cases.test.ts`
 Expected: PASS (11 cases).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git -C formspec-web commit tests/policy-resolution -m "test(policy): fixture cases for ADR-0011 §Failure Semantics + happy paths
@@ -1770,7 +1770,7 @@ add cases without touching the runner."
 - Modify: `src/composition/default.ts`
 - Test: `tests/profiles/composition-policy-wiring.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/profiles/composition-policy-wiring.test.ts
@@ -1798,12 +1798,12 @@ describe('Composition declares runtime-feature policy seams', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/profiles/composition-policy-wiring.test.ts`
 Expected: FAIL — `instanceCapabilities` / `orgRuntimePolicy` / `getFormRuntimePolicy` not on `Composition`.
 
-- [ ] **Step 3: Extend the Composition type**
+- [x] **Step 3: Extend the Composition type**
 
 Modify `src/composition/types.ts` — add the three new fields:
 
@@ -1871,12 +1871,12 @@ import type {
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/profiles/composition-policy-wiring.test.ts`
 Expected: PASS (3 tests). Also run the broader composition smoke: `npx vitest run tests/smoke` — none should regress.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/composition/types.ts src/composition/stub.ts src/composition/default.ts tests/profiles/composition-policy-wiring.test.ts -m "feat(composition): declare runtime-feature policy seams (web ADR-0011)
@@ -1898,7 +1898,7 @@ unavailable until reference adapters land."
 
 **Why:** ADR-0011 §Instance capabilities + §Rationale #1 ("Reference deployments must be honest") require that the wired adapter provenance and the declared `instanceCapabilities` cannot drift. Today the plan ships both halves but nothing enforces agreement. This task closes that gap with a typed feature-key → port-name map + a coherence check covering BOTH provenance markers (per Codex red-team Finding 3 — checking only `unavailable` would still let a production composition wire a demo stub and declare it available).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/profiles/composition-coherence.test.ts
@@ -1978,12 +1978,12 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/profiles/composition-coherence.test.ts`
 Expected: FAIL — modules not found.
 
-- [ ] **Step 3: Write the feature-key → port-name map**
+- [x] **Step 3: Write the feature-key → port-name map**
 
 ```ts
 // src/policy/feature-port-map.ts
@@ -2003,7 +2003,7 @@ export const FEATURE_PORT_MAP = {
 export type CompositionPortName = (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey];
 ```
 
-- [ ] **Step 4: Write the coherence assertion**
+- [x] **Step 4: Write the coherence assertion**
 
 ```ts
 // src/policy/composition-coherence.ts
@@ -2115,7 +2115,7 @@ export function assertCompositionCoherence(composition: CompositionLike): void {
 }
 ```
 
-- [ ] **Step 5: Re-export from the policy barrel**
+- [x] **Step 5: Re-export from the policy barrel**
 
 Add to `src/policy/index.ts`:
 
@@ -2128,12 +2128,12 @@ export {
 } from './composition-coherence.ts';
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 Run: `npx vitest run tests/profiles/composition-coherence.test.ts`
 Expected: PASS (5 tests).
 
-- [ ] **Step 7: Wire the assertion into `createDefaultComposition` boot path**
+- [x] **Step 7: Wire the assertion into `createDefaultComposition` boot path**
 
 In `src/composition/default.ts`, immediately before the production return statement (and immediately before the demo `createDemoComposition()` early return), add:
 
@@ -2149,12 +2149,12 @@ return composition;
 
 Apply the same pattern in `src/composition/stub.ts`'s `createStubComposition` — call `assertCompositionCoherence(composition)` before returning.
 
-- [ ] **Step 8: Re-run the full policy suite**
+- [x] **Step 8: Re-run the full policy suite**
 
 Run: `npx vitest run src/policy tests/profiles tests/smoke`
 Expected: PASS. The previously-passing tests still pass; the new coherence assertion now runs at composition-construction time on every test that creates a composition, which is the desired enforcement teeth.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git -C formspec-web commit src/policy/feature-port-map.ts src/policy/composition-coherence.ts src/policy/index.ts src/composition/default.ts src/composition/stub.ts tests/profiles/composition-coherence.test.ts -m "feat(policy): composition coherence assertion (web ADR-0011 §Rationale #1)
@@ -2175,11 +2175,11 @@ composition-construction time. Drift is caught at boot, not at feature use."
 - Modify: `src/app/hooks` index if it exists (otherwise skip)
 - Test: `tests/app/runtime-profile-provider.test.tsx`
 
-- [ ] **Step 1: Look at the hooks directory**
+- [x] **Step 1: Look at the hooks directory**
 
 Run: `ls src/app/hooks` and read any existing index file. If `src/app/hooks/index.ts` exists, the new hook needs to be re-exported there; if not, skip.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 ```tsx
 // tests/app/runtime-profile-provider.test.tsx
@@ -2216,7 +2216,7 @@ describe('RuntimeProfileProvider', () => {
 });
 ```
 
-- [ ] **Step 3: Write the provider + hook**
+- [x] **Step 3: Write the provider + hook**
 
 ```tsx
 // src/app/RuntimeProfileProvider.tsx
@@ -2262,12 +2262,12 @@ export function useResolvedRuntimeProfile(): ResolvedRuntimeProfile {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/app/runtime-profile-provider.test.tsx`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/app/RuntimeProfileProvider.tsx src/app/hooks/useResolvedRuntimeProfile.ts tests/app/runtime-profile-provider.test.tsx -m "feat(app): ResolvedRuntimeProfile context + hook (web ADR-0011)
@@ -2285,11 +2285,11 @@ this is the only legal access path."
 - Modify: `src/app/RespondentRuntime.tsx`
 - Test: `tests/app/runtime-feature-error-boundary.test.tsx`
 
-- [ ] **Step 1: Read the current form-load flow**
+- [x] **Step 1: Read the current form-load flow**
 
 Read `src/app/RespondentRuntime.tsx` lines 375–418 (`createReadyState`) to confirm the form-load boundary. The resolver call belongs immediately after `composition.definitionSource.getDefinition(...)` resolves, before engine creation. Errors of type `RuntimePolicyError` must bubble to the existing `respondentState: { status: 'error' }` path, which currently renders `<FriendlyError>`. We replace `<FriendlyError>` selection logic to detect `RuntimePolicyError` and render a dedicated `<RuntimePolicyErrorPage>` that surfaces the typed code as the support reference.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 ```tsx
 // tests/app/runtime-feature-error-boundary.test.tsx
@@ -2322,12 +2322,12 @@ describe('form-load boundary catches RuntimePolicyError', () => {
 
 (Note — if `tests/app/` doesn't yet have `@testing-library/react` available, list it under devDependencies and install before running. Run `npm ls @testing-library/react` first; if missing, `npm install --save-dev @testing-library/react@^16 @testing-library/jest-dom@^6` and import as needed.)
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `npx vitest run tests/app/runtime-feature-error-boundary.test.tsx`
 Expected: FAIL — no policy resolution happens at form-load.
 
-- [ ] **Step 4: Insert the resolver call + dedicated error page**
+- [x] **Step 4: Insert the resolver call + dedicated error page**
 
 In `src/app/RespondentRuntime.tsx`:
 
@@ -2436,14 +2436,14 @@ const handleLocaleChange = (locale: string): void => {
 
 Thread an optional `locale` override into `applyReadyState` / `createReadyState` so the restart uses the chosen locale instead of `defaultLocaleForDefinition(definition)`.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/app/runtime-feature-error-boundary.test.tsx`
 Expected: PASS (1 test).
 
 Also run a broader regression: `npx vitest run tests/app` to confirm no other runtime test broke.
 
-- [ ] **Step 6: Add the locale-recompute tripwire test**
+- [x] **Step 6: Add the locale-recompute tripwire test**
 
 ```tsx
 // tests/app/runtime-feature-locale-recompute.test.tsx
@@ -2495,12 +2495,12 @@ describe('locale change + runtime-feature recompute (ADR-0011 §Resolution)', ()
 });
 ```
 
-- [ ] **Step 7: Run the tripwire suite**
+- [x] **Step 7: Run the tripwire suite**
 
 Run: `npx vitest run tests/app/runtime-feature-locale-recompute.test.tsx`
 Expected: PASS (3 tests).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git -C formspec-web commit src/app/RespondentRuntime.tsx tests/app/runtime-feature-error-boundary.test.tsx tests/app/runtime-feature-locale-recompute.test.tsx -m "feat(app): resolve runtime profile at form-load + locale recompute + plain-language error page (web ADR-0011)
@@ -2524,7 +2524,7 @@ forcing the implementer to verify the recompute path."
 
 **Why:** Codex red-team Finding 2. The two seeded feature keys (`respondentPlace`, `status`) back unconditional adapter calls already in the shell. Without gating, a production composition that resolves both disabled still triggers `loadRespondentPlace` → `unavailableRespondentPlaceSource.readPlace()` → throw → respondent-place panel renders an adapter error. ADR-0011 §Failure Semantics says disabled UI is "hidden or replaced by an explicit unavailable state only when the user already has context for it" — adapter throws violate that.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // tests/app/runtime-feature-gating.test.tsx
@@ -2593,12 +2593,12 @@ describe('seeded feature gating on ResolvedRuntimeProfile (Codex Finding 2)', ()
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/app/runtime-feature-gating.test.tsx`
 Expected: FAIL — adapters are called unconditionally; the panel renders even when disabled.
 
-- [ ] **Step 3: Gate `loadRespondentPlace` on `profile.enabled.has('respondentPlace')`**
+- [x] **Step 3: Gate `loadRespondentPlace` on `profile.enabled.has('respondentPlace')`**
 
 In `src/app/RespondentRuntime.tsx`, modify the respondent-place loading effect (currently at lines 199–222). Replace the unconditional `loadRespondentPlace` call with a profile-gated branch. The profile is on the ready state per Task 12 step 2.
 
@@ -2646,7 +2646,7 @@ type RespondentPlaceState =
 
 In `RespondentPlacePanel`, short-circuit on `state.status === 'disabled'` to render nothing (`return null;`). The panel is hidden — not "unavailable" — because the respondent never had context for it.
 
-- [ ] **Step 4: Gate per-submission status fetches on `profile.enabled.has('status')`**
+- [x] **Step 4: Gate per-submission status fetches on `profile.enabled.has('status')`**
 
 Modify `loadRespondentPlace` to accept the profile and forward it to `readSubmissionStatuses`. In `readSubmissionStatuses`, skip the fetch when `status` is disabled:
 
@@ -2665,14 +2665,14 @@ async function readSubmissionStatuses(
 
 `SubmissionItem` already handles `status: undefined` (the `!status` branch in `statusFeedback`), so the UI degrades to "Status pending" / "Status has not been published yet" — the existing not-yet-published affordance the respondent has context for. No new copy needed.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/app/runtime-feature-gating.test.tsx`
 Expected: PASS (3 tests).
 
 Also run `npx vitest run tests/app` to confirm no regression — the error-boundary test from Task 12 and the locale-recompute tripwire still pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git -C formspec-web commit src/app/RespondentRuntime.tsx tests/app/runtime-feature-gating.test.tsx -m "feat(app): gate seeded respondent-place + status callsites on resolved profile
@@ -2698,7 +2698,7 @@ the very keys this plan seeds.
 **Files:**
 - Create: `docs/policy/runtime-feature-resolution.md`
 
-- [ ] **Step 1: Write the doc**
+- [x] **Step 1: Write the doc**
 
 ```markdown
 # Runtime feature resolution
@@ -2817,11 +2817,11 @@ production. This is the enforcement teeth behind ADR-0011 §Rationale #1
    new key.
 ```
 
-- [ ] **Step 2: No test step (documentation). Verify rendering quickly**
+- [x] **Step 2: No test step (documentation). Verify rendering quickly**
 
 Open `docs/policy/runtime-feature-resolution.md` and confirm the headings render.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C formspec-web commit docs/policy/runtime-feature-resolution.md -m "docs(policy): adopter-facing reference for runtime feature resolution"
@@ -2835,7 +2835,7 @@ git -C formspec-web commit docs/policy/runtime-feature-resolution.md -m "docs(po
 - Modify: `PLANNING.md`
 - Modify: `thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md`
 
-- [ ] **Step 1: Append the planning row**
+- [x] **Step 1: Append the planning row**
 
 Add an `FW-0065` row in `PLANNING.md` at the end of the Post-MVP section. Lowest free integer above the current high (`FW-0064`). Use the established row format from neighboring rows (e.g., FW-0063, FW-0064):
 
@@ -2853,7 +2853,7 @@ Add an `FW-0065` row in `PLANNING.md` at the end of the Post-MVP section. Lowest
 - **Note:** Closes the ADR-0011 Follow-on Work items (RuntimeFeatureResolver design/impl, typed errors, plain-language rendering, fixtures) AND closes Codex red-team findings on CI inclusion, seeded-callsite gating, and demo-stub provenance. Per ADR-0011 Non-goals, no canonical JSON schema for policy documents is defined here. Per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) the resolver lives in `src/policy/` (pure core).
 ```
 
-- [ ] **Step 2: Append a "Related plan" footer to the ADR**
+- [x] **Step 2: Append a "Related plan" footer to the ADR**
 
 Read `thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md`; under "Related Decisions" add one more bullet:
 
@@ -2861,11 +2861,11 @@ Read `thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md`; under "
 - Implementation plan: [`thoughts/plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md`](../plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md) — landed FW-0065 scaffolding
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `npm run check:testing-plan` and `npm run check:mvp-audit` from `formspec-web/`. Both must pass; if either trips on the new planning row, fix the row to match the validator's expected fields and re-run.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git -C formspec-web commit PLANNING.md thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md -m "docs(planning): FW-0065 runtime feature resolver scaffold + ADR cross-link"
@@ -2877,7 +2877,7 @@ git -C formspec-web commit PLANNING.md thoughts/adr/0011-runtime-feature-resolut
 
 **Files:** none.
 
-- [ ] **Step 1: Run the full CI catch-all**
+- [x] **Step 1: Run the full CI catch-all**
 
 ```bash
 cd formspec-web
@@ -2888,7 +2888,7 @@ npm run ci
 
 Expected: all green.
 
-- [ ] **Step 2: Spot-check the policy suite ran (defensive)**
+- [x] **Step 2: Spot-check the policy suite ran (defensive)**
 
 If `npm run ci` ever silently passes with zero policy tests reported, the `test:unit` script change in Task 8 regressed. Defensive check:
 
@@ -2898,11 +2898,11 @@ npx vitest run src/policy tests/policy-resolution tests/profiles tests/adapters
 
 Expected: explicit counts that include the resolver + fixture + coherence + provenance-marker suites. If any directory reports zero tests, fix `package.json` `test:unit` and re-run Step 1.
 
-- [ ] **Step 3: Run the architectural review**
+- [x] **Step 3: Run the architectural review**
 
 Per stack `CLAUDE.md` §HIGH-PRIORITY — dispatch the `formspec-specs:semi-formal-architecture-review` skill as a subagent against the diff. Address any BLOCKER findings; LOW/MEDIUM findings ship as follow-up rows or get fixed inline at the implementer's discretion.
 
-- [ ] **Step 4: Commit any review fixups, then prepare the parent submodule pointer bump**
+- [x] **Step 4: Commit any review fixups, then prepare the parent submodule pointer bump**
 
 ```bash
 cd ../
@@ -3018,3 +3018,9 @@ Tracked during the 2026-05-23 inline execution of this plan. Each row records an
 - Two scout reviews (one code, one architecture) ran against Tasks 1-5b. Six findings, all addressed inline before Task 8.
 - Two scout reviews ran against Tasks 6-10 + the composition contract extension. Five MEDIUM findings, all addressed inline (with two new fixture cases + DisabledCause docstring).
 - Two scout reviews ran against Tasks 10b-12b. One BLOCKER (composition coherence funnel) + four HIGH + four MEDIUM. Closed inline above. Code review went REQUEST CHANGES on the over-broad useEffect dep; that fix shipped before this plan is marked complete.
+
+---
+
+## Plan complete
+
+All 12 tasks (1, 2, 3, 4, 5, 5b, 6, 7, 8, 9, 10, 10b, 11, 12, 12b) shipped. Checkboxes ticked en masse at close-out; per-step trace lives in git history (`git log --oneline -- src/policy/ tests/policy-resolution/ tests/profiles/ tests/adapters/`). Deviations section above logs every divergence from the plan body, including the 8 deferred rows triaged in a follow-up pass (one filed as `FW-0066`, seven closed wontfix with trigger-anchored rationale). FW-0065 moved to PLANNING.md `## Closed`.
