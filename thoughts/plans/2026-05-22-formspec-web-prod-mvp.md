@@ -47,6 +47,27 @@ Unifying property: **time-to-first-success matters more than feature breadth**. 
 
 ---
 
+## 4.5 Tactical decisions locked (for autonomous execution)
+
+These were open in earlier drafts and are now locked so an autonomous agent doesn't stall. Any can be revised by the user mid-execution; absent that, the agent treats them as final.
+
+| Topic | Choice | Notes |
+|---|---|---|
+| Profile file format | `formspec.config.ts` at repo root — TypeScript module, default export typed against `FormspecWebConfig`. | Type-safe at build time; supports computed values; matches sibling-repo TS-strict style. |
+| Sample form (M5) | Authored fresh at `src/demo/sample-form.json`. Minimum coverage: text input, choice input, repeat group, conditional group, multilingual label (English + one other), Issuer document with name + logo URL. | Agent MAY adopt an existing fixture from `formspec/tests/fixtures/` if one covers all five surface types verbatim; default is fresh authoring focused on UX, not engine semantics. |
+| Hosted demo URL (M8) | **Deferred to user action.** Agent does NOT attempt domain registration or DNS. Agent ships `docs/deployment.md` with three deploy-path recipes (static-export → Vercel, static-export → Cloudflare Pages, self-host → Docker behind reverse proxy). User picks and runs. | Surfaces in M8 acceptance as "documented + ready, not deployed." |
+| Test framework | Vitest 4 (unit + smoke + conformance suites). | Matches sibling packages. |
+| E2E + a11y framework | Playwright with `@axe-core/playwright`. | Per the original plan; CI gate in M1. |
+| Linter | ESLint 9 flat config + `eslint-plugin-no-restricted-paths` for boundary discipline. | Per ADR-0009 §Discipline. |
+| Bundler | Vite 7. | Per ADR-0002. |
+| Package manager | npm (matches sibling `file:` linking convention). | |
+| Node version | 22 LTS. | Matches sibling `engines` fields. |
+| OIDC client library | `oidc-client-ts` v3. | Per ADR-0007 reference impl. |
+| UUID library | `uuid` v9+ (for `v7` generation). | Per EXT-14 inline. |
+| Initial state | Begin from current `formspec-web` HEAD on `main`. FW-0014 + FW-0016 scaffold work assumed closed (verify in M0 precondition check below). If scaffold missing, agent halts and reports. | |
+
+---
+
 ## 5. ADR coverage
 
 Every ADR in [`../adr/`](../adr/) traces to a role in this plan:
@@ -92,7 +113,45 @@ The 2026-05-21 placement-and-reframe spec is **superseded** by ADRs 0004–0009 
 
 ## 8. Capability milestones
 
-Eight milestones. Each: capability statement, observable acceptance criteria, FW rows closed (where applicable), upstream dependencies, documentation exit gate.
+Eight milestones. Each: capability statement, observable acceptance criteria, verification command, FW rows closed (where applicable), upstream dependencies, documentation exit gate.
+
+### Dependency graph
+
+```
+M0 (precondition) → M1 → M2 → M3 → M4 → M5 → M6 → M7 → M8
+                          │           │
+                          └─ stubs back M5 demo composition
+                                      │
+                                      └─ M6 builds on M5's wired engine
+```
+
+Strict linear order. Within a milestone, tasks may fan out to parallel craftsmen (with worktree isolation per stack-root CLAUDE.md "Parallel-craftsman commit safety"). Across milestones, no skipping or reordering — a later milestone's acceptance depends on the prior one's deliverables.
+
+EXT-23 gates M7 acceptance only. If it slips, M7 splits to M7a (anonymous-only multi-instance, MVP-shippable) + M7b (OIDC flow, deferred); the rest of the plan proceeds.
+
+### M0 — Precondition checks
+
+**Capability:** Verify the starting state before any milestone work begins.
+
+**Acceptance:**
+- Working tree clean (`git status` empty on `formspec-web` and stack root).
+- Scaffold rows FW-0014 (TypeScript strict baseline) and FW-0016 (skeleton package + entry point) are closed in `formspec-web/PLANNING.md`; the corresponding files exist on disk (verify with `ls src/app/main.tsx src/ports/ src/adapters/stub/`).
+- Sibling packages are buildable: `ls ../formspec/packages/formspec-types/dist/index.d.ts ../formspec/packages/formspec-react/dist/index.js`. If missing, run `cd .. && make build` and retry.
+- `node --version` reports ≥22. `npm --version` reports ≥10.
+
+**Verify:**
+```bash
+cd formspec-web
+git status                                                # clean
+grep -E "FW-001[46]" PLANNING.md | grep -i closed         # both closed
+ls src/app/main.tsx src/ports/ src/adapters/stub/         # all exist
+ls ../formspec/packages/formspec-types/dist/index.d.ts    # sibling built
+node --version && npm --version                           # ≥22, ≥10
+```
+
+**Halt criterion:** If any precondition fails, the agent reports the specific failure and stops. Do not proceed to M1.
+
+---
 
 ### M1 — Repo posture for many-deployments
 
@@ -104,6 +163,19 @@ Eight milestones. Each: capability statement, observable acceptance criteria, FW
 - CI gates on every PR: typecheck (TS strict), lint (with `no-restricted-paths` boundary per ADR-0009), vendor-leak grep (advisory), unit tests (Vitest), Playwright + `@axe-core/playwright` a11y on the placeholder shell.
 - Dockerfile produces a static-served build artifact; image runs and serves the placeholder shell over HTTP.
 - README explains positioning (what is formspec-web, who is it for), the Palantir-like posture, and where to start.
+
+**Verify:**
+```bash
+test -f LICENSE && grep -i "apache" LICENSE              # license file present and correct
+grep '"license"' package.json | grep -i apache           # package.json matches
+test -f Dockerfile                                       # Dockerfile present
+docker build -t formspec-web:test . && docker run --rm -d -p 8080:80 --name formspec-web-test formspec-web:test && sleep 3 && curl -sf http://localhost:8080/ > /dev/null && docker stop formspec-web-test
+npm run typecheck && npm run lint && npm test            # CI gates green
+npm run test:e2e                                         # Playwright a11y passes
+scripts/check-vendor-leaks.sh                            # advisory passes
+test -f README.md && grep -i "respondent" README.md      # README explains positioning
+test -f CONTRIBUTING.md                                  # contributing exists
+```
 
 **FW rows closed:** FW-0014, FW-0015, FW-0016, FW-0017, FW-0018.
 
@@ -125,6 +197,16 @@ Eight milestones. Each: capability statement, observable acceptance criteria, FW
   - **`publicPortalProfile`** — per-form implicit tenancy (no tenant header; server resolves tenant from form_id); Anonymous identity acceptable; lighter brand defaults.
 - Brand override path proven isolated: two instances of formspec-web with different brand configs can run side-by-side (M2 unit test; M8 multi-instance demo confirms at runtime).
 - Tenant binding option drives the protocol layer: bound instance attaches a tenant context header (matching `stack-common-http`'s `extract_tenant` convention); implicit instance does not.
+
+**Verify:**
+```bash
+test -f formspec.config.ts                               # profile config file at root
+grep -E "FormspecWebConfig" src/config/                  # schema exported
+grep -E "departmentApp|publicPortal" src/profiles/       # both reference profiles present
+npm run typecheck                                        # config + profiles typecheck
+npm test -- src/profiles                                 # profile unit tests pass
+test -f docs/configuration.md && test -f docs/profiles.md
+```
 
 **FW rows closed:** none (architectural — backs every adopter-side row).
 
@@ -153,6 +235,20 @@ Eight milestones. Each: capability statement, observable acceptance criteria, FW
 - Conformance harness is exported from a public package surface so third-party adapter authors can install it and run it against their adapter.
 - Stub adapters land for every port; each passes its own conformance suite. Stubs are first-class — they back the demo composition in M5, not just tests.
 
+**Verify:**
+```bash
+ls src/ports/{definition-source,draft-store,submit-transport,identity-provider,notification-delivery}.ts
+ls src/adapters/stub/{definition-source,draft-store,submit-transport,identity-provider,notification-delivery}.ts
+ls tests/adapter-conformance/_framework/conformance.ts
+ls tests/adapter-conformance/{definition-source,draft-store,submit-transport,identity-provider,notification-delivery}/conformance.test.ts
+npm run typecheck                                        # ports + stubs typecheck against real FormDefinition / FormResponse / IntakeHandoff
+npm test -- tests/adapter-conformance                    # all five port conformance suites pass against stubs
+npm test -- tests/shared/problem-json                    # Problem JSON shape matches stack-common
+npm test -- tests/shared/idempotency-key                 # UUIDv7 generator
+test -f docs/architecture.md
+ls docs/ports/{definition-source,draft-store,submit-transport,identity-provider,notification-delivery}.md
+```
+
 **Upstream dependencies:** none new — consumes existing `@formspec-org/types`.
 
 **Documentation exit gate:** `docs/architecture.md` (DI overview, hexagonal map, the five ports, how the conformance contract works); `docs/ports/<port>.md` per port (the integration contract: what an adapter must do, what invariants it must honor, how to run the conformance suite).
@@ -175,6 +271,17 @@ Eight milestones. Each: capability statement, observable acceptance criteria, FW
 - Every reference adapter passes its port's conformance suite (verified by the conformance test runner, not by hand).
 - The HTTP client passes the OIDC token (when present) via the Authorization header for `formspec-server` direct validation per decision B; missing/invalid token surfaces as Problem JSON.
 - `NotificationDelivery` adapter set: stub-only for MVP — no HTTP adapter ships because `formspec-server` has no `/notifications` route (EXT-19 deferred). Magic-link delivery in MVP uses the stub locally and surfaces the magic-link URL inline for development.
+
+**Verify:**
+```bash
+ls src/adapters/http/{http-client,definition-source,draft-store,submit-transport}.ts
+ls src/adapters/identity/{anonymous,oidc,magic-link}.ts
+npm test -- tests/adapter-conformance                    # all reference adapters pass their port's conformance suite
+npm test -- tests/adapters/http                          # HTTP adapters' own unit tests (mocked fetch)
+npm test -- tests/adapters/identity                      # identity adapters (mocked oidc-client)
+grep -E "/runtime/forms/.*/drafts|/drafts/.*/submit" src/adapters/http/ -r   # routes mirror server reality
+ls docs/adapters/{definition-source,draft-store,submit-transport,identity-provider,notification-delivery}.md
+```
 
 **FW rows closed:** FW-0001 (backend wire half), FW-0063 (production identity).
 
