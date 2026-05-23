@@ -26,6 +26,13 @@ import {
 import type { Composition } from '../composition/types.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityClaim, IdentityProvider, IdpOption } from '../ports/identity-provider.ts';
+import type {
+  ApplicantStatusResource,
+  RespondentDocumentRecord,
+  RespondentObligation,
+  RespondentPlaceSnapshot,
+  RespondentSubmissionRecord,
+} from '../ports/index.ts';
 import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
@@ -76,12 +83,24 @@ type SubmitState =
   | { status: 'error'; error: unknown }
   | { status: 'confirmed'; confirmation: SubmitConfirmation };
 
+type RespondentPlaceState =
+  | { status: 'loading' }
+  | {
+      status: 'ready';
+      snapshot: RespondentPlaceSnapshot;
+      submissionStatuses: Record<string, ApplicantStatusResource>;
+    }
+  | { status: 'error'; error: unknown };
+
 export function RespondentRuntime({
   composition,
   config,
 }: RespondentRuntimeProps) {
   const [respondentState, setRespondentState] = useState<RespondentState>({ status: 'loading' });
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
+  const [respondentPlaceState, setRespondentPlaceState] = useState<RespondentPlaceState>({
+    status: 'loading',
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -172,6 +191,35 @@ export function RespondentRuntime({
       engine?.dispose();
     };
   }, [composition]);
+
+  const placeSubjectRef = respondentState.status === 'ready'
+    ? respondentState.claim?.subjectRef ?? respondentState.draftKey.subjectRef
+    : undefined;
+
+  useEffect(() => {
+    if (respondentState.status !== 'ready') {
+      setRespondentPlaceState({ status: 'loading' });
+      return;
+    }
+
+    let cancelled = false;
+    setRespondentPlaceState({ status: 'loading' });
+    void loadRespondentPlace(composition, placeSubjectRef)
+      .then((state) => {
+        if (!cancelled) {
+          setRespondentPlaceState(state);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setRespondentPlaceState({ status: 'error', error });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [composition, placeSubjectRef, respondentState.status]);
 
   const handleSignIn = async (option: IdpOption): Promise<void> => {
     setRespondentState((current) =>
@@ -303,6 +351,7 @@ export function RespondentRuntime({
           definition={respondentState.definition}
           draftLoaded={respondentState.draftLoaded}
           mode={composition.mode}
+          respondentPlaceState={respondentPlaceState}
           resolvedIssuer={respondentState.resolvedIssuer}
           submitState={submitState}
           onLocaleChange={handleLocaleChange}
@@ -368,12 +417,50 @@ async function createReadyState(
   };
 }
 
+async function loadRespondentPlace(
+  composition: Composition,
+  subjectRef: string | undefined,
+): Promise<RespondentPlaceState> {
+  const snapshot = await composition.respondentPlaceSource.readPlace({ subjectRef });
+  const submissionStatuses = await readSubmissionStatuses(composition, snapshot);
+  return {
+    status: 'ready',
+    snapshot,
+    submissionStatuses,
+  };
+}
+
+async function readSubmissionStatuses(
+  composition: Composition,
+  snapshot: RespondentPlaceSnapshot,
+): Promise<Record<string, ApplicantStatusResource>> {
+  const entries = await Promise.all(
+    (snapshot.submissions ?? []).map(async (submission) => {
+      const statusRef = submission.applicantStatus?.resourceRef;
+      if (!statusRef) {
+        return undefined;
+      }
+      const status = await composition.statusReader.readStatus({
+        subjectRef: snapshot.subject.subjectRef,
+        submissionId: submission.id,
+        resourceRef: statusRef,
+        trackingUri: submission.applicantStatus?.endpoint,
+      });
+      return status ? ([submission.id, status] as const) : undefined;
+    }),
+  );
+  return Object.fromEntries(entries.filter((entry): entry is readonly [string, ApplicantStatusResource] => (
+    entry !== undefined
+  )));
+}
+
 function RespondentSurface({
   activeLocale,
   brandName,
   definition,
   draftLoaded,
   mode,
+  respondentPlaceState,
   resolvedIssuer,
   submitState,
   onLocaleChange,
@@ -383,6 +470,7 @@ function RespondentSurface({
   definition: FormDefinition;
   draftLoaded: boolean;
   mode: 'demo' | 'production';
+  respondentPlaceState: RespondentPlaceState;
   resolvedIssuer: ResolvedIssuer;
   submitState: SubmitState;
   onLocaleChange: (locale: string) => void;
@@ -428,6 +516,7 @@ function RespondentSurface({
       </div>
 
       <SubmitNotice state={submitState} />
+      <RespondentPlacePanel state={respondentPlaceState} />
 
       {submitState.status === 'confirmed' ? (
         <ConfirmationPanel confirmation={submitState.confirmation} />
@@ -442,6 +531,168 @@ function RespondentSurface({
         </div>
       )}
     </>
+  );
+}
+
+function RespondentPlacePanel({ state }: { state: RespondentPlaceState }) {
+  if (state.status === 'loading') {
+    return (
+      <section className="respondent-place" aria-labelledby="respondent-place-title">
+        <RespondentPlaceHeader trustSummary="Loading" />
+        <div className="respondent-place__loading" role="status">
+          Loading your forms and files
+        </div>
+      </section>
+    );
+  }
+
+  if (state.status === 'error') {
+    const detail = problemDetail(state.error);
+    return (
+      <section className="respondent-place" aria-labelledby="respondent-place-title">
+        <RespondentPlaceHeader trustSummary="Unavailable" />
+        <div className="submit-notice submit-notice--error" role="alert">
+          {detail.message}
+        </div>
+      </section>
+    );
+  }
+
+  const { snapshot, submissionStatuses } = state;
+  const obligations = snapshot.obligations ?? [];
+  const documents = snapshot.documents ?? [];
+  const submissions = snapshot.submissions ?? [];
+  const dueCount = obligations.filter((obligation) => (
+    obligation.state === 'due' || obligation.state === 'overdue'
+  )).length;
+
+  return (
+    <section className="respondent-place" aria-labelledby="respondent-place-title">
+      <RespondentPlaceHeader trustSummary={trustSummary(snapshot)} />
+      <div className="respondent-place__stats" aria-label="Respondent place summary">
+        <StatBlock label="Due" value={dueCount} />
+        <StatBlock label="Files" value={documents.length} />
+        <StatBlock label="Submitted" value={submissions.length} />
+      </div>
+      <div className="respondent-place__columns">
+        <PlaceList title="Obligations" emptyLabel="No open obligations">
+          {obligations.map((obligation) => (
+            <ObligationItem key={obligation.id} obligation={obligation} />
+          ))}
+        </PlaceList>
+        <PlaceList title="Files" emptyLabel="No saved files">
+          {documents.map((document) => (
+            <DocumentItem key={document.id} document={document} />
+          ))}
+        </PlaceList>
+        <PlaceList title="Submissions" emptyLabel="No submitted forms">
+          {submissions.map((submission) => (
+            <SubmissionItem
+              key={submission.id}
+              status={submissionStatuses[submission.id]}
+              submission={submission}
+            />
+          ))}
+        </PlaceList>
+      </div>
+    </section>
+  );
+}
+
+function RespondentPlaceHeader({ trustSummary }: { trustSummary: string }) {
+  return (
+    <div className="respondent-place__header">
+      <div>
+        <p className="respondent-header__kicker">Respondent place</p>
+        <h2 id="respondent-place-title">Your forms and files</h2>
+      </div>
+      <p className="respondent-place__trust">{trustSummary}</p>
+    </div>
+  );
+}
+
+function StatBlock({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="respondent-place__stat">
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function PlaceList({
+  children,
+  emptyLabel,
+  title,
+}: {
+  children: ReactNode;
+  emptyLabel: string;
+  title: string;
+}) {
+  const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
+  return (
+    <section className="place-list" aria-labelledby={`place-list-${slugToken(title)}`}>
+      <h3 id={`place-list-${slugToken(title)}`}>{title}</h3>
+      {hasChildren ? (
+        <ul className="place-list__items">{children}</ul>
+      ) : (
+        <p className="place-list__empty">{emptyLabel}</p>
+      )}
+    </section>
+  );
+}
+
+function ObligationItem({ obligation }: { obligation: RespondentObligation }) {
+  return (
+    <li className="place-list__item">
+      <div className="place-list__row">
+        <strong>{obligation.title}</strong>
+        <span className={`place-pill place-pill--${slugToken(obligation.state)}`}>
+          {labelFromToken(obligation.state)}
+        </span>
+      </div>
+      <p>{obligation.issuer.name}</p>
+      {obligation.dueAt ? <small>Due {formatDate(obligation.dueAt)}</small> : null}
+    </li>
+  );
+}
+
+function DocumentItem({ document }: { document: RespondentDocumentRecord }) {
+  return (
+    <li className="place-list__item">
+      <div className="place-list__row">
+        <strong>{document.displayName}</strong>
+        <span className="place-pill">{labelFromToken(document.kind)}</span>
+      </div>
+      <p>{document.issuer?.name ?? document.contentRef.mediaType}</p>
+      <small>
+        Uploaded {formatDate(document.capturedAt)}
+        {document.expiresAt ? ` / Expires ${formatDate(document.expiresAt)}` : ''}
+      </small>
+    </li>
+  );
+}
+
+function SubmissionItem({
+  status,
+  submission,
+}: {
+  status: ApplicantStatusResource | undefined;
+  submission: RespondentSubmissionRecord;
+}) {
+  const feedback = statusFeedback(status, submission);
+  return (
+    <li className="place-list__item">
+      <div className="place-list__row">
+        <strong>{submission.issuer.name}</strong>
+        <span className="place-pill">{feedback.label}</span>
+      </div>
+      <p>{feedback.detail}</p>
+      <small>
+        Submitted {formatDate(submission.submittedAt)}
+        {submission.documentRefs?.length ? ` / ${submission.documentRefs.length} file(s)` : ''}
+      </small>
+    </li>
   );
 }
 
@@ -607,6 +858,96 @@ function problemMessage(problem: ProblemJson): { message: string; code: string }
     message: problem.detail ? `${problem.title}: ${problem.detail}` : problem.title,
     code: problem.error_code,
   };
+}
+
+function trustSummary(snapshot: RespondentPlaceSnapshot): string {
+  return [
+    labelFromToken(snapshot.trustModel.storagePosture),
+    labelFromToken(snapshot.trustModel.issuerIsolation),
+    'server aggregation forbidden',
+  ].join(' / ');
+}
+
+function statusFeedback(
+  status: ApplicantStatusResource | undefined,
+  submission: RespondentSubmissionRecord,
+): { label: string; detail: string } {
+  if (!status) {
+    return {
+      label: submission.applicantStatus?.headline ?? 'Status pending',
+      detail: submission.applicantStatus?.summary ?? 'Status has not been published yet.',
+    };
+  }
+  if ('event' in status) {
+    return {
+      label: labelFromToken(status.event),
+      detail: status.summary ?? submission.applicantStatus?.summary ?? 'Timeline update received.',
+    };
+  }
+  if ('lifecycleState' in status) {
+    return {
+      label: labelFromToken(status.lifecycleState),
+      detail: status.title ?? submission.applicantStatus?.summary ?? 'Case status received.',
+    };
+  }
+  if ('statusTimeline' in status) {
+    const latest = status.statusTimeline.at(-1);
+    return latest
+      ? {
+          label: labelFromToken(latest.event),
+          detail: latest.summary ?? status.summary.title ?? 'Case timeline updated.',
+        }
+      : {
+          label: labelFromToken(status.summary.lifecycleState),
+          detail: status.summary.title ?? 'Case status received.',
+        };
+  }
+  if ('status' in status) {
+    return {
+      label: labelFromToken(String(status.status)),
+      detail: 'body' in status ? status.body : status.title,
+    };
+  }
+  if ('items' in status) {
+    return {
+      label: status.hasMore ? 'More updates' : 'Updates',
+      detail: `${status.items.length} applicant update(s) available.`,
+    };
+  }
+  if ('agentsInvolved' in status) {
+    return {
+      label: 'AI disclosure',
+      detail: `${status.agentsInvolved.length} agent disclosure record(s) available.`,
+    };
+  }
+  return {
+    label: status.roleInDecision,
+    detail: status.displayName,
+  };
+}
+
+function labelFromToken(value: string): string {
+  return value
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function slugToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
 }
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: unknown }> {
