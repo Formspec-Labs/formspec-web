@@ -44,5 +44,4 @@ Not exposed by this image:
   now.
 - No production error-reporting sink is wired.
 - No analytics or SLO dashboards are wired.
-- Full server-backed OIDC operations wait for EXT-23 and the web access-token
-  bridge.
+- Full server-backed OIDC operations wait for EXT-23 server validation.
