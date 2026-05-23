@@ -45,9 +45,11 @@ import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
 import {
+  InvalidRuntimePolicyError,
   anyEnabledFeatureIsLocaleConditional,
   isRuntimePolicyError,
   resolveRuntimeFeatures,
+  type DisabledCause,
   type ResolvedRuntimeProfile,
   type RuntimePolicyError,
 } from '../policy/index.ts';
@@ -107,6 +109,13 @@ type RespondentPlaceState =
       status: 'ready';
       snapshot: RespondentPlaceSnapshot;
       submissionStatuses: Record<string, ApplicantStatusResource>;
+      /**
+       * If the `status` feature is disabled by policy, the cause records WHY —
+       * so SubmissionItem can distinguish "status hasn't been published yet"
+       * (status enabled, no record returned) from "status is not shared by
+       * this issuer" (status forbidden by org/form). Per arch-review M-3.
+       */
+      statusDisabledCause: DisabledCause | undefined;
     }
   | { status: 'error'; error: unknown };
 
@@ -229,8 +238,11 @@ export function RespondentRuntime({
     ? respondentState.claim?.subjectRef ?? respondentState.draftKey.subjectRef
     : undefined;
 
+  const isReady = respondentState.status === 'ready';
+  const runtimeProfile = isReady ? respondentState.runtimeProfile : null;
+
   useEffect(() => {
-    if (respondentState.status !== 'ready') {
+    if (!isReady || !runtimeProfile) {
       setRespondentPlaceState({ status: 'loading' });
       return;
     }
@@ -239,14 +251,14 @@ export function RespondentRuntime({
     // adapter errors. With both seeded features disabled the panel is
     // suppressed entirely; with respondentPlace disabled we don't call the
     // (potentially unavailable) adapter at all.
-    if (!respondentState.runtimeProfile.enabled.has('respondentPlace')) {
+    if (!runtimeProfile.enabled.has('respondentPlace')) {
       setRespondentPlaceState({ status: 'disabled' });
       return;
     }
 
     let cancelled = false;
     setRespondentPlaceState({ status: 'loading' });
-    void loadRespondentPlace(composition, placeSubjectRef, respondentState.runtimeProfile)
+    void loadRespondentPlace(composition, placeSubjectRef, runtimeProfile)
       .then((state) => {
         if (!cancelled) {
           setRespondentPlaceState(state);
@@ -261,7 +273,11 @@ export function RespondentRuntime({
     return () => {
       cancelled = true;
     };
-  }, [composition, placeSubjectRef, respondentState]);
+    // Narrow deps to the two scalars the effect body actually reads. Keying
+    // off whole `respondentState` causes every shallow re-spread (claim
+    // refresh, locale change, draft restoration) to refire readPlace —
+    // production network amplification per code-review HIGH-1.
+  }, [composition, placeSubjectRef, isReady, runtimeProfile]);
 
   const handleSignIn = async (option: IdpOption): Promise<void> => {
     setRespondentState((current) =>
@@ -444,11 +460,24 @@ async function createReadyState(
   // combination, before any side effects. Throws typed RuntimePolicyError
   // when the form/org/instance triple is incoherent; the catch in
   // applyReadyState routes the error to the form-load boundary.
+  //
+  // Wrap the extractor call so an adopter-thrown error becomes a typed
+  // InvalidRuntimePolicyError instead of a generic stack trace — code-review
+  // LOW-2.
+  let formPolicy;
+  try {
+    formPolicy = composition.getFormRuntimePolicy(definition);
+  } catch (cause) {
+    throw new InvalidRuntimePolicyError(
+      'form',
+      `getFormRuntimePolicy extractor threw: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
   const runtimeProfile = resolveRuntimeFeatures({
     mode: composition.mode,
     instance: composition.instanceCapabilities,
     org: composition.orgRuntimePolicy,
-    form: composition.getFormRuntimePolicy(definition),
+    form: formPolicy,
   });
   const draftKey: DraftKey = {
     formUrl: definition.url,
@@ -494,6 +523,7 @@ async function loadRespondentPlace(
     status: 'ready',
     snapshot,
     submissionStatuses,
+    statusDisabledCause: profile.disabled.get('status')?.cause,
   };
 }
 
@@ -636,7 +666,7 @@ function RespondentPlacePanel({ state }: { state: RespondentPlaceState }) {
     );
   }
 
-  const { snapshot, submissionStatuses } = state;
+  const { snapshot, submissionStatuses, statusDisabledCause } = state;
   const obligations = snapshot.obligations ?? [];
   const documents = snapshot.documents ?? [];
   const submissions = snapshot.submissions ?? [];
@@ -668,6 +698,7 @@ function RespondentPlacePanel({ state }: { state: RespondentPlaceState }) {
             <SubmissionItem
               key={submission.id}
               status={submissionStatuses[submission.id]}
+              statusDisabledCause={statusDisabledCause}
               submission={submission}
             />
           ))}
@@ -753,12 +784,14 @@ function DocumentItem({ document }: { document: RespondentDocumentRecord }) {
 
 function SubmissionItem({
   status,
+  statusDisabledCause,
   submission,
 }: {
   status: ApplicantStatusResource | undefined;
+  statusDisabledCause: DisabledCause | undefined;
   submission: RespondentSubmissionRecord;
 }) {
-  const feedback = statusFeedback(status, submission);
+  const feedback = statusFeedback(status, submission, statusDisabledCause);
   return (
     <li className="place-list__item">
       <div className="place-list__row">
@@ -962,8 +995,18 @@ function trustSummary(snapshot: RespondentPlaceSnapshot): string {
 function statusFeedback(
   status: ApplicantStatusResource | undefined,
   submission: RespondentSubmissionRecord,
+  disabledCause: DisabledCause | undefined,
 ): { label: string; detail: string } {
   if (!status) {
+    // Disabled-by-policy: respondent never has reason to expect a status
+    // update from this issuer. Distinguish from "not yet published" so we
+    // don't falsely imply the status will arrive later (arch-review M-3).
+    if (disabledCause === 'org-forbidden' || disabledCause === 'form-forbidden') {
+      return {
+        label: 'Status not shared',
+        detail: 'This issuer does not share application status here.',
+      };
+    }
     return {
       label: submission.applicantStatus?.headline ?? 'Status pending',
       detail: submission.applicantStatus?.summary ?? 'Status has not been published yet.',

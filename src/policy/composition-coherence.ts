@@ -54,6 +54,25 @@ export class CompositionIncoherenceError extends Error {
   }
 }
 
+/**
+ * Composition-construction funnel: every composition root (stub, default
+ * production, adopter forks) MUST funnel its constructed Composition through
+ * this helper instead of returning a raw object literal. The helper enforces
+ * ADR-0011 §Rationale #1 ("reference deployments must be honest") and is the
+ * single point where coherence drift is caught at boot — no future adopter
+ * can forget to call assertCompositionCoherence directly because the public
+ * idiom IS the funnel.
+ *
+ * The returned composition is the SAME reference; we don't deep-freeze
+ * because adapters need to remain mutable for hot-reload / replay scenarios.
+ * The honesty contract is structural (declaration ↔ provenance), not
+ * shape-immutability.
+ */
+export function freezeComposition<T extends CompositionLike>(composition: T): T {
+  assertCompositionCoherence(composition);
+  return composition;
+}
+
 export function assertCompositionCoherence(composition: CompositionLike): void {
   for (const featureKey of RUNTIME_FEATURE_KEYS) {
     const portName = FEATURE_PORT_MAP[featureKey];

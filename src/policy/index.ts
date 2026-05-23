@@ -52,6 +52,7 @@ export { FEATURE_PORT_MAP, type CompositionPortName } from './feature-port-map.t
 export {
   CompositionIncoherenceError,
   assertCompositionCoherence,
+  freezeComposition,
   type CompositionIncoherenceKind,
   type CompositionLike,
 } from './composition-coherence.ts';

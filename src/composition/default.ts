@@ -13,7 +13,7 @@ import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respon
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import {
-  assertCompositionCoherence,
+  freezeComposition,
   type FormRuntimePolicy,
   type InstanceCapabilities,
   type OrgRuntimePolicy,
@@ -87,8 +87,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     } satisfies OrgRuntimePolicy,
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
-  assertCompositionCoherence(composition);
-  return composition;
+  return freezeComposition(composition);
 }
 
 function assertReferenceHttpDataPorts(config: FormspecWebConfig): void {

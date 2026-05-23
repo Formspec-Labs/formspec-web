@@ -11,11 +11,12 @@ import {
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
 import {
-  assertCompositionCoherence,
+  freezeComposition,
   type FormRuntimePolicy,
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../policy/index.ts';
+import type { FormDefinition } from '../ports/definition-source.ts';
 import type { Composition } from './types.ts';
 
 /**
@@ -47,15 +48,16 @@ export function createStubComposition(): Composition {
     orgRuntimePolicy: {
       features: { respondentPlace: 'allowed', status: 'allowed' },
     } satisfies OrgRuntimePolicy,
-    // The demo form opts into both seeded features. In demo mode the
-    // demo-stub adapters can satisfy them; the resolver enables them and the
-    // shell renders the respondent-place panel. Without this opt-in the
-    // resolver would mark both `not-requested` (org=allowed + form=silent)
-    // and Task 12b's gating would hide the panel.
-    getFormRuntimePolicy: (): FormRuntimePolicy => ({
-      features: { respondentPlace: 'optional', status: 'optional' },
-    }),
+    // The demo form opts into both seeded features. Other definitions get
+    // an empty policy — form-policy is form-owned per ADR-0011 §Form runtime
+    // policy, and only the bundled demo form declares these features. When a
+    // real x-formspec-runtime-policy form-extension field is standardized,
+    // this extractor reads from definition.extensions instead (arch H-3
+    // remediation: keeps the form-policy honesty intact).
+    getFormRuntimePolicy: (definition: FormDefinition): FormRuntimePolicy =>
+      definition.url === demoSampleFormUrl
+        ? { features: { respondentPlace: 'optional', status: 'optional' } }
+        : { features: {} },
   };
-  assertCompositionCoherence(composition);
-  return composition;
+  return freezeComposition(composition);
 }
