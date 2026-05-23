@@ -410,6 +410,13 @@ tokens can reach the reference server without leaking into `IdentityClaim`.
 
 **Documentation exit gate:** `docs/deployment.md` (Docker, docker-compose, env config); `docs/multi-deployment.md` (running N instances against one backend, brand/auth isolation guarantees); `docs/operations.md` (logs, error surfaces, what's externally vs internally exposed); top-level `README.md` final polish.
 
+**Gate note (2026-05-22):** M8 closes as a local web deployment proof, not a
+full server-backed OIDC stack. `docker-compose.yml` boots two static web
+instances with distinct profiles/brands and no `FORMSPEC_WEB_SERVER_URL`.
+`docs/deployment.md` records the deferred server stack: EXT-23 blocks OIDC
+validation, and EXT-25 tracks the production server image. Hosted demo URL
+selection is also deferred.
+
 ---
 
 ## 9. Cohort cadence + cross-stack visibility

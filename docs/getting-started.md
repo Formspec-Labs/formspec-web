@@ -16,8 +16,10 @@ Docker path:
 docker compose up --build
 ```
 
-Open `http://localhost:8080`. The default image also starts in demo mode. To run
-against a real `formspec-server`, set `FORMSPEC_WEB_SERVER_URL`:
+Open `http://localhost:8080` for `publicPortal` and
+`http://localhost:8081` for `departmentApp`. The default image also starts in
+demo mode. To run against a real `formspec-server`, set
+`FORMSPEC_WEB_SERVER_URL`:
 
 ```bash
 FORMSPEC_WEB_SERVER_URL=https://formspec-server.example.test docker compose up --build

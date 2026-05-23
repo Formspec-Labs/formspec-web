@@ -147,6 +147,15 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 
 Each row preserves its original `Done` content; the new `Blocked on:` annotation names the upstream dependency that gates it. References resolve into [`thoughts/specs/2026-05-22-upstream-extension-queue.md`](thoughts/specs/2026-05-22-upstream-extension-queue.md).
 
+### FW-0064 — Adapter-owned draft binding registry
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Platform
+- **Journey:** (none — platform)
+- **Done:** `HttpDraftStore` and `HttpSubmitTransport` share draft binding through an adapter-owned registry or composition helper instead of passing a web-runtime draft key through `IntakeHandoff.extensions` and resolving it back through `HttpDraftStore.draftIdFor()`. The port contracts stay unchanged; the cleanup is entirely inside the formspec-stack reference adapter composition.
+- **Blocked on:** no upstream block. Internal refactor filed from M8 closeout. The original milestone note called this "localStorage prefix coupling"; the landed implementation uses in-memory draft binding rather than localStorage, but the cleanup target is the same adapter-boundary coupling between draft persistence and submit.
+
 ### FW-0002 — Trust Center browseable without sign-in
 
 - **Phase:** Post-MVP

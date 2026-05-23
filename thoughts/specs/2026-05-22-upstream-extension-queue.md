@@ -271,6 +271,73 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 
 ---
 
+## Class 4 — Reference deployment and server gaps
+
+### EXT-19: Notifications endpoint for magic-link delivery
+
+**Owning repo:** formspec-server
+**Closes:** production magic-link delivery from the formspec-stack reference composition.
+**FW rows blocked:** FW-0063 (magic-link production adapter path)
+**Shape:** `POST /notifications` or equivalent server route that accepts the message envelope required by `NotificationDelivery` without embedding template semantics in formspec-web.
+**Fixture status:** none.
+**Status:** not yet filed.
+
+### EXT-20: Runtime URL to form-id resolution
+
+**Owning repo:** formspec-server
+**Closes:** canonical form URLs for respondent entry.
+**FW rows blocked:** FW-0001 (production URL ergonomics)
+**Shape:** server-side resolver from Formspec Definition URL/version to the runtime `form_id` used by `/runtime/forms/{form_id}`.
+**Fixture status:** none.
+**Status:** not yet filed.
+
+### EXT-21: Delete draft route
+
+**Owning repo:** formspec-server
+**Closes:** true remote draft deletion.
+**FW rows blocked:** FW-0043 (abandon-and-erase) and production cleanup semantics for FW-0001.
+**Shape:** `DELETE /drafts/{draft_id}` scoped by tenant and respondent identity. MVP `HttpDraftStore.delete()` only soft-deletes the local binding.
+**Fixture status:** none.
+**Status:** not yet filed.
+
+### EXT-22: Nested-path draft hydration
+
+**Owning repo:** formspec
+**Closes:** complete draft restore for repeat groups and conditional nested groups.
+**FW rows blocked:** FW-0001 (deep draft-resume fidelity)
+**Shape:** engine/API support for restoring nested response paths without formspec-web hand-rolling path grammar beyond the current best-effort `engine.setValue()` loop.
+**Fixture status:** none.
+**Status:** not yet filed.
+
+### EXT-23: Per-tenant OIDC trusted issuer and JWKS validation
+
+**Owning repo:** formspec-server
+**Closes:** direct token trust decision for the formspec-stack OIDC reference composition.
+**FW rows blocked:** FW-0063 (full M7/M7b production identity close)
+**Shape:** per-tenant trusted issuer config, JWKS client, RS256 verifier, and middleware path that accepts `Authorization: Bearer ...` from formspec-web after the web-side access-token bridge lands.
+**Fixture status:** none.
+**Status:** filed; gates M7.
+
+### EXT-24: Per-form tenant resolution for public portal forms
+
+**Owning repo:** formspec-server
+**Closes:** public portal tenant resolution without sentinel tenant headers.
+**FW rows blocked:** FW-0001 (public-portal production ergonomics)
+**Shape:** resolve tenant scope from `form_id` or published runtime metadata so `publicPortalProfile` can move from `headerMode: "sentinel-until-ext24"` to `headerMode: "omit-post-ext24"`.
+**Fixture status:** none.
+**Status:** not yet filed.
+
+### EXT-25: Production formspec-server image
+
+**Owning repo:** formspec-server
+**Closes:** local and hosted full-stack compose without bind-mounted `cargo run` server startup.
+**FW rows blocked:** M8 hosted/full-stack demo hardening
+**Shape:** production server Dockerfile/image plus documented runtime env for database/object-store dependencies.
+**Fixture status:** n/a.
+**Status:** not yet filed.
+
+---
+
 ## How this list shrinks
 
 - **When an extension lands upstream:** strike the entry, note the landing ADR / spec version, and update the consuming formspec-web row to "unblocked." Move fixture-status to `landed` with file pointers.
