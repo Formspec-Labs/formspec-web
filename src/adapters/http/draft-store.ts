@@ -103,6 +103,10 @@ export class HttpDraftStore implements DraftStore {
     }
   }
 
+  draftIdFor(key: DraftKey): string | undefined {
+    return this.bindings.get(keyString(key))?.draftId;
+  }
+
   private async resolveAnonymousSessionToken(key: DraftKey): Promise<string | undefined> {
     if (typeof this.anonymousSessionToken === 'function') {
       return this.anonymousSessionToken(key);

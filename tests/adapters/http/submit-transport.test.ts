@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { HttpSubmitTransport } from '../../../src/adapters/http/submit-transport.ts';
-import { sampleIntakeHandoff } from '../../../src/adapter-conformance/fixtures.ts';
+import {
+  sampleFormResponse,
+  sampleIntakeHandoff,
+} from '../../../src/adapter-conformance/fixtures.ts';
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import { idempotencyKey, jsonResponse, recordingFetch } from './test-fetch.ts';
 
@@ -33,6 +36,31 @@ describe('HttpSubmitTransport', () => {
       response_data: { fullName: 'Ada Lovelace' },
       anonymous_session_token: 'session-token',
       signing_requested: true,
+    });
+  });
+
+  it('uses response data carried by the handoff when no resolver override is supplied', async () => {
+    const { fetch, requests } = recordingFetch(() =>
+      jsonResponse({ response_id: 'response-from-handoff', status: 'accepted' }),
+    );
+    const adapter = new HttpSubmitTransport({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+      draftIdResolver: () => 'draft-http-1',
+    });
+    const handoff = {
+      ...sampleIntakeHandoff,
+      extensions: {
+        'x-formspec-response': sampleFormResponse,
+      },
+    };
+
+    await expect(adapter.submit(handoff, generateIdempotencyKey())).resolves.toMatchObject({
+      referenceNumber: 'response-from-handoff',
+      status: 'accepted',
+    });
+    expect(requests[0]?.body).toMatchObject({
+      response_data: sampleFormResponse.data,
     });
   });
 

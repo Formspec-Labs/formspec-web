@@ -93,6 +93,10 @@ function responseDataFromHandoff(handoff: IntakeHandoff): Record<string, unknown
   if (isRecord(candidate)) {
     return candidate;
   }
+  const response = handoff.extensions?.['x-formspec-response'];
+  if (isRecord(response) && isRecord(response.data)) {
+    return response.data;
+  }
   return {};
 }
 

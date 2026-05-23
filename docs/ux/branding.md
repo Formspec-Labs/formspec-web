@@ -16,9 +16,12 @@ When issuer resolution returns `source === "unbranded"`, the shell renders `Unbr
 
 ## Mutual Exclusion
 
-`RespondentSurface` branches on the resolved issuer source:
+The loading shell owns the temporary `h1` only until the runtime loads. After
+that, `RespondentSurface` owns the single form `h1` and branches on the
+resolved issuer source:
 
-- Branded: `IssuerChromeSlot` plus the form title.
+- Branded: `IssuerChromeSlot`, tenant brand kicker, form title, and description.
 - Unbranded: `UnbrandedCover`.
 
-The two issuer treatments are not rendered together.
+The two issuer treatments are not rendered together, and the app does not keep
+the loading header mounted behind the runtime.

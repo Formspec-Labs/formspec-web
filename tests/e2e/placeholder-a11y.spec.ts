@@ -4,6 +4,8 @@ import AxeBuilder from '@axe-core/playwright';
 test('demo form renders and has no automated accessibility violations', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Demo Benefits Intake' })).toBeVisible();
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('#respondent-title')).toHaveCount(1);
   await expect(page.getByLabel('Full name')).toBeVisible();
 
   let accessibilityScanResults = await new AxeBuilder({ page }).analyze();

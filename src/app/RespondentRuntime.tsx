@@ -145,6 +145,7 @@ export function RespondentRuntime({
     return (
       <FriendlyError
         error={respondentState.error}
+        headingLevel="h1"
         title="We could not load this form."
       />
     );
@@ -250,31 +251,22 @@ function RespondentSurface({
   const { engine, layoutPlan } = useFormspecContext();
   const localeOptions = useMemo(() => localeOptionsForDefinition(definition), [definition]);
   const isUnbranded = resolvedIssuer.source === 'unbranded';
-  const _title = engine.resolveLocaleString('$form.title', definition.title);
-  const _description = engine.resolveLocaleString('$form.description', definition.description ?? '');
-
-  useEffect(() => {
-    const heading = document.getElementById('respondent-title');
-    if (heading && heading.textContent !== _title) {
-      heading.textContent = _title;
-    }
-    const descriptionEl = document.querySelector('[data-formspec-shell-description]');
-    if (descriptionEl && descriptionEl.textContent !== _description) {
-      descriptionEl.textContent = _description;
-    }
-  }, [_description, _title]);
+  const title = engine.resolveLocaleString('$form.title', definition.title);
+  const description = engine.resolveLocaleString('$form.description', definition.description ?? '');
 
   return (
     <>
       {isUnbranded ? (
-        <UnbrandedCover title={_title} description={_description} />
+        <UnbrandedCover title={title} description={description} />
       ) : (
-        <>
+        <header className="respondent-header respondent-header--branded">
           <IssuerChromeSlot engine={engine} hostOrigin={window.location.origin} />
           <p className="respondent-header__kicker respondent-header__kicker--runtime">
             {brandName}
           </p>
-        </>
+          <h1 id="respondent-title">{title}</h1>
+          {description ? <p>{description}</p> : null}
+        </header>
       )}
 
       <div className="respondent-toolbar" aria-label="Form settings">

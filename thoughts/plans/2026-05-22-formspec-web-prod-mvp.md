@@ -348,6 +348,15 @@ ls docs/adapters/{definition-source,draft-store,submit-transport,identity-provid
 
 **Documentation exit gate:** `docs/ux/branding.md`, `docs/ux/errors.md`, `docs/ux/responsive.md`, `docs/ux/accessibility.md` (with the manual-sweep methodology + acceptance criteria), `docs/ux/i18n.md`.
 
+**Gate note (2026-05-22):** implementation and automated axe/mobile smoke
+checks are in place, but M6 is not release-signed. Manual VoiceOver and NVDA
+sweeps remain pending in `docs/ux/accessibility.md`. Lighthouse mobile also
+misses the default budget: latest local production-preview run scored about 74
+with FCP about 1.7 s and LCP about 12.3 s on simulated 3G, despite initial JS
+chunks staying under 200 KB gzip after lazy splitting. Production Locale
+Document loading is demo-proven only until the reference server serves concrete
+Locale Documents instead of only `locale_refs`.
+
 ---
 
 ### M7 — Identity production close + multi-flow demonstration

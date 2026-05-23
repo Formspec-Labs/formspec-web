@@ -77,7 +77,9 @@ export async function buildIntakeHandoff({
     ledgerHeadRef: `ledger:${responseId}:head`,
     occurredAt: new Date().toISOString(),
     extensions: {
+      'x-formspec-draft-key': draftKey,
       'x-formspec-response': response,
+      'x-formspec-response-data': response.data,
       'x-formspec-validation-report': validationReport,
     },
   };

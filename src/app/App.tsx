@@ -52,17 +52,21 @@ export function App({ config }: AppProps) {
           aria-labelledby="respondent-title"
           data-mode={composition.mode}
         >
-          <ShellHeader mode={composition.mode} />
           {Runtime ? (
             <Runtime composition={composition} config={config} />
-          ) : runtimeState.status === 'error' ? (
-            <div className="submit-notice submit-notice--error" role="alert">
-              {runtimeMessage(runtimeState.error)}
-            </div>
           ) : (
-            <div className="submit-notice" role="status">
-              Loading form
-            </div>
+            <>
+              <ShellHeader mode={composition.mode} />
+              {runtimeState.status === 'error' ? (
+                <div className="submit-notice submit-notice--error" role="alert">
+                  {runtimeMessage(runtimeState.error)}
+                </div>
+              ) : (
+                <div className="submit-notice" role="status">
+                  Loading form
+                </div>
+              )}
+            </>
           )}
         </section>
       </div>

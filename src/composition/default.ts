@@ -7,6 +7,7 @@ import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import { demoSampleFormUrl } from '../demo/index.ts';
+import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import type { IntakeHandoff } from '../ports/submit-transport.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
@@ -29,15 +30,16 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     baseUrl: serverUrl,
     tenantBinding: config.tenantBinding,
   };
+  const draftStore = new HttpDraftStore(httpConfig);
 
   return {
     mode: 'production',
     initialDefinitionUrl: productionInitialDefinitionUrl(serverUrl),
     definitionSource: new HttpDefinitionSource(httpConfig),
-    draftStore: new HttpDraftStore(httpConfig),
+    draftStore,
     submitTransport: new HttpSubmitTransport({
       ...httpConfig,
-      draftIdResolver: draftIdFromHandoff,
+      draftIdResolver: (handoff) => draftIdFromHandoff(handoff, draftStore),
     }),
     identityProvider: identityProviderFor(config, notificationDelivery),
     notificationDelivery,
@@ -79,9 +81,28 @@ function identityProviderFor(
   return new AnonymousAdapter();
 }
 
-function draftIdFromHandoff(handoff: IntakeHandoff): string | undefined {
+function draftIdFromHandoff(
+  handoff: IntakeHandoff,
+  draftStore: HttpDraftStore,
+): string | undefined {
   const draftId = handoff.extensions?.['x-formspec-draft-id'];
-  return typeof draftId === 'string' ? draftId : undefined;
+  if (typeof draftId === 'string') {
+    return draftId;
+  }
+  const draftKey = draftKeyFromHandoff(handoff);
+  return draftKey ? draftStore.draftIdFor(draftKey) : undefined;
+}
+
+function draftKeyFromHandoff(handoff: IntakeHandoff): DraftKey | undefined {
+  const candidate = handoff.extensions?.['x-formspec-draft-key'];
+  if (!isRecord(candidate) || typeof candidate.formUrl !== 'string') {
+    return undefined;
+  }
+  return {
+    formUrl: candidate.formUrl,
+    formVersion: typeof candidate.formVersion === 'string' ? candidate.formVersion : undefined,
+    subjectRef: typeof candidate.subjectRef === 'string' ? candidate.subjectRef : undefined,
+  };
 }
 
 function productionInitialDefinitionUrl(serverUrl: string): string {
@@ -90,4 +111,8 @@ function productionInitialDefinitionUrl(serverUrl: string): string {
 
 function demoFormId(): string {
   return demoSampleFormUrl.split('/').filter(Boolean).at(-1) ?? 'demo-intake';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

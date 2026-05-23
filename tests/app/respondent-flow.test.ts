@@ -64,6 +64,13 @@ describe('respondent flow helpers', () => {
       responseRef: `response:${sampleFormResponse.id ?? idempotencyKey}`,
       validationReportRef: 'validation:none',
     });
+    expect(handoff.extensions).toMatchObject({
+      'x-formspec-draft-key': {
+        formUrl: demoSampleForm.url,
+        formVersion: demoSampleForm.version,
+      },
+      'x-formspec-response-data': sampleFormResponse.data,
+    });
     expect(handoff.responseHash).toMatch(/^sha256:[a-f0-9]+$/);
   });
 });

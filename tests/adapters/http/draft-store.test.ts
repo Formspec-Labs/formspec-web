@@ -32,6 +32,7 @@ describe('HttpDraftStore', () => {
     const key = { formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef: 'S-1' };
 
     await adapter.save(key, sampleFormResponse);
+    expect(adapter.draftIdFor(key)).toBe('draft-http-1');
     await expect(adapter.load(key)).resolves.toEqual(sampleFormResponse);
     await adapter.save(key, { ...sampleFormResponse, data: { fullName: 'Grace Hopper' } });
 
