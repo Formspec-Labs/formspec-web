@@ -1,0 +1,13 @@
+{
+  "name": "default-on-instance-unavailable",
+  "description": "org default-on; instance unavailable; form silent -> disabled with default-on-no-instance",
+  "mode": "production",
+  "instance": { "respondentPlace": "unavailable", "status": "available" },
+  "org": { "features": { "respondentPlace": "default-on" } },
+  "form": { "features": {} },
+  "expect": {
+    "kind": "profile",
+    "enabled": [],
+    "disabled": { "respondentPlace": "default-on-no-instance", "status": "not-requested" }
+  }
+}

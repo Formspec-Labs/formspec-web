@@ -1,0 +1,9 @@
+{
+  "name": "invalid-form-policy-mode",
+  "description": "form policy uses an unknown mode -> InvalidRuntimePolicy",
+  "mode": "production",
+  "instance": { "respondentPlace": "available", "status": "available" },
+  "org": { "features": {} },
+  "form": { "features": { "status": "default-on" } },
+  "expect": { "kind": "throws", "code": "InvalidRuntimePolicy" }
+}

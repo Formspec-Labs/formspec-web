@@ -1,0 +1,13 @@
+{
+  "name": "demo-stub-satisfies-demo",
+  "description": "demo mode + demo-stub instance + form required -> enabled",
+  "mode": "demo",
+  "instance": { "respondentPlace": "demo-stub", "status": "demo-stub" },
+  "org": { "features": {} },
+  "form": { "features": { "status": "required" } },
+  "expect": {
+    "kind": "profile",
+    "enabled": ["status"],
+    "disabled": { "respondentPlace": "not-requested" }
+  }
+}

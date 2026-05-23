@@ -1,0 +1,9 @@
+{
+  "name": "required-org-forbidden",
+  "description": "form requires status; org forbids -> FeaturePolicyConflict",
+  "mode": "production",
+  "instance": { "respondentPlace": "available", "status": "available" },
+  "org": { "features": { "status": "forbidden" } },
+  "form": { "features": { "status": "required" } },
+  "expect": { "kind": "throws", "code": "FeaturePolicyConflict" }
+}

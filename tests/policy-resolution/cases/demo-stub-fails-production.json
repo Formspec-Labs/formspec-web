@@ -1,0 +1,9 @@
+{
+  "name": "demo-stub-fails-production",
+  "description": "production mode + demo-stub instance + form required -> UnsupportedRequiredFeature",
+  "mode": "production",
+  "instance": { "respondentPlace": "available", "status": "demo-stub" },
+  "org": { "features": {} },
+  "form": { "features": { "status": "required" } },
+  "expect": { "kind": "throws", "code": "UnsupportedRequiredFeature" }
+}
