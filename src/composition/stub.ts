@@ -10,6 +10,11 @@ import {
   demoApplicantStatusResource,
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
+import type {
+  FormRuntimePolicy,
+  InstanceCapabilities,
+  OrgRuntimePolicy,
+} from '../policy/index.ts';
 import type { Composition } from './types.ts';
 
 /**
@@ -34,5 +39,13 @@ export function createStubComposition(): Composition {
     statusReader: stubStatusReader([
       ['urn:wos:case_demo_0001', demoApplicantStatusResource()],
     ]),
+    instanceCapabilities: {
+      respondentPlace: 'demo-stub',
+      status: 'demo-stub',
+    } satisfies InstanceCapabilities,
+    orgRuntimePolicy: {
+      features: { respondentPlace: 'allowed', status: 'allowed' },
+    } satisfies OrgRuntimePolicy,
+    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
 }

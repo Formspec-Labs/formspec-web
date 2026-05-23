@@ -7,6 +7,12 @@ import type {
   StatusReader,
   SubmitTransport,
 } from '../ports/index.ts';
+import type { FormDefinition } from '../ports/definition-source.ts';
+import type {
+  FormRuntimePolicy,
+  InstanceCapabilities,
+  OrgRuntimePolicy,
+} from '../policy/index.ts';
 
 /**
  * Composition root contract — web ADR-0009 §Composition root pattern.
@@ -37,4 +43,15 @@ export interface Composition {
   respondentPlaceSource: RespondentPlaceSource;
   /** ADR-0010/FW-0039: WOS applicant API resource shapes, not a web status vocabulary. */
   statusReader: StatusReader;
+  /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */
+  instanceCapabilities: InstanceCapabilities;
+  /** ADR-0011 §Org runtime policy — supplied by the composition root. */
+  orgRuntimePolicy: OrgRuntimePolicy;
+  /**
+   * ADR-0011 §Form runtime policy — extracts the form's runtime-policy
+   * declaration from the loaded Definition. Default extractors return {} (no
+   * requirements); feature ADRs that add a form-policy field define their own
+   * extractor.
+   */
+  getFormRuntimePolicy: (definition: FormDefinition) => FormRuntimePolicy;
 }

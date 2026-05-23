@@ -12,6 +12,11 @@ import { stubNotificationDelivery } from '../adapters/stub/notification-delivery
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
+import type {
+  FormRuntimePolicy,
+  InstanceCapabilities,
+  OrgRuntimePolicy,
+} from '../policy/index.ts';
 import { demoSampleFormUrl } from '../demo/index.ts';
 import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
@@ -66,6 +71,14 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
+    instanceCapabilities: {
+      respondentPlace: 'unavailable',
+      status: 'unavailable',
+    } satisfies InstanceCapabilities,
+    orgRuntimePolicy: {
+      features: { respondentPlace: 'allowed', status: 'allowed' },
+    } satisfies OrgRuntimePolicy,
+    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
 }
 

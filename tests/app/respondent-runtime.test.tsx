@@ -250,6 +250,16 @@ function testComposition(
     statusReader: {
       readStatus: vi.fn(async () => options.applicantStatus),
     },
+    // ADR-0011: production-mode composition with both seeded capabilities
+    // available so the test inherits the pre-policy enablement.
+    instanceCapabilities: {
+      respondentPlace: 'available',
+      status: 'available',
+    },
+    orgRuntimePolicy: {
+      features: { respondentPlace: 'allowed', status: 'allowed' },
+    },
+    getFormRuntimePolicy: () => ({ features: {} }),
   };
 }
 
