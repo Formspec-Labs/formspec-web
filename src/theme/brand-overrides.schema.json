@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formspec.org/schemas/formspec-web/brand-overrides.schema.json",
+  "title": "Formspec Web Brand Overrides",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "tokens"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tokens": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": ["string", "number"]
+      }
+    }
+  }
+}

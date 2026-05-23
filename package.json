@@ -12,21 +12,26 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "check:vendor-leaks": "scripts/check-vendor-leaks.sh",
+    "ci": "npm run typecheck && npm run lint && npm test && npm run check:vendor-leaks && npm run test:e2e && npm run build"
   },
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^9.18.0",
+    "@playwright/test": "^1.60.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "eslint": "^9.18.0",
     "eslint-import-resolver-typescript": "^3.7.0",
     "eslint-plugin-import": "^2.31.0",
-    "happy-dom": "^17.0.0",
+    "happy-dom": "^20.9.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.20.0",
     "vite": "^7.0.0",

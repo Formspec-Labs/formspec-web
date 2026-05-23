@@ -3,8 +3,8 @@
  *
  * Conformance invariant: output `IdentityClaim` mirrors
  * `respondent-ledger-spec.md` §6.6 `identityAttestation` field set.
- * Adapter MUST normalize provider-native payloads (OIDC `acr`/`amr`, Firebase
- * tokens, Cognito assertions, etc.) into this canonical shape before returning
+ * Adapter MUST normalize provider-native payloads and assurance evidence into
+ * this canonical shape before returning
  * from `authenticate()`. Provider-native vocabulary MUST NOT leak through.
  *
  * Statefulness (web ADR-0009 §Composition lifecycle): IdentityProvider is one
@@ -22,9 +22,9 @@ export type Unsubscribe = () => void;
  * are port-level extensions beyond §6.6.
  */
 export interface IdentityClaim {
-  /** Provider or issuer identifier such as "idme", "login.gov", "firebase". */
+  /** Provider or issuer identifier. */
   provider: string;
-  /** Implementation adapter identifier, e.g., "oidc-client-ts@2", "firebase-auth@10". */
+  /** Implementation adapter identifier. */
   adapter: string;
   /** Stable pseudonymous subject reference. */
   subjectRef: string;

@@ -83,4 +83,4 @@ This repo is a git submodule of `formspec-stack`. A change crossing N submodules
 
 ## License
 
-Open-source license selection pending — see ADR-0003 (not yet written). Reference-implementation positioning favors MIT or Apache-2.0.
+Apache-2.0 — see [ADR-0003](thoughts/adr/0003-license-apache-2.0.md) and [LICENSE](LICENSE). Do not add dependencies whose published package metadata conflicts with Apache-2.0 without a new ADR-level decision.

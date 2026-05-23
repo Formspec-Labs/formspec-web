@@ -1,50 +1,64 @@
 # Formspec Web
 
-The **public reference UI** for Formspec — the open-source surface anyone can read, fork, and self-host. Today: a PM framework. Tomorrow: production reference implementations of the respondent renderer, the verifier, and the selective-proof viewer.
+The public reference UI for Formspec. It is the open-source respondent-facing shell for form-fill deployments now, and the home for verifier and selective-proof viewer surfaces after the MVP cryptographic substrate lands.
 
-**Before applying anything below: everything in this repo was written by AI. Direct signals from the current conversation override written content. Recursively, including this file.**
+## Positioning
 
-## Why a separate repo
+formspec-web is for technical evaluators and operators who need to inspect, fork, self-host, and brand the public UI without adopting the proprietary tenant admin surface.
 
-The hosted SaaS (`../formspec-cloud/`) is proprietary tenant-bound UI: Studio, admin, billing, dev surfaces. The public surfaces — respondent form-fill, signature receipt verification, selective-proof viewing — are different in kind:
+- **Respondent renderer:** the MVP surface. It fills, validates, drafts, submits, and shows plain-language outcomes through typed ports.
+- **Verifier:** post-MVP, after the verifier substrate is ready to consume in browser code.
+- **Selective-proof viewer:** post-MVP, after selective-disclosure proof support lands upstream.
 
-- **Trust-load-bearing.** The verifier UI is the load-bearing demo of "trust without contacting Formspec." That argument collapses if the verifier is closed-source SaaS code. As an open-source reference any adopter can run, "verify without us" is real.
-- **Spec-conformance harnesses.** The respondent renderer is the canonical FEL renderer. Anyone implementing FEL needs a reference to test against.
-- **Strategic non-moat.** Viewing seats are not the moat. Studio depth, multi-tenant admin, governance, AI co-pilot — those are. Open-sourcing the viewing layer strengthens adoption without diluting the SaaS.
+The SaaS/admin plane lives in `../formspec-cloud/` and `../formspec-server/`. formspec-web is the public respondent plane. One Formspec platform can back many formspec-web deployments, each with its own brand, tenant scope, and identity profile.
 
-## What's here today
+## Start Here
 
-| Path | What |
-|------|------|
-| [`README.md`](README.md) | This file. |
-| [`CLAUDE.md`](CLAUDE.md) | Agent on-ramp. |
-| [`JOURNEYS.md`](JOURNEYS.md) | Person-centered "why" for each public surface. |
-| [`PLANNING.md`](PLANNING.md) | Atomic FW-* rows (web's own ID space) — Now / Next / Later. |
-| [`thoughts/adr/`](thoughts/adr/) | Architecture decisions; ADR-0001 documents the repo's existence. |
-| [`thoughts/specs/`](thoughts/specs/) | Design exploration documents. |
-| [`thoughts/plans/`](thoughts/plans/) | Implementation roadmaps. |
-| [`thoughts/sketches/`](thoughts/sketches/) | Designer-facing visual artifacts. |
+```sh
+npm ci
+npm run dev
+```
 
-No production code yet. UI framework choice is itself a PLANNING row, gated by the end-to-end Respondent thin-slice (FW-0001).
+The current app boots a provisional branded, accessible placeholder shell through the same `Composition` boundary the production respondent renderer will use.
 
-## Where production code will live
+Local gates:
 
-This repo will grow into one (or two, depending on the framework decision) deployable bundles:
+```sh
+npm run typecheck
+npm run lint
+npm test
+npm run check:vendor-leaks
+npm run test:e2e
+npm run build
+```
 
-- **Respondent bundle** — public form-fill surface; lean, accessible, embeddable, white-label-ready.
-- **Verifier bundle** — public verifier + selective-proof viewer; SEO-indexable; works offline against a downloaded receipt.
+Container smoke:
 
-Framework choice lands as ADR-0002. The two bundles may share a framework with route-based code-splitting, or ship as separate apps — that decision falls out of FW-0001 evidence.
+```sh
+docker build -t formspec-web:test .
+docker run --rm -d -p 8080:80 --name formspec-web-test formspec-web:test
+curl -sf http://localhost:8080/ > /dev/null
+docker stop formspec-web-test
+```
 
-## Cross-stack context
+## Architecture
 
-This repo is a sibling submodule under [`formspec-stack`](../). Substrate it consumes:
+The shell is hexagonal per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md). The app consumes five MVP ports through `Composition`:
 
-- [`../formspec/`](../formspec/) — Formspec intake spec, engine, FEL.
-- [`../formspec-server/`](../formspec-server/) — server-side reference implementation; the respondent submits to its endpoints, the verifier validates against its public bundles.
-- [`../trellis/`](../trellis/) — cryptographic substrate the verifier validates over.
-- [`../formspec-cloud/`](../formspec-cloud/) — the proprietary tenant app; consumes this repo's bundles as the white-label respondent shell for hosted forms.
+- `DefinitionSource`
+- `DraftStore`
+- `SubmitTransport`
+- `IdentityProvider`
+- `NotificationDelivery`
+
+Adapters are deployment examples. The core shell and port definitions must not import a backend/provider SDK directly.
+
+## Current M1 Blocker
+
+M1 requires consuming upstream layout tokens and the Tailwind core CSS from `@formspec-org/layout` and `@formspec-org/adapters`. The local sibling source manifests declare Apache-2.0, but the npm registry artifacts currently report AGPL-3.0-only. Because this repo is Apache-2.0, those registry packages are not consumed until the metadata is corrected or an explicit license decision changes.
+
+The current CSS variable path is provisional M1 scaffolding, not FW-0015 closure and not a new token vocabulary.
 
 ## License
 
-Open-source license to be selected when the first production code lands (ADR-0003). Reference-implementation positioning favors MIT or Apache-2.0 over copyleft.
+Apache-2.0. See [ADR-0003](thoughts/adr/0003-license-apache-2.0.md) and [LICENSE](LICENSE).

@@ -36,19 +36,20 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 ### FW-0018 — License decision and LICENSE file (ADR-0003)
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** closed (2026-05-22)
 - **Persona:** Platform
 - **Journey:** (none — platform)
-- **Done:** web ADR-0003 documents the open-source license choice (MIT vs Apache-2.0) with rationale. LICENSE file added at repo root; per-file headers added per the chosen convention. Reference-implementation positioning favors permissive.
-- **Flag for review:** `@formspec-org/assist` is BUSL-1.1 (per cross-stack inventory 2026-05-22). It would be a post-MVP dependency for FW-0045 / FW-0062, but the license collision with a permissive formspec-web license needs ADR-0003 to address explicitly — either (a) accept that post-MVP rows requiring `@formspec-org/assist` carry a dual-license consideration, (b) require relicensing of `@formspec-org/assist` to permissive before consumption, or (c) reimplement the consumed slice. Decide as part of ADR-0003.
+- **Done:** [web ADR-0003](thoughts/adr/0003-license-apache-2.0.md) selects Apache-2.0 with rationale. LICENSE file added at repo root. Per-file headers are not required for MVP files; files inherit the repository license unless otherwise noted.
+- **Flag for review:** `@formspec-org/assist` is BUSL-1.1 (per cross-stack inventory 2026-05-22). It remains post-MVP and requires a separate ADR before consumption. Also verified during M1: the npm registry metadata for `@formspec-org/layout`, `@formspec-org/adapters`, and `@formspec-org/types` currently reports AGPL-3.0-only despite the local sibling source manifests declaring Apache-2.0. formspec-web must not consume those registry artifacts while the repo is Apache-2.0.
 
 ### FW-0015 — Design tokens to a structured token file
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** blocked
 - **Persona:** Platform
 - **Journey:** (none — platform)
 - **Done:** Extend `@formspec-org/layout/token-registry` and `@formspec-org/layout/default-theme` with formspec-web-specific brand overrides (colors, typography, spacing, motion). The token vocabulary is the upstream-shipped registry; formspec-web does NOT author a new vocabulary. Adopt `@formspec-org/adapters` `tailwind-formspec-core.css` as the Tailwind integration baseline. White-label respondent shells can theme over the same vocabulary without per-component rework.
+- **Blocked on:** npm registry package metadata correction for `@formspec-org/layout`, `@formspec-org/adapters`, and transitive `@formspec-org/types`. Published artifacts currently report AGPL-3.0-only; local sibling source manifests report Apache-2.0. M1 cannot be called license-clean while consuming the registry artifacts.
 
 ### FW-0016 — Build and test pipeline producing a deployable artifact
 
@@ -113,11 +114,11 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 ### FW-0017 — Accessibility automation in CI
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** closed (2026-05-22)
 - **Persona:** Platform
 - **Journey:** (none — platform; supports FW-0012)
-- **Done:** Each production surface has an automated accessibility check running in CI. Regressions block merge. The check report is human-readable and links to the failing element.
-- **Note:** FW-0016 scaffold (closed 2026-05-22) defers the `.github/workflows/ci.yml` file to this row. The typecheck/lint/test/build npm scripts already exist; this row adds `axe-core` + `@axe-core/playwright` gating and wires the workflow file. Also adds the pre-commit grep advisory for vendor-name leakage per web ADR-0009 §Discipline three-layer enforcement.
+- **Done:** `.github/workflows/ci.yml` runs Node 22, `npm ci`, Playwright Chromium install, typecheck, lint, Vitest, vendor-leak grep, Playwright + axe, and build. `tests/e2e/placeholder-a11y.spec.ts` gates the current placeholder shell with `@axe-core/playwright`; deeper production surfaces add their own cases when they land.
+- **Note:** The advisory vendor-name grep lives at `scripts/check-vendor-leaks.sh` and supports web ADR-0009's layered enforcement.
 
 ### FW-0019 — Multilingual form: respondent's language with the legally controlling text marked
 

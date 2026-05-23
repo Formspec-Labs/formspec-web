@@ -41,7 +41,7 @@ Unifying property: **time-to-first-success matters more than feature breadth**. 
 
 | # | Decision | Implication |
 |---|---|---|
-| A | **Tenant resolution: configurable via DI profile.** Both per-instance bound (department-app archetype) and per-form implicit (public-portal archetype) supported; profile selects which. | Two reference profiles ship in M2: `departmentApp` (bound, OIDC, branded) and `publicPortal` (implicit, anonymous-OK). MVP `publicPortal` attaches a sentinel `public` tenant header (zero new server work); **EXT-24** (server-side per-form tenant resolution) lets it drop the header once server work lands. Profile architecture supports both modes. |
+| A | **Tenant resolution: configurable via DI profile.** Both per-instance bound (department-app archetype) and per-form implicit (public-portal archetype) supported; profile selects which. | Two reference profiles ship in M2: `departmentApp` (bound, OIDC, branded) and `publicPortal` (implicit, anonymous-OK). Because `stack-common-http` currently requires a full four-part `TenantScope`, MVP `publicPortal` attaches a sentinel full scope (`tenant`, `workspace`, `environment`, `cell`) until **EXT-24** (server-side per-form tenant resolution) lets it drop tenant headers. Profile architecture supports both modes. |
 | B | **Authentication: direct token trust.** formspec-web obtains OIDC tokens via its `IdentityProvider` port; formspec-server validates the token directly against the issuer's JWKS. | No federation, no token exchange. **EXT-23** (server-side per-tenant trusted-issuer config + JWKS client + RS256 verifier) is **verified fully absent in `formspec-server`** as of 2026-05-22 (`formspec-server-auth-jwt` is HS256-only; `jwks_url` field declared but never consumed). EXT-23 is filed as a peer milestone in `formspec-server`; **M7 acceptance gates on its delivery**. |
 | C | **Deployment surface: Docker + docker-compose for MVP.** | Static export, Vercel template, Cloudflare bundle deferred. The MVP test is `docker-compose up`. Note: `formspec-server` has no production Dockerfile today — the existing compose pattern (`ops/managed-single-cell/docker-compose.yml`) runs the server as `cargo run` against bind-mounted source. MVP accepts this footprint; **EXT-25** (formspec-server production Dockerfile) is the future-state hardening item. |
 
@@ -58,7 +58,7 @@ These were open in earlier drafts and are now locked so an autonomous agent does
 | Hosted demo URL (M8) | **Deferred to user action.** Agent does NOT attempt domain registration or DNS. Agent ships `docs/deployment.md` with three deploy-path recipes (static-export → Vercel, static-export → Cloudflare Pages, self-host → Docker behind reverse proxy). User picks and runs. | Surfaces in M8 acceptance as "documented + ready, not deployed." |
 | Test framework | Vitest 4 (unit + smoke + conformance suites). | Matches sibling packages. |
 | E2E + a11y framework | Playwright with `@axe-core/playwright`. | Per the original plan; CI gate in M1. |
-| Linter | ESLint 9 flat config + `eslint-plugin-no-restricted-paths` for boundary discipline. | Per ADR-0009 §Discipline. |
+| Linter | ESLint 9 flat config + `eslint-plugin-import`'s `import/no-restricted-paths` rule for boundary discipline. | Per ADR-0009 §Discipline. Earlier drafts named `eslint-plugin-no-restricted-paths`; no maintained npm package exists under that name, so the ADR-aligned import rule is used directly. |
 | Bundler | Vite 7. | Per ADR-0002. |
 | Package manager | npm (matches sibling `file:` linking convention). | |
 | Node version | 22 LTS. | Matches sibling `engines` fields. |
@@ -76,7 +76,7 @@ Every ADR in [`../adr/`](../adr/) traces to a role in this plan:
 |---|---|
 | [0001 — Public reference UI separation](../adr/0001-public-reference-ui-separation.md) | Structural authority. This plan IS the formspec-web work. |
 | [0002 — UI framework React](../adr/0002-ui-framework-react.md) | Tech-stack authority. Vite 7 + React 19 + TS strict. |
-| [0003 — License Apache-2.0](../adr/0003-license-mit.md) | **Authored by this plan in M1.** |
+| [0003 — License Apache-2.0](../adr/0003-license-apache-2.0.md) | **Authored by this plan in M1.** |
 | [0004 — Consume primitives, do not invent them](../adr/0004-cross-repo-placement-consume-not-invent.md) | Discipline. Upstream specs and stack-common shapes are consumed verbatim. |
 | [0005 — MVP scope defers cryptographic substrate](../adr/0005-mvp-scope-defer-cryptographic-substrate.md) | Scope authority. Defines the out-of-scope cut. |
 | [0006 — Issuer Sidecar Spec request](../adr/0006-issuer-sidecar-spec-request.md) | Backs FW-0004. Consumed (not implemented) in M6 with draft-stability caveat — upstream spec is `v1.0.0-draft.1`. |
@@ -93,7 +93,7 @@ Every ADR in [`../adr/`](../adr/) traces to a role in this plan:
 - [`stack-common/schemas/error.schema.json`](../../../stack-common/schemas/error.schema.json) — canonical Problem JSON shape. Required fields: `type`, `title`, `status`, `error_code` (snake_case).
 - `stack-common-http` (`stack-common/crates/stack-common-http/`) — canonical HTTP middleware conventions. Cited by name by adapters:
   - `IDEMPOTENCY_KEY_HEADER = "idempotency-key"` — SubmitTransport uses this header verbatim; server-side `idempotency_middleware` honors it.
-  - `extract_tenant` + `HeaderConfig::formspec()` — tenant context header convention (e.g., `x-formspec-tenant-id`); `departmentApp` profile attaches it, `publicPortal` profile attaches a sentinel `public` value.
+  - `extract_tenant` + `HeaderConfig::formspec()` — tenant context header convention. Current Formspec scope is four headers: `x-formspec-tenant-id`, `x-formspec-workspace-id`, `x-formspec-environment-id`, and `x-formspec-cell-id`; `departmentApp` profile attaches configured values, `publicPortal` profile attaches a sentinel full scope until EXT-24 lands.
   - `MiddlewareBuilder::with_request_id` — request-id propagation; adapter should echo back `x-request-id` from Problem JSON responses for the `ProblemDisplay` "reference" field.
 - `respondent-ledger-spec §6.6 / §6.6.1 / §6.6A / §6.7` — `IdentityProvider` normalization invariants. §6.6 names the adapter-boundary as **SHOULD**; this plan elevates it to a project-local MUST at the port boundary because the port IS the adapter §6.6 describes (no provider-native leakage is enforceable here). §6.6.1 (MUST NOT silently downgrade) and §6.7 (`privacyTier` ⊥ `assuranceLevel` independence) are quoted verbatim as MUST.
 
@@ -160,7 +160,7 @@ node --version && npm --version                           # ≥22, ≥10
 **Acceptance:**
 - ADR-0003 (Apache-2.0) authored; LICENSE at repo root; `package.json` license matches.
 - Tokens from `@formspec-org/layout` consumed (default theme + Tailwind base via `@formspec-org/adapters`); per-deployment brand override path declared (`src/theme/brand-overrides.json` or equivalent) — isolated, not woven into the core.
-- CI gates on every PR: typecheck (TS strict), lint (with `no-restricted-paths` boundary per ADR-0009), vendor-leak grep (advisory), unit tests (Vitest), Playwright + `@axe-core/playwright` a11y on the placeholder shell.
+- CI gates on every PR: typecheck (TS strict), lint (with `no-restricted-paths` boundary per ADR-0009), unit tests (Vitest), Playwright + `@axe-core/playwright` a11y on the placeholder shell. CI also runs the vendor-leak grep as an advisory report; it does not block merge on its own per ADR-0009.
 - Dockerfile produces a static-served build artifact; image runs and serves the placeholder shell over HTTP.
 - README explains positioning (what is formspec-web, who is it for), the Palantir-like posture, and where to start.
 
@@ -177,9 +177,13 @@ test -f README.md && grep -i "respondent" README.md      # README explains posit
 test -f CONTRIBUTING.md                                  # contributing exists
 ```
 
-**FW rows closed:** FW-0014, FW-0015, FW-0016, FW-0017, FW-0018.
+**FW rows closed:** FW-0014, FW-0016, FW-0017, FW-0018.
+
+**FW rows blocked:** FW-0015 remains blocked on package-license metadata drift for the upstream token packages. M1 is not complete, and M2 MUST NOT start, until FW-0015 is either unblocked and closed or the owner explicitly approves splitting M1 into M1a (repo posture) and M1b (upstream token consumption).
 
 **Upstream dependencies:** none.
+
+**M1 steering note (2026-05-22):** License, Docker, CI, vendor-leak, Playwright/axe, README, and CONTRIBUTING work can land. The upstream token-consumption criterion remains blocked because npm registry metadata for `@formspec-org/layout`, `@formspec-org/adapters`, and transitive `@formspec-org/types` reports AGPL-3.0-only while formspec-web is Apache-2.0. Do not consume those registry artifacts until the metadata is corrected or a new license ADR changes the decision. This keeps M1 open even though the rest of the M1 surface can be committed.
 
 **Documentation exit gate:** `README.md` (positioning, buyer profile, quickstart-pointer); `CONTRIBUTING.md` (license posture, boundary rules per ADR-0009).
 
@@ -190,13 +194,14 @@ test -f CONTRIBUTING.md                                  # contributing exists
 **Capability:** A configurable deployment shape. Profiles select tenant model + auth + composition shape; env overrides handle secrets. The integration story is "pick a profile, override what you need."
 
 **Acceptance:**
-- `FormspecWebConfig` schema declared in TS, exported from a public package surface so adopter configs can typecheck against it.
+- `FormspecWebConfig` schema declared in TS, exported from the public package surface (`src/index.ts` re-exporting `src/config/`) so adopter configs can typecheck against it.
 - Per-deployment config consumed from `formspec.config.ts` at repo root (typescript module — type-safe, no schema-validation step needed for the common case); env vars (`VITE_FORMSPEC_SERVER_URL`, OIDC client config, OIDC issuer, magic-link callback path) override secrets at runtime.
 - ≥2 reference profiles ship:
-  - **`departmentAppProfile`** — per-instance tenant binding (tenant_id baked into config; attached as header to every formspec-server request); OIDC identity required; branded.
-  - **`publicPortalProfile`** — per-form implicit tenancy (no tenant header; server resolves tenant from form_id); Anonymous identity acceptable; lighter brand defaults.
+  - **`departmentAppProfile`** — per-instance tenant binding (full `TenantScope` baked into config: `tenant`, `workspace`, `environment`, `cell`; attached as four `HeaderConfig::formspec()` headers to every formspec-server request); OIDC identity required; branded.
+  - **`publicPortalProfile`** — per-form implicit tenancy in the product model, but MVP attaches a sentinel full `TenantScope` until EXT-24 lets the server resolve tenancy from `form_id`; Anonymous identity acceptable; lighter brand defaults.
 - Brand override path proven isolated: two instances of formspec-web with different brand configs can run side-by-side (M2 unit test; M8 multi-instance demo confirms at runtime).
-- Tenant binding option drives the protocol layer: bound instance attaches a tenant context header (matching `stack-common-http`'s `extract_tenant` convention); implicit instance does not.
+- Tenant binding option drives the protocol layer: bound instance attaches configured full-scope tenant headers matching `stack-common-http`'s `extract_tenant` convention; MVP implicit instance attaches sentinel full-scope tenant headers; post-EXT-24 implicit instance attaches no tenant headers and lets the server resolve from `form_id`.
+- Until M3 lands executable per-port conformance suites, M2 profile unit tests are the interim oracle for config loading, tenant-header attachment, env overrides, and brand isolation.
 
 **Verify:**
 ```bash
@@ -210,7 +215,7 @@ test -f docs/configuration.md && test -f docs/profiles.md
 
 **FW rows closed:** none (architectural — backs every adopter-side row).
 
-**Upstream dependencies:** server-side tenant-context header convention from `stack-common-http` (verified to exist). Server-side per-tenant trusted-issuer config for OIDC tokens — see §10 "Known gaps" (EXT-23 if absent).
+**Upstream dependencies:** server-side tenant-context header convention from `stack-common-http` (verified to exist as full `TenantScope`). Server-side per-tenant trusted-issuer config for OIDC tokens — see §10 "Known gaps" (EXT-23 if absent). EXT-24 is required before `publicPortalProfile` can truly omit tenant headers.
 
 **Documentation exit gate:** `docs/configuration.md` (full `FormspecWebConfig` schema, env overrides, profile selection); `docs/profiles.md` (each reference profile documented; "how to author your own profile" recipe).
 
@@ -416,6 +421,7 @@ The plan is honest about what it does not deliver. These are P0 follow-ups when 
 
 - **No named first pilot.** Buyer profile is articulated (technical evaluator on a curiosity → commitment journey); no specific adopter is committed. Without a pilot, the deployment ergonomics test is self-validated.
 - **Hosted demo URL target unchosen.** docker-compose covers the local quickstart; an internet-reachable demo URL needs a hosting decision (Vercel? Cloudflare Pages? Self-hosted?). Surfaced in M8 acceptance.
+- **Published layout/adapters license metadata drift blocks M1 token consumption.** Local sibling source manifests for `@formspec-org/layout` and `@formspec-org/adapters` declare Apache-2.0, but the npm registry artifacts currently report AGPL-3.0-only (and `@formspec-org/types` transitively does the same). With web ADR-0003 selecting Apache-2.0 for formspec-web, the registry packages cannot be consumed until the metadata is corrected or a new license decision is made.
 - **EXT-23 (server-side per-tenant trusted-issuer config) is filed as a peer milestone.** Verified 2026-05-22: fully absent in `formspec-server` (no JWKS, no RS256, no multi-issuer registry; `jwks_url` field is config-shaped vapor). Decision B locked; EXT-23 is substantive new server-side work (issuer registry per-tenant + JWKS client + RS256 verifier path in `stack-common-auth` or `formspec-server-auth-jwt`). **Gates M7 acceptance.** Owner: formspec-server. Schedule: TBD (see §12).
 - **Performance budget targets are defaults, not buyer-derived.** Lighthouse mobile ≥90, initial bundle ≤200 KB gz, FCP <1.5 s on simulated 3G — reasonable for an MVP, may need tuning against real-world conditions.
 - **Sample form ownership.** A canonical sample form ships in `src/demo/sample-form.json` at M5. Source: reuse an existing fixture from `formspec/tests/fixtures/`, or design fresh, or import from `formspec-server`'s seed data. Decide before M5.

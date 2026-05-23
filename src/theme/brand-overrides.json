@@ -1,0 +1,18 @@
+{
+  "$schema": "./brand-overrides.schema.json",
+  "name": "formspec-reference",
+  "tokens": {
+    "color.primary": "#155e56",
+    "color.primaryForeground": "#ffffff",
+    "color.foreground": "#1f2933",
+    "color.background": "#f7f8f5",
+    "color.border": "#c9d3cd",
+    "color.card": "#ffffff",
+    "color.muted": "#5d6b66",
+    "color.mutedForeground": "#66736f",
+    "color.ring": "#155e56",
+    "color.surface": "#edf3ef",
+    "radius.sm": "0.5rem",
+    "radius.md": "0.75rem"
+  }
+}

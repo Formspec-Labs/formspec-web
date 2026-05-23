@@ -1,4 +1,5 @@
 import { useComposition } from './hooks/useComposition.ts';
+import { getActiveBrandName } from '../theme/theme.ts';
 
 /**
  * Scaffold placeholder. FW-0016 acceptance: the shell mounts, the Composition
@@ -10,16 +11,67 @@ import { useComposition } from './hooks/useComposition.ts';
  */
 export function App() {
   const composition = useComposition();
-  const portNames = Object.keys(composition).filter(
-    (k) => composition[k as keyof typeof composition] !== undefined,
-  );
+  const ports = [
+    ['DefinitionSource', Boolean(composition.definitionSource)],
+    ['DraftStore', Boolean(composition.draftStore)],
+    ['SubmitTransport', Boolean(composition.submitTransport)],
+    ['IdentityProvider', Boolean(composition.identityProvider)],
+    ['NotificationDelivery', Boolean(composition.notificationDelivery)],
+  ] as const;
+
   return (
-    <main>
-      <h1>formspec-web</h1>
-      <p>Hexagonal scaffold per web ADR-0009.</p>
-      <p>
-        Wired ports: <code>{portNames.join(', ')}</code>
-      </p>
+    <main className="shell" aria-labelledby="shell-title">
+      <div className="shell__inner">
+        <header className="shell__header">
+          <p className="shell__eyebrow">Public reference UI</p>
+          <h1 id="shell-title" className="shell__title">
+            Formspec Web
+          </h1>
+          <p className="shell__summary">
+            Respondent-facing shell for Formspec deployments, built around audited ports,
+            isolated branding, and adapter conformance.
+          </p>
+        </header>
+
+        <div className="shell__grid">
+          <section className="shell__panel shell__panel--primary" aria-labelledby="ports-title">
+            <h2 id="ports-title" className="shell__section-title">
+              Composition Boundary
+            </h2>
+            <p className="shell__text">
+              The current scaffold is wired through the same five MVP ports the production
+              renderer will use.
+            </p>
+            <ul className="shell__ports" aria-label="Wired MVP ports">
+              {ports.map(([name, enabled]) => (
+                <li className="shell__port" key={name}>
+                  {name}: {enabled ? 'wired' : 'missing'}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="shell__panel shell__panel--secondary" aria-labelledby="posture-title">
+            <h2 id="posture-title" className="shell__section-title">
+              Deployment Posture
+            </h2>
+            <dl className="shell__meta">
+              <div className="shell__meta-row">
+                <dt>Active brand</dt>
+                <dd>{getActiveBrandName()}</dd>
+              </div>
+              <div className="shell__meta-row">
+                <dt>Runtime</dt>
+                <dd>Static Vite bundle</dd>
+              </div>
+              <div className="shell__meta-row">
+                <dt>Architecture</dt>
+                <dd>Hexagonal shell</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+      </div>
     </main>
   );
 }
