@@ -49,6 +49,54 @@ describe('check-release-docs', () => {
       'docs/operations.md ## Current Operational Gaps is missing "No hosted demo URL is selected"',
     );
   });
+
+  it('rejects missing reference-deployment extension queue entries', () => {
+    const result = runCheck(createFixture({ omitExtension: 'EXT-26' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'thoughts/specs/2026-05-22-upstream-extension-queue.md is missing entry "EXT-26"',
+    );
+  });
+
+  it('rejects EXT-23 if it stops naming the M7 gate', () => {
+    const result = runCheck(createFixture({ ext23Status: 'filed' }));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'thoughts/specs/2026-05-22-upstream-extension-queue.md EXT-23 Status is "filed", expected prefix "filed; gates M7"',
+    );
+  });
+
+  it('rejects exact owner drift in extension queue entries', () => {
+    const result = runCheck(
+      createFixture({
+        ownerOverrides: {
+          'EXT-22': 'formspec-server',
+        },
+      }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'thoughts/specs/2026-05-22-upstream-extension-queue.md EXT-22 Owning repo is "formspec-server", expected "formspec"',
+    );
+  });
+
+  it('rejects blank extension queue status fields', () => {
+    const result = runCheck(
+      createFixture({
+        statusOverrides: {
+          'EXT-24': '',
+        },
+      }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'thoughts/specs/2026-05-22-upstream-extension-queue.md EXT-24 is missing non-empty field "Status"',
+    );
+  });
 });
 
 function runCheck(root) {
@@ -63,6 +111,11 @@ function createFixture(options = {}) {
 
   write(root, 'docs/deployment.md', deploymentDoc(options));
   write(root, 'docs/operations.md', operationsDoc(options));
+  write(
+    root,
+    'thoughts/specs/2026-05-22-upstream-extension-queue.md',
+    extensionQueueDoc(options),
+  );
 
   return root;
 }
@@ -113,6 +166,44 @@ function operationsDoc(options) {
           '- No hosted demo URL is selected. Local Docker compose is the release proof for now.',
           '- Full server-backed OIDC operations wait for EXT-23 server validation.',
         ]),
+  ].join('\n');
+}
+
+function extensionQueueDoc(options) {
+  return [
+    '# Upstream extension queue',
+    '',
+    '## Class 4 - Reference deployment and server gaps',
+    '',
+    ...[
+      ['EXT-19', 'formspec-server', 'not yet filed'],
+      ['EXT-20', 'formspec-server', 'not yet filed'],
+      ['EXT-21', 'formspec-server', 'not yet filed'],
+      ['EXT-22', 'formspec', 'not yet filed'],
+      ['EXT-23', 'formspec-server', options.ext23Status ?? 'filed; gates M7'],
+      ['EXT-24', 'formspec-server', 'not yet filed'],
+      ['EXT-25', 'formspec-server', 'not yet filed'],
+      ['EXT-26', 'formspec-server', 'not yet filed'],
+      ['EXT-27', 'formspec-server', 'not yet filed'],
+    ].flatMap(([id, owner, status]) => {
+      if (id === options.omitExtension) {
+        return [];
+      }
+      const ownerValue = options.ownerOverrides?.[id] ?? owner;
+      const statusValue =
+        options.statusOverrides?.[id] ??
+        (id === 'EXT-23' && options.ext23Status !== undefined ? options.ext23Status : status);
+      return [
+        `### ${id}: Fixture entry`,
+        '',
+        `**Owning repo:** ${ownerValue}`,
+        '**FW rows blocked:** Fixture row',
+        '**Shape:** Fixture shape.',
+        '**Fixture status:** none.',
+        `**Status:** ${statusValue}`,
+        '',
+      ];
+    }),
   ].join('\n');
 }
 
