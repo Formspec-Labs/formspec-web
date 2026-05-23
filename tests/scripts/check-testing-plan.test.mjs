@@ -59,6 +59,34 @@ describe('check-testing-plan', () => {
     );
   });
 
+  it('rejects public package exports that drift away from the gated source surface', () => {
+    const result = runCheck(
+      createFixture({
+        exportOverrides: {
+          './adapter-conformance': './src/adapter-conformance/noop.ts',
+        },
+      }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'package.json export "./adapter-conformance" must be "./src/adapter-conformance/index.ts"',
+    );
+  });
+
+  it('rejects public package exports that point to missing paths', () => {
+    const result = runCheck(
+      createFixture({
+        omitPath: 'src/adapter-conformance/index.ts',
+      }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'package.json export "./adapter-conformance" points to missing path "./src/adapter-conformance/index.ts"',
+    );
+  });
+
   it('rejects missing root-level documentation paths from the coverage matrix', () => {
     const result = runCheck(createFixture({ omitPath: 'README.md' }));
 
@@ -125,8 +153,20 @@ function createFixture(options = {}) {
     ci: ciCommands.join(' && '),
     ...options.scriptOverrides,
   };
+  const exportsMap = {
+    '.': './src/index.ts',
+    './adapter-conformance': './src/adapter-conformance/index.ts',
+    './adapters/http': './src/adapters/http/index.ts',
+    './adapters/identity': './src/adapters/identity/index.ts',
+    './composition': './src/composition/index.ts',
+    './config': './src/config/index.ts',
+    './ports': './src/ports/index.ts',
+    './profiles': './src/profiles/index.ts',
+    './shared': './src/shared/index.ts',
+    ...options.exportOverrides,
+  };
 
-  write(root, 'package.json', JSON.stringify({ scripts }));
+  write(root, 'package.json', JSON.stringify({ exports: exportsMap, scripts }));
   write(root, '.github/workflows/ci.yml', workflow(ciCommands, options.commentOnlyWorkflowCommand));
   write(root, 'docs/testing-plan.md', testingPlan(options.omitCommand));
 
@@ -137,6 +177,15 @@ function createFixture(options = {}) {
     'tests/e2e/placeholder-a11y.spec.ts',
     'tests/scripts/check-testing-plan.test.mjs',
     'tests/scripts/check-release-docs.test.mjs',
+    'src/adapter-conformance/index.ts',
+    'src/adapters/http/index.ts',
+    'src/adapters/identity/index.ts',
+    'src/composition/index.ts',
+    'src/config/index.ts',
+    'src/index.ts',
+    'src/ports/index.ts',
+    'src/profiles/index.ts',
+    'src/shared/index.ts',
     'scripts/check-deployment-headers.mjs',
     'scripts/check-release-docs.mjs',
     'scripts/check-compose-quickstart.mjs',
@@ -196,7 +245,7 @@ function testingPlan(omitCommand) {
     '',
     '| Surface | Required evidence | Current implementation |',
     '| --- | --- | --- |',
-    '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `tests/scripts/check-release-docs.test.mjs`; `docs/testing-plan.md`; `scripts/check-testing-plan.mjs`; `scripts/check-release-docs.mjs`; `scripts/check-deployment-headers.mjs`; `scripts/check-compose-quickstart.mjs`; `scripts/check-multi-deployment.mjs`; `README.md`. |',
+    '| Fixture | Test evidence. | `src/profiles/profiles.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/e2e/placeholder-a11y.spec.ts`; `tests/scripts/check-testing-plan.test.mjs`; `tests/scripts/check-release-docs.test.mjs`; `docs/testing-plan.md`; `src/adapter-conformance/index.ts`; `scripts/check-testing-plan.mjs`; `scripts/check-release-docs.mjs`; `scripts/check-deployment-headers.mjs`; `scripts/check-compose-quickstart.mjs`; `scripts/check-multi-deployment.mjs`; `README.md`; `package.json`. |',
     '',
     '## Adapter Rules',
   ].join('\n');

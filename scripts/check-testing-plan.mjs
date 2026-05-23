@@ -35,6 +35,17 @@ const expectedScriptBodies = new Map([
   ['check:vendor-leaks', 'scripts/check-vendor-leaks.sh'],
   ['check:upstream-theme', 'node scripts/check-upstream-theme-assets.mjs'],
 ]);
+const expectedPackageExports = new Map([
+  ['.', './src/index.ts'],
+  ['./adapter-conformance', './src/adapter-conformance/index.ts'],
+  ['./adapters/http', './src/adapters/http/index.ts'],
+  ['./adapters/identity', './src/adapters/identity/index.ts'],
+  ['./composition', './src/composition/index.ts'],
+  ['./config', './src/config/index.ts'],
+  ['./ports', './src/ports/index.ts'],
+  ['./profiles', './src/profiles/index.ts'],
+  ['./shared', './src/shared/index.ts'],
+]);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const rootDir = rootDirFromArgs(process.argv.slice(2)) ?? defaultRootDir;
@@ -78,6 +89,7 @@ export function checkTestingPlan(rootDir) {
 
   const ciCommands = parseCiScriptCommands(ciScript);
   const workflowRunCommands = parseWorkflowRunCommands(ciWorkflow);
+  assertPackageExports(packageJson.exports, rootDir);
 
   for (const { gate, command, runsInCi } of commandGates) {
     const script = npmRunScript(command);
@@ -244,6 +256,27 @@ function assertCommandOrder(commands, actualCommands, label) {
   }
 }
 
+function assertPackageExports(exportsMap, rootDir) {
+  if (!isRecord(exportsMap)) {
+    fail('testing plan check failed: package.json is missing exports map');
+  }
+
+  for (const [exportName, expectedPath] of expectedPackageExports) {
+    const actualPath = exportsMap[exportName];
+    if (actualPath !== expectedPath) {
+      fail(
+        `testing plan check failed: package.json export "${exportName}" must be "${expectedPath}"`,
+      );
+    }
+
+    if (!existsSync(join(rootDir, normalizePath(expectedPath)))) {
+      fail(
+        `testing plan check failed: package.json export "${exportName}" points to missing path "${expectedPath}"`,
+      );
+    }
+  }
+}
+
 function testRootsFromCiCommands(commands, scripts) {
   const roots = new Set();
   for (const command of commands) {
@@ -309,6 +342,10 @@ function looksLikePath(reference) {
     reference.startsWith('tests/') ||
     /^[A-Za-z0-9_.-]+\.(?:json|md|toml|ya?ml)$/.test(reference)
   );
+}
+
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function fail(message) {
