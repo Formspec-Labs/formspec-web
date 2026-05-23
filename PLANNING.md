@@ -53,20 +53,22 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 ### FW-0016 — Build and test pipeline producing a deployable artifact
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** closed (2026-05-22) — local; CI workflow deferred to FW-0017
 - **Persona:** Platform
 - **Journey:** (none — platform)
-- **Done:** The build runs locally and in CI, produces a deployable artifact, and finishes a clean-tree build in under 60 seconds.
+- **Done:** Local build runs (`npm run build`), produces deployable artifact in `dist/`, finishes a clean-tree build in **369 ms** (~0.6% of the 60s target). Typecheck (`tsc --noEmit`), lint (`eslint .` with `no-restricted-paths` enforcing web ADR-0009 §Discipline boundary), and tests (Vitest; 5 smoke tests for composition root) all pass. Scaffolded files: `package.json`, `tsconfig.json`, `vite.config.ts`, `eslint.config.js`, `index.html`, `src/ports/` (5 MVP port interfaces per web ADR-0009), `src/adapters/stub/` (one stub adapter per port), `src/composition/{types,stub,default}.ts` (composition root), `src/app/` (React shell with `CompositionProvider` + `useComposition` hook), `tests/smoke/`, `tests/adapter-conformance/` skeleton dirs.
+- **CI workflow (`.github/workflows/ci.yml`) deliberately deferred** to FW-0017 per scaffold-session scope decision; the typecheck/lint/test/build steps are scripted in `package.json` and ready to wire when FW-0017 expands the CI surface with `axe-core` a11y gating.
 
 ### FW-0001 — End-to-end Respondent thin-slice (deployable)
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** in build (scaffold + ports + stub adapters landed 2026-05-22; consumer code pending)
 - **Persona:** Respondent
 - **Journey:** [J-002](JOURNEYS.md#j-002--respondent-fills-out-a-form-recovers-from-validation-and-never-loses-work)
 - **Done:** A real respondent can open a form URL, fill required fields, hit a validation error, recover, submit, and see a confirmation — backed by a real backend wire. Closing the tab and returning later (on the same or a different device) leaves every answer where it was. Errors read in plain English with a reference number the user can quote to support, never "something went wrong."
 - **Anti-patterns:** AP-001, AP-013, AP-015.
 - **Note:** Leads the backlog deliberately. Forces framework, design tokens, build, and accessibility-baseline decisions to fall out as evidence (FW-0014..0018), not as whiteboard rows. Consumes ports `DefinitionSource` (read), `DraftStore` (read+write), `SubmitTransport` (write). Issuer resolution is engine-owned (`IssuerStore` per web ADR-0006); composition wires a `FetchIssuerFetcher`, not a port. Submit boundary contract: `formspec/schemas/intake-handoff.schema.json` with `initiationMode: "publicIntake"`. Per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) the row delivers the port-consuming React shell + at least stub adapters that demonstrate the seam is real (typically swapped for HTTP adapters in the formspec-stack reference composition — see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)). Migrated from `formspec-cloud/PLANNING.md` CLD-0001.
+- **Progress (FW-0016 scaffold landing 2026-05-22):** React shell mounts (`src/app/main.tsx` → `CompositionProvider` → `App`); `Composition` consumed via `useComposition()` hook; all 3 consumed ports defined with TypeScript interfaces; stub adapters wired through `createDefaultComposition()` (currently delegates to `createStubComposition()`). **Remaining:** wire `@formspec-org/react` (`<FormspecProvider>` + `<FormspecForm />`) into the shell; replace stub adapters with HTTP adapters in the formspec-stack composition; render a real Definition end-to-end; wire `IntakeHandoff` submit through `formspec-server`; cross-device draft resume via `DraftStore` HTTP adapter; FW-0013 error rendering via `<ValidationSummary>`.
 
 ### FW-0004 — First-paint legitimacy: the sender's brand, what this is, who's asking
 
@@ -115,6 +117,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Persona:** Platform
 - **Journey:** (none — platform; supports FW-0012)
 - **Done:** Each production surface has an automated accessibility check running in CI. Regressions block merge. The check report is human-readable and links to the failing element.
+- **Note:** FW-0016 scaffold (closed 2026-05-22) defers the `.github/workflows/ci.yml` file to this row. The typecheck/lint/test/build npm scripts already exist; this row adds `axe-core` + `@axe-core/playwright` gating and wires the workflow file. Also adds the pre-commit grep advisory for vendor-name leakage per web ADR-0009 §Discipline three-layer enforcement.
 
 ### FW-0019 — Multilingual form: respondent's language with the legally controlling text marked
 
@@ -129,10 +132,11 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 ### FW-0063 — `IdentityProvider` port + conformance suite + ≥1 reference adapter
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** in build (port + stub adapter landed 2026-05-22; conformance suite + production adapter pending)
 - **Persona:** Respondent / Signer
 - **Journey:** [J-019](JOURNEYS.md#j-019--im-on-a-public-library-terminal-with-twenty-minutes-and-no-email), [J-032](JOURNEYS.md#j-032--sign-in-with-something-i-already-have-not-yet-another-password), [J-034](JOURNEYS.md#j-034--i-already-proved-who-i-am-to-logingov--idme--nhs--dont-make-me-do-it-again) (basic slices)
 - **Done:** Ship the `IdentityProvider` port (`src/ports/identity-provider.ts`) per [web ADR-0007](thoughts/adr/0007-identity-provider-port.md) + its conformance suite (`tests/adapter-conformance/identity-provider/`) + at least one production-grade reference adapter (specific adapter choice for the formspec-stack composition is in [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md); other compositions wire `FirebaseAuthAdapter` / `SupabaseAuthAdapter` / `ClerkAdapter` / `Auth0Adapter` / etc.). Anonymous fill remains a first-class path. Adapter `authenticate()` output MUST be normalized to `respondent-ledger-spec.md` §6.6 shape before any ledger write — the conformance suite verifies this for any adapter.
+- **Progress (FW-0016 scaffold landing 2026-05-22):** `IdentityProvider` port interface authored at `src/ports/identity-provider.ts` with the full §6.6-aligned `IdentityClaim` shape (enums match `respondent-ledger-event.schema.json` — `credentialType` / `personhoodCheck` / `subjectBinding` complete sets); `subscribe()` pattern wired for cross-port coordination per web ADR-0009 §Composition lifecycle. Stub adapter (`AnonymousAdapter`-shaped) lands in `src/adapters/stub/identity-provider.ts` proving the seam is real and exercising the subscribe lifecycle. **Remaining:** executable conformance suite under `tests/adapter-conformance/identity-provider/` (per ADR-0009 minimum bar — schema-validity round-trip + negative case asserting OIDC `acr` normalization), plus at least one production-grade reference adapter.
 - **Anti-patterns:** AP-001, AP-006, AP-020, AP-022.
 - **Note:** Adopter-side per [web ADR-0004](thoughts/adr/0004-cross-repo-placement-consume-not-invent.md) — no upstream spec. Architecture per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md). Specific adapter choice for the OSS reference deployment is a composition decision (see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)), separate from this row. FW-0028 (multi-IdP picker with assurance filtering) is post-MVP and consumes the same port.
 
@@ -149,7 +153,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Persona:** Evaluator
 - **Journey:** [J-006](JOURNEYS.md#j-006--evaluator-procurement-browses-trust-center-pre-purchase)
 - **Done:** A procurement reviewer can browse the Trust Center — data flow, capability matrix, subprocessor list, selective-proof artifacts — from an unauthenticated session. Pages are indexable by search engines. No sales gate, no popup, no contact form between the buyer and the answer to their question.
-- **Blocked on:** web ADR-0002 (pending) for page-by-page allocation between this repo and `formspec-site/`. The verifier widget stays here regardless. Migrated from CLD-0007.
+- **Blocked on:** post-MVP architectural call on Trust Center page-by-page allocation between this repo and `formspec-site/` (no ADR slot allocated yet — the previously-reserved web ADR-0002 was reassigned to the framework decision per FW-0014). The verifier widget stays here regardless. Migrated from CLD-0007.
 - **Anti-patterns:** AP-023.
 
 ### FW-0003 — Verifier validates a receipt and shows the claim graph
