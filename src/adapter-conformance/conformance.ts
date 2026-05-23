@@ -311,5 +311,34 @@ export function defineRespondentPlaceSourceConformance(
       await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects
         .toThrow();
     });
+
+    it('rejects selected-document presentation policies without document refs', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleRespondentPlaceSnapshot,
+        presentationPolicies: [
+          {
+            id: 'missing-document-refs',
+            scope: 'selected-documents',
+            allowedPurposes: ['eligibility'],
+          },
+        ],
+      } as unknown as RespondentPlaceSnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects
+        .toThrow();
+    });
+
+    it('rejects incomplete passkey-hpke encryption envelopes', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleRespondentPlaceSnapshot,
+        encryption: {
+          mode: 'passkey-hpke',
+          keyDerivation: 'passkey-derived',
+        },
+      } as unknown as RespondentPlaceSnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects
+        .toThrow();
+    });
   });
 }
