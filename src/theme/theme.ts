@@ -1,15 +1,9 @@
 import brandOverrides from './brand-overrides.json';
 import defaultTheme from './upstream/layout/default-theme.json';
 import tokenRegistry from './upstream/layout/token-registry.json';
+import type { BrandConfig, TokenValue } from '../config/types.ts';
 
-type TokenValue = string | number;
-
-interface BrandOverrides {
-  name: string;
-  tokens: Record<string, TokenValue>;
-}
-
-const activeBrandOverrides = brandOverrides as BrandOverrides;
+const defaultBrandConfig = brandOverrides as BrandConfig;
 const upstreamDefaultTheme = defaultTheme as { tokens: Record<string, TokenValue> };
 const upstreamTokenRegistry = tokenRegistry as Record<string, unknown>;
 
@@ -27,22 +21,30 @@ const adapterTokenAliases: Record<string, string[]> = {
   'font.family': ['font-family'],
 };
 
-export function applyBrandTheme(target: HTMLElement): void {
-  const tokens = {
-    ...upstreamDefaultTheme.tokens,
-    ...activeBrandOverrides.tokens,
-  };
+export function applyBrandTheme(target: HTMLElement, brandConfig = getDefaultBrandConfig()): void {
+  const tokens = mergeBrandTokens(brandConfig);
 
   for (const [key, value] of Object.entries(tokens)) {
     for (const cssName of cssVarNamesForToken(key)) {
       target.style.setProperty(cssName, String(value));
     }
   }
-  target.dataset.formspecBrand = activeBrandOverrides.name;
+  target.dataset.formspecBrand = brandConfig.name;
 }
 
-export function getActiveBrandName(): string {
-  return activeBrandOverrides.name;
+export function getDefaultBrandConfig(): BrandConfig {
+  return defaultBrandConfig;
+}
+
+export function getBrandName(brandConfig = getDefaultBrandConfig()): string {
+  return brandConfig.name;
+}
+
+export function mergeBrandTokens(brandConfig: BrandConfig): Record<string, TokenValue> {
+  return {
+    ...upstreamDefaultTheme.tokens,
+    ...brandConfig.tokens,
+  };
 }
 
 export function getUpstreamTokenRegistry(): Record<string, unknown> {

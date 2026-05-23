@@ -1,5 +1,5 @@
+import type { FormspecWebConfig } from '../config/types.ts';
 import { useComposition } from './hooks/useComposition.ts';
-import { getActiveBrandName } from '../theme/theme.ts';
 
 /**
  * Scaffold placeholder. FW-0016 acceptance: the shell mounts, the Composition
@@ -9,7 +9,11 @@ import { getActiveBrandName } from '../theme/theme.ts';
  * respondent renderer consuming `@formspec-org/react`'s <FormspecProvider> +
  * <FormspecForm /> bound to the wired ports.
  */
-export function App() {
+interface AppProps {
+  config: FormspecWebConfig;
+}
+
+export function App({ config }: AppProps) {
   const composition = useComposition();
   const ports = [
     ['DefinitionSource', Boolean(composition.definitionSource)],
@@ -58,7 +62,11 @@ export function App() {
             <dl className="shell__meta">
               <div className="shell__meta-row">
                 <dt>Active brand</dt>
-                <dd>{getActiveBrandName()}</dd>
+                <dd>{config.brand.name}</dd>
+              </div>
+              <div className="shell__meta-row">
+                <dt>Profile</dt>
+                <dd>{config.profileName}</dd>
               </div>
               <div className="shell__meta-row">
                 <dt>Runtime</dt>

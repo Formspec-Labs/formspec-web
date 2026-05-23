@@ -1,5 +1,6 @@
 import { createStubComposition } from './stub.ts';
 import type { Composition } from './types.ts';
+import type { FormspecWebConfig } from '../config/types.ts';
 
 /**
  * Default composition for the OSS reference deployment.
@@ -10,6 +11,6 @@ import type { Composition } from './types.ts';
  * Cloudflare Workers, login.gov + AWS, etc.) fork this file and wire their
  * own adapters against the same port interfaces.
  */
-export function createDefaultComposition(): Composition {
+export function createDefaultComposition(_config?: FormspecWebConfig): Composition {
   return createStubComposition();
 }
