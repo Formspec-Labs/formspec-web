@@ -7,6 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./adapter-conformance": "./src/adapter-conformance/index.ts",
+    "./adapters/http": "./src/adapters/http/index.ts",
+    "./adapters/identity": "./src/adapters/identity/index.ts",
     "./config": "./src/config/index.ts",
     "./ports": "./src/ports/index.ts",
     "./shared": "./src/shared/index.ts",
@@ -29,6 +31,7 @@
   },
   "dependencies": {
     "@formspec-org/types": "file:vendor/formspec-types",
+    "oidc-client-ts": "^3.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "uuid": "^14.0.0"

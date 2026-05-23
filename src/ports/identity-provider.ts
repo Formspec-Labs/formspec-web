@@ -54,7 +54,11 @@ export interface IdentityClaim {
 }
 
 export type IdpOption =
-  | { kind: 'magic-link'; channel: 'email' | 'sms'; minAssurance: 'L2' }
+  | {
+      kind: 'magic-link';
+      channel: 'email' | 'sms';
+      minAssurance: Extract<AssuranceLevel, 'L2' | 'L3' | 'L4'>;
+    }
   | { kind: 'oidc'; issuer: string; displayName: string; minAssurance: AssuranceLevel }
   | { kind: 'anonymous'; minAssurance: 'L1' };
 
