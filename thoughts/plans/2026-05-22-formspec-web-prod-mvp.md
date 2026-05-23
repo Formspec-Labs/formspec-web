@@ -348,16 +348,16 @@ ls docs/adapters/{definition-source,draft-store,submit-transport,identity-provid
 
 **Documentation exit gate:** `docs/ux/branding.md`, `docs/ux/errors.md`, `docs/ux/responsive.md`, `docs/ux/accessibility.md` (with the manual-sweep methodology + acceptance criteria), `docs/ux/i18n.md`.
 
-**Gate note (2026-05-22):** implementation and automated axe/mobile smoke
-checks are in place, but M6 is not release-signed. Manual VoiceOver and NVDA
-sweeps remain pending in `docs/ux/accessibility.md`. Lighthouse mobile also
-misses the default budget: latest local production-preview run scored about 74
-with FCP about 1.7 s and LCP about 12.3 s on simulated 3G, despite initial JS
-chunks staying under 200 KB gzip after lazy splitting. Production Locale
-Document loading is demo-proven only until the reference server serves concrete
-Locale Documents instead of only `locale_refs`. HTTP draft hydration is
-same-session only until EXT-26 adds a server-backed draft state read/resume
-surface.
+**Gate note (updated 2026-05-23):** implementation and automated axe/mobile
+smoke checks are in place, but M6 is not release-signed. Manual VoiceOver and
+NVDA sweeps remain pending in `docs/ux/accessibility.md`. The Lighthouse mobile
+budget now passes against the Docker/nginx deployment target after the static
+first-paint shell and gzip/cache-header work: latest local Docker/nginx evidence
+in `docs/ux/responsive.md` scored 94 with FCP about 1.3 s. Refresh that
+measurement before a release tag. Production Locale Document loading is
+demo-proven only until the reference server serves concrete Locale Documents
+instead of only `locale_refs`. HTTP draft hydration is same-session only until
+EXT-26 adds a server-backed draft state read/resume surface.
 
 ---
 
@@ -397,15 +397,13 @@ profiles. M7b still needs the server-side verifier before sign-off.
 
 **Acceptance:**
 - `Dockerfile` builds a static-served image (nginx or similar base); image runs demo mode by default and production mode with env-driven config.
-- `docker-compose.yml` at the formspec-web root wires:
-  - One `formspec-server` instance + its dependencies (postgres, object store).
-  - ≥2 formspec-web instances (`departmentApp` profile, `publicPortal` profile) each on a distinct port + with distinct brand config.
-- The compose stack boots cleanly (`docker-compose up` from a fresh clone); both web instances render their sample form within 60 s of start.
-- Brand and auth isolation verified across the two instances by a documented manual smoke test (run from `docs/multi-deployment.md`).
+- `docker-compose.yml` at the formspec-web root wires ≥2 formspec-web instances (`departmentApp` profile, `publicPortal` profile) each on a distinct port + with distinct brand config. The full `formspec-server` + postgres + object-store compose stack is deferred by the gate note below until EXT-23 and EXT-25 land.
+- The compose web stack validates cleanly with `npm run check:compose-config`; the automated multi-deployment smoke builds the image, starts both web instances, and verifies both sample forms render and submit.
+- Brand and auth isolation verified across the two instances by `npm run test:multi-deployment`; the documented browser smoke in `docs/multi-deployment.md` remains a human spot-check.
 - EXT-19, EXT-20, EXT-21, EXT-22, EXT-23, EXT-24, EXT-25 migrated into [`2026-05-22-upstream-extension-queue.md`](../specs/2026-05-22-upstream-extension-queue.md) with owning repo, FW rows blocked, fixture status, status (`not yet filed` / `filed` / `landed` / `gates M7` for EXT-23). Owners named where known.
 - Internal-refactor debt (localStorage prefix coupling between `HttpDraftStore` and `HttpSubmitTransport`) filed as an `FW-NNNN` row in `formspec-web/PLANNING.md` for post-MVP cleanup.
 - Stack-root submodule pointer bumps verified at each cohort boundary (Cohort 1 = M1; Cohort 2 = M5; Cohort 3 = M7; Cohort 4 = M8).
-- Automated code gates green: typecheck + lint + vendor-leak + unit + Playwright a11y + production build. Release sign-off remains bounded by the M6 gate note for Lighthouse/mobile/FCP and manual screen-reader sweeps.
+- Automated code gates green: `npm run ci` runs typecheck, lint, testing-plan integrity, port conformance, unit/smoke tests, vendor-leak, upstream-theme sync, Playwright a11y, production build, bundle budget, compose config validation, Docker/nginx deployment headers, and Docker/nginx multi-deployment smoke. Release sign-off remains bounded by manual screen-reader sweeps plus the explicit server-side/manual rows in `docs/testing-plan.md`.
 - A stable internet-reachable demo URL is named and live, OR the hosting decision is recorded as a deferred follow-up (see §10).
 
 **FW rows closed:** plan itself; MVP closeout.
@@ -414,9 +412,12 @@ profiles. M7b still needs the server-side verifier before sign-off.
 
 **Documentation exit gate:** `docs/deployment.md` (Docker, docker-compose, env config); `docs/multi-deployment.md` (running N instances against one backend, brand/auth isolation guarantees); `docs/operations.md` (logs, error surfaces, what's externally vs internally exposed); top-level `README.md` final polish.
 
-**Gate note (2026-05-22):** M8 closes as a local web deployment proof, not a
-full server-backed OIDC stack. `docker-compose.yml` boots two static web
-instances with distinct profiles/brands and no `FORMSPEC_WEB_SERVER_URL`.
+**Gate note (updated 2026-05-23):** M8 closes as a local web deployment proof,
+not a full server-backed OIDC stack. `docker-compose.yml` boots two static web
+instances with distinct profiles/brands and no `FORMSPEC_WEB_SERVER_URL`;
+`npm run check:compose-config` validates that compose file and
+`npm run test:multi-deployment` proves the two deployed nginx instances render,
+brand-isolate, submit the demo form, and emit no browser warnings/errors.
 `docs/deployment.md` records the deferred server stack: EXT-23 blocks OIDC
 validation, and EXT-25 tracks the production server image. Hosted demo URL
 selection is also deferred.
@@ -455,7 +456,7 @@ The plan is honest about what it does not deliver. These are P0 follow-ups when 
 - **Hosted demo URL target unchosen.** docker-compose covers the local quickstart; an internet-reachable demo URL needs a hosting decision (Vercel? Cloudflare Pages? Self-hosted?). Surfaced in M8 acceptance.
 - **Published layout/adapters license metadata drift blocks registry installation, not M1 source-asset consumption.** Local sibling source manifests for `@formspec-org/layout` and `@formspec-org/adapters` declare Apache-2.0, but the npm registry artifacts currently report AGPL-3.0-only (and `@formspec-org/types` transitively does the same). With web ADR-0003 selecting Apache-2.0 for formspec-web, the registry packages cannot be installed until the metadata is corrected or a new license decision is made. M1 consumes copied static assets from the local Apache-2.0 sibling source packages and verifies them with `npm run check:upstream-theme`.
 - **EXT-23 (server-side per-tenant trusted-issuer config) is filed as a peer milestone.** Verified 2026-05-22: fully absent in `formspec-server` (no JWKS, no RS256, no multi-issuer registry; `jwks_url` field is config-shaped vapor). Decision B locked; EXT-23 is substantive new server-side work (issuer registry per-tenant + JWKS client + RS256 verifier path in `stack-common-auth` or `formspec-server-auth-jwt`). **Gates M7 acceptance.** Owner: formspec-server. Schedule: TBD (see §12).
-- **Performance budget targets are defaults, not buyer-derived.** Lighthouse mobile ≥90, initial bundle ≤200 KB gz, FCP <1.5 s on simulated 3G — reasonable for an MVP, may need tuning against real-world conditions.
+- **Performance budget targets are defaults, not buyer-derived.** Lighthouse mobile ≥90, initial bundle ≤200 KB gz, FCP <1.5 s on simulated 3G — reasonable for an MVP, may need tuning against real-world conditions. Current local Docker/nginx evidence passes; refresh before a release tag.
 - **Sample form ownership.** A canonical sample form ships in `src/demo/sample-form.json` at M5. Source: reuse an existing fixture from `formspec/tests/fixtures/`, or design fresh, or import from `formspec-server`'s seed data. Decide before M5.
 - **Profile file format.** Locked for MVP: `formspec.config.ts` (TypeScript module) typed against `FormspecWebConfig` and included in `tsconfig.json`. YAML or JSON alternatives remain future-compatible but are not part of M2.
 - **EXT-19..22 scheduling.** Surfaced as queue items, not gated for MVP closeout. But they are *visible* defects in real use:

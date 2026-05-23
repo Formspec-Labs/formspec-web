@@ -89,7 +89,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Journey:** [J-004](JOURNEYS.md#j-004--filling-it-out-on-a-phone-one-handed-on-the-bus)
 - **Done:** The form works on a phone in one hand: tap targets reachable with the thumb, the right keyboard for the right field (numbers, dates, email), no pinch-zoom, primary buttons in reach. The form was designed for the phone first; the desktop layout is a wider variant, not the other way around.
 - **Anti-patterns:** —
-- **Note:** Phone parity is part of the M6 baseline. `docs/ux/responsive.md` records the current mobile behavior and the Playwright mobile tap-target check gates it. Lighthouse mobile performance remains open release-signoff work, not a missing implementation path.
+- **Note:** Phone parity is part of the M6 baseline. `docs/ux/responsive.md` records the current mobile behavior and the Playwright mobile tap-target check gates it. Latest local Docker/nginx Lighthouse evidence passes the mobile >=90 and FCP <1.5 s budget; refresh that measurement before a release tag.
 
 ### FW-0013 — Plain-language errors and typed problem detail
 
