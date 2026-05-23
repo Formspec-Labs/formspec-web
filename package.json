@@ -11,6 +11,7 @@
     "./adapters/identity": "./src/adapters/identity/index.ts",
     "./composition": "./src/composition/index.ts",
     "./config": "./src/config/index.ts",
+    "./policy": "./src/policy/index.ts",
     "./ports": "./src/ports/index.ts",
     "./shared": "./src/shared/index.ts",
     "./profiles": "./src/profiles/index.ts"
@@ -24,7 +25,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:unit": "vitest run src/profiles tests/adapters tests/app tests/demo tests/scripts tests/shared tests/smoke",
+    "test:unit": "vitest run src/policy src/profiles tests/adapters tests/app tests/demo tests/policy-resolution tests/profiles tests/scripts tests/shared tests/smoke",
     "test:conformance": "vitest run tests/adapter-conformance",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
