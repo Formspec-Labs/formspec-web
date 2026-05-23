@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check:vendor-leaks": "scripts/check-vendor-leaks.sh",
-    "ci": "npm run typecheck && npm run lint && npm test && npm run check:vendor-leaks && npm run test:e2e && npm run build"
+    "check:upstream-theme": "node scripts/check-upstream-theme-assets.mjs",
+    "ci": "npm run typecheck && npm run lint && npm test && npm run check:vendor-leaks && npm run check:upstream-theme && npm run test:e2e && npm run build"
   },
   "dependencies": {
     "react": "^19.0.0",

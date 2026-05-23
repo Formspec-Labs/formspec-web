@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createDefaultComposition } from '../composition/default.ts';
 import { applyBrandTheme } from '../theme/theme.ts';
+import '../theme/upstream/adapters/tailwind-formspec-core.css';
 import { App } from './App.tsx';
 import './app.css';
 import { CompositionProvider } from './CompositionProvider.tsx';

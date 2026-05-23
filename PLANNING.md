@@ -45,11 +45,11 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 ### FW-0015 — Design tokens to a structured token file
 
 - **Phase:** MVP
-- **Status:** blocked
+- **Status:** in review (candidate implementation landed; pending owner approval)
 - **Persona:** Platform
 - **Journey:** (none — platform)
-- **Done:** Extend `@formspec-org/layout/token-registry` and `@formspec-org/layout/default-theme` with formspec-web-specific brand overrides (colors, typography, spacing, motion). The token vocabulary is the upstream-shipped registry; formspec-web does NOT author a new vocabulary. Adopt `@formspec-org/adapters` `tailwind-formspec-core.css` as the Tailwind integration baseline. White-label respondent shells can theme over the same vocabulary without per-component rework.
-- **Blocked on:** npm registry package metadata correction for `@formspec-org/layout`, `@formspec-org/adapters`, and transitive `@formspec-org/types`. Published artifacts currently report AGPL-3.0-only; local sibling source manifests report Apache-2.0. M1 cannot be called license-clean while consuming the registry artifacts.
+- **Candidate implementation:** Consumes `@formspec-org/layout` default theme + token registry and `@formspec-org/adapters` `tailwind-formspec-core.css` from the local sibling source packages under `../formspec/packages/`, whose manifests and LICENSE files declare Apache-2.0. The copied assets live under `src/theme/upstream/` and are verified with `npm run check:upstream-theme`; formspec-web-specific overrides stay isolated in `src/theme/brand-overrides.json`. The token vocabulary is the upstream-shipped registry; formspec-web does NOT author a new vocabulary. Registry package installation remains avoided while npm metadata reports AGPL-3.0-only for the same package names.
+- **Pending:** Owner approval is required to ratify the source-asset strategy as satisfying the M1 token-consumption gate while registry package metadata remains wrong.
 
 ### FW-0016 — Build and test pipeline producing a deployable artifact
 

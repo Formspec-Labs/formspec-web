@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { createDefaultComposition } from '../../src/composition/default.ts';
+import { applyBrandTheme, getUpstreamTokenRegistry } from '../../src/theme/theme.ts';
 
 describe('composition root smoke', () => {
   it('createStubComposition wires all 5 MVP ports', () => {
@@ -44,5 +45,21 @@ describe('composition root smoke', () => {
     expect(received).toHaveLength(2);
     expect(received[1]).toBe(claim);
     unsubscribe();
+  });
+
+  it('consumes the upstream token registry vocabulary for brand overrides', () => {
+    const registry = getUpstreamTokenRegistry();
+    expect(registry).toHaveProperty('$formspecTokenRegistry', '1.0');
+    expect(JSON.stringify(registry)).toContain('color.primary');
+  });
+
+  it('emits adapter-compatible CSS variable aliases from upstream tokens', () => {
+    const target = document.createElement('div');
+    applyBrandTheme(target);
+    expect(target.style.getPropertyValue('--formspec-color-primary')).toBe('#155e56');
+    expect(target.style.getPropertyValue('--formspec-color-primary-foreground')).toBe('#ffffff');
+    expect(target.style.getPropertyValue('--formspec-color-text')).toBe('#1f2933');
+    expect(target.style.getPropertyValue('--formspec-color-text-secondary')).toBe('#5d6b66');
+    expect(target.style.getPropertyValue('--formspec-color-warning-border')).toBe('#946112');
   });
 });

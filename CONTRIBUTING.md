@@ -29,6 +29,7 @@ npm run typecheck
 npm run lint
 npm test
 npm run check:vendor-leaks
+npm run check:upstream-theme
 npm run test:e2e
 npm run build
 ```

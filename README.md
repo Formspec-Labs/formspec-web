@@ -53,11 +53,11 @@ The shell is hexagonal per [web ADR-0009](thoughts/adr/0009-hexagonal-architectu
 
 Adapters are deployment examples. The core shell and port definitions must not import a backend/provider SDK directly.
 
-## Current M1 Blocker
+## Upstream Theme Assets
 
-M1 requires consuming upstream layout tokens and the Tailwind core CSS from `@formspec-org/layout` and `@formspec-org/adapters`. The local sibling source manifests declare Apache-2.0, but the npm registry artifacts currently report AGPL-3.0-only. Because this repo is Apache-2.0, those registry packages are not consumed until the metadata is corrected or an explicit license decision changes.
+M1 consumes the default theme, token registry, and Tailwind core CSS from the local sibling source packages under `../formspec/packages/`. Those source package manifests declare Apache-2.0. The npm registry artifacts currently report AGPL-3.0-only, so this repo does not install those registry packages.
 
-The current CSS variable path is provisional M1 scaffolding, not FW-0015 closure and not a new token vocabulary.
+The copied assets live under `src/theme/upstream/`. Run `npm run check:upstream-theme` when the sibling `../formspec` checkout is available to verify source package licenses and byte-for-byte sync.
 
 ## License
 

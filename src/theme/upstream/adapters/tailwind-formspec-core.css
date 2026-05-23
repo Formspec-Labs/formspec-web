@@ -1,0 +1,183 @@
+/* @filedesc Default styles for core Formspec plugins when using the Tailwind adapter — Card, ActionButton, ValidationSummary. */
+
+/*
+ * Rules live in @layer components so host Tailwind utilities (utilities layer) can override
+ * the same element — e.g. ActionButton cssClass="bg-violet-600 …" on .formspec-submit.
+ * Unlayered CSS always beats layered utilities; do not remove this layer when using Tailwind.
+ */
+
+:root {
+  --formspec-tw-accent: var(--formspec-color-primary, #4f46e5);
+  --formspec-tw-accent-fg: var(--formspec-color-primary-foreground, #ffffff);
+  --formspec-tw-accent-soft: color-mix(in srgb, var(--formspec-tw-accent) 10%, var(--formspec-color-surface, white));
+  --formspec-tw-accent-ring: color-mix(in srgb, var(--formspec-tw-accent) 22%, transparent);
+  --formspec-tw-danger: var(--formspec-color-error, #dc2626);
+  --formspec-tw-danger-ring: rgb(220 38 38 / 0.16);
+  --formspec-tw-card-bg: var(--formspec-color-surface, #ffffff);
+  --formspec-tw-card-border: var(--formspec-color-border, #e2e8f0);
+  --formspec-tw-card-title-bg: var(--formspec-color-surface-muted, #f8fafc);
+  --formspec-tw-card-title-border: var(--formspec-color-border, #e2e8f0);
+  --formspec-tw-surface: var(--formspec-color-surface, #ffffff);
+  --formspec-tw-surface-muted: var(--formspec-color-surface-muted, #f8fafc);
+  --formspec-tw-field-bg: var(--formspec-color-surface, #ffffff);
+  --formspec-tw-border: var(--formspec-color-border, #cbd5e1);
+  --formspec-tw-border-strong: var(--formspec-color-border-strong, #94a3b8);
+  --formspec-tw-text: var(--formspec-color-text, #0f172a);
+  --formspec-tw-muted: var(--formspec-color-text-secondary, #64748b);
+  --formspec-tw-placeholder: var(--formspec-color-text-muted, #94a3b8);
+  --formspec-tw-track: var(--formspec-color-surface-emphasis, #dbe4f0);
+  --formspec-tw-knob-ring: rgb(15 23 42 / 0.08);
+  --formspec-tw-shadow-sm: var(--formspec-shadow-sm, 0 1px 2px rgb(15 23 42 / 0.06));
+  --formspec-tw-shadow-md: var(--formspec-shadow-md, 0 4px 12px rgb(15 23 42 / 0.14));
+  --formspec-tw-danger-bg: var(--formspec-color-error-bg, #fef2f2);
+  --formspec-tw-danger-text: var(--formspec-color-error-text, #450a0a);
+  --formspec-tw-danger-border: var(--formspec-color-error-border, #fecaca);
+  --formspec-tw-warning-border: var(--formspec-color-warning-border, #f59e0b);
+  --formspec-tw-warning-bg: var(--formspec-color-warning-bg, #fffbeb);
+  --formspec-tw-warning-text: var(--formspec-color-warning-text, #451a03);
+  --formspec-tw-info-border: var(--formspec-color-info-border, #0ea5e9);
+  --formspec-tw-info-bg: var(--formspec-color-info-bg, #f0f9ff);
+  --formspec-tw-info-text: var(--formspec-color-info-text, #0c4a6e);
+  --formspec-tw-success: var(--formspec-color-success, #16a34a);
+}
+
+@layer components {
+  .formspec-card {
+    border-radius: 1rem;
+    border: 1px solid var(--formspec-tw-card-border);
+    background: var(--formspec-tw-card-bg);
+    padding: 1rem;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  }
+
+  .formspec-card-title {
+    margin: -1rem -1rem 0.75rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--formspec-tw-card-title-border);
+    background: var(--formspec-tw-card-title-bg);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--formspec-tw-text);
+  }
+
+  .formspec-card-subtitle {
+    margin: 0 0 0.625rem;
+    font-size: 0.75rem;
+    line-height: 1.375;
+    color: var(--formspec-tw-muted);
+  }
+
+  .formspec-submit {
+    display: block;
+    width: 100%;
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 0.75rem;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    transition: filter 0.15s ease;
+    background-color: var(--formspec-tw-accent);
+    color: var(--formspec-tw-accent-fg);
+  }
+
+  .formspec-submit:hover {
+    filter: brightness(1.08);
+  }
+
+  .formspec-submit:focus {
+    outline: none;
+  }
+
+  .formspec-submit:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--formspec-tw-accent) 40%, transparent);
+    outline-offset: 2px;
+  }
+
+  .formspec-submit:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .formspec-validation-summary--visible {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    border: 1px solid var(--formspec-tw-danger-border);
+    border-radius: 0.75rem;
+  }
+
+  .formspec-validation-summary-header,
+  .formspec-validation-summary-title {
+    margin: 0;
+    padding: 0.625rem 0.875rem;
+    border-bottom: 1px solid var(--formspec-tw-danger-border);
+    background: var(--formspec-tw-danger-bg);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1.35;
+    color: var(--formspec-tw-danger-text);
+  }
+
+  .formspec-shape-error,
+  .formspec-shape-warning,
+  .formspec-shape-info {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    border-left: 3px solid transparent;
+    border-radius: 0;
+    font-size: 0.78rem;
+    line-height: 1.375;
+  }
+
+  .formspec-shape-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .formspec-shape-error {
+    border-left-color: var(--formspec-tw-danger);
+    background: var(--formspec-tw-danger-bg);
+    color: var(--formspec-tw-danger-text);
+  }
+
+  .formspec-shape-warning {
+    border-left-color: var(--formspec-tw-warning-border);
+    background: var(--formspec-tw-warning-bg);
+    color: var(--formspec-tw-warning-text);
+  }
+
+  .formspec-shape-info {
+    border-left-color: var(--formspec-tw-info-border);
+    background: var(--formspec-tw-info-bg);
+    color: var(--formspec-tw-info-text);
+  }
+
+  .formspec-validation-summary-link {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+}

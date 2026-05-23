@@ -27,14 +27,14 @@ Per-file headers are not required for the MVP codebase. Source files inherit the
 1. **Adoption friction stays low.** Apache-2.0 is permissive and familiar to government, commercial, and open-source adopters.
 2. **Patent language matters.** The verifier positioning depends on a public implementation that adopters can inspect and reuse without ambiguity around patent grants.
 3. **Sibling source alignment is the target.** The local sibling source manifests for `@formspec-org/layout` and `@formspec-org/adapters` declare Apache-2.0.
-4. **Published-package drift must block consumption.** The npm registry metadata for those same packages currently reports AGPL-3.0-only. formspec-web must not consume those registry artifacts until the published metadata is corrected or an explicit license ADR changes this decision.
+4. **Published-package drift blocks registry consumption, not source consumption.** The npm registry metadata for those same packages currently reports AGPL-3.0-only. formspec-web must not install those registry artifacts until the published metadata is corrected or an explicit license ADR changes this decision. It may consume traced static assets from the Apache-2.0 local sibling source packages.
 5. **Future license collisions stay explicit.** `@formspec-org/assist` is not an MVP dependency. Any post-MVP row that wants to consume BUSL-licensed or otherwise differently licensed code must make a new ADR-level decision before adding the dependency.
 
 ## Consequences
 
 - The repository license gate is satisfied by `LICENSE`, `package.json`, and this ADR.
 - Contributors must not add dependencies whose licenses conflict with Apache-2.0 without an explicit ADR update.
-- M1 token consumption from `@formspec-org/layout` / `@formspec-org/adapters` remains blocked until the registry license metadata matches the intended Apache-2.0 source posture or a local build artifact strategy is approved.
+- M1 token consumption from `@formspec-org/layout` / `@formspec-org/adapters` uses traced static assets copied from the local Apache-2.0 sibling source packages. The npm registry artifacts remain blocked until their metadata matches the intended Apache-2.0 source posture.
 - Post-MVP AI/assist surfaces remain blocked from implicit consumption until their license posture is separately resolved.
 
 ## Related
