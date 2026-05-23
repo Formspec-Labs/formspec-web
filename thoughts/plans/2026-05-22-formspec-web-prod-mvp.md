@@ -54,6 +54,8 @@ These were open in earlier drafts and are now locked so an autonomous agent does
 | Topic | Choice | Notes |
 |---|---|---|
 | Profile file format | `formspec.config.ts` at repo root — TypeScript module, default export typed against `FormspecWebConfig`. | Type-safe at build time; supports computed values; matches sibling-repo TS-strict style. |
+| Runtime config delivery | Static bundles read a generated `/formspec-runtime-config.js` before app bootstrap; Docker/nginx emits it from runtime env at container start. Vite `VITE_*` values are dev/build fallbacks only and are normalized into the same runtime-config shape. | Prevents the static `dist/` artifact from pretending build-time `import.meta.env` values can change after image build. |
+| Public config surface | `src/index.ts` re-exports `src/config/` and `src/profiles/`; `package.json` exposes that source-level surface for local adopter configs even while the package remains `"private": true`. `formspec.config.ts` is included in `tsconfig.json` so it is typechecked. | "Public" means the repo-local typed integration surface for M2, not npm publication. |
 | Sample form (M5) | Authored fresh at `src/demo/sample-form.json`. Minimum coverage: text input, choice input, repeat group, conditional group, multilingual label (English + one other), Issuer document with name + logo URL. | Agent MAY adopt an existing fixture from `formspec/tests/fixtures/` if one covers all five surface types verbatim; default is fresh authoring focused on UX, not engine semantics. |
 | Hosted demo URL (M8) | **Deferred to user action.** Agent does NOT attempt domain registration or DNS. Agent ships `docs/deployment.md` with three deploy-path recipes (static-export → Vercel, static-export → Cloudflare Pages, self-host → Docker behind reverse proxy). User picks and runs. | Surfaces in M8 acceptance as "documented + ready, not deployed." |
 | Test framework | Vitest 4 (unit + smoke + conformance suites). | Matches sibling packages. |
@@ -64,7 +66,7 @@ These were open in earlier drafts and are now locked so an autonomous agent does
 | Node version | 22 LTS. | Matches sibling `engines` fields. |
 | OIDC client library | `oidc-client-ts` v3. | Per ADR-0007 reference impl. |
 | UUID library | `uuid` v9+ (for `v7` generation). | Per EXT-14 inline. |
-| Initial state | Begin from current `formspec-web` HEAD on `main`. FW-0014 + FW-0016 scaffold work assumed closed (verify in M0 precondition check below). If scaffold missing, agent halts and reports. | |
+| Initial state | Begin from current `formspec-web` HEAD on `main`. FW-0014 + FW-0016 scaffold work assumed closed (verify in M0 precondition check below). If scaffold missing, agent halts and reports. | M2 MUST NOT start until FW-0015 owner approval is recorded and the stack-root dirt is either clean, committed as the cohort-1 gitlink bump, or explicitly waived. |
 
 ---
 
@@ -143,7 +145,7 @@ EXT-23 gates M7 acceptance only. If it slips, M7 splits to M7a (anonymous-only m
 ```bash
 cd formspec-web
 git status                                                # clean
-grep -E "FW-001[46]" PLANNING.md | grep -i closed         # both closed
+rg -n -A4 "FW-0014" PLANNING.md | grep -i closed && rg -n -A4 "FW-0016" PLANNING.md | grep -i closed
 ls src/app/main.tsx src/ports/ src/adapters/stub/         # all exist
 ls ../formspec/packages/formspec-types/dist/index.d.ts    # sibling built
 node --version && npm --version                           # ≥22, ≥10
@@ -191,16 +193,17 @@ test -f CONTRIBUTING.md                                  # contributing exists
 
 ### M2 — Configuration model + DI profiles
 
-**Capability:** A configurable deployment shape. Profiles select tenant model + auth + composition shape; env overrides handle secrets. The integration story is "pick a profile, override what you need."
+**Capability:** A configurable deployment shape. Profiles select tenant model + auth + composition shape; runtime overrides handle deploy-time values. The integration story is "pick a profile, override what you need."
 
 **Acceptance:**
-- `FormspecWebConfig` schema declared in TS, exported from the public package surface (`src/index.ts` re-exporting `src/config/`) so adopter configs can typecheck against it.
-- Per-deployment config consumed from `formspec.config.ts` at repo root (typescript module — type-safe, no schema-validation step needed for the common case); env vars (`VITE_FORMSPEC_SERVER_URL`, OIDC client config, OIDC issuer, magic-link callback path) override secrets at runtime.
+- `FormspecWebConfig` schema declared in TS, exported from the repo-local public package surface (`src/index.ts` re-exporting `src/config/` and `src/profiles/`) so adopter configs can typecheck against it; `package.json` exposes this surface even though the package remains private for MVP.
+- Per-deployment config consumed from `formspec.config.ts` at repo root (typescript module included in `tsconfig.json`; type-safe, no schema-validation step needed for the common case). Static production builds read runtime overrides from `/formspec-runtime-config.js`, emitted by the Docker/nginx entrypoint from deploy-time env (`FORMSPEC_WEB_*`). Vite `VITE_*` values are dev/build fallbacks only and normalize into the same runtime config shape.
 - ≥2 reference profiles ship:
-  - **`departmentAppProfile`** — per-instance tenant binding (full `TenantScope` baked into config: `tenant`, `workspace`, `environment`, `cell`; attached as four `HeaderConfig::formspec()` headers to every formspec-server request); OIDC identity required; branded.
-  - **`publicPortalProfile`** — per-form implicit tenancy in the product model, but MVP attaches a sentinel full `TenantScope` until EXT-24 lets the server resolve tenancy from `form_id`; Anonymous identity acceptable; lighter brand defaults.
-- Brand override path proven isolated: two instances of formspec-web with different brand configs can run side-by-side (M2 unit test; M8 multi-instance demo confirms at runtime).
-- Tenant binding option drives the protocol layer: bound instance attaches configured full-scope tenant headers matching `stack-common-http`'s `extract_tenant` convention; MVP implicit instance attaches sentinel full-scope tenant headers; post-EXT-24 implicit instance attaches no tenant headers and lets the server resolve from `form_id`.
+  - **`departmentAppProfile`** — per-instance tenant binding (full `TenantScope` baked into config: `tenant`, `workspace`, `environment`, `cell`; reference HTTP adapters attach the four `HeaderConfig::formspec()` headers to every stack-composition request); OIDC identity required; branded.
+  - **`publicPortalProfile`** — per-form implicit tenancy in the product model, but MVP reference HTTP adapters attach a sentinel full `TenantScope` until EXT-24 lets the server resolve tenancy from `form_id`; Anonymous identity acceptable; lighter brand defaults.
+- Brand override path proven isolated: two instances of formspec-web with different brand configs can run side-by-side (M2 unit test; M8 multi-instance demo confirms at runtime). Implementation MUST refactor the M1 singleton theme helper into pure/injected brand config before claiming this acceptance item.
+- Tenant binding option drives the reference HTTP adapter layer: bound instance attaches configured full-scope tenant headers matching `stack-common-http`'s `extract_tenant` convention; MVP implicit instance attaches sentinel full-scope tenant headers; post-EXT-24 implicit instance attaches no tenant headers and lets the upstream service resolve from `form_id`.
+- `FormspecWebConfig` stays adopter-agnostic at the core contract: top-level config names profiles, tenant binding, identity policy, brand tokens, and port composition choices. Service-specific URLs, header dialects, and auth endpoints live under reference-adapter config (for the formspec-stack composition) and MUST NOT leak into `src/ports/`, `src/composition/types.ts`, or the portable profile contract.
 - Until M3 lands executable per-port conformance suites, M2 profile unit tests are the interim oracle for config loading, tenant-header attachment, env overrides, and brand isolation.
 
 **Verify:**
@@ -208,6 +211,7 @@ test -f CONTRIBUTING.md                                  # contributing exists
 test -f formspec.config.ts                               # profile config file at root
 grep -E "FormspecWebConfig" src/config/                  # schema exported
 grep -E "departmentApp|publicPortal" src/profiles/       # both reference profiles present
+grep -E "formspec.config.ts" tsconfig.json               # root config participates in typecheck
 npm run typecheck                                        # config + profiles typecheck
 npm test -- src/profiles                                 # profile unit tests pass
 test -f docs/configuration.md && test -f docs/profiles.md
@@ -425,7 +429,7 @@ The plan is honest about what it does not deliver. These are P0 follow-ups when 
 - **EXT-23 (server-side per-tenant trusted-issuer config) is filed as a peer milestone.** Verified 2026-05-22: fully absent in `formspec-server` (no JWKS, no RS256, no multi-issuer registry; `jwks_url` field is config-shaped vapor). Decision B locked; EXT-23 is substantive new server-side work (issuer registry per-tenant + JWKS client + RS256 verifier path in `stack-common-auth` or `formspec-server-auth-jwt`). **Gates M7 acceptance.** Owner: formspec-server. Schedule: TBD (see §12).
 - **Performance budget targets are defaults, not buyer-derived.** Lighthouse mobile ≥90, initial bundle ≤200 KB gz, FCP <1.5 s on simulated 3G — reasonable for an MVP, may need tuning against real-world conditions.
 - **Sample form ownership.** A canonical sample form ships in `src/demo/sample-form.json` at M5. Source: reuse an existing fixture from `formspec/tests/fixtures/`, or design fresh, or import from `formspec-server`'s seed data. Decide before M5.
-- **Profile file format.** Plan proposes `formspec.config.ts` (TypeScript module). YAML or JSON alternatives are tractable; the TS path gives type-safety against the `FormspecWebConfig` schema at build time. Owner preference welcome before M2 starts.
+- **Profile file format.** Locked for MVP: `formspec.config.ts` (TypeScript module) typed against `FormspecWebConfig` and included in `tsconfig.json`. YAML or JSON alternatives remain future-compatible but are not part of M2.
 - **EXT-19..22 scheduling.** Surfaced as queue items, not gated for MVP closeout. But they are *visible* defects in real use:
   - EXT-19 (no `/notifications`) — magic-link delivery broken; stub-only is the workaround.
   - EXT-20 (no URL → form_id resolver) — users must paste runtime endpoint URLs; not a published API.
