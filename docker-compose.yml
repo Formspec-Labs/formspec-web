@@ -6,3 +6,12 @@ services:
       - "8080:80"
     environment:
       FORMSPEC_WEB_PROFILE: publicPortal
+
+  formspec-web-department:
+    image: formspec-web:local
+    depends_on:
+      - formspec-web
+    ports:
+      - "8081:80"
+    environment:
+      FORMSPEC_WEB_PROFILE: departmentApp

@@ -10,6 +10,18 @@ During M7a, the MVP-shippable proof is anonymous-only. The runtime can boot
 `publicPortal` without starting any external identity side effect, and it keeps
 draft keys scoped by the active anonymous `subjectRef`.
 
+## Anonymous M7a Compose
+
+`docker-compose.yml` boots two static web containers:
+
+- `formspec-web` on `http://localhost:8080` with `FORMSPEC_WEB_PROFILE=publicPortal`.
+- `formspec-web-department` on `http://localhost:8081` with
+  `FORMSPEC_WEB_PROFILE=departmentApp`.
+
+Both omit `FORMSPEC_WEB_SERVER_URL`, so the reference app stays in demo mode
+and uses the anonymous boot path. This proves profile and brand isolation for
+two deployed web instances without asserting server-backed OIDC.
+
 Full side-by-side OIDC proof waits for two prerequisites:
 
 - EXT-23 lands in `formspec-server` so the backend can validate per-tenant OIDC

@@ -28,6 +28,9 @@ Docker quickstart:
 docker compose up --build
 ```
 
+The compose file starts the public portal on `http://localhost:8080` and the
+department profile on `http://localhost:8081`.
+
 See [docs/getting-started.md](docs/getting-started.md).
 
 Local gates:

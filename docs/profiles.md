@@ -26,3 +26,8 @@ Brand config is injected per app instance. The theme helper accepts a
 `BrandConfig` and writes CSS variables onto the supplied target element, so two
 instances can render distinct brands side-by-side without shared singleton
 state.
+
+`docker-compose.yml` demonstrates that isolation with two static web instances:
+`publicPortal` on port 8080 and `departmentApp` on port 8081. In M7a both run
+without `FORMSPEC_WEB_SERVER_URL`, so they intentionally stay in anonymous demo
+mode while proving profile and brand separation.
