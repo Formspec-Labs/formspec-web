@@ -37,7 +37,7 @@ formspec-web adds respondent-place ports only where consumer code lands:
 - `RespondentPlaceSource` reads respondent-held obligations, document metadata, submission history, presentation policies, and applicant-status projections.
 - `StatusReader` reads WOS applicant API shaped status for a submitted item.
 
-Both ports follow web ADR-0009: typed interfaces, stub adapters, conformance suites, composition-root wiring, and no direct adapter imports from app code. Stub adapters are allowed for demo and development; production adapters remain explicit deployment choices.
+Both ports follow web ADR-0009: typed interfaces, stub adapters, conformance suites, composition-root wiring, and no direct adapter imports from app code. Stub adapters are allowed for demo and development; production adapters remain explicit deployment choices. The default production composition fails closed with unavailable respondent-place/status adapters until a deployment wires real integrations.
 
 ### Token bag
 

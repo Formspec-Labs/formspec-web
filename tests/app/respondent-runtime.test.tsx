@@ -6,7 +6,11 @@ import type { Composition } from '../../src/composition/types.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import type { IdentityClaim, IdentityProvider, IdpOption } from '../../src/ports/identity-provider.ts';
-import type { ApplicantStatusResource, RespondentPlaceSnapshot } from '../../src/ports/index.ts';
+import type {
+  ApplicantStatusResource,
+  RespondentPlaceSnapshot,
+  RespondentSubmissionRecord,
+} from '../../src/ports/index.ts';
 
 describe('RespondentRuntime identity sign-in', () => {
   let root: Root | undefined;
@@ -91,6 +95,39 @@ describe('RespondentRuntime identity sign-in', () => {
       resourceRef: 'urn:wos:case_test_0001',
       subjectRef: 'oidc:test-subject',
       submissionId: 'sub-test-0001',
+    }));
+  });
+
+  it('requests submission status by submission id when a projection has no resource ref', async () => {
+    const identityProvider = new TestIdentityProvider();
+    const composition = testComposition(identityProvider, {
+      applicantStatus: {
+        event: 'case-created',
+        occurredAt: '2026-05-24T12:00:00.000Z',
+        summary: 'Case created.',
+      },
+      respondentPlace: respondentPlaceSnapshotWithData({
+        applicantStatus: {
+          sourceSchema: 'https://schemas.formspec.io/wos-api/applicant/v1',
+          projectionKind: 'ApplicantStatusTimelineEntry',
+          endpoint: 'https://wos.example.test/applicant/cases/case_test_0002',
+          updatedAt: '2026-05-24T12:00:00.000Z',
+          headline: 'Received',
+          summary: 'Your submission was received.',
+        },
+      }),
+    });
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Case Created');
+
+    expect(composition.statusReader.readStatus).toHaveBeenCalledWith(expect.objectContaining({
+      resourceRef: undefined,
+      subjectRef: 'oidc:test-subject',
+      submissionId: 'sub-test-0001',
+      trackingUri: 'https://wos.example.test/applicant/cases/case_test_0002',
     }));
   });
 
@@ -239,7 +276,9 @@ function emptyRespondentPlaceSnapshot(): RespondentPlaceSnapshot {
   };
 }
 
-function respondentPlaceSnapshotWithData(): RespondentPlaceSnapshot {
+function respondentPlaceSnapshotWithData(
+  overrides: Partial<RespondentSubmissionRecord> = {},
+): RespondentPlaceSnapshot {
   return {
     ...emptyRespondentPlaceSnapshot(),
     obligations: [
@@ -279,7 +318,7 @@ function respondentPlaceSnapshotWithData(): RespondentPlaceSnapshot {
           version: demoSampleForm.version,
         },
         submittedAt: '2026-05-23T12:00:00.000Z',
-        applicantStatus: {
+        applicantStatus: overrides.applicantStatus ?? {
           sourceSchema: 'https://schemas.formspec.io/wos-api/applicant/v1',
           projectionKind: 'ApplicantStatusTimelineEntry',
           resourceRef: 'urn:wos:case_test_0001',
@@ -288,6 +327,7 @@ function respondentPlaceSnapshotWithData(): RespondentPlaceSnapshot {
           summary: 'Your submission was received.',
         },
         documentRefs: ['doc-proof-address'],
+        ...overrides,
       },
     ],
   };

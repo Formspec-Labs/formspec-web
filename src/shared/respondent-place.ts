@@ -67,6 +67,7 @@ const presentationProtocols = new Set([
 ]);
 const exportFormats = new Set(['portable-json', 'encrypted-portable-json']);
 const exportIncludes = new Set(['documents', 'submissions', 'obligations', 'presentation-policies']);
+const privacyTiers = new Set(['anonymous', 'pseudonymous', 'verified']);
 const lifecycleStates = new Set([
   'active',
   'suspended',
@@ -132,7 +133,8 @@ export function isRespondentPlaceSnapshot(value: unknown): value is RespondentPl
     value.aggregationMode !== 'client-wallet' ||
     !isRespondentTrustModel(value.trustModel) ||
     typeof value.subject.subjectRef !== 'string' ||
-    typeof value.subject.privacyTier !== 'string'
+    typeof value.subject.privacyTier !== 'string' ||
+    !privacyTiers.has(value.subject.privacyTier)
   ) {
     return false;
   }
@@ -142,18 +144,17 @@ export function isRespondentPlaceSnapshot(value: unknown): value is RespondentPl
   if (value.export !== undefined && !isExportPackage(value.export)) {
     return false;
   }
-  if (Array.isArray(value.obligations) && !value.obligations.every(isRespondentObligation)) {
+  if (!isOptionalArray(value.obligations, isRespondentObligation)) {
     return false;
   }
-  if (Array.isArray(value.documents) && !value.documents.every(isRespondentDocumentRecord)) {
+  if (!isOptionalArray(value.documents, isRespondentDocumentRecord)) {
     return false;
   }
-  if (Array.isArray(value.submissions) && !value.submissions.every(isRespondentSubmissionRecord)) {
+  if (!isOptionalArray(value.submissions, isRespondentSubmissionRecord)) {
     return false;
   }
   if (
-    Array.isArray(value.presentationPolicies) &&
-    !value.presentationPolicies.every(isPresentationPolicy)
+    !isOptionalArray(value.presentationPolicies, isPresentationPolicy)
   ) {
     return false;
   }
@@ -224,19 +225,24 @@ function isPresentationPolicy(value: unknown): boolean {
   ))) {
     return false;
   }
+  if (value.protocolHints !== undefined) {
+    if (
+      !Array.isArray(value.protocolHints) ||
+      !value.protocolHints.every((hint) => (
+        typeof hint === 'string' && presentationProtocols.has(hint)
+      ))
+    ) {
+      return false;
+    }
+  }
+  if (value.recipientIssuer !== undefined && !isIssuerRef(value.recipientIssuer)) {
+    return false;
+  }
   if (value.scope === 'selected-documents') {
     return (
       Array.isArray(value.documentRefs) &&
       value.documentRefs.length > 0 &&
       value.documentRefs.every((documentRef) => typeof documentRef === 'string')
-    );
-  }
-  if (value.protocolHints !== undefined) {
-    return (
-      Array.isArray(value.protocolHints) &&
-      value.protocolHints.every((hint) => (
-        typeof hint === 'string' && presentationProtocols.has(hint)
-      ))
     );
   }
   return true;
@@ -272,6 +278,7 @@ function isExportPackage(value: unknown): boolean {
 function isApplicantCaseDetail(value: unknown): value is ApplicantCaseDetail {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, ['summary', 'openTasks', 'recentNotifications', 'statusTimeline', 'aiInvolvement']) &&
     isApplicantCaseSummary(value.summary) &&
     Array.isArray(value.openTasks) &&
     value.openTasks.every(isApplicantTaskSummary) &&
@@ -286,11 +293,31 @@ function isApplicantCaseDetail(value: unknown): value is ApplicantCaseDetail {
 function isApplicantCaseSummary(value: unknown): value is ApplicantCaseSummary {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, [
+      'id',
+      'workflowUrl',
+      'lifecycleState',
+      'actionNeeded',
+      'title',
+      'continuationOfServicesActive',
+      'continuationOfServicesEndsAt',
+      'createdAt',
+      'updatedAt',
+    ]) &&
     typeof value.id === 'string' &&
     typeof value.workflowUrl === 'string' &&
     typeof value.lifecycleState === 'string' &&
     lifecycleStates.has(value.lifecycleState) &&
     typeof value.actionNeeded === 'boolean' &&
+    (value.title === undefined || typeof value.title === 'string') &&
+    (
+      value.continuationOfServicesActive === undefined ||
+      typeof value.continuationOfServicesActive === 'boolean'
+    ) &&
+    (
+      value.continuationOfServicesEndsAt === undefined ||
+      typeof value.continuationOfServicesEndsAt === 'string'
+    ) &&
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string'
   );
@@ -299,8 +326,10 @@ function isApplicantCaseSummary(value: unknown): value is ApplicantCaseSummary {
 function isApplicantCaseSummaryPage(value: unknown): value is ApplicantCaseSummaryPage {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, ['items', 'cursor', 'hasMore']) &&
     Array.isArray(value.items) &&
     value.items.every(isApplicantCaseSummary) &&
+    (value.cursor === undefined || typeof value.cursor === 'string') &&
     typeof value.hasMore === 'boolean'
   );
 }
@@ -308,6 +337,16 @@ function isApplicantCaseSummaryPage(value: unknown): value is ApplicantCaseSumma
 function isApplicantTaskSummary(value: unknown): value is ApplicantTaskSummary {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, [
+      'id',
+      'processId',
+      'kind',
+      'status',
+      'title',
+      'deadline',
+      'createdAt',
+      'updatedAt',
+    ]) &&
     typeof value.id === 'string' &&
     typeof value.processId === 'string' &&
     typeof value.kind === 'string' &&
@@ -315,15 +354,19 @@ function isApplicantTaskSummary(value: unknown): value is ApplicantTaskSummary {
     typeof value.status === 'string' &&
     isReservedOrExtension(value.status, taskStatuses) &&
     typeof value.title === 'string' &&
+    (value.deadline === undefined || typeof value.deadline === 'string') &&
     typeof value.createdAt === 'string'
+    && (value.updatedAt === undefined || typeof value.updatedAt === 'string')
   );
 }
 
 function isApplicantTaskPage(value: unknown): value is ApplicantTaskPage {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, ['items', 'cursor', 'hasMore']) &&
     Array.isArray(value.items) &&
     value.items.every(isApplicantTaskSummary) &&
+    (value.cursor === undefined || typeof value.cursor === 'string') &&
     typeof value.hasMore === 'boolean'
   );
 }
@@ -331,6 +374,17 @@ function isApplicantTaskPage(value: unknown): value is ApplicantTaskPage {
 function isApplicantNotificationListItem(value: unknown): value is ApplicantNotificationListItem {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, [
+      'id',
+      'kind',
+      'status',
+      'title',
+      'body',
+      'processId',
+      'taskId',
+      'createdAt',
+      'readAt',
+    ]) &&
     typeof value.id === 'string' &&
     typeof value.kind === 'string' &&
     isReservedOrExtension(value.kind, notificationKinds) &&
@@ -338,15 +392,20 @@ function isApplicantNotificationListItem(value: unknown): value is ApplicantNoti
     notificationStatuses.has(value.status) &&
     typeof value.title === 'string' &&
     typeof value.body === 'string' &&
-    typeof value.createdAt === 'string'
+    (value.processId === undefined || typeof value.processId === 'string') &&
+    (value.taskId === undefined || typeof value.taskId === 'string') &&
+    typeof value.createdAt === 'string' &&
+    (value.readAt === undefined || typeof value.readAt === 'string')
   );
 }
 
 function isApplicantNotificationPage(value: unknown): value is ApplicantNotificationPage {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, ['items', 'cursor', 'hasMore']) &&
     Array.isArray(value.items) &&
     value.items.every(isApplicantNotificationListItem) &&
+    (value.cursor === undefined || typeof value.cursor === 'string') &&
     typeof value.hasMore === 'boolean'
   );
 }
@@ -354,15 +413,27 @@ function isApplicantNotificationPage(value: unknown): value is ApplicantNotifica
 function isApplicantStatusTimelineEntry(value: unknown): value is ApplicantStatusTimelineEntry {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, ['event', 'occurredAt', 'summary', 'newLifecycleState', 'taskId']) &&
     typeof value.event === 'string' &&
     isReservedOrExtension(value.event, timelineEvents) &&
-    typeof value.occurredAt === 'string'
+    typeof value.occurredAt === 'string' &&
+    (value.summary === undefined || typeof value.summary === 'string') &&
+    (
+      value.newLifecycleState === undefined ||
+      (typeof value.newLifecycleState === 'string' && lifecycleStates.has(value.newLifecycleState))
+    ) &&
+    (value.taskId === undefined || typeof value.taskId === 'string')
   );
 }
 
 function isApplicantAiInvolvementSummary(value: unknown): value is ApplicantAiInvolvementSummary {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, [
+      'agentsInvolved',
+      'narrativeRecordCount',
+      'humanReviewedAllAgentDecisions',
+    ]) &&
     Array.isArray(value.agentsInvolved) &&
     value.agentsInvolved.every(isApplicantAgentSummary) &&
     typeof value.narrativeRecordCount === 'number' &&
@@ -375,6 +446,7 @@ function isApplicantAiInvolvementSummary(value: unknown): value is ApplicantAiIn
 function isApplicantAgentSummary(value: unknown): value is ApplicantAgentSummary {
   return (
     isRecord(value) &&
+    hasOnlyKeys(value, ['displayName', 'roleInDecision', 'confidence']) &&
     typeof value.displayName === 'string' &&
     typeof value.roleInDecision === 'string' &&
     agentRoles.has(value.roleInDecision) &&
@@ -399,4 +471,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isReservedOrExtension(value: string, reserved: Set<string>): boolean {
   return reserved.has(value) || /^x-[a-z][a-z0-9-]*$/.test(value);
+}
+
+function isOptionalArray(
+  value: unknown,
+  itemGuard: (item: unknown) => boolean,
+): boolean {
+  return value === undefined || (Array.isArray(value) && value.every(itemGuard));
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(value).every((key) => allowed.has(key));
 }

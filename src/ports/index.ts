@@ -1,10 +1,11 @@
 /**
- * MVP port surface per web ADR-0009 §MVP port inventory.
+ * Port surface per web ADR-0009 and ADR-0010.
  *
- * Five ports total. Issuer resolution is engine-owned (formspec-engine
- * IssuerStore); composition wires a FetchIssuerFetcher, not a port.
- * Post-MVP ports are ratified per-port when consumer code lands. ADR-0010
- * adds respondent-place ports for stub-backed consumer surfaces.
+ * The MVP inventory remains DefinitionSource, DraftStore, SubmitTransport,
+ * IdentityProvider, and NotificationDelivery. Issuer resolution is engine-owned
+ * (formspec-engine IssuerStore); composition wires a FetchIssuerFetcher, not a
+ * port. ADR-0010 ratifies RespondentPlaceSource and StatusReader as active
+ * respondent-place consumer ports.
  */
 
 export type { DefinitionSource, FormDefinition } from './definition-source.ts';

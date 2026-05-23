@@ -269,6 +269,18 @@ export function defineStatusReaderConformance(
       await expect(Promise.resolve().then(() => subject.registerStatus('bad', invalid))).rejects
         .toThrow();
     });
+
+    it('rejects hybrid wrapper-plus-resource status payloads', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleApplicantStatusResource,
+        sourceSchema: sampleApplicantStatusProjection.sourceSchema,
+        projectionKind: sampleApplicantStatusProjection.projectionKind,
+        updatedAt: sampleApplicantStatusProjection.updatedAt,
+      } as unknown as ApplicantStatusResource;
+      await expect(Promise.resolve().then(() => subject.registerStatus('bad-hybrid', invalid)))
+        .rejects.toThrow();
+    });
   });
 }
 
@@ -338,5 +350,30 @@ export function defineRespondentPlaceSourceConformance(
       await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects
         .toThrow();
     });
+
+    it('rejects privacy tiers outside the sidecar taxonomy', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleRespondentPlaceSnapshot,
+        subject: {
+          ...sampleRespondentPlaceSnapshot.subject,
+          privacyTier: 'identified',
+        },
+      } as unknown as RespondentPlaceSnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects
+        .toThrow();
+    });
+
+    for (const field of ['obligations', 'documents', 'submissions', 'presentationPolicies'] as const) {
+      it(`rejects non-array ${field}`, async () => {
+        const subject = setup();
+        const invalid = {
+          ...sampleRespondentPlaceSnapshot,
+          [field]: { id: 'not-an-array' },
+        } as unknown as RespondentPlaceSnapshot;
+        await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects
+          .toThrow();
+      });
+    }
   });
 }

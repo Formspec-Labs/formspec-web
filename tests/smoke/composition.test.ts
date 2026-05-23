@@ -63,6 +63,25 @@ describe('composition root smoke', () => {
     );
   });
 
+  it('production composition does not expose empty respondent-place stubs', async () => {
+    const c = createDefaultComposition({
+      ...departmentAppProfile,
+      ports: referenceHttpDataPorts(departmentAppProfile.ports),
+      referenceAdapters: {
+        formspecStack: {
+          ...departmentAppProfile.referenceAdapters?.formspecStack,
+          tenantHeaderDialect: 'formspec',
+          formspecServerUrl: 'https://formspec-server.example.test',
+        },
+      },
+    });
+
+    await expect(c.respondentPlaceSource.readPlace({ subjectRef: 'respondent:test' })).rejects
+      .toThrow(/Respondent place adapter is not configured/);
+    await expect(c.statusReader.readStatus({ submissionId: 'sub-test' })).rejects
+      .toThrow(/Applicant status adapter is not configured/);
+  });
+
   it('createDefaultComposition rejects server URLs without reference HTTP data ports', () => {
     expect(() =>
       createDefaultComposition({

@@ -17,8 +17,8 @@ import type {
  * Out of this interface (deliberately, per ADR-0009 §"Not in the constitutional inventory"):
  *  (a) Issuer resolution — engine-owned (formspec-engine IssuerStore);
  *      composition wires a FetchIssuerFetcher at boot, not a port.
- *  (b) Post-MVP ports — StatusReader, BundleSource, Verifier ratified per-port
- *      when consumer code lands.
+ *  (b) Remaining post-MVP ports — BundleSource and Verifier ratified per-port
+ *      when consumer code lands. StatusReader is active per ADR-0010.
  *  (c) Adopter-side seams — PaymentRail, BotProtection, EmbedTransport per
  *      ADR-0004 §exception become ports as consumer code lands.
  *  (d) Cross-stack TS shapes — stack-common / integrity-stack mirrors tracked
@@ -35,6 +35,6 @@ export interface Composition {
   notificationDelivery?: NotificationDelivery;
   /** ADR-0010: respondent-held obligations, documents, and history. */
   respondentPlaceSource: RespondentPlaceSource;
-  /** ADR-0010/FW-0039: WOS applicant API projection, not a web status vocabulary. */
+  /** ADR-0010/FW-0039: WOS applicant API resource shapes, not a web status vocabulary. */
   statusReader: StatusReader;
 }

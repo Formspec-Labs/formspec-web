@@ -436,14 +436,13 @@ async function readSubmissionStatuses(
 ): Promise<Record<string, ApplicantStatusResource>> {
   const entries = await Promise.all(
     (snapshot.submissions ?? []).map(async (submission) => {
-      const statusRef = submission.applicantStatus?.resourceRef;
-      if (!statusRef) {
+      if (!submission.applicantStatus) {
         return undefined;
       }
       const status = await composition.statusReader.readStatus({
         subjectRef: snapshot.subject.subjectRef,
         submissionId: submission.id,
-        resourceRef: statusRef,
+        resourceRef: submission.applicantStatus.resourceRef,
         trackingUri: submission.applicantStatus?.endpoint,
       });
       return status ? ([submission.id, status] as const) : undefined;
