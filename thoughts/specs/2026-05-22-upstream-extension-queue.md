@@ -307,7 +307,7 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **FW rows blocked:** FW-0001 (server-backed draft resume) and production release sign-off for the M6 draft-hydration claim.
 **Shape:** expand the draft read surface so web can recover a draft without an in-memory key-to-`draft_id` binding. Acceptable shapes include `DraftView` carrying `draft_state`, a dedicated `GET /drafts/{draft_id}/state`, plus a scoped lookup/list route by form and verified subject. The route must preserve tenant scope and anonymous-session verification.
 **Fixture status:** none.
-**Status:** not yet filed.
+**Status:** not yet filed. Re-verified absent 2026-05-23: `DraftView` still carries metadata only and omits `draft_state`; no scoped lookup/list route exists for web draft resume.
 
 ### EXT-27: Session-bound anonymous draft update
 
@@ -316,7 +316,7 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **FW rows blocked:** storage-efficient anonymous autosave for FW-0001 and external-audit sign-off of anonymous draft update semantics.
 **Shape:** extend `PATCH /drafts/{draft_id}` or add an equivalent update route that accepts `anonymous_session_token`, verifies it against the draft's form and subject, and rejects mismatches. Until this lands, `HttpDraftStore` creates a fresh anonymous server draft on each save and submits the latest binding instead of using the unbound PATCH route.
 **Fixture status:** none.
-**Status:** not yet filed.
+**Status:** not yet filed. Re-verified absent 2026-05-23: `UpdateDraftCommand` carries `draft_state` and optional version only; no `anonymous_session_token` is accepted on the update path.
 
 ### EXT-22: Nested-path draft hydration
 
@@ -334,7 +334,7 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **FW rows blocked:** FW-0063 (full M7/M7b production identity close)
 **Shape:** per-tenant trusted issuer config, JWKS client, RS256 verifier, and middleware path that accepts `Authorization: Bearer ...` from formspec-web. The web-side access-token bridge has landed; server validation remains the gating work.
 **Fixture status:** none.
-**Status:** filed; gates M7.
+**Status:** filed; gates M7. Re-verified absent 2026-05-23: `formspec-server-auth-jwt` still constructs HS256 issuers/verifiers, `composition.rs` still passes `jwks_url: None`, and no JWKS/RS256 trusted-issuer path exists.
 
 ### EXT-24: Per-form tenant resolution for public portal forms
 
