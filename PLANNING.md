@@ -11,6 +11,8 @@ Format reference: [`CLAUDE.md`](CLAUDE.md). Person-need source: [`JOURNEYS.md`](
 
 **Port-shape framing.** Per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md), every row that touches a backend concern is expressed in terms of the **port** it consumes (`DefinitionSource`, `DraftStore`, `SubmitTransport`, `IdentityProvider`, `NotificationDelivery`, `StatusReader`, `BundleSource`, `Verifier`). Specific backend services appear only as reference adapters in the formspec-stack composition ([web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)). Adopter compositions wire different adapters.
 
+**Runtime feature framing.** Per [web ADR-0011](thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md), post-MVP respondent features resolve from instance capabilities, org runtime policy, and form runtime policy into one read-only runtime profile. A form that requires a feature the instance cannot support, or that the org forbids, fails at load time with a typed configuration error. Optional features resolve off without silently downgrading required behavior.
+
 ## Status vocabulary
 
 *open* | *in design* | *in build* | *live* | *closed*. Same set as JOURNEYS.
