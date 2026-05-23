@@ -158,7 +158,7 @@ export function isRespondentPlaceSnapshot(value: unknown): value is RespondentPl
       'presentationPolicies',
       'export',
       'extensions',
-    ]) ||
+    ], { allowTopLevelExtensions: true }) ||
     value.$formspecRespondentLibrary !== '1.0' ||
     typeof value.version !== 'string' ||
     typeof value.libraryId !== 'string' ||
@@ -644,14 +644,20 @@ function isOptionalArray(
   return value === undefined || (Array.isArray(value) && value.every(itemGuard));
 }
 
-function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  options: { allowTopLevelExtensions?: boolean } = {},
+): boolean {
   const allowed = new Set(allowedKeys);
-  return Object.keys(value).every((key) => allowed.has(key));
+  return Object.keys(value).every((key) => (
+    allowed.has(key) || (options.allowTopLevelExtensions === true && key.startsWith('x-'))
+  ));
 }
 
 function isExtensions(value: unknown): boolean {
   return (
     isRecord(value) &&
-    Object.keys(value).every((key) => /^x-[a-z][a-z0-9-]*$/.test(key))
+    Object.keys(value).every((key) => key.startsWith('x-'))
   );
 }

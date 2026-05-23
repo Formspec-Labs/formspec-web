@@ -297,6 +297,21 @@ export function defineRespondentPlaceSourceConformance(
       expect(found).toEqual(sampleRespondentPlaceSnapshot);
     });
 
+    it('preserves schema-valid x-extension keys', async () => {
+      const subject = setup();
+      const snapshotWithExtensions = {
+        ...sampleRespondentPlaceSnapshot,
+        'x-vendorFlag': { enabled: true },
+        extensions: {
+          'x-Vendor/opaque': { retained: true },
+        },
+      } as unknown as RespondentPlaceSnapshot;
+      await subject.replaceSnapshot(snapshotWithExtensions);
+      const found = await subject.adapter.readPlace({ subjectRef: 'respondent:conformance' });
+      expect(isRespondentPlaceSnapshot(roundTripJson(found))).toBe(true);
+      expect(found).toEqual(snapshotWithExtensions);
+    });
+
     it('rejects server-side aggregation mode', async () => {
       const subject = setup();
       const invalid = {
