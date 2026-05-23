@@ -54,62 +54,62 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 ### FW-0016 — Build and test pipeline producing a deployable artifact
 
 - **Phase:** MVP
-- **Status:** closed (2026-05-22) — local; CI workflow deferred to FW-0017
+- **Status:** closed (2026-05-22)
 - **Persona:** Platform
 - **Journey:** (none — platform)
-- **Done:** Local build runs (`npm run build`), produces deployable artifact in `dist/`, finishes a clean-tree build in **369 ms** (~0.6% of the 60s target). Typecheck (`tsc --noEmit`), lint (`eslint .` with `no-restricted-paths` enforcing web ADR-0009 §Discipline boundary), and tests (Vitest; 5 smoke tests for composition root) all pass. Scaffolded files: `package.json`, `tsconfig.json`, `vite.config.ts`, `eslint.config.js`, `index.html`, `src/ports/` (5 MVP port interfaces per web ADR-0009), `src/adapters/stub/` (one stub adapter per port), `src/composition/{types,stub,default}.ts` (composition root), `src/app/` (React shell with `CompositionProvider` + `useComposition` hook), `tests/smoke/`, `tests/adapter-conformance/` skeleton dirs.
-- **CI workflow (`.github/workflows/ci.yml`) deliberately deferred** to FW-0017 per scaffold-session scope decision; the typecheck/lint/test/build steps are scripted in `package.json` and ready to wire when FW-0017 expands the CI surface with `axe-core` a11y gating.
+- **Done:** Local and CI build paths run `npm run ci`: typecheck (`tsc --noEmit`), lint (`eslint .` with `no-restricted-paths` enforcing web ADR-0009 §Discipline boundary), port conformance, unit/smoke tests, vendor-leak grep, upstream-theme sync, Playwright + axe, and production build. The Docker image builds static assets into nginx and writes runtime config from `FORMSPEC_WEB_*` environment variables at container start. Current suite: 18 test files / 96 tests plus 3 Playwright Chromium checks. The comprehensive gate matrix lives in `docs/testing-plan.md`.
 
 ### FW-0001 — End-to-end Respondent thin-slice (deployable)
 
 - **Phase:** MVP
-- **Status:** in build (scaffold + ports + stub adapters landed 2026-05-22; consumer code pending)
+- **Status:** live (MVP reference path; release-signoff gaps tracked below)
 - **Persona:** Respondent
 - **Journey:** [J-002](JOURNEYS.md#j-002--respondent-fills-out-a-form-recovers-from-validation-and-never-loses-work)
 - **Done:** A real respondent can open a form URL, fill required fields, hit a validation error, recover, submit, and see a confirmation — backed by a real backend wire. Closing the tab and returning later (on the same or a different device) leaves every answer where it was. Errors read in plain English with a reference number the user can quote to support, never "something went wrong."
 - **Anti-patterns:** AP-001, AP-013, AP-015.
 - **Note:** Leads the backlog deliberately. Forces framework, design tokens, build, and accessibility-baseline decisions to fall out as evidence (FW-0014..0018), not as whiteboard rows. Consumes ports `DefinitionSource` (read), `DraftStore` (read+write), `SubmitTransport` (write). Issuer resolution is engine-owned (`IssuerStore` per web ADR-0006); composition wires a `FetchIssuerFetcher`, not a port. Submit boundary contract: `formspec/schemas/intake-handoff.schema.json` with `initiationMode: "publicIntake"`. Per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) the row delivers the port-consuming React shell + at least stub adapters that demonstrate the seam is real (typically swapped for HTTP adapters in the formspec-stack reference composition — see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)). Migrated from `formspec-cloud/PLANNING.md` CLD-0001.
-- **Progress (FW-0016 scaffold landing 2026-05-22):** React shell mounts (`src/app/main.tsx` → `CompositionProvider` → `App`); `Composition` consumed via `useComposition()` hook; all 3 consumed ports defined with TypeScript interfaces; stub adapters wired through `createDefaultComposition()` (currently delegates to `createStubComposition()`). **Remaining:** wire `@formspec-org/react` (`<FormspecProvider>` + `<FormspecForm />`) into the shell; replace stub adapters with HTTP adapters in the formspec-stack composition; render a real Definition end-to-end; wire `IntakeHandoff` submit through `formspec-server`; cross-device draft resume via `DraftStore` HTTP adapter; FW-0013 error rendering via `<ValidationSummary>`.
+- **Progress (M8 closeout 2026-05-22):** React shell mounts (`src/app/main.tsx` → `CompositionProvider` → `App`) and lazy-loads `RespondentRuntime`; the runtime consumes `@formspec-org/react` via `FormspecProvider`, `IssuerChromeSlot`, and `FormspecNode`; demo mode renders the bundled multilingual sample form end-to-end; production mode wires `HttpDefinitionSource`, `HttpDraftStore`, and `HttpSubmitTransport` when `FORMSPEC_WEB_SERVER_URL` selects `reference-http` data ports. Public anonymous production creates a server-issued anonymous session before draft create/submit. Submit handoff carries response data and draft binding, and the production composition smoke covers the two-save runtime path before submit.
+- **Remaining release gaps:** cross-reload / cross-device draft resume is not server-backed until EXT-26; in-place anonymous draft update is not session-bound server-side until EXT-27, so web creates a fresh anonymous draft per save; full OIDC production submit waits for EXT-23 plus the web access-token bridge.
 
 ### FW-0004 — First-paint legitimacy: the sender's brand, what this is, who's asking
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** live
 - **Persona:** Respondent
 - **Journey:** [J-001](JOURNEYS.md#j-001--first-impression-is-this-legitimate-and-can-i-trust-it-for-the-next-ten-minutes)
 - **Done:** First paint shows the sender's brand front and center, the platform's brand subordinate, and a one-line statement of who is asking and why — all above the fold on a phone, with no popup, no consent wall, and no humanity gauntlet between the click and the form. The user can decide "this is legitimate" without scrolling.
 - **Anti-patterns:** AP-012.
-- **Note:** Substrate ships. Consume `<Issuer>` from `@formspec-org/react` (`packages/formspec-react/src/issuer.tsx`) for the cover; the cascade + chain walk + cycle guard + ETag fetch run inside the engine's `IssuerStore` (`packages/formspec-engine/src/issuer/IssuerStore.ts`, `MAX_CHAIN_DEPTH=8`). formspec-web work is styling + integration; the `IssuerSource` port wraps `IssuerStore`, configured per composition. The formspec-stack reference composition routes the fetch path through a server cache (see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)); other adopters wire direct browser fetch or static-inline. Unbranded fallback (title + description) is acceptable when no Issuer is declared.
+- **Note:** Substrate ships. `RespondentRuntime` consumes `IssuerChromeSlot` from `@formspec-org/react`; the cascade + chain walk + cycle guard run inside the engine's `IssuerStore`. Demo and compose smoke prove branded first paint for `formspec-public` and `formspec-department`; unbranded fallback remains available when the engine resolves `source === "unbranded"`.
 
 ### FW-0005 — Phone-first form-fill, one-handed
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** live
 - **Persona:** Respondent
 - **Journey:** [J-004](JOURNEYS.md#j-004--filling-it-out-on-a-phone-one-handed-on-the-bus)
 - **Done:** The form works on a phone in one hand: tap targets reachable with the thumb, the right keyboard for the right field (numbers, dates, email), no pinch-zoom, primary buttons in reach. The form was designed for the phone first; the desktop layout is a wider variant, not the other way around.
 - **Anti-patterns:** —
-- **Note:** Phone parity is the largest single addressable-population unlock and the cheapest one to forfeit by accident. Audit from FW-0001 onward, not after.
+- **Note:** Phone parity is part of the M6 baseline. `docs/ux/responsive.md` records the current mobile behavior and the Playwright mobile tap-target check gates it. Lighthouse mobile performance remains open release-signoff work, not a missing implementation path.
 
 ### FW-0013 — Plain-language errors and typed problem detail
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** live
 - **Persona:** Respondent
 - **Journey:** [J-002](JOURNEYS.md#j-002--respondent-fills-out-a-form-recovers-from-validation-and-never-loses-work) (deep cut)
 - **Done:** Every error the user sees says what went wrong in plain English, names whether it's something they need to fix or something the system needs to fix, and carries a short reference ID the user can quote. Cross-field contradictions ("your dependent's birthdate makes them 19 but you marked them as a child under 17") are stated in those terms, not as code names.
 - **Anti-patterns:** AP-013.
-- **Note:** Substrate ships. Consume `<ValidationSummary>` from `@formspec-org/react` for the validation-render surface; use `stack-common` Problem JSON (`stack-common-error::StackError::into_problem()`) for the typed-error envelope and `stack-common` request-id middleware for reference numbers. Submit-gate semantics follow `formspec/specs/core/validation-mapping.md` (landed 2026-05-22 — `complete-response` requires `ValidationReport.valid === true`). FW-0001 carries the minimum bar; this row carries the depth — every error class catalogued, every message reviewed for plain language.
+- **Note:** The M6 shell parses Problem JSON, renders support references, catches client-side runtime failures, and blocks invalid submit with plain-language guidance. Deeper cross-field contradiction copy and exhaustive error-class review remain post-MVP polish; the current release gate is documented in `docs/ux/errors.md`.
 
 ### FW-0012 — Accessibility: WCAG 2.1 AA across every production surface
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** in build (automated gates live; manual AT release sign-off pending)
 - **Persona:** Platform / Respondent
 - **Journey:** [J-005](JOURNEYS.md#j-005--i-use-a-screen-reader-i-have-low-vision-my-hands-shake-the-form-needs-to-work)
 - **Done:** A blind respondent on a screen reader, a low-vision respondent at 400% zoom, a respondent who navigates by keyboard, an older respondent on a shaky touch — each can finish the form alone, on their own tools. Every surface has an automated a11y check captured in CI; failing surfaces have a tracked fix row.
 - **Anti-patterns:** —
-- **Note:** Both a platform discipline (FW-0017) and a journey commitment. The two are kept in one row so the discipline never drifts away from the lived experience.
+- **Note:** Automated axe checks run in Playwright for the current rendered surfaces. Manual VoiceOver and NVDA sweeps are still pending in `docs/ux/accessibility.md`; treat M6 as implementation-ready but not release-signed until those rows are completed.
 
 ### FW-0017 — Accessibility automation in CI
 
@@ -123,21 +123,21 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 ### FW-0019 — Multilingual form: respondent's language with the legally controlling text marked
 
 - **Phase:** MVP
-- **Status:** open
+- **Status:** live (demo Locale sidecars; server Locale Documents pending)
 - **Persona:** Respondent
 - **Journey:** [J-010](JOURNEYS.md#j-010--translate-this-form-into-my-language-without-bending-the-legal-meaning)
 - **Done:** The respondent reads the form in their language, sees the legally controlling text marked plainly, and writes narrative fields in their own words. Names in multiple scripts are first-class.
 - **Anti-patterns:** —
-- **Note:** Worked from scratch — no in-place retrofit of an English-only form layer. Consumes existing Locale spec. Certified-translator attribution on narrative translations is post-MVP (see queue EXT-2 for the Response per-value provenance dependency).
+- **Note:** The respondent runtime loads bundled demo Locale Documents and exposes the English/Spanish toggle. Production server payloads currently expose `locale_refs` only; concrete server-served Locale Documents remain a release gap documented in `docs/ux/i18n.md`. Certified-translator attribution on narrative translations is post-MVP (see queue EXT-2 for the Response per-value provenance dependency).
 
 ### FW-0063 — `IdentityProvider` port + conformance suite + ≥1 reference adapter
 
 - **Phase:** MVP
-- **Status:** in build (port + stub adapter landed 2026-05-22; conformance suite + production adapter pending)
+- **Status:** live (M7a; M7b blocked on EXT-23)
 - **Persona:** Respondent / Signer
 - **Journey:** [J-019](JOURNEYS.md#j-019--im-on-a-public-library-terminal-with-twenty-minutes-and-no-email), [J-032](JOURNEYS.md#j-032--sign-in-with-something-i-already-have-not-yet-another-password), [J-034](JOURNEYS.md#j-034--i-already-proved-who-i-am-to-logingov--idme--nhs--dont-make-me-do-it-again) (basic slices)
 - **Done:** Ship the `IdentityProvider` port (`src/ports/identity-provider.ts`) per [web ADR-0007](thoughts/adr/0007-identity-provider-port.md) + its conformance suite (`tests/adapter-conformance/identity-provider/`) + at least one production-grade reference adapter (specific adapter choice for the formspec-stack composition is in [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md); other compositions wire `FirebaseAuthAdapter` / `SupabaseAuthAdapter` / `ClerkAdapter` / `Auth0Adapter` / etc.). Anonymous fill remains a first-class path. Adapter `authenticate()` output MUST be normalized to `respondent-ledger-spec.md` §6.6 shape before any ledger write — the conformance suite verifies this for any adapter.
-- **Progress (FW-0016 scaffold landing 2026-05-22):** `IdentityProvider` port interface authored at `src/ports/identity-provider.ts` with the full §6.6-aligned `IdentityClaim` shape (enums match `respondent-ledger-event.schema.json` — `credentialType` / `personhoodCheck` / `subjectBinding` complete sets); `subscribe()` pattern wired for cross-port coordination per web ADR-0009 §Composition lifecycle. Stub adapter (`AnonymousAdapter`-shaped) lands in `src/adapters/stub/identity-provider.ts` proving the seam is real and exercising the subscribe lifecycle. **Remaining:** executable conformance suite under `tests/adapter-conformance/identity-provider/` (per ADR-0009 minimum bar — schema-validity round-trip + negative case asserting OIDC `acr` normalization), plus at least one production-grade reference adapter.
+- **Progress (M7a/M8 closeout 2026-05-22):** `IdentityProvider` port interface is §6.6-aligned; conformance covers stub, local anonymous, HTTP anonymous session, OIDC, and magic-link adapters. `OidcAdapter` normalizes ACR L1-L4 and fails on weak/unknown assurance instead of leaking provider-native vocabulary. The runtime auto-authenticates only side-effect-free anonymous options, fails closed for production `oidc-required` profiles without a claim, subscribes to identity changes, invalidates prior subject drafts, and reloads ready state. Full M7b remains blocked by EXT-23 in `formspec-server` plus the web access-token bridge for `HttpClient.accessToken`.
 - **Anti-patterns:** AP-001, AP-006, AP-020, AP-022.
 - **Note:** Adopter-side per [web ADR-0004](thoughts/adr/0004-cross-repo-placement-consume-not-invent.md) — no upstream spec. Architecture per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md). Specific adapter choice for the OSS reference deployment is a composition decision (see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)), separate from this row. FW-0028 (multi-IdP picker with assurance filtering) is post-MVP and consumes the same port.
 

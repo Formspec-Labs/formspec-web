@@ -19,7 +19,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
+      - run: npm run test:conformance
+      - run: npm run test:unit
       - run: npm run check:vendor-leaks
       - uses: actions/checkout@v4
         with:

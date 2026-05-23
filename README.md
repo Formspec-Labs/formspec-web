@@ -36,13 +36,11 @@ See [docs/getting-started.md](docs/getting-started.md).
 Local gates:
 
 ```sh
-npm run typecheck
-npm run lint
-npm test
-npm run check:vendor-leaks
-npm run test:e2e
-npm run build
+npm run ci
 ```
+
+See [docs/testing-plan.md](docs/testing-plan.md) for the full gate matrix,
+conformance requirements, and manual release blockers.
 
 Container smoke:
 
