@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 test('demo form renders and has no automated accessibility violations', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Demo Benefits Intake' })).toBeVisible();
-  await expect(page.locator('h1')).toHaveCount(1);
+  await expectReactShellCommitted(page);
   await expect(page.locator('#respondent-title')).toHaveCount(1);
   await expect(page.getByLabel('Full name')).toBeVisible();
 
@@ -43,6 +43,7 @@ test('load error surface has no automated accessibility violations', async ({ pa
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'We could not load this form.' })).toBeVisible();
+  await expectReactShellCommitted(page);
   const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScanResults.violations).toEqual([]);
 });
@@ -57,6 +58,7 @@ test('oidc-required sign-in surface has no automated accessibility violations', 
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+  await expectReactShellCommitted(page);
   await expect(page.getByRole('button', { name: 'Sign in with https://idp.example.gov/realms/formspec' })).toBeVisible();
   const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
   expect(accessibilityScanResults.violations).toEqual([]);
@@ -80,3 +82,22 @@ test('mobile viewport keeps primary controls at tap-target size', async ({ page 
     expect(box?.height).toBeGreaterThanOrEqual(44);
   }
 });
+
+test('no-JavaScript fallback explains the requirement', async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  try {
+    await page.goto('/');
+    await expect(page.locator('#formspec-static-shell')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Loading form' })).toBeVisible();
+    await expect(page.getByText('This form requires JavaScript.')).toBeVisible();
+    await expect(page.locator('h1')).toHaveCount(1);
+  } finally {
+    await context.close();
+  }
+});
+
+async function expectReactShellCommitted(page: Page) {
+  await expect(page.locator('#formspec-static-shell')).toHaveCount(0);
+  await expect(page.locator('h1')).toHaveCount(1);
+}

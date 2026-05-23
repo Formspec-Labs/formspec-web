@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, useLayoutEffect, useState, type ComponentType } from 'react';
 import type { FormspecWebConfig } from '../config/types.ts';
 import { demoSampleForm } from '../demo/index.ts';
 import type { Composition } from '../composition/types.ts';
@@ -21,6 +21,10 @@ type RuntimeState =
 export function App({ config }: AppProps) {
   const composition = useComposition();
   const [runtimeState, setRuntimeState] = useState<RuntimeState>({ status: 'loading' });
+
+  useLayoutEffect(() => {
+    document.getElementById('formspec-static-shell')?.remove();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

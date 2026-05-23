@@ -10,7 +10,7 @@ import importPlugin from 'eslint-plugin-import';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'vendor/**'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'test-results/**', 'vendor/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

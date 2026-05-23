@@ -12,9 +12,116 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23155e56'/%3E%3Cpath d='M4 5h8v1.5H4zm0 3h8v1.5H4zm0 3h5v1.5H4z' fill='white'/%3E%3C/svg%3E"
     />
     <title>Formspec Web</title>
+    <style>
+      :root {
+        background: #f7f8f5;
+        color: #1f2933;
+        font-family: "Inter", "Segoe UI", sans-serif;
+      }
+
+      body {
+        min-width: 320px;
+        min-height: 100svh;
+        margin: 0;
+      }
+
+      .static-first-paint {
+        min-height: 100svh;
+        background: #f7f8f5;
+      }
+
+      .static-first-paint__inner {
+        width: min(100% - 1rem, 56rem);
+        margin: 0 auto;
+        padding: clamp(0.75rem, 3vw, 2rem) 0 3rem;
+      }
+
+      .static-first-paint__panel {
+        display: grid;
+        gap: 1.1rem;
+        border: 1px solid #c9d3cd;
+        border-radius: 8px;
+        padding: clamp(1rem, 4vw, 2rem);
+        background: #fff;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+      }
+
+      .static-first-paint__kicker,
+      .static-first-paint__status {
+        color: #5d6b66;
+      }
+
+      .static-first-paint__kicker,
+      .static-first-paint__title,
+      .static-first-paint__copy,
+      .static-first-paint__status {
+        margin: 0;
+      }
+
+      .static-first-paint__kicker {
+        font-size: 0.86rem;
+        font-weight: 750;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .static-first-paint__title {
+        max-width: 42rem;
+        color: #1f2933;
+        font-size: clamp(1.8rem, 5vw, 3.1rem);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .static-first-paint__copy {
+        max-width: 42rem;
+        color: #5d6b66;
+        font-size: 1rem;
+        line-height: 1.55;
+      }
+
+      .static-first-paint__status {
+        border: 1px solid #c9d3cd;
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        background: #f8fbfa;
+      }
+
+      .static-first-paint__noscript {
+        border: 1px solid #9f1c1c;
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        background: #fff8f8;
+        color: #7f1d1d;
+      }
+
+      .static-first-paint__noscript p {
+        margin: 0;
+      }
+
+      .js-enabled .static-first-paint__noscript {
+        display: none;
+      }
+    </style>
+    <script>
+      document.documentElement.classList.add("js-enabled");
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <div id="formspec-static-shell" class="static-first-paint" role="status">
+      <div class="static-first-paint__inner">
+        <section class="static-first-paint__panel" aria-labelledby="static-first-paint-title">
+          <p class="static-first-paint__kicker">Formspec Web</p>
+          <h1 id="static-first-paint-title" class="static-first-paint__title">Loading form</h1>
+          <p class="static-first-paint__copy">Preparing the requested Formspec form.</p>
+          <p class="static-first-paint__status">Loading form</p>
+          <div class="static-first-paint__noscript" role="alert">
+            <p>This form requires JavaScript. Enable JavaScript and reload this page.</p>
+          </div>
+        </section>
+      </div>
+    </div>
     <script src="/formspec-runtime-config.js"></script>
     <script type="module" src="/src/app/main.tsx"></script>
   </body>
