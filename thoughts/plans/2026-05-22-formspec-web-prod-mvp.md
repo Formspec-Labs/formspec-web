@@ -68,6 +68,8 @@ These were open in earlier drafts and are now locked so an autonomous agent does
 | UUID library | `uuid` v9+ (for `v7` generation). | Per EXT-14 inline. |
 | Initial state | Begin from current `formspec-web` HEAD on `main`. FW-0014 + FW-0016 scaffold work assumed closed (verify in M0 precondition check below). If scaffold missing, agent halts and reports. | M2 MUST NOT start until FW-0015 owner approval is recorded and the stack-root dirt is either clean, committed as the cohort-1 gitlink bump, or explicitly waived. |
 
+**M2 start waiver (2026-05-22):** Owner instructed the agent to proceed to M2 without resolving the FW-0015 licensing question now ("don't worry about licensing, i'll come back to it later") and to ignore unrelated `formspec-studio` dirt. This waiver allows M2 implementation to start; it does not close FW-0015 or ratify npm registry package consumption.
+
 ---
 
 ## 5. ADR coverage
