@@ -1,0 +1,205 @@
+'use client';
+/** @filedesc useScreener — React hook for the Formspec screener gate. */
+import { useState, useCallback, useMemo } from 'react';
+import { evalFEL, wasmEvaluateScreenerDocument } from '@formspec-org/engine';
+/**
+ * Read the item's data type, supporting both the canonical schema field
+ * (`dataType`) and the simplified alias (`type`) from the user-facing API.
+ */
+function itemDataType(item) {
+    return item.dataType ?? item.type ?? 'text';
+}
+/**
+ * Read the item's option list, supporting both the canonical schema field
+ * (`options`) and the simplified alias (`choices`).
+ */
+function itemOptions(item) {
+    return item.options ?? item.choices ?? [];
+}
+/**
+ * Determine whether a screener item is required.
+ * Checks the item's own `required` flag first, then falls back to
+ * `screener.binds` (the canonical location in the definition schema).
+ * FEL expressions in the `required` bind are evaluated against the
+ * current answers using the engine's FEL evaluator.
+ */
+export function isItemRequired(item, screener, answers) {
+    if (item.required === true)
+        return true;
+    const binds = screener?.binds ?? [];
+    const bind = binds.find((b) => b.path === item.key);
+    if (!bind || bind.required == null)
+        return false;
+    if (typeof bind.required === 'boolean')
+        return bind.required;
+    if (bind.required === 'true')
+        return true;
+    if (bind.required === 'false')
+        return false;
+    if (typeof bind.required === 'string') {
+        try {
+            const result = evalFEL(bind.required, answers);
+            return result === true;
+        }
+        catch {
+            return false;
+        }
+    }
+    return false;
+}
+function buildSeedAnswers(items, seed) {
+    const out = {};
+    if (!seed)
+        return out;
+    for (const item of items) {
+        if (seed[item.key] !== undefined) {
+            out[item.key] = seed[item.key];
+        }
+    }
+    return out;
+}
+function asRouteExtensionsRecord(value) {
+    if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined;
+    }
+    return value;
+}
+function routeExtensionsFromMatch(matched) {
+    return asRouteExtensionsRecord(matched.metadata) ?? asRouteExtensionsRecord(matched.extensions);
+}
+function firstMatchedRouteFromDetermination(determination) {
+    const matched = determination.overrides?.matched?.[0]
+        ?? determination.phases?.flatMap((p) => p.matched)?.[0];
+    if (!matched) {
+        return null;
+    }
+    return {
+        target: matched.target,
+        label: matched.label,
+        extensions: routeExtensionsFromMatch(matched),
+    };
+}
+export function useScreener(options = {}) {
+    const screenerDoc = options.screenerDocument ?? null;
+    const items = useMemo(() => screenerDoc?.items ?? [], [screenerDoc]);
+    const routes = useMemo(() => (screenerDoc?.evaluation?.flatMap((p) => p.routes ?? []) ?? []), [screenerDoc]);
+    const binds = useMemo(() => screenerDoc?.binds ?? [], [screenerDoc]);
+    const [answers, setAnswers] = useState(() => buildSeedAnswers(items, options.seedAnswers));
+    const [state, setState] = useState('idle');
+    const [routeResult, setRouteResult] = useState(null);
+    const [skipped, setSkipped] = useState(false);
+    const [errors, setErrors] = useState({});
+    const setAnswer = useCallback((key, value) => {
+        setAnswers((prev) => ({ ...prev, [key]: value }));
+        setErrors((prev) => {
+            if (!prev[key])
+                return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+        setState((s) => (s === 'idle' ? 'answering' : s));
+    }, []);
+    const submit = useCallback(() => {
+        const newErrors = {};
+        const hasExplicitRequired = items.some((i) => isItemRequired(i, screenerDoc, answers));
+        if (hasExplicitRequired) {
+            for (const item of items) {
+                if (isItemRequired(item, screenerDoc, answers)) {
+                    const val = answers[item.key];
+                    if (val === undefined || val === null || val === '') {
+                        newErrors[item.key] = `${item.label || item.key} is required`;
+                    }
+                }
+            }
+        }
+        else {
+            const hasAny = items.some((i) => {
+                const v = answers[i.key];
+                return v !== undefined && v !== null && v !== '';
+            });
+            if (!hasAny && items.length > 0) {
+                newErrors[items[0].key] = 'Please answer at least one question';
+            }
+        }
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            return;
+        }
+        setErrors({});
+        let result = null;
+        if (screenerDoc) {
+            try {
+                const determination = wasmEvaluateScreenerDocument(screenerDoc, answers);
+                result = firstMatchedRouteFromDetermination(determination);
+            }
+            catch {
+                result = null;
+            }
+        }
+        if (!result) {
+            setRouteResult({ route: { target: '' }, routeType: 'none' });
+            setState('routed');
+            options.onRoute?.({ target: '' }, 'none', answers);
+            return;
+        }
+        const matchedRoute = routes.find((r) => {
+            if (r.target === result.target)
+                return true;
+            if (result.label != null && result.label !== '' && r.label === result.label)
+                return true;
+            return false;
+        });
+        let routeType = 'internal';
+        if (matchedRoute?.routeType === 'internal'
+            || matchedRoute?.routeType === 'external'
+            || matchedRoute?.routeType === 'none') {
+            routeType = matchedRoute.routeType;
+        }
+        else {
+            const defUrl = screenerDoc?.targetDefinition?.url;
+            if (defUrl && result.target === defUrl) {
+                routeType = 'internal';
+            }
+            else if (matchedRoute?.type === 'external' || matchedRoute?.externalUrl) {
+                routeType = 'external';
+            }
+            else if (defUrl && result.target !== defUrl) {
+                routeType = 'external';
+            }
+        }
+        const route = {
+            target: result.target,
+            label: result.label,
+            extensions: result.extensions,
+        };
+        setRouteResult({ route, routeType });
+        setState('routed');
+        options.onRoute?.(route, routeType, answers);
+    }, [answers, items, routes, screenerDoc, options]);
+    const restart = useCallback(() => {
+        setAnswers(buildSeedAnswers(items, options.seedAnswers));
+        setRouteResult(null);
+        setErrors({});
+        setState('idle');
+        setSkipped(false);
+    }, [items, options.seedAnswers]);
+    const skip = useCallback(() => {
+        setSkipped(true);
+    }, []);
+    return {
+        state,
+        answers,
+        items,
+        binds,
+        routes,
+        setAnswer,
+        submit,
+        restart,
+        skip,
+        routeResult,
+        skipped,
+        errors,
+    };
+}
+export { itemDataType, itemOptions };

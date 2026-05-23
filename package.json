@@ -32,6 +32,8 @@
   },
   "dependencies": {
     "@formspec-org/engine": "file:vendor/formspec-engine",
+    "@formspec-org/layout": "file:vendor/formspec-layout",
+    "@formspec-org/react": "file:vendor/formspec-react",
     "@formspec-org/types": "file:vendor/formspec-types",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.0.0",

@@ -72,20 +72,31 @@
           "type": "field",
           "label": "Full name",
           "dataType": "string",
-          "hint": "As it appears on your ID."
+          "hint": "As it appears on your ID.",
+          "presentation": {
+            "autoComplete": "name"
+          }
         },
         {
           "key": "email",
           "type": "field",
           "label": "Email address",
-          "dataType": "string"
+          "dataType": "string",
+          "presentation": {
+            "autoComplete": "email",
+            "inputMode": "email"
+          }
         },
         {
           "key": "phone",
           "type": "field",
           "label": "Phone number",
           "dataType": "string",
-          "hint": "Optional."
+          "hint": "Optional.",
+          "presentation": {
+            "autoComplete": "tel",
+            "inputMode": "tel"
+          }
         },
         {
           "key": "preferredContact",

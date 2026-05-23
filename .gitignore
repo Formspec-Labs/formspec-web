@@ -9,6 +9,10 @@ dist/
 !vendor/formspec-engine/wasm-pkg-runtime/**
 !vendor/formspec-engine/wasm-pkg-tools/
 !vendor/formspec-engine/wasm-pkg-tools/**
+!vendor/formspec-layout/dist/
+!vendor/formspec-layout/dist/**
+!vendor/formspec-react/dist/
+!vendor/formspec-react/dist/**
 build/
 coverage/
 playwright-report/

@@ -1,0 +1,24 @@
+{
+  "name": "@formspec-org/layout",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./default-theme": "./dist/default-theme.json",
+    "./token-registry": "./dist/token-registry.json",
+    "./formspec-layout.css": "./dist/formspec-layout.css",
+    "./formspec-default.css": "./dist/formspec-default.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@formspec-org/types": "file:../formspec-types"
+  }
+}

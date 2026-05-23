@@ -1,37 +1,39 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { FormDefinition, FormItem, FormOption } from '@formspec-org/types';
+import { useEffect, useState, type ComponentType } from 'react';
 import type { FormspecWebConfig } from '../config/types.ts';
+import { demoSampleForm } from '../demo/index.ts';
+import type { Composition } from '../composition/types.ts';
 import { useComposition } from './hooks/useComposition.ts';
 
 interface AppProps {
   config: FormspecWebConfig;
 }
 
-type DefinitionState =
+interface RespondentRuntimeProps {
+  composition: Composition;
+  config: FormspecWebConfig;
+}
+
+type RuntimeState =
   | { status: 'loading' }
-  | { status: 'ready'; definition: FormDefinition }
-  | { status: 'error'; message: string };
+  | { status: 'ready'; Runtime: ComponentType<RespondentRuntimeProps> }
+  | { status: 'error'; error: unknown };
 
 export function App({ config }: AppProps) {
   const composition = useComposition();
-  const [definitionState, setDefinitionState] = useState<DefinitionState>({ status: 'loading' });
+  const [runtimeState, setRuntimeState] = useState<RuntimeState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
-    setDefinitionState({ status: 'loading' });
-    void composition.definitionSource
-      .getDefinition(composition.initialDefinitionUrl)
-      .then((definition) => {
+    setRuntimeState({ status: 'loading' });
+    void import('./RespondentRuntime.tsx')
+      .then((module) => {
         if (!cancelled) {
-          setDefinitionState({ status: 'ready', definition });
+          setRuntimeState({ status: 'ready', Runtime: module.RespondentRuntime });
         }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setDefinitionState({
-            status: 'error',
-            message: error instanceof Error ? error.message : 'Unable to load form definition',
-          });
+          setRuntimeState({ status: 'error', error });
         }
       });
     return () => {
@@ -39,258 +41,50 @@ export function App({ config }: AppProps) {
     };
   }, [composition]);
 
+  const Runtime = runtimeState.status === 'ready' ? runtimeState.Runtime : null;
+  const isBusy = runtimeState.status === 'loading';
+
   return (
-    <main className="shell" aria-busy={definitionState.status === 'loading'}>
-      {definitionState.status === 'loading' ? (
-        <div className="shell__status" role="status">
-          Loading form
-        </div>
-      ) : null}
-      {definitionState.status === 'error' ? (
-        <div className="shell__status shell__status--error" role="alert">
-          {definitionState.message}
-        </div>
-      ) : null}
-      {definitionState.status === 'ready' ? (
-        <DefinitionPreview
-          brandName={config.brand.name}
-          definition={definitionState.definition}
-          mode={composition.mode}
-        />
-      ) : null}
+    <main className="shell" aria-busy={isBusy}>
+      <div className="shell__inner">
+        <section
+          className="respondent-flow formspec-container"
+          aria-labelledby="respondent-title"
+          data-mode={composition.mode}
+        >
+          <ShellHeader mode={composition.mode} />
+          {Runtime ? (
+            <Runtime composition={composition} config={config} />
+          ) : runtimeState.status === 'error' ? (
+            <div className="submit-notice submit-notice--error" role="alert">
+              {runtimeMessage(runtimeState.error)}
+            </div>
+          ) : (
+            <div className="submit-notice" role="status">
+              Loading form
+            </div>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
 
-function DefinitionPreview({
-  brandName,
-  definition,
-  mode,
-}: {
-  brandName: string;
-  definition: FormDefinition;
-  mode: 'demo' | 'production';
-}) {
-  const requiredPaths = useMemo(
-    () =>
-      new Set(
-        definition.binds
-          ?.filter((bind) => bind.required === true || bind.required === 'true')
-          .map((bind) => bind.path) ?? [],
-      ),
-    [definition.binds],
-  );
-  const issuerName = displayName(definition.issuer) ?? brandName;
-  const localeLabels = localeSummary(definition);
-
+function ShellHeader({ mode }: { mode: 'demo' | 'production' }) {
+  const title = mode === 'demo' ? demoSampleForm.title : 'Loading form';
+  const description =
+    mode === 'demo'
+      ? demoSampleForm.description
+      : 'Preparing the requested Formspec form.';
   return (
-    <div className="shell__inner">
-      <header className="form-hero">
-        <p className="form-hero__issuer">{issuerName}</p>
-        <h1 className="form-hero__title">{definition.title}</h1>
-        {definition.description ? (
-          <p className="form-hero__description">{definition.description}</p>
-        ) : null}
-        <dl className="form-hero__meta" aria-label="Form metadata">
-          <div>
-            <dt>Profile</dt>
-            <dd>{mode}</dd>
-          </div>
-          <div>
-            <dt>Version</dt>
-            <dd>{definition.version}</dd>
-          </div>
-          <div>
-            <dt>Languages</dt>
-            <dd>{localeLabels}</dd>
-          </div>
-        </dl>
-      </header>
-
-      <form className="demo-form" aria-label={definition.title}>
-        {definition.items.map((item) => (
-          <ItemNode
-            definition={definition}
-            item={item}
-            key={item.key}
-            path={item.key}
-            requiredPaths={requiredPaths}
-          />
-        ))}
-      </form>
-    </div>
+    <header className="respondent-header respondent-header--unbranded">
+      <p className="respondent-header__kicker">Formspec Web</p>
+      <h1 id="respondent-title">{title}</h1>
+      {description ? <p data-formspec-shell-description>{description}</p> : null}
+    </header>
   );
 }
 
-function ItemNode({
-  definition,
-  item,
-  path,
-  requiredPaths,
-}: {
-  definition: FormDefinition;
-  item: FormItem;
-  path: string;
-  requiredPaths: ReadonlySet<string>;
-}) {
-  if (item.type === 'display') {
-    return <p className="demo-display">{item.label}</p>;
-  }
-
-  if (item.type === 'group') {
-    const children = item.children ?? [];
-    return (
-      <fieldset className="demo-section">
-        <legend>{item.label}</legend>
-        {item.description ? <p className="demo-section__description">{item.description}</p> : null}
-        <div className="demo-section__fields">
-          {children.map((child) => (
-            <ItemNode
-              definition={definition}
-              item={child}
-              key={child.key}
-              path={`${path}.${child.key}`}
-              requiredPaths={requiredPaths}
-            />
-          ))}
-        </div>
-      </fieldset>
-    );
-  }
-
-  return (
-    <FieldNode
-      definition={definition}
-      item={item}
-      path={path}
-      required={isRequiredPath(path, requiredPaths)}
-    />
-  );
-}
-
-function FieldNode({
-  definition,
-  item,
-  path,
-  required,
-}: {
-  definition: FormDefinition;
-  item: FormItem;
-  path: string;
-  required: boolean;
-}) {
-  const inputId = `field-${path.replace(/[^A-Za-z0-9_-]/g, '-')}`;
-  const descriptionId = item.hint ? `${inputId}-hint` : undefined;
-  return (
-    <div className="demo-field">
-      <label htmlFor={inputId}>
-        {item.label}
-        {required ? <span aria-label="required"> *</span> : null}
-      </label>
-      <FieldControl
-        definition={definition}
-        describedBy={descriptionId}
-        inputId={inputId}
-        item={item}
-        required={required}
-      />
-      {item.hint ? (
-        <p className="demo-field__hint" id={descriptionId}>
-          {item.hint}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function FieldControl({
-  definition,
-  describedBy,
-  inputId,
-  item,
-  required,
-}: {
-  definition: FormDefinition;
-  describedBy: string | undefined;
-  inputId: string;
-  item: FormItem;
-  required: boolean;
-}) {
-  const options = optionsFor(definition, item);
-  const commonProps = {
-    'aria-describedby': describedBy,
-    id: inputId,
-    name: inputId,
-    required,
-  };
-
-  if (item.dataType === 'boolean') {
-    return <input {...commonProps} type="checkbox" />;
-  }
-
-  if (item.dataType === 'text') {
-    return <textarea {...commonProps} rows={4} />;
-  }
-
-  if (options.length > 0 || item.dataType === 'choice') {
-    return (
-      <select {...commonProps} defaultValue="">
-        <option value="" disabled>
-          Select
-        </option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    );
-  }
-
-  if (item.dataType === 'integer' || item.dataType === 'decimal') {
-    return <input {...commonProps} inputMode="numeric" type="number" />;
-  }
-
-  if (item.dataType === 'date') {
-    return <input {...commonProps} type="date" />;
-  }
-
-  return <input {...commonProps} type="text" />;
-}
-
-function optionsFor(definition: FormDefinition, item: FormItem): FormOption[] {
-  if (item.options) {
-    return item.options;
-  }
-  if (!item.optionSet) {
-    return [];
-  }
-  return definition.optionSets?.[item.optionSet]?.options ?? [];
-}
-
-function isRequiredPath(path: string, requiredPaths: ReadonlySet<string>): boolean {
-  return requiredPaths.has(path) || requiredPaths.has(path.replace('.', '[*].'));
-}
-
-function displayName(issuer: FormDefinition['issuer']): string | undefined {
-  if (!issuer || !('name' in issuer)) {
-    return undefined;
-  }
-  const name = issuer.displayName ?? issuer.name;
-  return typeof name === 'string' ? name : name.en;
-}
-
-function localeSummary(definition: FormDefinition): string {
-  const locales = definition.extensions?.['x-formspec-locales'];
-  if (!isRecord(locales) || !Array.isArray(locales.available)) {
-    return 'English';
-  }
-  return locales.available
-    .filter((locale): locale is string => typeof locale === 'string')
-    .map((locale) => locale.toUpperCase())
-    .join(', ');
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function runtimeMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Try again. If the problem continues, contact support.';
 }
