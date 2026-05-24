@@ -310,6 +310,16 @@ describe('DocumentsRuntime (FW-0056 slice 1)', () => {
       for (const term of forbidden) {
         expect(text).not.toContain(term);
       }
+      // FW-0056 arch-review MED-2: regex guards complement the literal pins.
+      // Literals catch today's known leak sources; word-boundary +
+      // case-insensitive regexes catch drift (case variants, alt delimiters
+      // — 'VC,' / 'VC<' / 'w3c' / 'hpke' embedded in mixed-case prose) that
+      // the literals would silently miss. These fire for the same protocol
+      // vocabulary the literals pin.
+      expect(text).not.toMatch(/\bVC\b/i);
+      expect(text).not.toMatch(/\bW3C\b/i);
+      expect(text).not.toMatch(/\bHPKE\b/i);
+      expect(text).not.toMatch(/\bOpenID4VP\b/i);
     });
   });
 
