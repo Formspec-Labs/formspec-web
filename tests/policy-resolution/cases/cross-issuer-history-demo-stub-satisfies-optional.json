@@ -1,0 +1,38 @@
+{
+  "name": "cross-issuer-history-demo-stub-satisfies-optional",
+  "description": "FW-0057 slice 1: demo mode + form optional crossIssuerHistory + instance demo-stub -> enabled",
+  "mode": "demo",
+  "instance": {
+    "respondentPlace": "demo-stub",
+    "status": "demo-stub",
+    "documentPresentation": "unavailable",
+    "fileUpload": "unavailable",
+    "crossIssuerHistory": "demo-stub"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
+      "fileUpload": "allowed",
+      "crossIssuerHistory": "allowed"
+    }
+  },
+  "form": {
+    "features": {
+      "crossIssuerHistory": "optional"
+    }
+  },
+  "expect": {
+    "kind": "profile",
+    "enabled": [
+      "crossIssuerHistory"
+    ],
+    "disabled": {
+      "respondentPlace": "not-requested",
+      "status": "not-requested",
+      "documentPresentation": "not-requested",
+      "fileUpload": "not-requested"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "cross-issuer-history-disabled-no-instance",
+  "description": "FW-0057 slice 1: crossIssuerHistory optional + instance unavailable -> disabled with optional-no-instance",
+  "mode": "production",
+  "instance": {
+    "respondentPlace": "available",
+    "status": "available",
+    "documentPresentation": "unavailable",
+    "fileUpload": "unavailable",
+    "crossIssuerHistory": "unavailable"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
+      "fileUpload": "allowed",
+      "crossIssuerHistory": "allowed"
+    }
+  },
+  "form": {
+    "features": {
+      "crossIssuerHistory": "optional"
+    }
+  },
+  "expect": {
+    "kind": "profile",
+    "enabled": [],
+    "disabled": {
+      "crossIssuerHistory": "optional-no-instance",
+      "respondentPlace": "not-requested",
+      "status": "not-requested",
+      "documentPresentation": "not-requested",
+      "fileUpload": "not-requested"
+    }
+  }
+}

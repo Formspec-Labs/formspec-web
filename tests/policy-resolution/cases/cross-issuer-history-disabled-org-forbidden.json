@@ -1,0 +1,37 @@
+{
+  "name": "cross-issuer-history-disabled-org-forbidden",
+  "description": "FW-0057 slice 1: crossIssuerHistory optional + org forbidden -> disabled with org-forbidden",
+  "mode": "production",
+  "instance": {
+    "respondentPlace": "available",
+    "status": "available",
+    "documentPresentation": "unavailable",
+    "fileUpload": "unavailable",
+    "crossIssuerHistory": "unavailable"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
+      "fileUpload": "allowed",
+      "crossIssuerHistory": "forbidden"
+    }
+  },
+  "form": {
+    "features": {
+      "crossIssuerHistory": "optional"
+    }
+  },
+  "expect": {
+    "kind": "profile",
+    "enabled": [],
+    "disabled": {
+      "crossIssuerHistory": "org-forbidden",
+      "respondentPlace": "not-requested",
+      "status": "not-requested",
+      "documentPresentation": "not-requested",
+      "fileUpload": "not-requested"
+    }
+  }
+}
