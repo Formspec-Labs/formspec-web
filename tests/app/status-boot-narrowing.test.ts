@@ -45,6 +45,18 @@ const spies = vi.hoisted(() => ({
   httpAnonProvider: vi.fn(function () {
     return { __mockHttpAnonymousIdentityProvider: true };
   }),
+  oidcAdapter: vi.fn(function () {
+    return {
+      __mockOidcAdapter: true,
+      currentAccessToken: () => undefined,
+    };
+  }),
+  magicLinkAdapter: vi.fn(function () {
+    return { __mockMagicLinkAdapter: true };
+  }),
+  anonymousAdapter: vi.fn(function () {
+    return { __mockAnonymousAdapter: true };
+  }),
 }));
 
 vi.mock('../../src/adapters/http/definition-source.ts', () => ({
@@ -60,9 +72,19 @@ vi.mock('../../src/adapters/http/anonymous-session.ts', () => ({
   AnonymousSessionBridge: spies.anonSession,
   HttpAnonymousIdentityProvider: spies.httpAnonProvider,
 }));
+vi.mock('../../src/adapters/identity/oidc.ts', () => ({
+  OidcAdapter: spies.oidcAdapter,
+}));
+vi.mock('../../src/adapters/identity/magic-link.ts', () => ({
+  MagicLinkAdapter: spies.magicLinkAdapter,
+}));
+vi.mock('../../src/adapters/identity/anonymous.ts', () => ({
+  AnonymousAdapter: spies.anonymousAdapter,
+}));
 
 import {
   createDefaultComposition,
+  createDefaultObligationsRouteComposition,
   createDefaultStatusRouteComposition,
 } from '../../src/composition/default.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
@@ -99,6 +121,9 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     spies.httpSubmit.mockClear();
     spies.anonSession.mockClear();
     spies.httpAnonProvider.mockClear();
+    spies.oidcAdapter.mockClear();
+    spies.magicLinkAdapter.mockClear();
+    spies.anonymousAdapter.mockClear();
   });
 
   afterEach(() => {
@@ -144,6 +169,34 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.httpDef).toHaveBeenCalled();
   });
 
+  it('createDefaultObligationsRouteComposition does NOT construct the real identity adapter when respondentPlace is unavailable (MED-4)', async () => {
+    // Today the production obligations-route factory hardcodes
+    // `respondentPlace: 'unavailable'` (no production respondent-place adapter
+    // ships yet — design §"Production gap"). The composition still needs to
+    // boot honestly; constructing OidcAdapter (or any other identity adapter
+    // with eager network/IndexedDB work) at boot would lie about the
+    // surface's runtime cost. MED-4: short-circuit to noopIdentityProvider
+    // when the gated respondent-place capability is unavailable.
+    const c = createDefaultObligationsRouteComposition(productionConfig());
+    expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
+    expect(spies.oidcAdapter).not.toHaveBeenCalled();
+    expect(spies.magicLinkAdapter).not.toHaveBeenCalled();
+    expect(spies.anonymousAdapter).not.toHaveBeenCalled();
+    expect(spies.httpAnonProvider).not.toHaveBeenCalled();
+    expect(spies.anonSession).not.toHaveBeenCalled();
+    // Identity provider on this narrowed surface is the noop adapter — calling
+    // it throws with the FW-0068 cite, same as the other narrowed ports.
+    await expect(c.identityProvider.discover()).rejects.toThrow(/FW-0068/);
+  });
+
+  it('createDefaultComposition (full-app) DOES construct the OIDC identity adapter when configured (differential)', () => {
+    createDefaultComposition(productionConfig());
+    // Full-app composition wires the real OidcAdapter — proves the obligations-
+    // route factory's narrowing is a deliberate short-circuit, not a
+    // tautology of the test setup.
+    expect(spies.oidcAdapter).toHaveBeenCalled();
+  });
+
   it('chooseComposition picks the obligations-route factory when the URL is /obligations (FW-0055)', async () => {
     const composition = chooseComposition({
       href: 'http://localhost/obligations',
@@ -156,9 +209,13 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.httpDef).not.toHaveBeenCalled();
     expect(spies.httpDraft).not.toHaveBeenCalled();
     expect(spies.httpSubmit).not.toHaveBeenCalled();
-    // Anonymous session bridge IS constructed because the obligations surface
-    // is identity-bound — the identity provider wiring path mirrors the
-    // full-app factory.
-    expect(spies.anonSession).toHaveBeenCalled();
+    // Per MED-4: identity is now gated on the respondent-place capability
+    // being available. Today the production obligations-route factory always
+    // declares `respondentPlace: 'unavailable'`, so neither the
+    // AnonymousSessionBridge nor any real identity adapter is constructed.
+    // The identity port is the noop sentinel — the dashboard renders the
+    // "not shared" copy and never reads it.
+    expect(spies.anonSession).not.toHaveBeenCalled();
+    expect(spies.oidcAdapter).not.toHaveBeenCalled();
   });
 });

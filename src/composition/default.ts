@@ -151,12 +151,21 @@ export function createDefaultStatusRouteComposition(
  * Obligations-route sibling of {@link createDefaultComposition} (FW-0055
  * slice 1, coordinated with FW-0068).
  *
- * Wires `respondentPlaceSource` + `identityProvider` (real — the /obligations
- * surface is identity-bound per design §"Why identity-required") + the runtime-
- * profile / policy slots. Form-shaped MVP ports (`definitionSource`,
- * `draftStore`, `submitTransport`) are noop because the obligations route never
- * reads them. `statusReader` stays on the unavailable sentinel — the obligations
- * page links to `/status` via hyperlink, not via direct port call.
+ * Wires `respondentPlaceSource` + the runtime-profile / policy slots.
+ * Form-shaped MVP ports (`definitionSource`, `draftStore`, `submitTransport`)
+ * are noop because the obligations route never reads them. `statusReader`
+ * stays on the unavailable sentinel — the obligations page links to `/status`
+ * via hyperlink, not via direct port call.
+ *
+ * Identity provider is gated on the gated `respondentPlace` capability
+ * (MED-4): when the production composition declares `respondentPlace =
+ * 'unavailable'` the surface renders the "not shared" copy and never reads
+ * identity, so we short-circuit to `noopIdentityProvider()` rather than
+ * eagerly construct an OIDC/magic-link/anonymous adapter that the page won't
+ * use. The "check the declaration, then construct only what we need" shape
+ * preserves boot honesty for future identity adapters that DO eager-work
+ * (token refresh, IndexedDB reads) — those won't boot-fail when the gated
+ * capability is off.
  *
  * Mirrors the FW-0068 status-route factory's coherence funnel through
  * `freezeComposition`.
@@ -168,21 +177,21 @@ export function createDefaultObligationsRouteComposition(
   if (!serverUrl) {
     return createDemoObligationsRouteComposition();
   }
-  const notificationDelivery = stubNotificationDelivery();
-  const baseHttpConfig = {
-    baseUrl: serverUrl,
-    tenantBinding: config.tenantBinding,
+  const instanceCapabilities: InstanceCapabilities = {
+    respondentPlace: 'unavailable',
+    status: 'unavailable',
   };
-  const initialDefinitionUrl = productionInitialDefinitionUrl(serverUrl);
-  // Identity-required surface: wire the real identity provider so the
-  // auth-required state can render. Anonymous-session bridge stays available
-  // for adopters who wire an anonymous identity binding, identical to the
-  // full-app factory.
-  const anonymousSessions = new AnonymousSessionBridge(baseHttpConfig);
-  const identityBinding = identityProviderFor(config, notificationDelivery, {
-    anonymousSessions,
-    initialDefinitionUrl,
-  });
+  const notificationDelivery = stubNotificationDelivery();
+  // MED-4: identity is only wired when the gated respondent-place capability
+  // is available. Today the production factory always declares
+  // `respondentPlace: 'unavailable'`, so the noop branch always fires —
+  // identical to the status-route factory's posture. When a real production
+  // respondent-place adapter ships and the declaration moves to 'available',
+  // this branch picks up identity wiring automatically.
+  const identityProvider: IdentityProvider =
+    instanceCapabilities.respondentPlace === 'available'
+      ? buildRealIdentityProvider(config, notificationDelivery, serverUrl).provider
+      : noopIdentityProvider('/obligations');
 
   const composition: Composition = {
     mode: 'production',
@@ -190,20 +199,40 @@ export function createDefaultObligationsRouteComposition(
     definitionSource: noopDefinitionSource('/obligations'),
     draftStore: noopDraftStore('/obligations'),
     submitTransport: noopSubmitTransport('/obligations'),
-    identityProvider: identityBinding.provider,
+    identityProvider,
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
-    instanceCapabilities: {
-      respondentPlace: 'unavailable',
-      status: 'unavailable',
-    } satisfies InstanceCapabilities,
+    instanceCapabilities,
     orgRuntimePolicy: {
       features: { respondentPlace: 'allowed', status: 'allowed' },
     } satisfies OrgRuntimePolicy,
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
   return freezeComposition(composition);
+}
+
+/**
+ * Builds the real identity binding for the obligations route. Split out from
+ * the factory body so the construction only runs when MED-4's gate clears —
+ * the function body still references `AnonymousSessionBridge` etc. but no
+ * adapter is invoked until the function is called.
+ */
+function buildRealIdentityProvider(
+  config: FormspecWebConfig,
+  notificationDelivery: ReturnType<typeof stubNotificationDelivery>,
+  serverUrl: string,
+): IdentityBinding {
+  const baseHttpConfig = {
+    baseUrl: serverUrl,
+    tenantBinding: config.tenantBinding,
+  };
+  const initialDefinitionUrl = productionInitialDefinitionUrl(serverUrl);
+  const anonymousSessions = new AnonymousSessionBridge(baseHttpConfig);
+  return identityProviderFor(config, notificationDelivery, {
+    anonymousSessions,
+    initialDefinitionUrl,
+  });
 }
 
 function assertReferenceHttpDataPorts(config: FormspecWebConfig): void {
