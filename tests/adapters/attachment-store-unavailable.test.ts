@@ -15,6 +15,17 @@ describe('unavailableAttachmentStore', () => {
     ).rejects.toBeInstanceOf(AttachmentUploadError);
   });
 
+  it('carries the typed `unavailable` code so adopters branch without parsing prose (L-1)', async () => {
+    const adapter = unavailableAttachmentStore();
+    try {
+      await adapter.upload(new Blob(['x']), { filename: 'x.txt', mimeType: 'text/plain' });
+      throw new Error('expected upload to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(AttachmentUploadError);
+      expect((err as AttachmentUploadError).code).toBe('unavailable');
+    }
+  });
+
   it('uses the supplied message when overridden', async () => {
     const adapter = unavailableAttachmentStore('custom message');
     await expect(

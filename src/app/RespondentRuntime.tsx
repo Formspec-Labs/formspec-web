@@ -47,7 +47,10 @@ import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
 import {
+  FeaturePolicyConflictError,
   InvalidRuntimePolicyError,
+  OrgPolicyUnsatisfiedError,
+  UnsupportedRequiredFeatureError,
   anyEnabledFeatureIsLocaleConditional,
   isRuntimePolicyError,
   resolveRuntimeFeatures,
@@ -910,11 +913,21 @@ function RuntimePolicyErrorPage({ error }: { error: RuntimePolicyError }) {
  * Per-feature plain-language copy for runtime-policy errors at form load.
  * FW-0033 adds the fileUpload row; other keys fall back to the generic
  * sentence. Fixture-pinned in tests/app/respondent-runtime-attachment.test.tsx.
+ *
+ * L-5: narrow on the typed subclasses that carry a featureKey before reading
+ * it; InvalidRuntimePolicyError has no featureKey and falls through to the
+ * generic copy. The previous `(error as { featureKey?: string })` cast bled
+ * a structural untyped read into the typed-error surface.
  */
 function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
-  const featureKey = (error as { featureKey?: string }).featureKey;
-  if (featureKey === 'fileUpload') {
-    return 'This form needs file uploads, but this site is not set up to receive files.';
+  if (
+    error instanceof UnsupportedRequiredFeatureError ||
+    error instanceof FeaturePolicyConflictError ||
+    error instanceof OrgPolicyUnsatisfiedError
+  ) {
+    if (error.featureKey === 'fileUpload') {
+      return 'This form needs file uploads, but this site is not set up to receive files.';
+    }
   }
   return 'This form requires a capability this site does not currently support. Try again later, or contact the sender for help.';
 }

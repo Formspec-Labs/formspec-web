@@ -19,6 +19,7 @@ import {
   AttachmentUploadError,
   type AttachmentRef,
   type AttachmentStore,
+  type AttachmentUploadErrorCode,
 } from '../ports/attachment-store.ts';
 import { useAttachmentStore } from './AttachmentStoreProvider.tsx';
 
@@ -330,8 +331,24 @@ async function uploadOne(
   });
 }
 
+/**
+ * Vocabulary firewall: respondent-facing copy keyed on the typed code, not on
+ * adopter-supplied prose. Adopter `error.message` may include adopter
+ * vocabulary (URLs, host names, request IDs) — the renderer keeps the user
+ * surface plain-language and uses `error.message` only as a debug fallback
+ * for the `unknown` code where the adopter is the only sane source of detail.
+ */
+const ATTACHMENT_UPLOAD_FAILURE_COPY_BY_CODE: Record<AttachmentUploadErrorCode, string> = {
+  'file-too-large': 'That file is larger than the upload limit. Try a smaller file.',
+  'mime-rejected': 'That file type is not accepted here.',
+  network: 'We could not reach the upload service. Check your connection and try again.',
+  unavailable: 'File upload is not available on this site.',
+  unknown: ATTACHMENT_UPLOAD_FAILURE_COPY,
+};
+
 function failureMessage(reason: unknown): string {
-  if (reason instanceof AttachmentUploadError && reason.message) return reason.message;
-  if (reason instanceof Error && reason.message) return reason.message;
+  if (reason instanceof AttachmentUploadError) {
+    return ATTACHMENT_UPLOAD_FAILURE_COPY_BY_CODE[reason.code] ?? ATTACHMENT_UPLOAD_FAILURE_COPY;
+  }
   return ATTACHMENT_UPLOAD_FAILURE_COPY;
 }

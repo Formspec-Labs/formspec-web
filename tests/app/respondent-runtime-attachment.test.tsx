@@ -194,7 +194,7 @@ describe('RespondentRuntime attachment integration (FW-0033)', () => {
 
   it('keeps the AttachmentUploadError surface for adapters to throw plain-language failures', () => {
     expect(() => {
-      throw new AttachmentUploadError('test failure');
+      throw new AttachmentUploadError('test failure', { code: 'unknown' });
     }).toThrow(AttachmentUploadError);
   });
 });

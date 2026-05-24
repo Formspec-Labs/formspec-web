@@ -173,7 +173,9 @@ describe('FormspecWebAttachmentControl', () => {
   it('shows an inline error and does NOT touch the engine value when upload fails', async () => {
     const failing: AttachmentStore = {
       upload: async () => {
-        throw new AttachmentUploadError('Network timeout — try again.');
+        // L-1: the code drives the user-visible copy; adopter prose is kept off
+        // the user surface so the vocabulary firewall stays clean.
+        throw new AttachmentUploadError('adopter prose: ECONNREFUSED', { code: 'network' });
       },
     };
     const harness = makeFieldHarness();
@@ -191,7 +193,9 @@ describe('FormspecWebAttachmentControl', () => {
     });
     await flush();
 
-    expect(container?.textContent ?? '').toContain('Network timeout');
+    // Renders code-keyed plain-language copy; does NOT render adopter prose.
+    expect(container?.textContent ?? '').toContain('could not reach the upload service');
+    expect(container?.textContent ?? '').not.toContain('ECONNREFUSED');
     expect(harness.readValue()).toBeNull();
   });
 

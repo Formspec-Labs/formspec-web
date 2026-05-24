@@ -10,7 +10,7 @@ export function unavailableAttachmentStore(
 ): AttachmentStore {
   const adapter: AttachmentStore = {
     async upload(_blob: Blob, _metadata: AttachmentUploadMetadata) {
-      throw new AttachmentUploadError(message);
+      throw new AttachmentUploadError(message, { code: 'unavailable' });
     },
   };
   return markUnavailableAdapter(adapter, {

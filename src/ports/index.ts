@@ -58,5 +58,6 @@ export type {
   AttachmentStore,
   AttachmentRef,
   AttachmentUploadMetadata,
+  AttachmentUploadErrorCode,
 } from './attachment-store.ts';
 export { AttachmentUploadError } from './attachment-store.ts';

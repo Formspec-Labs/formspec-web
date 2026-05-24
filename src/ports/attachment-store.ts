@@ -41,10 +41,25 @@ export interface AttachmentRef {
   readonly filename: string;
 }
 
+/**
+ * Discriminator codes adopters branch on for telemetry and UI copy without
+ * parsing the prose `message`. Keep the closed set narrow — new failure
+ * categories add a new code + a corresponding plain-language copy entry in
+ * the renderer's failure-copy map.
+ */
+export type AttachmentUploadErrorCode =
+  | 'file-too-large'
+  | 'mime-rejected'
+  | 'network'
+  | 'unavailable'
+  | 'unknown';
+
 export class AttachmentUploadError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
+  readonly code: AttachmentUploadErrorCode;
+  constructor(message: string, options: { code: AttachmentUploadErrorCode; cause?: unknown }) {
+    super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'AttachmentUploadError';
+    this.code = options.code;
   }
 }
 
