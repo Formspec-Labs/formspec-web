@@ -16,7 +16,6 @@ import type { SubmitTransport } from '../ports/submit-transport.ts';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { FormRuntimePolicyExtractor } from '../ports/form-runtime-policy-extractor.ts';
 import {
-  RUNTIME_FEATURE_KEYS,
   isFormFeaturePolicyMode,
   isRuntimeFeatureKey,
 } from '../policy/index.ts';
@@ -534,9 +533,14 @@ export function defineAttachmentStoreConformance(
 
 /**
  * Conformance harness for `FormRuntimePolicyExtractor` (FW-0066, web ADR-0011
- * §Form runtime policy). Encodes the five conformance invariants the port
- * comment names. Adapter authors register their extractor with an optional
- * `definition` fixture that exercises the adapter's happy path.
+ * §Form runtime policy). Encodes the five testable conformance invariants the
+ * port comment names — purity / closed-set keys / closed-set modes /
+ * no-throw-on-empty / key-collision precedence. Definition-only derivation
+ * (the sixth invariant in the original draft) is structurally enforced by the
+ * single-argument `extract(definition)` signature; no harness assertion is
+ * possible because there is no parameter through which leakage could occur.
+ * Adapter authors register their extractor with an optional `definition`
+ * fixture that exercises the adapter's happy path.
  */
 export function defineFormRuntimePolicyExtractorConformance(
   name: string,
@@ -578,14 +582,14 @@ export function defineFormRuntimePolicyExtractorConformance(
       const definition = subject.definition ?? sampleFormDefinition;
       const policy = subject.adapter.extract(definition);
       for (const key of Object.keys(policy.features)) {
+        // `isRuntimeFeatureKey` consults the closed tuple internally; this is
+        // the membership check. If the adapter invented a key, the assertion
+        // fails. If the adapter extracted zero keys, the loop trivially
+        // passes — that is correct: the closed-set contract is "every
+        // returned key is in the tuple", not "the adapter must return at
+        // least one key".
         expect(isRuntimeFeatureKey(key)).toBe(true);
       }
-      // The closed-set tuple is the source of truth; failing this assertion
-      // means the adapter invented a key. Touch RUNTIME_FEATURE_KEYS so it
-      // stays referenced when the closed-set membership check above passes
-      // trivially (no extracted keys); otherwise unused-import lints would
-      // strip the tuple import from the harness module on a future refactor.
-      expect(Array.isArray(RUNTIME_FEATURE_KEYS)).toBe(true);
     });
 
     it('only returns modes in {forbidden, optional, required}', () => {
@@ -596,6 +600,40 @@ export function defineFormRuntimePolicyExtractorConformance(
         if (mode === undefined) continue;
         expect(isFormFeaturePolicyMode(mode)).toBe(true);
       }
+    });
+
+    // key-collision-precedence — locks the Composite contract: when two
+    // delegates set the same feature key, the LAST one wins (call-site
+    // ordering is the precedence signal). The port comment names this
+    // invariant; this assertion makes the contract fixture-pinned so a
+    // future refactor that flips the merge order (e.g. swaps `Object.assign`
+    // for a "first-wins" reduce) trips the harness. Adapter authors who
+    // compose multiple extractors rely on this guarantee; the test wraps
+    // the subject's adapter twice with the SAME extractor at index 0
+    // followed by a synthetic "override" delegate at index 1 that pins
+    // `fileUpload: 'optional'`. If the subject's adapter happens to set
+    // `fileUpload: 'required'` on this definition (the attachment-bearing
+    // happy path of `AttachmentRequirementExtractor`), the override must
+    // win. Otherwise the override is the only declarer and still wins
+    // trivially. Either way the assertion is the same: precedence is
+    // last-wins.
+    it('honors last-wins precedence when composed with a same-key delegate', async () => {
+      // Import lazily to avoid a circular module load between the harness
+      // and the composing adapter that consumes it.
+      const { CompositeFormRuntimePolicyExtractor } = await import(
+        '../adapters/composing/form-runtime-policy-extractor.ts'
+      );
+      const subject = setup();
+      const definition = subject.definition ?? sampleFormDefinition;
+      const overrideDelegate: FormRuntimePolicyExtractor = {
+        extract: () => ({ features: { fileUpload: 'optional' } }),
+      };
+      const composed = new CompositeFormRuntimePolicyExtractor([
+        subject.adapter,
+        overrideDelegate,
+      ]);
+      const policy = composed.extract(definition);
+      expect(policy.features.fileUpload).toBe('optional');
     });
   });
 }

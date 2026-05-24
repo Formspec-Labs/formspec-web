@@ -22,8 +22,44 @@
  * 3. Closed-set modes — every returned mode is `'forbidden' | 'optional' | 'required'`.
  * 4. No-throw on empty — a definition with `items: []` returns `{ features: {} }`,
  *    never throws.
- * 5. Definition-only derivation — the mode for any key is derivable from the
- *    `FormDefinition` alone; no instance- or org-policy leakage.
+ * 5. Key-collision precedence (composition contract) — when multiple extractors
+ *    set the SAME feature key (typically via `CompositeFormRuntimePolicyExtractor`),
+ *    the LAST extractor's value wins. Call-site ordering of the delegate array
+ *    is the precedence signal. Composite extractors document their delegate
+ *    order explicitly so adopters reading the composition can predict the
+ *    effective policy without reading the merge implementation. See
+ *    `CompositeFormRuntimePolicyExtractor` at
+ *    `src/adapters/composing/form-runtime-policy-extractor.ts` — the
+ *    last-wins guarantee is the `Object.assign(features, policy.features)`
+ *    loop body.
+ *
+ * Definition-only derivation is structurally enforced by the single-argument
+ * `extract(definition)` signature — no harness assertion is required because
+ * there is no parameter through which instance- or org-policy could leak.
+ *
+ * Shallow-merge constraint (future-feature-key contract). The composite merge
+ * is a one-level `Object.assign` over `policy.features`. This is sound only
+ * because `FormFeaturePolicyMode` is a primitive string union
+ * (`'forbidden' | 'optional' | 'required'`); deep-merge has no semantic in
+ * this port. Any future feature whose value type is NOT a primitive string
+ * mode (object, array, nested record) breaks the contract — last-wins would
+ * still apply, but adopters composing two delegates over an object-valued key
+ * would silently lose fields from the earlier delegate. New feature keys MUST
+ * stay primitive-typed; if a future feature needs richer structure, the port
+ * (and the composite merge) versions together.
+ *
+ * Synchronous-forever signature. `extract` returns `FormRuntimePolicy`
+ * synchronously, not `Promise<FormRuntimePolicy>`. Invariant #1 (pure, no I/O)
+ * makes async unjustified by construction — all known extractors are pure
+ * transforms over the in-memory definition. The trigger that would force a
+ * migration to async: a future extractor needs to fetch a remote schema
+ * reference, OR consult an external registry whose contents are not part of
+ * the definition. The remediation for that trigger is NOT to migrate this
+ * port to async; it is either (a) pre-resolve the remote reference before
+ * passing the resolved definition to `extract`, or (b) version the port to
+ * `FormRuntimePolicyExtractorV2` with an async signature. Adopters who
+ * publish their own extractor crates rely on the sync signature being
+ * stable across the v1 lifetime of this port.
  *
  * Non-form surfaces (`StatusRuntime`, `ObligationsRuntime`, `DocumentsRuntime`
  * per web ADR-0011 §"Non-form surface synthesis") MUST NOT consume this port;
