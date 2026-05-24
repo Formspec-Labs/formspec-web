@@ -20,7 +20,7 @@ export function parseStatusRoute(href: string): StatusRouteParams | null {
   if (!candidate) {
     return null;
   }
-  if (!candidate.startsWith(WOS_URN_PREFIX)) {
+  if (!candidate.startsWith(WOS_URN_PREFIX) || candidate.length <= WOS_URN_PREFIX.length) {
     return null;
   }
   return { caseUrn: candidate };

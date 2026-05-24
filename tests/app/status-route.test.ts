@@ -26,4 +26,9 @@ describe('parseStatusRoute', () => {
     expect(parseStatusRoute('https://app.example.test/status?case=javascript:alert(1)')).toBeNull();
     expect(parseStatusRoute('https://app.example.test/status?case=')).toBeNull();
   });
+
+  it('rejects the bare urn:wos: prefix without a tail (code-review F-1)', () => {
+    expect(parseStatusRoute('https://app.example.test/status?case=urn:wos:')).toBeNull();
+    expect(parseStatusRoute('https://app.example.test/status?case=urn%3Awos%3A')).toBeNull();
+  });
 });
