@@ -41,13 +41,20 @@ a consumer, and slice 1's selection action is local React state only. When
 SC-4 (Verifiable Presentation Profile) + EXT-18 (HPKE wrapper) land a real
 VP port, the slot mapping splits.
 
-While the slot is shared, the coherence assertion requires the two keys'
-declarations to agree (same slot, same provenance): both `'unavailable'`
-paired with the unavailable sentinel, or both `'demo-stub'` paired with the
-demo-stub-marked place adapter, or both `'available'` paired with an unmarked
-production adapter. The first adopter who wires a real wallet but no VP
-stack triggers the assertion — and that breakage is the correct trigger for
-the VP-port promotion.
+While the slot is shared, the coherence assertion enforces a per-key UNION
+contract over the underlying adapter, not paired-declaration symmetry. A
+key declaring `'unavailable'` does not consume the adapter, so it may pair
+with any slot state without conflict; keys declaring `'demo-stub'` /
+`'available'` must each match the slot adapter's provenance. Honest
+combinations include `{respondentPlace: 'demo-stub', documentPresentation:
+'unavailable'}` (today's demo composition — `documentPresentation` truly
+absent), `{both 'unavailable'}` (today's production), and `{respondentPlace:
+'available', documentPresentation: 'unavailable'}` (the SC-4 trigger: real
+wallet, no VP stack — assertion accepts and the row's clearance mechanism
+fires from a different gate). The assertion REJECTS `{respondentPlace:
+'demo-stub', documentPresentation: 'available'}` (overclaiming production VP
+while substrate is demo-only) and any other declaration that exceeds the
+slot's actual provenance.
 
 ## Resolver contract
 
@@ -98,7 +105,7 @@ the code; never on the rendered string.
 
 `assertCompositionCoherence` runs at composition construction
 (`createStubComposition` and `createDefaultComposition`) and rejects
-adapter↔declaration drift. Six rules:
+adapter↔declaration drift. Seven rules:
 
 | Rule | Trigger |
 |---|---|
@@ -108,6 +115,7 @@ adapter↔declaration drift. Six rules:
 | `demo-stub-adapter-without-demo-stub-declaration` | Adapter marked demo-stub + declaration ≠ `'demo-stub'` |
 | `demo-stub-declaration-without-demo-stub-adapter` | Declaration = `'demo-stub'` + adapter not marked demo-stub |
 | `available-declaration-paired-with-marked-adapter` | Declaration = `'available'` + adapter carries a marker |
+| `shared-slot-declaration-conflict` | Two keys sharing a port slot declare incompatible provenance requirements (e.g., one `'demo-stub'` + one `'available'` against the same adapter). The `'unavailable'` declaration is the no-consumer escape — it doesn't conflict with any sibling declaration on the shared slot |
 
 The assertion enforces ADR-0011 §Rationale #1 ("reference deployments must
 be honest") — drift is caught at boot, not at feature use.
