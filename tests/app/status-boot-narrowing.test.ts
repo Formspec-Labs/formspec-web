@@ -84,6 +84,7 @@ vi.mock('../../src/adapters/identity/anonymous.ts', () => ({
 
 import {
   createDefaultComposition,
+  createDefaultDocumentsRouteComposition,
   createDefaultObligationsRouteComposition,
   createDefaultStatusRouteComposition,
 } from '../../src/composition/default.ts';
@@ -215,6 +216,38 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     // AnonymousSessionBridge nor any real identity adapter is constructed.
     // The identity port is the noop sentinel — the dashboard renders the
     // "not shared" copy and never reads it.
+    expect(spies.anonSession).not.toHaveBeenCalled();
+    expect(spies.oidcAdapter).not.toHaveBeenCalled();
+  });
+
+  it('createDefaultDocumentsRouteComposition does NOT construct HTTP / identity adapters when respondentPlace is unavailable (FW-0056)', async () => {
+    // Same MED-4 gating as the obligations-route factory: the documents
+    // dashboard is identity-bound, but identity is wired only when the
+    // gated respondent-place capability is available. Production today
+    // always declares unavailable, so the noop branch fires.
+    const c = createDefaultDocumentsRouteComposition(productionConfig());
+    expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
+    expect(c.instanceCapabilities.documentPresentation).toBe('unavailable');
+    expect(spies.httpDef).not.toHaveBeenCalled();
+    expect(spies.httpDraft).not.toHaveBeenCalled();
+    expect(spies.httpSubmit).not.toHaveBeenCalled();
+    expect(spies.oidcAdapter).not.toHaveBeenCalled();
+    expect(spies.magicLinkAdapter).not.toHaveBeenCalled();
+    expect(spies.anonymousAdapter).not.toHaveBeenCalled();
+    expect(spies.httpAnonProvider).not.toHaveBeenCalled();
+    expect(spies.anonSession).not.toHaveBeenCalled();
+    await expect(c.identityProvider.discover()).rejects.toThrow(/FW-0068/);
+  });
+
+  it('chooseComposition picks the documents-route factory when the URL is /documents (FW-0056)', async () => {
+    const composition = chooseComposition({
+      href: 'http://localhost/documents',
+      config: productionConfig(),
+    });
+    await expect(composition.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    expect(spies.httpDef).not.toHaveBeenCalled();
+    expect(spies.httpDraft).not.toHaveBeenCalled();
+    expect(spies.httpSubmit).not.toHaveBeenCalled();
     expect(spies.anonSession).not.toHaveBeenCalled();
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
   });

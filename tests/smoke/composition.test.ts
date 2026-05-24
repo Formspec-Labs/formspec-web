@@ -1,16 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createStubComposition,
+  createStubDocumentsRouteComposition,
   createStubObligationsRouteComposition,
   createStubStatusRouteComposition,
 } from '../../src/composition/stub.ts';
 import {
   createDefaultComposition,
+  createDefaultDocumentsRouteComposition,
   createDefaultObligationsRouteComposition,
   createDefaultStatusRouteComposition,
 } from '../../src/composition/default.ts';
 import {
   createDemoComposition,
+  createDemoDocumentsRouteComposition,
   createDemoObligationsRouteComposition,
   createDemoStatusRouteComposition,
 } from '../../src/composition/demo.ts';
@@ -375,6 +378,60 @@ describe('composition root smoke', () => {
     const c = createDemoObligationsRouteComposition();
     expect(c.mode).toBe('demo');
     expect(c.instanceCapabilities.respondentPlace).toBe('demo-stub');
+  });
+
+  it('createDefaultDocumentsRouteComposition wires respondentPlaceSource + real identity gate; form-shaped MVP ports throw on call (FW-0056)', async () => {
+    const c = createDefaultDocumentsRouteComposition();
+    expect(c.mode).toBe('demo');
+    expect(c.respondentPlaceSource).toBeDefined();
+    expect(c.identityProvider).toBeDefined();
+    expect(c.instanceCapabilities.respondentPlace).toBeDefined();
+    expect(c.instanceCapabilities.documentPresentation).toBeDefined();
+    expect(c.orgRuntimePolicy.features).toBeDefined();
+    expect(c.getFormRuntimePolicy).toBeDefined();
+    // Form-shaped MVP ports are noop on this narrowed route.
+    await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    await expect(c.draftStore.load({ formUrl: 'https://x', subjectRef: 's' })).rejects.toThrow(/FW-0068/);
+    await expect(c.submitTransport.submit({} as never, 'k')).rejects.toThrow(/FW-0068/);
+    // Identity provider on the documents route is REAL (not noop) — surface is identity-bound.
+    await expect(c.identityProvider.discover()).resolves.toBeDefined();
+  });
+
+  it('createDefaultDocumentsRouteComposition in production mode keeps unavailable sentinel for respondentPlace + documentPresentation (FW-0056)', () => {
+    const c = createDefaultDocumentsRouteComposition({
+      ...departmentAppProfile,
+      ports: referenceHttpDataPorts(departmentAppProfile.ports),
+      referenceAdapters: {
+        formspecStack: {
+          ...departmentAppProfile.referenceAdapters?.formspecStack,
+          tenantHeaderDialect: 'formspec',
+          formspecServerUrl: 'https://formspec-server.example.test',
+        },
+      },
+    });
+    expect(c.mode).toBe('production');
+    expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
+    expect(c.instanceCapabilities.documentPresentation).toBe('unavailable');
+    expect(c.instanceCapabilities.status).toBe('unavailable');
+  });
+
+  it('createStubDocumentsRouteComposition delivers demo respondent-place + demo identity; form-shaped ports noop (FW-0056)', async () => {
+    const c = createStubDocumentsRouteComposition();
+    expect(c.mode).toBe('demo');
+    expect(c.instanceCapabilities.respondentPlace).toBe('demo-stub');
+    expect(c.instanceCapabilities.documentPresentation).toBe('demo-stub');
+    const snapshot = await c.respondentPlaceSource.readPlace({});
+    expect(snapshot.documents).toBeDefined();
+    expect((snapshot.documents ?? []).length).toBeGreaterThan(0);
+    await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    await expect(c.identityProvider.discover()).resolves.toBeDefined();
+  });
+
+  it('createDemoDocumentsRouteComposition delegates to the stub documents-route variant (FW-0056)', () => {
+    const c = createDemoDocumentsRouteComposition();
+    expect(c.mode).toBe('demo');
+    expect(c.instanceCapabilities.respondentPlace).toBe('demo-stub');
+    expect(c.instanceCapabilities.documentPresentation).toBe('demo-stub');
   });
 
   it('IdentityProvider subscribe receives initial null then update on authenticate', async () => {

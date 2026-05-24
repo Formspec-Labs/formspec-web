@@ -181,3 +181,44 @@ export function createStubStatusRouteComposition(): Composition {
   };
   return freezeComposition(composition);
 }
+
+/**
+ * Documents-route sibling of {@link createStubComposition} (FW-0056 slice 1,
+ * coordinated with FW-0068).
+ *
+ * Wires the same demo `respondentPlaceSource` + `statusReader` + identity
+ * stubs the full stub composition uses, plus the demo `identityProvider`
+ * (the /documents surface is identity-bound). Form-shaped MVP ports
+ * (definition / draft / submit) are noop because the documents route never
+ * reads them. `instanceCapabilities` declares both `respondentPlace` and
+ * `documentPresentation` as `demo-stub` — same slot, same provenance — per
+ * the transitional port mapping documented in feature-port-map.ts.
+ */
+export function createStubDocumentsRouteComposition(): Composition {
+  const composition: Composition = {
+    mode: 'demo',
+    initialDefinitionUrl: 'about:not-constructed#fw-0056',
+    definitionSource: noopDefinitionSource('/documents'),
+    draftStore: noopDraftStore('/documents'),
+    submitTransport: noopSubmitTransport('/documents'),
+    identityProvider: stubIdentityProvider(),
+    respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
+    statusReader: stubStatusReader([
+      ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
+    ]),
+    instanceCapabilities: {
+      respondentPlace: 'demo-stub',
+      status: 'demo-stub',
+      documentPresentation: 'demo-stub',
+    } satisfies InstanceCapabilities,
+    orgRuntimePolicy: {
+      features: {
+        respondentPlace: 'allowed',
+        status: 'allowed',
+        documentPresentation: 'allowed',
+      },
+    } satisfies OrgRuntimePolicy,
+    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
+  };
+  return freezeComposition(composition);
+}

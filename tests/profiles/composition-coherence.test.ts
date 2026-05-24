@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { createStubComposition, createStubStatusRouteComposition } from '../../src/composition/stub.ts';
+import {
+  createStubComposition,
+  createStubDocumentsRouteComposition,
+  createStubObligationsRouteComposition,
+  createStubStatusRouteComposition,
+} from '../../src/composition/stub.ts';
 import {
   createDefaultComposition,
+  createDefaultDocumentsRouteComposition,
+  createDefaultObligationsRouteComposition,
   createDefaultStatusRouteComposition,
 } from '../../src/composition/default.ts';
-import { createDemoStatusRouteComposition } from '../../src/composition/demo.ts';
+import {
+  createDemoDocumentsRouteComposition,
+  createDemoObligationsRouteComposition,
+  createDemoStatusRouteComposition,
+} from '../../src/composition/demo.ts';
 import {
   assertCompositionCoherence,
   type CompositionLike,
@@ -57,6 +68,30 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
 
   it('demo status-route composition is coherent (FW-0068)', () => {
     expect(() => assertCompositionCoherence(createDemoStatusRouteComposition())).not.toThrow();
+  });
+
+  it('default obligations-route composition is coherent (FW-0055)', () => {
+    expect(() => assertCompositionCoherence(createDefaultObligationsRouteComposition())).not.toThrow();
+  });
+
+  it('stub obligations-route composition is coherent (FW-0055)', () => {
+    expect(() => assertCompositionCoherence(createStubObligationsRouteComposition())).not.toThrow();
+  });
+
+  it('demo obligations-route composition is coherent (FW-0055)', () => {
+    expect(() => assertCompositionCoherence(createDemoObligationsRouteComposition())).not.toThrow();
+  });
+
+  it('default documents-route composition is coherent (FW-0056)', () => {
+    expect(() => assertCompositionCoherence(createDefaultDocumentsRouteComposition())).not.toThrow();
+  });
+
+  it('stub documents-route composition is coherent (FW-0056)', () => {
+    expect(() => assertCompositionCoherence(createStubDocumentsRouteComposition())).not.toThrow();
+  });
+
+  it('demo documents-route composition is coherent (FW-0056)', () => {
+    expect(() => assertCompositionCoherence(createDemoDocumentsRouteComposition())).not.toThrow();
   });
 
   it('flags an adapter marked unavailable but declared anything other than unavailable', () => {

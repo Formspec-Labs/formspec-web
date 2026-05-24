@@ -32,6 +32,7 @@ import type { IntakeHandoff } from '../ports/submit-transport.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
 import {
   createDemoComposition,
+  createDemoDocumentsRouteComposition,
   createDemoObligationsRouteComposition,
   createDemoStatusRouteComposition,
 } from './demo.ts';
@@ -230,6 +231,75 @@ export function createDefaultObligationsRouteComposition(
     instanceCapabilities,
     orgRuntimePolicy: {
       features: { respondentPlace: 'allowed', status: 'allowed' },
+    } satisfies OrgRuntimePolicy,
+    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
+  };
+  return freezeComposition(composition);
+}
+
+/**
+ * Documents-route sibling of {@link createDefaultComposition} (FW-0056
+ * slice 1, coordinated with FW-0068).
+ *
+ * Wires `respondentPlaceSource` (load-bearing — documents come from the
+ * snapshot) + the runtime-profile / policy slots. Form-shaped MVP ports
+ * (`definitionSource`, `draftStore`, `submitTransport`) are noop because the
+ * documents route never reads them. `statusReader` stays on the unavailable
+ * sentinel — `DocumentsRuntime` does not call it.
+ *
+ * Identity provider is gated on the gated `respondentPlace` capability per
+ * the MED-4 pattern FW-0055 established: when the production composition
+ * declares `respondentPlace = 'unavailable'`, the surface renders the
+ * "not available" copy and never reads identity, so we short-circuit to
+ * `noopIdentityProvider()` rather than eagerly construct OIDC/magic-link/
+ * anonymous adapters that the page won't use. When a real production
+ * respondent-place adapter ships, this branch picks up identity wiring
+ * automatically.
+ *
+ * `documentPresentation` shares the `respondentPlaceSource` slot per the
+ * transitional port mapping (see feature-port-map.ts); declared `unavailable`
+ * here paired with `unavailableRespondentPlaceSource()` — same slot, same
+ * provenance — to keep the coherence assertion satisfied. When SC-4 + EXT-18
+ * ratify the real VP port, the slot mapping splits.
+ *
+ * Mirrors the FW-0068 status-route + FW-0055 obligations-route factories'
+ * coherence funnel through `freezeComposition`.
+ */
+export function createDefaultDocumentsRouteComposition(
+  config: FormspecWebConfig = departmentAppProfile,
+): Composition {
+  const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
+  if (!serverUrl) {
+    return createDemoDocumentsRouteComposition();
+  }
+  const instanceCapabilities: InstanceCapabilities = {
+    respondentPlace: 'unavailable',
+    status: 'unavailable',
+    documentPresentation: 'unavailable',
+  };
+  const notificationDelivery = stubNotificationDelivery();
+  const identityProvider: IdentityProvider =
+    instanceCapabilities.respondentPlace === 'available'
+      ? buildRealIdentityProvider(config, notificationDelivery, serverUrl).provider
+      : noopIdentityProvider('/documents');
+
+  const composition: Composition = {
+    mode: 'production',
+    initialDefinitionUrl: 'about:not-constructed#fw-0056',
+    definitionSource: noopDefinitionSource('/documents'),
+    draftStore: noopDraftStore('/documents'),
+    submitTransport: noopSubmitTransport('/documents'),
+    identityProvider,
+    notificationDelivery,
+    respondentPlaceSource: unavailableRespondentPlaceSource(),
+    statusReader: unavailableStatusReader(),
+    instanceCapabilities,
+    orgRuntimePolicy: {
+      features: {
+        respondentPlace: 'allowed',
+        status: 'allowed',
+        documentPresentation: 'allowed',
+      },
     } satisfies OrgRuntimePolicy,
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
