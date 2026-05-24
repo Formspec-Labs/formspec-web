@@ -19,6 +19,9 @@ export interface DraftBindingRegistry {
   get(key: DraftKey): DraftBindingSnapshot | undefined;
   put(key: DraftKey, snapshot: DraftBindingSnapshot): void;
   delete(key: DraftKey): void;
+  // Materializes to array (not iterator) — call sites are low-frequency
+  // (list / invalidateSubject), so allocation is acceptable vs the
+  // ergonomic win of array iteration patterns.
   entries(): Array<{ key: DraftKey; snapshot: DraftBindingSnapshot }>;
 }
 

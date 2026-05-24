@@ -77,6 +77,13 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
  * `buildIntakeHandoff` mirrors those fields onto `definitionRef + subjectRef`,
  * so the derivation here is the inverse of the construction there. Exported
  * so cohort-level tests can pin the derivation explicitly.
+ *
+ * Binding is keyed by save-time `subjectRef`. Identity transitions
+ * (anonymous → authenticated mid-session) change `subjectRef` and orphan the
+ * prior binding — submit will fail with "requires a draft id" unless
+ * `RespondentRuntime` re-saves after the transition. The `DraftStore` exposes
+ * `invalidateSubject` for explicit rebinding; wiring it to the identity-change
+ * signal is follow-on work tracked separately.
  */
 export function draftKeyFromHandoff(handoff: IntakeHandoff): DraftKey {
   return {
