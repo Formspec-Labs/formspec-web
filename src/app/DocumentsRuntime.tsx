@@ -41,7 +41,7 @@ import {
   signInOptionsForIdentityPolicy,
 } from './respondent-flow.ts';
 import {
-  DocumentItem,
+  DocumentItemContent,
   groupAndSortDocuments,
   uniqueKindCount,
   type GroupedDocuments,
@@ -320,9 +320,15 @@ function DocumentItemWithSelection({
   const matchingPolicies = policies.filter(
     (policy) => policy.documentRefs?.includes(document.id) ?? false,
   );
+  // Single `<li>` wrapper carries the same `place-list__item` class the
+  // shared `DocumentItem` emits, so the DOM-parity test pins both surfaces
+  // to the same outer shape. The selection action + disclosure render as
+  // siblings inside the same list-item — nesting a second `<li>` here would
+  // be a WCAG 1.3.1 violation (axe `listitem` rule: list item without a
+  // <ul>/<ol> parent).
   return (
-    <li className="documents-section__item">
-      <DocumentItem document={document} />
+    <li className="place-list__item">
+      <DocumentItemContent document={document} />
       <button
         aria-expanded={open}
         className="documents-section__use"

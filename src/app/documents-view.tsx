@@ -87,6 +87,21 @@ function byCapturedAtThenDisplayName(
 export function DocumentItem({ document }: { document: RespondentDocumentRecord }) {
   return (
     <li className="place-list__item">
+      <DocumentItemContent document={document} />
+    </li>
+  );
+}
+
+/**
+ * Inner content of `DocumentItem`, without the `<li>` wrapper. Consumed by
+ * `DocumentsRuntime` so the dashboard's enriched per-item layout (selection
+ * action + disclosure) can render inside one `<li>` without nesting another
+ * `<li>` inside it — nested `<li>` without an interposed `<ul>` is a WCAG
+ * 1.3.1 violation (axe `listitem` rule).
+ */
+export function DocumentItemContent({ document }: { document: RespondentDocumentRecord }) {
+  return (
+    <>
       <div className="place-list__row">
         <strong>{document.displayName}</strong>
         <span className="place-pill">{labelFromToken(document.kind)}</span>
@@ -96,6 +111,6 @@ export function DocumentItem({ document }: { document: RespondentDocumentRecord 
         Uploaded {formatDate(document.capturedAt)}
         {document.expiresAt ? ` / Expires ${formatDate(document.expiresAt)}` : ''}
       </small>
-    </li>
+    </>
   );
 }

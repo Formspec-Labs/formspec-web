@@ -396,7 +396,7 @@ describe('DocumentsRuntime (FW-0056 slice 1)', () => {
   });
 
   describe('DOM parity with shared DocumentItem', () => {
-    it('renders the parity-fixture document with the same <li> HTML the isolated component produces', async () => {
+    it('renders the parity-fixture document with the same inner content the isolated component produces', async () => {
       const isolatedHtml = renderParityFixture();
       cleanup();
 
@@ -411,10 +411,18 @@ describe('DocumentsRuntime (FW-0056 slice 1)', () => {
 
       const li = container.querySelector('li.place-list__item');
       expect(li).not.toBeNull();
-      // Parity: the dashboard surface emits the EXACT same `<li>` outerHTML
-      // the shared DocumentItem produces in isolation. Locks out drift if a
-      // future change inlines custom document markup in this surface.
-      expect(li!.outerHTML).toBe(isolatedHtml);
+      // Parity: the dashboard surface emits the SAME inner-content prefix the
+      // shared DocumentItem produces in isolation. The dashboard <li>
+      // additionally appends the "Use this document…" button + disclosure as
+      // siblings (per FW-0056 selection-action design); the parity contract is
+      // that the inner content (place-list__row + issuer line + uploaded/
+      // expires line) is byte-identical. Locks out drift if a future change
+      // inlines custom document markup in the dashboard surface.
+      const isolatedInner = stripLiWrapper(isolatedHtml);
+      const dashboardHtml = li!.outerHTML;
+      expect(dashboardHtml.startsWith(`<li class="place-list__item">${isolatedInner}`)).toBe(
+        true,
+      );
     });
   });
 
@@ -467,6 +475,12 @@ describe('DocumentsRuntime copy constants', () => {
 });
 
 // --- test helpers ---
+
+function stripLiWrapper(liHtml: string): string {
+  // Removes the outer `<li class="…">` open + `</li>` close so we can compare
+  // inner content prefixes across surfaces that wrap shared content differently.
+  return liHtml.replace(/^<li[^>]*>/, '').replace(/<\/li>$/, '');
+}
 
 function doc(overrides: Partial<RespondentDocumentRecord> = {}): RespondentDocumentRecord {
   return {
