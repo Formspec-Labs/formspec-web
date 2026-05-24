@@ -6,6 +6,8 @@
 **Subordinate to:** web ADR-0008 (reference deployment composition), web ADR-0009 (hexagonal architecture), web ADR-0011 (runtime feature resolution).
 **Authority:** internal composition refactor; no port changes; no user-visible vocabulary changes.
 
+> **Naming note (2026-05-23, post-FW-0055):** the noop adapter family was originally named `noop-for-status-route/` (this doc's body still uses that name in the verbatim early-draft sections where it appears). At N=3 sibling-factory landing — when FW-0055 added `createDefault/Stub/DemoObligationsRouteComposition` reusing the same family — the family + helper were renamed to `noop-for-narrowed-route/` + `notForNarrowedRouteError(portName, routeCite?)` (see FW-0055 closeout independent arch-review MED-2). All citations in this doc body now refer to the post-rename path.
+
 ## What FW-0068 actually needs (vs the row prose)
 
 The row's Done criterion: `src/app/main.tsx` parses the route BEFORE constructing the composition; when `parseStatusRoute(window.location.href)` matches, `main.tsx` constructs a status-only composition via a new factory that wires ONLY `statusReader` + the runtime-profile / policy resolver state (plus the bare-minimum `Composition` slots the React shell unconditionally reads: `mode`, `instanceCapabilities`, `orgRuntimePolicy`, `getFormRuntimePolicy`). No `IdentityProvider`, no `DraftStore`, no `SubmitTransport`, no `DefinitionSource`, no `NotificationDelivery`, no `RespondentPlaceSource` constructed in the status-route path.
@@ -45,7 +47,7 @@ For the status-route composition we need adapter objects in those slots that:
 
 Two sub-options:
 
-- **(a.i) Build a `noop-for-status-route/` adapter family** (one file per MVP port) that throws "Not constructed for the /status route" on call.
+- **(a.i) Build a `noop-for-narrowed-route/` adapter family** (one file per MVP port) that throws "Not constructed for the /status route" on call.
 - **(a.ii) Reuse the existing `stub*` adapters** — they're already inert in-memory implementations.
 
 **Pick (a.i).** Justification:
@@ -55,7 +57,7 @@ Two sub-options:
 3. New adapters cost ~15 LOC each and explicitly communicate the narrowing.
 4. The honesty contract for the *gated* keys is preserved: the status-route composition declares `respondentPlace: 'unavailable'` and wires `unavailableRespondentPlaceSource()` (the existing sentinel). `status` declares whatever the production composition would (today `'unavailable'`, paired with `unavailableStatusReader()`).
 
-A single barrel `src/adapters/noop-for-status-route/index.ts` exports the five MVP-port noops. Each adapter:
+A single barrel `src/adapters/noop-for-narrowed-route/index.ts` exports the five MVP-port noops. Each adapter:
 
 ```ts
 function notForStatusRouteError(portName: string): Error {
@@ -122,13 +124,13 @@ Row prose names the helper `statusRouteComposition()`. The existing factory fami
 
 ## Acceptance criteria
 
-1. New file `src/adapters/noop-for-status-route/index.ts` exporting `noopDefinitionSource()`, `noopDraftStore()`, `noopSubmitTransport()`, `noopIdentityProvider()`. Each throws a "not constructed on the /status route" error on any call, with FW-0068 cite.
+1. New file `src/adapters/noop-for-narrowed-route/index.ts` exporting `noopDefinitionSource()`, `noopDraftStore()`, `noopSubmitTransport()`, `noopIdentityProvider()`. Each throws a "not constructed on the /status route" error on any call, with FW-0068 cite.
 2. New factory `createDefaultStatusRouteComposition(config?)` exported from `src/composition/default.ts` (and re-exported from `src/composition/index.ts`).
 3. New factory `createStubStatusRouteComposition()` in `src/composition/stub.ts`.
 4. New factory `createDemoStatusRouteComposition()` in `src/composition/demo.ts` (delegates to the stub variant, matching the existing `createDemoComposition` delegation).
 5. `src/app/main.tsx` parses the route via `parseStatusRoute(window.location.href)` and selects the appropriate factory BEFORE constructing the composition.
 6. **Boot-narrowing test** at `tests/app/status-boot-narrowing.test.ts` mocks the unrelated adapter constructors (`HttpDefinitionSource`, `HttpDraftStore`, `HttpSubmitTransport`, `AnonymousSessionBridge`, identity-provider factories) and asserts that constructing the status-route composition does NOT invoke them. This is the H-1 assertion FW-0039 was missing.
-7. **Noop-adapter throw test** at `tests/adapters/noop-for-status-route.test.ts` proves each noop throws on call with the FW-0068 cite.
+7. **Noop-adapter throw test** at `tests/adapters/noop-for-narrowed-route.test.ts` proves each noop throws on call with the FW-0068 cite.
 8. **Composition-coherence extension** at `tests/profiles/composition-coherence.test.ts`: both new factories pass `assertCompositionCoherence`. (Today the test covers `createStubComposition` + `createDefaultComposition`; extend to cover the two new factories.)
 9. **Smoke-test extension** at `tests/smoke/composition.test.ts`: the four-factory smoke (full-app default + stub, plus status-route default + stub) lists every port the React shell unconditionally reads.
 10. **PLANNING.md FW-0068 row** moved to ## Closed following FW-0065's pattern; FW-0039 closed-row prose updated to remove the "route-aware composition narrowing is filed as FW-0068" gap from its Release-gaps narrative (the gap is closed; FW-0068 is no longer the open follow-on).
