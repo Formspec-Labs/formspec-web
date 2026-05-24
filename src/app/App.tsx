@@ -3,6 +3,7 @@ import type { FormspecWebConfig } from '../config/types.ts';
 import { demoSampleForm } from '../demo/index.ts';
 import type { Composition } from '../composition/types.ts';
 import { useComposition } from './hooks/useComposition.ts';
+import { parseStatusRoute, type StatusRouteParams } from './status-route.ts';
 
 interface AppProps {
   config: FormspecWebConfig;
@@ -13,9 +14,25 @@ interface RespondentRuntimeProps {
   config: FormspecWebConfig;
 }
 
+interface StatusRuntimeProps {
+  composition: Composition;
+  config: FormspecWebConfig;
+  route: StatusRouteParams;
+}
+
 type RuntimeState =
   | { status: 'loading' }
-  | { status: 'ready'; Runtime: ComponentType<RespondentRuntimeProps> }
+  | {
+      status: 'ready';
+      route: 'form';
+      Runtime: ComponentType<RespondentRuntimeProps>;
+    }
+  | {
+      status: 'ready';
+      route: 'status';
+      Runtime: ComponentType<StatusRuntimeProps>;
+      params: StatusRouteParams;
+    }
   | { status: 'error'; error: unknown };
 
 export function App({ config }: AppProps) {
@@ -29,10 +46,23 @@ export function App({ config }: AppProps) {
   useEffect(() => {
     let cancelled = false;
     setRuntimeState({ status: 'loading' });
-    void import('./RespondentRuntime.tsx')
-      .then((module) => {
+    const statusParams = parseStatusRoute(window.location.href);
+    const loader = statusParams
+      ? import('./StatusRuntime.tsx').then((module) => ({
+          status: 'ready' as const,
+          route: 'status' as const,
+          Runtime: module.StatusRuntime,
+          params: statusParams,
+        }))
+      : import('./RespondentRuntime.tsx').then((module) => ({
+          status: 'ready' as const,
+          route: 'form' as const,
+          Runtime: module.RespondentRuntime,
+        }));
+    void loader
+      .then((next) => {
         if (!cancelled) {
-          setRuntimeState({ status: 'ready', Runtime: module.RespondentRuntime });
+          setRuntimeState(next);
         }
       })
       .catch((error: unknown) => {
@@ -45,7 +75,6 @@ export function App({ config }: AppProps) {
     };
   }, [composition]);
 
-  const Runtime = runtimeState.status === 'ready' ? runtimeState.Runtime : null;
   const isBusy = runtimeState.status === 'loading';
 
   return (
@@ -56,8 +85,10 @@ export function App({ config }: AppProps) {
           aria-labelledby="respondent-title"
           data-mode={composition.mode}
         >
-          {Runtime ? (
-            <Runtime composition={composition} config={config} />
+          {runtimeState.status === 'ready' && runtimeState.route === 'form' ? (
+            <runtimeState.Runtime composition={composition} config={config} />
+          ) : runtimeState.status === 'ready' && runtimeState.route === 'status' ? (
+            <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
           ) : (
             <>
               <ShellHeader mode={composition.mode} />
