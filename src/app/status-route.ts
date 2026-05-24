@@ -1,3 +1,4 @@
+import type { RouteNarrowing } from '../composition/route-narrowing.ts';
 import type { WosResourceUrn } from '../ports/status-reader.ts';
 
 export interface StatusRouteParams {
@@ -5,6 +6,22 @@ export interface StatusRouteParams {
 }
 
 const WOS_URN_PREFIX = 'urn:wos:';
+
+/**
+ * Route-narrowing descriptor for `/status` (FW-0070).
+ *
+ * Status surface reads `statusReader` only — no respondent-place reads, no
+ * identity binding (URN is the bearer per FW-0039). Form-shaped ports
+ * (definition / draft / submit) unconditionally noop on every narrowed
+ * route. See FW-0070 design §"Decision 3".
+ */
+export const STATUS_ROUTE_NARROWING: RouteNarrowing = {
+  routeCite: '/status',
+  initialDefinitionUrlSentinel: 'about:not-constructed#fw-0068',
+  consumesRespondentPlace: false,
+  consumesStatus: true,
+  identityBound: false,
+};
 
 export function parseStatusRoute(href: string): StatusRouteParams | null {
   let url: URL;

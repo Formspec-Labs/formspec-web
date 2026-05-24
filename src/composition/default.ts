@@ -307,12 +307,14 @@ export function createDefaultDocumentsRouteComposition(
 }
 
 /**
- * Builds the real identity binding for the obligations route. Split out from
+ * Builds the real identity binding for a narrowed route. Split out from
  * the factory body so the construction only runs when MED-4's gate clears —
  * the function body still references `AnonymousSessionBridge` etc. but no
- * adapter is invoked until the function is called.
+ * adapter is invoked until the function is called. Exported so the
+ * parameterized route-narrowing factory (FW-0070) can reuse the same wiring
+ * without duplicating the OIDC / magic-link / anonymous selection rules.
  */
-function buildRealIdentityProvider(
+export function buildRealIdentityProvider(
   config: FormspecWebConfig,
   notificationDelivery: ReturnType<typeof stubNotificationDelivery>,
   serverUrl: string,
@@ -339,7 +341,7 @@ function assertReferenceHttpDataPorts(config: FormspecWebConfig): void {
   }
 }
 
-interface IdentityBinding {
+export interface IdentityBinding {
   provider: IdentityProvider;
   accessToken?: AccessTokenProvider;
 }

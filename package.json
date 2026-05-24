@@ -25,7 +25,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:unit": "vitest run src/policy src/profiles tests/adapters tests/app tests/demo tests/policy-resolution tests/profiles tests/scripts tests/shared tests/smoke",
+    "test:unit": "vitest run src/policy src/profiles tests/adapters tests/app tests/composition tests/demo tests/policy-resolution tests/profiles tests/scripts tests/shared tests/smoke",
     "test:conformance": "vitest run tests/adapter-conformance",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
