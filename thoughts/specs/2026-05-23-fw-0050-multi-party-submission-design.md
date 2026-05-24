@@ -285,14 +285,16 @@ Landed in the upstream extension queue at [`2026-05-22-upstream-extension-queue.
 
 ### 7.1 FW-0049 / FW-0060 — safe-address (load-bearing)
 
-FW-0060 explicitly cites: "per-party visibility (per FW-0050) land across the form, the receipt, and the verifier" ([`PLANNING.md:685`](../../PLANNING.md)). The dependency is bidirectional:
+FW-0060 explicitly cites: "per-party visibility (per FW-0050) land across the form, the receipt, and the verifier" ([`PLANNING.md:682`](../../PLANNING.md)). The dependency is bidirectional:
 
-- FW-0050 depends on FW-0049's privacy-class taxonomy ([EXT-1 in `2026-05-22-upstream-extension-queue.md:26`](2026-05-22-upstream-extension-queue.md)) for marking which fields are protectable.
+- FW-0050 depends on FW-0049's privacy-class taxonomy for marking which fields are protectable.
 - FW-0060 depends on FW-0050's per-party visibility model for determining which co-party should not see the protected field.
 
 **Composition rule:** when a form declares both `multiParty` and `safeAddress` features, the resolved runtime profile composes them: a protectable field's `visibleTo[]` is intersected with the safe-address jurisdictional rule. If the intersection is empty (no party can legally see the protected value), the form-load surfaces an `InvalidRuntimePolicyError` per [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md). Silent leak forbidden.
 
 The child-custody scenario (§4.3) is the canonical instance: survivor parent's safe-address-protected home address must not be visible to the co-parent. This composition is the architectural requirement; the design does not ship FW-0060 (that's FW-0049's design row) but does declare the seam.
+
+**FW-0049 design — RESOLVED 2026-05-23.** [FW-0049 design `thoughts/specs/2026-05-23-fw-0049-safe-address-handling-design.md`](2026-05-23-fw-0049-safe-address-handling-design.md) is the canonical safe-address-class-taxonomy + audience-policy source. §3.1 specifies the `safe-*` class set (`safe-address`, `safe-contact`, `safe-employer`); §3.2 collapses the schema onto `accessControl.class` per stack-root ADR-0074 (retiring the proposed EXT-1 `privacy` block); §3.5 specifies the receipt-side audience contract; §7 explicitly satisfies the right half of the FW-0050 §7.1 composition rule with the worked child-custody example at §7.2. **FW-0061 build consumes the FW-0049 §7 shape directly** — the resolver intersects the safe-* audience policy (excludes-public-receipt) with the multi-party `visibleTo[]` per-party scoping; canonical case yields `visibleTo = parentA + issuer-verification`, empty-intersection cases surface `InvalidRuntimePolicyError` at form-load. **The design dependency closes here.** Build-time dependency on FW-0049's build row (FW-0060 in `PLANNING.md`) remains: FW-0060's `SafeAddressDirectory` adapter + Phase 2+ commitment-slot writer + Disclosure Manifest emitter must exist before FW-0061 can ship the per-party safe-address visibility scoping, OR FW-0061 must descope safe-address from its initial slice.
 
 ### 7.2 AP-014 — coercion (J-041 explicit binding)
 
