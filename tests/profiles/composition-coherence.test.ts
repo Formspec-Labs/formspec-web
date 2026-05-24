@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createStubComposition } from '../../src/composition/stub.ts';
-import { createDefaultComposition } from '../../src/composition/default.ts';
+import { createStubComposition, createStubStatusRouteComposition } from '../../src/composition/stub.ts';
+import {
+  createDefaultComposition,
+  createDefaultStatusRouteComposition,
+} from '../../src/composition/default.ts';
+import { createDemoStatusRouteComposition } from '../../src/composition/demo.ts';
 import {
   assertCompositionCoherence,
   type CompositionLike,
@@ -33,6 +37,18 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
 
   it('default composition is coherent (production mode + unavailable sentinels + unavailable declarations)', () => {
     expect(() => assertCompositionCoherence(createDefaultComposition())).not.toThrow();
+  });
+
+  it('default status-route composition is coherent (FW-0068)', () => {
+    expect(() => assertCompositionCoherence(createDefaultStatusRouteComposition())).not.toThrow();
+  });
+
+  it('stub status-route composition is coherent (FW-0068)', () => {
+    expect(() => assertCompositionCoherence(createStubStatusRouteComposition())).not.toThrow();
+  });
+
+  it('demo status-route composition is coherent (FW-0068)', () => {
+    expect(() => assertCompositionCoherence(createDemoStatusRouteComposition())).not.toThrow();
   });
 
   it('flags an adapter marked unavailable but declared anything other than unavailable', () => {
