@@ -37,10 +37,10 @@ import type { IdentityClaim, IdentityProvider, IdpOption } from '../ports/identi
 import type {
   ApplicantStatusResource,
   RespondentDocumentRecord,
-  RespondentObligation,
   RespondentPlaceSnapshot,
   RespondentSubmissionRecord,
 } from '../ports/index.ts';
+import { ObligationItem } from './obligations-view.tsx';
 import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
@@ -750,21 +750,6 @@ function PlaceList({
         <p className="place-list__empty">{emptyLabel}</p>
       )}
     </section>
-  );
-}
-
-function ObligationItem({ obligation }: { obligation: RespondentObligation }) {
-  return (
-    <li className="place-list__item">
-      <div className="place-list__row">
-        <strong>{obligation.title}</strong>
-        <span className={`place-pill place-pill--${slugToken(obligation.state)}`}>
-          {labelFromToken(obligation.state)}
-        </span>
-      </div>
-      <p>{obligation.issuer.name}</p>
-      {obligation.dueAt ? <small>Due {formatDate(obligation.dueAt)}</small> : null}
-    </li>
   );
 }
 
