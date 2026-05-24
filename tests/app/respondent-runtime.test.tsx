@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
+import {
+  PARITY_FIXTURE_OBLIGATION,
+  renderParityFixture,
+} from './obligations-view.test.tsx';
+import { cleanup as rtlCleanup } from '@testing-library/react';
 import type { Composition } from '../../src/composition/types.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
@@ -96,6 +101,32 @@ describe('RespondentRuntime identity sign-in', () => {
       subjectRef: 'oidc:test-subject',
       submissionId: 'sub-test-0001',
     }));
+  });
+
+  it('in-form obligations panel renders ObligationItem with the SAME <li> HTML the shared component produces (MED-3 parity)', async () => {
+    // Render the shared ObligationItem in isolation first, then compare to
+    // the in-form panel's rendered <li>. Locks out drift if a future change
+    // inlines custom obligation markup in the RespondentRuntime panel.
+    const isolatedHtml = renderParityFixture();
+    rtlCleanup(); // drop the isolated render before mounting the full runtime.
+
+    const identityProvider = new TestIdentityProvider();
+    const placeSnapshot = {
+      ...emptyRespondentPlaceSnapshot(),
+      obligations: [PARITY_FIXTURE_OBLIGATION],
+    };
+    const composition = testComposition(identityProvider, {
+      respondentPlace: placeSnapshot,
+    });
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Your forms and files');
+
+    const li = container?.querySelector('li.place-list__item');
+    if (!li) throw new Error('in-form obligations panel did not render <li class="place-list__item">');
+    expect(li.outerHTML).toBe(isolatedHtml);
   });
 
   it('requests submission status by submission id when a projection has no resource ref', async () => {

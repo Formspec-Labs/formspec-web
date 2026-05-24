@@ -7,6 +7,10 @@ import {
   NOT_SHARED_UNAVAILABLE_COPY,
   ObligationsRuntime,
 } from '../../src/app/ObligationsRuntime.tsx';
+import {
+  PARITY_FIXTURE_OBLIGATION,
+  renderParityFixture,
+} from './obligations-view.test.tsx';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
@@ -294,6 +298,29 @@ describe('ObligationsRuntime (FW-0055 slice 1)', () => {
       });
       // Section is rendered, not the auth screen.
       expect(screen.queryByText(/Sign in to see your obligations/i)).toBeNull();
+    });
+  });
+
+  describe('DOM parity with shared ObligationItem (MED-3)', () => {
+    it('renders the parity-fixture obligation with the same <li> HTML the isolated component produces', async () => {
+      const isolatedHtml = renderParityFixture();
+      cleanup(); // drop the isolated render before mounting the dashboard.
+
+      const composition = compositionWithObligations([PARITY_FIXTURE_OBLIGATION]);
+
+      const { container } = render(
+        <ObligationsRuntime composition={composition} config={departmentAppProfile} />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('heading', { name: /What you owe/i })).not.toBeNull();
+      });
+
+      const li = container.querySelector('li.place-list__item');
+      expect(li).not.toBeNull();
+      // Parity: the dashboard surface emits the EXACT same `<li>` outerHTML
+      // the shared ObligationItem produces in isolation. Locks out drift if a
+      // future change inlines custom obligation markup in this surface.
+      expect(li!.outerHTML).toBe(isolatedHtml);
     });
   });
 
