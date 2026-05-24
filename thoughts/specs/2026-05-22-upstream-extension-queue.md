@@ -215,24 +215,24 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 ### EXT-31: Access-Class Registry entries for safe-* (safe-address handling)
 
 **Owning repo:** formspec
-**File:** `formspec/specs/registry/access-class-registry.md` (the Access-Class Registry companion proposed in [stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md))
+**File:** `formspec/specs/registry/access-class-registry.md` — the Access-Class Registry companion proposed in [stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md), **not yet authored** (verified 2026-05-23 — `formspec/specs/registry/` contains only `changelog-spec`, `extension-registry`, `signature-method-registry`).
 **Closes:** J-037 (safe-address handling)
 **FW rows blocked:** FW-0049 (design dependency), FW-0060 (build)
-**Shape:** three new class entries per [FW-0049 design §3.1 + §6.3](2026-05-23-fw-0049-safe-address-handling-design.md): `safe-address`, `safe-contact`, `safe-employer`, all under the `safe-*` namespace prefix. Each entry carries `defaultAudience`, `excludedAudiences`, `substitutionRule` (deployment-resolved validator port reference), and `cascadeRule` (`automatic` for `safe-address`/`safe-contact`, `manual` for `safe-employer` due to derived-field heterogeneity). Per ADR-0074 §"Five decisions" line 41–45 the registry is the canonical home for cross-form class vocabulary; Core treats class tokens as opaque.
-**Cross-stack:** lands as part of XS-4 ratification (see below). Requires ADR-0074 promotion from Proposed to Accepted; the Access-Class Registry companion needs to exist first (currently proposed in ADR-0074 §"Companion artifacts"). FW-0049 design assumes the companion lands per ADR-0074's plan and registers the safe-* entries.
+**Shape:** three new class entries per [FW-0049 design §3.1 + §6.3](2026-05-23-fw-0049-safe-address-handling-design.md): `safe-address`, `safe-contact`, `safe-employer`, all under the `safe-*` namespace prefix. Each entry carries `defaultAudience` (the audience(s) that receive plaintext — snake_case per Trellis OC §13.3 + ADR-0074 §1 convention), `excludedAudiences`, and `substitutionRule` (deployment-resolved validator port reference). **Derived-field handling relies on ADR-0074 §"Five decisions" line 44 cross-class FEL definition-error discipline + §"Profile-driven relaxation" `flClassCompatibility` — no new "cascade" mechanism is introduced.** Per ADR-0074 §"Five decisions" line 41–45 the registry is the canonical home for cross-form class vocabulary; Core treats class tokens as opaque.
+**Cross-stack:** lands as part of XS-4 ratification (see below). Requires ADR-0074 promotion from Proposed to Accepted AND the Access-Class Registry companion file to be authored (currently neither has landed). FW-0049 design assumes both happen via ADR-0074's promotion path.
 **Fixture status:** none. Land with one fixture per class covering the canonical scenarios per FW-0049 §2.3 (DV-survivor / witness-protection / multi-party-custody).
-**Status:** proposed 2026-05-23 by FW-0049 design; pending XS-4 ratification at stack-root + ADR-0074 promotion.
+**Status:** proposed 2026-05-23 by FW-0049 design; pending XS-4 ratification at stack-root + ADR-0074 promotion + parent companion file authoring.
 
 ### EXT-32: Privacy Profile default audience policy for safe-* (safe-address handling)
 
 **Owning repo:** formspec
-**File:** `formspec/specs/privacy/privacy-profile.md` (the Privacy Profile sidecar proposed in [stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md))
+**File:** `formspec/specs/privacy/privacy-profile.md` — the Privacy Profile sidecar proposed in [stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md), **not yet authored** (verified 2026-05-23 — `formspec/specs/privacy/` does not exist).
 **Closes:** J-037 (safe-address handling)
 **FW rows blocked:** FW-0049 (design dependency), FW-0060 (build)
-**Shape:** default audience-policy entry for the `safe-*` namespace per [FW-0049 design §6.4](2026-05-23-fw-0049-safe-address-handling-design.md). The defaults: `safe-*` classes have `issuer-verification` as the only plaintext audience; `respondent-public-receipt`, `verifier-public-output`, and `foia-public` audiences are excluded by default. Per-jurisdiction overrides land as Privacy Profile additions per deployment (FOIA carve-outs for specific elected-official disclosure rules, etc.). Per ADR-0074 the Privacy Profile sidecar is the home for deployment-level audience policy; FW-0049 supplies the cross-deployment default.
-**Cross-stack:** lands as part of XS-4 ratification (see below). Requires ADR-0074 promotion + Privacy Profile sidecar to exist.
+**Shape:** default audience-policy entry for the `safe-*` namespace per [FW-0049 design §6.4](2026-05-23-fw-0049-safe-address-handling-design.md). The defaults (snake_case audience tokens per Trellis OC §13.3 + ADR-0074 §1 convention): `safe-*` classes have `issuer_verification` as the only plaintext audience; `respondent_public_receipt`, `verifier_public_output`, and `foia_public` audiences are excluded by default. Per-jurisdiction overrides land as Privacy Profile additions per deployment (FOIA carve-outs for specific elected-official disclosure rules, etc.). Per ADR-0074 §"Five decisions" line 45 the Privacy Profile sidecar is the home for deployment-level audience policy + audience-name registration; FW-0049 supplies the cross-deployment default. **The audience tokens above are proposed defaults, not settled vocabulary.**
+**Cross-stack:** lands as part of XS-4 ratification (see below). Requires ADR-0074 promotion + Privacy Profile sidecar file to be authored (currently neither has landed).
 **Fixture status:** none. Land with default-policy fixtures + per-jurisdiction-override fixtures (CA-ACP, WA-ACP, USMS-WitSec).
-**Status:** proposed 2026-05-23 by FW-0049 design; pending XS-4 ratification at stack-root + ADR-0074 promotion.
+**Status:** proposed 2026-05-23 by FW-0049 design; pending XS-4 ratification at stack-root + ADR-0074 promotion + parent companion file authoring.
 
 ### EXT-10: Receipt-domain prose update (drift fix)
 

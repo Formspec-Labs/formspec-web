@@ -16,6 +16,8 @@
 
 Decide the formspec-web shape for safe-address handling on forms where protected parties' truthful answers (home address, phone, employer) would endanger them per [FW-0049 Done](../../PLANNING.md). Deliverables: framing decisions (Q1–Q4), the `safeAddress` capability contract under [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md), the field-level class taxonomy and substitution-rule shape, the runtime render discipline, the receipt-side audience contract, the verifier discipline, the failure semantics, the multi-party composition with FW-0050, and the cross-stack dependency chain. This is a **design row**; the build is [FW-0060 in `PLANNING.md:676`](../../PLANNING.md).
 
+**Substrate-status disclaimer.** FW-0049 design presumes [stack-root ADR-0074](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md)'s Decision shape (`accessControl.class` + Access-Class Registry + Privacy Profile sidecar + bucketed Response + Phase 5 Emission). **ADR-0074 status is currently Proposed, not Accepted.** Promotion to Accepted is upstream work; if ADR-0074 reshapes in flight, FW-0049's substrate references (especially §3.1, §3.2, §6.3, §6.4) follow. The Access-Class Registry companion (`formspec/specs/registry/access-class-registry.md`) and Privacy Profile sidecar (`formspec/specs/privacy/privacy-profile.md`) are proposed in ADR-0074 §"Companion artifacts" but **not yet authored**; EXT-31 + EXT-32 land into files that the ADR-0074 promotion path must author first.
+
 ### 1.2 Non-goals
 
 - **Implementation.** No code, no port-conformance fixtures, no React shell. FW-0060 owns build.
@@ -111,17 +113,20 @@ Each decision: the answer first, then the rationale, then the alternative consid
 ```text
 class: "safe-address"
 namespace: "safe"
-defaultAudience: ["issuer-verification"]              # NOT public-receipt; NOT verifier-public-output
-excludedAudiences: ["respondent-public-receipt", "verifier-public-output", "foia-public"]
+defaultAudience: ["issuer_verification"]              # NOT public_receipt; NOT verifier_public_output
+excludedAudiences: ["respondent_public_receipt", "verifier_public_output", "foia_public"]
 substitutionRule: {
   kind: "deployment-resolved"                          # the deployment supplies the substitute-address validator
   validatorPortRef: "SafeAddressDirectory"             # FW-0060 will name the port; the registry just declares the seam
 }
-cascadeRule: {
-  kind: "automatic"                                    # FEL outputs reading a safe-* input inherit the class by default
-  override: "privacy-profile-explicit"                 # Privacy Profile may relax per output with explicit declaration
-}
+# Derived-field handling: relies on ADR-0074 §"Five decisions" line 44 — cross-class FEL is a definition error
+# when no Profile is loaded; under a loaded Profile, relaxation requires literal audience-array equality declared
+# via flClassCompatibility (ADR-0074 §"Profile-driven relaxation"). No new "cascade" mechanism is invented here.
 ```
+
+**Audience-name convention.** The audience tokens above (`issuer_verification`, `respondent_public_receipt`, `verifier_public_output`, `foia_public`) follow the **snake_case convention** established by Trellis Operational Companion §13.3 (`foia_public`, `opposing_counsel`, `appellate_court`) and ADR-0074 §1's `medical_caseworker`, `supervisor`. These specific audience tokens are **proposed for the Privacy Profile sidecar's default policy** (per EXT-32 below); they are not yet settled vocabulary. The Privacy Profile sidecar is the canonical home for audience-name registration per ADR-0074 §"Five decisions" line 45 (audience policy in the sidecar, not in Core).
+
+**Derived-field handling re-anchor.** Per ADR-0074 §"Five decisions" line 44 + §"Profile-driven relaxation": cross-class FEL is a definition error (unconditionally when no Profile is loaded); under a loaded Privacy Profile, relaxation requires literal audience-array equality declared via `flClassCompatibility`. **FW-0049 does NOT introduce a new "cascade" mechanism;** the safe-* class declaration on a source field causes any cross-class FEL output to be a definition error unless the Privacy Profile explicitly relaxes with audience-equal `flClassCompatibility`. Derived fields needing the same protection MUST themselves be declared `safe-*`-class by the author. **This is ADR-0074's discipline, not a FW-0049 invention.**
 
 The shape above is **proposed for the Access-Class Registry companion** (per [ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md)). FW-0049 does not author the registry; it specifies the entries needed.
 
@@ -162,7 +167,7 @@ The shape above is **proposed for the Access-Class Registry companion** (per [AD
 | Field | accessControl | Audience | Render |
 |---|---|---|---|
 | `mailingAddress` | `class: "procedural"` (or `unclassified`) | All audiences | Plaintext rendered |
-| `protectedHomeAddress` | `class: "safe-address"` | Issuer-verification audience only | Masked + per-act reveal; never rendered to public-receipt / verifier-public-output / FOIA |
+| `protectedHomeAddress` | `class: "safe-address"` | `issuer_verification` audience only | Masked + per-act reveal; never rendered to `respondent_public_receipt` / `verifier_public_output` / `foia_public` |
 
 The form's UI presents this as a single conceptual address with a "Protected address" flag — the respondent toggles "I'm in an Address Confidentiality Program" and the substitute-address field appears alongside the truthful-address field. The substitute (e.g., CA SoS PO Box) goes to public audiences; the truthful goes to the issuer-verification audience only.
 
@@ -181,8 +186,10 @@ The form's UI presents this as a single conceptual address with a "Protected add
 **PROPOSAL.** The verifier-grade receipt for safe-*-class fields rides Trellis Phase 2+ selective-disclosure substrate per Trellis Core §13 commitment slots + Operational Companion OC-26/27/30 Disclosure Manifest. The receipt carries:
 
 1. A **commitment slot** populated at admit time for every safe-*-class field, whether or not the respondent invoked safe-address handling — **OC-26 uniform slot-population discipline**. This is the structural-indistinguishability anchor: the slot's *presence* is uniform across all submissions of a `safeAddress`-enabled form; the slot's *opening* (revealed plaintext vs. committed-only) carries the protection.
-2. A **Disclosure Manifest** (OC-27) per audience: the public-receipt audience entry lists safe-* fields in `committed_only_fields[]` (i.e., committed but withheld); the issuer-verification audience entry lists them in `disclosed_fields[]`; the verifier-public-output audience entry lists them in `committed_only_fields[]`. The manifest carries `commitment_proofs` (OC-27 item 9) tying the disclosed/committed-only fields to the Core §13 commitment slots.
+2. A **Disclosure Manifest** (OC-27) per audience: the `respondent_public_receipt` audience entry lists safe-* fields in `committed_only_fields[]` (i.e., committed but withheld); the `issuer_verification` audience entry lists them in `disclosed_fields[]`; the `verifier_public_output` audience entry lists them in `committed_only_fields[]`. The manifest carries `commitment_proofs` (OC-27 item 9) tying the disclosed/committed-only fields to the Core §13 commitment slots.
 3. **Independent auditability per OC-30:** an auditor MUST be able to verify that the commitment slots in the canonical record match the commitments in the manifest *without* requiring access to plaintext. The verifier's positive verdict reads: *"This submission contained a protected address field that satisfied the form's eligibility predicate; the address value is not present in this receipt."*
+
+**Response-vs-Receipt distinction (foundational).** The Response (what the issuer processes per ADR-0074 bucketed wire shape, §7.2.6) and the Receipt (what the public verifier reads per Trellis envelope) are **distinct artifacts at different layers**. The design's substrate answer differs per artifact: Response → bucketed encryption (per-audience key-bag, plaintext unreachable without audience key); Receipt → commitment-with-proof (audience-scoped Disclosure Manifest, no plaintext at any audience-derivation path). The two mechanisms **compose**, not substitute.
 
 **Phase boundary.** Per Trellis Core §13.3, **Phase 1 producers MUST emit `commitments` as `null` or `[]`.** This means:
 
@@ -249,6 +256,8 @@ safeAddress?: {
 }
 ```
 
+The `acpJurisdictionsAccepted[]` token values are deployment-defined identifiers; the examples (`CA-ACP`, `WA-ACP`, `USMS-WitSec`) are proposed conventions, not settled vocabulary. The Privacy Profile sidecar (EXT-32) is the canonical home for the jurisdiction-key registration.
+
 The block is the resolver's read-only output. Adapters do not consume it directly; the shell does, and orchestrates the existing `IdentityProvider` + `SubmitTransport` ports plus the FW-0060-build safe-address adapters against it.
 
 **Sensitive-data discipline:** the `rendererHints` are presentation copy only; no plaintext substitute-address registry data appears in the resolved profile (those live behind the validator port, queried per-field at validation time, never bulk-exposed to the shell).
@@ -308,42 +317,47 @@ EXT-1 ([`thoughts/specs/2026-05-22-upstream-extension-queue.md:26`](2026-05-22-u
 
 ### 6.3 EXT-31 (new) — Access-Class Registry entries for safe-*
 
-**Proposed for upstream extension queue.** The Access-Class Registry companion ([stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md)) gains three new class entries per §3.1 + §3.2:
+**Proposed for upstream extension queue.** The Access-Class Registry companion ([stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md), **not yet authored**) gains three new class entries per §3.1 + §3.2:
 
 ```text
 class: "safe-address"
 namespace: "safe"
-defaultAudience: ["issuer-verification"]
-excludedAudiences: ["respondent-public-receipt", "verifier-public-output", "foia-public"]
+defaultAudience: ["issuer_verification"]
+excludedAudiences: ["respondent_public_receipt", "verifier_public_output", "foia_public"]
 substitutionRule: { kind: "deployment-resolved", validatorPortRef: "SafeAddressDirectory" }
-cascadeRule: { kind: "automatic", override: "privacy-profile-explicit" }
 
 class: "safe-contact"
 namespace: "safe"
-defaultAudience: ["issuer-verification"]
-excludedAudiences: ["respondent-public-receipt", "verifier-public-output", "foia-public"]
+defaultAudience: ["issuer_verification"]
+excludedAudiences: ["respondent_public_receipt", "verifier_public_output", "foia_public"]
 substitutionRule: { kind: "deployment-resolved", validatorPortRef: "SafeContactDirectory" }
-cascadeRule: { kind: "automatic", override: "privacy-profile-explicit" }
 
 class: "safe-employer"
 namespace: "safe"
-defaultAudience: ["issuer-verification"]
-excludedAudiences: ["respondent-public-receipt", "verifier-public-output", "foia-public"]
+defaultAudience: ["issuer_verification"]
+excludedAudiences: ["respondent_public_receipt", "verifier_public_output", "foia_public"]
 substitutionRule: { kind: "heterogeneous-deployment-resolved" }
-cascadeRule: { kind: "manual" }
 ```
 
-`safe-employer`'s substitution-rule is `heterogeneous-deployment-resolved` because employer concealment varies widely; deployment-specific. `safe-employer`'s cascade is `manual` because derived fields ("works in tech" derived from employer name) often need explicit author classification rather than automatic inheritance.
+`safe-employer`'s substitution-rule is `heterogeneous-deployment-resolved` because employer concealment varies widely; deployment-specific.
+
+**Derived-field handling** for all three classes relies on ADR-0074 §"Five decisions" line 44 cross-class FEL definition-error discipline; no new "cascade" mechanism is introduced. Derived fields needing the same protection MUST be declared `safe-*`-class explicitly by the form author, or rely on Privacy Profile `flClassCompatibility` declarations (only valid when audience arrays are literally equal per ADR-0074 §"Profile-driven relaxation"). **The audience names above are proposed for the Privacy Profile sidecar's default policy (EXT-32);** they are not yet settled vocabulary.
+
+**Parent file dependency:** this entry presumes `formspec/specs/registry/access-class-registry.md` is authored as part of the ADR-0074 promotion path; the file does not yet exist (verified 2026-05-23 — `formspec/specs/registry/` contains only `changelog-spec`, `extension-registry`, `signature-method-registry`).
 
 ### 6.4 EXT-32 (new) — Privacy Profile default audience policy for safe-*
 
-**Proposed for upstream extension queue.** The Privacy Profile sidecar ([stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md)) gains a default audience-policy entry for the `safe-*` namespace. The default policy:
+**Proposed for upstream extension queue.** The Privacy Profile sidecar ([stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md), **not yet authored**) gains a default audience-policy entry for the `safe-*` namespace. The default policy (audience tokens snake_case per Trellis OC §13.3 + ADR-0074 §1 convention):
 
-- `safe-*` classes have `issuer-verification` audience as the only audience receiving plaintext;
-- the audience `respondent-public-receipt` is explicitly excluded;
-- the audience `verifier-public-output` is explicitly excluded;
-- the audience `foia-public` is excluded by default (overridable per-deployment for specific jurisdictions that legally mandate disclosure — e.g., a specific elected-official disclosure rule that overrides ACP; rare but exists);
+- `safe-*` classes have `issuer_verification` audience as the only audience receiving plaintext;
+- the audience `respondent_public_receipt` is explicitly excluded;
+- the audience `verifier_public_output` is explicitly excluded;
+- the audience `foia_public` is excluded by default (overridable per-deployment for specific jurisdictions that legally mandate disclosure — e.g., a specific elected-official disclosure rule that overrides ACP; rare but exists);
 - per-jurisdiction overrides land as Privacy Profile additions per deployment.
+
+**Audience-name registration is the Privacy Profile sidecar's authority** per ADR-0074 §"Five decisions" line 45; the tokens above are proposed defaults, not settled vocabulary.
+
+**Parent file dependency:** this entry presumes `formspec/specs/privacy/privacy-profile.md` is authored as part of the ADR-0074 promotion path; the file does not yet exist (verified 2026-05-23 — `formspec/specs/privacy/` does not exist).
 
 ### 6.5 XS-4 (new) — Cross-stack ADR for safe-address pipeline
 
@@ -390,10 +404,10 @@ Per FW-0050 §7.1: *"when a form declares both `multiParty` and `safeAddress` fe
 
 FW-0049's contribution: the **safe-address audience policy** (§3.4 + §6.4) supplies the right operand of the intersection. The composition:
 
-- Form declares: field carries `accessControl.class: "safe-address"`; per-form Privacy Profile audience policy lists `[issuer-verification]` as the only plaintext audience.
+- Form declares: field carries `accessControl.class: "safe-address"`; per-form Privacy Profile audience policy lists `[issuer_verification]` as the only plaintext audience.
 - FW-0050 declares: field's `visibleTo[]` lists `[parentA.roleId]` (excludes parentB).
-- Resolver intersects: parentB-receiving audiences = `{parentB.roleId, public-receipt}` ∩ `{issuer-verification}` = empty. parentA-receiving audiences = `{parentA.roleId, issuer-verification}` ∩ `{issuer-verification}` = `{issuer-verification}`. **No leak to parentB; verification flows to issuer-verification audience; canonical case works.**
-- Failure case: form declares `visibleTo: [public-receipt-audience]` for a `safe-address` field (form-author error). Intersection with safe-address audience policy = empty for the public-receipt slot. `InvalidRuntimePolicyError` at form-load.
+- Resolver intersects: parentB-receiving audiences = `{parentB.roleId, respondent_public_receipt}` ∩ `{issuer_verification}` = empty. parentA-receiving audiences = `{parentA.roleId, issuer_verification}` ∩ `{issuer_verification}` = `{issuer_verification}`. **No leak to parentB; verification flows to the `issuer_verification` audience; canonical case works.**
+- Failure case: form declares `visibleTo: [respondent_public_receipt]` for a `safe-address` field (form-author error). Intersection with safe-address audience policy = empty for the public-receipt slot. `InvalidRuntimePolicyError` at form-load.
 
 ### 7.2 The canonical child-custody case worked example
 
@@ -405,7 +419,7 @@ Per §2.3.3 worked scenario:
   - Public receipt: parentA's address committed-only (with commitment proof per Phase 2+); parentB's address disclosed in plaintext.
   - parentA-receipt audience: both addresses present in plaintext (parentA owns the safe-address value).
   - parentB-receipt audience: parentA's address committed-only (without unwrap key); parentB's address present in plaintext.
-  - issuer-verification audience: both addresses in plaintext (eligibility evaluation).
+  - `issuer_verification` audience: both addresses in plaintext (eligibility evaluation).
 - Phase 2+ commitment slots: populated for `parentA.homeAddress` in every submission of this form (uniform shape); the slot's opening differs per audience per the Disclosure Manifest.
 - Phase 1 fallback: `parentA.homeAddress` is OMITTED from the public-receipt entirely; the receipt structure differs from a same-form submission where neither parent is ACP-protected. **The Phase 1 fallback is structurally insufficient for this scenario; Phase 2+ substrate is required.**
 
