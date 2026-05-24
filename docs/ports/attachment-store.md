@@ -94,9 +94,11 @@ file picker / drag-drop surface before bytes reach the AttachmentStore:
 
 ## Form-policy gate
 
-The default + stub composition's `getFormRuntimePolicy` walks the loaded
-definition for any field whose `dataType === 'attachment'`. If at least one
-is present, the form's policy declares `fileUpload: 'required'`. The
+The default + stub composition's `formRuntimePolicyExtractor` (specifically
+the `AttachmentRequirementExtractor` reference adapter, promoted to the
+`FormRuntimePolicyExtractor` port at FW-0066) walks the loaded definition
+for any field whose `dataType === 'attachment'`. If at least one is
+present, the form's policy declares `fileUpload: 'required'`. The
 resolver then throws `UnsupportedRequiredFeatureError` at the form-load
 boundary if the instance cannot satisfy it, and the React shell renders the
 fileUpload-specific copy: "This form needs file uploads, but this site is

@@ -16,7 +16,7 @@ import type { FormRuntimePolicy } from '../../policy/policy-shapes.ts';
 import type { FormRuntimePolicyExtractor } from '../../ports/form-runtime-policy-extractor.ts';
 import type { FormDefinition } from '../../ports/definition-source.ts';
 
-class DemoFormPolicyExtractorImpl implements FormRuntimePolicyExtractor {
+export class DemoFormPolicyExtractor implements FormRuntimePolicyExtractor {
   extract(definition: FormDefinition): FormRuntimePolicy {
     if (definition.url === demoSampleFormUrl) {
       return { features: { respondentPlace: 'optional', status: 'optional' } };
@@ -26,12 +26,10 @@ class DemoFormPolicyExtractorImpl implements FormRuntimePolicyExtractor {
 }
 
 export function stubFormRuntimePolicyExtractor(): FormRuntimePolicyExtractor {
-  const adapter = new DemoFormPolicyExtractorImpl();
+  const adapter = new DemoFormPolicyExtractor();
   markDemoStubAdapter(adapter, {
     featureKey: 'respondentPlace',
     reason: 'demo-only URL-keyed extractor; opts the bundled sample form into the seeded runtime-feature pair',
   });
   return adapter;
 }
-
-export { DemoFormPolicyExtractorImpl as DemoFormPolicyExtractor };

@@ -15,6 +15,7 @@ const portSuites = new Map([
   ['RespondentPlaceSource', 'tests/adapter-conformance/respondent-place-source/conformance.test.ts'],
   ['StatusReader', 'tests/adapter-conformance/status-reader/conformance.test.ts'],
   ['AttachmentStore', 'tests/adapter-conformance/attachment-store/conformance.test.ts'],
+  ['FormRuntimePolicyExtractor', 'tests/adapter-conformance/form-runtime-policy-extractor/conformance.test.ts'],
 ]);
 const stubPortsByPath = new Map([
   ['src/adapters/stub/definition-source.ts', 'DefinitionSource'],
@@ -25,6 +26,7 @@ const stubPortsByPath = new Map([
   ['src/adapters/stub/respondent-place-source.ts', 'RespondentPlaceSource'],
   ['src/adapters/stub/status-reader.ts', 'StatusReader'],
   ['src/adapters/stub/attachment-store.ts', 'AttachmentStore'],
+  ['src/adapters/stub/form-runtime-policy-extractor.ts', 'FormRuntimePolicyExtractor'],
 ]);
 const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/respondent-place-source.ts', 'unavailableRespondentPlaceSource'],
@@ -40,6 +42,7 @@ const requiredHarnessExports = [
   'defineRespondentPlaceSourceConformance',
   'defineStatusReaderConformance',
   'defineAttachmentStoreConformance',
+  'defineFormRuntimePolicyExtractorConformance',
 ];
 const requiredReadmePhrases = [
   'formspec-web/adapter-conformance',
@@ -214,7 +217,7 @@ function portImplementedBy(classHeader) {
   }
   return (
     implementsMatch[1].match(
-      /\b(DefinitionSource|DraftStore|SubmitTransport|IdentityProvider|NotificationDelivery|RespondentPlaceSource|StatusReader)\b/,
+      /\b(DefinitionSource|DraftStore|SubmitTransport|IdentityProvider|NotificationDelivery|RespondentPlaceSource|StatusReader|FormRuntimePolicyExtractor)\b/,
     )?.[1] ?? null
   );
 }

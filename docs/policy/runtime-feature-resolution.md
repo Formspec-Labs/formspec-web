@@ -12,8 +12,9 @@ resolved profile; it never inspects raw instance, org, or form policy.
 2. **Org runtime policy** — `OrgRuntimePolicy`, one of
    `'forbidden' | 'allowed' | 'default-on' | 'required'` per feature key.
 3. **Form runtime policy** — extracted from the loaded `FormDefinition` via
-   `composition.getFormRuntimePolicy(definition)`, one of
-   `'forbidden' | 'optional' | 'required'` per feature key.
+   `composition.formRuntimePolicyExtractor.extract(definition)` (the
+   `FormRuntimePolicyExtractor` port — promoted from a closure-typed slot at
+   FW-0066), one of `'forbidden' | 'optional' | 'required'` per feature key.
 
 ## Feature keys
 
@@ -69,7 +70,7 @@ const profile = resolveRuntimeFeatures({
   mode: 'production',
   instance: composition.instanceCapabilities,
   org: composition.orgRuntimePolicy,
-  form: composition.getFormRuntimePolicy(definition),
+  form: composition.formRuntimePolicyExtractor.extract(definition),
 });
 ```
 
@@ -180,12 +181,16 @@ verify the recompute path before shipping the new key.
    tripwire test at
    `tests/app/runtime-feature-locale-recompute.test.tsx` will start
    failing and must be updated with a real recompute assertion.
-6. If the feature reads from the form definition, supply a
-   `getFormRuntimePolicy` extractor that maps the form's runtime-policy
-   field to the resolver shape. (When the first non-trivial extractor
-   lands, promote the closure to a full `FormRuntimePolicyExtractor` port
-   with conformance fixtures — flagged HIGH-1 in the 2026-05-23 scout
-   architecture review.)
+6. If the feature reads from the form definition, author a
+   `FormRuntimePolicyExtractor` adapter (likely in
+   `src/adapters/composing/form-runtime-policy-extractor.ts`) that maps the
+   form's runtime-policy field to the resolver shape, and add it to the
+   composition root's `formRuntimePolicyExtractor` slot — typically by
+   appending it to the existing `CompositeFormRuntimePolicyExtractor` array
+   so the new extractor composes with the attachment-field walker + any
+   prior key's extractor. Register the adapter in the conformance suite at
+   `tests/adapter-conformance/form-runtime-policy-extractor/conformance.test.ts`
+   with a fixture definition that exercises its happy path.
 7. Add fixture cases under `tests/policy-resolution/cases/` covering
    required / optional / forbidden / default-on / policy-conflict for
    the new key.
@@ -197,7 +202,8 @@ the FW-0065 implementation:
 
 - `instanceCapabilities: InstanceCapabilities`
 - `orgRuntimePolicy: OrgRuntimePolicy`
-- `getFormRuntimePolicy: (definition) => FormRuntimePolicy`
+- `formRuntimePolicyExtractor: FormRuntimePolicyExtractor` (promoted from
+  a closure-typed slot at FW-0066; the closure form is gone, not aliased)
 
 An adopter forking the composition root **will** see `tsc --noEmit`
 errors until they declare all three. The minimum migration that
@@ -205,10 +211,10 @@ preserves current behavior:
 
 ```ts
 import type {
-  FormRuntimePolicy,
   InstanceCapabilities,
   OrgRuntimePolicy,
 } from 'formspec-web/policy';
+import type { FormRuntimePolicyExtractor } from 'formspec-web/ports';
 
 const composition: Composition = {
   // ...existing fields...
@@ -222,12 +228,24 @@ const composition: Composition = {
   // Default form-policy extractor returns no requirements — features
   // resolve to `not-requested` unless the form opts in. To preserve
   // pre-FW-0065 behavior (panel always rendered), opt the form into
-  // both seeded features:
-  getFormRuntimePolicy: (): FormRuntimePolicy => ({
-    features: { respondentPlace: 'optional', status: 'optional' },
-  }),
+  // both seeded features via a small extractor instance:
+  formRuntimePolicyExtractor: {
+    extract: () => ({
+      features: { respondentPlace: 'optional', status: 'optional' },
+    }),
+  } satisfies FormRuntimePolicyExtractor,
 };
 ```
+
+The shipped reference adapters live in
+`src/adapters/composing/form-runtime-policy-extractor.ts`
+(`EmptyFormRuntimePolicyExtractor`, `AttachmentRequirementExtractor`,
+`CompositeFormRuntimePolicyExtractor`) and
+`src/adapters/stub/form-runtime-policy-extractor.ts`
+(`stubFormRuntimePolicyExtractor` — the demo-form URL-keyed opt-in,
+marked `DEMO_STUB_ADAPTER`). Compose them with
+`CompositeFormRuntimePolicyExtractor` instead of authoring inline
+closures.
 
 If you wire the unavailable* sentinel adapters, set the declarations to
 `'unavailable'` and the assertion will pass. If you wire real production
@@ -333,10 +351,14 @@ available." copy.
 ## Worked example: the in-form upload affordance as a required capability (FW-0033 slice 1)
 
 `fileUpload` is the first feature key driven by **definition introspection**
-rather than literal route synthesis. The composition's `getFormRuntimePolicy`
-walks the loaded `FormDefinition` for any field with `dataType ===
-'attachment'`. If at least one is present, the form's policy declares
-`fileUpload: 'required'`; otherwise the key is absent from the form policy.
+rather than literal route synthesis. The composition's
+`formRuntimePolicyExtractor` (specifically the
+`AttachmentRequirementExtractor` reference adapter at
+`src/adapters/composing/form-runtime-policy-extractor.ts`, promoted to the
+`FormRuntimePolicyExtractor` port at FW-0066) walks the loaded
+`FormDefinition` for any field with `dataType === 'attachment'`. If at
+least one is present, the form's policy declares `fileUpload: 'required'`;
+otherwise the key is absent from the form policy.
 
 The instance × org pair drives the form-load outcome:
 
@@ -362,6 +384,6 @@ under `tests/adapter-conformance/attachment-store/` enforces the contract.
 
 This pattern generalizes for any future feature key whose form policy is
 derived from definition content (e.g., a `payment` key derived from the
-presence of fee-bearing fields). The walker stays inline in
-`getFormRuntimePolicy` until FW-0066 promotes the closure to a port with
-conformance fixtures.
+presence of fee-bearing fields). New extractors land as
+`FormRuntimePolicyExtractor` adapters and compose into the composition's
+`CompositeFormRuntimePolicyExtractor` array.
