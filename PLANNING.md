@@ -193,6 +193,8 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Done:** `Composition.getFormRuntimePolicy(definition) => FormRuntimePolicy` is promoted to a named `FormRuntimePolicyExtractor` port with an `adapter-conformance` suite (per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md)). The inline TODO in `src/composition/types.ts` is removed; `docs/policy/runtime-feature-resolution.md` updates to describe the port rather than the function-typed slot. Trigger: the moment the first feature ADR ships a non-trivial extractor — anything more than `() => ({ features: {} })` or a URL-keyed literal switch. **Non-form-surface accommodation (per [web ADR-0011](thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md) §"Non-form surface synthesis" addendum, ratified upstream from FW-0039 arch-review F-1 + independent arch-review M-1):** the port shape MUST accommodate non-form-surface consumers like `StatusRuntime` (`src/app/StatusRuntime.tsx:55-62`) which synthesize their request at the route boundary without a `FormDefinition`. Option A: the port accepts a second-shape "route-derived" request alongside the "definition-derived" request. Option B: non-form surfaces continue to bypass the port and assert the request literally. Pick when the trigger fires; the slice-1 literal synthesis is acceptable today because there's no port yet to bypass. The ADR-0011 addendum is the upstream authority — this row's caveat sub-bullet is the planning-side pointer.
 - **Blocked on:** no upstream block. Filed from web ADR-0011 / FW-0065 closeout — flagged HIGH-1 by both the code-review and the architecture-review of Tasks 10b-12b (the scout-review pair against the composition-coherence + seeded-callsite-gating batch; see [plan §Process notes](thoughts/plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md#deviations) for the review batches). The function-typed slot shipped because no extractor today carries logic worth conformance-testing; per ADR-0011 §Non-goals, "this ADR does not add every future feature port now." The first feature ADR with real extractor logic (e.g., a locale-conditional or definition-introspective extractor) trips this row.
 - **Taxonomy-extension trigger fired (FW-0056, 2026-05-23) but port-promotion row not pulled forward:** FW-0056 (Respondent document library + selective presentation slice 1) is the first feature ADR to extend the closed `RuntimeFeatureKey` taxonomy beyond the seeded `{respondentPlace, status}` pair — it appends `documentPresentation`. The taxonomy extension alone does NOT require the port promotion: FW-0056's literal route-synthesis pattern (`form: { features: { respondentPlace: 'optional', documentPresentation: 'optional' } }` synthesized at the route boundary) still works against the function-typed slot. The port promotion remains scheduled for the moment a feature ADR ships a non-trivial extractor — anything more than `() => ({ features: {} })` or a URL-keyed literal switch.
+- **Port-promotion trigger pulse #1 (FW-0056, 2026-05-23):** FW-0056 added the `documentPresentation` runtime-feature key but its form-policy extraction stayed on the URL-keyed literal-switch side of the threshold (`form: { features: { documentPresentation: 'optional' } }` synthesized at the `/documents` route boundary). The slot stayed function-typed; the port did not promote. This counts as **pulse #1** because the taxonomy extension is the first half of the empirical signal that a port is wanted — the second half is an extractor that introspects definition content.
+- **Port-promotion trigger pulse #2 (FW-0033, 2026-05-23):** FW-0033 (File upload slice 1) shipped `extractAttachmentRequirement(definition)` in `src/policy/extract-form-policy.ts` — the **first non-literal extractor** in the codebase. It recursively walks `definition.items` (including nested in repeating groups) for `dataType === 'attachment'` fields and is composed into the default + stub compositions' `getFormRuntimePolicy`. Combined with pulse #1, the port-promotion threshold is now empirically tripped TWICE: taxonomy has extended past the seeded pair AND an extractor has crossed the "more than a URL-keyed literal switch" line. FW-0066 is ready to schedule. Slice 1 of FW-0033 kept the extractor inline (the function-typed slot still handles the closure shape without forcing the port); the next feature row whose extractor needs conformance-test coverage should pull this refactor forward.
 - **Anti-patterns:** (none — port-promotion refactor; conformance suite shape inherits from existing port patterns under `tests/adapter-conformance/`).
 
 ### FW-0067 — Cross-case throughput strip on the /status page
@@ -218,6 +220,56 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Consumes ports:** likely a new `ObligationsPreferencesStore` port (mute / batch / escalate state) and the XS-2 token-bag adapter family for cross-issuer fan-out — port shapes ratified per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) when this row's consumer code lands.
 - **Blocked on:** XS-2 implementation (client-side multi-tenant token bag per stack-root ADR-0068 D-1 + D-3 — see `thoughts/specs/2026-05-22-upstream-extension-queue.md`) for the cross-issuer fan-out half; the affordance half (mute/batch/escalate, calendar export, notification-budget visibility) needs a per-issuer obligation-change event primitive (not yet filed — track here until the FW-0069 consumer slice scope is clear).
 - **Anti-patterns:** AP-006, AP-014.
+
+### FW-0073 — File upload slice 2: camera capture + deskew + edge detection + legibility check
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent
+- **Journey:** [J-040](JOURNEYS.md#j-040--file-upload-as-a-primary-act-not-a-side-door-load-bearing-for-regulated-work)
+- **Done:** The `FormspecWebAttachmentControl` (FW-0033 slice 1) gains an in-page camera-capture path — `getUserMedia`-backed live preview, automatic edge detection, corner-drag deskew, and a client-side legibility check (resolution / contrast / glare heuristic) that warns the respondent BEFORE submit. The receiver sees what the respondent saw. Reuses the existing `AttachmentStore` port unchanged — the captured `Blob` flows through the same `upload()` path as a file-picker pick. Honest deferred-capability copy shrinks accordingly when this lands; remove the words "Camera capture, edge detection, ..." from the fixture-pinned literal in the same commit.
+- **Blocked on:** no upstream block — slice-1 deferral per FW-0033 design §"Non-goals." Substantial client-side capture / image-processing UI is the scope reason. Possibly small optional Definition extension for `capture` hint per the original FW-0033 row (`capture: 'environment' | 'user' | 'none'`).
+- **Anti-patterns:** AP-001, AP-008, AP-013.
+
+### FW-0074 — File upload slice 2: on-device redaction
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent
+- **Journey:** [J-040](JOURNEYS.md#j-040--file-upload-as-a-primary-act-not-a-side-door-load-bearing-for-regulated-work)
+- **Done:** The respondent can redact fields that don't belong to this form BEFORE the bytes leave the device — a draw-to-redact overlay on the captured / picked image, with the redacted bytes being the only payload that reaches `AttachmentStore.upload()`. Redacted regions are irrecoverable (not metadata-flagged; the underlying pixels are overwritten). Honest deferred-capability copy shrinks accordingly when this lands.
+- **Blocked on:** no upstream block — slice-1 deferral per FW-0033 design §"Non-goals." Best landed after FW-0073 (the capture path is the natural redaction host); standalone for picked images too.
+- **Anti-patterns:** AP-001, AP-008, AP-013.
+
+### FW-0075 — File upload + document library compose: save attachment to library on upload
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent
+- **Journey:** [J-040](JOURNEYS.md#j-040--file-upload-as-a-primary-act-not-a-side-door-load-bearing-for-regulated-work) + [J-042](JOURNEYS.md#j-042--i-own-my-own-documents-and-i-decide-what-to-share) (cross-row compose)
+- **Done:** When an upload happens AND a document library is enabled on the instance (FW-0056 production wallet wired, not the slice-1 read-only library), the respondent can opt to save the uploaded attachment into their library at upload time — one checkbox on the upload row, labeled honestly ("Save a copy in your documents"). The saved entry carries the right `RespondentDocumentKind` (defaulting to `form-attachment`; the respondent can pick another). Reuses the wallet `presentationPolicies[]` shape from FW-0056. Cross-row trigger: only the compose lands here; the standalone library lives in FW-0056 and the standalone upload lives in FW-0033.
+- **Blocked on:** FW-0056 slice 2 (production VP / wallet write path — blocked on SC-4 + EXT-18 + stack-root ADR-0116 substrate). The compose cannot ship while the library is read-only.
+- **Anti-patterns:** AP-013, AP-014.
+
+### FW-0076 — File upload: resumable / chunked uploads for large files
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent
+- **Journey:** [J-040](JOURNEYS.md#j-040--file-upload-as-a-primary-act-not-a-side-door-load-bearing-for-regulated-work)
+- **Done:** The `AttachmentStore` port gains a streaming / chunked variant (or a sibling port `ResumableAttachmentStore` per web ADR-0009 narrow-port discipline) so multi-MB attachments survive flaky networks and tab reloads. Slice 1 `upload(blob)` stays — large-file flow upgrades to the resumable shape when the adopter wires it. Progress indicator on the upload row reports byte-level progress (vs slice 1's binary in-flight/done). Reference adapters (S3 multipart, tus-protocol, browser-streams) land alongside the port shape per the adopter-shaped port pattern.
+- **Blocked on:** no upstream block — slice-1 deferral. Port-shape ratification follows web ADR-0009 §"Not in the constitutional inventory" — ratified as its own ADR when this row's consumer code lands. Coordinates with the EXT-34 wire-format ratification (resumable refs may differ).
+- **Anti-patterns:** AP-008.
+
+### FW-0077 — Demo form attachment field (gated on refresh-surviving demo store)
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent
+- **Journey:** [J-040](JOURNEYS.md#j-040--file-upload-as-a-primary-act-not-a-side-door-load-bearing-for-regulated-work)
+- **Done:** The OSS reference demo composition's example form gains an `attachment` field so contributors / evaluators can exercise the upload path end-to-end without writing a fixture. Gated on a demo store that survives page refresh — slice 1's `stubAttachmentStore()` is in-memory only, so a demo form with an attachment field would mislead the moment the respondent reloaded. Either (a) the demo stub gains an IndexedDB / localStorage backing (small new adapter — keep the conformance contract intact), or (b) the demo composition wires a refresh-surviving reference adapter when one ships under FW-0073 / FW-0076. Field uses the existing `attachment` dataType through `FormspecWebAttachmentControl` — no new component work.
+- **Blocked on:** no upstream block — slice-1 deferral per FW-0033 design §"Demo form posture." Either persistent demo store (small adapter) or alignment with a production reference adapter landing under sibling FW-0073 / FW-0076.
+- **Anti-patterns:** AP-008.
 
 ### FW-0002 — Trust Center browseable without sign-in
 
@@ -427,15 +479,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Done:** The platform gives senders the means to write notifications a recipient can verify before clicking — case reference visible in the email body, paper-letter QR resolving to a sender-attested confirmation page on the public verifier, sender domain matching the issuer's published list.
 - **Blocked on:** queue SC-1 (Notification Template Sidecar) + cryptographic substrate (the verifier page itself).
 
-### FW-0033 — File upload as a primary act
-
-- **Phase:** Post-MVP
-- **Status:** open
-- **Persona:** Respondent
-- **Journey:** [J-040](JOURNEYS.md#j-040--file-upload-as-a-primary-act-not-a-side-door-load-bearing-for-regulated-work)
-- **Done:** Capture from the phone camera with deskew, edge detection, and a legibility check. The user sees what the receiver will see *before* it sends. The user can redact fields that don't belong to this form. Each upload is labeled with which question it answers and why.
-- **Blocked on:** no upstream block — primitives compose cleanly per stack-root ADR-0072 (formspec `attachment` field-type + `stack-common-object-store` + trellis attestation). Post-MVP for scope (substantial client-side capture/deskew/redaction UI). Possibly small optional Definition extension for `capture` hint.
-- **Anti-patterns:** AP-001, AP-008, AP-013.
+### FW-0033 — *(closed as live (slice 1); see [## Closed](#closed) — slice 2 open as FW-0073..FW-0077; EXT-34 filed for `AttachmentRef` + `IntakeHandoff` wire-format ratification)*
 
 ### FW-0034 — Honest-correction path on the receipt chain
 
