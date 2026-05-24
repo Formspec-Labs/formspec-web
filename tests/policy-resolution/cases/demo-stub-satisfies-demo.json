@@ -6,10 +6,13 @@
     "respondentPlace": "demo-stub",
     "status": "demo-stub",
     "documentPresentation": "unavailable",
-    "fileUpload": "unavailable"
+    "fileUpload": "unavailable",
+    "crossIssuerHistory": "demo-stub"
   },
   "org": {
-    "features": {}
+    "features": {
+      "crossIssuerHistory": "allowed"
+    }
   },
   "form": {
     "features": {

@@ -6,14 +6,16 @@
     "respondentPlace": "demo-stub",
     "status": "demo-stub",
     "documentPresentation": "unavailable",
-    "fileUpload": "demo-stub"
+    "fileUpload": "demo-stub",
+    "crossIssuerHistory": "demo-stub"
   },
   "org": {
     "features": {
       "respondentPlace": "allowed",
       "status": "allowed",
       "documentPresentation": "allowed",
-      "fileUpload": "allowed"
+      "fileUpload": "allowed",
+      "crossIssuerHistory": "allowed"
     }
   },
   "form": {
@@ -23,7 +25,9 @@
   },
   "expect": {
     "kind": "profile",
-    "enabled": ["fileUpload"],
+    "enabled": [
+      "fileUpload"
+    ],
     "disabled": {
       "respondentPlace": "not-requested",
       "status": "not-requested",

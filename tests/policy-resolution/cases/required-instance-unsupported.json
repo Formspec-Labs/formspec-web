@@ -6,10 +6,13 @@
     "respondentPlace": "available",
     "status": "unavailable",
     "documentPresentation": "unavailable",
-    "fileUpload": "unavailable"
+    "fileUpload": "unavailable",
+    "crossIssuerHistory": "unavailable"
   },
   "org": {
-    "features": {}
+    "features": {
+      "crossIssuerHistory": "allowed"
+    }
   },
   "form": {
     "features": {

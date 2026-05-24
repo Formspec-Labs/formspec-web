@@ -6,14 +6,16 @@
     "respondentPlace": "available",
     "status": "available",
     "documentPresentation": "available",
-    "fileUpload": "unavailable"
+    "fileUpload": "unavailable",
+    "crossIssuerHistory": "unavailable"
   },
   "org": {
     "features": {
       "respondentPlace": "allowed",
       "status": "allowed",
       "documentPresentation": "forbidden",
-      "fileUpload": "allowed"
+      "fileUpload": "allowed",
+      "crossIssuerHistory": "allowed"
     }
   },
   "form": {
