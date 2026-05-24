@@ -194,6 +194,17 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Blocked on:** no upstream block. Filed from web ADR-0011 / FW-0065 closeout — flagged HIGH-1 by both the code-review and the architecture-review of Tasks 10b-12b (the scout-review pair against the composition-coherence + seeded-callsite-gating batch; see [plan §Process notes](thoughts/plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md#deviations) for the review batches). The function-typed slot shipped because no extractor today carries logic worth conformance-testing; per ADR-0011 §Non-goals, "this ADR does not add every future feature port now." The first feature ADR with real extractor logic (e.g., a locale-conditional or definition-introspective extractor) trips this row.
 - **Anti-patterns:** (none — port-promotion refactor; conformance suite shape inherits from existing port patterns under `tests/adapter-conformance/`).
 
+### FW-0067 — Cross-case throughput strip on the /status page
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent
+- **Journey:** [J-021](JOURNEYS.md#j-021--i-hit-submit-where-is-it-now-and-what-do-i-owe-next) (the "actual recent throughput" half)
+- **Done:** The `/status?case={urn}` page (FW-0039 slice 1) shows a workflow-scoped throughput strip drawn from the EXT-28 projection — "Most decisions on this workflow have been issued within X days over the last 90 days (N cases)." When the projection is empty or below the minimum-sample threshold, the page continues to render the FW-0039 slice 1 "Timing for similar applications is not yet available" copy honestly. Strip text + threshold behavior is fixture-pinned so future copy edits trip the assertions.
+- **Consumes ports:** likely a new `WorkflowThroughputReader` port (or an extension on `StatusReader`) — port-shape ratified per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) when this row's consumer code lands.
+- **Blocked on:** EXT-28 (WOS applicant API recent-throughput projection — see `thoughts/specs/2026-05-22-upstream-extension-queue.md`).
+- **Anti-patterns:** AP-006, AP-013.
+
 ### FW-0002 — Trust Center browseable without sign-in
 
 - **Phase:** Post-MVP
@@ -459,18 +470,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Done:** Amending a submission is a recognized act on the same receipt chain — not a delete, not a silent overwrite. Withdrawals are first-class within the window the receiving agency permits. A signer can attach a dispute note to a record they signed, undeletable by the counterparty.
 - **Blocked on:** queue EXT-5 (`response.withdrawn`, `response.dispute-attached`, `consent.revoked` events).
 
-### FW-0039 — Post-submit status surface with realistic timing
-
-- **Phase:** Post-MVP
-- **Status:** open
-- **Persona:** Respondent
-- **Journey:** [J-021](JOURNEYS.md#j-021--i-hit-submit-where-is-it-now-and-what-do-i-owe-next)
-- **Done:** After submit, the user has a real status page: received, queued, in review with which unit, decision drafted, issued — with timing drawn from actual recent throughput, not vendor estimates. Reachable without an account.
-- **Consumes ports:** `StatusReader` (returns case-status shape conforming to the `work-spec/schemas/api/applicant.schema.json` contract), ratified by [web ADR-0010](thoughts/adr/0010-respondent-place-trust-model.md) when the FW-0039 consumer slice landed.
-- **Progress (stub-backed DI slice 2026-05-23):** `StatusReader` is ratified as a WOS applicant API resource port with a stub adapter and conformance suite. `RespondentRuntime` reads WOS-shaped status feedback for submissions referenced by the Respondent Library sidecar and renders it in the respondent-place panel.
-- **Deviations:** The current surface is an in-form status/history panel, not the standalone no-account status page with realistic throughput timing. The full production page remains blocked on a real applicant-API reference adapter.
-- **Blocked on:** at least one production `StatusReader` reference adapter implementation. The intended formspec-stack adapter is `ProxiedApplicantStatusAdapter` (proxies through formspec-server to WOS — see [web ADR-0008](thoughts/adr/0008-reference-deployment-composition.md)), but it is not shipped yet; production composition fails closed with an unavailable sentinel until `workspec-server`'s applicant-API implementation and the formspec-server proxy land. Adopters running their own case-management backend wire a different adapter against the same `StatusReader` port.
-- **Anti-patterns:** AP-006, AP-013.
+### FW-0039 — *(closed as live (slice 1); see [## Closed](#closed); follow-on FW-0067 for cross-case throughput)*
 
 ### FW-0040 — Embed: form lives in the host's page
 
@@ -721,3 +721,18 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Consumes ports:** none (pure resolver) — but extends the Composition surface every port consumer ultimately reads.
 - **Closed:** scaffold shipped in [`thoughts/plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md`](thoughts/plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md) (see plan §Deviations for execution log + deferred-row triage). All 8 deferred rows triaged; one filed as FW-0066 (FormRuntimePolicyExtractor port promotion), seven closed wontfix with trigger-anchored rationale.
 - **Note:** Closes the ADR-0011 Follow-on Work items (RuntimeFeatureResolver design/impl, typed errors, plain-language rendering, fixtures) AND closes Codex red-team findings on CI inclusion, seeded-callsite gating, and demo-stub provenance. Per ADR-0011 Non-goals, no canonical JSON schema for policy documents is defined here. Per [web ADR-0009](thoughts/adr/0009-hexagonal-architecture-ports-and-adapters.md) the resolver lives in `src/policy/` (pure core).
+
+### FW-0039 — Post-submit status surface (slice 1) — standalone /status route + accountless URN access
+
+- **Phase:** Post-MVP
+- **Status:** live (slice 1; cross-case throughput deferred to FW-0067 + EXT-28)
+- **Persona:** Respondent
+- **Journey:** [J-021](JOURNEYS.md#j-021--i-hit-submit-where-is-it-now-and-what-do-i-owe-next)
+- **What slice 1 landed:** Standalone `/status?case={WosResourceUrn}` route reachable without an account. `StatusRuntime` renders the WOS applicant API `ApplicantCaseDetail` timeline + open tasks + AI-involvement disclosure + per-case timing strip with **prominent** "Timing for similar applications is not yet available on this site." framing (literal copy fixture-pinned). Confirmation panel hands the respondent a "Track this application" link when the submit transport returns a `caseUrn`. Vocabulary firewall preserved — every WOS enum routes through `labelFromToken`, no case URN ever appears in body copy. Identity boot bypassed on the `/status` route — the page composes ONLY: runtime profile resolution + `StatusReader.readStatus` + render. No `IdentityProvider.authenticate`/`discover`, no draft store, no submit transport, no formspec-engine init (proved by `tests/app/status-runtime.test.tsx#identity discipline`). Per-route runtime-feature gate reuses the `status` key (no new key, no taxonomy extension); `StatusRuntime` synthesizes `form: { features: { status: 'optional' } }` at the route boundary — stays OPTIONAL, never required (per [web ADR-0011](thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md) §Failure Semantics + FW-0039 arch-review F-4). Plain "Status not shared" copy renders for every disabled-cause branch (`org-forbidden`, `form-forbidden`, `optional-no-instance`) per FW-0065's M-3 plumbing extended to a non-form surface. Stage-mapping respects WOS lifecycle semantics — `lifecycle-changed → completed/terminated` correctly lights the `Closed` cell (code-review F-4).
+- **Done (slice 1):** `tests/app/status-runtime.test.tsx` (17 cases including literal copy pins + stage-mapping correctness + identity discipline + policy-error path + adapter-error path); `tests/app/app-routing.test.tsx` (2 cases); `tests/app/status-route.test.ts` (6 cases including F-1 bare-prefix guard); `tests/app/confirmation-panel.test.tsx` (4 cases); `tests/adapters/stub-submit-transport.test.ts` (3 cases pinning the new `caseUrn` field); `src/app/format.test.ts` (8 cases); extended `tests/e2e/placeholder-a11y.spec.ts` (submit→click-through + direct-status route, both axe-clean); `docs/ports/status-reader.md` (URN-as-bearer-token semantics, disabled-status short-circuit, throughput deferral); `docs/policy/runtime-feature-resolution.md` (`/status` worked example with instance×org verdict table). `npm run ci` green. EXT-28 filed in `thoughts/specs/2026-05-22-upstream-extension-queue.md` as the load-bearing upstream dependency for the throughput half.
+- **User-visible behavior change:** post-submit confirmation now offers a bookmarkable "Track this application" link instead of dead-ending at a reference number. Reopening that link in any browser, without signing in, shows the live application status page with the five-stage strip, per-case timing, what-you-owe-next ribbon, and (when present) AI-involvement disclosure.
+- **Consumes ports:** `StatusReader` (existing, no extension). `SubmitTransport.SubmitConfirmation` gained an optional `caseUrn?: WosResourceUrn` field — HTTP transport untouched per arch-review F-7.
+- **Plan:** [`thoughts/plans/2026-05-23-fw-0039-post-submit-status-surface.md`](thoughts/plans/2026-05-23-fw-0039-post-submit-status-surface.md).
+- **Design:** [`thoughts/specs/2026-05-23-fw-0039-post-submit-status-surface-design.md`](thoughts/specs/2026-05-23-fw-0039-post-submit-status-surface-design.md).
+- **Release gaps named:** (a) cross-case recent-throughput projection — see FW-0067 + EXT-28; without it the timing strip honestly shows only per-case data and the "not yet available" framing. (b) Production `ProxiedApplicantStatusAdapter` — the same one FW-0039's original `Blocked on:` named; until it ships, the production composition wires `unavailableStatusReader` and the `/status` route honestly renders "Status not shared. This site does not provide application status." (c) URN-as-possession-factor model — adapter-side rate limiting + uniform not-found copy are load-bearing for the slice's accountless-access honesty contract (documented in `docs/ports/status-reader.md`); URN expiry / magic-link rotation / browser-bound proof remain FW-0054's job.
+- **Note:** Closes web ADR-0011 §Failure Semantics for an OPTIONAL non-form surface — the design + resolver permit it cleanly without forcing a `required` form-policy synthesis (arch-review F-4). Consumes web ADR-0010 §DI shape `StatusReader` port without extension. The route-as-request `optional` synthesis is the worked example pattern for any future post-MVP surface that consumes a feature key as OPTIONAL.

@@ -194,3 +194,4 @@ This extends web ADR-0009 and ADR-0010:
 - web ADR-0010 - respondent place trust model and DI consumption
 - stack-root ADR-0068 - tenant and scope composition
 - Implementation plan: [`thoughts/plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md`](../plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md) — landed FW-0065 scaffolding
+- Implementation plan: [`thoughts/plans/2026-05-23-fw-0039-post-submit-status-surface.md`](../plans/2026-05-23-fw-0039-post-submit-status-surface.md) — worked example of the `status` capability key driving an OPTIONAL non-form surface (FW-0039 slice 1: `/status?case={WosResourceUrn}` route)
