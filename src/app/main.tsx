@@ -1,7 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import rootConfig from '../../formspec.config.ts';
-import { createDefaultComposition } from '../composition/default.ts';
 import { readRuntimeConfig, resolveActiveConfig } from '../config/runtime.ts';
 import { applyBrandTheme } from '../theme/theme.ts';
 import '@formspec-org/layout/formspec-default.css';
@@ -9,9 +8,13 @@ import '../theme/upstream/adapters/tailwind-formspec-core.css';
 import { App } from './App.tsx';
 import './app.css';
 import { CompositionProvider } from './CompositionProvider.tsx';
+import { chooseComposition } from './main-helpers.ts';
 
 const activeConfig = resolveActiveConfig(rootConfig, readRuntimeConfig());
-const composition = createDefaultComposition(activeConfig);
+const composition = chooseComposition({
+  href: window.location.href,
+  config: activeConfig,
+});
 const rootEl = document.getElementById('root');
 if (!rootEl) {
   throw new Error('Root element #root not found');
