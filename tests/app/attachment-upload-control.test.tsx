@@ -81,7 +81,9 @@ function makeNode(props: Record<string, unknown> = {}): LayoutNode {
 }
 
 async function fileFromBytes(bytes: Uint8Array, name: string, type = 'application/pdf'): Promise<File> {
-  return new File([bytes], name, { type });
+  // Cast through ArrayBufferLike → BlobPart to avoid TS DOM lib's
+  // SharedArrayBuffer-vs-ArrayBuffer mismatch (the runtime accepts both).
+  return new File([bytes as unknown as BlobPart], name, { type });
 }
 
 let root: Root | undefined;

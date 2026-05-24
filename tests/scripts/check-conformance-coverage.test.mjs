@@ -278,6 +278,15 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/attachment-store/conformance.test.ts',
+    suiteText(
+      'AttachmentStore',
+      [['stub AttachmentStore conformance', 'stubAttachmentStore']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -291,11 +300,16 @@ function writeAdapterFiles(root, options) {
     ['src/adapters/stub/notification-delivery.ts', 'export function stubNotificationDelivery() {}'],
     ['src/adapters/stub/respondent-place-source.ts', 'export function stubRespondentPlaceSource() {}'],
     ['src/adapters/stub/status-reader.ts', 'export function stubStatusReader() {}'],
+    ['src/adapters/stub/attachment-store.ts', 'export function stubAttachmentStore() {}'],
     [
       'src/adapters/unavailable/respondent-place-source.ts',
       'export function unavailableRespondentPlaceSource() {}',
     ],
     ['src/adapters/unavailable/status-reader.ts', 'export function unavailableStatusReader() {}'],
+    [
+      'src/adapters/unavailable/attachment-store.ts',
+      'export function unavailableAttachmentStore() {}',
+    ],
     [
       'src/adapters/http/definition-source.ts',
       'export class HttpDefinitionSource implements DefinitionSource {}',
@@ -331,10 +345,12 @@ function defaultComposition() {
   return [
     'import { unavailableRespondentPlaceSource } from "../adapters/unavailable/respondent-place-source.ts";',
     'import { unavailableStatusReader } from "../adapters/unavailable/status-reader.ts";',
+    'import { unavailableAttachmentStore } from "../adapters/unavailable/attachment-store.ts";',
     'export function createDefaultComposition() {',
     '  return {',
     '    respondentPlaceSource: unavailableRespondentPlaceSource(),',
     '    statusReader: unavailableStatusReader(),',
+    '    attachmentStore: unavailableAttachmentStore(),',
     '  };',
     '}',
   ].join('\n');
@@ -350,6 +366,7 @@ function publicIndex() {
     '  defineNotificationDeliveryConformance,',
     '  defineRespondentPlaceSourceConformance,',
     '  defineStatusReaderConformance,',
+    '  defineAttachmentStoreConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }

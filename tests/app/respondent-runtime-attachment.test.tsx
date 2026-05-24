@@ -162,8 +162,12 @@ describe('RespondentRuntime attachment integration (FW-0033)', () => {
     });
     await waitForText('lease.pdf');
 
-    // 1. Adapter received the bytes through the port.
-    const stub = composition.attachmentStore as { getStoredBytes(uri: string): Blob | undefined };
+    // 1. Adapter received the bytes through the port. Reach the stub-only
+    // helper through `unknown` since AttachmentStore itself does not declare
+    // `getStoredBytes` (it's a stub-adapter convenience).
+    const stub = composition.attachmentStore as unknown as {
+      getStoredBytes(uri: string): Blob | undefined;
+    };
     expect(stub.getStoredBytes('attachment:demo-1')).toBeDefined();
 
     // 2. The engine value at the attachment path JSON-round-trips to an
