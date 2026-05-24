@@ -3,7 +3,7 @@ import {
   noopDraftStore,
   noopIdentityProvider,
   noopSubmitTransport,
-} from '../adapters/noop-for-status-route/index.ts';
+} from '../adapters/noop-for-narrowed-route/index.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../adapters/stub/draft-store.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
@@ -83,9 +83,9 @@ export function createStubObligationsRouteComposition(): Composition {
   const composition: Composition = {
     mode: 'demo',
     initialDefinitionUrl: 'about:not-constructed#fw-0055',
-    definitionSource: noopDefinitionSource(),
-    draftStore: noopDraftStore(),
-    submitTransport: noopSubmitTransport(),
+    definitionSource: noopDefinitionSource('/obligations'),
+    draftStore: noopDraftStore('/obligations'),
+    submitTransport: noopSubmitTransport('/obligations'),
     identityProvider: stubIdentityProvider(),
     respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
     statusReader: stubStatusReader([
@@ -117,10 +117,10 @@ export function createStubStatusRouteComposition(): Composition {
   const composition: Composition = {
     mode: 'demo',
     initialDefinitionUrl: 'about:not-constructed#fw-0068',
-    definitionSource: noopDefinitionSource(),
-    draftStore: noopDraftStore(),
-    submitTransport: noopSubmitTransport(),
-    identityProvider: noopIdentityProvider(),
+    definitionSource: noopDefinitionSource('/status'),
+    draftStore: noopDraftStore('/status'),
+    submitTransport: noopSubmitTransport('/status'),
+    identityProvider: noopIdentityProvider('/status'),
     respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
     statusReader: stubStatusReader([
       ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],

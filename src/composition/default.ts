@@ -13,7 +13,7 @@ import {
   noopDraftStore,
   noopIdentityProvider,
   noopSubmitTransport,
-} from '../adapters/noop-for-status-route/index.ts';
+} from '../adapters/noop-for-narrowed-route/index.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
@@ -105,7 +105,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
  *
  * Wires the production `statusReader` + the runtime-profile / policy slots
  * StatusRuntime reads; every other port is a noop that throws on call (see
- * `src/adapters/noop-for-status-route/`). Constructed when `main.tsx` parses
+ * `src/adapters/noop-for-narrowed-route/`). Constructed when `main.tsx` parses
  * the URL as a `/status?case=...` route, so the production HTTP / OIDC /
  * anonymous-session machinery never boots on that surface.
  *
@@ -129,10 +129,10 @@ export function createDefaultStatusRouteComposition(
   const composition: Composition = {
     mode: 'production',
     initialDefinitionUrl: 'about:not-constructed#fw-0068',
-    definitionSource: noopDefinitionSource(),
-    draftStore: noopDraftStore(),
-    submitTransport: noopSubmitTransport(),
-    identityProvider: noopIdentityProvider(),
+    definitionSource: noopDefinitionSource('/status'),
+    draftStore: noopDraftStore('/status'),
+    submitTransport: noopSubmitTransport('/status'),
+    identityProvider: noopIdentityProvider('/status'),
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
     instanceCapabilities: {
@@ -187,9 +187,9 @@ export function createDefaultObligationsRouteComposition(
   const composition: Composition = {
     mode: 'production',
     initialDefinitionUrl: 'about:not-constructed#fw-0055',
-    definitionSource: noopDefinitionSource(),
-    draftStore: noopDraftStore(),
-    submitTransport: noopSubmitTransport(),
+    definitionSource: noopDefinitionSource('/obligations'),
+    draftStore: noopDraftStore('/obligations'),
+    submitTransport: noopSubmitTransport('/obligations'),
     identityProvider: identityBinding.provider,
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
