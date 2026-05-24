@@ -235,3 +235,32 @@ feature key as an OPTIONAL capability uses the same shape.
 `StatusRuntime` is the worked example; the form-load boundary in
 `RespondentRuntime` remains the only place `required`-policy semantics
 apply.
+
+## Worked example: the /obligations route as an optional non-form surface (FW-0055 slice 1)
+
+The `/obligations` route (FW-0055 slice 1) is the second non-form surface
+to consume the same pattern. It reads the `respondentPlace` capability
+key — already seeded per web ADR-0011 §"Feature Ownership Table"
+(which lists "Obligations stream" as a consumer of the respondent-place
+instance capability + token bag, not a new key). `ObligationsRuntime`
+synthesizes `form: { features: { respondentPlace: 'optional' } }` at the
+route boundary — never `required`. The route IS the user's opt-in.
+
+The instance × org pair drives the rendered verdict:
+
+| Mode | Instance | Org | Page renders |
+|---|---|---|---|
+| any | `available` | `allowed` / `default-on` / `required` | "What you owe" dashboard with sort + section grouping + cross-sender header. |
+| any | `available` | `forbidden` | "Obligations are not shared. This sender does not share an obligations view here." |
+| any | `unavailable` | any | "Obligations are not shared. This site does not provide an obligations view." |
+| `demo` | `demo-stub` | `allowed` | Dashboard with demo data. |
+| `production` | `demo-stub` | any | `assertCompositionCoherence` throws at composition boot — production rejects demo stubs. |
+
+The page reuses the same disabled-cause taxonomy and the same FW-0065 M-3
+plumbing pattern `StatusRuntime` ratified. Unlike `/status`, the
+`/obligations` route is **identity-bound** (per FW-0055 design §"Why
+identity-required, not URN-keyed"): the page boots `IdentityProvider`
+discovery + authenticate before reading `RespondentPlaceSource`. The
+runtime-feature gate runs FIRST so a disabled `respondentPlace` short-
+circuits before identity is required — there is no point asking the
+respondent to sign in to see "Obligations are not shared." copy.

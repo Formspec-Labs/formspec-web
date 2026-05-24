@@ -19,3 +19,16 @@ Run the conformance suite with:
 ```bash
 npm test -- tests/adapter-conformance/respondent-place-source
 ```
+
+## Consumers
+
+Two consumers in `formspec-web`:
+
+- `RespondentPlacePanel` inside `RespondentRuntime` — surfaces obligations + files
+  + submissions next to the form-fill view (in-form context).
+- `ObligationsRuntime` at `/obligations` (FW-0055 slice 1) — standalone
+  respondent-owned dashboard, identity-bound, sorted + sender-grouped + gap-
+  honest. Reuses this port; calls no other (no `StatusReader`, no form-shaped
+  MVP ports).
+
+Both share `src/app/obligations-view.tsx` for the obligation render contract.
