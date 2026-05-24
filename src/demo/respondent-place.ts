@@ -1,4 +1,5 @@
 import type {
+  ApplicantCaseDetail,
   ApplicantStatusProjection,
   ApplicantStatusResource,
   RespondentPlaceSnapshot,
@@ -21,6 +22,50 @@ export function demoApplicantStatusResource(): ApplicantStatusResource {
     event: 'applicant-task-submitted',
     occurredAt: '2026-05-23T12:00:00.000Z',
     summary: 'Your demo intake was received and is waiting for review.',
+  };
+}
+
+export function demoApplicantCaseDetail(): ApplicantCaseDetail {
+  return {
+    summary: {
+      id: 'urn:wos:case_demo_0001',
+      workflowUrl: 'https://benefits.example.gov/workflows/benefits-adjudication',
+      lifecycleState: 'active',
+      actionNeeded: true,
+      title: 'Application for benefits adjudication',
+      createdAt: '2026-05-23T12:00:00.000Z',
+      updatedAt: '2026-05-23T15:30:00.000Z',
+    },
+    openTasks: [
+      {
+        id: 'urn:wos:task_demo_001',
+        processId: 'urn:wos:case_demo_0001',
+        kind: 'verification',
+        status: 'pending',
+        title: 'Provide additional address proof',
+        deadline: '2026-06-15T23:59:59.000Z',
+        createdAt: '2026-05-23T13:00:00.000Z',
+      },
+    ],
+    recentNotifications: [],
+    statusTimeline: [
+      {
+        event: 'case-created',
+        occurredAt: '2026-05-23T12:00:00.000Z',
+        summary: 'Application received.',
+      },
+      {
+        event: 'applicant-task-assigned',
+        occurredAt: '2026-05-23T13:00:00.000Z',
+        summary: 'Verification task assigned.',
+        taskId: 'urn:wos:task_demo_001',
+      },
+    ],
+    aiInvolvement: {
+      agentsInvolved: [{ displayName: 'Eligibility Assistant', roleInDecision: 'advisory' }],
+      narrativeRecordCount: 1,
+      humanReviewedAllAgentDecisions: true,
+    },
   };
 }
 

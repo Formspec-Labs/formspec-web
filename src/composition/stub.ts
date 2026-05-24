@@ -7,7 +7,7 @@ import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../adapters/stub/submit-transport.ts';
 import { demoSampleForm, demoSampleFormUrl } from '../demo/index.ts';
 import {
-  demoApplicantStatusResource,
+  demoApplicantCaseDetail,
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
 import {
@@ -39,7 +39,7 @@ export function createStubComposition(): Composition {
     notificationDelivery: stubNotificationDelivery(),
     respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
     statusReader: stubStatusReader([
-      ['urn:wos:case_demo_0001', demoApplicantStatusResource()],
+      ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
     ]),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
