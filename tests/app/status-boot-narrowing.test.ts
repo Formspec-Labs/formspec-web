@@ -124,14 +124,14 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.anonSession).toHaveBeenCalled();
   });
 
-  it('chooseComposition picks the status-route factory when the URL matches /status?case=urn:wos:...', () => {
+  it('chooseComposition picks the status-route factory when the URL matches /status?case=urn:wos:...', async () => {
     const composition = chooseComposition({
       href: 'http://localhost/status?case=urn:wos:case_demo_0001',
       config: productionConfig(),
     });
     // The status-route factory wires noop adapters that throw with FW-0068
-    // cite; verify by calling one.
-    expect(composition.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    // cite; verify by calling one. Awaited so the assertion is not racy.
+    await expect(composition.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
     expect(spies.httpDef).not.toHaveBeenCalled();
   });
 
