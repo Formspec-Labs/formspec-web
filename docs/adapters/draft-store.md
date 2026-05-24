@@ -24,9 +24,20 @@ save and move the local binding to that new `draft_id`. The current server
 token, so the reference web composition avoids that route for anonymous drafts
 until the server exposes a session-bound update contract (EXT-27).
 
+## Composition pairing
+
+The formspec-stack reference composition wires `HttpDraftStore` and
+`HttpSubmitTransport` together through `createHttpAdapterCohort(config)` (see
+`src/adapters/http/cohort.ts`), which shares the draft-id binding through a
+private registry captured in the cohort closure. The cohort is the wiring path;
+the standalone constructor stays viable for adopters with their own draft-id
+source (and is what the conformance suite uses). See `docs/adapters/submit-transport.md`
+for the submit-side of the pairing.
+
 Run:
 
 ```bash
 npm test -- tests/adapter-conformance/draft-store
 npm test -- tests/adapters/http/draft-store.test.ts
+npm test -- tests/adapters/http/cohort.test.ts
 ```
