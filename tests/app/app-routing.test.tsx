@@ -61,6 +61,21 @@ describe('App route selection (FW-0039 slice 1)', () => {
       ).not.toBeNull();
     });
   });
+
+  it('routes /documents to the documents runtime (FW-0056 slice 1)', async () => {
+    setHref('http://localhost/documents');
+    const composition = createStubComposition();
+    render(
+      <CompositionProvider value={composition}>
+        <App config={departmentAppProfile} />
+      </CompositionProvider>,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('heading', { name: /Your documents/i, level: 1 }),
+      ).not.toBeNull();
+    });
+  });
 });
 
 function setHref(href: string): void {
