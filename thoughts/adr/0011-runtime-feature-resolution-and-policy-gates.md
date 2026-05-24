@@ -71,6 +71,8 @@ This is a recognized synthesis pattern, not a special case: any non-form surface
 
 **Implication for FW-0066** (`FormRuntimePolicyExtractor` port promotion): when the trigger fires, the port must accommodate non-form-surface synthesis as a first-class operation — not a route-side hack. Either (a) the port accepts a second-shape "route-derived" request alongside the "definition-derived" request, or (b) non-form surfaces continue to bypass the port and assert the request literally with the same OPTIONAL-only discipline. FW-0066's row carries the choice; this addendum is the upstream authority the FW-0066 caveat sub-bullet points at.
 
+**FW-0066 closed (2026-05-24) — Option B holds.** The port promoted with the single-method `extract(definition)` shape; narrowed-route compositions wire `EmptyFormRuntimePolicyExtractor` into the slot to satisfy the type contract, and `StatusRuntime` / `ObligationsRuntime` / `DocumentsRuntime` continue to synthesize their request literally at the route boundary per this addendum. The closure-typed slot is gone (no shim) per project no-shims discipline; see [`thoughts/specs/2026-05-24-fw-0066-form-runtime-policy-extractor-port-design.md`](../specs/2026-05-24-fw-0066-form-runtime-policy-extractor-port-design.md).
+
 ### Form runtime policy
 
 Form policy is form-owned. It answers: "What does this form need?"
