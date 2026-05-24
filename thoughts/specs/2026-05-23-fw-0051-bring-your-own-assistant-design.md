@@ -44,7 +44,7 @@ The threat model is the load-bearing input. Stated explicitly so the design's su
 - The **form** does NOT trust any specific assistant. Per Assist §11.1 "MUST treat all tool input as untrusted." The Assist Provider validates every path + value before acting.
 - The **assistant** runs in the respondent's tools — locally (browser extension, in-page widget, local MCP server) OR remotely (the respondent's choice of cloud AI). The form has no visibility into nor control over the assistant beyond the Assist tool surface.
 
-**What the assistant SHOULD see (default introspection scope):** the form's Definition (per `formspec.form.describe`); the structural layout (per `formspec.field.list` returning `FieldSummary[]`); per-field metadata (per `formspec.field.describe` returning `FieldDescription` — **with `value` masked by default**, per §3.3 below); per-field help context resolved from References + Ontology sidecars (per `formspec.field.help` returning `FieldHelp`); progress state (per `formspec.form.progress`); validation state (per `formspec.form.validate` / `formspec.field.validate`).
+**What the assistant SHOULD see (default introspection scope):** the form's Definition (per `formspec.form.describe`); the structural layout (per `formspec.field.list` returning `FieldSummary[]`); per-field metadata (per `formspec.field.describe` returning `FieldDescription` — **with `value` masked by default**, per §3.2 below); per-field help context resolved from References + Ontology sidecars (per `formspec.field.help` returning `FieldHelp`); progress state (per `formspec.form.progress`); validation state (per `formspec.form.validate` / `formspec.field.validate`).
 
 **What the assistant MUST NOT see by default:** the respondent's filled-in plaintext values (returned masked in `FieldDescription.value`; the per-field reveal escalation is the unmask gate); the issuer's identity context (deployment configuration like `safetyTeamRecipients[]` per EXT-30); the respondent's identity (the form's `IdentityProvider`-bound identity is not exposed via Assist); other-party data in multi-party flows per FW-0050 §7.1 (per-party-scoping rule); cryptographic material (signing keys, HPKE recipients, audience keys).
 
@@ -55,7 +55,7 @@ The threat model is the load-bearing input. Stated explicitly so the design's su
 - **Attacker identity.** A party seeking to extract the respondent's values, manipulate the respondent's submission, or instrumentalize the assistant against the respondent. Includes: malicious browser extension authors, hostile cloud-AI providers, coercers controlling the respondent's tools, prompt-injection attacks delivered via the assistant's responses.
 - **Attacker goal.** Exfiltrate plaintext values; cause unintended writes; cause the respondent to submit a manipulated form without realizing.
 - **What the attacker observes.** Whatever the Assist tool surface exposes (default introspection scope; revealed field values that the respondent has explicitly unmasked); the form's public Definition + sidecars (these are public per `(definitionUrl, definitionVersion)` per Assist §9); the rendered DOM (subject to Assist §8 passive annotations).
-- **What the attacker cannot force.** Silent writes (Assist §4.3 (2), (3); §11.3); reads of fields the respondent has not unmasked (FW-0051 §3.3 default mask); reads of fields outside the per-party visibility set in multi-party flows (FW-0050 §7.1); reads of the form's cryptographic material; modification of validation rules (Assist §11.4 + §4.3 (4) MUST NOT suppress core validation).
+- **What the attacker cannot force.** Silent writes (Assist §4.3 (2), (3); §11.3); reads of fields the respondent has not unmasked (FW-0051 §3.2 default mask); reads of fields outside the per-party visibility set in multi-party flows (FW-0050 §7.1); reads of the form's cryptographic material; modification of validation rules (Assist §4.3 (4) MUST NOT suppress core validation).
 - **What the attacker knows.** Kerckhoffs-style — the attacker has read this design + the assist-spec; knows the per-act + per-field-reveal model; knows the masked-by-default value semantics. **The defense rests on the per-act confirm gates + per-field reveal escalation + structural-defense against silent writes**, not on the affordance being secret.
 
 ### 2.3 Three grounded scenarios
@@ -64,15 +64,15 @@ Each scenario gives: the setup, what the BYO-assistant mechanism must achieve, w
 
 **2.3.1 Respondent uses cloud-AI helper for a complex tax form.** Small-business owner filling a Schedule C. Confused by terminology. Uses a paid cloud-AI subscription. Wants the assistant to explain a field's meaning, propose a value, validate the proposal, suggest a fix.
 - **Required:** the assistant reads Definition + per-field help (References + Ontology) + validation state, proposes a value via `formspec.field.set` with `confirm: true`, the form gates the apply behind a per-act confirm surface, the respondent reviews + confirms.
-- **Design posture:** §3 framing decisions; §3.1 form-policy gate (`bringYourOwnAssistant: allowed | required`); §3.3 masked-by-default value semantics in introspection; §3.4 per-field reveal escalation for the "ask my assistant about THIS field's value" case; mutation discipline rides Assist §3.3 + §4.3 directly. **Canonical scenario; design optimizes for this.**
+- **Design posture:** §3 framing decisions; §3.1 form-policy gate (`bringYourOwnAssistant: allowed | required`); §3.2 masked-by-default value semantics in introspection; §3.3 per-field reveal escalation for the "ask my assistant about THIS field's value" case; mutation discipline rides Assist §3.3 + §4.3 directly. **Canonical scenario; design optimizes for this.**
 
 **2.3.2 Respondent uses a browser-extension assistant (WebMCP).** Blind user with a screen reader + a custom WebMCP-enabled assistant. Filing benefits. Wants the assistant to walk them field-by-field, propose values from their profile (cross-form, per Assist §6), notify validation errors in their preferred cadence.
 - **Required:** the form registers the Assist Provider tools via `navigator.modelContext.registerTool()` (Assist §7.2); the extension discovers + invokes; `requestUserInteraction()` mediates confirms; accessibility semantics coexist (the screen reader continues to read the DOM; the assistant uses the tools — both work).
-- **Design posture:** WebMCP is the canonical transport; the form's posture toggle activates the Provider; per-act confirm gates ride `requestUserInteraction()`; per-field reveal escalation is a respondent-side UI affordance the extension can trigger via tool invocation (proposed extension §3.5 + §6.2). **Canonical WebMCP scenario; design supports directly via Assist §7.2.**
+- **Design posture:** WebMCP is the canonical transport; the form's posture toggle activates the Provider; per-act confirm gates ride `requestUserInteraction()`; per-field reveal escalation is a respondent-side UI affordance the extension can trigger via tool invocation (FW-0051 §3.3 + §6.2 proposed upstream extension). **Canonical WebMCP scenario; design supports directly via Assist §7.2.**
 
 **2.3.3 Adversarial extension — data exfiltration disguised as helper.** A malicious extension installs itself, discovers the form via Mode 2 fallback (Assist §10.2), enumerates fields, attempts to exfiltrate values, attempts to submit on the respondent's behalf without confirmation.
 - **Required:** structural defenses that hold even against an adversarial Consumer with full Assist API access.
-- **Design posture:** **layered defense.** (a) Default introspection surface masks values (§3.3); the assistant sees `FieldDescription.value` as a `"(protected)"` sentinel until per-field reveal (§3.4). (b) `formspec.field.set` requires confirm gate (§3.5 binds Assist §4.3 (5) SHOULD into a runtime invariant per FW-0051); the respondent reviews + confirms before any value applies. (c) `formspec.profile.apply` with `confirm: true` is structurally required for any bulk write (Assist §3.5). (d) Prompt-injection in the assistant's response text cannot escalate — the form acts only on structured `value` payloads via `formspec.field.set`, not on the assistant's free text. (e) Per-act consent for the form-level connection (§3.5 staged grant) means the assistant cannot bootstrap silently. **Defenses hold at the structural level; the adversarial extension can ONLY do what the respondent confirms it can do. §8 documents the residual risk.**
+- **Design posture:** **layered defense.** (a) Default introspection surface masks values (§3.2); the assistant sees `FieldDescription.value` as a `"(protected)"` sentinel until per-field reveal (§3.3). (b) `formspec.field.set` requires confirm gate (§3.4 binds Assist §4.3 (5) SHOULD into a runtime invariant per FW-0051); the respondent reviews + confirms before any value applies. (c) `formspec.profile.apply` with `confirm: true` is structurally required for any bulk write (Assist §3.5). (d) Prompt-injection in the assistant's response text cannot escalate — the form acts only on structured `value` payloads via `formspec.field.set`, not on the assistant's free text. (e) Per-act consent for the form-level connection (§3.4 staged grant) means the assistant cannot bootstrap silently. **Defenses hold at the structural level; the adversarial extension can ONLY do what the respondent confirms it can do. §8 documents the residual risk.**
 
 ### 2.4 Out-of-scope threat patterns
 
@@ -101,7 +101,7 @@ Each decision: the answer first, then the rationale, then the alternative consid
 
 ### 3.2 Q2 — Value masking in introspection: default masked + per-act reveal
 
-**PROPOSAL.** `FieldDescription.value` returned from `formspec.field.describe` (Assist §4.4) is **masked by default** in the formspec-web Assist Provider implementation — the assistant sees a sentinel (e.g., `"(protected)"` or the locale's accessible-mask convention) rather than the plaintext value. The per-field reveal affordance (§3.4) is the unmask gate.
+**PROPOSAL.** `FieldDescription.value` returned from `formspec.field.describe` (Assist §4.4) is **masked by default** in the formspec-web Assist Provider implementation — the assistant sees a sentinel (e.g., `"(protected)"` or the locale's accessible-mask convention) rather than the plaintext value. The per-field reveal affordance (§3.3) is the unmask gate.
 
 **Substrate justification.** The assist-spec §4.4 defines `FieldDescription.value: unknown` without constraining its semantics; FW-0051's runtime constant narrows the contract for the formspec-web Provider implementation. The masking discipline mirrors [FW-0049 §3.3](2026-05-23-fw-0049-safe-address-handling-design.md) (masked-by-default safe-address rendering on every respondent-facing surface, including the assist-spec introspection surface which is by definition a respondent-facing surface — the respondent's tools read it).
 
@@ -114,7 +114,7 @@ Each decision: the answer first, then the rationale, then the alternative consid
 | `hint` | visible |
 | `dataType` | visible |
 | `widget` | visible |
-| `value` | **masked sentinel** (e.g., `"(protected)"`) — unmasked per-field by §3.4 reveal |
+| `value` | **masked sentinel** (e.g., `"(protected)"`) — unmasked per-field by §3.3 reveal |
 | `required` | visible |
 | `relevant` | visible |
 | `readonly` | visible |
@@ -129,7 +129,7 @@ Each decision: the answer first, then the rationale, then the alternative consid
 
 **ValidationReport semantics.** `formspec.form.validate` / `formspec.field.validate` return `ValidationReport` / `ValidationResult[]`. Per the core spec, validation results carry severity + path + constraint kind + message. The default mask discipline applies here too: validation messages MUST NOT echo the offending value back. The Provider implementation must scrub plaintext values from validation messages before returning to the Assist surface. This is a runtime invariant for the formspec-web Provider; the assist-spec doesn't constrain message content, but FW-0051 narrows.
 
-**Alternative rejected: default plaintext.** Considered as the simpler reading of Assist §4.4. Rejected because the respondent's primary consent (connecting their assistant to the form) bundles too much: it would mean "let my assistant see this form" silently includes "let my assistant see every value I've ever entered." The staged-grant pattern (§3.5) requires the masked default to make the structure-only first step meaningful.
+**Alternative rejected: default plaintext.** Considered as the simpler reading of Assist §4.4. Rejected because the respondent's primary consent (connecting their assistant to the form) bundles too much: it would mean "let my assistant see this form" silently includes "let my assistant see every value I've ever entered." The staged-grant pattern (§3.4) requires the masked default to make the structure-only first step meaningful.
 
 **Alternative rejected: opt-in plaintext per-field at form-author time.** Considered (form Definition declares which fields are auto-revealed). Rejected as authorial overreach into respondent privacy — the respondent should decide what to reveal, not the form author. The form author's declaration is "this form participates with assistants"; the per-field decision is the respondent's.
 
@@ -142,7 +142,7 @@ Each decision: the answer first, then the rationale, then the alternative consid
 - **Explicit:** the respondent invokes; the form does not infer.
 - **Revocable:** a per-field "stop revealing" affordance is available next to the reveal affordance after grant. Revocation re-masks for the rest of the session.
 
-**Render discipline.** The reveal affordance is rendered next to the field's value in the form's own UI; the affordance toggles between "ask my assistant about this field" (mask state) and "stop sharing this field with my assistant" (reveal state). The affordance is keyboard-accessible (per [AP-019](../../JOURNEYS.md) accessible-alternative discipline + [`formspec-cloud/CLAUDE.md`](../../../formspec-cloud/CLAUDE.md) keyboard-first constraint).
+**Render discipline.** The reveal affordance is rendered next to the field's value in the form's own UI; the affordance toggles between "ask my assistant about this field" (mask state) and "stop sharing this field with my assistant" (reveal state). The affordance is keyboard-accessible (per [AP-019](../../JOURNEYS.md) accessible-alternative discipline + the anti-Clippy keyboard-first constraint that [`formspec-web/CLAUDE.md`](../../CLAUDE.md) inherits from cloud).
 
 **Provider implementation.** When the respondent grants reveal for field `path`, the formspec-web Assist Provider updates an internal session-scoped grant set; subsequent `formspec.field.describe { path }` calls for that path return the plaintext `value`; calls for non-granted paths return the masked sentinel. The grant set is in-memory only; never persisted; never serialized off the device.
 
@@ -152,7 +152,7 @@ Each decision: the answer first, then the rationale, then the alternative consid
 
 **Alternative rejected: persistent grant across sessions.** Considered for usability (respondent doesn't have to re-reveal every session). Rejected: violates the per-session privacy posture; a grant that lasts across sessions silently re-extends past consent into future sessions. The respondent's decision to "let my assistant help today" should not bind tomorrow's session.
 
-**Alternative rejected: single global reveal toggle.** Considered for simplicity. Rejected per the §3.2 staged-grant argument: bundles too much consent; defeats the per-field discipline.
+**Alternative rejected: single global reveal toggle.** Considered for simplicity. Rejected per the §3.4 staged-grant rationale: bundles too much consent; defeats the per-field discipline.
 
 ### 3.4 Q4 — Consent affordance: staged grant (structure-see → propose-values → per-field-value-reveal)
 
@@ -160,9 +160,9 @@ Each decision: the answer first, then the rationale, then the alternative consid
 
 | Stage | Grant scope | Effect |
 |---|---|---|
-| Stage 1 | Structure-see | The Assist Provider exposes the introspection tool catalog (Assist §3.2: `formspec.form.describe`, `formspec.field.list`, `formspec.field.describe` with masked values per §3.3, `formspec.field.help`, `formspec.form.progress`) + the validation tools (Assist §3.4) + the navigation tools (Assist §3.6). The assistant can READ the form's structure and help context; cannot propose values; cannot read filled values. |
-| Stage 2 | Propose-values | Stage 1 + the mutation tool catalog (Assist §3.3: `formspec.field.set`, `formspec.field.bulkSet`) gated by per-act confirm (§3.5). The assistant can PROPOSE values; the respondent confirms each apply. The profile tools (Assist §3.5) are also enabled; `formspec.profile.apply` with `confirm: true` is required for any bulk-apply. |
-| Stage 3 | Per-field value reveal | Stage 1 + (optionally) Stage 2 + per-field reveal grants per §3.4. The assistant can READ specific field values the respondent has revealed. |
+| Stage 1 | Structure-see | The Assist Provider exposes the introspection tool catalog (Assist §3.2: `formspec.form.describe`, `formspec.field.list`, `formspec.field.describe` with masked values per FW-0051 §3.2, `formspec.field.help`, `formspec.form.progress`) + the validation tools (Assist §3.4) + the navigation tools (Assist §3.6). The assistant can READ the form's structure and help context; cannot propose values; cannot read filled values. |
+| Stage 2 | Propose-values | Stage 1 + the mutation tool catalog (Assist §3.3: `formspec.field.set`, `formspec.field.bulkSet`) gated by per-act confirm (FW-0051 §3.4 Stage 2 below). The assistant can PROPOSE values; the respondent confirms each apply. The profile tools (Assist §3.5) are also enabled; `formspec.profile.apply` with `confirm: true` is required for any bulk-apply. |
+| Stage 3 | Per-field value reveal | Stage 1 + (optionally) Stage 2 + per-field reveal grants per FW-0051 §3.3. The assistant can READ specific field values the respondent has revealed. |
 
 The stages are independent toggles; a respondent may grant Stage 1 without Stage 2, or Stage 2 without any Stage 3 grants (the assistant can propose values without seeing existing values — e.g., proposing a value for a still-empty field based on the field's help context).
 
@@ -170,14 +170,14 @@ The stages are independent toggles; a respondent may grant Stage 1 without Stage
 
 1. Stage 1 toggle: "Let my assistant see this form's structure."
 2. Stage 2 toggle: "Let my assistant propose values (I'll confirm each one)."
-3. Per-field Stage 3 reveal affordances: rendered next to fields per §3.4.
+3. Per-field Stage 3 reveal affordances: rendered next to fields per §3.3.
 4. Revoke-all affordance: a single action that disables all stages and clears all per-field grants.
 
-**Per-act confirm gate (Stage 2).** Per Assist §3.3 + §4.3 + §11.4, the Provider validates writability + relevance + non-suppression of core validation. The formspec-web Provider implementation MUST surface a confirm gate for every `formspec.field.set` invocation (even without `confirm: true` on the tool call) when the writes come from a Stage-2-granted assistant. The respondent reviews the proposed value + the field name + the help context, then confirms or rejects. Bulk operations (`formspec.field.bulkSet`, `formspec.profile.apply`) route through a single combined confirm surface listing all proposed changes.
+**Per-act confirm gate (Stage 2).** Per Assist §3.3 mutation tools + §4.3 (1)–(4) mutation rules, the Provider validates writability + relevance + non-suppression of core validation. The formspec-web Provider implementation MUST surface a confirm gate for every `formspec.field.set` invocation (even without `confirm: true` on the tool call) when the writes come from a Stage-2-granted assistant. The respondent reviews the proposed value + the field name + the help context, then confirms or rejects. Bulk operations (`formspec.field.bulkSet`, `formspec.profile.apply`) route through a single combined confirm surface listing all proposed changes.
 
-**The Provider's confirm gate is a runtime invariant.** Assist §3.3 says the Provider "SHOULD" support human-in-the-loop; FW-0051 narrows for the formspec-web implementation: the Provider MUST surface a confirm for every Stage-2 mutation. This is more restrictive than the assist-spec's normative floor; FW-0051's tighter rule is justified by AP-002 (no auto-apply) — the spec's SHOULD is the floor for any Provider, FW-0051's MUST is the floor for formspec-web's Provider implementation. **The runtime invariant is documented here; the assist-spec is not amended.**
+**The Provider's confirm gate is a runtime invariant.** Assist §4.3 (5) says the Provider "SHOULD" support human-in-the-loop confirmation for bulk or profile-driven writes; FW-0051 narrows for the formspec-web implementation: the Provider MUST surface a confirm for every Stage-2 mutation (including single-field writes, not just bulk). This is more restrictive than the assist-spec's normative floor; FW-0051's tighter rule is justified by AP-002 (no auto-apply) — the spec's SHOULD is the floor for any Provider, FW-0051's MUST is the floor for formspec-web's Provider implementation. **The runtime invariant is documented here; the assist-spec is not amended.**
 
-**Interop asymmetry — named honestly.** Consumers compliant with the assist-spec's lower SHOULD floor (§3.3 + §4.3 (5)) may expect some Provider implementations to apply single-field-set silently. Consumers interacting with formspec-web's Provider will encounter the stricter MUST behavior — a value never applies without per-act respondent confirmation. **This is intentional per AP-002 binding;** the asymmetry is named so adopters and Consumer authors don't read it as a bug. EXT-33 §6.2 (4) would codify the runtime-policy-aware tightening upstream.
+**Interop asymmetry — named honestly.** Consumers compliant with the assist-spec's lower SHOULD floor (§4.3 (5)) may expect some Provider implementations to apply single-field-set silently. Consumers interacting with formspec-web's Provider will encounter the stricter MUST behavior — a value never applies without per-act respondent confirmation. **This is intentional per AP-002 binding;** the asymmetry is named so adopters and Consumer authors don't read it as a bug. EXT-33 §6.2 (4) would codify the runtime-policy-aware tightening upstream.
 
 **Alternative rejected: single toggle.** Bundles too much; defeats the layered consent model. Rejected per the brief's Q3 analysis.
 
@@ -210,12 +210,12 @@ Per [web ADR-0009 §"Not in the constitutional inventory" (b)](../adr/0009-hexag
 
 | Adopter axis | What it implies |
 |---|---|
-| Assist Provider runtime adapter | Implements the Assist §3 tool catalog over the formspec-engine `FormEngine` state. Returns `FieldDescription` with masked-by-default `value` per FW-0051 §3.3. Scrubs plaintext from `ValidationResult.message`. Mediates Stage 2 mutation through a confirm-gate dispatch into the adopter's UI shell. |
+| Assist Provider runtime adapter | Implements the Assist §3 tool catalog over the formspec-engine `FormEngine` state. Returns `FieldDescription` with masked-by-default `value` per FW-0051 §3.2. Scrubs plaintext from `ValidationResult.message`. Mediates Stage 2 mutation through a confirm-gate dispatch into the adopter's UI shell. |
 | WebMCP transport adapter (default) | Registers tools via `navigator.modelContext.registerTool()` per Assist §7.2; mediates confirms via `requestUserInteraction()`. SHOULD install a polyfill when native WebMCP is unavailable. |
 | postMessage transport adapter (default for iframe-embedded forms) | `postMessage`-based binding per Assist §7.4; correlates with `callId`; isolates privileged extension APIs from injected page code. Composes with FW-0053 (embeddable widget) — the embed boundary is the Assist transport boundary. |
 | MCP transport adapter (optional) | For server-mediated agents; preserves tool names + result envelopes per Assist §7.3; maps confirms to MCP user prompts. |
 | HTTP transport adapter (optional) | For remote agents; per Assist §7.5; `GET /formspec/tools` + `POST /formspec/tools/{name}`. Subject to org policy data-residency restriction. |
-| Consent affordance UI adapter | Renders the three-stage grant panel (§3.4) + per-field reveal affordances (§3.4). Anti-Clippy: ambient, pull-not-push, no persona, no avatar, keyboard-first. Adopter-styled per their UI conventions; consent semantics are the constant. |
+| Consent affordance UI adapter | Renders the three-stage grant panel (§3.4) + per-field reveal affordances (§3.3). Anti-Clippy: ambient, pull-not-push, no persona, no avatar, keyboard-first. Adopter-styled per their UI conventions; consent semantics are the constant. |
 | Per-field reveal grant store | In-memory session-scoped grant set; never persisted; never serialized off device. The Provider consults the grant set when answering `formspec.field.describe`. |
 
 **Why not invent an `AssistProvider` port here.** Per ADR-0009 §(b) the bar is consumer code, not predicted-need. The Assist Provider is a substantial implementation; its port shape becomes obvious at build time when the adapter is co-implemented. **FW-0062 picks the port shape at build time.** Lean: a single `AssistProvider` port slot with transport-specific adapters, OR a port-per-transport surface with shared Provider state. The choice falls out at build time when the integration with `FormEngine` is wired.
@@ -234,7 +234,7 @@ bringYourOwnAssistant?: {
 }
 ```
 
-The block is the resolver's read-only output. The shell consults `posture` at form-load (renders the consent affordance per §3.4 unless `forbidden`); `enabledTransports` (registers Provider with the supported transports); `allowedToolCategories` (filters the tool catalog before registration so out-of-policy tools never appear to the assistant in the first place).
+The block is the resolver's read-only output. The shell consults `posture` at form-load (renders the consent affordance per §3.3 + §3.4 unless `forbidden`); `enabledTransports` (registers Provider with the supported transports); `allowedToolCategories` (filters the tool catalog before registration so out-of-policy tools never appear to the assistant in the first place).
 
 **Sensitive-data discipline:** the resolved profile contains no plaintext, no per-field reveals, no session state. Stage grants live in the shell's session state, not the profile. The profile is recomputable from the instance + org + form policy without consulting any respondent action.
 
@@ -296,10 +296,10 @@ FW-0062 build (formspec-web)
 
 **Candidate clarifications (uplift summary per architecture-review remediation 2026-05-23):**
 
-1. **§4.4 `FieldDescription.value` masking semantics — RECOMMENDED uplift.** Add a non-normative note that Provider implementations MAY mask `value` by default and require explicit per-field reveal grant to unmask. Lets FW-0051's §3.3 discipline be cited as a recognized Provider posture rather than a private narrowing. **Uplift rationale (Finding 1 from inline architecture review):** the masked-default discipline is load-bearing for the staged-grant UX; without upstream codification, FW-0051's privacy posture has a soft floor — a different formspec-web Provider implementation (or a different Provider in another deployment of the spec) would NOT be bound. Promoted from OPTIONAL to RECOMMENDED.
-2. **§11 security/privacy — add per-act + per-field reveal as a SHOULD pattern — RECOMMENDED uplift.** A new §11.8 SHOULD: "Providers serving forms whose runtime policy restricts default value-visibility SHOULD mask `FieldDescription.value` until the respondent invokes a per-field reveal affordance." Codifies FW-0051's §3.3 + §3.4 as a recognized pattern. **Uplift rationale: same as (1).** Promoted from OPTIONAL to RECOMMENDED.
+1. **§4.4 `FieldDescription.value` masking semantics — RECOMMENDED uplift.** Add a non-normative note that Provider implementations MAY mask `value` by default and require explicit per-field reveal grant to unmask. Lets FW-0051's §3.2 discipline be cited as a recognized Provider posture rather than a private narrowing. **Uplift rationale:** the masked-default discipline is load-bearing for the staged-grant UX; without upstream codification, FW-0051's privacy posture has a soft floor — a different formspec-web Provider implementation (or a different Provider in another deployment of the spec) could ship plaintext-by-default and remain compliant with the spec. Promoted from OPTIONAL to RECOMMENDED.
+2. **§11 security/privacy — add per-act + per-field reveal as a SHOULD pattern — RECOMMENDED uplift.** A new §11.8 SHOULD: "Providers serving forms whose runtime policy restricts default value-visibility SHOULD mask `FieldDescription.value` until the respondent invokes a per-field reveal affordance." Codifies FW-0051's §3.2 + §3.3 as a recognized pattern. **Uplift rationale: same as (1)** — without §11 codification, the privacy posture relies on a private narrowing the spec does not bind. Promoted from OPTIONAL to RECOMMENDED.
 3. **§6 profile-matching — add a per-assistant scope hook (Q5 from research brief) — OPTIONAL.** If the assist-spec's §6 profile-matching is to support per-assistant grant + revocation (cross-form value reuse keyed per assistant), a per-assistant scope hook would land here. **NOT proposed for slice 1** — relies on browser's WebExtension permission model per §1.2 non-goal. Flagged for future.
-4. **§3.3 mutation tools — runtime-policy-aware confirm-gate normative tightening — RECOMMENDED uplift.** A new §4.3 (6) MUST: "When the Provider's runtime policy declares a per-act confirm requirement for the mutation surface, the Provider MUST surface a confirm gate for every mutation invocation (regardless of `confirm: true` on the tool call)." Codifies FW-0051's §3.4 Stage 2 invariant as a recognized Provider posture. **Uplift rationale (Finding 2 from inline architecture review):** the interop asymmetry between FW-0051's MUST and the spec's SHOULD floor is honest only if codified upstream. Promoted from OPTIONAL to RECOMMENDED.
+4. **§3.3 mutation tools — runtime-policy-aware confirm-gate normative tightening — RECOMMENDED uplift.** A new §4.3 (6) MUST: "When the Provider's runtime policy declares a per-act confirm requirement for the mutation surface, the Provider MUST surface a confirm gate for every mutation invocation (regardless of `confirm: true` on the tool call)." Codifies FW-0051's §3.4 Stage 2 invariant as a recognized Provider posture. **Uplift rationale:** the interop asymmetry between FW-0051's MUST and the spec's §4.3 (5) SHOULD floor is honest only if codified upstream — without this clarification, FW-0051's stricter behavior reads as a private deviation from the spec rather than a recognized Provider posture. Promoted from OPTIONAL to RECOMMENDED.
 
 **Status:** candidates (1) + (2) + (4) RECOMMENDED; candidate (3) OPTIONAL. FW-0051 design ratifies against the current assist-spec; EXT-33 RECOMMENDED items close the upstream codification gap. Land alongside (or shortly after) FW-0051 owner ratification.
 
@@ -315,8 +315,8 @@ The substrate is in-spec at the Formspec layer; nothing in the Trellis envelope 
 
 - The Q1–Q4 framing decisions, scoped to formspec-web's consumer perspective.
 - The `bringYourOwnAssistant` capability shape under [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — the resolved-profile block in §4.3, the three-tier form-policy + per-category restriction (§3.1), the failure-semantics binding.
-- The masked-by-default + per-act reveal discipline per §3.3 + §3.4.
-- The three-stage staged grant model per §3.5.
+- The masked-by-default + per-act reveal discipline per §3.2 + §3.3.
+- The three-stage staged grant model per §3.4.
 - The runtime invariants binding Assist §11 to formspec-web's Provider implementation (per-act confirm gate; plaintext scrub in validation messages; in-memory session-scoped grant store).
 - The composition rules with FW-0050 (§7.1), FW-0049 (§7.2), FW-0048 (§7.3), FW-0058 (§7.6).
 - The adopter-contract pattern over the `AssistProvider` runtime + transport adapters (§4.2) — the conformance fixture pattern can be authored now even though the port shape lands with FW-0062 build.
@@ -338,7 +338,7 @@ When a form declares both `multiParty` AND `bringYourOwnAssistant`, the Assist P
 
 ### 7.2 FW-0049 / FW-0060 — safe-address composition
 
-Safe-*-class fields per [FW-0049 §3.3](2026-05-23-fw-0049-safe-address-handling-design.md) render masked across every respondent-facing surface; the Assist introspection surface is by definition a respondent-facing surface (the respondent's tool reads it). **The same masking discipline applies on the Assist surface**: `FieldDescription.value` for a safe-*-class field returns the masked sentinel even after a Stage 3 per-field reveal grant for that field. **The per-field reveal grant covers FW-0051's default mask (§3.3); the safe-*-class mask is a separate, higher-priority mask that survives the FW-0051 reveal.**
+Safe-*-class fields per [FW-0049 §3.3](2026-05-23-fw-0049-safe-address-handling-design.md) render masked across every respondent-facing surface; the Assist introspection surface is by definition a respondent-facing surface (the respondent's tool reads it). **The same masking discipline applies on the Assist surface**: `FieldDescription.value` for a safe-*-class field returns the masked sentinel even after a Stage 3 per-field reveal grant for that field. **The per-field reveal grant covers FW-0051's default mask (§3.2); the safe-*-class mask is a separate, higher-priority mask that survives the FW-0051 reveal.**
 
 **Why:** FW-0049's mask exists for shoulder-surfing / screen-share defense; the respondent's own awareness of the value is mediated by their own UI's reveal (FW-0049 §3.3 "edit-mode IS reveal"). For the assistant case, the respondent revealing a safe-* value to the assistant is **a separate, stronger consent decision** than revealing a normal field's value. Slice 1 chooses the safer default: the Assist Provider NEVER unmasks safe-*-class fields, regardless of the respondent's per-field reveal grant. If a future use case demands safe-*-class fields be revealable to assistants (e.g., legal-aid software helping a survivor fill a benefits form), a follow-on row revisits with a stronger consent surface. **The discipline composes via "AND" not "OR": both masks must be lifted for unmask; the safe-* mask cannot be lifted by FW-0051's reveal.**
 
@@ -356,7 +356,7 @@ A coercer who controls the respondent's assistant (malicious extension; coercer-
 
 ### 7.4 AP-002 — auto-apply prohibition
 
-[AP-002](../../JOURNEYS.md) "MUST NOT auto-apply a signature from a single 'Adopt and Sign' click." The corresponding rule for assistant-mediated mutation: **the per-act confirm gate per §3.4 Stage 2 IS the satisfaction.** No assistant invocation applies a value silently; every mutation goes through the respondent's review. **Slice 1 enforces this as a runtime invariant** — the Provider's confirm gate is a MUST, not a SHOULD (tightening the assist-spec §3.3 normative floor).
+[AP-002](../../JOURNEYS.md) "MUST NOT auto-apply a signature from a single 'Adopt and Sign' click." The corresponding rule for assistant-mediated mutation: **the per-act confirm gate per §3.4 Stage 2 IS the satisfaction.** No assistant invocation applies a value silently; every mutation goes through the respondent's review. **Slice 1 enforces this as a runtime invariant** — the Provider's confirm gate is a MUST, not a SHOULD (tightening the assist-spec §4.3 (5) normative floor).
 
 ### 7.5 AP-007 — parity audit
 
@@ -417,9 +417,9 @@ Honest list of what FW-0051 design does NOT resolve:
 | Q3: per-act, per-session, explicit, revocable per-field reveal | PROPOSAL | owner review |
 | Q4: three-stage staged grant (structure-see → propose-values → per-field-value-reveal) | PROPOSAL | owner review |
 | `bringYourOwnAssistant` capability addition to ADR-0011 Feature Ownership Table | PROPOSAL | owner review + ADR-0011 amendment |
-| Assist Provider runtime invariant: per-act confirm gate is MUST (tightens assist-spec §3.3 SHOULD floor) | PROPOSAL | owner review |
+| Assist Provider runtime invariant: per-act confirm gate is MUST (tightens assist-spec §4.3 (5) SHOULD floor) | PROPOSAL | owner review |
 | Adopter contracts over Assist transport adapters + consent UI adapter + per-field reveal grant store; port shape deferred to FW-0062 build per ADR-0009 §(b) | PROPOSAL | owner review |
-| EXT-33 (new) — assist-spec clarifications: (1) `FieldDescription.value` masking note + (2) per-act + per-field-reveal §11 SHOULD + (4) runtime-policy-aware confirm-gate MUST = RECOMMENDED uplift per architecture-review Finding 1+2; (3) per-assistant scope hook stays OPTIONAL | PROPOSAL to formspec | formspec spec-expert review |
+| EXT-33 (new) — assist-spec clarifications: (1) `FieldDescription.value` masking note + (2) per-act + per-field-reveal §11 SHOULD + (4) runtime-policy-aware confirm-gate MUST = RECOMMENDED uplift (without (1) + (2), a different Provider could ship plaintext-by-default and remain spec-compliant; without (4), FW-0051's MUST reads as private deviation from §4.3 (5) SHOULD); (3) per-assistant scope hook stays OPTIONAL | PROPOSAL to formspec | formspec spec-expert review |
 | No XS-N required for slice 1 (assist-spec covers substrate; nothing in Trellis envelope changes) | PROPOSAL | owner review |
 | Multi-party composition per FW-0050 §7.1 (per-party scoping on Assist tool catalog) | PROPOSAL | owner review + FW-0050 design author |
 | Safe-address composition per FW-0049 §3.3 (safe-* mask survives FW-0051 reveal) | PROPOSAL | owner review + FW-0049 design author |
