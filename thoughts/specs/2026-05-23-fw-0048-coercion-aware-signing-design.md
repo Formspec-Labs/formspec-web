@@ -54,7 +54,7 @@ Each scenario gives: the setup, what the duress signal must achieve, what this d
 
 **2.3.1 Domestic-abuse POA.** Survivor at home, abuser present, financial POA on a bank's intake portal. Abuser observes the screen.
 - **Required:** duress signal that fires invisibly, produces a byte-identical receipt, routes to the bank's safety team (not visible in the public ledger / receipt the abuser sees).
-- **Design posture:** §3 detection primitive — dual-PIN-on-passkey (Q1 candidate 5) for instances supporting `duressAware`; §4 byte-identical receipt with §5.2 HPKE-wrapped commitment-slot payload to the safety team; §5.3 quarantine semantics. **Canonical scenario; design optimizes for this.**
+- **Design posture:** §3 detection primitive — dual-passkey (Q1 candidate 5) for instances supporting `duressAware`; §4 byte-identical receipt with §5.2 HPKE-wrapped payload (DEK wrapped in `key_bag`; ciphertext in `payload_ref`) to the safety team; §5.3 quarantine semantics. **Canonical scenario; design optimizes for this.**
 
 **2.3.2 Trafficking — immigration sponsorship beneficiary.** Trafficked person, handler present, on handler's device. Handler controls the device fully.
 - **Required:** a way to signal duress that does not require the survivor to operate the handler's device unattended.
@@ -106,15 +106,15 @@ Two implementation tiers under web ADR-0011, both produced by the same `duressAw
 
 **PROPOSAL.** Byte-identical success-path between duress-signaled and non-duress flows. The respondent's receipt, the visible status copy, the email-confirmation if any, the URL-bar state, the network-tab timing (modulo random jitter), the redirect chain — **all identical** to a shoulder-surfer.
 
-The duress fact lives **only** in the issuer-side sidecar (a Trellis §13 Disclosure Manifest withholding the field from the `respondent_facing_receipt` audience, disclosing it to the `issuer_safety_team` audience). The respondent's downloadable receipt cryptographically commits to the duress slot (commitment-slot population per Trellis OC-26) but does not reveal whether the slot's value indicates duress.
+The duress fact lives **only** in the `submission.duress-signaled` event's HPKE-wrapped plaintext (decryptable only by the safety-team recipient registered in the issuer-sidecar). The respondent's downloadable receipt contains the event envelope (signed, with `payload_ref` ciphertext + `key_bag` entry per Trellis Core §6.4 + §9.4) but no party other than the safety-team recipient can recover the plaintext duress fact.
 
 **Justification.** J-027's metaphor is the bank-teller silent alarm; the alarm rings at the security desk, not the teller's counter. AP-014's test: "non-obvious to a shoulder-surfer and does not halt the form in a way that tips off the coercer." Any deviation from byte-identical-success-path violates AP-014.
 
-**Trellis OC-26 binding.** Per [`trellis/specs/trellis-operational-companion.md:472`](../../../trellis/specs/trellis-operational-companion.md), commitment slots MUST be populated at admit time; retroactive population is NON-CONFORMANT for Phase 2+. This means **every high-risk-template submission populates the duress commitment slot whether or not duress was signaled** — uniform slot presence prevents the slot's absence from being observable. The slot's *value* is what carries the signal; the slot's *presence* is uniform.
+**Trellis event-level uniform-shape binding (Core §6.4 + §9.4; event registry per OC-26).** Every high-risk-template submission emits the `submission.duress-signaled` event whether or not duress was signaled — the event's *presence* is uniform; the event's *plaintext* (decryptable only by the safety-team recipient) is what carries the signal (§3.4 + §5.2 substrate path). The Disclosure Manifest mechanism (OC-26 → OC-31) is a Phase 2+ overlay for *later* selective disclosure of public-by-default fields; it does not govern HPKE-wrapped payloads on Phase 1 events, which are already opaque-by-default to anyone without the safety-team private key.
 
 **Alternative rejected: differentiated-success-path with delay or different copy.** Detectable by an observant coercer (the coercer notices the email took longer to arrive, or the copy differs from a non-duress submission they've seen before). Rejected.
 
-**Alternative rejected: omit slot when no duress is signaled.** Forbidden by OC-26 above; would also leak the duress fact by slot-presence.
+**Alternative rejected: omit the `submission.duress-signaled` event when no duress is signaled.** Leaks the duress fact by event presence — a chain observer who knows the event_type signature for `submission.duress-signaled` would learn the binary signal by event-existence alone. Event-level uniform shape (§3.4 + §5.2) emits the event on every submission with byte-shape-uniform envelope; only the safety-team recipient can recover the plaintext.
 
 **Honest consequence.** Byte-identical-success-path means a malicious respondent could *falsely* signal duress to delay or invalidate a legitimate counterparty's reliance on the receipt. Mitigation: §5.3 quarantine semantics are issuer-side decisions, not respondent-visible state changes; a false duress signal results in safety-team review at the issuer, which the issuer's processes can disposition. The receipt itself remains cryptographically valid pending the issuer's downstream disposition.
 
@@ -134,23 +134,29 @@ The duress fact lives **only** in the issuer-side sidecar (a Trellis §13 Disclo
 
 **Alternative rejected: respondent-side recovery-flow only.** Doesn't reach the canonical scenario 2.3.1 where the respondent is on the coercer's device.
 
-### 3.4 Q4 — Receipt-side semantics: HPKE-wrapped payload to safety-team recipient
+### 3.4 Q4 — Receipt-side semantics: HPKE-wrapped payload via the standard Trellis envelope (DEK in `key_bag`, ciphertext in `payload_ref`)
 
-**PROPOSAL.** The commitment-slot value is an **HPKE Base-mode wrapped payload** addressed to the safety-team recipient public key. The plaintext payload carries `(duress_signaled: bool, severity_band: enum, routing_target_id: opaque, captured_at: timestamp)`. Only the safety-team's private key holder can decrypt.
+**PROPOSAL.** The duress payload rides Trellis's standard payload-encryption mechanism per Trellis Core §6.4 + §9.4. There is **no commitment-slot ciphertext**: Core §13 commitment slots are scheme-specific cryptographic commitments (Pedersen / Merkle / BBS+) reserved for Phase 2+ selective-disclosure, not HPKE ciphertext containers. The duress signal flows the documented HPKE path:
 
-The Disclosure Manifest withholds the slot's plaintext from the `respondent_facing_receipt` audience; the commitment proof is independently auditable per OC-30 (an auditor can verify the slot is well-formed and commits to *some* value without learning the value).
+1. **Plaintext payload** (see §5.2 for shape) is encrypted under a fresh content-encryption key (DEK) using ChaCha20-Poly1305 per Core §6.4. The ciphertext lives in the event's `payload_ref` (`PayloadInline` or `PayloadExternal`).
+2. **DEK wrap** for the safety-team recipient lives in the event's `key_bag` per Core §9.4: one `KeyBagEntry` whose `recipient` names the safety-team recipient (registered per-issuer in the issuer-sidecar, EXT-30 / §6.4 below), `suite = 1` (`DHKEM(X25519, HKDF-SHA256)` / `HKDF-SHA256` / `ChaCha20-Poly1305`), `wrapped_dek` produced by RFC 9180 `SetupBaseS` / `Seal` with `info = h''` and `aad = h''`. Only the holder of the safety-team private key can unwrap the DEK and decrypt the ciphertext.
+3. **No `commitments` population required.** Per Core §13.3, Phase 1 producers MUST emit `commitments` as `null` or `[]` (Phase 1 verifiers MUST accept either). The duress-payload opacity is delivered by the §9.4 key_bag wrap, not by a §13 commitment.
 
-**Justification.** A boolean-only signal would mean an attacker who somehow obtained the safety-team's decryption key could read every submission's duress status. HPKE wrap restricts plaintext access to the holder of the safety-team private key, and the wrap targets a recipient public key registered per-issuer in the issuer-sidecar (web ADR-0006). **Strongest opacity within Trellis Phase-2 primitives.**
+**Re-anchored uniform-shape story (event-level, not slot-level).** The uniform-shape posture lives at the **event level**: every high-risk-template signing ceremony emits a `submission.duress-signaled` event with a byte-shape-uniform envelope (uniform-sized padded `payload_ref` ciphertext; uniform `key_bag` entry to the safety-team recipient). The plaintext distinguishes the duress vs non-duress case (`duressSignaled: true | false` in §5.2). A shoulder-surfing observer of the chain sees one `submission.duress-signaled` event per high-risk-template submission; the event's *presence* is uniform, the event's *plaintext* (decryptable only by the safety-team recipient) is what carries the signal. This is consistent with Core §13.2's identity-value rule for *unused* commitment slots: shape uniformity is the universal Trellis defence against presence-as-leak.
+
+**Justification.** Routing the duress payload through the standard `payload_ref` + `key_bag` HPKE path is the only structurally-correct option in Trellis Phase 1, and it preserves the canonical opacity guarantee (only the safety-team private-key holder can read the plaintext). The §9.4 wrap targets a recipient public key registered per-issuer in the issuer-sidecar (web ADR-0006 + EXT-30). Trellis Phase 1 mechanisms suffice; no Phase 2 commitment work is required for the base pattern (see §6.5 + §6.6 for the Phase 2 advanced-disclosure dependency surfaced separately).
 
 **HPKE suite per Trellis Core §9.4 suite 1.** `DHKEM(X25519, HKDF-SHA256)` / `HKDF-SHA256` / `ChaCha20-Poly1305` — same suite as Trellis per-class DEK wrapping (ADR-0074 inheritance per `trellis/CLAUDE.md`). **Depends on EXT-18 (`@integrity-stack/hpke` — TS wrapper around `hpke-js`)**, already queued for FW-0056. Stacking the duress-payload onto the same TS wrapper amortizes the integration.
 
 **Severity band semantics.** Three-band closed enum: `flag-for-review | active-concern | immediate-intervention`. The respondent-facing affordance does not expose the band choice; the band is determined by the activation surface — `dual-passkey` ceremony with the duress credential = `active-concern` by default; instance-configured policy may map to other bands. **Open question** in §8 (band selection by respondent vs by system) deferred to FW-0059 build.
 
-**Alternative rejected: plain boolean in the commitment slot.** Reduces opacity; any auditor with chain access learns whether each submission was duress-signaled. Rejected.
+**Alternative rejected: encode duress payload into a §13 commitment slot.** Structurally wrong: Core §13 commitments are Pedersen / Merkle / BBS+ cryptographic commitments scheme-bound per §13.3 (all Phase 2+ Reserved); Phase 1 producers MUST emit `commitments` as `null` or `[]`. A commitment is not an HPKE ciphertext container. Rejected.
 
-**Alternative rejected: per-routing-target plaintext signal.** Defeats HPKE wrap's purpose.
+**Alternative rejected: plain boolean in the plaintext with no encryption.** Reduces opacity; any party with payload-read access learns whether each submission was duress-signaled. Rejected.
 
-**Alternative rejected: omit Trellis sidecar entirely; signal duress via out-of-band channel only.** Loses cryptographic auditability — the issuer's safety team has no proof the duress signal originated from a verified signing ceremony. Rejected.
+**Alternative rejected: per-routing-target plaintext signal.** Defeats the HPKE wrap's purpose.
+
+**Alternative rejected: omit the Trellis event entirely; signal duress via out-of-band channel only.** Loses cryptographic auditability — the issuer's safety team has no proof the duress signal originated from a verified signing ceremony. Rejected.
 
 ## 4. Capability key and port shape
 
@@ -178,7 +184,7 @@ Per [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md): "d
 | Port | What `duressAware` adds |
 |---|---|
 | `IdentityProvider` (web ADR-0007) | The credential-selection moment during signing now returns a `(credential, isDuressCredential)` tuple where `isDuressCredential` is a server-side classification, not client-side state — the client cannot read which credential was used as duress (the WebAuthn ceremony returns only the credential ID; the duress classification is server-side per the issuer's credential-registry). **Shape change: minimal — `IdentityClaim` gains an opaque `signalChannel` field the resolver consults.** |
-| `SubmitTransport` | The submit envelope carries the HPKE-wrapped duress-signal slot in a designated commitment-slot position. **Shape change: minimal — the slot is part of the canonical Response envelope per EXT-5; transport unchanged.** |
+| `SubmitTransport` | The submit envelope carries the `submission.duress-signaled` event with `payload_ref` ciphertext + `key_bag` HPKE wrap to the safety-team recipient per §5.2. **Shape change: minimal — the event is part of the canonical Response envelope per EXT-5; transport unchanged.** |
 | **New: `SafetyRouting`** | A new port: `dispatch(signal: HPKE_wrapped_bytes, target: opaque) → void`. Adapter-shaped (issuer-webhook adapter vs WOS-task adapter); conformance-suite tests dispatch + retry semantics. **Justified as a new port** because the dispatch target is genuinely adopter-shaped (NCADV-webhook / Slack-internal / WOS-task adapter each implement different transport patterns), and the dispatch step has its own failure semantics distinct from `SubmitTransport`. |
 
 **Why one new port and not zero.** The dispatch concern doesn't belong in `SubmitTransport`: the dispatch can succeed when the submit fails (the safety team must still be alerted even if the form submission errors out) and vice versa (the submit can succeed; the dispatch retry can lag). Separating the ports keeps each adapter's failure handling clean. Per ADR-0009 §"Not in the constitutional inventory" the bar for a new port is "the surface is genuinely adopter-shaped with distinct failure semantics" — `SafetyRouting` clears that bar.
@@ -222,16 +228,16 @@ extensions["formspec.submission.duress-signal.v1"]: {
   partyRef?:                   string                  // for multi-party (FW-0050) — urn:party:<roleId>:<sessionId>; absent for single-party
   capturedAt:                  timestamp               // RFC 3339, when the duress detection surface fired
   mechanismUsed:               "dual-passkey" | "dual-pin" | "pin-second-entry"
-  payloadCommitmentSlot:       string                  // Trellis §13 commitment-slot reference (must be populated whether or not duress was signaled — see §5.2)
-  payloadHpkeRef?:             string                  // ref to the HPKE-wrapped payload bytes (lives in the issuer-side sidecar, NOT in the canonical record)
+  payloadRef:                  string                  // reference to the event's PayloadRef (Trellis Core §6.4) carrying the ChaCha20-Poly1305 ciphertext of the §5.2 plaintext
+  keyBagRecipientHandle:       string                  // handle naming the KeyBagEntry recipient (Trellis Core §9.4) whose wrapped_dek unwraps the payload DEK; resolves to the safety-team recipient registered in the issuer-sidecar safetyTeamRecipients[] (EXT-30)
 }
 ```
 
-**Honesty constraint per OC-26 (commitment-slot population):** every submission of a `duressAware`-enabled form populates `payloadCommitmentSlot` with a valid commitment — to either a duress-signal payload OR an explicit non-duress-marker payload (uniform-shape; see §5.2). The slot's *presence* MUST NOT reveal the signal state. This is a binding requirement on the issuer's intake pipeline; formspec-web's submit adapter ensures the slot is always populated by submitting both `(duress = true)` and `(duress = false)` cases identically through the same code path.
+**Honesty constraint (event-level uniform shape).** Every submission of a `duressAware`-enabled form emits one `submission.duress-signaled` event with the byte-shape-uniform envelope per §3.4: padded `payload_ref` ciphertext, single `key_bag` entry naming the safety-team recipient, plaintext distinguishes duress vs non-duress (`duressSignaled: true | false` per §5.2). The event's *presence* is uniform across all submissions; the event's *plaintext* is what the safety-team recipient decrypts to detect the signal. formspec-web's submit adapter ensures uniformity by routing both `(duressSignaled = true)` and `(duressSignaled = false)` through the same code path with identical envelope shape. **No §13 commitment-slot population is required** — per Trellis Core §13.3, Phase 1 producers MUST emit `commitments` as `null` or `[]`. The OC-26 selective-disclosure slot-population rule applies only to records subject to later selective disclosure (Phase 2+) and is orthogonal to the duress payload's HPKE wrap.
 
-### 5.2 HPKE-wrapped payload (the value the slot commits to)
+### 5.2 HPKE-wrapped payload (the plaintext the safety-team recipient decrypts)
 
-**Plaintext shape** (held only by the safety-team recipient after decrypt):
+**Plaintext shape** (held only by the safety-team recipient after `key_bag` unwrap + `payload_ref` decrypt):
 
 ```text
 {
@@ -247,11 +253,13 @@ extensions["formspec.submission.duress-signal.v1"]: {
 }
 ```
 
-**HPKE wrap parameters** per Trellis Core §9.4 suite 1: `DHKEM(X25519, HKDF-SHA256)` / `HKDF-SHA256` / `ChaCha20-Poly1305`. Recipient public key is registered in the issuer-sidecar's `safetyTeamRecipients[]` block (proposed EXT-30; see §6).
+**Substrate path per Trellis Core (no commitment-slot use).** The plaintext is encrypted under a fresh DEK with ChaCha20-Poly1305; the ciphertext lives in the event's `payload_ref` (`PayloadInline` per §6.4). The DEK is wrapped for the safety-team recipient via a single `key_bag` `KeyBagEntry` per §9.4 — `suite = 1` (`DHKEM(X25519, HKDF-SHA256)` / `HKDF-SHA256` / `ChaCha20-Poly1305`), recipient public key registered in the issuer-sidecar's `safetyTeamRecipients[]` block (EXT-30; see §6.4), `info = h''`, `aad = h''`, fresh X25519 ephemeral per wrap. The `submission.duress-signaled` event signature (Ed25519 over COSE_Sign1, §6.6) covers the envelope including `payload_ref` and `key_bag`; any modification invalidates the signature.
 
-**Uniform-shape non-duress case.** When the respondent did not signal duress, the payload still wraps `{ duressSignaled: false, severityBand: null, ... }` with the same byte-length-padded shape (HPKE Base mode supports arbitrary AAD; padding to a fixed envelope size happens at the formspec-web wrap step). The safety team's decrypt of every submission yields `{ duressSignaled: false }` for the vast majority and `{ duressSignaled: true }` for the rare signal. **This means the safety team must decrypt every submission to detect duress** — an honest tradeoff: the cost is decryption-per-submission; the benefit is the slot's presence is uniform and a chain-observer cannot infer the duress state.
+**Uniform-shape non-duress case (event-level).** When the respondent did not signal duress, the same event is still emitted, the same plaintext shape is still wrapped — the plaintext just carries `{ duressSignaled: false, severityBand: null, ... }`. The ciphertext bytes are padded to a fixed envelope size at the formspec-web wrap step before HPKE seal (formspec-web pre-pads the plaintext to a fixed length; HPKE Base mode supports `aad = h''`, so the padding lives in the plaintext bytes, not in HPKE associated data). The safety team's decrypt of every submission yields `{ duressSignaled: false }` for the vast majority and `{ duressSignaled: true }` for the rare signal. **This means the safety team must decrypt every submission to detect duress** — an honest tradeoff: the cost is decryption-per-submission; the benefit is the event's *presence* and envelope shape are uniform and a chain-observer cannot infer the duress state.
 
-**Alternative rejected: optional slot populated only on duress.** Violates OC-26 (slot must be populated at admit time) and leaks duress fact by slot presence. Rejected.
+**Alternative rejected: omit the `submission.duress-signaled` event when no duress was signaled.** Leaks duress fact by event presence. Rejected — the event-level uniform-shape posture (§3.4) requires the event to be emitted whether or not duress was signaled.
+
+**Alternative rejected: encode the payload into a §13 commitment slot.** Trellis Core §13 commitments are scheme-specific cryptographic commitments (Pedersen / Merkle / BBS+) reserved for Phase 2+; per §13.3 Phase 1 producers MUST emit `commitments` as `null` or `[]`. A commitment is not an HPKE ciphertext container. Rejected.
 
 ### 5.3 Recovery / failure semantics
 
@@ -313,13 +321,14 @@ issuerSidecar.safetyTeamRecipients: Array<{
 
 **XS-3 proposed content (consumer perspective):**
 
-1. **Boundary:** at `intake-handoff` plus the optional WOS-task dispatch. Formspec owns the per-event payload shape; Trellis carries the sidecar discipline (§13 Disclosure Manifest withholding the duress slot from `respondent_facing_receipt`); WOS optionally owns the `safety-reviewer` actorExtension; the SafetyRouting adapter is an adopter-shaped dispatch layer that targets either an issuer-side webhook or a WOS task.
-2. **Trellis discipline:** OC-26 (slot population at admit time, uniform across submissions) + OC-27 (Disclosure Manifest structure) + OC-30 (independent auditability) bind. **No new Trellis primitive required.**
-3. **WOS actorExtension:** `safety-reviewer` per S10.1, closed-membership-role at the WOS layer with per-tenant ACL preventing observability by rank-and-file caseworkers. **Optional** — `issuer-webhook` routing tier doesn't require WOS at all.
-4. **Receipt discipline:** the verifier surface MUST NOT distinguish duress-signaled and non-duress submissions. Verifier conformance suite must include fixtures covering both cases producing identical user-visible verdicts.
-5. **Per-party scoping (FW-0050 §7.2 binding):** when `duressAware` composes with `multiParty`, the sidecar is per-party — Party B's duress signal is per-party-scoped, never visible to Party A through any surface (status reads, ceremony state, receipt). See §7 below.
+1. **Boundary:** at `intake-handoff` plus the optional WOS-task dispatch. Formspec owns the per-event payload shape; Trellis carries the standard envelope (signed event with `payload_ref` ciphertext + `key_bag` wrap per Core §6.4 + §9.4); WOS optionally owns the `safety-reviewer` actorExtension; the SafetyRouting adapter is an adopter-shaped dispatch layer that targets either an issuer-side webhook or a WOS task.
+2. **Trellis discipline (base pattern, works in Phase 1):** Core §6.4 (`payload_ref` carries the ChaCha20-Poly1305 ciphertext), §9.4 (`key_bag` carries the HPKE Base-mode DEK wrap to the safety-team recipient), §6.6 (Ed25519 over COSE_Sign1 signs the envelope). **No new Trellis substrate primitive required for the base duress pipeline.** The only Trellis-side work is event-type registration: per Core §6.7 + §14 the `submission.duress-signaled` event_type must be registered in the bound registry so the verifier obligation under §14.4 resolves at signing time and §13.2 fixed-position vector declarations (if any) are pinned for the event type. Event-type registration is Phase 1 work.
+3. **Phase 2+ advanced disclosure (deferred, surfaced honestly).** Any advanced post-hoc selective-disclosure manifest over the duress payload (e.g., disclosing a subset of the plaintext fields to an appellate-court audience while withholding others from FOIA) would require Trellis Phase 2+: OC-26 commitment-slot population at admit time + OC-27 Disclosure Manifest structure + OC-30 independent auditability + a Phase 2+ commitment scheme registered under Core §13.3. **FW-0048 does NOT require any of this for the base pattern** — the safety-team recipient receives the full plaintext via §9.4 unwrap; no selective-disclosure carve-out is needed for the MVP routing. The Phase 2+ dependency is surfaced here only so a future row scoping post-hoc selective disclosure over the duress payload knows the substrate gap.
+4. **WOS actorExtension:** `safety-reviewer` per S10.1, closed-membership-role at the WOS layer with per-tenant ACL preventing observability by rank-and-file caseworkers. **Optional** — `issuer-webhook` routing tier doesn't require WOS at all.
+5. **Receipt discipline:** the verifier surface MUST NOT distinguish duress-signaled and non-duress submissions. Verifier conformance suite must include fixtures covering both cases producing identical user-visible verdicts.
+6. **Per-party scoping (FW-0050 §7.2 binding):** when `duressAware` composes with `multiParty`, the event is per-party — Party B's duress signal is per-party-scoped, never visible to Party A through any surface (status reads, ceremony state, receipt). See §7 below.
 
-**Without XS-3 ratification, FW-0048 design cannot be acted on by FW-0059.** The dependency is hard.
+**Without XS-3 ratification, FW-0048 design cannot be acted on by FW-0059.** The dependency is hard. XS-3 itself is achievable on Trellis Phase 1 (the base HPKE-via-key_bag pattern is documented Phase 1 mechanism); only the optional post-hoc selective-disclosure-manifest feature (item 3 above) waits on Phase 2.
 
 ### 6.6 What FW-0048 ratifies standalone
 
@@ -335,7 +344,9 @@ issuerSidecar.safetyTeamRecipients: Array<{
 - The EXT-5 payload shape extension (formspec ratification).
 - The issuer-sidecar `safetyTeamRecipients[]` block (EXT-30 — proposed).
 - The XS-3 cross-stack ADR (spans formspec + WOS + trellis).
-- The WOS `safety-reviewer` actorExtension (per XS-3 §6.5 (3) — only for `wos-task` routing tier).
+- Trellis Phase 1 event-type registration of `submission.duress-signaled` in the bound registry (per Core §6.7 + §14) so the verifier obligation under §14.4 resolves at signing time. Required for the base pipeline.
+- The WOS `safety-reviewer` actorExtension (per XS-3 §6.5 (4) — only for `wos-task` routing tier).
+- **Trellis Phase 2** — required ONLY for post-hoc selective-disclosure manifests over the duress payload (XS-3 §6.5 (3) above). The base pipeline (event with `payload_ref` ciphertext + `key_bag` HPKE wrap → safety-team recipient) does NOT require Phase 2 and is achievable on Phase 1 substrate.
 
 ## 7. Multi-party composition (FW-0050 §7.2 satisfaction)
 
@@ -358,16 +369,16 @@ The single-party sidecar shape from §5.1 carries a `partyRef?` field that is ab
 
 Each party's duress payload is HPKE-wrapped independently. The safety-team recipient (per the issuer-sidecar `safetyTeamRecipients[]` block) may be the same across parties (one recipient for all parties' duress signals) or different per role (e.g., immigration sponsorship may route the petitioner's duress to one team and the beneficiary's to a different team — the trafficking-survivor pipeline is structurally distinct).
 
-The per-party `partyRef` is part of the HPKE plaintext (NOT in any committed-but-unencrypted slot), so even an observer of the chain cannot determine which party signaled duress.
+The per-party `partyRef` is part of the HPKE plaintext (inside the §5.2 plaintext block, encrypted by the per-event DEK before key_bag wrap), so even an observer of the chain cannot determine which party signaled duress.
 
 ### 7.3 FW-0061 build constraints (consumed by FW-0061 author directly)
 
 The FW-0061 build is responsible for:
 
 1. **Per-party `SafetyRouting.dispatch()` invocations.** Each party's `IdentityProvider` session, after the signing ceremony, fires its own duress-detection step server-side, producing zero or one HPKE-wrapped payloads per party. The `SafetyRouting` adapter dispatches each independently (per-party retry semantics; one party's dispatch failure MUST NOT block another party's dispatch).
-2. **Per-party commitment-slot population.** Per OC-26, each party's signature event's commitment slot is populated whether or not that party signaled duress, uniform-shape per §5.2.
+2. **Per-party event-level uniform shape.** Each party's signing ceremony emits a `submission.duress-signaled` event with byte-shape-uniform envelope (padded `payload_ref` ciphertext + `key_bag` entry to the safety-team recipient) per §3.4 + §5.2, whether or not that party signaled duress.
 3. **Cross-party visibility enforcement.** Per §7.1 above: receipts, status reads, and ceremony state MUST be byte-identical across all combinations of which parties signaled duress.
-4. **Multi-party fixture coverage.** FW-0061 conformance fixtures MUST include: (a) co-equal flow where Party A signaled duress, Party B did not; (b) co-equal flow where both parties signaled duress; (c) asymmetric flow where the asymmetricSecondary party signaled duress; (d) all corresponding "no party signaled duress" baselines. Receipts in (a)-(c) MUST be byte-identical to (d) modulo the HPKE-wrapped slot contents.
+4. **Multi-party fixture coverage.** FW-0061 conformance fixtures MUST include: (a) co-equal flow where Party A signaled duress, Party B did not; (b) co-equal flow where both parties signaled duress; (c) asymmetric flow where the asymmetricSecondary party signaled duress; (d) all corresponding "no party signaled duress" baselines. Receipts in (a)-(c) MUST be byte-identical to (d) modulo the HPKE-wrapped `payload_ref` ciphertext bytes (which differ in plaintext but match in shape).
 
 ## 8. Open questions / deferrals
 
@@ -390,7 +401,7 @@ Honest list of what FW-0048 design does NOT resolve:
 | Q1: dual-credential primary mechanism with PIN-second-entry fallback tiers | PROPOSAL | owner review |
 | Q2: byte-identical success-path; duress fact only in issuer-side sidecar | PROPOSAL | owner review |
 | Q3: issuer-webhook routing (MVP-tier) + WOS-task (asymmetric-tier) | PROPOSAL | owner review |
-| Q4: HPKE-wrapped payload via Trellis §13 commitment slot | PROPOSAL | owner review |
+| Q4: HPKE-wrapped payload via Trellis Core §6.4 `payload_ref` + §9.4 `key_bag` (no §13 commitment-slot use; Phase 1) | PROPOSAL | owner review |
 | `duressAware` capability tier under ADR-0011 (mechanism × routingTier axes) | PROPOSAL | owner review + ADR-0011 evolution |
 | New `SafetyRouting` port (extend `IdentityProvider` + `SubmitTransport`; no new credential-store port) | PROPOSAL | owner review |
 | EXT-5 payload shape per §5.1 (extension of queued entry) | PROPOSAL to formspec | formspec spec-expert review |
@@ -409,8 +420,10 @@ Honest list of what FW-0048 design does NOT resolve:
 - [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md) — hexagonal architecture (port-shape discipline; new `SafetyRouting` port justified per §4.2)
 - [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — runtime feature resolution (the `duressAware` capability the design instantiates)
 - [FW-0050 design 2026-05-23](2026-05-23-fw-0050-multi-party-submission-design.md) — multi-party (§7.2 delegates per-party duress sidecar to this row; §7 above satisfies)
-- [trellis-operational-companion §13](../../../trellis/specs/trellis-operational-companion.md) — Disclosure Manifest discipline (the substrate the sidecar rides on)
-- [Trellis Core §9.4](../../../trellis/specs/trellis-core.md) — HPKE suite 1 parameters (the wrap suite per §5.2)
+- [Trellis Core §6.4](../../../trellis/specs/trellis-core.md) — `PayloadRef` shape (where the duress ciphertext lives per §5.2)
+- [Trellis Core §9.4](../../../trellis/specs/trellis-core.md) — Key bag + HPKE Base-mode wrap (where the safety-team DEK wrap lives per §5.2)
+- [Trellis Core §13](../../../trellis/specs/trellis-core.md) — Commitment slots reserved (Phase 2+; NOT used by the duress base pattern per §3.4)
+- [trellis-operational-companion §13](../../../trellis/specs/trellis-operational-companion.md) — Disclosure Manifest discipline (Phase 2+ overlay; relevant only for the deferred post-hoc selective-disclosure feature per §6.5 (3))
 - [stack-root ADR-0074](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md) — per-class DEK wrapping inheritance (HPKE suite parity)
 - Source brief: [`thoughts/sketches/2026-05-23-fw-0048-coercion-aware-signing-research-brief.md`](../sketches/2026-05-23-fw-0048-coercion-aware-signing-research-brief.md)
 - Journey: [J-027 in `JOURNEYS.md:526`](../../JOURNEYS.md)
