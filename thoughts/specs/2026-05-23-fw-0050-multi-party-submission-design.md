@@ -30,9 +30,17 @@ Each decision: the answer first, then the rationale, then the alternative consid
 
 ### 2.1 Q1 — One canonical multi-party shape with a role taxonomy
 
-**PROPOSAL.** FW-0050 designs **one parameterized shape** with a closed `partyRole` taxonomy: `coEqual`, `asymmetricPrimary`, `asymmetricSecondary`, `guardianFor`. Joint tax (two `coEqual`), immigration sponsorship (`asymmetricPrimary` petitioner + `asymmetricSecondary` beneficiary), child custody (two `coEqual` parents over a non-party child subject), household benefits (one `asymmetricPrimary` head-of-household + N `asymmetricSecondary` adult attestants) all fall out as configurations.
+**PROPOSAL.** FW-0050 designs **one parameterized shape** with a closed `partyRole` taxonomy: `coEqual`, `asymmetricPrimary`, `asymmetricSecondary`, `guardianFor`. Joint tax (two `coEqual`), immigration sponsorship (`asymmetricPrimary` petitioner + `asymmetricSecondary` beneficiary), child custody (two `coEqual` parents over a non-party child subject), household benefits (see disposition rule below) all fall out as configurations — once the multi-party-vs-FW-0037 boundary is decided per scenario.
 
-**Rationale.** One port surface, one conformance suite, one resolved-runtime-profile shape under [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md). Three separate shapes would force three separate capability keys (`multiPartyCoEqual` / `multiPartyAsymmetric` / `multiPartyGuardian`), three policy resolutions, three sets of conformance fixtures, and three failure-semantic taxonomies — a 3× duplication of the same architectural shape. The taxonomy pattern is the one [web ADR-0011 Feature Ownership Table line 138](../adr/0011-runtime-feature-resolution-and-policy-gates.md) already uses for `allowed party roles` as an org-policy axis; this decision instantiates that slot rather than inventing a new axis.
+**Multi-party-vs-FW-0037 disposition rule (closes research brief §3.4 boundary question).** A flow is **multi-party (FW-0050-shaped) iff exhibit-signers have their own session continuity** — separate identity binding through `IdentityProvider`, separate `DraftStore` scope, separate signature ceremony with its own `signedPayload.digest`. Otherwise it is **single-party-with-exhibits (FW-0037-shaped)**: the principal's session is the only session, the principal's signature is the only `AuthoredSignature` with `capacity = "self"`, and exhibit-signer attestations are document artifacts (PDFs/scans) the principal uploads and the principal's signature commits to — modeled at the FW-0037 `capacity` layer or as response artifacts, not as additional parties.
+
+**SNAP / Medicaid household-benefits disposition: FW-0037-shaped, not multi-party.** The lead respondent (head-of-household) authenticates once, holds one draft, signs the application once. Adult-attestants sign declarations **as exhibits attached to the principal's submission** — typically on paper, scanned, uploaded; or via a separate single-party Formspec flow whose signed Response is referenced as an exhibit artifact. The exhibit-signer's signature commits to the exhibit's bytes, not to the household application's `signedPayload.digest`; the head-of-household's signature commits to the assembled application including the exhibit-artifact hashes. No second authenticated respondent-side session against the household form; no per-party-scoped slice of the household draft; no per-party `IdentityProvider` claim coordinated by the formspec-web shell.
+
+**Justification.** The load-bearing test is whether the substrate must orchestrate N concurrent or sequential respondent-side sessions over the **same Definition's draft**. SNAP / Medicaid head-of-household + adult-attestants does not — the adult-attestant artifact is sealed before the head-of-household session begins (paper/scan) or in a parallel single-party flow (the attestation form is its own Definition), and the head-of-household's signature commits to the artifact's hash. Forcing this case into multi-party would inflate every adopter's `multiParty` capability surface (per-party `DraftStore` scoping, per-party invitation channel, per-party deadline policy) for a flow whose actual orchestration is "principal uploads document; principal signs." That defeats the Q4 intake-only-vs-WOS-tier split (§2.4) — household benefits would be falsely tagged as needing the asymmetric tier (multiple roles) when client-side single-party orchestration handles it.
+
+**Alternative rejected: model SNAP / Medicaid as multi-party with `asymmetricSecondary` attestants.** Considered because the upstream-extension-queue's earlier `parties` block sketch (now [EXT-28 at `2026-05-22-upstream-extension-queue.md:193`](2026-05-22-upstream-extension-queue.md)) enumerated household-benefits as a four-scenario example. Rejected on three grounds: (1) the head-of-household + adult-attestants flow doesn't satisfy the session-continuity test above — adult attestants don't authenticate against the household form; (2) the existing FW-0037 capacity + `authorityArtifact` shape on `AuthoredSignature` (EXT-3) already models exhibit-attestation provenance without inflating the multi-party surface; (3) if a particular benefits jurisdiction does require each adult member to authenticate independently and sign their own scoped slice of the household form, that variant promotes to multi-party (`asymmetricPrimary` head + N `asymmetricSecondary` adults) at form-author discretion — the disposition is per-form, not per-scenario-class. The taxonomy supports the multi-party variant; the default disposition is FW-0037.
+
+**Rationale (for the canonical-shape decision itself).** One port surface, one conformance suite, one resolved-runtime-profile shape under [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md). Three separate shapes would force three separate capability keys (`multiPartyCoEqual` / `multiPartyAsymmetric` / `multiPartyGuardian`), three policy resolutions, three sets of conformance fixtures, and three failure-semantic taxonomies — a 3× duplication of the same architectural shape. The taxonomy pattern is the one [web ADR-0011 Feature Ownership Table line 138](../adr/0011-runtime-feature-resolution-and-policy-gates.md) already uses for `allowed party roles` as an org-policy axis; this decision instantiates that slot rather than inventing a new axis.
 
 **Alternative rejected: three shapes per scenario class (research brief Q1).** Cleaner per-case mental model; loses on conformance surface area and on the [web ADR-0004](../adr/0004-cross-repo-placement-consume-not-invent.md) discipline (one upstream primitive vs three). The research brief's `§3.1`–`§3.4` scenarios differ in role asymmetry and visibility scoping, not in shape; collapsing them into role-parameter values keeps the contract narrow.
 
@@ -59,7 +67,7 @@ Each decision: the answer first, then the rationale, then the alternative consid
 1. Variable **count** at runtime is supported: a role can be declared with cardinality (`{role: "adultAttestant", cardinality: "1..N"}`) and the runtime binds 1 to N identities to that role slot. The Definition still declares the role type.
 2. Variable **role types** at runtime — the lead respondent inventing a new role on the fly — is forbidden. If the form's authoring side didn't anticipate a role, the form is not modeling it; ad hoc role invention defeats per-role visibility/signing declarations.
 
-This split keeps the SNAP / Medicaid household-attestant case in scope without giving up Definition-time validation.
+This split keeps the cardinality-variable case in scope without giving up Definition-time validation. **Note:** per the §2.1 disposition rule, SNAP / Medicaid head-of-household + adult-attestants is FW-0037-shaped by default; the variable-cardinality multi-party path described here applies to the jurisdiction-specific variant where each adult member authenticates independently against the household form (rare).
 
 ### 2.4 Q4 — Intake-only viable for `coEqual` only; WOS governance required for asymmetric roles
 
@@ -88,12 +96,14 @@ The `multiParty` instance-capability row from [web ADR-0011 Feature Ownership Ta
 
 | Layer | What it carries for `multiParty` |
 |---|---|
-| Instance capability | Adapter-backed party/session orchestration; tier (`coEqual` / `asymmetric`) is part of the capability evidence |
+| Instance capability | Adapter-backed party/session orchestration; tier (`coEqual` / `asymmetric`) is part of the capability evidence — instance declares the highest tier it can serve |
 | Org policy | `allowed party roles` (closed enum subset of the Q1 taxonomy) plus per-party assurance floors, deadline policy, invitation channel allow-list |
-| Form policy | Form declares required `multiParty` tier (`coEqual` or `asymmetric`) and the per-role assurance floor required for each declared role |
+| Form policy | Form declares required `multiParty` tier (`coEqual` or `asymmetric`) **as a first-class authoring declaration** (not derived); plus the per-role assurance floor required for each declared role |
 | Resolved runtime profile | Enabled features + per-role policy resolution; the form-load boundary throws `UnsupportedRequiredFeatureError` if the instance tier doesn't satisfy the form's required tier |
 
-The `tier` axis is the load-bearing addition. Without it, an instance with intake-only `coEqual`-capable orchestration looks like it can serve an immigration-sponsorship form; the resolver would let the form load and the failure would surface at signature time. Tiered capability fails closed at form-load per ADR-0011's failure-semantics discipline.
+**Tier is a first-class form-policy declaration, not a runtime-derived value.** The form author declares `multiParty.tier` on the Definition; the resolver consumes it; the runtime does not compute it from `(roles, visibilityScope, disagreement-merge-presence)`. This is the load-bearing decision driving the rest of §3: without it, an instance with intake-only `coEqual`-capable orchestration looks like it can serve an immigration-sponsorship form (the resolver would let the form load and the failure would surface at signature time), and worse, the custody case (§4.3 — `coEqual` roles requiring `asymmetric` tier because of per-party visibility and disagreement-merge complexity) cannot be expressed at all by any deterministic derivation rule. Tiered capability fails closed at form-load per ADR-0011's failure-semantics discipline.
+
+**Rejected alternative: derive tier from `(roles, visibilityScope, disagreement-as-state-present)`.** Considered because it removes one form-author burden. Rejected because custody (§4.3) is the counterexample: roles are `coEqual` and the form may opt into disagreement-merge or per-party visibility independently, so the derivation rule would need to bake in "if visibility is scoped OR disagreement-merge is declared, force tier to `asymmetric`" — at which point the form author is effectively still declaring tier, just through three correlated proxies instead of one explicit axis. Implicit derivation also makes tier silently drift when an author adds a private-to-party field to a form previously declared `coEqual`; explicit declaration surfaces the orchestration-tier change at the same edit where the privacy change happens.
 
 ### 3.2 Port shape — proposal: no new port, conditional
 
@@ -117,7 +127,7 @@ The `ResolvedRuntimeProfile` consumed by the React shell per [web ADR-0011](../a
 
 ```text
 multiParty?: {
-  tier: "coEqual" | "asymmetric"
+  tier: "coEqual" | "asymmetric"        // mirrors Definition.parties.tier (form-authored, not derived — see §3.1)
   parties: Array<{
     roleId: string                      // matches Definition.parties[*].roleId
     role: "coEqual" | "asymmetricPrimary" | "asymmetricSecondary" | "guardianFor"
@@ -129,6 +139,8 @@ multiParty?: {
   deadlinePolicy?: { perPartyDeadline?: Duration, expirationAction: "void-submission" | "convert-to-partial" }
 }
 ```
+
+The `tier` field is a **mirror of the Definition-level form-policy declaration**, not a value the resolver computes from the `parties[*].role` taxonomy or from `visibilityScope`. Per §3.1, tier and roles are orthogonal axes: roles encode signature semantics (who-signs-what), tier encodes orchestration complexity (what-orchestration-the-instance-must-provide). The custody case (§4.3) is the load-bearing example — `coEqual` roles with `asymmetric` tier — and is only expressible because tier is declared, not derived. EXT-28 (the `parties` block on `definition.schema.json`, [`2026-05-22-upstream-extension-queue.md:193`](2026-05-22-upstream-extension-queue.md)) must carry the `tier` field at form-policy level alongside the role enumeration.
 
 The block is the resolver's read-only output. Adapters do not consume it directly; the shell does, and orchestrates ports against it. This keeps the port-extension surface narrow per [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md).
 
@@ -153,7 +165,7 @@ Each scenario shows: party-role bindings, the resolved runtime profile, which po
 ### 4.3 Child custody filing (research brief §3.3) — WOS-tier with merge-semantics requirements
 
 - **Roles:** Two `coEqual` parents (the child is the **subject**, not a party — per research brief `§3.3`, the child neither fills nor signs; modeled as `intake-handoff.subjectRef` not as a party-role slot).
-- **Resolved profile:** `multiParty.tier = "asymmetric"` (because of the per-party visibility and the disagreement-merge semantics, even though the roles are `coEqual`-symmetric — the **tier** axis tracks orchestration complexity, the **role** axis tracks signature semantics).
+- **Resolved profile:** `multiParty.tier = "asymmetric"` — the form author declares the tier explicitly on the Definition (per §3.1 and §3.3 — tier is form-authored, not derived from `(roles, visibilityScope, disagreement-merge-presence)`). The custody form's author chooses `asymmetric` tier because the form requires per-party visibility scoping (FW-0049/FW-0060 dependency) and disagreement-merge semantics (§5.4) — both orchestration-complexity properties that exceed `coEqual`-tier intake-only capability. This is the canonical case where the **tier** axis tracks orchestration complexity and the **role** axis tracks signature semantics, and the two diverge: `coEqual` roles + `asymmetric` tier.
 - **Ports exercised:** `DraftStore` (per-party scoped slices with overlap), `IdentityProvider` (two sessions), `SubmitTransport` (merged Response carrying disagreement-as-state per §5).
 - **MVP-tier blocked.** Safe-address per-party visibility (§6.1 dependency on FW-0049/FW-0060) is the hard prerequisite; without it, a survivor's address could leak to the co-parent through the joint receipt.
 
@@ -164,7 +176,7 @@ Each scenario shows: party-role bindings, the resolved runtime profile, which po
 Two sub-cases driven by the resolved-profile `deadlinePolicy.expirationAction`:
 
 - **`void-submission`** (default for asymmetric tier and for any safe-address-affected form): the submission is voided; Party A's signature is recorded as `partySignature.status = "revoked-on-expiration"` via an EXT-5-extended ledger event; no intake-handoff lands. Party A is notified that their signature did not result in a submission.
-- **`convert-to-partial`** (legal for `coEqual` tier where the form explicitly declares partial submissions as valid — rare; SNAP-style household applications with a "if cohabitant declines, mark as single-applicant variant" rule): the intake-handoff lands with `partySignatures[]` carrying only Party A's entry and an `EXT-5 partyMissing` ledger event annotating the missing role slot.
+- **`convert-to-partial`** (legal for `coEqual` tier where the form explicitly declares partial submissions as valid — rare; e.g. the jurisdiction-specific multi-party variant of SNAP-style household applications where each adult authenticates against the household form, with a "if cohabitant declines, mark as single-applicant variant" rule — per §2.1 disposition this is the non-default household-benefits shape): the intake-handoff lands with `partySignatures[]` carrying only Party A's entry and an `EXT-5 partyMissing` ledger event annotating the missing role slot.
 
 **Default is `void-submission`.** Adopters opt into `convert-to-partial` per form-policy and only if the form's authoring side declares the partial-submission shape — silent downgrade is forbidden per [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md)'s failure-semantics rule.
 
@@ -219,7 +231,7 @@ FW-0050 design (this doc)
 XS-1 ratification (stack-root ADR — not yet authored)
     ↓
 EXT-3 spec change (formspec — capacity + party-role on AuthoredSignature)
-+ new EXT for definition.schema.json `parties` block + per-item `visibleTo[]`
++ EXT-28 (definition.schema.json `parties` block + tier + per-item `visibleTo[]`)
     ↓
 FW-0061 build (formspec-web)
 ```
@@ -245,13 +257,11 @@ Per [`thoughts/specs/2026-05-22-upstream-extension-queue.md:47`](2026-05-22-upst
 
 **This is one EXT-3 extension, not two.** The capacity primitive (FW-0037) and the party-role primitive (FW-0050) share the `AuthoredSignature` extension surface; landing them together avoids two passes over the same schema.
 
-### 6.4 New EXT — Definition `parties` block
+### 6.4 EXT-28 — Definition `parties` block
 
-Not yet in the upstream extension queue. This design proposes:
+Landed in the upstream extension queue at [`2026-05-22-upstream-extension-queue.md:193`](2026-05-22-upstream-extension-queue.md) as part of FW-0050's design landing. This design proposes:
 
-- **EXT-N (`parties` block on `definition.schema.json`)** — form-level `parties: PartyRole[]` declaring role slots with cardinality, plus per-item `visibleTo[]` / `editableBy[]` / `signedBy[]` (or per-section equivalent — XS-1 decides). Closes the per-party visibility model the FW-0050 design depends on.
-
-This entry should be added to [`thoughts/specs/2026-05-22-upstream-extension-queue.md`](2026-05-22-upstream-extension-queue.md) as part of FW-0050's design landing.
+- **EXT-28 (`parties` block on `definition.schema.json`)** — form-level `parties: PartyRole[]` declaring role slots with cardinality, plus a form-policy `tier: "coEqual" | "asymmetric"` declaration (form-authored, not derived — per §3.1), plus per-item `visibleTo[]` / `editableBy[]` / `signedBy[]` (or per-section equivalent — XS-1 decides). Closes the per-party visibility model the FW-0050 design depends on. The queue entry at [`2026-05-22-upstream-extension-queue.md:193`](2026-05-22-upstream-extension-queue.md) currently enumerates the role/visibility shape; the `tier` form-policy field is added by this design's MED-2 remediation and should land in EXT-28 alongside the role enumeration.
 
 ### 6.5 What FW-0050 ratifies standalone
 
@@ -265,7 +275,7 @@ This entry should be added to [`thoughts/specs/2026-05-22-upstream-extension-que
 
 **Waits on upstream:**
 
-- The Definition `parties` block + per-item visibility (EXT-N).
+- The Definition `parties` block + form-policy `tier` declaration + per-item visibility (EXT-28).
 - The `partyRole` field on `AuthoredSignature` (EXT-3 extension).
 - The `subjects[]` and `partySignatures[]` shapes on `intake-handoff` (XS-1).
 - The WOS applicant API extension for multi-applicant projection (XS-1 + WOS ADR).
@@ -315,7 +325,7 @@ These are real, called out so FW-0061 has a known surface to address (or so a fo
 4. **Sync co-fill** (Q2 deferral). Separate design row when pulled forward.
 5. **AI-agent co-party** (FW-0058 deferral). The taxonomy extension is straightforward; the ceremony semantics are not. FW-0058 owns.
 6. **Per-party post-submission lifecycle actions** (amend / withdraw / dispute scoped per-party). [Web ADR-0011's `recordLifecycle`](../adr/0011-runtime-feature-resolution-and-policy-gates.md) capability composes with `multiParty`; the composition rules are a FW-0061 build concern.
-7. **Definition-time validation of role configuration.** Whether the formspec engine refuses to render a form whose `parties` block has conflicting role/visibility declarations. Engine-side concern, follow-on to EXT-N.
+7. **Definition-time validation of role configuration.** Whether the formspec engine refuses to render a form whose `parties` block has conflicting role/visibility declarations. Engine-side concern, follow-on to EXT-28.
 8. **Reviewer-vs-party single-sidecar question (FW-0042 interaction).** Two separate sharing primitives, or one? Owner of the decision is unclear; flag for FW-0042's design row.
 
 ## 9. Decision summary
@@ -331,10 +341,10 @@ These are real, called out so FW-0061 has a known surface to address (or so a fo
 | Extend `DraftStore` + `IdentityProvider` + `SubmitTransport` (§3.2) | PROPOSAL | owner review |
 | XS-1 boundary at `intake-handoff` (§6.2) | PROPOSAL to stack-root | stack-root architecture review |
 | EXT-3 extends to carry `partyRole` (§6.3) | PROPOSAL to formspec | formspec spec-expert review |
-| New EXT for Definition `parties` block (§6.4) | PROPOSAL to formspec | formspec spec-expert review |
+| EXT-28 for Definition `parties` block (§6.4) | PROPOSAL to formspec | formspec spec-expert review |
 | Disagreement-as-state at field-merge layer (§5.4) | PROPOSAL | owner review + XS-1 ratification |
 
-**Row status change:** FW-0050 moves from `open` to `in design`. FW-0050 stays open until this design is owner-ratified and the upstream chain (XS-1 → EXT-3 → EXT-N) has at least proposed shapes.
+**Row status change:** FW-0050 moves from `open` to `in design`. FW-0050 stays open until this design is owner-ratified and the upstream chain (XS-1 → EXT-3 → EXT-28) has at least proposed shapes.
 
 ## 10. Related decisions
 
