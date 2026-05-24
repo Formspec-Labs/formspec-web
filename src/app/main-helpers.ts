@@ -1,40 +1,26 @@
-import {
-  createDefaultComposition,
-  createDefaultDocumentsRouteComposition,
-  createDefaultObligationsRouteComposition,
-  createDefaultStatusRouteComposition,
-} from '../composition/default.ts';
+import { createDefaultComposition } from '../composition/default.ts';
+import { createRouteNarrowedComposition } from '../composition/route-narrowing.ts';
 import type { Composition } from '../composition/types.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
-import { parseDocumentsRoute } from './documents-route.ts';
-import { parseObligationsRoute } from './obligations-route.ts';
-import { parseStatusRoute } from './status-route.ts';
+import { DOCUMENTS_ROUTE_NARROWING, parseDocumentsRoute } from './documents-route.ts';
+import { OBLIGATIONS_ROUTE_NARROWING, parseObligationsRoute } from './obligations-route.ts';
+import { STATUS_ROUTE_NARROWING, parseStatusRoute } from './status-route.ts';
 
 /**
- * Picks the right composition factory based on the current route (FW-0068).
+ * Picks the right composition factory based on the current route (FW-0068,
+ * parameterized in FW-0070).
  *
  * Called from `main.tsx` at boot, before constructing the composition. Reuses
  * the pure `parseStatusRoute` / `parseObligationsRoute` / `parseDocumentsRoute`
  * parsers so the boot-time parse and the runtime parse in `App.tsx` cannot
- * disagree.
+ * disagree. Each narrowed route dispatches to `createRouteNarrowedComposition`
+ * with its co-located descriptor; the full-app route falls back to
+ * `createDefaultComposition`.
  *
- * Closes FW-0039 H-1: when the URL is `/status?case=urn:wos:...`, the
- * status-route factory wires only `statusReader` + the runtime-profile /
- * policy slots. No HTTP / OIDC / anonymous-session machinery boots.
- *
- * Extended for FW-0055 slice 1: when the URL is `/obligations`, the
- * obligations-route factory wires `respondentPlaceSource` + `identityProvider`
- * (gated on the respondent-place capability) + runtime-profile slots.
- *
- * Extended for FW-0056 slice 1: when the URL is `/documents`, the
- * documents-route factory wires the same respondent-place + identity + policy
- * slots; the surface is identity-bound by the same J-039/J-042 framing
- * logic.
- *
- * The N=4 dispatch arm (FW-0068's reviewer-named parameterization trigger)
- * is acknowledged in FW-0070 — internal refactor that collapses the four
- * sibling factories into one parameterized helper. Not landed here to keep
- * the FW-0056 row scope tight.
+ * Closes FW-0039 H-1 (FW-0068) and the N=4 sibling-factory parameterization
+ * trigger (FW-0070). Adding a new narrowed route requires: (1) a new route
+ * parser file, (2) a `*_ROUTE_NARROWING` descriptor co-located with it, and
+ * (3) one new dispatch arm here.
  */
 export function chooseComposition({
   href,
@@ -44,13 +30,21 @@ export function chooseComposition({
   config: FormspecWebConfig;
 }): Composition {
   if (parseStatusRoute(href)) {
-    return createDefaultStatusRouteComposition(config);
+    return createRouteNarrowedComposition({ mode: 'default', config, route: STATUS_ROUTE_NARROWING });
   }
   if (parseObligationsRoute(href)) {
-    return createDefaultObligationsRouteComposition(config);
+    return createRouteNarrowedComposition({
+      mode: 'default',
+      config,
+      route: OBLIGATIONS_ROUTE_NARROWING,
+    });
   }
   if (parseDocumentsRoute(href)) {
-    return createDefaultDocumentsRouteComposition(config);
+    return createRouteNarrowedComposition({
+      mode: 'default',
+      config,
+      route: DOCUMENTS_ROUTE_NARROWING,
+    });
   }
   return createDefaultComposition(config);
 }
