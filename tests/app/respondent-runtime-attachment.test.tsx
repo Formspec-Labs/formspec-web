@@ -146,6 +146,25 @@ async function waitForText(text: string, timeoutMs = 4000): Promise<void> {
   }
 }
 
+/**
+ * Wait for the settled-row remove button to appear. The pending-uploading
+ * row also contains the filename, so waiting on the filename via textContent
+ * races the storage.set() that lands the bytes. The remove button only
+ * renders after Promise.allSettled resolves AND the engine re-renders with
+ * the new field.value containing the AttachmentRef.
+ */
+async function waitForSettledRow(filename: string, timeoutMs = 4000): Promise<void> {
+  const start = Date.now();
+  while (container?.querySelector(`[aria-label="Remove ${filename}"]`) === null) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`Timed out waiting for settled row: ${filename}\n\nDOM:\n${container?.textContent ?? ''}`);
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+}
+
 describe('RespondentRuntime attachment integration (FW-0033)', () => {
   it('uploads via the wired AttachmentStore so the AttachmentRef survives JSON serialization (the substrate-honesty contract)', async () => {
     const { composition } = buildComposition({ mode: 'demo-stub-attachment' });
@@ -160,7 +179,10 @@ describe('RespondentRuntime attachment integration (FW-0033)', () => {
       input.dispatchEvent(new Event('change', { bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    await waitForText('lease.pdf');
+    // Wait for the SETTLED-row remove button (aria-label) — not the filename
+    // text, which matches the pending-uploading row too and races the
+    // storage.set() below.
+    await waitForSettledRow('lease.pdf');
 
     // 1. Adapter received the bytes through the port. Reach the stub-only
     // helper through `unknown` since AttachmentStore itself does not declare
