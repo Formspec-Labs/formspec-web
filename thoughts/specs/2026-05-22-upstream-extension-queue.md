@@ -27,12 +27,11 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 
 **Owning repo:** formspec
 **File:** `formspec/schemas/definition.schema.json`
-**Closes:** J-015 (irreversibility / consequences), J-017 (purpose + citation), J-028 (cross-agency referral), J-037 (safe-address protectability)
-**FW rows blocked:** FW-0007, FW-0021, FW-0029, FW-0049
-**Shape:** three sibling blocks on items — `consequences`, `purpose`, `privacy`. Not collapsed into one mega-block because different consumers read different blocks (privacy → renderer + verifier; consequences → submit-gate + ledger; purpose → inline disclosure surface). Authored as one ADR + one schema change.
-**No name collision with existing `disabledDisplay`:** the `privacy` block adds `protectable: bool` (adjective declaring "this field IS protectable") and `class` enum (`"safe-address" | "contact" | "employer" | ...`). The existing `disabledDisplay` enum (lines 945–952 of `definition.schema.json`) — whose values are `"hidden" | "protected"` — remains untouched. `protectable` (adjective property) and `protected` (existing enum value) coexist; no rename needed.
-**Fixture status:** none. Land with fixtures in `formspec/tests/fixtures/items/{consequences,purpose,privacy}/`.
-**Status:** not yet filed.
+**Closes:** J-015 (irreversibility / consequences), J-017 (purpose + citation), J-028 (cross-agency referral). **J-037 reassigned 2026-05-23 to EXT-31 + EXT-32 per FW-0049 design** — the `privacy` block is retired in favor of `accessControl.class` per stack-root ADR-0074.
+**FW rows blocked:** FW-0007, FW-0021, FW-0029. **FW-0049 no longer blocks on EXT-1 per the scope reduction** — `accessControl.class` is the canonical safe-address mechanism (EXT-31 registers the safe-* class tokens; EXT-32 supplies the Privacy Profile audience policy).
+**Shape:** two sibling blocks on items — `consequences`, `purpose`. **The originally-proposed `privacy` block is retired 2026-05-23** per [FW-0049 design §3.2 + §6.2](2026-05-23-fw-0049-safe-address-handling-design.md): safe-address handling lives on `accessControl.class` per [stack-root ADR-0074](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md), not on a parallel `privacy` property. Two schema properties with overlapping semantics drift; one canonical mechanism per ADR-0074 §"Five decisions" line 41–45. The `consequences` and `purpose` blocks are unaffected. Authored as one ADR + one schema change.
+**Fixture status:** none. Land with fixtures in `formspec/tests/fixtures/items/{consequences,purpose}/`.
+**Status:** not yet filed. Scope reduced 2026-05-23 by FW-0049 design (the `privacy` block is gone; safe-address moves to EXT-31 + EXT-32).
 
 ### EXT-2: Response metadata envelope
 
@@ -213,6 +212,28 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Fixture status:** none. Land with per-template recipient + key-rotation fixtures (`validUntilAt` set with overlapping windows + cutover semantics).
 **Status:** proposed 2026-05-23 by FW-0048 design; pending XS-3 ratification at stack-root.
 
+### EXT-31: Access-Class Registry entries for safe-* (safe-address handling)
+
+**Owning repo:** formspec
+**File:** `formspec/specs/registry/access-class-registry.md` (the Access-Class Registry companion proposed in [stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md))
+**Closes:** J-037 (safe-address handling)
+**FW rows blocked:** FW-0049 (design dependency), FW-0060 (build)
+**Shape:** three new class entries per [FW-0049 design §3.1 + §6.3](2026-05-23-fw-0049-safe-address-handling-design.md): `safe-address`, `safe-contact`, `safe-employer`, all under the `safe-*` namespace prefix. Each entry carries `defaultAudience`, `excludedAudiences`, `substitutionRule` (deployment-resolved validator port reference), and `cascadeRule` (`automatic` for `safe-address`/`safe-contact`, `manual` for `safe-employer` due to derived-field heterogeneity). Per ADR-0074 §"Five decisions" line 41–45 the registry is the canonical home for cross-form class vocabulary; Core treats class tokens as opaque.
+**Cross-stack:** lands as part of XS-4 ratification (see below). Requires ADR-0074 promotion from Proposed to Accepted; the Access-Class Registry companion needs to exist first (currently proposed in ADR-0074 §"Companion artifacts"). FW-0049 design assumes the companion lands per ADR-0074's plan and registers the safe-* entries.
+**Fixture status:** none. Land with one fixture per class covering the canonical scenarios per FW-0049 §2.3 (DV-survivor / witness-protection / multi-party-custody).
+**Status:** proposed 2026-05-23 by FW-0049 design; pending XS-4 ratification at stack-root + ADR-0074 promotion.
+
+### EXT-32: Privacy Profile default audience policy for safe-* (safe-address handling)
+
+**Owning repo:** formspec
+**File:** `formspec/specs/privacy/privacy-profile.md` (the Privacy Profile sidecar proposed in [stack-root ADR-0074 §"Companion artifacts"](../../../thoughts/adr/0074-formspec-native-field-level-transparency.md))
+**Closes:** J-037 (safe-address handling)
+**FW rows blocked:** FW-0049 (design dependency), FW-0060 (build)
+**Shape:** default audience-policy entry for the `safe-*` namespace per [FW-0049 design §6.4](2026-05-23-fw-0049-safe-address-handling-design.md). The defaults: `safe-*` classes have `issuer-verification` as the only plaintext audience; `respondent-public-receipt`, `verifier-public-output`, and `foia-public` audiences are excluded by default. Per-jurisdiction overrides land as Privacy Profile additions per deployment (FOIA carve-outs for specific elected-official disclosure rules, etc.). Per ADR-0074 the Privacy Profile sidecar is the home for deployment-level audience policy; FW-0049 supplies the cross-deployment default.
+**Cross-stack:** lands as part of XS-4 ratification (see below). Requires ADR-0074 promotion + Privacy Profile sidecar to exist.
+**Fixture status:** none. Land with default-policy fixtures + per-jurisdiction-override fixtures (CA-ACP, WA-ACP, USMS-WitSec).
+**Status:** proposed 2026-05-23 by FW-0049 design; pending XS-4 ratification at stack-root + ADR-0074 promotion.
+
 ### EXT-10: Receipt-domain prose update (drift fix)
 
 **Owning repo:** formspec
@@ -292,6 +313,16 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Shape:** per [FW-0048 design §6.5](2026-05-23-fw-0048-coercion-aware-signing-design.md): (1) Trellis Core §6.4 + §9.4 carry the base envelope unchanged (signed event, `payload_ref` ciphertext, `key_bag` HPKE wrap to safety-team recipient) — no new substrate primitive required; (2) event-type registration of `submission.duress-signaled` in the bound registry per Core §6.7 + §14 is the only Trellis-side Phase 1 work; (3) advanced post-hoc selective-disclosure manifests over the duress payload would require Phase 2+ (OC-26 + OC-27 + OC-30 + Phase 2 commitment scheme) — explicitly deferred, base pipeline does not depend on it; (4) WOS `safety-reviewer` actorExtension is OPTIONAL — `issuer-webhook` routing doesn't require WOS at all; (5) receipt discipline — verifier MUST NOT distinguish duress-signaled and non-duress submissions in any user-visible way (byte-identical receipt path per §3.2); (6) per-party scoping per [FW-0050 §7.2](2026-05-23-fw-0050-multi-party-submission-design.md) and [FW-0048 §7](2026-05-23-fw-0048-coercion-aware-signing-design.md) — Party B's duress signal MUST NOT be observable to Party A through any surface (status / receipt / ceremony).
 **Fixture status:** none. Cross-stack ADR needed in `formspec-stack/thoughts/adr/`. Per [FW-0048 §7.3 (4)] multi-party fixture matrix lives in FW-0061 build.
 **Status:** proposed 2026-05-23 by FW-0048 design; pending stack-root ratification.
+
+### XS-4: Safe-address pipeline (cross-stack)
+
+**Spans:** formspec (Access-Class Registry safe-* entries per EXT-31 + Privacy Profile default audience per EXT-32) + work-spec (per-actor audience policy for safe-* in applicant API + governance projections when WOS is the deployment's governance layer) + trellis (Phase 2+ OC-26 commitment-slot population + OC-27 Disclosure Manifest binding for safe-* fields; base bucketed-Response per ADR-0074 works Phase 1)
+**Closes:** J-037 (safe-address handling)
+**FW rows blocked:** FW-0049 (design — design dependency closed by this ADR's ratification), FW-0060 (build)
+**Recommended boundary:** at `intake-handoff` plus the Trellis admit step. Formspec owns the field-level class declaration + bucketed-Response shape; Trellis carries the Phase 2 commitment slots + Disclosure Manifest; WOS owns per-actor audience policy when WOS is the deployment's governance layer.
+**Shape:** per [FW-0049 design §6.5](2026-05-23-fw-0049-safe-address-handling-design.md): (1) Phase 1 — ADR-0074 bucketed-Response delivers at-rest/in-transit confidentiality (safe-* class fields land in a separate bucket wrapped to the issuer-verification audience); receipt-side semantics are full-omit-with-structural-tell (insufficient for J-037 canonical scenarios). (2) Phase 2 — OC-26 uniform commitment-slot population (slot present whether or not the respondent invoked safe-address) + OC-27 Disclosure Manifest per audience (`committed_only_fields` for public-receipt; `disclosed_fields` for issuer-verification) + OC-30 independent auditability (verifier validates the eligibility-predicate-satisfaction commitment proof without plaintext); REQUIRED for the verifier-grade tier. (3) WOS audience policy — applicant API + governance projections honor the Privacy Profile audience policy before rendering safe-* fields per requesting actor; composition with FW-0050 §7.1 per-party scoping applies. (4) Receipt discipline — verifier MUST NOT distinguish safe-address-redacted receipts from non-redacted at the structural level (uniform commitment slots; differs only in manifest openings). (5) PKAF downstream — when a safe-*-protected value is referenced by a downstream Rulespec assertion, the assertion's `rkaf:AccessScope` MUST inherit a regulatory-restricted scope reflecting the upstream `accessControl.class` (specific DPV composition per deployment).
+**Fixture status:** none. Cross-stack ADR needed in `formspec-stack/thoughts/adr/`. Per FW-0049 §7.4 fixture matrix lives in FW-0060 build (single-party DV-survivor / single-party witness-protection / multi-party child-custody scenarios).
+**Status:** proposed 2026-05-23 by FW-0049 design; pending stack-root ratification + Trellis Phase 2 substrate availability for the verifier-grade tier (Phase 1 fallback path is achievable without).
 
 ### XS-2: Respondent-side multi-tenant token bag
 
