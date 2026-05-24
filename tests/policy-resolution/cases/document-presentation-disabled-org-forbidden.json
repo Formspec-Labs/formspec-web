@@ -30,7 +30,8 @@
       "documentPresentation": "org-forbidden",
       "respondentPlace": "not-requested",
       "status": "not-requested",
-      "fileUpload": "not-requested"
+      "fileUpload": "not-requested",
+      "crossIssuerHistory": "not-requested"
     }
   }
 }

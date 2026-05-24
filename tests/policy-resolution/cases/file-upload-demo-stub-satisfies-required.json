@@ -31,7 +31,8 @@
     "disabled": {
       "respondentPlace": "not-requested",
       "status": "not-requested",
-      "documentPresentation": "not-requested"
+      "documentPresentation": "not-requested",
+      "crossIssuerHistory": "not-requested"
     }
   }
 }

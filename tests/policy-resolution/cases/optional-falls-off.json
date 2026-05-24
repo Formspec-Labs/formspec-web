@@ -27,7 +27,8 @@
     "disabled": {
       "respondentPlace": "optional-no-instance",
       "status": "not-requested",
-      "fileUpload": "not-requested"
+      "fileUpload": "not-requested",
+      "crossIssuerHistory": "not-requested"
     }
   }
 }
