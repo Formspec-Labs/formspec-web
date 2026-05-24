@@ -374,6 +374,12 @@ Each party's duress payload is HPKE-wrapped independently. The safety-team recip
 
 The per-party `partyRef` is part of the HPKE plaintext (inside the §5.2 plaintext block, encrypted by the per-event DEK before key_bag wrap), so even an observer of the chain cannot determine which party signaled duress.
 
+### 7.2.5 FW-0051 composition (BYO-assistant — coercion-via-tool-manipulation; recommended `forbidden` default for high-coercion templates)
+
+FW-0051 (bring-your-own-assistant) and FW-0048 (coercion-aware signing) compose at the threat-model layer: a coercer who controls the respondent's assistant (malicious extension; coercer-installed tool; coercer instructing respondent to invoke assistant) can use the assistant as a coercion amplifier. **Per [FW-0051 §7.3](2026-05-23-fw-0051-bring-your-own-assistant-design.md):** forms in this design's high-coercion-risk template set (§6.4: financial POA, immigration sponsorship, advance directive, marriage/divorce, custody, benefits-redirect) SHOULD declare `bringYourOwnAssistant: forbidden` AND `duressAware: required`. Combined posture: no assistant surface to be coerced through, AND the duress channel is available if the respondent is being coerced through other means. Adopters MAY override per-deployment (e.g., immigration legal-aid that uses assistant tooling for the same template class can explicitly opt in by declaring `bringYourOwnAssistant: allowed` + accepting the increased residual risk).
+
+**Substrate effect:** none on FW-0048's substrate paths (this section is informational, naming a policy-composition recommendation; the duress channel + per-party HPKE wrap + safety-routing adapter are unchanged). The `forbidden` posture is a per-form policy declaration enforced at form-load per [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md).
+
 ### 7.3 FW-0061 build constraints (consumed by FW-0061 author directly)
 
 The FW-0061 build is responsible for:

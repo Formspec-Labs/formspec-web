@@ -433,6 +433,14 @@ FW-0048 (coercion-aware signing) and FW-0049 (safe-address) are adjacent but dis
 - The duress signal's HPKE-wrapped payload (FW-0048 §5.2) and the safe-address bucketed-Response routing (this design §3.4 + §3.5) are independent substrate paths — both can fire on the same submission.
 - The verifier sees: a `submission.duress-signaled` event (with HPKE-wrapped payload per FW-0048 §5.2 — opaque without safety-team key), and a safe-address commitment-with-proof per this design §3.5. **No interaction**; both protect different concerns through different substrate paths.
 
+### 7.3.5 FW-0051 composition (BYO-assistant — safe-* mask survives FW-0051 reveal)
+
+FW-0051 (bring-your-own-assistant) and FW-0049 (safe-address) compose at the Assist introspection surface: the Assist Provider's `formspec.field.describe` returns `FieldDescription` (Assist §4.4) including `value`, and FW-0051 §3.3 masks `value` by default with a per-field reveal escalation as the unmask gate. **For safe-*-class fields, the FW-0049 §3.3 mask is a SEPARATE, HIGHER-PRIORITY mask that survives the FW-0051 reveal.** Per [FW-0051 §7.2](2026-05-23-fw-0051-bring-your-own-assistant-design.md): the Assist Provider NEVER unmasks safe-*-class fields regardless of the respondent's Stage 3 per-field reveal grant. The discipline composes via "AND" not "OR": both masks must be lifted for unmask; the safe-* mask cannot be lifted by FW-0051's reveal.
+
+**Justification.** FW-0049's mask exists for shoulder-surfing / screen-share defense; the respondent's own awareness of the value is mediated by their own UI's reveal (FW-0049 §3.3 "edit-mode IS reveal"). For the assistant case, the respondent revealing a safe-* value to the assistant is a separate, stronger consent decision than revealing a normal field's value. Slice 1 chooses the safer default: assistants never see plaintext safe-* values. If a future use case demands safe-*-class fields be revealable to assistants (e.g., legal-aid software helping a survivor fill a benefits form), a follow-on row revisits with a stronger consent surface.
+
+**FW-0060 build constraint addition (consumed by FW-0060 author directly):** the Assist Provider implementation under FW-0062 build MUST mask safe-*-class fields in `FieldDescription.value` unconditionally; the FW-0062 build's per-field reveal grant store MUST exclude safe-*-class fields from the unmaskable set. Conformance fixtures cover the safe-* + Assist composition case.
+
 ### 7.4 FW-0060 build constraints (consumed by FW-0060 author directly)
 
 The FW-0060 build is responsible for:

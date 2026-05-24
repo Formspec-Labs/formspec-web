@@ -37,11 +37,11 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 
 **Owning repo:** formspec
 **File:** `formspec/schemas/response.schema.json`
-**Closes:** J-010 (narrative-translation provenance), J-011 (per-field AI authorship), J-017 (which disclosure was shown), J-020 (prefill provenance), J-023 (calculated-value derivation)
-**FW rows blocked:** FW-0022, FW-0024
-**Shape:** sibling blocks keyed by item path — `metadata.provenance[path]` `{class, sourceRef, capturedAt, attestedBy}`, `metadata.derivations[path]` (FEL trace via existing `evalFELWithTrace` at `formspec/packages/formspec-engine/src/fel/fel-api-runtime.ts:99`), `metadata.disclosuresShown[path]`. Opt-in at form level. Reuse `ChangeSetEntry.valueClass` enum from `respondent-ledger-event.schema.json` (property defined at line 320; enum begins at line 322) — promote to a shared `common.schema.json` def.
-**Fixture status:** none. Land with fixtures in `formspec/tests/fixtures/response/{provenance,derivations,disclosures-shown}/`.
-**Status:** not yet filed.
+**Closes:** J-010 (narrative-translation provenance), J-011 (per-field AI authorship), J-017 (which disclosure was shown), J-020 (prefill provenance), J-023 (calculated-value derivation), **J-046 (per-field assistant-suggested authorship lineage per AP-007 Test rule)**.
+**FW rows blocked:** FW-0022, FW-0024, **FW-0051 (per-field assistant-suggested provenance per FW-0051 §7.5 AP-007 binding — `attestedBy: respondent, sourceRef: assistant-suggested` shape)**
+**Shape:** sibling blocks keyed by item path — `metadata.provenance[path]` `{class, sourceRef, capturedAt, attestedBy}`, `metadata.derivations[path]` (FEL trace via existing `evalFELWithTrace` at `formspec/packages/formspec-engine/src/fel/fel-api-runtime.ts:99`), `metadata.disclosuresShown[path]`. Opt-in at form level. Reuse `ChangeSetEntry.valueClass` enum from `respondent-ledger-event.schema.json` (property defined at line 320; enum begins at line 322) — promote to a shared `common.schema.json` def. **FW-0051 addition (2026-05-23):** the `sourceRef` field SHOULD carry the value `"assistant-suggested"` (or a more specific transport-keyed value like `"assistant-suggested:webmcp"`) when the value was proposed by a BYO-assistant tool invocation and confirmed by the respondent; no aggregate "AI score" is computed or exposed (AP-007 Test rule).
+**Fixture status:** none. Land with fixtures in `formspec/tests/fixtures/response/{provenance,derivations,disclosures-shown}/`. **FW-0051 addition (2026-05-23):** include an `assistant-suggested` provenance fixture in `provenance/`.
+**Status:** not yet filed. Scope extended 2026-05-23 by FW-0051 design (per-field assistant-suggested provenance carrier; no new EXT row needed).
 
 ### EXT-3: Capacity + party-role on AuthoredSignature
 
@@ -233,6 +233,21 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Cross-stack:** lands as part of XS-4 ratification (see below). Requires ADR-0074 promotion + Privacy Profile sidecar file to be authored (currently neither has landed).
 **Fixture status:** none. Land with default-policy fixtures + per-jurisdiction-override fixtures (CA-ACP, WA-ACP, USMS-WitSec).
 **Status:** proposed 2026-05-23 by FW-0049 design; pending XS-4 ratification at stack-root + ADR-0074 promotion + parent companion file authoring.
+
+### EXT-33: Formspec Assist Spec clarifications (BYO-assistant runtime postures) — OPTIONAL
+
+**Owning repo:** formspec
+**File:** `formspec/specs/assist/assist-spec.md` (small clarifications to draft 1.0.0)
+**Closes:** J-046 (codifies the FW-0051 §3.3 + §3.4 + §3.5 disciplines as recognized Provider postures in the upstream spec)
+**FW rows blocked:** none (FW-0051 design proceeds against the current draft 1.0.0 without this; OPTIONAL upstream tightening).
+**Shape:** four candidate clarifications per [FW-0051 design §6.2](2026-05-23-fw-0051-bring-your-own-assistant-design.md):
+1. **§4.4 `FieldDescription.value` masking semantics.** Add a non-normative note that Provider implementations MAY mask `value` by default and require explicit per-field reveal grant to unmask. Lets FW-0051's §3.3 discipline cite as a recognized posture rather than a private narrowing.
+2. **§11 security/privacy — add per-act + per-field reveal as a SHOULD pattern.** New §11.8 SHOULD: "Providers serving forms whose runtime policy restricts default value-visibility SHOULD mask `FieldDescription.value` until the respondent invokes a per-field reveal affordance."
+3. **§6 profile-matching — per-assistant scope hook.** Add per-assistant scope hook for cross-form profile reuse keyed per assistant. **NOT proposed for slice 1** — relies on browser's WebExtension permission model per FW-0051 §1.2 non-goal; flagged for future.
+4. **§3.3 mutation tools — runtime-policy-aware confirm-gate normative tightening.** New §4.3 (6) MUST: "When the Provider's runtime policy declares a per-act confirm requirement for the mutation surface, the Provider MUST surface a confirm gate for every mutation invocation (regardless of `confirm: true` on the tool call)." Codifies FW-0051's §3.4 Stage 2 invariant.
+**Cross-stack:** none. Single-spec upstream tightening; no cross-stack ratification required.
+**Fixture status:** none. The upstream tightening lands with fixture cases for the new normative floors if pursued.
+**Status:** OPTIONAL — proposed 2026-05-23 by FW-0051 design; not blocking FW-0051 or FW-0062 build; land if owner concurs that upstream tightening is worth a small assist-spec revision.
 
 ### EXT-10: Receipt-domain prose update (drift fix)
 
