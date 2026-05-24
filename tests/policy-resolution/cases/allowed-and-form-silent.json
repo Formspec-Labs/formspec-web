@@ -5,12 +5,14 @@
   "instance": {
     "respondentPlace": "available",
     "status": "available",
-    "documentPresentation": "unavailable"
+    "documentPresentation": "unavailable",
+    "fileUpload": "unavailable"
   },
   "org": {
     "features": {
       "respondentPlace": "allowed",
-      "status": "allowed"
+      "status": "allowed",
+      "fileUpload": "allowed"
     }
   },
   "form": {
@@ -21,7 +23,8 @@
     "enabled": [],
     "disabled": {
       "respondentPlace": "not-requested",
-      "status": "not-requested"
+      "status": "not-requested",
+      "fileUpload": "not-requested"
     }
   }
 }

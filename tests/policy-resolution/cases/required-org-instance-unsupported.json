@@ -5,11 +5,13 @@
   "instance": {
     "respondentPlace": "unavailable",
     "status": "available",
-    "documentPresentation": "unavailable"
+    "documentPresentation": "unavailable",
+    "fileUpload": "unavailable"
   },
   "org": {
     "features": {
-      "respondentPlace": "required"
+      "respondentPlace": "required",
+      "fileUpload": "allowed"
     }
   },
   "form": {

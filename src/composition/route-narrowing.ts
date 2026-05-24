@@ -42,6 +42,7 @@ import {
   demoApplicantCaseDetail,
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
+import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
@@ -139,6 +140,11 @@ function buildProductionNarrowedComposition({
     respondentPlace: 'unavailable',
     status: 'unavailable',
     documentPresentation: 'unavailable',
+    // FW-0033 slice 1: narrowed routes do not accept uploads. Uniformly
+    // unavailable across all narrowed-route descriptors today; if a future
+    // route needs an upload affordance, add a `consumesAttachmentStore` flag
+    // to RouteNarrowing then.
+    fileUpload: 'unavailable',
   };
   const notificationDelivery = stubNotificationDelivery();
   // MED-4: identity is only wired when the gated respondent-place capability
@@ -162,6 +168,7 @@ function buildProductionNarrowedComposition({
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
+    attachmentStore: unavailableAttachmentStore(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     getFormRuntimePolicy: emptyFormRuntimePolicy,
@@ -187,6 +194,7 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     statusReader: stubStatusReader([
       ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
     ]),
+    attachmentStore: unavailableAttachmentStore(),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -197,6 +205,11 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // unavailable declaration opts out of the slot, and the demo-stub-
       // marked place adapter satisfies only the respondentPlace key.
       documentPresentation: 'unavailable',
+      // FW-0033 slice 1: narrowed routes (status / obligations / documents)
+      // do not render forms, so upload affordance is not reachable. Both
+      // stub mode and production mode declare unavailable to match the wired
+      // sentinel.
+      fileUpload: 'unavailable',
     },
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     getFormRuntimePolicy: emptyFormRuntimePolicy,
@@ -210,6 +223,7 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       respondentPlace: 'allowed',
       status: 'allowed',
       documentPresentation: 'allowed',
+      fileUpload: 'allowed',
     },
   };
 }

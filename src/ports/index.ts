@@ -54,3 +54,9 @@ export type {
   RespondentTrustModel,
   RespondentDocumentKind,
 } from './respondent-place-source.ts';
+export type {
+  AttachmentStore,
+  AttachmentRef,
+  AttachmentUploadMetadata,
+} from './attachment-store.ts';
+export { AttachmentUploadError } from './attachment-store.ts';

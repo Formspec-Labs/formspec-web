@@ -1,0 +1,33 @@
+{
+  "name": "file-upload-demo-stub-satisfies-required",
+  "description": "FW-0033 slice 1: demo mode + form requires fileUpload + instance demo-stub -> enabled",
+  "mode": "demo",
+  "instance": {
+    "respondentPlace": "demo-stub",
+    "status": "demo-stub",
+    "documentPresentation": "unavailable",
+    "fileUpload": "demo-stub"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
+      "fileUpload": "allowed"
+    }
+  },
+  "form": {
+    "features": {
+      "fileUpload": "required"
+    }
+  },
+  "expect": {
+    "kind": "profile",
+    "enabled": ["fileUpload"],
+    "disabled": {
+      "respondentPlace": "not-requested",
+      "status": "not-requested",
+      "documentPresentation": "not-requested"
+    }
+  }
+}

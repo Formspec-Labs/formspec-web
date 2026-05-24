@@ -5,7 +5,8 @@
   "instance": {
     "respondentPlace": "available",
     "status": "demo-stub",
-    "documentPresentation": "unavailable"
+    "documentPresentation": "unavailable",
+    "fileUpload": "unavailable"
   },
   "org": {
     "features": {}

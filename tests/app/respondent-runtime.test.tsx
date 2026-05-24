@@ -281,6 +281,11 @@ function testComposition(
     statusReader: {
       readStatus: vi.fn(async () => options.applicantStatus),
     },
+    attachmentStore: {
+      upload: vi.fn(async () => {
+        throw new Error('upload not used in this test');
+      }),
+    },
     // ADR-0011: production-mode composition with both seeded capabilities
     // available and the form opting both in. Without the form opt-in the
     // resolver would mark both `not-requested` (org=allowed + form=silent)
@@ -292,12 +297,17 @@ function testComposition(
       // FW-0056: closed-taxonomy key — declare for resolver input validity.
       // The in-form respondent surface doesn't consume documentPresentation.
       documentPresentation: 'available',
+      // FW-0033: closed-taxonomy key — the runtime test form has no
+      // attachment field, so 'unavailable' satisfies the resolver without
+      // forcing an upload affordance into these tests.
+      fileUpload: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
         respondentPlace: 'allowed',
         status: 'allowed',
         documentPresentation: 'allowed',
+        fileUpload: 'allowed',
       },
     },
     getFormRuntimePolicy: () => ({

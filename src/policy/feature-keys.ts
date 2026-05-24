@@ -11,6 +11,13 @@
  *     VP port. FW-0056 §"Decision on runtime feature key" carries the
  *     rationale; FW-0066 row carries the port-promotion follow-on.
  *
+ * Extended at FW-0033 slice 1 (file upload as a primary act):
+ *   - fileUpload → gated against the AttachmentStore port (1:1 mapping, no
+ *     transitional slot-sharing). First feature key whose form-policy
+ *     extractor introspects definition content (looks for any field with
+ *     dataType === 'attachment'); FW-0066 trigger pulse #2 for the
+ *     FormRuntimePolicyExtractor port promotion.
+ *
  * Extension protocol: every future feature ADR adds its key here and to the
  * Composition's InstanceCapabilities declaration. No string-typed feature keys
  * outside this set — the resolver rejects unknown keys with
@@ -31,6 +38,7 @@ export const RUNTIME_FEATURE_KEYS = [
   'respondentPlace',
   'status',
   'documentPresentation',
+  'fileUpload',
 ] as const;
 
 export type RuntimeFeatureKey = (typeof RUNTIME_FEATURE_KEYS)[number];

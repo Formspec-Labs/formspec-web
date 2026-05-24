@@ -1,5 +1,6 @@
 import type { FormDefinition, FormResponse, IntakeHandoff } from '@formspec-org/types';
 import type { IdentityClaim } from '../ports/identity-provider.ts';
+import type { AttachmentRef } from '../ports/attachment-store.ts';
 export {
   isApplicantStatusResource,
   isApplicantStatusProjection,
@@ -75,6 +76,22 @@ export function isCanonicalIdentityClaim(value: unknown): value is IdentityClaim
     typeof value.subjectBinding === 'string' &&
     typeof value.assuranceLevel === 'string' &&
     leakedProviderNativeIdentityKeys(value as unknown as IdentityClaim).length === 0
+  );
+}
+
+export function isAttachmentRef(value: unknown): value is AttachmentRef {
+  if (!isRecord(value)) return false;
+  return (
+    value.kind === 'attachment-ref' &&
+    typeof value.uri === 'string' &&
+    value.uri.length > 0 &&
+    typeof value.hash === 'string' &&
+    value.hash.startsWith('sha256:') &&
+    typeof value.size === 'number' &&
+    Number.isInteger(value.size) &&
+    value.size >= 0 &&
+    typeof value.mimeType === 'string' &&
+    typeof value.filename === 'string'
   );
 }
 

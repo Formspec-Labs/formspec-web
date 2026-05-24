@@ -141,3 +141,22 @@ export const sampleRespondentPlaceSnapshot: RespondentPlaceSnapshot = {
 export function roundTripJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
+
+// FW-0033: deterministic bytes so hash assertions are stable.
+const SAMPLE_ATTACHMENT_BYTES = new Uint8Array([
+  0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x46, 0x57, 0x2d, 0x30, 0x30, 0x33, 0x33, 0x0a,
+]);
+const DIFFERENT_ATTACHMENT_BYTES = new Uint8Array([0x44, 0x49, 0x46, 0x46, 0x45, 0x52]);
+
+export function sampleAttachmentBlob(): Blob {
+  return new Blob([SAMPLE_ATTACHMENT_BYTES], { type: 'application/octet-stream' });
+}
+
+export function differentAttachmentBlob(): Blob {
+  return new Blob([DIFFERENT_ATTACHMENT_BYTES], { type: 'application/octet-stream' });
+}
+
+export const sampleAttachmentMetadata = {
+  filename: 'lease-agreement.pdf',
+  mimeType: 'application/pdf',
+} as const;

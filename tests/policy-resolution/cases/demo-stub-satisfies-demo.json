@@ -5,7 +5,8 @@
   "instance": {
     "respondentPlace": "demo-stub",
     "status": "demo-stub",
-    "documentPresentation": "unavailable"
+    "documentPresentation": "unavailable",
+    "fileUpload": "unavailable"
   },
   "org": {
     "features": {}
@@ -21,7 +22,8 @@
       "status"
     ],
     "disabled": {
-      "respondentPlace": "not-requested"
+      "respondentPlace": "not-requested",
+      "fileUpload": "not-requested"
     }
   }
 }

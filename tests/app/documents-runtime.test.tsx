@@ -570,12 +570,14 @@ function productionCompositionWithIdentity(
       respondentPlace: 'available',
       status: 'available',
       documentPresentation: 'available',
+      fileUpload: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
         respondentPlace: 'allowed',
         status: 'allowed',
         documentPresentation: 'allowed',
+        fileUpload: 'allowed',
       },
     },
     getFormRuntimePolicy: () => ({ features: {} }),

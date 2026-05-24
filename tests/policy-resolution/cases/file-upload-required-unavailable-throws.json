@@ -1,0 +1,28 @@
+{
+  "name": "file-upload-required-unavailable-throws",
+  "description": "FW-0033 slice 1: form requires fileUpload + instance unavailable -> UnsupportedRequiredFeature",
+  "mode": "production",
+  "instance": {
+    "respondentPlace": "unavailable",
+    "status": "unavailable",
+    "documentPresentation": "unavailable",
+    "fileUpload": "unavailable"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
+      "fileUpload": "allowed"
+    }
+  },
+  "form": {
+    "features": {
+      "fileUpload": "required"
+    }
+  },
+  "expect": {
+    "kind": "throws",
+    "code": "UnsupportedRequiredFeature"
+  }
+}

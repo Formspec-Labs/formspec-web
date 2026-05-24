@@ -19,6 +19,7 @@ import {
 } from '../../src/policy/sentinel.ts';
 import { stubRespondentPlaceSource } from '../../src/adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../../src/adapters/stub/status-reader.ts';
+import { unavailableAttachmentStore } from '../../src/adapters/unavailable/attachment-store.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
 
@@ -36,9 +37,13 @@ function productionCompositionLike(overrides: Partial<CompositionLike> = {}): Co
       // declaration on both keys lets the unavailable sentinel cohere for
       // both at once.
       documentPresentation: 'unavailable',
+      // FW-0033: closed-taxonomy key paired with the unavailable
+      // attachmentStore sentinel.
+      fileUpload: 'unavailable',
     },
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
+    attachmentStore: unavailableAttachmentStore(),
     ...overrides,
   };
 }
@@ -113,6 +118,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         respondentPlace: 'unavailable',
         status: 'available',
         documentPresentation: 'unavailable',
+        fileUpload: 'unavailable',
       },
       statusReader: stubStatusReader(),
     });
@@ -126,6 +132,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         respondentPlace: 'unavailable',
         status: 'demo-stub',
         documentPresentation: 'unavailable',
+        fileUpload: 'unavailable',
       },
     });
     expect(() => assertCompositionCoherence(composition)).toThrow(/status/);
@@ -166,6 +173,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
   ): CompositionLike {
     return {
       statusReader: unavailableStatusReader(),
+      attachmentStore: unavailableAttachmentStore(),
       ...overrides,
     };
   }
@@ -177,6 +185,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         respondentPlace: 'demo-stub',
         status: 'unavailable',
         documentPresentation: 'unavailable',
+        fileUpload: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -190,6 +199,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         respondentPlace: 'unavailable',
         status: 'unavailable',
         documentPresentation: 'unavailable',
+        fileUpload: 'unavailable',
       },
       respondentPlaceSource: unavailableRespondentPlaceSource(),
     });
@@ -203,6 +213,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         respondentPlace: 'demo-stub',
         status: 'unavailable',
         documentPresentation: 'demo-stub',
+        fileUpload: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -217,6 +228,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         respondentPlace: 'available',
         status: 'unavailable',
         documentPresentation: 'unavailable',
+        fileUpload: 'unavailable',
       },
       respondentPlaceSource: realPlaceAdapter as never,
     });
@@ -230,6 +242,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         respondentPlace: 'demo-stub',
         status: 'unavailable',
         documentPresentation: 'available',
+        fileUpload: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -245,6 +258,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         respondentPlace: 'demo-stub',
         status: 'unavailable',
         documentPresentation: 'available',
+        fileUpload: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });

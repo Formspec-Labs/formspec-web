@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { freezeComposition, CompositionIncoherenceError } from './composition-coherence.ts';
+import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
+import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 
@@ -16,9 +18,11 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         // respondentPlaceSource slot, so the demo-stub place adapter
         // satisfies only the respondentPlace key.
         documentPresentation: 'unavailable',
+        fileUpload: 'demo-stub',
       } as const,
       respondentPlaceSource: stubRespondentPlaceSource(),
       statusReader: stubStatusReader(),
+      attachmentStore: stubAttachmentStore(),
     };
     expect(freezeComposition(composition)).toBe(composition);
   });
@@ -30,9 +34,11 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         respondentPlace: 'unavailable',
         status: 'available',
         documentPresentation: 'unavailable',
+        fileUpload: 'unavailable',
       } as const,
       respondentPlaceSource: unavailableRespondentPlaceSource(),
       statusReader: stubStatusReader(),
+      attachmentStore: unavailableAttachmentStore(),
     };
     expect(() => freezeComposition(composition)).toThrow(CompositionIncoherenceError);
   });

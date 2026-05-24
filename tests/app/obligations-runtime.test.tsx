@@ -436,12 +436,15 @@ function productionCompositionWithIdentity(
       status: 'available',
       // FW-0056: closed-taxonomy key — declare for resolver input validity.
       documentPresentation: 'available',
+      // FW-0033: closed-taxonomy key — declare for resolver input validity.
+      fileUpload: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
         respondentPlace: 'allowed',
         status: 'allowed',
         documentPresentation: 'allowed',
+        fileUpload: 'allowed',
       },
     },
     getFormRuntimePolicy: () => ({ features: {} }),

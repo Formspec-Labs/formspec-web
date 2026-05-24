@@ -1,4 +1,5 @@
 import type {
+  AttachmentStore,
   DefinitionSource,
   DraftStore,
   IdentityProvider,
@@ -43,6 +44,8 @@ export interface Composition {
   respondentPlaceSource: RespondentPlaceSource;
   /** ADR-0010/FW-0039: WOS applicant API resource shapes, not a web status vocabulary. */
   statusReader: StatusReader;
+  /** FW-0033 slice 1: object-store seam for attachment uploads (web ADR-0011 fileUpload). */
+  attachmentStore: AttachmentStore;
   /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */
   instanceCapabilities: InstanceCapabilities;
   /** ADR-0011 §Org runtime policy — supplied by the composition root. */

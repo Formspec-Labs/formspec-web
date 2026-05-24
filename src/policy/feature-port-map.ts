@@ -20,6 +20,11 @@ export const FEATURE_PORT_MAP = {
   // new port name; FW-0066 covers the FormRuntimePolicyExtractor promotion
   // that this taxonomy extension triggers.
   documentPresentation: 'respondentPlaceSource',
+  // FW-0033 slice 1: 1:1 mapping. The AttachmentStore port is the substrate
+  // AND the consumer; no transitional slot-sharing. Adopters wire one
+  // AttachmentStore implementation (S3 / R2 / Azure Blob / server-bundled /
+  // IPFS / etc.) per deployment composition.
+  fileUpload: 'attachmentStore',
 } as const satisfies Readonly<Record<RuntimeFeatureKey, string>>;
 
 export type CompositionPortName = (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey];

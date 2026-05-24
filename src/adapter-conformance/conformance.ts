@@ -13,8 +13,10 @@ import type {
   StatusReader,
 } from '../ports/status-reader.ts';
 import type { SubmitTransport } from '../ports/submit-transport.ts';
+import type { AttachmentStore } from '../ports/attachment-store.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import {
+  isAttachmentRef,
   isCanonicalIdentityClaim,
   isFormDefinition,
   isFormResponse,
@@ -24,7 +26,10 @@ import {
   leakedProviderNativeIdentityKeys,
 } from './assertions.ts';
 import {
+  differentAttachmentBlob,
   roundTripJson,
+  sampleAttachmentBlob,
+  sampleAttachmentMetadata,
   sampleFormDefinition,
   sampleFormResponse,
   sampleIntakeHandoff,
@@ -64,6 +69,10 @@ export interface StatusReaderConformanceSubject {
 export interface RespondentPlaceSourceConformanceSubject {
   adapter: RespondentPlaceSource;
   replaceSnapshot(snapshot: RespondentPlaceSnapshot): void | Promise<void>;
+}
+
+export interface AttachmentStoreConformanceSubject {
+  adapter: AttachmentStore;
 }
 
 export function defineDefinitionSourceConformance(
@@ -436,5 +445,56 @@ export function defineRespondentPlaceSourceConformance(
           .toThrow();
       });
     }
+  });
+}
+
+export function defineAttachmentStoreConformance(
+  name: string,
+  setup: () => AttachmentStoreConformanceSubject,
+): void {
+  describe(name, () => {
+    it('round-trips a blob into a schema-valid AttachmentRef', async () => {
+      const subject = setup();
+      const blob = sampleAttachmentBlob();
+      const ref = await subject.adapter.upload(blob, sampleAttachmentMetadata);
+      expect(isAttachmentRef(roundTripJson(ref))).toBe(true);
+      expect(ref.size).toBe(blob.size);
+      expect(ref.mimeType).toBe(sampleAttachmentMetadata.mimeType);
+      expect(ref.filename).toBe(sampleAttachmentMetadata.filename);
+    });
+
+    it('produces the same hash for identical bytes within one adapter instance', async () => {
+      const subject = setup();
+      const first = await subject.adapter.upload(sampleAttachmentBlob(), sampleAttachmentMetadata);
+      const second = await subject.adapter.upload(sampleAttachmentBlob(), sampleAttachmentMetadata);
+      expect(second.hash).toBe(first.hash);
+    });
+
+    it('produces different hashes for different bytes', async () => {
+      const subject = setup();
+      const first = await subject.adapter.upload(sampleAttachmentBlob(), sampleAttachmentMetadata);
+      const second = await subject.adapter.upload(
+        differentAttachmentBlob(),
+        sampleAttachmentMetadata,
+      );
+      expect(second.hash).not.toBe(first.hash);
+    });
+
+    it('accepts an empty blob and yields a zero-size ref', async () => {
+      const subject = setup();
+      const empty = new Blob([], { type: 'application/octet-stream' });
+      const ref = await subject.adapter.upload(empty, {
+        filename: 'empty.bin',
+        mimeType: 'application/octet-stream',
+      });
+      expect(ref.size).toBe(0);
+      expect(isAttachmentRef(ref)).toBe(true);
+    });
+
+    it('emits a non-empty URI distinct enough to address the upload', async () => {
+      const subject = setup();
+      const ref = await subject.adapter.upload(sampleAttachmentBlob(), sampleAttachmentMetadata);
+      expect(ref.uri.length).toBeGreaterThan(0);
+    });
   });
 }

@@ -9,6 +9,7 @@ import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
+import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
@@ -18,6 +19,7 @@ import {
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../policy/index.ts';
+import { extractAttachmentRequirement } from '../policy/extract-form-policy.ts';
 import { demoSampleFormUrl } from '../demo/index.ts';
 import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
@@ -77,12 +79,13 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
+    attachmentStore: unavailableAttachmentStore(),
     // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —
     // the wired adapter (per web ADR-0010 for respondent-place, FW-0039 for
-    // status) AND the declaration. assertCompositionCoherence catches forks
-    // that update only one half.
+    // status, FW-0033 for fileUpload) AND the declaration.
+    // assertCompositionCoherence catches forks that update only one half.
     instanceCapabilities: {
       respondentPlace: 'unavailable',
       status: 'unavailable',
@@ -93,15 +96,29 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       // the same unavailable respondent-place sentinel (transitional port
       // mapping per feature-port-map.ts).
       documentPresentation: 'unavailable',
+      // FW-0033 slice 1: the OSS reference composition does not ship an
+      // object-store adapter — adopters fork to wire S3 / R2 / Azure Blob /
+      // server-bundled / IPFS per their deployment. Forms with attachment
+      // fields will fail-load with UnsupportedRequiredFeatureError until an
+      // adapter is wired.
+      fileUpload: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
         respondentPlace: 'allowed',
         status: 'allowed',
         documentPresentation: 'allowed',
+        fileUpload: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
-    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
+    // FW-0033 slice 1: first non-literal extractor. Walks the definition for
+    // attachment fields and declares `fileUpload: 'required'` if any are
+    // present; otherwise an empty policy. FW-0066 will promote this kind of
+    // walker into the FormRuntimePolicyExtractor port.
+    getFormRuntimePolicy: (definition): FormRuntimePolicy => {
+      const fileUpload = extractAttachmentRequirement(definition);
+      return fileUpload ? { features: { fileUpload } } : { features: {} };
+    },
   };
   return freezeComposition(composition);
 }

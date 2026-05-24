@@ -1,3 +1,4 @@
+import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../adapters/stub/draft-store.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
@@ -16,6 +17,7 @@ import {
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../policy/index.ts';
+import { extractAttachmentRequirement } from '../policy/extract-form-policy.ts';
 import type { FormDefinition } from '../ports/definition-source.ts';
 import type { Composition } from './types.ts';
 
@@ -46,6 +48,7 @@ export function createStubComposition(): Composition {
     statusReader: stubStatusReader([
       ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
     ]),
+    attachmentStore: stubAttachmentStore(),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -60,24 +63,35 @@ export function createStubComposition(): Composition {
       // land a real VP port, the slot mapping splits and this declaration
       // can move to 'demo-stub' or 'available' as the ceremony allows.
       documentPresentation: 'unavailable',
+      // FW-0033 slice 1: in-memory stub adapter satisfies the demo posture.
+      // Per the design's §"Demo form posture" decision, the bundled
+      // sample-form.json has no attachment field today; the stub is exercised
+      // through synthetic-definition tests and the conformance suite.
+      fileUpload: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
         respondentPlace: 'allowed',
         status: 'allowed',
         documentPresentation: 'allowed',
+        fileUpload: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
-    // The demo form opts into both seeded features. Other definitions get
-    // an empty policy — form-policy is form-owned per ADR-0011 §Form runtime
-    // policy, and only the bundled demo form declares these features. When a
-    // real x-formspec-runtime-policy form-extension field is standardized,
-    // this extractor reads from definition.extensions instead (arch H-3
-    // remediation: keeps the form-policy honesty intact).
-    getFormRuntimePolicy: (definition: FormDefinition): FormRuntimePolicy =>
-      definition.url === demoSampleFormUrl
-        ? { features: { respondentPlace: 'optional', status: 'optional' } }
-        : { features: {} },
+    // The demo form opts into the seeded features; the fileUpload requirement
+    // is derived by walking the definition for attachment-typed fields per
+    // FW-0033 — `required` if any present, else absent. Combines the seeded
+    // literal map (only for the bundled demo) with the walker output for
+    // every definition.
+    getFormRuntimePolicy: (definition: FormDefinition): FormRuntimePolicy => {
+      const fileUpload = extractAttachmentRequirement(definition);
+      const features: FormRuntimePolicy['features'] = {
+        ...(definition.url === demoSampleFormUrl
+          ? { respondentPlace: 'optional', status: 'optional' }
+          : {}),
+        ...(fileUpload ? { fileUpload } : {}),
+      };
+      return { features };
+    },
   };
   return freezeComposition(composition);
 }

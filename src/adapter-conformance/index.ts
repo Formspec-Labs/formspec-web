@@ -1,4 +1,5 @@
 export {
+  defineAttachmentStoreConformance,
   defineDefinitionSourceConformance,
   defineDraftStoreConformance,
   defineIdentityProviderConformance,
@@ -6,6 +7,7 @@ export {
   defineRespondentPlaceSourceConformance,
   defineStatusReaderConformance,
   defineSubmitTransportConformance,
+  type AttachmentStoreConformanceSubject,
   type DefinitionSourceConformanceSubject,
   type DraftStoreConformanceSubject,
   type IdentityProviderConformanceSubject,
@@ -15,6 +17,7 @@ export {
   type SubmitTransportConformanceSubject,
 } from './conformance.ts';
 export {
+  isAttachmentRef,
   isCanonicalIdentityClaim,
   isFormDefinition,
   isFormResponse,
@@ -26,7 +29,10 @@ export {
   providerNativeIdentityKeys,
 } from './assertions.ts';
 export {
+  differentAttachmentBlob,
   roundTripJson,
+  sampleAttachmentBlob,
+  sampleAttachmentMetadata,
   sampleFormDefinition,
   sampleFormResponse,
   sampleIntakeHandoff,

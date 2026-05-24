@@ -1,9 +1,9 @@
 {
-  "name": "optional-falls-off",
-  "description": "form optional; instance unavailable; org allows -> disabled with optional-no-instance",
+  "name": "file-upload-disabled-no-instance",
+  "description": "FW-0033 slice 1: form does not request fileUpload + instance unavailable -> disabled not-requested",
   "mode": "production",
   "instance": {
-    "respondentPlace": "unavailable",
+    "respondentPlace": "available",
     "status": "available",
     "documentPresentation": "unavailable",
     "fileUpload": "unavailable"
@@ -11,20 +11,21 @@
   "org": {
     "features": {
       "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
       "fileUpload": "allowed"
     }
   },
   "form": {
-    "features": {
-      "respondentPlace": "optional"
-    }
+    "features": {}
   },
   "expect": {
     "kind": "profile",
     "enabled": [],
     "disabled": {
-      "respondentPlace": "optional-no-instance",
+      "respondentPlace": "not-requested",
       "status": "not-requested",
+      "documentPresentation": "not-requested",
       "fileUpload": "not-requested"
     }
   }

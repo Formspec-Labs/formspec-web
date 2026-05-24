@@ -14,6 +14,9 @@ const baseInstance = {
   // here so the resolver's input validation passes for the failure-semantics
   // fixtures that don't otherwise care about the key.
   documentPresentation: 'unavailable',
+  // FW-0033: fileUpload is the third closed-taxonomy extension; same
+  // honest-unavailable posture for these fixtures.
+  fileUpload: 'unavailable',
 } as const;
 const emptyOrg = { features: {} } as const;
 
@@ -86,6 +89,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
         respondentPlace: 'demo-stub',
         status: 'demo-stub',
         documentPresentation: 'unavailable',
+        fileUpload: 'unavailable',
       },
       org: emptyOrg,
       form: { features: { status: 'required' } },
@@ -133,6 +137,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
           respondentPlace: 'partial' as never,
           status: 'available',
           documentPresentation: 'unavailable',
+          fileUpload: 'unavailable',
         },
         org: emptyOrg,
         form: { features: {} },

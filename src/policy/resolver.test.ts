@@ -12,6 +12,8 @@ const allAvailable: InstanceCapabilities = {
   // FW-0056 slice 1: declare documentPresentation so resolver validation
   // passes; the resolver-test cases don't gate against it.
   documentPresentation: 'available',
+  // FW-0033 slice 1: declare fileUpload so resolver validation passes.
+  fileUpload: 'available',
 };
 
 const allowAllOrg: OrgRuntimePolicy = {
@@ -19,6 +21,7 @@ const allowAllOrg: OrgRuntimePolicy = {
     respondentPlace: 'allowed',
     status: 'allowed',
     documentPresentation: 'allowed',
+    fileUpload: 'allowed',
   },
 };
 
