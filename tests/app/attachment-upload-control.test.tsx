@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { act } from 'react';
+import { act, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { LayoutNode } from '@formspec-org/layout';
 import type { UseFieldResult } from '@formspec-org/react';
@@ -244,6 +244,116 @@ describe('FormspecWebAttachmentControl', () => {
       </AttachmentStoreProvider>,
     );
     expect(container?.textContent ?? '').toContain(ATTACHMENT_DEFERRED_CAPABILITY_COPY);
+  });
+
+  it('does NOT resurrect a concurrently-removed ref when an upload settles after the remove (H-1 closure-stale race)', async () => {
+    // Manual-promise upload so the test controls settle ordering.
+    let resolveUpload: (ref: AttachmentRef) => void = () => {};
+    const uploadPromise = new Promise<AttachmentRef>((resolve) => {
+      resolveUpload = resolve;
+    });
+    const racingStore: AttachmentStore = {
+      upload: async () => uploadPromise,
+    };
+
+    const existing: AttachmentRef = {
+      kind: 'attachment-ref',
+      uri: 'attachment:demo-existing',
+      hash: 'sha256:00',
+      size: 4,
+      mimeType: 'application/pdf',
+      filename: 'existing.pdf',
+    };
+
+    // Live harness wrapper: setValue triggers a re-render (matching the
+    // production engine contract) so the H-1 fix's fieldValueRef can observe
+    // the post-remove field.value before the upload settles.
+    let observedValue: unknown = null;
+    const setObserved = vi.fn();
+    function LiveHarness() {
+      const [value, setValue] = useState<unknown>([existing]);
+      useEffect(() => {
+        observedValue = value;
+        setObserved(value);
+      }, [value]);
+      const field = {
+        id: 'fld-lease',
+        path: 'lease',
+        itemKey: 'lease',
+        dataType: 'attachment',
+        label: 'Lease',
+        hint: null,
+        description: null,
+        value,
+        required: true,
+        visible: true,
+        readonly: false,
+        touched: false,
+        errors: [],
+        error: null,
+        options: [],
+        optionsState: { loading: false, error: null },
+        disabledDisplay: 'hidden' as const,
+        setValue,
+        touch: () => {},
+        inputProps: {
+          id: 'fld-lease',
+          name: 'lease',
+          value: '',
+          onChange: () => {},
+          onBlur: () => {},
+          required: true,
+          readOnly: false,
+          'aria-invalid': false,
+          'aria-required': true,
+        },
+      } as unknown as UseFieldResult;
+      return <FormspecWebAttachmentControl field={field} node={makeNode({ multiple: true })} />;
+    }
+    render(
+      <AttachmentStoreProvider value={racingStore}>
+        <LiveHarness />
+      </AttachmentStoreProvider>,
+    );
+
+    // 1. Start an upload (it's pending — the store hasn't resolved yet).
+    const newFile = await fileFromBytes(new Uint8Array([9, 9, 9]), 'new.pdf');
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [newFile], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+
+    // 2. While the upload is in flight, user clicks Remove on the existing ref.
+    const removeBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.getAttribute('aria-label') === 'Remove existing.pdf');
+    expect(removeBtn).toBeTruthy();
+    await act(async () => {
+      removeBtn?.click();
+      await flush();
+    });
+    expect(observedValue).toEqual([]); // remove landed synchronously and a re-render fired.
+
+    // 3. Resolve the upload AFTER the remove has landed.
+    const uploadedRef: AttachmentRef = {
+      kind: 'attachment-ref',
+      uri: 'attachment:demo-uploaded',
+      hash: 'sha256:99',
+      size: 3,
+      mimeType: 'application/pdf',
+      filename: 'new.pdf',
+    };
+    await act(async () => {
+      resolveUpload(uploadedRef);
+      await flush();
+    });
+    await flush();
+
+    // 4. Post-settle: the removed existing ref must NOT reappear. The field
+    // value contains the uploaded ref only.
+    const finalValue = observedValue as AttachmentRef[];
+    expect(finalValue.map((ref) => ref.uri)).toEqual(['attachment:demo-uploaded']);
   });
 
   it('respects the vocabulary firewall — no spec / port / cryptographic jargon in DOM', () => {

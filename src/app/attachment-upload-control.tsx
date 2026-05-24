@@ -63,6 +63,14 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const [isDragOver, setIsDragOver] = useState(false);
 
   const refs = asArray(field.value);
+  // H-1 closure-stale race fix: every read of "what's currently in the field"
+  // inside async post-settle paths must walk through this ref, NOT the
+  // closure-captured `refs` array. If the user removes an existing ref while
+  // an upload is in flight, `field.value` updates synchronously but the
+  // handler's closure does not — without this ref, the post-settle write
+  // would reintroduce the removed value.
+  const fieldValueRef = useRef<unknown>(field.value);
+  fieldValueRef.current = field.value;
 
   const writeBack = useCallback(
     (next: AttachmentRef[]): void => {
@@ -110,7 +118,12 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         ),
       );
 
-      let nextRefs: AttachmentRef[] = multiple ? [...refs] : [];
+      // H-1: read field.value FRESH at settlement time via fieldValueRef.
+      // Concurrent removes during the in-flight upload update field.value
+      // synchronously; reading the closure-captured `refs` would resurrect a
+      // ref the user just removed.
+      const liveRefs = asArray(fieldValueRef.current);
+      let nextRefs: AttachmentRef[] = multiple ? [...liveRefs] : [];
       const finalRows: RowStatus[] = [];
       for (let index = 0; index < uploaded.length; index += 1) {
         const outcome = uploaded[index];
@@ -132,7 +145,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       ]);
       writeBack(nextRefs);
     },
-    [attachmentStore, maxSize, multiple, refs, writeBack],
+    [attachmentStore, maxSize, multiple, writeBack],
   );
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
@@ -159,7 +172,10 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 
   const removeAt = (uri: string): void => {
     field.touch();
-    writeBack(refs.filter((ref) => ref.uri !== uri));
+    // Read FRESH field state — the rendered closure may be stale relative to a
+    // just-settled upload that wrote new refs (mirror of the H-1 fix).
+    const liveRefs = asArray(fieldValueRef.current);
+    writeBack(liveRefs.filter((ref) => ref.uri !== uri));
   };
 
   const dismissPending = (key: string): void => {
