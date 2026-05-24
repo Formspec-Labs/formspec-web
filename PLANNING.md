@@ -218,6 +218,8 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Blocked on:** XS-2 implementation (client-side multi-tenant token bag per stack-root ADR-0068 D-1 + D-3 — see `thoughts/specs/2026-05-22-upstream-extension-queue.md`) for the cross-issuer fan-out half; the affordance half (mute/batch/escalate, calendar export, notification-budget visibility) needs a per-issuer obligation-change event primitive (not yet filed — track here until the FW-0069 consumer slice scope is clear).
 - **Anti-patterns:** AP-006, AP-014.
 
+### FW-0002 — Trust Center browseable without sign-in
+
 - **Phase:** Post-MVP
 - **Status:** open
 - **Persona:** Evaluator
