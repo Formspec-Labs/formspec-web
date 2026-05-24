@@ -22,7 +22,7 @@ Each of these is independently load-bearing; failing on any one of them makes th
 
 Slice 1 lands:
 
-- A dedicated **status route** (`/status?case={WosResourceUrn}` and `/status?ref={confirmationRef}`) handled inside `App.tsx`. No router dependency added; `App.tsx` reads `window.location.pathname + search` once at mount and selects either `RespondentRuntime` or a new `StatusRuntime` view. Subsequent navigation back to `/` reloads — accountable + simple.
+- A dedicated **status route** (`/status?case={WosResourceUrn}`) handled inside `App.tsx`. No router dependency added; `App.tsx` reads `window.location.pathname + search` once at mount and selects either `RespondentRuntime` or a new `StatusRuntime` view. Subsequent navigation back to `/` reloads — accountable + simple. (The earlier draft also promised `/status?ref={confirmationRef}` short-code resolution; that is **deferred** — see §"Deferred from Slice 1" below.)
 - A new **`StatusRuntime.tsx`** that renders the WOS applicant-case detail (`ApplicantCaseDetail` / `ApplicantStatusTimelineEntry[]` / `ApplicantTaskSummary[]` / `ApplicantNotificationListItem[]` / `ApplicantAiInvolvementSummary`) as a respondent-facing page — five-stage progress strip drawn from `statusTimeline` events, what-comes-next ribbon from `openTasks`, AI-involvement disclosure when present, link back to the form.
 - **Accountless access** by treating the case URN as the access token for the slice. The form's confirmation panel emits a `/status?case={caseUrn}` link the respondent can bookmark, save offline, or paste into a different device. The `StatusReader` port already accepts an opaque request — the page just hands the URN through. Authorization is the adapter's concern (per ADR-0009); for the stub composition the URN is the key; for production the `ProxiedApplicantStatusAdapter` will gate as the adopter's deployment dictates. **No new identity work**; the slice is honest on this seam because the port already permits unauthenticated reads.
 - **Confirmation panel rework.** `RespondentRuntime`'s `ConfirmationPanel` already renders a `referenceNumber` and optional `trackingUri`. Slice 1 sets `trackingUri = '/status?case={caseUrn}'` when the submit transport returns a case URN in the confirmation, and renames the call-to-action to "Track this application." If no case URN is returned (today's stub transport returns only a STUB-* reference number), the panel keeps the existing copy and does not invent a tracking link.
@@ -76,7 +76,7 @@ The page does NOT claim "anyone with the link can see this forever." It claims "
 What is honest today:
 
 - The URL is plain `text/plain` — bookmarkable, paste-able, printable.
-- The page renders without an `IdentityProvider` session and without invoking `composition.identityProvider.authenticate()` or `discover()`. The status route composes ONLY: runtime profile resolution + StatusReader.readStatus + render. It does NOT compose: bootIdentity, draftStore, submitTransport, FormspecProvider, formspec-engine init (arch-review F-9). This is a deliberate composition narrowing — `StatusRuntime` is not "RespondentRuntime minus the form;" it is a separate surface that wires only the ports it needs.
+- The page renders without an `IdentityProvider` session and without invoking `composition.identityProvider.authenticate()` or `discover()`. `StatusRuntime` does not USE non-status ports at runtime (no `IdentityProvider.authenticate`/`discover`, no draft store, no submit transport, no formspec-engine call); the slice-1 honesty stops at the consumer. **The composition itself still wires all adapters at boot** because `src/app/main.tsx` calls `createDefaultComposition(activeConfig)` BEFORE the route is read — route-aware composition narrowing (parse route first; emit a status-only composition that wires only `statusReader` + policy resolver) is filed as **FW-0068** from the FW-0039 closeout independent architecture review (H-1). The arch-review F-9 closure tracked the consumer-level discipline; the wiring-level narrowing is FW-0068's scope.
 - The runtime profile resolution still runs (instance + org + form-layer-empty) to honour ADR-0011 gating.
 - The page shows nothing speculative — when the adapter returns `undefined` for an unknown URN, the page says "We don't have status for this reference. Check the link, or contact the sender." It does not say "the system is down" (it might not be) and it does not say "wait and try later" (that's a vendor-estimate dishonesty).
 
@@ -147,7 +147,7 @@ The per-case label is also reshaped from the design's earlier "Your application'
 | `StatusRuntime` does NOT invoke `composition.identityProvider.authenticate()` | `status-runtime.test.tsx#no identity authenticate` |
 | Submit flow surfaces a "Track this application" link when stub composition returns a case URN | `respondent-runtime.test.tsx#tracking link rendered` |
 | Submit flow does NOT invent a tracking link when no case URN is returned | `respondent-runtime.test.tsx#no tracking link without caseUrn` |
-| URL `/status` activates `StatusRuntime`, `/` keeps `RespondentRuntime` | `app.test.tsx#route selection` |
+| URL `/status` activates `StatusRuntime`, `/` keeps `RespondentRuntime` | `tests/app/app-routing.test.tsx#App route selection (FW-0039 slice 1)` |
 | End-to-end submit + click-through to status page passes axe | `tests/e2e/placeholder-a11y.spec.ts#track this application` |
 
 The fixture-driven `policy-resolution` case keeps the status-route gate honest at boot, parallel to the existing FW-0065 fixture set.
@@ -176,6 +176,13 @@ The fixture-driven `policy-resolution` case keeps the status-route gate honest a
 - URN expiry / magic-link rotation / browser-bound proof (FW-0054).
 - Push notifications for status changes.
 - Locale-conditional status copy.
+
+## Deferred from Slice 1
+
+- **`/status?ref={confirmationRef}` short-code resolution.** The §Decision bullet earlier promised both `?case={WosResourceUrn}` and `?ref={confirmationRef}` query forms. Slice 1 shipped only `?case=` (`src/app/status-route.ts:19`); `?ref=` was silently dropped. Strike the promise here per FW-0039 closeout independent arch-review L-2 — leaving the silent drift in is exactly the dishonesty FW-0039 is meant to avoid.
+  - **Slice-2 follow-on path:** confirmation refs (today: `STUB-…` reference numbers from the stub submit transport) need a deterministic resolution to a `WosResourceUrn` before the `?ref=` parser can hand a URN to `StatusReader.readStatus`. For the stub composition this is trivial (the stub already binds `caseUrn = urn:wos:case_demo_{ref}` to the same reference number). For production this is an adapter-level concern — the `ProxiedApplicantStatusAdapter` named in FW-0039's release-gaps will need a `resolveRefToUrn(ref) => Promise<WosResourceUrn | undefined>` operation, or the production transport's `SubmitConfirmation` must carry both `referenceNumber` and `caseUrn` so the client never has to resolve. Pick when the production adapter lands; until then `?ref=` stays unimplemented and `parseStatusRoute` only honours `?case=`. Filed inline rather than as a new FW row because the slice-1 implementation gap is trivial (a one-line literal-to-URN map for the stub) and the production design call rides on the same FW-0039 release-gap (production `ProxiedApplicantStatusAdapter`).
+
+- **Route-aware composition narrowing.** The §Accountless-access "the page renders without an `IdentityProvider` session" bullet was honest at the consumer level (`StatusRuntime` does not USE non-status ports) but overstated at the wiring level (`main.tsx` still calls `createDefaultComposition(activeConfig)` BEFORE the route is read, so every adapter — including formspec-engine init — boots regardless). Wiring-level narrowing is filed as **FW-0068** from the FW-0039 closeout independent arch-review H-1.
 
 ## Cross-references
 
