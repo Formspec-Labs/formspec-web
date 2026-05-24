@@ -50,4 +50,19 @@ export class AttachmentUploadError extends Error {
 
 export interface AttachmentStore {
   upload(blob: Blob, metadata: AttachmentUploadMetadata): Promise<AttachmentRef>;
+  /**
+   * Optional: lifecycle hook the renderer calls when the respondent removes
+   * an AttachmentRef from the field value before submit. Adopters who back
+   * the port with durable object storage (S3 / R2 / Azure Blob / GCS) SHOULD
+   * implement `delete` to avoid orphaned bytes from abandoned attaches.
+   *
+   * Adopters who omit `delete` are responsible for lifecycle cleanup at
+   * submit time by diffing the bytes their AttachmentStore retains against
+   * the final `response.data` set (the substrate-of-record).
+   *
+   * Errors thrown by `delete` are swallowed by the renderer — lifecycle is
+   * adopter-side responsibility and a failed cleanup MUST NOT block the
+   * respondent's flow.
+   */
+  delete?(uri: string): Promise<void>;
 }

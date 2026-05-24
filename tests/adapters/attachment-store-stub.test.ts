@@ -29,6 +29,14 @@ describe('stubAttachmentStore', () => {
     expect(stubAttachmentStore().getStoredBytes('attachment:nope')).toBeUndefined();
   });
 
+  it('implements the optional delete hook — bytes are gone after delete (M-2)', async () => {
+    const adapter = stubAttachmentStore();
+    const ref = await adapter.upload(sampleAttachmentBlob(), sampleAttachmentMetadata);
+    expect(adapter.getStoredBytes(ref.uri)).toBeDefined();
+    await adapter.delete!(ref.uri);
+    expect(adapter.getStoredBytes(ref.uri)).toBeUndefined();
+  });
+
   describe('when globalThis.crypto.subtle is unavailable (M-1: weak-hash fallback removed)', () => {
     afterEach(() => {
       vi.unstubAllGlobals();

@@ -42,6 +42,9 @@ export function stubAttachmentStore(): StubAttachmentStore {
         filename: metadata.filename,
       };
     },
+    async delete(uri: string): Promise<void> {
+      storage.delete(uri);
+    },
     getStoredBytes(uri: string): Blob | undefined {
       return storage.get(uri);
     },

@@ -195,6 +195,79 @@ describe('FormspecWebAttachmentControl', () => {
     expect(harness.readValue()).toBeNull();
   });
 
+  it('calls AttachmentStore.delete on remove when the adopter implements it (M-2)', async () => {
+    const deleteSpy = vi.fn(async (_uri: string) => {});
+    const store: AttachmentStore = {
+      upload: async () => ({
+        kind: 'attachment-ref',
+        uri: 'attachment:demo-x',
+        hash: 'sha256:00',
+        size: 1,
+        mimeType: 'application/pdf',
+        filename: 'x.pdf',
+      }),
+      delete: deleteSpy,
+    };
+    const existing: AttachmentRef = {
+      kind: 'attachment-ref',
+      uri: 'attachment:demo-existing',
+      hash: 'sha256:00',
+      size: 4,
+      mimeType: 'application/pdf',
+      filename: 'existing.pdf',
+    };
+    const harness = makeFieldHarness({ initial: existing });
+    render(
+      <AttachmentStoreProvider value={store}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode()} />
+      </AttachmentStoreProvider>,
+    );
+    const removeBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.getAttribute('aria-label') === 'Remove existing.pdf');
+    expect(removeBtn).toBeTruthy();
+    await act(async () => {
+      removeBtn?.click();
+      await flush();
+    });
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(deleteSpy).toHaveBeenCalledWith('attachment:demo-existing');
+  });
+
+  it('does not blow up when removing if the adopter omits delete (M-2 — optional)', async () => {
+    // Store with NO delete method — the renderer must not throw.
+    const store: AttachmentStore = {
+      upload: async () => ({
+        kind: 'attachment-ref',
+        uri: 'attachment:nope',
+        hash: 'sha256:00',
+        size: 1,
+        mimeType: 'application/pdf',
+        filename: 'x.pdf',
+      }),
+    };
+    const existing: AttachmentRef = {
+      kind: 'attachment-ref',
+      uri: 'attachment:demo-existing',
+      hash: 'sha256:00',
+      size: 4,
+      mimeType: 'application/pdf',
+      filename: 'existing.pdf',
+    };
+    const harness = makeFieldHarness({ initial: existing });
+    render(
+      <AttachmentStoreProvider value={store}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode()} />
+      </AttachmentStoreProvider>,
+    );
+    const removeBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.getAttribute('aria-label') === 'Remove existing.pdf');
+    await act(async () => {
+      removeBtn?.click();
+      await flush();
+    });
+    expect(harness.readValue()).toBeNull();
+  });
+
   it('removes an existing AttachmentRef from the field value', async () => {
     const harness = makeFieldHarness({
       initial: { kind: 'attachment-ref', uri: 'attachment:demo-1', hash: 'sha256:00', size: 4, mimeType: 'application/pdf', filename: 'lease.pdf' } satisfies AttachmentRef,

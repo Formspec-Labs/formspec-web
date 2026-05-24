@@ -496,5 +496,19 @@ export function defineAttachmentStoreConformance(
       const ref = await subject.adapter.upload(sampleAttachmentBlob(), sampleAttachmentMetadata);
       expect(ref.uri.length).toBeGreaterThan(0);
     });
+
+    // M-2: optional delete contract. Adopters who implement delete MUST honor
+    // it for refs the adapter produced; the assertion is guarded so adopters
+    // who omit delete are not failed for an optional capability.
+    it('honors delete for refs it produced (when implemented)', async () => {
+      const subject = setup();
+      if (typeof subject.adapter.delete !== 'function') {
+        return;
+      }
+      const ref = await subject.adapter.upload(sampleAttachmentBlob(), sampleAttachmentMetadata);
+      await subject.adapter.delete(ref.uri);
+      // No exception is the contract — adopters may also choose to make
+      // subsequent reads fail, but failure surface is adopter-shaped.
+    });
   });
 }

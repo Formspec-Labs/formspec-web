@@ -176,6 +176,16 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     // just-settled upload that wrote new refs (mirror of the H-1 fix).
     const liveRefs = asArray(fieldValueRef.current);
     writeBack(liveRefs.filter((ref) => ref.uri !== uri));
+    // M-2: best-effort lifecycle hook. Adopters who don't implement `delete`
+    // are responsible for submit-side cleanup via response-data diff (see
+    // docs/ports/attachment-store.md). A failed delete must not block the
+    // respondent — swallow + log.
+    if (typeof attachmentStore.delete === 'function') {
+      void attachmentStore.delete(uri).catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.debug('AttachmentStore.delete failed (non-blocking)', err);
+      });
+    }
   };
 
   const dismissPending = (key: string): void => {

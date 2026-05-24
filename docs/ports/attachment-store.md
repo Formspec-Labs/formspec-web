@@ -37,14 +37,24 @@ endpoint that accepts the submit handoff. Uploading progressively during
 form fill (rather than in a single submit-time batch) also surfaces errors
 at the field, not at the end of a multi-megabyte POST.
 
-## Why there is no `delete`, `download`, or `list` operation
+## Optional `delete` for in-flight remove
 
-The respondent's act is "give the file to the system." Lifecycle from that
-point belongs to the adopter's object store: retention sweeps, orphan
-cleanup (abandoned form sessions that uploaded then never submitted), and
-audit-log retention all stay outside this port. A future
-`AttachmentReader` port (for receipt portals + selective-proof viewers per
-FW-0009 / FW-0010) is filed separately.
+The port exposes an OPTIONAL `delete(uri: string): Promise<void>` hook. The
+field-component renderer calls it when the respondent removes an
+AttachmentRef from the field value before submit. Adopters who back the
+port with durable object storage (S3 / R2 / Azure Blob / GCS) SHOULD
+implement `delete` to avoid orphaned bytes from abandoned attaches.
+
+Adopters who omit `delete` are responsible for submit-side cleanup by
+diffing the bytes their store retains against the final `response.data`
+set (the substrate-of-record). The renderer treats `delete` failures as
+non-blocking and swallows them with a `console.debug` — a failing cleanup
+MUST NOT interrupt the respondent's flow.
+
+`download` and `list` are NOT in scope here. The respondent's act is "give
+the file to the system." Read paths (retention sweeps, audit retention,
+receipt portals, selective-proof viewers per FW-0009 / FW-0010) live on a
+future `AttachmentReader` port, filed separately.
 
 ## Composition wiring
 
