@@ -9,6 +9,7 @@
  */
 
 import type { IntakeHandoff } from '@formspec-org/types';
+import type { WosResourceUrn } from './status-reader.ts';
 
 export type { IntakeHandoff } from '@formspec-org/types';
 
@@ -19,6 +20,16 @@ export interface SubmitConfirmation {
   status: 'accepted' | 'queued' | 'rejected';
   /** Optional URI for the respondent to track the submission. */
   trackingUri?: string;
+  /**
+   * Optional WOS case URN for the submitted application (FW-0039 slice 1).
+   * Populated by transports whose backend already knows the case identity at
+   * submit time. The web shell hands this through to a `/status?case={urn}`
+   * tracking link. Consumer code MUST handle undefined; producer code MUST
+   * NOT populate this field unless the backend really has a case identity to
+   * report — arch-review F-7. HTTP transport leaves this undefined until the
+   * production status adapter lands.
+   */
+  caseUrn?: WosResourceUrn;
 }
 
 export interface SubmitTransport {

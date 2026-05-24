@@ -22,9 +22,11 @@ export function stubSubmitTransport(): SubmitTransport {
         return existing;
       }
       counter += 1;
+      const refTail = counter.toString().padStart(6, '0');
       const confirmation: SubmitConfirmation = {
-        referenceNumber: `STUB-${counter.toString().padStart(6, '0')}`,
+        referenceNumber: `STUB-${refTail}`,
         status: 'accepted',
+        caseUrn: `urn:wos:case_demo_${refTail}`,
       };
       replay.set(idempotencyKey, confirmation);
       return confirmation;
