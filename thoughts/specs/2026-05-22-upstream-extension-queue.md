@@ -234,20 +234,20 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Fixture status:** none. Land with default-policy fixtures + per-jurisdiction-override fixtures (CA-ACP, WA-ACP, USMS-WitSec).
 **Status:** proposed 2026-05-23 by FW-0049 design; pending XS-4 ratification at stack-root + ADR-0074 promotion + parent companion file authoring.
 
-### EXT-33: Formspec Assist Spec clarifications (BYO-assistant runtime postures) — OPTIONAL
+### EXT-33: Formspec Assist Spec clarifications (BYO-assistant runtime postures)
 
 **Owning repo:** formspec
 **File:** `formspec/specs/assist/assist-spec.md` (small clarifications to draft 1.0.0)
 **Closes:** J-046 (codifies the FW-0051 §3.3 + §3.4 + §3.5 disciplines as recognized Provider postures in the upstream spec)
-**FW rows blocked:** none (FW-0051 design proceeds against the current draft 1.0.0 without this; OPTIONAL upstream tightening).
+**FW rows blocked:** none directly (FW-0051 design proceeds against the current draft 1.0.0). **However**, per FW-0051 inline architecture review Findings 1+2, candidates (1) + (2) + (4) are RECOMMENDED upstream codification — without them, FW-0051's privacy posture and AP-002 interop asymmetry rest on a soft floor.
 **Shape:** four candidate clarifications per [FW-0051 design §6.2](2026-05-23-fw-0051-bring-your-own-assistant-design.md):
-1. **§4.4 `FieldDescription.value` masking semantics.** Add a non-normative note that Provider implementations MAY mask `value` by default and require explicit per-field reveal grant to unmask. Lets FW-0051's §3.3 discipline cite as a recognized posture rather than a private narrowing.
-2. **§11 security/privacy — add per-act + per-field reveal as a SHOULD pattern.** New §11.8 SHOULD: "Providers serving forms whose runtime policy restricts default value-visibility SHOULD mask `FieldDescription.value` until the respondent invokes a per-field reveal affordance."
-3. **§6 profile-matching — per-assistant scope hook.** Add per-assistant scope hook for cross-form profile reuse keyed per assistant. **NOT proposed for slice 1** — relies on browser's WebExtension permission model per FW-0051 §1.2 non-goal; flagged for future.
-4. **§3.3 mutation tools — runtime-policy-aware confirm-gate normative tightening.** New §4.3 (6) MUST: "When the Provider's runtime policy declares a per-act confirm requirement for the mutation surface, the Provider MUST surface a confirm gate for every mutation invocation (regardless of `confirm: true` on the tool call)." Codifies FW-0051's §3.4 Stage 2 invariant.
+1. **§4.4 `FieldDescription.value` masking semantics — RECOMMENDED uplift.** Add a non-normative note that Provider implementations MAY mask `value` by default and require explicit per-field reveal grant to unmask. Closes the soft-floor gap surfaced in architecture-review Finding 1.
+2. **§11 security/privacy — add per-act + per-field reveal as a SHOULD pattern — RECOMMENDED uplift.** New §11.8 SHOULD per FW-0051 §6.2 (2). Closes the soft-floor gap surfaced in architecture-review Finding 1.
+3. **§6 profile-matching — per-assistant scope hook — OPTIONAL.** NOT proposed for slice 1; relies on browser's WebExtension permission model per FW-0051 §1.2 non-goal.
+4. **§3.3 mutation tools — runtime-policy-aware confirm-gate normative tightening — RECOMMENDED uplift.** New §4.3 (6) MUST per FW-0051 §6.2 (4). Codifies FW-0051's §3.4 Stage 2 MUST and closes the interop-asymmetry-honest-only-if-codified gap surfaced in architecture-review Finding 2.
 **Cross-stack:** none. Single-spec upstream tightening; no cross-stack ratification required.
-**Fixture status:** none. The upstream tightening lands with fixture cases for the new normative floors if pursued.
-**Status:** OPTIONAL — proposed 2026-05-23 by FW-0051 design; not blocking FW-0051 or FW-0062 build; land if owner concurs that upstream tightening is worth a small assist-spec revision.
+**Fixture status:** none. The upstream tightening lands with fixture cases for the new normative floors when (1) + (2) + (4) ratify.
+**Status:** candidates (1) + (2) + (4) RECOMMENDED; (3) OPTIONAL — proposed 2026-05-23 by FW-0051 design + uplifted by FW-0051 inline architecture-review remediation 2026-05-23. Not blocking FW-0051 or FW-0062 build; land alongside (or shortly after) FW-0051 owner ratification.
 
 ### EXT-10: Receipt-domain prose update (drift fix)
 
