@@ -8,12 +8,6 @@ import {
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
-import {
-  noopDefinitionSource,
-  noopDraftStore,
-  noopIdentityProvider,
-  noopSubmitTransport,
-} from '../adapters/noop-for-narrowed-route/index.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
@@ -30,18 +24,18 @@ import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import type { IntakeHandoff } from '../ports/submit-transport.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
-import {
-  createDemoComposition,
-  createDemoDocumentsRouteComposition,
-  createDemoObligationsRouteComposition,
-  createDemoStatusRouteComposition,
-} from './demo.ts';
+import { createDemoComposition } from './demo.ts';
 import type { Composition } from './types.ts';
 
 /**
  * Default composition for the OSS reference deployment. Without an explicit
  * FORMSPEC server URL it stays in demo mode; production mode is selected by
  * runtime env and wires the M4 HTTP reference adapters.
+ *
+ * Narrowed-route compositions (`/status` per FW-0068, `/obligations` per
+ * FW-0055, `/documents` per FW-0056) live in `./route-narrowing.ts` and are
+ * parameterized by descriptor (FW-0070) — they are not siblings of this
+ * factory; this file owns the full-app form-route composition only.
  */
 export function createDefaultComposition(config: FormspecWebConfig = departmentAppProfile): Composition {
   const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
@@ -87,8 +81,8 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —
     // the wired adapter (per web ADR-0010 for respondent-place, FW-0039 for
-    // status) AND the declaration. assertCompositionCoherence (Task 10b)
-    // catches forks that update only one half.
+    // status) AND the declaration. assertCompositionCoherence catches forks
+    // that update only one half.
     instanceCapabilities: {
       respondentPlace: 'unavailable',
       status: 'unavailable',
@@ -100,200 +94,6 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       // mapping per feature-port-map.ts).
       documentPresentation: 'unavailable',
     } satisfies InstanceCapabilities,
-    orgRuntimePolicy: {
-      features: {
-        respondentPlace: 'allowed',
-        status: 'allowed',
-        documentPresentation: 'allowed',
-      },
-    } satisfies OrgRuntimePolicy,
-    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
-  };
-  return freezeComposition(composition);
-}
-
-/**
- * Status-route sibling of {@link createDefaultComposition} (FW-0068).
- *
- * Wires the production `statusReader` + the runtime-profile / policy slots
- * StatusRuntime reads; every other port is a noop that throws on call (see
- * `src/adapters/noop-for-narrowed-route/`). Constructed when `main.tsx` parses
- * the URL as a `/status?case=...` route, so the production HTTP / OIDC /
- * anonymous-session machinery never boots on that surface.
- *
- * Closes the FW-0039 H-1 architectural debt — the slice-1 accountless-access
- * claim was honest at the consumer level (`StatusRuntime` does not USE
- * non-status ports) but false at the composition level until this factory
- * landed.
- */
-export function createDefaultStatusRouteComposition(
-  config: FormspecWebConfig = departmentAppProfile,
-): Composition {
-  const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
-  if (!serverUrl) {
-    return createDemoStatusRouteComposition();
-  }
-  // Production-mode status route. statusReader stays on the
-  // unavailable sentinel until the production ProxiedApplicantStatusAdapter
-  // ships (FW-0039 release gap b). Non-status MVP ports are noops because the
-  // /status route never reads them — and the coherence assertion runs
-  // through freezeComposition just like the full-app sibling.
-  const composition: Composition = {
-    mode: 'production',
-    initialDefinitionUrl: 'about:not-constructed#fw-0068',
-    definitionSource: noopDefinitionSource('/status'),
-    draftStore: noopDraftStore('/status'),
-    submitTransport: noopSubmitTransport('/status'),
-    identityProvider: noopIdentityProvider('/status'),
-    respondentPlaceSource: unavailableRespondentPlaceSource(),
-    statusReader: unavailableStatusReader(),
-    instanceCapabilities: {
-      respondentPlace: 'unavailable',
-      status: 'unavailable',
-      // FW-0056 slice 1: no production VP stack (see createDefaultComposition
-      // for rationale). Same unavailable declaration on every narrowed-route
-      // sibling factory until SC-4 + EXT-18 land.
-      documentPresentation: 'unavailable',
-    } satisfies InstanceCapabilities,
-    orgRuntimePolicy: {
-      features: {
-        respondentPlace: 'allowed',
-        status: 'allowed',
-        documentPresentation: 'allowed',
-      },
-    } satisfies OrgRuntimePolicy,
-    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
-  };
-  return freezeComposition(composition);
-}
-
-/**
- * Obligations-route sibling of {@link createDefaultComposition} (FW-0055
- * slice 1, coordinated with FW-0068).
- *
- * Wires `respondentPlaceSource` + the runtime-profile / policy slots.
- * Form-shaped MVP ports (`definitionSource`, `draftStore`, `submitTransport`)
- * are noop because the obligations route never reads them. `statusReader`
- * stays on the unavailable sentinel — the obligations page links to `/status`
- * via hyperlink, not via direct port call.
- *
- * Identity provider is gated on the gated `respondentPlace` capability
- * (MED-4): when the production composition declares `respondentPlace =
- * 'unavailable'` the surface renders the "not shared" copy and never reads
- * identity, so we short-circuit to `noopIdentityProvider()` rather than
- * eagerly construct an OIDC/magic-link/anonymous adapter that the page won't
- * use. The "check the declaration, then construct only what we need" shape
- * preserves boot honesty for future identity adapters that DO eager-work
- * (token refresh, IndexedDB reads) — those won't boot-fail when the gated
- * capability is off.
- *
- * Mirrors the FW-0068 status-route factory's coherence funnel through
- * `freezeComposition`.
- */
-export function createDefaultObligationsRouteComposition(
-  config: FormspecWebConfig = departmentAppProfile,
-): Composition {
-  const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
-  if (!serverUrl) {
-    return createDemoObligationsRouteComposition();
-  }
-  const instanceCapabilities: InstanceCapabilities = {
-    respondentPlace: 'unavailable',
-    status: 'unavailable',
-    // FW-0056 slice 1: see createDefaultComposition for the documentPresentation
-    // unavailable rationale. The /obligations surface itself doesn't consume
-    // documentPresentation; the key is declared here so the closed-taxonomy
-    // type-check passes on every InstanceCapabilities literal.
-    documentPresentation: 'unavailable',
-  };
-  const notificationDelivery = stubNotificationDelivery();
-  // MED-4: identity is only wired when the gated respondent-place capability
-  // is available. Today the production factory always declares
-  // `respondentPlace: 'unavailable'`, so the noop branch always fires —
-  // identical to the status-route factory's posture. When a real production
-  // respondent-place adapter ships and the declaration moves to 'available',
-  // this branch picks up identity wiring automatically.
-  const identityProvider: IdentityProvider =
-    instanceCapabilities.respondentPlace === 'available'
-      ? buildRealIdentityProvider(config, notificationDelivery, serverUrl).provider
-      : noopIdentityProvider('/obligations');
-
-  const composition: Composition = {
-    mode: 'production',
-    initialDefinitionUrl: 'about:not-constructed#fw-0055',
-    definitionSource: noopDefinitionSource('/obligations'),
-    draftStore: noopDraftStore('/obligations'),
-    submitTransport: noopSubmitTransport('/obligations'),
-    identityProvider,
-    notificationDelivery,
-    respondentPlaceSource: unavailableRespondentPlaceSource(),
-    statusReader: unavailableStatusReader(),
-    instanceCapabilities,
-    orgRuntimePolicy: {
-      features: { respondentPlace: 'allowed', status: 'allowed' },
-    } satisfies OrgRuntimePolicy,
-    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
-  };
-  return freezeComposition(composition);
-}
-
-/**
- * Documents-route sibling of {@link createDefaultComposition} (FW-0056
- * slice 1, coordinated with FW-0068).
- *
- * Wires `respondentPlaceSource` (load-bearing — documents come from the
- * snapshot) + the runtime-profile / policy slots. Form-shaped MVP ports
- * (`definitionSource`, `draftStore`, `submitTransport`) are noop because the
- * documents route never reads them. `statusReader` stays on the unavailable
- * sentinel — `DocumentsRuntime` does not call it.
- *
- * Identity provider is gated on the gated `respondentPlace` capability per
- * the MED-4 pattern FW-0055 established: when the production composition
- * declares `respondentPlace = 'unavailable'`, the surface renders the
- * "not available" copy and never reads identity, so we short-circuit to
- * `noopIdentityProvider()` rather than eagerly construct OIDC/magic-link/
- * anonymous adapters that the page won't use. When a real production
- * respondent-place adapter ships, this branch picks up identity wiring
- * automatically.
- *
- * `documentPresentation` shares the `respondentPlaceSource` slot per the
- * transitional port mapping (see feature-port-map.ts); declared `unavailable`
- * here paired with `unavailableRespondentPlaceSource()` — same slot, same
- * provenance — to keep the coherence assertion satisfied. When SC-4 + EXT-18
- * ratify the real VP port, the slot mapping splits.
- *
- * Mirrors the FW-0068 status-route + FW-0055 obligations-route factories'
- * coherence funnel through `freezeComposition`.
- */
-export function createDefaultDocumentsRouteComposition(
-  config: FormspecWebConfig = departmentAppProfile,
-): Composition {
-  const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
-  if (!serverUrl) {
-    return createDemoDocumentsRouteComposition();
-  }
-  const instanceCapabilities: InstanceCapabilities = {
-    respondentPlace: 'unavailable',
-    status: 'unavailable',
-    documentPresentation: 'unavailable',
-  };
-  const notificationDelivery = stubNotificationDelivery();
-  const identityProvider: IdentityProvider =
-    instanceCapabilities.respondentPlace === 'available'
-      ? buildRealIdentityProvider(config, notificationDelivery, serverUrl).provider
-      : noopIdentityProvider('/documents');
-
-  const composition: Composition = {
-    mode: 'production',
-    initialDefinitionUrl: 'about:not-constructed#fw-0056',
-    definitionSource: noopDefinitionSource('/documents'),
-    draftStore: noopDraftStore('/documents'),
-    submitTransport: noopSubmitTransport('/documents'),
-    identityProvider,
-    notificationDelivery,
-    respondentPlaceSource: unavailableRespondentPlaceSource(),
-    statusReader: unavailableStatusReader(),
-    instanceCapabilities,
     orgRuntimePolicy: {
       features: {
         respondentPlace: 'allowed',

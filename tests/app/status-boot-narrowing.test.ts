@@ -82,12 +82,11 @@ vi.mock('../../src/adapters/identity/anonymous.ts', () => ({
   AnonymousAdapter: spies.anonymousAdapter,
 }));
 
-import {
-  createDefaultComposition,
-  createDefaultDocumentsRouteComposition,
-  createDefaultObligationsRouteComposition,
-  createDefaultStatusRouteComposition,
-} from '../../src/composition/default.ts';
+import { createDefaultComposition } from '../../src/composition/default.ts';
+import { createRouteNarrowedComposition } from '../../src/composition/route-narrowing.ts';
+import { DOCUMENTS_ROUTE_NARROWING } from '../../src/app/documents-route.ts';
+import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts';
+import { STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import type { FormspecWebConfig, PortCompositionConfig } from '../../src/config/types.ts';
 import { chooseComposition } from '../../src/app/main-helpers.ts';
@@ -131,8 +130,12 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     vi.restoreAllMocks();
   });
 
-  it('createDefaultStatusRouteComposition does NOT invoke HTTP adapter constructors in production mode', () => {
-    createDefaultStatusRouteComposition(productionConfig());
+  it('status-route narrowed composition does NOT invoke HTTP adapter constructors in production mode (FW-0068 via FW-0070)', () => {
+    createRouteNarrowedComposition({
+      mode: 'default',
+      config: productionConfig(),
+      route: STATUS_ROUTE_NARROWING,
+    });
 
     expect(spies.httpDef).not.toHaveBeenCalled();
     expect(spies.httpDraft).not.toHaveBeenCalled();
@@ -170,15 +173,19 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.httpDef).toHaveBeenCalled();
   });
 
-  it('createDefaultObligationsRouteComposition does NOT construct the real identity adapter when respondentPlace is unavailable (MED-4)', async () => {
-    // Today the production obligations-route factory hardcodes
-    // `respondentPlace: 'unavailable'` (no production respondent-place adapter
-    // ships yet — design §"Production gap"). The composition still needs to
-    // boot honestly; constructing OidcAdapter (or any other identity adapter
-    // with eager network/IndexedDB work) at boot would lie about the
-    // surface's runtime cost. MED-4: short-circuit to noopIdentityProvider
-    // when the gated respondent-place capability is unavailable.
-    const c = createDefaultObligationsRouteComposition(productionConfig());
+  it('obligations-route narrowed composition does NOT construct the real identity adapter when respondentPlace is unavailable (MED-4 via FW-0070)', async () => {
+    // Today's production posture hardcodes `respondentPlace: 'unavailable'`
+    // (no production respondent-place adapter ships yet — FW-0068 design
+    // §"Production gap"). The parameterized factory still needs to boot
+    // honestly; constructing OidcAdapter (or any other identity adapter with
+    // eager network/IndexedDB work) at boot would lie about the surface's
+    // runtime cost. MED-4: short-circuit to noopIdentityProvider when the
+    // gated respondent-place capability is unavailable.
+    const c = createRouteNarrowedComposition({
+      mode: 'default',
+      config: productionConfig(),
+      route: OBLIGATIONS_ROUTE_NARROWING,
+    });
     expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
     expect(spies.magicLinkAdapter).not.toHaveBeenCalled();
@@ -220,12 +227,16 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
   });
 
-  it('createDefaultDocumentsRouteComposition does NOT construct HTTP / identity adapters when respondentPlace is unavailable (FW-0056)', async () => {
-    // Same MED-4 gating as the obligations-route factory: the documents
+  it('documents-route narrowed composition does NOT construct HTTP / identity adapters when respondentPlace is unavailable (FW-0056 via FW-0070)', async () => {
+    // Same MED-4 gating as the obligations-route descriptor: the documents
     // dashboard is identity-bound, but identity is wired only when the
     // gated respondent-place capability is available. Production today
     // always declares unavailable, so the noop branch fires.
-    const c = createDefaultDocumentsRouteComposition(productionConfig());
+    const c = createRouteNarrowedComposition({
+      mode: 'default',
+      config: productionConfig(),
+      route: DOCUMENTS_ROUTE_NARROWING,
+    });
     expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
     expect(c.instanceCapabilities.documentPresentation).toBe('unavailable');
     expect(spies.httpDef).not.toHaveBeenCalled();

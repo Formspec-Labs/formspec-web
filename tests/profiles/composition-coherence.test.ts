@@ -1,21 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { createStubComposition } from '../../src/composition/stub.ts';
+import { createDefaultComposition } from '../../src/composition/default.ts';
 import {
-  createStubComposition,
-  createStubDocumentsRouteComposition,
-  createStubObligationsRouteComposition,
-  createStubStatusRouteComposition,
-} from '../../src/composition/stub.ts';
-import {
-  createDefaultComposition,
-  createDefaultDocumentsRouteComposition,
-  createDefaultObligationsRouteComposition,
-  createDefaultStatusRouteComposition,
-} from '../../src/composition/default.ts';
-import {
-  createDemoDocumentsRouteComposition,
-  createDemoObligationsRouteComposition,
-  createDemoStatusRouteComposition,
-} from '../../src/composition/demo.ts';
+  createRouteNarrowedComposition,
+  type RouteNarrowing,
+  type RouteNarrowingMode,
+} from '../../src/composition/route-narrowing.ts';
+import { DOCUMENTS_ROUTE_NARROWING } from '../../src/app/documents-route.ts';
+import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts';
+import { STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
 import {
   assertCompositionCoherence,
   type CompositionLike,
@@ -50,6 +43,30 @@ function productionCompositionLike(overrides: Partial<CompositionLike> = {}): Co
   };
 }
 
+// FW-0070: programmatic generator replaces 9 explicit narrowed-factory cases.
+// Adding a new descriptor adds its coherence coverage automatically; the
+// matrix no longer scales linearly with the file body.
+const NARROWED_DESCRIPTORS: ReadonlyArray<readonly [string, RouteNarrowing]> = [
+  ['STATUS_ROUTE_NARROWING (FW-0068)', STATUS_ROUTE_NARROWING],
+  ['OBLIGATIONS_ROUTE_NARROWING (FW-0055)', OBLIGATIONS_ROUTE_NARROWING],
+  ['DOCUMENTS_ROUTE_NARROWING (FW-0056)', DOCUMENTS_ROUTE_NARROWING],
+];
+const NARROWED_MODES: readonly RouteNarrowingMode[] = ['default', 'stub'];
+
+function* narrowedCompositionCoherenceCases(): Generator<{
+  name: string;
+  build: () => ReturnType<typeof createRouteNarrowedComposition>;
+}> {
+  for (const [label, route] of NARROWED_DESCRIPTORS) {
+    for (const mode of NARROWED_MODES) {
+      yield {
+        name: `${mode} mode × ${label} is coherent`,
+        build: () => createRouteNarrowedComposition({ mode, route }),
+      };
+    }
+  }
+}
+
 describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-0011 §Rationale #1)', () => {
   it('stub composition is coherent (demo mode + demo-stub adapters + demo-stub declarations)', () => {
     expect(() => assertCompositionCoherence(createStubComposition())).not.toThrow();
@@ -59,40 +76,12 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
     expect(() => assertCompositionCoherence(createDefaultComposition())).not.toThrow();
   });
 
-  it('default status-route composition is coherent (FW-0068)', () => {
-    expect(() => assertCompositionCoherence(createDefaultStatusRouteComposition())).not.toThrow();
-  });
-
-  it('stub status-route composition is coherent (FW-0068)', () => {
-    expect(() => assertCompositionCoherence(createStubStatusRouteComposition())).not.toThrow();
-  });
-
-  it('demo status-route composition is coherent (FW-0068)', () => {
-    expect(() => assertCompositionCoherence(createDemoStatusRouteComposition())).not.toThrow();
-  });
-
-  it('default obligations-route composition is coherent (FW-0055)', () => {
-    expect(() => assertCompositionCoherence(createDefaultObligationsRouteComposition())).not.toThrow();
-  });
-
-  it('stub obligations-route composition is coherent (FW-0055)', () => {
-    expect(() => assertCompositionCoherence(createStubObligationsRouteComposition())).not.toThrow();
-  });
-
-  it('demo obligations-route composition is coherent (FW-0055)', () => {
-    expect(() => assertCompositionCoherence(createDemoObligationsRouteComposition())).not.toThrow();
-  });
-
-  it('default documents-route composition is coherent (FW-0056)', () => {
-    expect(() => assertCompositionCoherence(createDefaultDocumentsRouteComposition())).not.toThrow();
-  });
-
-  it('stub documents-route composition is coherent (FW-0056)', () => {
-    expect(() => assertCompositionCoherence(createStubDocumentsRouteComposition())).not.toThrow();
-  });
-
-  it('demo documents-route composition is coherent (FW-0056)', () => {
-    expect(() => assertCompositionCoherence(createDemoDocumentsRouteComposition())).not.toThrow();
+  describe('narrowed-route compositions cohere across every (mode, descriptor) combo (FW-0070)', () => {
+    for (const testCase of narrowedCompositionCoherenceCases()) {
+      it(testCase.name, () => {
+        expect(() => assertCompositionCoherence(testCase.build())).not.toThrow();
+      });
+    }
   });
 
   it('flags an adapter marked unavailable but declared anything other than unavailable', () => {

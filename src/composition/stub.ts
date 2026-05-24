@@ -1,9 +1,3 @@
-import {
-  noopDefinitionSource,
-  noopDraftStore,
-  noopIdentityProvider,
-  noopSubmitTransport,
-} from '../adapters/noop-for-narrowed-route/index.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../adapters/stub/draft-store.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
@@ -29,6 +23,11 @@ import type { Composition } from './types.ts';
  * All-stub composition for tests + scaffold smoke test.
  * Per web ADR-0009 §Composition lifecycle, the composition root is the only
  * place adapters are wired into ports.
+ *
+ * Narrowed-route stub compositions (`/status` per FW-0068, `/obligations`
+ * per FW-0055, `/documents` per FW-0056) live in `./route-narrowing.ts`
+ * and are parameterized by descriptor (FW-0070). This factory owns the
+ * full-app form-route composition only.
  */
 export function createStubComposition(): Composition {
   const definitionSource = stubDefinitionSource();
@@ -79,137 +78,6 @@ export function createStubComposition(): Composition {
       definition.url === demoSampleFormUrl
         ? { features: { respondentPlace: 'optional', status: 'optional' } }
         : { features: {} },
-  };
-  return freezeComposition(composition);
-}
-
-/**
- * Obligations-route sibling of {@link createStubComposition} (FW-0055
- * slice 1, coordinated with FW-0068).
- *
- * Wires the same demo `respondentPlaceSource` + `statusReader` + identity stubs
- * the full stub composition uses, plus the demo `identityProvider` (the
- * /obligations surface is identity-bound). Form-shaped MVP ports
- * (definition / draft / submit) are noop because the obligations route never
- * reads them. `instanceCapabilities` continues to describe what the demo
- * deployment CAN do; the narrowing is the noop form ports only.
- */
-export function createStubObligationsRouteComposition(): Composition {
-  const composition: Composition = {
-    mode: 'demo',
-    initialDefinitionUrl: 'about:not-constructed#fw-0055',
-    definitionSource: noopDefinitionSource('/obligations'),
-    draftStore: noopDraftStore('/obligations'),
-    submitTransport: noopSubmitTransport('/obligations'),
-    identityProvider: stubIdentityProvider(),
-    respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
-    statusReader: stubStatusReader([
-      ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
-    ]),
-    instanceCapabilities: {
-      respondentPlace: 'demo-stub',
-      status: 'demo-stub',
-      // FW-0056 design line 121 + arch-review MED-1: no demo VP stack
-      // (substrate doesn't exist anywhere). Same posture as the full demo
-      // composition — see createStubComposition for the shared-slot honesty
-      // rationale.
-      documentPresentation: 'unavailable',
-    } satisfies InstanceCapabilities,
-    orgRuntimePolicy: {
-      features: {
-        respondentPlace: 'allowed',
-        status: 'allowed',
-        documentPresentation: 'allowed',
-      },
-    } satisfies OrgRuntimePolicy,
-    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
-  };
-  return freezeComposition(composition);
-}
-
-/**
- * Status-route sibling of {@link createStubComposition} (FW-0068).
- *
- * Wires the same demo `statusReader` + `respondentPlaceSource` stubs the full
- * stub composition uses so the inline arch-review Finding 1 reshape holds —
- * `instanceCapabilities` continues to describe what the demo deployment can
- * do, not what the slot wires. The narrowing on the /status surface is the
- * noop MVP ports; the gated keys keep their existing `demo-stub` declarations
- * and the coherence assertion still funnels through `freezeComposition`.
- */
-export function createStubStatusRouteComposition(): Composition {
-  const composition: Composition = {
-    mode: 'demo',
-    initialDefinitionUrl: 'about:not-constructed#fw-0068',
-    definitionSource: noopDefinitionSource('/status'),
-    draftStore: noopDraftStore('/status'),
-    submitTransport: noopSubmitTransport('/status'),
-    identityProvider: noopIdentityProvider('/status'),
-    respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
-    statusReader: stubStatusReader([
-      ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
-    ]),
-    instanceCapabilities: {
-      respondentPlace: 'demo-stub',
-      status: 'demo-stub',
-      // FW-0056 design line 121 + arch-review MED-1: no demo VP stack
-      // (substrate doesn't exist anywhere). Same posture as the full demo
-      // composition — see createStubComposition for the shared-slot honesty
-      // rationale.
-      documentPresentation: 'unavailable',
-    } satisfies InstanceCapabilities,
-    orgRuntimePolicy: {
-      features: {
-        respondentPlace: 'allowed',
-        status: 'allowed',
-        documentPresentation: 'allowed',
-      },
-    } satisfies OrgRuntimePolicy,
-    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
-  };
-  return freezeComposition(composition);
-}
-
-/**
- * Documents-route sibling of {@link createStubComposition} (FW-0056 slice 1,
- * coordinated with FW-0068).
- *
- * Wires the same demo `respondentPlaceSource` + `statusReader` + identity
- * stubs the full stub composition uses, plus the demo `identityProvider`
- * (the /documents surface is identity-bound). Form-shaped MVP ports
- * (definition / draft / submit) are noop because the documents route never
- * reads them. `instanceCapabilities` declares `respondentPlace` as
- * `demo-stub` (the demo wallet IS demo-stub) and `documentPresentation` as
- * `unavailable` (no demo VP stack exists — FW-0056 design line 121).
- * The shared-slot independent-declarations rule in the coherence assertion
- * makes this honest: the unavailable declaration opts out of the slot, so
- * the demo-stub place adapter satisfies only the respondentPlace key.
- */
-export function createStubDocumentsRouteComposition(): Composition {
-  const composition: Composition = {
-    mode: 'demo',
-    initialDefinitionUrl: 'about:not-constructed#fw-0056',
-    definitionSource: noopDefinitionSource('/documents'),
-    draftStore: noopDraftStore('/documents'),
-    submitTransport: noopSubmitTransport('/documents'),
-    identityProvider: stubIdentityProvider(),
-    respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
-    statusReader: stubStatusReader([
-      ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
-    ]),
-    instanceCapabilities: {
-      respondentPlace: 'demo-stub',
-      status: 'demo-stub',
-      documentPresentation: 'unavailable',
-    } satisfies InstanceCapabilities,
-    orgRuntimePolicy: {
-      features: {
-        respondentPlace: 'allowed',
-        status: 'allowed',
-        documentPresentation: 'allowed',
-      },
-    } satisfies OrgRuntimePolicy,
-    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
   return freezeComposition(composition);
 }
