@@ -1,6 +1,5 @@
+import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
 import { HttpDefinitionSource } from '../adapters/http/definition-source.ts';
-import { HttpDraftStore } from '../adapters/http/draft-store.ts';
-import { HttpSubmitTransport } from '../adapters/http/submit-transport.ts';
 import {
   AnonymousSessionBridge,
   HttpAnonymousIdentityProvider,
@@ -21,9 +20,7 @@ import {
 } from '../policy/index.ts';
 import { demoSampleFormUrl } from '../demo/index.ts';
 import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
-import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
-import type { IntakeHandoff } from '../ports/submit-transport.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
 import { createDemoComposition } from './demo.ts';
 import type { Composition } from './types.ts';
@@ -59,9 +56,9 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
   const httpConfig = identityBinding.accessToken
     ? { ...baseHttpConfig, accessToken: identityBinding.accessToken }
     : baseHttpConfig;
-  const draftStore = new HttpDraftStore({
+  const { draftStore, submitTransport } = createHttpAdapterCohort({
     ...httpConfig,
-    anonymousSessionToken: (key) => anonymousSessions.tokenForDraftKey(key),
+    anonymousSessions,
   });
 
   const composition: Composition = {
@@ -69,11 +66,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     initialDefinitionUrl,
     definitionSource: new HttpDefinitionSource(httpConfig),
     draftStore,
-    submitTransport: new HttpSubmitTransport({
-      ...httpConfig,
-      draftIdResolver: (handoff) => draftIdFromHandoff(handoff, draftStore),
-      anonymousSessionToken: (handoff) => anonymousSessions.tokenForHandoff(handoff),
-    }),
+    submitTransport,
     identityProvider: identityBinding.provider,
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
@@ -212,38 +205,10 @@ function identityProviderFor(
   return { provider: new AnonymousAdapter() };
 }
 
-function draftIdFromHandoff(
-  handoff: IntakeHandoff,
-  draftStore: HttpDraftStore,
-): string | undefined {
-  const draftId = handoff.extensions?.['x-formspec-draft-id'];
-  if (typeof draftId === 'string') {
-    return draftId;
-  }
-  const draftKey = draftKeyFromHandoff(handoff);
-  return draftKey ? draftStore.draftIdFor(draftKey) : undefined;
-}
-
-function draftKeyFromHandoff(handoff: IntakeHandoff): DraftKey | undefined {
-  const candidate = handoff.extensions?.['x-formspec-draft-key'];
-  if (!isRecord(candidate) || typeof candidate.formUrl !== 'string') {
-    return undefined;
-  }
-  return {
-    formUrl: candidate.formUrl,
-    formVersion: typeof candidate.formVersion === 'string' ? candidate.formVersion : undefined,
-    subjectRef: typeof candidate.subjectRef === 'string' ? candidate.subjectRef : undefined,
-  };
-}
-
 function productionInitialDefinitionUrl(serverUrl: string): string {
   return `${serverUrl.replace(/\/+$/, '')}/runtime/forms/${demoFormId()}`;
 }
 
 function demoFormId(): string {
   return demoSampleFormUrl.split('/').filter(Boolean).at(-1) ?? 'demo-intake';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

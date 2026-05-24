@@ -27,10 +27,7 @@ const spies = vi.hoisted(() => ({
     return { __mockHttpDefinitionSource: true };
   }),
   httpDraft: vi.fn(function () {
-    return {
-      __mockHttpDraftStore: true,
-      draftIdFor: () => undefined,
-    };
+    return { __mockHttpDraftStore: true };
   }),
   httpSubmit: vi.fn(function () {
     return { __mockHttpSubmitTransport: true };

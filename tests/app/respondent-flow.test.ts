@@ -72,12 +72,13 @@ describe('respondent flow helpers', () => {
       validationReportRef: 'validation:none',
     });
     expect(handoff.extensions).toMatchObject({
-      'x-formspec-draft-key': {
-        formUrl: demoSampleForm.url,
-        formVersion: demoSampleForm.version,
-      },
       'x-formspec-response-data': sampleFormResponse.data,
     });
+    // FW-0064: the web-runtime draft key no longer rides through extensions.
+    // The HTTP adapter cohort derives the binding from
+    // `handoff.definitionRef + handoff.subjectRef`. Regression guard so the
+    // smell does not silently come back.
+    expect(handoff.extensions).not.toHaveProperty('x-formspec-draft-key');
     expect(handoff.responseHash).toMatch(/^sha256:[a-f0-9]+$/);
   });
 

@@ -10,6 +10,14 @@ export {
   createHttpDefinitionSource,
   type HttpDefinitionSourceConfig,
 } from './definition-source.ts';
+export {
+  createHttpAdapterCohort,
+  draftKeyFromHandoff,
+  type DraftBindingRegistry,
+  type DraftBindingSnapshot,
+  type HttpAdapterCohort,
+  type HttpAdapterCohortConfig,
+} from './cohort.ts';
 export { HttpDraftStore, createHttpDraftStore, type HttpDraftStoreConfig } from './draft-store.ts';
 export { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 export {
