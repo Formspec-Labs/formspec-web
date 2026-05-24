@@ -8,6 +8,12 @@ import {
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
+import {
+  noopDefinitionSource,
+  noopDraftStore,
+  noopIdentityProvider,
+  noopSubmitTransport,
+} from '../adapters/noop-for-status-route/index.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
@@ -24,7 +30,7 @@ import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import type { IntakeHandoff } from '../ports/submit-transport.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
-import { createDemoComposition } from './demo.ts';
+import { createDemoComposition, createDemoStatusRouteComposition } from './demo.ts';
 import type { Composition } from './types.ts';
 
 /**
@@ -78,6 +84,53 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     // the wired adapter (per web ADR-0010 for respondent-place, FW-0039 for
     // status) AND the declaration. assertCompositionCoherence (Task 10b)
     // catches forks that update only one half.
+    instanceCapabilities: {
+      respondentPlace: 'unavailable',
+      status: 'unavailable',
+    } satisfies InstanceCapabilities,
+    orgRuntimePolicy: {
+      features: { respondentPlace: 'allowed', status: 'allowed' },
+    } satisfies OrgRuntimePolicy,
+    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
+  };
+  return freezeComposition(composition);
+}
+
+/**
+ * Status-route sibling of {@link createDefaultComposition} (FW-0068).
+ *
+ * Wires the production `statusReader` + the runtime-profile / policy slots
+ * StatusRuntime reads; every other port is a noop that throws on call (see
+ * `src/adapters/noop-for-status-route/`). Constructed when `main.tsx` parses
+ * the URL as a `/status?case=...` route, so the production HTTP / OIDC /
+ * anonymous-session machinery never boots on that surface.
+ *
+ * Closes the FW-0039 H-1 architectural debt — the slice-1 accountless-access
+ * claim was honest at the consumer level (`StatusRuntime` does not USE
+ * non-status ports) but false at the composition level until this factory
+ * landed.
+ */
+export function createDefaultStatusRouteComposition(
+  config: FormspecWebConfig = departmentAppProfile,
+): Composition {
+  const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
+  if (!serverUrl) {
+    return createDemoStatusRouteComposition();
+  }
+  // Production-mode status route. statusReader stays on the
+  // unavailable sentinel until the production ProxiedApplicantStatusAdapter
+  // ships (FW-0039 release gap b). Non-status MVP ports are noops because the
+  // /status route never reads them — and the coherence assertion runs
+  // through freezeComposition just like the full-app sibling.
+  const composition: Composition = {
+    mode: 'production',
+    initialDefinitionUrl: 'about:not-constructed#fw-0068',
+    definitionSource: noopDefinitionSource(),
+    draftStore: noopDraftStore(),
+    submitTransport: noopSubmitTransport(),
+    identityProvider: noopIdentityProvider(),
+    respondentPlaceSource: unavailableRespondentPlaceSource(),
+    statusReader: unavailableStatusReader(),
     instanceCapabilities: {
       respondentPlace: 'unavailable',
       status: 'unavailable',

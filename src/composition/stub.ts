@@ -1,3 +1,9 @@
+import {
+  noopDefinitionSource,
+  noopDraftStore,
+  noopIdentityProvider,
+  noopSubmitTransport,
+} from '../adapters/noop-for-status-route/index.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../adapters/stub/draft-store.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
@@ -58,6 +64,40 @@ export function createStubComposition(): Composition {
       definition.url === demoSampleFormUrl
         ? { features: { respondentPlace: 'optional', status: 'optional' } }
         : { features: {} },
+  };
+  return freezeComposition(composition);
+}
+
+/**
+ * Status-route sibling of {@link createStubComposition} (FW-0068).
+ *
+ * Wires the same demo `statusReader` + `respondentPlaceSource` stubs the full
+ * stub composition uses so the inline arch-review Finding 1 reshape holds —
+ * `instanceCapabilities` continues to describe what the demo deployment can
+ * do, not what the slot wires. The narrowing on the /status surface is the
+ * noop MVP ports; the gated keys keep their existing `demo-stub` declarations
+ * and the coherence assertion still funnels through `freezeComposition`.
+ */
+export function createStubStatusRouteComposition(): Composition {
+  const composition: Composition = {
+    mode: 'demo',
+    initialDefinitionUrl: 'about:not-constructed#fw-0068',
+    definitionSource: noopDefinitionSource(),
+    draftStore: noopDraftStore(),
+    submitTransport: noopSubmitTransport(),
+    identityProvider: noopIdentityProvider(),
+    respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
+    statusReader: stubStatusReader([
+      ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
+    ]),
+    instanceCapabilities: {
+      respondentPlace: 'demo-stub',
+      status: 'demo-stub',
+    } satisfies InstanceCapabilities,
+    orgRuntimePolicy: {
+      features: { respondentPlace: 'allowed', status: 'allowed' },
+    } satisfies OrgRuntimePolicy,
+    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
   return freezeComposition(composition);
 }

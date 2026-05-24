@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createStubComposition } from '../../src/composition/stub.ts';
-import { createDefaultComposition } from '../../src/composition/default.ts';
-import { createDemoComposition } from '../../src/composition/demo.ts';
+import { createStubComposition, createStubStatusRouteComposition } from '../../src/composition/stub.ts';
+import {
+  createDefaultComposition,
+  createDefaultStatusRouteComposition,
+} from '../../src/composition/default.ts';
+import { createDemoComposition, createDemoStatusRouteComposition } from '../../src/composition/demo.ts';
 import { applyBrandTheme, getUpstreamTokenRegistry } from '../../src/theme/theme.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import type { OidcClientDriver } from '../../src/adapters/identity/oidc.ts';
@@ -265,6 +268,53 @@ describe('composition root smoke', () => {
     const first = await submitTransport.submit(sampleIntakeHandoff, generateIdempotencyKey());
     const second = await submitTransport.submit(sampleIntakeHandoff, generateIdempotencyKey());
     expect(second.referenceNumber).not.toBe(first.referenceNumber);
+  });
+
+  it('createDefaultStatusRouteComposition wires statusReader + policy slots; non-status MVP ports throw on call (FW-0068)', async () => {
+    const c = createDefaultStatusRouteComposition();
+    expect(c.mode).toBe('demo');
+    expect(c.statusReader).toBeDefined();
+    expect(c.respondentPlaceSource).toBeDefined();
+    expect(c.instanceCapabilities.status).toBeDefined();
+    expect(c.orgRuntimePolicy.features).toBeDefined();
+    expect(c.getFormRuntimePolicy).toBeDefined();
+    await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    await expect(c.draftStore.load({ formUrl: 'https://x', subjectRef: 's' })).rejects.toThrow(/FW-0068/);
+    await expect(c.submitTransport.submit({} as never, 'k')).rejects.toThrow(/FW-0068/);
+    await expect(c.identityProvider.discover()).rejects.toThrow(/FW-0068/);
+  });
+
+  it('createDefaultStatusRouteComposition in production mode keeps unavailable sentinel for status (FW-0068)', () => {
+    const c = createDefaultStatusRouteComposition({
+      ...departmentAppProfile,
+      ports: referenceHttpDataPorts(departmentAppProfile.ports),
+      referenceAdapters: {
+        formspecStack: {
+          ...departmentAppProfile.referenceAdapters?.formspecStack,
+          tenantHeaderDialect: 'formspec',
+          formspecServerUrl: 'https://formspec-server.example.test',
+        },
+      },
+    });
+    expect(c.mode).toBe('production');
+    expect(c.instanceCapabilities.status).toBe('unavailable');
+    expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
+  });
+
+  it('createStubStatusRouteComposition delivers a status reader the demo URN resolves through; MVP ports noop (FW-0068)', async () => {
+    const c = createStubStatusRouteComposition();
+    expect(c.mode).toBe('demo');
+    expect(c.instanceCapabilities.status).toBe('demo-stub');
+    expect(c.instanceCapabilities.respondentPlace).toBe('demo-stub');
+    await expect(c.statusReader.readStatus({ resourceRef: 'urn:wos:case_demo_0001' }))
+      .resolves.toBeDefined();
+    await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+  });
+
+  it('createDemoStatusRouteComposition delegates to the stub status-route variant (FW-0068)', () => {
+    const c = createDemoStatusRouteComposition();
+    expect(c.mode).toBe('demo');
+    expect(c.instanceCapabilities.status).toBe('demo-stub');
   });
 
   it('IdentityProvider subscribe receives initial null then update on authenticate', async () => {
