@@ -2,8 +2,21 @@
   "name": "required-org-instance-unsupported",
   "description": "org requires respondentPlace; instance unavailable -> OrgPolicyUnsatisfied",
   "mode": "production",
-  "instance": { "respondentPlace": "unavailable", "status": "available" },
-  "org": { "features": { "respondentPlace": "required" } },
-  "form": { "features": {} },
-  "expect": { "kind": "throws", "code": "OrgPolicyUnsatisfied" }
+  "instance": {
+    "respondentPlace": "unavailable",
+    "status": "available",
+    "documentPresentation": "unavailable"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "required"
+    }
+  },
+  "form": {
+    "features": {}
+  },
+  "expect": {
+    "kind": "throws",
+    "code": "OrgPolicyUnsatisfied"
+  }
 }

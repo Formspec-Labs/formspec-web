@@ -91,9 +91,20 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     instanceCapabilities: {
       respondentPlace: 'unavailable',
       status: 'unavailable',
+      // FW-0056 slice 1: no production VP stack yet. SC-4 ratifies the
+      // Verifiable Presentation Profile; EXT-18 lands the HPKE wrapper for
+      // passkey-derived wallet encryption. Until those land, every production
+      // composition declares documentPresentation unavailable — paired with
+      // the same unavailable respondent-place sentinel (transitional port
+      // mapping per feature-port-map.ts).
+      documentPresentation: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
-      features: { respondentPlace: 'allowed', status: 'allowed' },
+      features: {
+        respondentPlace: 'allowed',
+        status: 'allowed',
+        documentPresentation: 'allowed',
+      },
     } satisfies OrgRuntimePolicy,
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
@@ -138,9 +149,17 @@ export function createDefaultStatusRouteComposition(
     instanceCapabilities: {
       respondentPlace: 'unavailable',
       status: 'unavailable',
+      // FW-0056 slice 1: no production VP stack (see createDefaultComposition
+      // for rationale). Same unavailable declaration on every narrowed-route
+      // sibling factory until SC-4 + EXT-18 land.
+      documentPresentation: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
-      features: { respondentPlace: 'allowed', status: 'allowed' },
+      features: {
+        respondentPlace: 'allowed',
+        status: 'allowed',
+        documentPresentation: 'allowed',
+      },
     } satisfies OrgRuntimePolicy,
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
@@ -180,6 +199,11 @@ export function createDefaultObligationsRouteComposition(
   const instanceCapabilities: InstanceCapabilities = {
     respondentPlace: 'unavailable',
     status: 'unavailable',
+    // FW-0056 slice 1: see createDefaultComposition for the documentPresentation
+    // unavailable rationale. The /obligations surface itself doesn't consume
+    // documentPresentation; the key is declared here so the closed-taxonomy
+    // type-check passes on every InstanceCapabilities literal.
+    documentPresentation: 'unavailable',
   };
   const notificationDelivery = stubNotificationDelivery();
   // MED-4: identity is only wired when the gated respondent-place capability

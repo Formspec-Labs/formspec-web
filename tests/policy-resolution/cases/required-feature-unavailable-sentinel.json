@@ -2,8 +2,21 @@
   "name": "required-feature-unavailable-sentinel",
   "description": "production capability flagged unavailable (sentinel adapter wired); form required -> UnsupportedRequiredFeature",
   "mode": "production",
-  "instance": { "respondentPlace": "unavailable", "status": "unavailable" },
-  "org": { "features": {} },
-  "form": { "features": { "respondentPlace": "required" } },
-  "expect": { "kind": "throws", "code": "UnsupportedRequiredFeature" }
+  "instance": {
+    "respondentPlace": "unavailable",
+    "status": "unavailable",
+    "documentPresentation": "unavailable"
+  },
+  "org": {
+    "features": {}
+  },
+  "form": {
+    "features": {
+      "respondentPlace": "required"
+    }
+  },
+  "expect": {
+    "kind": "throws",
+    "code": "UnsupportedRequiredFeature"
+  }
 }

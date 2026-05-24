@@ -2,12 +2,26 @@
   "name": "default-on-instance-available",
   "description": "org default-on; instance available; form silent -> enabled",
   "mode": "production",
-  "instance": { "respondentPlace": "available", "status": "available" },
-  "org": { "features": { "respondentPlace": "default-on" } },
-  "form": { "features": {} },
+  "instance": {
+    "respondentPlace": "available",
+    "status": "available",
+    "documentPresentation": "unavailable"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "default-on"
+    }
+  },
+  "form": {
+    "features": {}
+  },
   "expect": {
     "kind": "profile",
-    "enabled": ["respondentPlace"],
-    "disabled": { "status": "not-requested" }
+    "enabled": [
+      "respondentPlace"
+    ],
+    "disabled": {
+      "status": "not-requested"
+    }
   }
 }

@@ -23,7 +23,15 @@ import { unavailableStatusReader } from '../../src/adapters/unavailable/status-r
 function productionCompositionLike(overrides: Partial<CompositionLike> = {}): CompositionLike {
   return {
     mode: 'production',
-    instanceCapabilities: { respondentPlace: 'unavailable', status: 'unavailable' },
+    instanceCapabilities: {
+      respondentPlace: 'unavailable',
+      status: 'unavailable',
+      // FW-0056: transitional port mapping (see feature-port-map.ts) — the
+      // same respondentPlaceSource slot satisfies both keys. Same unavailable
+      // declaration on both keys lets the unavailable sentinel cohere for
+      // both at once.
+      documentPresentation: 'unavailable',
+    },
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
     ...overrides,
@@ -76,7 +84,11 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
 
   it('flags a demo-stub adapter wired in a production-mode composition', () => {
     const composition = productionCompositionLike({
-      instanceCapabilities: { respondentPlace: 'unavailable', status: 'available' },
+      instanceCapabilities: {
+        respondentPlace: 'unavailable',
+        status: 'available',
+        documentPresentation: 'unavailable',
+      },
       statusReader: stubStatusReader(),
     });
     expect(() => assertCompositionCoherence(composition)).toThrow(/status/);
@@ -85,7 +97,11 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
 
   it('flags a demo-stub declaration with no matching demo-stub-marked adapter', () => {
     const composition = productionCompositionLike({
-      instanceCapabilities: { respondentPlace: 'unavailable', status: 'demo-stub' },
+      instanceCapabilities: {
+        respondentPlace: 'unavailable',
+        status: 'demo-stub',
+        documentPresentation: 'unavailable',
+      },
     });
     expect(() => assertCompositionCoherence(composition)).toThrow(/status/);
     expect(() => assertCompositionCoherence(composition)).toThrow(/demo-stub/);

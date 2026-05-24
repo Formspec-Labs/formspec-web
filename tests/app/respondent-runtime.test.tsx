@@ -289,9 +289,16 @@ function testComposition(
     instanceCapabilities: {
       respondentPlace: 'available',
       status: 'available',
+      // FW-0056: closed-taxonomy key — declare for resolver input validity.
+      // The in-form respondent surface doesn't consume documentPresentation.
+      documentPresentation: 'available',
     },
     orgRuntimePolicy: {
-      features: { respondentPlace: 'allowed', status: 'allowed' },
+      features: {
+        respondentPlace: 'allowed',
+        status: 'allowed',
+        documentPresentation: 'allowed',
+      },
     },
     getFormRuntimePolicy: () => ({
       features: { respondentPlace: 'optional', status: 'optional' },

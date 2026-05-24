@@ -2,12 +2,27 @@
   "name": "optional-falls-off",
   "description": "form optional; instance unavailable; org allows -> disabled with optional-no-instance",
   "mode": "production",
-  "instance": { "respondentPlace": "unavailable", "status": "available" },
-  "org": { "features": { "respondentPlace": "allowed" } },
-  "form": { "features": { "respondentPlace": "optional" } },
+  "instance": {
+    "respondentPlace": "unavailable",
+    "status": "available",
+    "documentPresentation": "unavailable"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed"
+    }
+  },
+  "form": {
+    "features": {
+      "respondentPlace": "optional"
+    }
+  },
   "expect": {
     "kind": "profile",
     "enabled": [],
-    "disabled": { "respondentPlace": "optional-no-instance", "status": "not-requested" }
+    "disabled": {
+      "respondentPlace": "optional-no-instance",
+      "status": "not-requested"
+    }
   }
 }

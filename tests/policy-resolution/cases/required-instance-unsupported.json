@@ -2,8 +2,21 @@
   "name": "required-instance-unsupported",
   "description": "form requires status; instance unavailable -> UnsupportedRequiredFeature",
   "mode": "production",
-  "instance": { "respondentPlace": "available", "status": "unavailable" },
-  "org": { "features": {} },
-  "form": { "features": { "status": "required" } },
-  "expect": { "kind": "throws", "code": "UnsupportedRequiredFeature" }
+  "instance": {
+    "respondentPlace": "available",
+    "status": "unavailable",
+    "documentPresentation": "unavailable"
+  },
+  "org": {
+    "features": {}
+  },
+  "form": {
+    "features": {
+      "status": "required"
+    }
+  },
+  "expect": {
+    "kind": "throws",
+    "code": "UnsupportedRequiredFeature"
+  }
 }

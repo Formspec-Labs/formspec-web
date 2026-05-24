@@ -50,9 +50,22 @@ export function createStubComposition(): Composition {
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
+      // FW-0056 slice 1: documentPresentation transitionally shares the
+      // respondentPlaceSource slot (see feature-port-map.ts). Demo declares
+      // 'demo-stub' to match the demo-stub-marked place adapter; the UI
+      // surface (DocumentsRuntime) still renders the deferred-presentation
+      // copy on the "Use this document…" action because no real VP
+      // ceremony exists in slice 1 — the action's copy is gated by the
+      // consumer, not by this declaration. When SC-4 + EXT-18 land a real
+      // ceremony, this declaration and the slot mapping split.
+      documentPresentation: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
-      features: { respondentPlace: 'allowed', status: 'allowed' },
+      features: {
+        respondentPlace: 'allowed',
+        status: 'allowed',
+        documentPresentation: 'allowed',
+      },
     } satisfies OrgRuntimePolicy,
     // The demo form opts into both seeded features. Other definitions get
     // an empty policy — form-policy is form-owned per ADR-0011 §Form runtime
@@ -94,9 +107,25 @@ export function createStubObligationsRouteComposition(): Composition {
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
+      // FW-0056 slice 1: documentPresentation transitionally shares the
+      // respondentPlaceSource slot (see feature-port-map.ts). Stub mode
+      // declares 'demo-stub' so the same demo-stub-marked place adapter
+      // coheres for both keys. The UI surface (DocumentsRuntime) still
+      // renders the deferred-presentation copy on the "Use this document…"
+      // action — because no real VP ceremony exists in any composition yet,
+      // the action's copy is gated by the consumer, not by this declaration.
+      // When the real VP port lands (SC-4 + EXT-18 + a future port ADR),
+      // this declaration AND the slot mapping split; until then, the
+      // coherence assertion's "same slot, same provenance" rule keeps both
+      // declarations honest.
+      documentPresentation: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
-      features: { respondentPlace: 'allowed', status: 'allowed' },
+      features: {
+        respondentPlace: 'allowed',
+        status: 'allowed',
+        documentPresentation: 'allowed',
+      },
     } satisfies OrgRuntimePolicy,
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };
@@ -128,9 +157,25 @@ export function createStubStatusRouteComposition(): Composition {
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
+      // FW-0056 slice 1: documentPresentation transitionally shares the
+      // respondentPlaceSource slot (see feature-port-map.ts). Stub mode
+      // declares 'demo-stub' so the same demo-stub-marked place adapter
+      // coheres for both keys. The UI surface (DocumentsRuntime) still
+      // renders the deferred-presentation copy on the "Use this document…"
+      // action — because no real VP ceremony exists in any composition yet,
+      // the action's copy is gated by the consumer, not by this declaration.
+      // When the real VP port lands (SC-4 + EXT-18 + a future port ADR),
+      // this declaration AND the slot mapping split; until then, the
+      // coherence assertion's "same slot, same provenance" rule keeps both
+      // declarations honest.
+      documentPresentation: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
-      features: { respondentPlace: 'allowed', status: 'allowed' },
+      features: {
+        respondentPlace: 'allowed',
+        status: 'allowed',
+        documentPresentation: 'allowed',
+      },
     } satisfies OrgRuntimePolicy,
     getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
   };

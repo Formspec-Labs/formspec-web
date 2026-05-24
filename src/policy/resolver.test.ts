@@ -9,10 +9,17 @@ import type {
 const allAvailable: InstanceCapabilities = {
   respondentPlace: 'available',
   status: 'available',
+  // FW-0056 slice 1: declare documentPresentation so resolver validation
+  // passes; the resolver-test cases don't gate against it.
+  documentPresentation: 'available',
 };
 
 const allowAllOrg: OrgRuntimePolicy = {
-  features: { respondentPlace: 'allowed', status: 'allowed' },
+  features: {
+    respondentPlace: 'allowed',
+    status: 'allowed',
+    documentPresentation: 'allowed',
+  },
 };
 
 describe('resolveRuntimeFeatures (happy path)', () => {

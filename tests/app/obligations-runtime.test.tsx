@@ -235,10 +235,18 @@ describe('ObligationsRuntime (FW-0055 slice 1)', () => {
         instanceCapabilities: {
           ...composition.instanceCapabilities,
           respondentPlace: 'unavailable',
+          // FW-0056: same slot as respondentPlace under the transitional
+          // port mapping; align the declaration so the literal composition
+          // would still pass coherence if funneled through freezeComposition.
+          documentPresentation: 'unavailable',
         },
         respondentPlaceSource: unavailableRespondentPlaceSource(),
         orgRuntimePolicy: {
-          features: { respondentPlace: 'allowed', status: 'allowed' },
+          features: {
+            respondentPlace: 'allowed',
+            status: 'allowed',
+            documentPresentation: 'allowed',
+          },
         },
         getFormRuntimePolicy: () => ({ features: {} }),
       };
@@ -426,9 +434,15 @@ function productionCompositionWithIdentity(
     instanceCapabilities: {
       respondentPlace: 'available',
       status: 'available',
+      // FW-0056: closed-taxonomy key — declare for resolver input validity.
+      documentPresentation: 'available',
     },
     orgRuntimePolicy: {
-      features: { respondentPlace: 'allowed', status: 'allowed' },
+      features: {
+        respondentPlace: 'allowed',
+        status: 'allowed',
+        documentPresentation: 'allowed',
+      },
     },
     getFormRuntimePolicy: () => ({ features: {} }),
     identityProvider,

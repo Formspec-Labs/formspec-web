@@ -2,8 +2,23 @@
   "name": "form-forbidden-org-required",
   "description": "form forbids status; org requires it -> FeaturePolicyConflict",
   "mode": "production",
-  "instance": { "respondentPlace": "available", "status": "available" },
-  "org": { "features": { "status": "required" } },
-  "form": { "features": { "status": "forbidden" } },
-  "expect": { "kind": "throws", "code": "FeaturePolicyConflict" }
+  "instance": {
+    "respondentPlace": "available",
+    "status": "available",
+    "documentPresentation": "unavailable"
+  },
+  "org": {
+    "features": {
+      "status": "required"
+    }
+  },
+  "form": {
+    "features": {
+      "status": "forbidden"
+    }
+  },
+  "expect": {
+    "kind": "throws",
+    "code": "FeaturePolicyConflict"
+  }
 }

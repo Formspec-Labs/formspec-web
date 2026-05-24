@@ -8,13 +8,21 @@ import {
 } from './feature-keys.ts';
 
 describe('RUNTIME_FEATURE_KEYS', () => {
-  it('seeds with respondentPlace and status only (per ADR-0011 Follow-on Work)', () => {
-    expect([...RUNTIME_FEATURE_KEYS]).toEqual(['respondentPlace', 'status']);
+  it('extends the seeded pair with documentPresentation (FW-0056 slice 1; append-only)', () => {
+    // Append-only: FW-0056 adds documentPresentation at the tail per the
+    // file-level comment. Re-sorting alphabetically would silently change
+    // the resolver-loop iteration order; new feature ADRs append.
+    expect([...RUNTIME_FEATURE_KEYS]).toEqual([
+      'respondentPlace',
+      'status',
+      'documentPresentation',
+    ]);
   });
 
   it('isRuntimeFeatureKey narrows arbitrary strings', () => {
     const candidate: string = 'status';
     expect(isRuntimeFeatureKey(candidate)).toBe(true);
+    expect(isRuntimeFeatureKey('documentPresentation')).toBe(true);
     expect(isRuntimeFeatureKey('payment')).toBe(false);
   });
 
@@ -23,9 +31,10 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(k).toBe('respondentPlace');
   });
 
-  it('no seeded feature key is locale-conditional today (ADR-0011 §Resolution recompute trigger)', () => {
+  it('no feature key is locale-conditional today (ADR-0011 §Resolution recompute trigger)', () => {
     expect(LOCALE_CONDITIONAL_FEATURE_KEYS.size).toBe(0);
     expect(isLocaleConditionalFeatureKey('status')).toBe(false);
     expect(isLocaleConditionalFeatureKey('respondentPlace')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('documentPresentation')).toBe(false);
   });
 });

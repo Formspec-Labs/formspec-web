@@ -2,12 +2,27 @@
   "name": "default-on-and-form-forbidden",
   "description": "org default-on + form forbidden -> form wins (forbidden short-circuit before default-on branch)",
   "mode": "production",
-  "instance": { "respondentPlace": "available", "status": "available" },
-  "org": { "features": { "respondentPlace": "default-on" } },
-  "form": { "features": { "respondentPlace": "forbidden" } },
+  "instance": {
+    "respondentPlace": "available",
+    "status": "available",
+    "documentPresentation": "unavailable"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "default-on"
+    }
+  },
+  "form": {
+    "features": {
+      "respondentPlace": "forbidden"
+    }
+  },
   "expect": {
     "kind": "profile",
     "enabled": [],
-    "disabled": { "respondentPlace": "form-forbidden", "status": "not-requested" }
+    "disabled": {
+      "respondentPlace": "form-forbidden",
+      "status": "not-requested"
+    }
   }
 }

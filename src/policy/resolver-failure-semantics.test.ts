@@ -7,7 +7,14 @@ import {
 } from './errors.ts';
 import { resolveRuntimeFeatures } from './resolver.ts';
 
-const baseInstance = { respondentPlace: 'available', status: 'available' } as const;
+const baseInstance = {
+  respondentPlace: 'available',
+  status: 'available',
+  // FW-0056: documentPresentation is a closed-taxonomy key; declare unavailable
+  // here so the resolver's input validation passes for the failure-semantics
+  // fixtures that don't otherwise care about the key.
+  documentPresentation: 'unavailable',
+} as const;
 const emptyOrg = { features: {} } as const;
 
 describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
@@ -75,7 +82,11 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
   it('accepts a demo-stub capability for a demo-mode required feature', () => {
     const profile = resolveRuntimeFeatures({
       mode: 'demo',
-      instance: { respondentPlace: 'demo-stub', status: 'demo-stub' },
+      instance: {
+        respondentPlace: 'demo-stub',
+        status: 'demo-stub',
+        documentPresentation: 'unavailable',
+      },
       org: emptyOrg,
       form: { features: { status: 'required' } },
     });
@@ -118,7 +129,11 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
     expect(() =>
       resolveRuntimeFeatures({
         mode: 'production',
-        instance: { respondentPlace: 'partial' as never, status: 'available' },
+        instance: {
+          respondentPlace: 'partial' as never,
+          status: 'available',
+          documentPresentation: 'unavailable',
+        },
         org: emptyOrg,
         form: { features: {} },
       }),
