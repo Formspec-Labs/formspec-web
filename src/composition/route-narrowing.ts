@@ -28,6 +28,7 @@
  * All output funnels through `freezeComposition` per FW-0068 §Acceptance
  * #1 — the coherence assertion still runs at construction time.
  */
+import { EmptyFormRuntimePolicyExtractor } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import {
   noopDefinitionSource,
   noopDraftStore,
@@ -48,7 +49,6 @@ import { unavailableStatusReader } from '../adapters/unavailable/status-reader.t
 import type { FormspecWebConfig } from '../config/types.ts';
 import {
   freezeComposition,
-  type FormRuntimePolicy,
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../policy/index.ts';
@@ -171,7 +171,7 @@ function buildProductionNarrowedComposition({
     attachmentStore: unavailableAttachmentStore(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
-    getFormRuntimePolicy: emptyFormRuntimePolicy,
+    formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
   };
   return freezeComposition(composition);
 }
@@ -212,7 +212,7 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       fileUpload: 'unavailable',
     },
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
-    getFormRuntimePolicy: emptyFormRuntimePolicy,
+    formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
   };
   return freezeComposition(composition);
 }
@@ -226,8 +226,4 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       fileUpload: 'allowed',
     },
   };
-}
-
-function emptyFormRuntimePolicy(): FormRuntimePolicy {
-  return { features: {} };
 }

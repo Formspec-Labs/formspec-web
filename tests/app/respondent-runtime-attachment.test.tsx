@@ -17,11 +17,10 @@ import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
 import {
   freezeComposition,
-  type FormRuntimePolicy,
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../../src/policy/index.ts';
-import { extractAttachmentRequirement } from '../../src/policy/extract-form-policy.ts';
+import { AttachmentRequirementExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import type { Composition } from '../../src/composition/types.ts';
 import type { IntakeHandoff } from '../../src/ports/submit-transport.ts';
 import { AttachmentUploadError } from '../../src/ports/attachment-store.ts';
@@ -104,10 +103,7 @@ function buildComposition({
     attachmentStore,
     instanceCapabilities,
     orgRuntimePolicy,
-    getFormRuntimePolicy: (definition): FormRuntimePolicy => {
-      const fileUpload = extractAttachmentRequirement(definition);
-      return fileUpload ? { features: { fileUpload } } : { features: {} };
-    },
+    formRuntimePolicyExtractor: new AttachmentRequirementExtractor(),
   });
   return { composition, submitSpy };
 }

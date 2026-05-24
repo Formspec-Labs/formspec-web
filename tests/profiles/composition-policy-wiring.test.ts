@@ -17,7 +17,10 @@ describe('Composition declares runtime-feature policy seams', () => {
 
   it('stub composition opts the demo form into both seeded features as optional', () => {
     const c = createStubComposition();
-    const policy = c.getFormRuntimePolicy({ url: demoSampleFormUrl, version: '1' } as never);
+    const policy = c.formRuntimePolicyExtractor.extract({
+      url: demoSampleFormUrl,
+      version: '1',
+    } as never);
     expect(policy.features).toEqual({
       respondentPlace: 'optional',
       status: 'optional',
@@ -26,7 +29,10 @@ describe('Composition declares runtime-feature policy seams', () => {
 
   it('stub composition returns an empty policy for non-demo form definitions', () => {
     const c = createStubComposition();
-    const policy = c.getFormRuntimePolicy({ url: 'urn:other-form', version: '1' } as never);
+    const policy = c.formRuntimePolicyExtractor.extract({
+      url: 'urn:other-form',
+      version: '1',
+    } as never);
     expect(policy.features).toEqual({});
   });
 });

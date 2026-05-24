@@ -476,11 +476,11 @@ async function createReadyState(
   // LOW-2.
   let formPolicy;
   try {
-    formPolicy = composition.getFormRuntimePolicy(definition);
+    formPolicy = composition.formRuntimePolicyExtractor.extract(definition);
   } catch (cause) {
     throw new InvalidRuntimePolicyError(
       'form',
-      `getFormRuntimePolicy extractor threw: ${cause instanceof Error ? cause.message : String(cause)}`,
+      `FormRuntimePolicyExtractor.extract threw: ${cause instanceof Error ? cause.message : String(cause)}`,
     );
   }
   const runtimeProfile = resolveRuntimeFeatures({

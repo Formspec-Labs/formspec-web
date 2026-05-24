@@ -310,9 +310,11 @@ function testComposition(
         fileUpload: 'allowed',
       },
     },
-    getFormRuntimePolicy: () => ({
-      features: { respondentPlace: 'optional', status: 'optional' },
-    }),
+    formRuntimePolicyExtractor: {
+      extract: () => ({
+        features: { respondentPlace: 'optional', status: 'optional' },
+      }),
+    },
   };
 }
 

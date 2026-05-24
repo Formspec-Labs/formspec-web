@@ -18,7 +18,7 @@ describe('seeded feature gating on ResolvedRuntimeProfile (Codex Finding 2)', ()
     (composition as { respondentPlaceSource: unknown }).respondentPlaceSource =
       unavailableRespondentPlaceSource();
     (composition as { statusReader: unknown }).statusReader = unavailableStatusReader();
-    composition.getFormRuntimePolicy = () => ({ features: {} });
+    composition.formRuntimePolicyExtractor = { extract: () => ({ features: {} }) };
     composition.orgRuntimePolicy = { features: {} };
 
     const readPlaceSpy = vi.spyOn(composition.respondentPlaceSource, 'readPlace');

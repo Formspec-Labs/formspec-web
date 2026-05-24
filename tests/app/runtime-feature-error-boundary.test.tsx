@@ -11,7 +11,9 @@ describe('form-load boundary catches RuntimePolicyError', () => {
     composition.orgRuntimePolicy = {
       features: { ...composition.orgRuntimePolicy.features, status: 'required' },
     };
-    composition.getFormRuntimePolicy = () => ({ features: { status: 'forbidden' } });
+    composition.formRuntimePolicyExtractor = {
+      extract: () => ({ features: { status: 'forbidden' } }),
+    };
 
     render(<RespondentRuntime composition={composition} config={departmentAppProfile} />);
 

@@ -2,15 +2,14 @@ import type {
   AttachmentStore,
   DefinitionSource,
   DraftStore,
+  FormRuntimePolicyExtractor,
   IdentityProvider,
   NotificationDelivery,
   RespondentPlaceSource,
   StatusReader,
   SubmitTransport,
 } from '../ports/index.ts';
-import type { FormDefinition } from '../ports/definition-source.ts';
 import type {
-  FormRuntimePolicy,
   InstanceCapabilities,
   OrgRuntimePolicy,
 } from '../policy/index.ts';
@@ -52,15 +51,13 @@ export interface Composition {
   orgRuntimePolicy: OrgRuntimePolicy;
   /**
    * ADR-0011 §Form runtime policy — extracts the form's runtime-policy
-   * declaration from the loaded Definition. Default extractors return {} (no
-   * requirements); feature ADRs that add a form-policy field define their own
-   * extractor.
-   *
-   * Today shipped as a closure on Composition rather than a full port with
-   * conformance suite. Promote to `FormRuntimePolicyExtractor` port (with
-   * conformance fixtures under `tests/adapter-conformance/`) the moment the
-   * first feature ADR ships a non-trivial extractor — scout flag HIGH-1
-   * (2026-05-23 architecture review).
+   * declaration from the loaded Definition. Promoted to a named
+   * `FormRuntimePolicyExtractor` port at FW-0066 (closure-typed slot retired
+   * per project no-shims discipline once the FW-0033 attachment-field walker
+   * tripped the promotion threshold). Reference adapters live at
+   * `src/adapters/composing/form-runtime-policy-extractor.ts` and
+   * `src/adapters/stub/form-runtime-policy-extractor.ts`; conformance suite at
+   * `tests/adapter-conformance/form-runtime-policy-extractor/`.
    */
-  getFormRuntimePolicy: (definition: FormDefinition) => FormRuntimePolicy;
+  formRuntimePolicyExtractor: FormRuntimePolicyExtractor;
 }

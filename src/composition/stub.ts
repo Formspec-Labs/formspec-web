@@ -1,6 +1,11 @@
+import {
+  AttachmentRequirementExtractor,
+  CompositeFormRuntimePolicyExtractor,
+} from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../adapters/stub/draft-store.ts';
+import { stubFormRuntimePolicyExtractor } from '../adapters/stub/form-runtime-policy-extractor.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
@@ -13,12 +18,9 @@ import {
 } from '../demo/respondent-place.ts';
 import {
   freezeComposition,
-  type FormRuntimePolicy,
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../policy/index.ts';
-import { extractAttachmentRequirement } from '../policy/extract-form-policy.ts';
-import type { FormDefinition } from '../ports/definition-source.ts';
 import type { Composition } from './types.ts';
 
 /**
@@ -77,21 +79,17 @@ export function createStubComposition(): Composition {
         fileUpload: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
-    // The demo form opts into the seeded features; the fileUpload requirement
-    // is derived by walking the definition for attachment-typed fields per
-    // FW-0033 — `required` if any present, else absent. Combines the seeded
-    // literal map (only for the bundled demo) with the walker output for
-    // every definition.
-    getFormRuntimePolicy: (definition: FormDefinition): FormRuntimePolicy => {
-      const fileUpload = extractAttachmentRequirement(definition);
-      const features: FormRuntimePolicy['features'] = {
-        ...(definition.url === demoSampleFormUrl
-          ? { respondentPlace: 'optional', status: 'optional' }
-          : {}),
-        ...(fileUpload ? { fileUpload } : {}),
-      };
-      return { features };
-    },
+    // FW-0066: CompositeFormRuntimePolicyExtractor composes the demo-form
+    // URL-keyed seeded-pair opt-in (DemoFormPolicyExtractor) with the
+    // attachment-field walker (AttachmentRequirementExtractor) into one
+    // FormRuntimePolicyExtractor port instance. Order matters: later
+    // extractors override earlier ones on a key collision, but the two
+    // extractors here target disjoint keys (respondentPlace / status vs
+    // fileUpload) so the order is informational.
+    formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
+      stubFormRuntimePolicyExtractor(),
+      new AttachmentRequirementExtractor(),
+    ]),
   };
   return freezeComposition(composition);
 }

@@ -191,7 +191,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       composition.orgRuntimePolicy = {
         features: { respondentPlace: 'allowed', status: 'allowed' },
       };
-      composition.getFormRuntimePolicy = () => ({ features: {} });
+      composition.formRuntimePolicyExtractor = { extract: () => ({ features: {} }) };
       const spy = vi.spyOn(composition.statusReader, 'readStatus');
       render(
         <StatusRuntime

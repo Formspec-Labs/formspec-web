@@ -248,7 +248,7 @@ describe('ObligationsRuntime (FW-0055 slice 1)', () => {
             documentPresentation: 'allowed',
           },
         },
-        getFormRuntimePolicy: () => ({ features: {} }),
+        formRuntimePolicyExtractor: { extract: () => ({ features: {} }) },
       };
       const readSpy = vi.spyOn(productionComposition.respondentPlaceSource, 'readPlace');
 
@@ -447,7 +447,7 @@ function productionCompositionWithIdentity(
         fileUpload: 'allowed',
       },
     },
-    getFormRuntimePolicy: () => ({ features: {} }),
+    formRuntimePolicyExtractor: { extract: () => ({ features: {} }) },
     identityProvider,
     respondentPlaceSource: {
       readPlace: vi.fn(async () => snapshotWith({ obligations })),

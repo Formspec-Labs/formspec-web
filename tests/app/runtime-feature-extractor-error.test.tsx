@@ -4,14 +4,16 @@ import { createStubComposition } from '../../src/composition/stub.ts';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 
-describe('getFormRuntimePolicy extractor exceptions become typed RuntimePolicyError', () => {
+describe('FormRuntimePolicyExtractor exceptions become typed RuntimePolicyError', () => {
   afterEach(() => {
     cleanup();
   });
   it('routes adopter-thrown extractor errors to the form-load boundary as InvalidRuntimePolicy', async () => {
     const composition = createStubComposition();
-    composition.getFormRuntimePolicy = () => {
-      throw new Error('synthetic extractor failure');
+    composition.formRuntimePolicyExtractor = {
+      extract: () => {
+        throw new Error('synthetic extractor failure');
+      },
     };
 
     render(<RespondentRuntime composition={composition} config={departmentAppProfile} />);
@@ -29,8 +31,10 @@ describe('getFormRuntimePolicy extractor exceptions become typed RuntimePolicyEr
     // narrowing in place, the generic copy renders and the fileUpload-specific
     // copy must not appear.
     const composition = createStubComposition();
-    composition.getFormRuntimePolicy = () => {
-      throw new Error('synthetic extractor failure');
+    composition.formRuntimePolicyExtractor = {
+      extract: () => {
+        throw new Error('synthetic extractor failure');
+      },
     };
 
     render(<RespondentRuntime composition={composition} config={departmentAppProfile} />);

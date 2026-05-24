@@ -294,7 +294,7 @@ describe('composition root smoke', () => {
       expect(c.instanceCapabilities.respondentPlace).toBeDefined();
       expect(c.instanceCapabilities.documentPresentation).toBeDefined();
       expect(c.orgRuntimePolicy.features).toBeDefined();
-      expect(c.getFormRuntimePolicy).toBeDefined();
+      expect(c.formRuntimePolicyExtractor).toBeDefined();
       await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
       await expect(c.draftStore.load({ formUrl: 'https://x', subjectRef: 's' })).rejects.toThrow(/FW-0068/);
       await expect(c.submitTransport.submit({} as never, 'k')).rejects.toThrow(/FW-0068/);

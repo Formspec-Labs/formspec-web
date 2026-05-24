@@ -5,6 +5,7 @@ import {
   AnonymousSessionBridge,
   HttpAnonymousIdentityProvider,
 } from '../adapters/http/anonymous-session.ts';
+import { AttachmentRequirementExtractor } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
@@ -15,11 +16,9 @@ import { unavailableStatusReader } from '../adapters/unavailable/status-reader.t
 import type { FormspecWebConfig } from '../config/types.ts';
 import {
   freezeComposition,
-  type FormRuntimePolicy,
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../policy/index.ts';
-import { extractAttachmentRequirement } from '../policy/extract-form-policy.ts';
 import { demoSampleFormUrl } from '../demo/index.ts';
 import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
@@ -111,14 +110,11 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
         fileUpload: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
-    // FW-0033 slice 1: first non-literal extractor. Walks the definition for
-    // attachment fields and declares `fileUpload: 'required'` if any are
-    // present; otherwise an empty policy. FW-0066 will promote this kind of
-    // walker into the FormRuntimePolicyExtractor port.
-    getFormRuntimePolicy: (definition): FormRuntimePolicy => {
-      const fileUpload = extractAttachmentRequirement(definition);
-      return fileUpload ? { features: { fileUpload } } : { features: {} };
-    },
+    // FW-0066: AttachmentRequirementExtractor wraps the FW-0033 walker as a
+    // FormRuntimePolicyExtractor port instance. Production deployments compose
+    // additional extractors here as future feature ADRs land definition-
+    // introspective walkers (via CompositeFormRuntimePolicyExtractor).
+    formRuntimePolicyExtractor: new AttachmentRequirementExtractor(),
   };
   return freezeComposition(composition);
 }

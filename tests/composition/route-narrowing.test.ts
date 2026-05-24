@@ -108,9 +108,9 @@ describe('createRouteNarrowedComposition — descriptor contracts (FW-0070)', ()
       });
     });
 
-    it('getFormRuntimePolicy returns empty form policy (routes synthesize per-surface)', () => {
+    it('formRuntimePolicyExtractor returns empty form policy (routes synthesize per-surface)', () => {
       const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      expect(c.getFormRuntimePolicy({} as never)).toEqual({ features: {} });
+      expect(c.formRuntimePolicyExtractor.extract({} as never)).toEqual({ features: {} });
     });
   });
 });
