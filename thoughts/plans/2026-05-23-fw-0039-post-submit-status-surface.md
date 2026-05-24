@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship slice 1 of FW-0039 — a standalone `/status?case={WosResourceUrn}` route reachable without an account, rendering the WOS applicant API timeline + open tasks + AI disclosure, with honest per-case timing and an explicit "Timing for similar applications is not yet available" gap. Composition reuses the existing `StatusReader` port (no new port, no new feature key). File EXT-28 and FW-0067 for the cross-case throughput aggregation deferred to upstream.
+**Goal:** Ship slice 1 of FW-0039 — a standalone `/status?case={WosResourceUrn}` route reachable without an account, rendering the WOS applicant API timeline + open tasks + AI disclosure, with honest per-case timing and an explicit "Timing for similar applications is not yet available" gap. Composition reuses the existing `StatusReader` port (no new port, no new feature key). File EXT-29 and FW-0067 for the cross-case throughput aggregation deferred to upstream.
 
 **Design:** [`thoughts/specs/2026-05-23-fw-0039-post-submit-status-surface-design.md`](../specs/2026-05-23-fw-0039-post-submit-status-surface-design.md).
 
@@ -35,7 +35,7 @@
 - `tests/adapters/` (new sibling `stub-submit-transport.test.ts` if it does not already exist; otherwise extend) — pin the `caseUrn` field shape.
 - `tests/e2e/placeholder-a11y.spec.ts` — extend the existing demo-form-submit test with click-through to `/status` page; assert axe-clean on the status page.
 - `docs/policy/runtime-feature-resolution.md` — append §"Worked example: the /status route as an optional surface" tying the design to the resolver's disabled-cause branches.
-- `thoughts/specs/2026-05-22-upstream-extension-queue.md` — file `EXT-28: WOS applicant API recent-throughput projection`.
+- `thoughts/specs/2026-05-22-upstream-extension-queue.md` — file `EXT-29: WOS applicant API recent-throughput projection`.
 - `PLANNING.md` — FW-0039 row moves to `## Closed` with a "Progress (2026-05-DD)" + "Done (slice 1)" bullet, mirroring the FW-0065 close-out shape; new `FW-0067` row in Post-MVP for the cross-case-throughput consumer slice.
 - `thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md` — append `/status` route to the §Related Decisions / Implementation plan footer (small one-bullet append).
 
@@ -734,7 +734,7 @@ Mirror the existing `docs/ports/*.md` shape (definition-source, draft-store, sub
 - **Composition wiring** — stub adapter for demo; unavailable sentinel for production; `ProxiedApplicantStatusAdapter` planned per FW-0039 row + web ADR-0008.
 - **URN-as-bearer-token semantics (FW-0039 slice 1)** — the `/status?case={urn}` route hands the URN to `readStatus`; adopters MUST rate-limit unknown-URN probes server-side; the page returns uniform "not found" copy for every unknown URN so it is not an enumeration oracle. URN format follows the stack-common-typeid grammar (queue EXT-13).
 - **Disabled-status rendering** — when the resolved runtime profile disables `status`, `StatusRuntime` short-circuits and never calls `readStatus`. The honest copy is "Status not shared" — adapters do not need to handle policy-disabled cases.
-- **Throughput aggregation** — out of scope; deferred to EXT-28 (WOS applicant API recent-throughput projection) consumed by FW-0067.
+- **Throughput aggregation** — out of scope; deferred to EXT-29 (WOS applicant API recent-throughput projection) consumed by FW-0067.
 - **Conformance** — link to `tests/adapter-conformance/status-reader/conformance.test.ts` and the shared definitions in `src/adapter-conformance/conformance.ts`.
 
 - [x] **Step 2: Verify lint + check:release-docs**
@@ -804,17 +804,17 @@ git -C formspec-web commit \
 
 ---
 
-### Task 10: File EXT-28 in the upstream extension queue
+### Task 10: File EXT-29 in the upstream extension queue
 
 **Files:**
 - Modify: `thoughts/specs/2026-05-22-upstream-extension-queue.md`
 
-- [x] **Step 1: Append the EXT-28 entry**
+- [x] **Step 1: Append the EXT-29 entry**
 
 After the EXT-25 entry in `## Class 4 — Reference deployment and server gaps` (or wherever fits the existing structure):
 
 ```markdown
-### EXT-28: WOS applicant API recent-throughput projection
+### EXT-29: WOS applicant API recent-throughput projection
 
 **Owning repo:** work-spec (schema) + formspec-server (proxy)
 **Closes:** the "actual recent throughput" half of J-021. Today the WOS `ApplicantStatusTimelineEntry[]` exposes per-case event history; there is no projection of cross-case stage-duration statistics (e.g., "median time from `applicant-task-submitted` to `decision-reached` for cases on this workflow in the last 90 days"). Without it, the formspec-web post-submit status surface (FW-0039) shows only per-case timing and cannot satisfy the J-021 "realistic time estimates from actual recent throughput, not vendor estimates" claim.
@@ -831,7 +831,7 @@ After the EXT-25 entry in `## Class 4 — Reference deployment and server gaps` 
 ```bash
 git -C formspec-web commit \
   thoughts/specs/2026-05-22-upstream-extension-queue.md \
-  -m "feat(queue): file EXT-28 — WOS applicant API recent-throughput projection (FW-0039)
+  -m "feat(queue): file EXT-29 — WOS applicant API recent-throughput projection (FW-0039)
 
 Honesty constraint: the projection returns empty stageDurations rather
 than synthesizing percentiles from a tiny sample. The consumer slice
@@ -863,7 +863,7 @@ In `## Closed`, after FW-0065:
 ### FW-0039 — Post-submit status surface (slice 1) — standalone /status route + accountless URN access
 
 - **Phase:** Post-MVP
-- **Status:** live (slice 1; cross-case throughput deferred to FW-0067 + EXT-28)
+- **Status:** live (slice 1; cross-case throughput deferred to FW-0067 + EXT-29)
 - **Persona:** Respondent
 - **Journey:** [J-021](JOURNEYS.md#j-021--i-hit-submit-where-is-it-now-and-what-do-i-owe-next)
 - **What slice 1 landed:** Standalone `/status?case={WosResourceUrn}` route reachable without an account; `StatusRuntime` renders the WOS applicant API timeline + open tasks + AI-involvement disclosure + per-case timing strip with prominent "Timing for similar applications is not yet available on this site." framing. Confirmation panel hands the respondent a "Track this application" link when the submit transport returns a case URN. Vocabulary firewall preserved (WOS enums pass through `labelFromToken`; no case-URN leaks into body copy). Identity boot is bypassed on the `/status` route — the page composes ONLY: runtime profile resolution + StatusReader.readStatus + render. Per-route runtime-feature gate reuses the `status` key (no new key, no taxonomy extension). Plain "Status not shared" copy renders for all disabled-cause branches (org-forbidden, form-forbidden, instance-unavailable, demo-stub-in-production-rejected) per FW-0065's M-3 plumbing extended to a non-form surface.
@@ -872,7 +872,7 @@ In `## Closed`, after FW-0065:
 - **Consumes ports:** `StatusReader` (existing). No new ports.
 - **Plan:** [`thoughts/plans/2026-05-23-fw-0039-post-submit-status-surface.md`](thoughts/plans/2026-05-23-fw-0039-post-submit-status-surface.md).
 - **Design:** [`thoughts/specs/2026-05-23-fw-0039-post-submit-status-surface-design.md`](thoughts/specs/2026-05-23-fw-0039-post-submit-status-surface-design.md).
-- **Release gaps named:** (a) cross-case recent-throughput projection — see FW-0067 + EXT-28; (b) production `ProxiedApplicantStatusAdapter` — the same one FW-0039's `Blocked on:` named; until it ships, the production composition wires `unavailableStatusReader` and the `/status` route renders the "Status not shared. This site does not provide application status." copy honestly; (c) URN-as-possession-factor model — adapter-side rate limiting is load-bearing for the slice's honesty contract (named in `docs/ports/status-reader.md`); URN expiry / magic-link rotation / browser-bound proof remain FW-0054's job.
+- **Release gaps named:** (a) cross-case recent-throughput projection — see FW-0067 + EXT-29; (b) production `ProxiedApplicantStatusAdapter` — the same one FW-0039's `Blocked on:` named; until it ships, the production composition wires `unavailableStatusReader` and the `/status` route renders the "Status not shared. This site does not provide application status." copy honestly; (c) URN-as-possession-factor model — adapter-side rate limiting is load-bearing for the slice's honesty contract (named in `docs/ports/status-reader.md`); URN expiry / magic-link rotation / browser-bound proof remain FW-0054's job.
 - **Note:** Closes web ADR-0011 §Failure Semantics for an OPTIONAL non-form surface (the design and the resolver permit it cleanly without forcing a `required` form-policy synthesis — arch-review F-4). Consumes web ADR-0010 §DI shape `StatusReader` port without extension.
 ```
 
@@ -887,9 +887,9 @@ Place between FW-0066 and FW-0002 (mirroring FW-0066's neighborhood):
 - **Status:** open
 - **Persona:** Respondent
 - **Journey:** [J-021](JOURNEYS.md#j-021--i-hit-submit-where-is-it-now-and-what-do-i-owe-next) (the "actual recent throughput" half)
-- **Done:** The `/status?case={urn}` page (FW-0039 slice 1) shows a workflow-scoped throughput strip drawn from the EXT-28 projection — "Most decisions on this workflow have been issued within X days over the last 90 days (N cases)." When the projection is empty or below the minimum-sample threshold, the page continues to render the FW-0039 slice 1 "Timing for similar applications is not yet available" copy honestly. Strip text + threshold behavior is fixture-pinned so future copy edits trip the assertions.
+- **Done:** The `/status?case={urn}` page (FW-0039 slice 1) shows a workflow-scoped throughput strip drawn from the EXT-29 projection — "Most decisions on this workflow have been issued within X days over the last 90 days (N cases)." When the projection is empty or below the minimum-sample threshold, the page continues to render the FW-0039 slice 1 "Timing for similar applications is not yet available" copy honestly. Strip text + threshold behavior is fixture-pinned so future copy edits trip the assertions.
 - **Consumes ports:** likely a new `WorkflowThroughputReader` port (or an extension on `StatusReader`) — port-shape ratified per web ADR-0009 when this row's consumer code lands.
-- **Blocked on:** EXT-28 (WOS applicant API recent-throughput projection — see `thoughts/specs/2026-05-22-upstream-extension-queue.md`).
+- **Blocked on:** EXT-29 (WOS applicant API recent-throughput projection — see `thoughts/specs/2026-05-22-upstream-extension-queue.md`).
 - **Anti-patterns:** AP-006, AP-013.
 ```
 
@@ -912,7 +912,7 @@ git -C formspec-web commit \
 
 Mirrors the FW-0065 close-out shape (stub-in-place pointing to ## Closed,
 substantive entry in ## Closed with Progress/Done/Release-gaps bullets).
-FW-0067 names EXT-28 as its block; the throughput strip is its only
+FW-0067 names EXT-29 as its block; the throughput strip is its only
 remaining piece for the J-021 'realistic time estimates from actual
 recent throughput' claim."
 ```
@@ -996,7 +996,7 @@ git commit -m "chore(formspec-web): bump submodule for FW-0039 slice 1 (post-sub
 | `SubmitConfirmation.caseUrn` optional (arch-review F-7) | Task 2 |
 | Status-reader port doc was a pre-existing gap (arch-review F-2) | Task 8 |
 | `tests/e2e/placeholder-a11y.spec.ts` not renamed (arch-review F-5) | Task 7 |
-| EXT-28 ↔ FW-0067 cross-link (arch-review F-8, F-10) | Tasks 10, 11 |
+| EXT-29 ↔ FW-0067 cross-link (arch-review F-8, F-10) | Tasks 10, 11 |
 | Vocabulary firewall — `labelFromToken` over WOS enums | Task 6 |
 | ADR-0010 status vocabulary stays WOS-owned | Tasks 2, 5, 6 |
 | FW-0065 M-3 plumbing reused on non-form surface | Task 6 |

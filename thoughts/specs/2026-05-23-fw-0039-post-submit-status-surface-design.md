@@ -30,7 +30,7 @@ Slice 1 lands:
 
 Slice 1 does **not** ship:
 
-- **Cross-case recent-throughput data.** The WOS applicant API does not expose it today, the formspec-stack composition wires `unavailableStatusReader`, and synthesizing it client-side from one applicant's history is exactly the vendor-estimate dishonesty J-021 names. This is filed as `EXT-28: WOS applicant API recent-throughput projection` in the upstream extension queue. FW-0039 ships as `live (slice 1)` with that gap named, and a follow-on row (`FW-0067`) is filed for the consumer slice once EXT-28 lands.
+- **Cross-case recent-throughput data.** The WOS applicant API does not expose it today, the formspec-stack composition wires `unavailableStatusReader`, and synthesizing it client-side from one applicant's history is exactly the vendor-estimate dishonesty J-021 names. This is filed as `EXT-29: WOS applicant API recent-throughput projection` in the upstream extension queue. FW-0039 ships as `live (slice 1)` with that gap named, and a follow-on row (`FW-0067`) is filed for the consumer slice once EXT-29 lands.
 - **Magic-link / OTP re-auth.** The accountless path is URN-knowledge today (the URN behaves like a possession factor — the respondent has the link or they don't). Magic-link replay is FW-0041 / FW-0054's job (both post-MVP for cryptographic substrate reasons). Slice 1 does not pre-empt them.
 - **Push notifications.** Out of scope for this row; `task-deadline-approaching` notification kind is rendered when the adapter returns it, but no delivery path is added.
 
@@ -50,7 +50,7 @@ The `respondentPlace` key is **not** consumed by `StatusRuntime` — status page
 
 **`StatusReader` (no change).** Already returns `ApplicantCaseDetail` / `ApplicantStatusTimelineEntry` / etc. `StatusRuntime` calls `readStatus({ resourceRef: caseUrn })` and expects the adapter to return an `ApplicantCaseDetail` (or undefined). The conformance suite already covers this shape; no new conformance test for the port itself.
 
-**Submit transport (minimal extension).** `SubmitConfirmation` carries `referenceNumber` and optional `trackingUri`. The stub `submitTransport` already constructs the confirmation. Slice 1 widens the stub's confirmation with an optional `caseUrn: WosResourceUrn` field — informational only, the trackingUri is still the load-bearing field for the chrome. The HTTP transport does not gain a field until the production adapter lands (EXT-28 era).
+**Submit transport (minimal extension).** `SubmitConfirmation` carries `referenceNumber` and optional `trackingUri`. The stub `submitTransport` already constructs the confirmation. Slice 1 widens the stub's confirmation with an optional `caseUrn: WosResourceUrn` field — informational only, the trackingUri is still the load-bearing field for the chrome. The HTTP transport does not gain a field until the production adapter lands (EXT-29 era).
 
 **No new ports.** Per web ADR-0009 §"Not in the constitutional inventory" — no port is ratified before it has a consumer. The throughput aggregation is post-MVP and the consumer ADR will name the port shape; FW-0039 doesn't pre-empt it.
 
@@ -95,7 +95,7 @@ What slice 1 derives from that shape **honestly**:
 - **What's next.** Drawn from `openTasks[].title` and `openTasks[].deadline` when present. "You owe: X by Y." The deadline is a server-supplied date, not a synthetic SLA.
 - **AI involvement disclosure.** When `ApplicantCaseDetail.aiInvolvement` is present, render "AI participated in this case" with the agent count, the role classifier (advisory / primary / fallback per the WOS schema), and the human-reviewed-all flag — copying the schema's plain-language framing verbatim. Required by the EU AI Act Article 13 / OMB M-24-10 obligation already encoded in the projection.
 
-What slice 1 **refuses to display** in the absence of EXT-28:
+What slice 1 **refuses to display** in the absence of EXT-29:
 - "Average wait for similar applications."
 - "Decisions typically take N days."
 - Any number derived from anything other than the timestamps on *this* case's own timeline.
@@ -117,7 +117,7 @@ The per-case label is also reshaped from the design's earlier "Your application'
 - `tests/e2e/placeholder-a11y.spec.ts` (modify) — end-to-end smoke that submits the demo form, clicks the "Track this application" link, and asserts axe-clean on the rendered status page.
 - `docs/ports/status-reader.md` (new) — port-level adopter doc following the existing `docs/ports/*.md` pattern (already required for every port per M3 in the MVP audit).
 - `docs/policy/runtime-feature-resolution.md` (modify) — add the `/status` route as a worked example of the optional-falls-off branch on a non-form surface.
-- `thoughts/specs/2026-05-22-upstream-extension-queue.md` (modify) — file `EXT-28: WOS applicant API recent-throughput projection`.
+- `thoughts/specs/2026-05-22-upstream-extension-queue.md` (modify) — file `EXT-29: WOS applicant API recent-throughput projection`.
 - `PLANNING.md` (modify) — FW-0039 closes as `live (slice 1)`; FW-0067 opens for the throughput consumer slice.
 
 ## Non-goals (explicit, to bound scope)
@@ -170,7 +170,7 @@ The fixture-driven `policy-resolution` case keeps the status-route gate honest a
 - Honest "no aggregate" framing in place of vendor estimates.
 - Test coverage spanning policy-gate, port-mock, route selection, vocabulary firewall, accessibility, and the end-to-end submit→track click-through.
 
-**Stays open (FW-0067, EXT-28):**
+**Stays open (FW-0067, EXT-29):**
 - Cross-case recent-throughput data ("most decisions issue within X days for this workflow").
 - Production `ProxiedApplicantStatusAdapter` (the `Blocked on:` already named on FW-0039).
 - URN expiry / magic-link rotation / browser-bound proof (FW-0054).
@@ -184,4 +184,4 @@ The fixture-driven `policy-resolution` case keeps the status-route gate honest a
 - [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — `status` capability key
 - [FW-0065 plan](../plans/2026-05-23-runtime-feature-resolution-and-policy-gates.md) — gating + plumbing already shipped
 - [FW-0039 implementation plan](../plans/2026-05-23-fw-0039-post-submit-status-surface.md) — task-by-task execution
-- [`thoughts/specs/2026-05-22-upstream-extension-queue.md`](2026-05-22-upstream-extension-queue.md) — EXT-28 throughput projection filed here
+- [`thoughts/specs/2026-05-22-upstream-extension-queue.md`](2026-05-22-upstream-extension-queue.md) — EXT-29 throughput projection filed here

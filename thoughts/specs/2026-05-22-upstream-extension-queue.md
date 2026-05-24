@@ -365,7 +365,7 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Fixture status:** n/a.
 **Status:** not yet filed.
 
-### EXT-28: WOS applicant API recent-throughput projection
+### EXT-29: WOS applicant API recent-throughput projection
 
 **Owning repo:** work-spec (schema) + formspec-server (proxy)
 **Closes:** the "actual recent throughput" half of J-021. Today the WOS `ApplicantStatusTimelineEntry[]` (`work-spec/schemas/api/applicant.schema.json#/$defs/ApplicantStatusTimelineEntry`) exposes per-case event history; there is no projection of cross-case stage-duration statistics (e.g., "median time from `applicant-task-submitted` to `decision-reached` for cases on this workflow in the last 90 days"). Without it, FW-0039 slice 1 shows only per-case timing and cannot satisfy the J-021 "realistic time estimates from actual recent throughput, not vendor estimates" claim.

@@ -60,5 +60,5 @@ policy-disabled case; the resolver short-circuits before the call.
 
 Out of scope for `StatusReader`. The "actual recent throughput" half of
 J-021 / FW-0039 needs a workflow-scoped cross-case statistic — filed as
-`EXT-28` in [the upstream extension queue](../../thoughts/specs/2026-05-22-upstream-extension-queue.md)
+`EXT-29` in [the upstream extension queue](../../thoughts/specs/2026-05-22-upstream-extension-queue.md)
 and consumed by FW-0067 once it lands.
