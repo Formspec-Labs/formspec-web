@@ -36,11 +36,11 @@ import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityClaim, IdentityProvider, IdpOption } from '../ports/identity-provider.ts';
 import type {
   ApplicantStatusResource,
-  RespondentDocumentRecord,
   RespondentPlaceSnapshot,
   RespondentSubmissionRecord,
 } from '../ports/index.ts';
 import { ObligationItem } from './obligations-view.tsx';
+import { DocumentItem } from './documents-view.tsx';
 import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
@@ -750,22 +750,6 @@ function PlaceList({
         <p className="place-list__empty">{emptyLabel}</p>
       )}
     </section>
-  );
-}
-
-function DocumentItem({ document }: { document: RespondentDocumentRecord }) {
-  return (
-    <li className="place-list__item">
-      <div className="place-list__row">
-        <strong>{document.displayName}</strong>
-        <span className="place-pill">{labelFromToken(document.kind)}</span>
-      </div>
-      <p>{document.issuer?.name ?? document.contentRef.mediaType}</p>
-      <small>
-        Uploaded {formatDate(document.capturedAt)}
-        {document.expiresAt ? ` / Expires ${formatDate(document.expiresAt)}` : ''}
-      </small>
-    </li>
   );
 }
 
