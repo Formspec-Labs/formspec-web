@@ -30,7 +30,7 @@ const DAY_MS = 24 * HOUR_MS;
  * Plain-language elapsed time between two ISO timestamps. Per FW-0039 §Timing
  * realism — used by the StatusRuntime per-case timing strip. Never claims
  * "average" or "typical" — that copy belongs to the workflow-throughput strip
- * (FW-0067) once the upstream EXT-28 projection lands.
+ * (FW-0067) once the upstream EXT-29 projection lands.
  */
 export function formatDuration(fromIso: string, toIso: string): string {
   const from = new Date(fromIso).getTime();
