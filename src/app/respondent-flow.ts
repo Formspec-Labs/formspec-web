@@ -162,3 +162,7 @@ function fallbackHash(bytes: Uint8Array): string {
   }
   return hash.toString(16).padStart(8, '0');
 }
+
+export function buildConfirmationTrackingUri(caseUrn: string): string {
+  return `/status?case=${encodeURIComponent(caseUrn)}`;
+}

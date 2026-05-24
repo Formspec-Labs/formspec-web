@@ -56,6 +56,7 @@ import {
 import { RuntimeProfileProvider } from './RuntimeProfileProvider.tsx';
 import {
   assertIdentityPolicySatisfied,
+  buildConfirmationTrackingUri,
   buildIntakeHandoff,
   hydrateEngineFromResponse,
   identitySubjectChanged,
@@ -905,15 +906,17 @@ function SubmitNotice({ state }: { state: SubmitState }) {
   return null;
 }
 
-function ConfirmationPanel({ confirmation }: { confirmation: SubmitConfirmation }) {
+export function ConfirmationPanel({ confirmation }: { confirmation: SubmitConfirmation }) {
+  const trackingHref = confirmation.caseUrn
+    ? buildConfirmationTrackingUri(confirmation.caseUrn)
+    : confirmation.trackingUri;
+  const trackingLabel = confirmation.caseUrn ? 'Track this application' : 'Track this submission';
   return (
     <section className="confirmation-panel" aria-labelledby="confirmation-title" tabIndex={-1}>
       <h2 id="confirmation-title">Submission received</h2>
       <p>Reference number</p>
       <strong>{confirmation.referenceNumber}</strong>
-      {confirmation.trackingUri ? (
-        <a href={confirmation.trackingUri}>Track this submission</a>
-      ) : null}
+      {trackingHref ? <a href={trackingHref}>{trackingLabel}</a> : null}
     </section>
   );
 }
