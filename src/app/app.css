@@ -462,6 +462,118 @@ select {
   clip: rect(0, 0, 0, 0);
 }
 
+.status-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem 0;
+}
+
+.status-surface__subtitle {
+  color: var(--formspec-color-text-muted, #555);
+  margin: -1rem 0 0;
+}
+
+.status-stage-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.status-stage-strip__cell {
+  padding: 0.75rem 0.5rem;
+  border-radius: 0.5rem;
+  background: var(--formspec-color-surface-2, #f3f3f5);
+  text-align: center;
+  font-weight: 500;
+  color: var(--formspec-color-text-muted, #777);
+}
+
+.status-stage-strip__cell--current {
+  background: var(--formspec-color-accent-soft, #ddeefd);
+  color: var(--formspec-color-accent-text, #053b6e);
+  border: 1px solid var(--formspec-color-accent, #1e6fdf);
+}
+
+.status-timing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: var(--formspec-color-surface-1, #fff);
+  border: 1px solid var(--formspec-color-border, #e2e2e6);
+}
+
+.status-timing__no-aggregate {
+  font-weight: 600;
+  color: var(--formspec-color-text, #222);
+  margin: 0;
+}
+
+.status-timing__header {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.status-timing__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.status-timing__item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed var(--formspec-color-border, #e2e2e6);
+}
+
+.status-timing__item:last-child {
+  border-bottom: 0;
+}
+
+.status-next-tasks,
+.status-ai-disclosure {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: var(--formspec-color-surface-1, #fff);
+  border: 1px solid var(--formspec-color-border, #e2e2e6);
+}
+
+.status-next-tasks__list,
+.status-ai-disclosure__list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.status-next-tasks__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+@media (max-width: 720px) {
+  .status-stage-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .status-next-tasks__item {
+    flex-direction: column;
+  }
+}
+
 @media (max-width: 720px) {
   .respondent-flow {
     border-inline: 0;

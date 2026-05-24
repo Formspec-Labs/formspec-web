@@ -54,6 +54,7 @@ import {
   type RuntimePolicyError,
 } from '../policy/index.ts';
 import { RuntimeProfileProvider } from './RuntimeProfileProvider.tsx';
+import { formatDate, labelFromToken, slugToken } from './format.ts';
 import {
   assertIdentityPolicySatisfied,
   buildConfirmationTrackingUri,
@@ -1063,29 +1064,9 @@ function statusFeedback(
   };
 }
 
-function labelFromToken(value: string): string {
-  return value
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function slugToken(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
-}
+// Format helpers moved to ./format.ts so StatusRuntime + RespondentRuntime
+// share one definition (FW-0039 slice 1). Re-exported below via direct
+// import sites; nothing else in this file references them by closure.
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: unknown }> {
   override state: { error: unknown } = { error: null };

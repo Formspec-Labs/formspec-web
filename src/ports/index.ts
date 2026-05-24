@@ -26,12 +26,16 @@ export type {
 export type {
   StatusReader,
   StatusRequest,
+  ApplicantAgentSummary,
+  ApplicantAiInvolvementSummary,
   ApplicantStatusResource,
   ApplicantCaseSummary,
   ApplicantCaseDetail,
   ApplicantTaskSummary,
   ApplicantNotificationListItem,
   ApplicantStatusTimelineEntry,
+  ApplicantTimelineEvent,
+  WosResourceUrn,
 } from './status-reader.ts';
 export { WOS_APPLICANT_SCHEMA_ID } from './status-reader.ts';
 export type {
