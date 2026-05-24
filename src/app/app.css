@@ -470,7 +470,7 @@ select {
 }
 
 .status-surface__subtitle {
-  color: var(--formspec-color-text-muted, #555);
+  color: var(--formspec-color-text, #222);
   margin: -1rem 0 0;
 }
 
@@ -489,7 +489,10 @@ select {
   background: var(--formspec-color-surface-2, #f3f3f5);
   text-align: center;
   font-weight: 500;
-  color: var(--formspec-color-text-muted, #777);
+  /* WCAG 2.1 AA: regular text color (not muted) keeps contrast over the
+     surface-2 background. The current-cell style overrides this with a
+     stronger accent for visual prominence. */
+  color: var(--formspec-color-text, #222);
 }
 
 .status-stage-strip__cell--current {

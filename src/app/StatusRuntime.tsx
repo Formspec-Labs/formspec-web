@@ -291,8 +291,11 @@ function NextTasks({ tasks }: { tasks: readonly ApplicantTaskSummary[] }) {
 }
 
 function AiDisclosure({ involvement }: { involvement: ApplicantAiInvolvementSummary }) {
+  // Use a div not an <aside>; <aside> implies the complementary landmark and
+  // axe flags landmarks nested inside the section landmark (the status-surface
+  // <section> with aria-labelledby creates a region landmark).
   return (
-    <aside className="status-ai-disclosure" aria-labelledby="status-ai-title">
+    <div className="status-ai-disclosure" aria-labelledby="status-ai-title">
       <h2 id="status-ai-title">AI participated in this case</h2>
       <ul className="status-ai-disclosure__list">
         {involvement.agentsInvolved.map((agent, index) => (
@@ -309,7 +312,7 @@ function AiDisclosure({ involvement }: { involvement: ApplicantAiInvolvementSumm
           Narrative records on this case: {involvement.narrativeRecordCount}
         </p>
       ) : null}
-    </aside>
+    </div>
   );
 }
 

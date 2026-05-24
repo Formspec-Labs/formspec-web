@@ -64,6 +64,44 @@ test('oidc-required sign-in surface has no automated accessibility violations', 
   expect(accessibilityScanResults.violations).toEqual([]);
 });
 
+test('demo submit click-through opens an accessible status page (FW-0039 slice 1)', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Demo Benefits Intake' })).toBeVisible();
+  await page.getByLabel('Full name').fill('Ada Lovelace');
+  await page.getByLabel('Email address').fill('ada@example.test');
+  await page.getByLabel('Preferred contact method').selectOption('email');
+  await page.getByLabel('Member name').first().fill('Ada Lovelace');
+  await page.getByRole('button', { name: 'Submit' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Submission received' })).toBeVisible();
+  const trackingLink = page.getByRole('link', { name: /Track this application/i });
+  await expect(trackingLink).toBeVisible();
+  const href = await trackingLink.getAttribute('href');
+  expect(href).toMatch(/^\/status\?case=urn%3Awos%3Acase_demo_/);
+
+  await trackingLink.click();
+  await expect(page.getByRole('heading', { name: 'Your application status', level: 1 })).toBeVisible();
+  // The freshly-submitted case URN is not pre-registered in the stub status
+  // reader (only the pre-seeded urn:wos:case_demo_0001 is). The page renders
+  // the unknown-URN copy honestly — which is exactly what we want to assert.
+  await expect(page.getByText(/We don't have status for this reference/i)).toBeVisible();
+
+  const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScanResults.violations).toEqual([]);
+});
+
+test('direct /status?case=urn:wos:case_demo_0001 renders the demo case (FW-0039 slice 1)', async ({ page }) => {
+  await page.goto('/status?case=urn:wos:case_demo_0001');
+  await expect(page.getByRole('heading', { name: 'Your application status', level: 1 })).toBeVisible();
+  await expect(page.getByText('Timing for similar applications is not yet available on this site.')).toBeVisible();
+  await expect(page.getByText('Time since each step on your application')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /AI participated in this case/i })).toBeVisible();
+  await expect(page.getByRole('list', { name: /Application stages/i })).toBeVisible();
+
+  const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScanResults.violations).toEqual([]);
+});
+
 test('mobile viewport keeps primary controls at tap-target size', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
