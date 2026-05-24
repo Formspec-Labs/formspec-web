@@ -197,3 +197,41 @@ const composition: Composition = {
 If you wire the unavailable* sentinel adapters, set the declarations to
 `'unavailable'` and the assertion will pass. If you wire real production
 adapters, set the declarations to `'available'`.
+
+## Worked example: the /status route as an optional non-form surface (FW-0039 slice 1)
+
+The `/status?case={WosResourceUrn}` route (FW-0039 slice 1) is a non-form
+surface that consumes the `status` capability key. The user clicking the
+"Track this application" link IS their opt-in to view status, so
+`StatusRuntime` synthesizes `form: { features: { status: 'optional' } }`
+at the route boundary — never `required`, so the form-load error
+boundary semantics never apply (arch-review F-4 of FW-0039).
+
+The instance × org pair drives the rendered verdict:
+
+| Mode | Instance | Org | Page renders |
+|---|---|---|---|
+| any | `available` | `allowed` / `default-on` / `required` | Full status page (WOS-shaped timeline + tasks + AI disclosure + per-case timing strip). |
+| any | `available` | `forbidden` | "Status not shared. This issuer does not share application status here." |
+| any | `unavailable` | any | "Status not shared. This site does not provide application status." |
+| `demo` | `demo-stub` | `allowed` | Full status page (demo data). |
+| `production` | `demo-stub` | any | `assertCompositionCoherence` throws at composition boot — production rejects demo stubs. |
+
+The page never raises a typed `UnsupportedRequiredFeatureError` on this
+route because it never forces `status: required`. The disabled-cause
+branches drive the rendered copy:
+
+- `org-forbidden` / `form-forbidden` → "This issuer does not share application status here."
+- `optional-no-instance` / `default-on-no-instance` / `production-rejects-demo-stub` → "This site does not provide application status."
+
+When the resolver itself throws (e.g., malformed `OrgRuntimePolicy` triggers
+`InvalidRuntimePolicyError`), `StatusRuntime` catches and renders a small
+"not configured correctly" page with the typed error code as the support
+reference — separate from the "Status not shared" copy because the failure
+shape is genuinely different (deployment misconfiguration, not policy).
+
+This pattern generalizes: any future post-MVP surface that consumes a
+feature key as an OPTIONAL capability uses the same shape.
+`StatusRuntime` is the worked example; the form-load boundary in
+`RespondentRuntime` remains the only place `required`-policy semantics
+apply.
