@@ -574,11 +574,12 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 ### FW-0050 — Multi-party submission: research and design row
 
 - **Phase:** Post-MVP (design row)
-- **Status:** open
+- **Status:** in design
 - **Persona:** Respondent / Signer / Platform
 - **Journey:** [J-041](JOURNEYS.md#j-041--multi-party-forms-many-respondents-one-submission-load-bearing-for-joint-legal-tax-immigration-custody-and-financial-work)
 - **Done:** Design output for joint-submission flows where each party authenticates independently, holds their own draft, sees only the parts the form's privacy model says they should see, signs their own attestations cryptographically separately.
-- **Blocked on:** queue XS-1 (multi-party intake cross-stack ADR spanning formspec + WOS + trellis) + EXT-3 (capacity primitive).
+- **Progress (2026-05-23):** Design proposal landed at [`thoughts/specs/2026-05-23-fw-0050-multi-party-submission-design.md`](thoughts/specs/2026-05-23-fw-0050-multi-party-submission-design.md). Q1–Q4 framing decisions, the `multiParty` capability tier axis under [web ADR-0011](thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md), and the cross-stack dependency chain (XS-1 → EXT-3 + EXT-N for `parties` block → FW-0061) are PROPOSAL-status pending owner review.
+- **Blocked on:** queue XS-1 (multi-party intake cross-stack ADR spanning formspec + WOS + trellis) + EXT-3 (capacity primitive) + new EXT-N for Definition `parties` block.
 - **Anti-patterns:** AP-002, AP-014.
 
 ### FW-0051 — Bring-your-own-assistant: structure exposure and consent model

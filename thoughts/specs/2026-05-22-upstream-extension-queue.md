@@ -49,10 +49,10 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Owning repo:** formspec (+ binding to PKAF for authority chains)
 **File:** `formspec/schemas/response.schema.json`
 **Closes:** J-012 (filer-not-signer); foundation for J-041 (multi-party).
-**FW rows blocked:** FW-0037, FW-0058
-**Shape:** extend `AuthoredSignature` with `capacity` block (enum: `self | poa | guardian | executor | parent | licensed-professional | corporate-officer | ai-agent`), `principalRef` (urn party id, reuse `intake-handoff.schema.json:180` `urn:party:` convention), `authorityArtifact` (URI + hash + type). AI-agent variant gets a separate `agentChain` block — defer per FW-0058 split.
-**Fixture status:** none. Land with capacity + authority-artifact fixture matrix.
-**Status:** not yet filed.
+**FW rows blocked:** FW-0037, FW-0058, FW-0050/FW-0061 (extended scope below)
+**Shape:** extend `AuthoredSignature` with `capacity` block (enum: `self | poa | guardian | executor | parent | licensed-professional | corporate-officer | ai-agent`), `principalRef` (urn party id, reuse `intake-handoff.schema.json:180` `urn:party:` convention), `authorityArtifact` (URI + hash + type). AI-agent variant gets a separate `agentChain` block — defer per FW-0058 split. **Multi-party extension:** add `partyRole` field bound to `definition.schema.json.parties[*].roleId` (closed enum `coEqual | asymmetricPrimary | asymmetricSecondary | guardianFor` per FW-0050 §2.1). Land EXT-3 + multi-party `partyRole` together — same `AuthoredSignature` extension surface; two passes is two breaks for one schema.
+**Fixture status:** none. Land with capacity + authority-artifact + partyRole fixture matrix.
+**Status:** not yet filed. Multi-party `partyRole` extension proposed by [FW-0050 design 2026-05-23 §6.3](2026-05-23-fw-0050-multi-party-submission-design.md).
 
 ### EXT-4: Engine API extensions for relevance + derivation introspection
 
@@ -189,6 +189,17 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Shape:** TS type mirroring the Rust struct, plus at least one fixture vector pinning the field set. Two options: (a) schema-derived codegen (preferred if `stack-common-proof` exposes a JSON Schema or OpenAPI projection); (b) hand-mirror with conformance fixtures keeping the two in sync.
 **Fixture status:** none. Resolution sequenced with FW-0003 implementation; without it, the post-MVP verifier port spec is incomplete.
 **Status:** not yet filed.
+
+### EXT-28: Definition `parties` block + per-item party-scoped visibility (multi-party)
+
+**Owning repo:** formspec
+**File:** `formspec/schemas/definition.schema.json`
+**Closes:** J-041 (multi-party forms — Definition-time party-role declaration)
+**FW rows blocked:** FW-0050 (design dependency), FW-0061 (build)
+**Shape:** form-level `parties: PartyRole[]` declaring role slots with `{roleId, role: "coEqual" | "asymmetricPrimary" | "asymmetricSecondary" | "guardianFor", cardinality: {min, max}, assuranceFloor?, visibilityScope}`; plus per-item (or per-section — XS-1 ratifies the granularity) `visibleTo[]` / `editableBy[]` / `signedBy[]` referencing `roleId` values. Per [FW-0050 design 2026-05-23 §2.3](2026-05-23-fw-0050-multi-party-submission-design.md) Q3 is Definition-time party-role declaration; runtime binds party identities to role slots. Variable cardinality at runtime is supported; ad-hoc role invention at runtime is forbidden.
+**Cross-stack:** lands as part of XS-1 ratification spanning formspec + WOS + trellis. Trellis substrate is unchanged (sequential per-party signing over digest-stable Formspec Signed Response Payload already works). XS-1 also carries a paired `response.schema.json` extension for disagreement-as-state (per FW-0050 design §5.4 + §6.2 (5)) so conflicting per-party field values can be carried with party attribution instead of silently merged.
+**Fixture status:** none. Land with `coEqual` joint-tax fixture + `asymmetric` immigration-sponsorship fixture + `coEqual` child-custody-with-disagreement fixture (per FW-0050 design §4 worked scenarios).
+**Status:** proposed 2026-05-23 by FW-0050 design; pending XS-1 ratification at stack-root.
 
 ### EXT-10: Receipt-domain prose update (drift fix)
 
