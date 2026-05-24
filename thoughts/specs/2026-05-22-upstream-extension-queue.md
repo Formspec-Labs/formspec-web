@@ -70,6 +70,7 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Closes:** J-016 (withdraw / dispute / consent revoke), J-026 (decline as a first-class event), J-027 (duress signal), J-030 (deletion receipt), J-033 (bot protection cleared), J-017 (disclosure presented)
 **FW rows blocked:** FW-0007, FW-0026, FW-0036, FW-0038, FW-0043, FW-0048, FW-0049
 **Events to add:** `response.declined` (with optional `clauseReferences[]`, `reason`), `response.withdrawn`, `response.dispute-attached`, `consent.revoked`, `submission.duress-signaled` (with private-sidecar discipline per `trellis-operational-companion.md` §13 Disclosure Manifest), `data.erased`, `disclosure.presented`, `field.flagged-by-respondent`, `bot-protection-cleared`. File as one combined PR.
+**`response.withdrawn` / `response.dispute-attached` per-party scope — extended 2026-05-24 by [FW-0034 design §6.2](2026-05-24-fw-0034-honest-correction-path-design.md).** Both event types MUST accept an optional `partyRef` field naming which party in a multi-party flow authored the act (per FW-0050 §7.1 composition). Single-party flows omit `partyRef`; multi-party flows populate it. The shape mirrors the `response.correction-recorded` event's `data.partyRef?` convention (proposed analogously by FW-0034 design for the correction event when in multi-party flows). Fixture coverage: the EXT-5 fixture set for the two event types MUST include both single-party (no `partyRef`) and multi-party (`partyRef` populated) cases.
 **`submission.duress-signaled` payload shape — extended 2026-05-23 by [FW-0048 design §5.1](2026-05-23-fw-0048-coercion-aware-signing-design.md).** Carries `extensions["formspec.submission.duress-signal.v1"]` block: `{signalId, responseId, authoredSignatureRef?, partyRef? (for FW-0050 multi-party composition), capturedAt, mechanismUsed (dual-passkey | dual-pin | pin-second-entry), payloadRef (reference to the event's Trellis Core §6.4 PayloadRef carrying the ChaCha20-Poly1305 ciphertext), keyBagRecipientHandle (handle naming the Trellis Core §9.4 KeyBagEntry recipient whose wrapped_dek unwraps the payload DEK; resolves to the safety-team recipient registered in the issuer-sidecar safetyTeamRecipients[] block, EXT-30)}`. The plaintext encrypted under the DEK (which the recipient unwraps from key_bag) carries `{schemaVersion, duressSignaled, severityBand, routingTargetId, capturedAt, contextMetadata?}` per HPKE Base mode + Trellis Core §9.4 suite 1. No Trellis Core §13 commitment-slot use — per Core §13.3, Phase 1 producers MUST emit `commitments` as `null` or `[]`. Event-level uniform shape (every high-risk-template submission emits the event whether or not duress was signaled; plaintext distinguishes the cases) is the chain-observer-opacity discipline; no §13 slot population is required for the base pipeline.
 **Fixture status:** none. Land each event-type with at least one fixture in `formspec/tests/fixtures/ledger/`. `submission.duress-signaled` fixtures must include the uniform-shape non-duress case (event emitted with same envelope shape; plaintext `duressSignaled: false`) so the fixture corpus exercises event-level uniform-presence discipline per FW-0048 §3.4.
 **Status:** not yet filed. Payload-shape extension proposed 2026-05-23 by FW-0048 design.
@@ -339,6 +340,25 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Fixture status:** none. Cross-stack ADR needed in `formspec-stack/thoughts/adr/`. Per FW-0049 §7.4 fixture matrix lives in FW-0060 build (single-party DV-survivor / single-party witness-protection / multi-party child-custody scenarios).
 **Status:** proposed 2026-05-23 by FW-0049 design; pending stack-root ratification + Trellis Phase 2 substrate availability for the verifier-grade tier (Phase 1 fallback path is achievable without).
 
+### XS-5: Record-lifecycle three-act mapping (cross-stack)
+
+**Spans:** formspec (Respondent Ledger event taxonomy — existing `response.correction-recorded` per §11.4 + EXT-5 queued `response.withdrawn` / `response.dispute-attached`) + work-spec (Kernel §13.9 five-mode amendment taxonomy + `TerminateInstanceRequest` per `work-spec/specs/api/instance.md:131`) + trellis (Phase 1 linear chain per Core §10.1 + ADR 0066 `correctionAuthorized`/`responseCorrection` correction-preservation reporting per Core §27.4 — already specified)
+**Closes:** J-044 (cooperative correction) + J-016 (adversarial withdraw / dispute) — confirms the substrate-mapping is coherent across the three subsystems and that the respondent's three user-acts route to upstream primitives deterministically.
+**FW rows blocked:** FW-0034 (design — design dependency closed by this ADR's ratification), FW-0038 (build).
+**Recommended boundary:** at the Respondent Ledger event-emit plus the WOS Instance API termination call. Formspec owns the respondent-ledger event semantics; WOS owns the governance-layer determination/termination flow; Trellis owns the chain integrity + correction-preservation report.
+**Shape:** per [FW-0034 design §6.4](2026-05-24-fw-0034-honest-correction-path-design.md):
+1. **Three-act mapping table:** `correct` → Formspec `response.correction-recorded` (narrow subset per `correctableFieldSet[]`) OR `response.amendment-opened` (substantive overflow) + WOS Kernel §13.9 `correction` OR `amendment` mode; `withdraw` → Formspec EXT-5 `response.withdrawn` + WOS `TerminateInstanceRequest { terminationKind: "applicant-withdrawn" }` (no determination) OR WOS Kernel §13.9 `rescission` mode (determination exists); `dispute` → Formspec EXT-5 `response.dispute-attached` + no WOS lifecycle transition (counter-attestation only).
+2. **Trellis discipline.** Every lifecycle event lives on the same response-ledger chain as the original submission, linked via `prev_hash`. Cross-chain supersession (`trellis.supersedes-chain-id.v1` extension) is used ONLY when WOS Kernel §13.9 `supersession` mode produces a new case/chain — not for the basic correct/withdraw/dispute path. **No Phase 2+ Trellis substrate is required for the basic correction chain.**
+3. **Verifier discipline.** Existing correction-preservation report per Trellis Core §27.4 surfaces `CorrectionPreservationOutcome` rows with `correction_event_hash`. The FW-0034 verifier-public-output renders these per FW-0034 §5; the withdrawal + dispute event types (EXT-5) extend the same report shape — verifier surfaces "withdrawn-by-applicant on [event_hash]" and "disputed-by-signer on [event_hash]" rows analogously.
+4. **WOS actor scope (when WOS is the governance layer).** The applicant API + governance projections MUST surface the lifecycle events on the case timeline per `work-spec/specs/api/applicant.md:74` `ApplicantStatusTimelineEntry`. The reserved-literal `lifecycle-changed` covers all three acts; a more-specific stage label distinguishes them ("correction-recorded" / "withdrawn-by-applicant" / "dispute-attached") in the timeline-entry detail.
+5. **Multi-party composition.** Per [FW-0050 §7.1](2026-05-23-fw-0050-multi-party-submission-design.md): lifecycle events carry optional `partyRef`; shared-field corrections require all-party co-signature; per-party withdrawal defaults to `all-parties-must-agree`; signer-only dispute scoped per signer.
+6. **Safe-* composition.** Per [FW-0049 §7](2026-05-23-fw-0049-safe-address-handling-design.md): correction event payloads inherit field `accessControl.class`; correction `reason` and dispute `statement` text carry their own class declaration; receipt-chain renderer honors mask discipline.
+7. **PKAF downstream.** When a corrected/withdrawn/disputed record is referenced by a downstream PKAF assertion, the assertion's lifecycle MUST track via `rkaf:supersedesAssertion` + `rkaf:lifecycleEvent`. **Vocabulary tokens are ILLUSTRATIVE pending Rulespec alignment row.**
+
+**Subsystem-count honesty.** Each subsystem already specifies its share of the substrate; XS-5 confirms the three-act mapping is coherent and that no new primitive is required. Lighter cross-stack work than XS-4 (FW-0049) because the substrate is mature; the ADR is primarily a confirmation + naming exercise rather than a new substrate commitment.
+**Fixture status:** none. Cross-stack ADR needed in `formspec-stack/thoughts/adr/`. Per FW-0034 §5 the fixture matrix lives in FW-0038 build (three-act scenarios + the multi-party + safe-* composition variants).
+**Status:** proposed 2026-05-24 by [FW-0034 design](2026-05-24-fw-0034-honest-correction-path-design.md); pending stack-root ratification + EXT-5 ratification + EXT-35 ratification.
+
 ### XS-2: Respondent-side multi-tenant token bag
 
 **Spans:** formspec-web (UI-side fan-out pattern)
@@ -432,6 +452,49 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Shape:** production server Dockerfile/image plus documented runtime env for database/object-store dependencies.
 **Fixture status:** n/a.
 **Status:** not yet filed.
+
+### EXT-35: WOS `governance.recordLifecycle` form-policy block (record lifecycle actions)
+
+**Owning repo:** work-spec
+**File:** `work-spec/schemas/wos-workflow.schema.json` — extends the existing `Governance.amendmentTaxonomy` ([`work-spec/specs/kernel/spec.md:2168`](../../../work-spec/specs/kernel/spec.md)) with a sibling `recordLifecycle` block carrying the per-act respondent-facing lifecycle-action configuration per [FW-0034 design §3.3 + §6.3](2026-05-24-fw-0034-honest-correction-path-design.md).
+**Closes:** J-044 (cooperative correction) + J-016 (adversarial withdraw / dispute) — the form-policy declaration shape that maps respondent's three user-acts (`correct` / `withdraw` / `dispute`) onto the WOS Kernel §13.9 amendment taxonomy literals.
+**FW rows blocked:** FW-0034 (design — design dependency closed by this EXT's ratification), FW-0038 (build).
+**Shape:** per [FW-0034 design §6.3](2026-05-24-fw-0034-honest-correction-path-design.md):
+
+```text
+governance.recordLifecycle?: {
+  correctable?: {
+    enabled: boolean
+    correctableFieldSet: Array<string>                    // RFC 6901 pointers; required when enabled = true
+    window?: { closesAt: string }                         // e.g., "determination" | "issuance+30d" | "submission+Nd" | "never"
+    requiresEvidence?: boolean
+    requiresReason?: boolean                              // default true
+    kernelMode: "correction"                              // routes to amendmentTaxonomy literal
+    reasonField?: { accessControl: { class: string } }    // safe-* class declaration per FW-0049 composition
+  }
+  withdrawable?: {
+    enabled: boolean
+    window?: { closesAt: string }
+    requiresReason?: boolean                              // default true
+    preDeterminationKernelMode: "applicant-withdrawn"     // formspec-web emits TerminateInstanceRequest; applicant authority
+    postDeterminationIntent?: "rescission-requested"      // formspec-web emits response.withdrawn with rescissionRequested:true; ISSUER decides whether to emit the kernel `rescission` event (issuer authority, not respondent). Authority-ladder distinction.
+    requiresIssuerAcceptance?: boolean                    // MUST be true when postDeterminationIntent is configured
+    partyScope?: "any-party" | "all-parties-must-agree"   // case-level multi-party withdraw composition per FW-0034 §7.4; default all-parties-must-agree. DISTINCT from FW-0050 §5.2 per-signature withdraw which is per-party always (substrate rule, no partyScope axis).
+  }
+  disputable?: {
+    enabled: boolean
+    signerOnly?: boolean                                  // default true
+    requiresReason?: boolean                              // default true
+    statementField?: { accessControl: { class: string } } // safe-* class declaration per FW-0049 composition
+    // No kernelMode binding — dispute is counter-attestation, not lifecycle state transition
+  }
+}
+```
+
+The block sits alongside the existing `governance.amendmentTaxonomy[]` — the taxonomy declares which kernel modes are PERMITTED on the workflow; the `recordLifecycle` block declares the respondent-facing affordances + their per-act configuration. The two blocks compose: a `correctable.enabled: true` declaration MUST be paired with `amendmentTaxonomy` containing `"correction"` (or `"amendment"` for substantive overflow per FW-0034 §3.2); a `withdrawable.enabled: true` declaration MUST be paired with `"rescission"` when determination-after-issuance withdrawal is supported.
+**Cross-stack:** see XS-5 below — confirms the three-act mapping across formspec + WOS + trellis.
+**Fixture status:** none. Land with fixtures in `work-spec/tests/fixtures/governance/recordLifecycle/` covering the three-act matrix + the window-closed / disabled / per-party-scope variants.
+**Status:** proposed 2026-05-24 by [FW-0034 design](2026-05-24-fw-0034-honest-correction-path-design.md); pending XS-5 ratification at stack-root.
 
 ### EXT-34: `AttachmentRef` wire-format ratification inside `IntakeHandoff`
 
