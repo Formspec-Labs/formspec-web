@@ -47,7 +47,7 @@
 - Create: `src/app/status-route.ts`
 - Create: `tests/app/status-route.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/app/status-route.test.ts
@@ -85,7 +85,7 @@ describe('parseStatusRoute', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 npx vitest run tests/app/status-route.test.ts
@@ -93,7 +93,7 @@ npx vitest run tests/app/status-route.test.ts
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/app/status-route.ts
@@ -126,7 +126,7 @@ export function parseStatusRoute(href: string): StatusRouteParams | null {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 npx vitest run tests/app/status-route.test.ts
@@ -134,7 +134,7 @@ npx vitest run tests/app/status-route.test.ts
 
 Expected: PASS (5 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit src/app/status-route.ts tests/app/status-route.test.ts -m "feat(app): /status route parser (FW-0039 slice 1)
@@ -152,7 +152,7 @@ the status page never round-trips arbitrary text into StatusReader."
 - Modify: `src/adapters/stub/submit-transport.ts`
 - Modify: `tests/adapters/` (new or existing stub-submit-transport test)
 
-- [ ] **Step 1: Locate the existing stub-transport tests**
+- [x] **Step 1: Locate the existing stub-transport tests**
 
 ```bash
 ls tests/adapters
@@ -161,7 +161,7 @@ grep -r "stubSubmitTransport" tests/ src/composition/
 
 If there is no existing `stub-submit-transport.test.ts`, create one. Otherwise extend the existing file.
 
-- [ ] **Step 2: Write the failing test (new or extension)**
+- [x] **Step 2: Write the failing test (new or extension)**
 
 ```ts
 // tests/adapters/stub-submit-transport.test.ts
@@ -195,7 +195,7 @@ describe('stubSubmitTransport caseUrn (FW-0039 slice 1)', () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 ```bash
 npx vitest run tests/adapters/stub-submit-transport.test.ts
@@ -203,7 +203,7 @@ npx vitest run tests/adapters/stub-submit-transport.test.ts
 
 Expected: FAIL — `caseUrn` is undefined.
 
-- [ ] **Step 4: Extend the port type**
+- [x] **Step 4: Extend the port type**
 
 ```ts
 // src/ports/submit-transport.ts — add to SubmitConfirmation interface
@@ -218,11 +218,11 @@ import type { WosResourceUrn } from './status-reader.ts';
 
 Per arch-review F-7, the field is **optional** on the type. Consumer code must handle `undefined`; producer code (HTTP transport) MUST NOT populate it until the production status adapter lands.
 
-- [ ] **Step 5: Populate `caseUrn` in the stub transport**
+- [x] **Step 5: Populate `caseUrn` in the stub transport**
 
 Modify `src/adapters/stub/submit-transport.ts`: derive a stable `caseUrn` from the idempotency key (e.g., `urn:wos:case_demo_${idempotencyKey-derived-tail}`) and put it on the returned confirmation. The deterministic shape lets the stub composition pre-register a status resource under the same key in Task 5.
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 ```bash
 npx vitest run tests/adapters/stub-submit-transport.test.ts
@@ -230,7 +230,7 @@ npx vitest run tests/adapters/stub-submit-transport.test.ts
 
 Expected: PASS (2 tests).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -254,7 +254,7 @@ field is optional; consumer code handles undefined."
 - Modify: `src/app/RespondentRuntime.tsx` — `ConfirmationPanel` reads `confirmation.caseUrn`.
 - Modify: `tests/app/respondent-runtime.test.tsx` — assertions.
 
-- [ ] **Step 1: Write the failing test extension**
+- [x] **Step 1: Write the failing test extension**
 
 In `tests/app/respondent-runtime.test.tsx`, add a `describe('Track this application link (FW-0039 slice 1)')` block:
 
@@ -289,11 +289,11 @@ it('does NOT render a tracking link when the confirmation omits caseUrn', async 
 
 (Reuse the existing test helpers in this file for form-fill + submit; if none exist, write a small `fillAndSubmit()` local helper that mirrors the existing test patterns.)
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Expected: FAIL — no link rendered.
 
-- [ ] **Step 3: Implement the helper**
+- [x] **Step 3: Implement the helper**
 
 ```ts
 // src/app/respondent-flow.ts — append
@@ -302,7 +302,7 @@ export function buildConfirmationTrackingUri(caseUrn: string): string {
 }
 ```
 
-- [ ] **Step 4: Wire the link into `ConfirmationPanel`**
+- [x] **Step 4: Wire the link into `ConfirmationPanel`**
 
 In `src/app/RespondentRuntime.tsx`, change `ConfirmationPanel` so it:
 
@@ -312,7 +312,7 @@ In `src/app/RespondentRuntime.tsx`, change `ConfirmationPanel` so it:
 
 The existing optional `trackingUri` field stays untouched — slice 1 is additive. (Future consolidation between `trackingUri` and `caseUrn` belongs to whatever row lands the production status adapter; the design's §Non-goals pins HTTP transport untouched.)
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 ```bash
 npx vitest run tests/app/respondent-runtime.test.tsx
@@ -320,7 +320,7 @@ npx vitest run tests/app/respondent-runtime.test.tsx
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -342,7 +342,7 @@ the caseUrn field is optional so this stays additive over FW-0001."
 - Modify: `src/app/App.tsx`
 - Create: `tests/app/app-routing.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // tests/app/app-routing.test.tsx
@@ -396,11 +396,11 @@ describe('App route selection (FW-0039 slice 1)', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Expected: FAIL — second test fails (no StatusRuntime exists).
 
-- [ ] **Step 3: Implement route selection in `App.tsx`**
+- [x] **Step 3: Implement route selection in `App.tsx`**
 
 Inside `App.tsx`, replace the single `import('./RespondentRuntime.tsx')` lazy load with a route-aware loader:
 
@@ -421,7 +421,7 @@ void loader.then(({ Runtime, route }) => {
 
 Then in the render: pass `route` as an additional prop when present. `StatusRuntime` accepts `{ composition, route }`; `RespondentRuntime` ignores it.
 
-- [ ] **Step 4: Create the minimum `StatusRuntime.tsx` to make the route test pass**
+- [x] **Step 4: Create the minimum `StatusRuntime.tsx` to make the route test pass**
 
 Just enough to make Task 4's test green — a loading skeleton + `<h1>Your application status</h1>`. Real rendering lands in Task 6. This keeps the red/green cycle tight.
 
@@ -447,7 +447,7 @@ export function StatusRuntime(_props: StatusRuntimeProps) {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 ```bash
 npx vitest run tests/app/app-routing.test.tsx
@@ -455,7 +455,7 @@ npx vitest run tests/app/app-routing.test.tsx
 
 Expected: PASS (2 tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -477,7 +477,7 @@ ships as a placeholder; rendering lands in subsequent task."
 - Modify: `src/demo/respondent-place.ts` (optional — only if Task 2's caseUrn shape doesn't already align)
 - Verify: existing `tests/profiles/composition-policy-wiring.test.ts` still green.
 
-- [ ] **Step 1: Determine the deterministic caseUrn the stub transport will emit**
+- [x] **Step 1: Determine the deterministic caseUrn the stub transport will emit**
 
 The Task 2 stub transport derives `urn:wos:case_demo_{...tail...}` from the idempotency key. For the e2e demo flow, the form submit path uses `generateIdempotencyKey()` (random UUIDv7), so the URN is per-submit. The respondent-place sidecar already registers a sample case `urn:wos:case_demo_0001` for the in-form panel. Two distinct URN sets exist:
 
@@ -486,7 +486,7 @@ The Task 2 stub transport derives `urn:wos:case_demo_{...tail...}` from the idem
 
 The stub composition needs to register status data for the demo URN. The fresh-submit URN has no pre-registered status (the stub adapter returns `undefined` for unknown keys, so the page renders "We don't have status for this reference" — which is the correct honest behavior for a just-submitted case).
 
-- [ ] **Step 2: Verify or extend the stub composition registration**
+- [x] **Step 2: Verify or extend the stub composition registration**
 
 ```bash
 grep -n "registerStatus\|case_demo_0001" src/composition/stub.ts src/adapters/stub/status-reader.ts
@@ -542,7 +542,7 @@ statusReader: stubStatusReader([
 
 Replacing the old single-`event` registration with the case-detail registration. The single-event registration was sufficient for the in-form panel's SubmissionItem render, which destructures `event` from a timeline entry; the new case-detail registration is structurally compatible because `SubmissionItem`'s statusFeedback already discriminates `'statusTimeline' in status` for case details.
 
-- [ ] **Step 3: Run all existing tests to catch regressions**
+- [x] **Step 3: Run all existing tests to catch regressions**
 
 ```bash
 npm run test:unit
@@ -550,7 +550,7 @@ npm run test:unit
 
 Adjust any tests that asserted on the old `ApplicantStatusTimelineEntry` shape; the case-detail shape is structurally richer (`SubmissionItem`'s `statusFeedback` walks the timeline correctly).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -572,7 +572,7 @@ SubmissionItem render path remains green via the case-detail branch."
 - Create: `tests/app/status-runtime.test.tsx`
 - Modify: `src/app/app.css` — small additions for the new chrome (5-stage strip, timing strip, AI disclosure box, what-comes-next ribbon). Keep additive, no overrides.
 
-- [ ] **Step 1: Write the failing tests (full matrix)**
+- [x] **Step 1: Write the failing tests (full matrix)**
 
 Cover (each as a separate `it`):
 
@@ -591,7 +591,7 @@ Cover (each as a separate `it`):
 
 Write the test file with one `describe` block per concern; reuse `createStubComposition()` and patch its `statusReader` / `instanceCapabilities` / `orgRuntimePolicy` per test, mirroring the existing `tests/app/runtime-feature-gating.test.tsx` patterns.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 npx vitest run tests/app/status-runtime.test.tsx
@@ -599,7 +599,7 @@ npx vitest run tests/app/status-runtime.test.tsx
 
 Expected: FAIL — placeholder StatusRuntime doesn't render any of the asserted content.
 
-- [ ] **Step 3: Implement `StatusRuntime.tsx`**
+- [x] **Step 3: Implement `StatusRuntime.tsx`**
 
 Wire:
 
@@ -618,7 +618,7 @@ Wire:
 
 Use the existing `labelFromToken` / `formatDate` helpers from `RespondentRuntime.tsx` — extract them to a shared module (`src/app/format.ts`) so both runtimes use the same helpers. Add a new `formatDuration(fromIso: string, toIso: string): string` helper to the same module.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 npx vitest run tests/app/status-runtime.test.tsx
@@ -626,7 +626,7 @@ npx vitest run tests/app/status-runtime.test.tsx
 
 Expected: PASS (12 tests).
 
-- [ ] **Step 5: Add minimal CSS**
+- [x] **Step 5: Add minimal CSS**
 
 Append additive selectors to `src/app/app.css`:
 
@@ -638,13 +638,13 @@ Append additive selectors to `src/app/app.css`:
 
 Keep selectors namespaced under `.status-surface` so the form runtime CSS is untouched.
 
-- [ ] **Step 6: Run typecheck + lint to catch regressions**
+- [x] **Step 6: Run typecheck + lint to catch regressions**
 
 ```bash
 npm run typecheck && npm run lint
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -675,7 +675,7 @@ arch-review F-4."
 **Files:**
 - Modify: `tests/e2e/placeholder-a11y.spec.ts` (append one test scenario; do not rename the file — arch-review F-5)
 
-- [ ] **Step 1: Append the failing test**
+- [x] **Step 1: Append the failing test**
 
 ```ts
 test('demo submit click-through opens an accessible status page', async ({ page }) => {
@@ -702,7 +702,7 @@ test('demo submit click-through opens an accessible status page', async ({ page 
 });
 ```
 
-- [ ] **Step 2: Run the e2e suite**
+- [x] **Step 2: Run the e2e suite**
 
 ```bash
 npm run test:e2e
@@ -710,7 +710,7 @@ npm run test:e2e
 
 Expected: the new scenario passes, the existing scenarios stay green.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -725,7 +725,7 @@ git -C formspec-web commit \
 **Files:**
 - Create: `docs/ports/status-reader.md`
 
-- [ ] **Step 1: Write the doc**
+- [x] **Step 1: Write the doc**
 
 Mirror the existing `docs/ports/*.md` shape (definition-source, draft-store, submit-transport, identity-provider, notification-delivery). Sections to cover:
 
@@ -737,7 +737,7 @@ Mirror the existing `docs/ports/*.md` shape (definition-source, draft-store, sub
 - **Throughput aggregation** — out of scope; deferred to EXT-28 (WOS applicant API recent-throughput projection) consumed by FW-0067.
 - **Conformance** — link to `tests/adapter-conformance/status-reader/conformance.test.ts` and the shared definitions in `src/adapter-conformance/conformance.ts`.
 
-- [ ] **Step 2: Verify lint + check:release-docs**
+- [x] **Step 2: Verify lint + check:release-docs**
 
 ```bash
 npm run lint
@@ -746,7 +746,7 @@ npm run check:release-docs
 
 If the docs check expects the file to appear in some manifest, update the manifest accordingly.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -766,7 +766,7 @@ because the slice's accountless honesty depends on it (arch-review F-2)."
 **Files:**
 - Modify: `docs/policy/runtime-feature-resolution.md`
 
-- [ ] **Step 1: Append §"Worked example: the /status route as an optional surface"**
+- [x] **Step 1: Append §"Worked example: the /status route as an optional surface"**
 
 ```markdown
 ## Worked example: the /status route as an optional surface (FW-0039)
@@ -794,7 +794,7 @@ fails at construction-time `assertCompositionCoherence`; that is the
 honesty gate for the demo / production boundary, not a per-route gate.
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -809,7 +809,7 @@ git -C formspec-web commit \
 **Files:**
 - Modify: `thoughts/specs/2026-05-22-upstream-extension-queue.md`
 
-- [ ] **Step 1: Append the EXT-28 entry**
+- [x] **Step 1: Append the EXT-28 entry**
 
 After the EXT-25 entry in `## Class 4 — Reference deployment and server gaps` (or wherever fits the existing structure):
 
@@ -826,7 +826,7 @@ After the EXT-25 entry in `## Class 4 — Reference deployment and server gaps` 
 **Status:** not yet filed.
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -847,7 +847,7 @@ per ADR-0010."
 **Files:**
 - Modify: `PLANNING.md`
 
-- [ ] **Step 1: Update the FW-0039 Post-MVP row**
+- [x] **Step 1: Update the FW-0039 Post-MVP row**
 
 Find the existing FW-0039 row in `## Post-MVP`. Append a "Progress" bullet that summarizes what slice 1 landed, then leave the row body in place and convert the row to a stub pointing into `## Closed` (mirroring the FW-0065 close-out pattern in `git show 2b4856c -- PLANNING.md`):
 
@@ -855,7 +855,7 @@ Find the existing FW-0039 row in `## Post-MVP`. Append a "Progress" bullet that 
 ### FW-0039 — *(closed as live (slice 1); see [## Closed](#closed); follow-on FW-0067)*
 ```
 
-- [ ] **Step 2: Append the closed entry**
+- [x] **Step 2: Append the closed entry**
 
 In `## Closed`, after FW-0065:
 
@@ -876,7 +876,7 @@ In `## Closed`, after FW-0065:
 - **Note:** Closes web ADR-0011 §Failure Semantics for an OPTIONAL non-form surface (the design and the resolver permit it cleanly without forcing a `required` form-policy synthesis — arch-review F-4). Consumes web ADR-0010 §DI shape `StatusReader` port without extension.
 ```
 
-- [ ] **Step 3: File FW-0067 in `## Post-MVP`**
+- [x] **Step 3: File FW-0067 in `## Post-MVP`**
 
 Place between FW-0066 and FW-0002 (mirroring FW-0066's neighborhood):
 
@@ -893,7 +893,7 @@ Place between FW-0066 and FW-0002 (mirroring FW-0066's neighborhood):
 - **Anti-patterns:** AP-006, AP-013.
 ```
 
-- [ ] **Step 4: Run the PLANNING validators**
+- [x] **Step 4: Run the PLANNING validators**
 
 ```bash
 npm run check:testing-plan
@@ -903,7 +903,7 @@ npm run check:upstream-blockers
 
 Fix any validator complaints inline.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -924,7 +924,7 @@ recent throughput' claim."
 **Files:**
 - Modify: `thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md`
 
-- [ ] **Step 1: Append the FW-0039 implementation plan to §Related Decisions**
+- [x] **Step 1: Append the FW-0039 implementation plan to §Related Decisions**
 
 Under the existing "Implementation plan:" bullet, add one more bullet:
 
@@ -932,7 +932,7 @@ Under the existing "Implementation plan:" bullet, add one more bullet:
 - Implementation plan: [`thoughts/plans/2026-05-23-fw-0039-post-submit-status-surface.md`](../plans/2026-05-23-fw-0039-post-submit-status-surface.md) — worked example of the `status` capability key driving an optional non-form surface (FW-0039 slice 1)
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git -C formspec-web commit \
@@ -946,7 +946,7 @@ git -C formspec-web commit \
 
 **Files:** none.
 
-- [ ] **Step 1: Run the full CI catch-all**
+- [x] **Step 1: Run the full CI catch-all**
 
 ```bash
 cd formspec-web
@@ -955,7 +955,7 @@ npm run ci
 
 Expected: all green.
 
-- [ ] **Step 2: Spot-check the new test suites ran**
+- [x] **Step 2: Spot-check the new test suites ran**
 
 ```bash
 npx vitest run tests/app/status-route.test.ts tests/app/status-runtime.test.tsx tests/app/app-routing.test.tsx tests/adapters/stub-submit-transport.test.ts
@@ -963,11 +963,11 @@ npx vitest run tests/app/status-route.test.ts tests/app/status-runtime.test.tsx 
 
 Each must report explicit non-zero passing-test counts.
 
-- [ ] **Step 3: Re-run the architecture review on the diff**
+- [x] **Step 3: Re-run the architecture review on the diff**
 
 Dispatch `formspec-specs:semi-formal-architecture-review` against the final diff. Address any BLOCKER findings. LOW / MEDIUM ship as follow-up rows or get fixed inline at the implementer's discretion.
 
-- [ ] **Step 4: Commit any review fix-ups, then prepare the parent submodule pointer bump**
+- [x] **Step 4: Commit any review fix-ups, then prepare the parent submodule pointer bump**
 
 ```bash
 cd ../
@@ -1025,4 +1025,44 @@ Inline execution proceeds per TDD red/green/refactor with arch-review or code-re
 
 ## Deviations
 
-(populated during execution)
+Tracked during the 2026-05-23 inline execution. Each row records an intentional divergence from the plan body and the justification.
+
+### Closed inline (review remediation)
+
+- **Code-review F-1: `parseStatusRoute` accepted bare `urn:wos:` prefix.** `startsWith(prefix)` returns true for the prefix itself; a production status adapter receiving an empty URN tail would cascade-fail. Tightened to require `length > prefix.length` and added a regression test. Commit `0b16a27`.
+
+- **Arch-review F-4 design revision + Task 6 implementation.** Original design said `StatusRuntime` passes `form: { features: {} }` to the resolver — meaning the `status` feature would fall through to `not-requested` and the page would render "Status not shared" even on a fully-supported deployment. Revised in the design + implemented in `StatusRuntime.tsx:55-62`: synthesize `form: { features: { status: 'optional' } }` because the user IS opting in by visiting `/status`. Stays OPTIONAL, never required — preserves the F-4 honesty (no synthetic required-policy, no form-load error boundary semantics on the route). Documented in the design + `docs/policy/runtime-feature-resolution.md` worked example.
+
+- **Arch-review F-1 design revision.** Original design treated URN entropy as "high enough" without naming the adapter's load-bearing rate-limit responsibility. Added explicit naming in the design §Accountless access + a load-bearing section in `docs/ports/status-reader.md`. The page returns uniform "not found" for every unknown URN so it is not an enumeration oracle.
+
+- **Arch-review F-6 design revision + Task 6 implementation.** Original design's "Your application's timing so far" subtly implied progress-toward-typical. Reshaped to "Time since each step on your application" + made the "Timing for similar applications is not yet available on this site." copy **prominent** (not a footnote). Both literal copy strings exported as constants from `StatusRuntime.tsx` and pinned in `tests/app/status-runtime.test.tsx#StatusRuntime copy constants` per code-review F-3.
+
+- **Arch-review F-9 design revision.** Original design implicitly said StatusRuntime would skip identity boot; revised to make it explicit. Pinned via `tests/app/status-runtime.test.tsx#identity discipline` (spies on `authenticate` + `discover`, asserts zero calls).
+
+- **Arch-review F-7 acknowledgment.** Plan + design call out `SubmitConfirmation.caseUrn` as optional; HTTP transport stays unchanged; `tests/adapters/stub-submit-transport.test.ts` pins the new field; HTTP-transport tests do not touch caseUrn.
+
+- **Code-review F-2 remediation.** PolicyErrorPage branch was untested. Added `tests/app/status-runtime.test.tsx#StatusRuntime policy-error path` injecting an invalid org-policy mode so `InvalidRuntimePolicyError` fires; pins the "not configured correctly" copy + the typed code as the support reference. Commit `885324c`.
+
+- **Code-review F-3 remediation.** Promoted `NO_AGGREGATE_COPY` + `PER_CASE_HEADER` to exported constants and added a literal-pin test (`StatusRuntime copy constants`). Future copy edits trip the literal pin BEFORE the component-render test. Commit `885324c`.
+
+- **Code-review F-4 remediation.** `stageFromEvent(event)` collapsed `lifecycle-changed` to `'in-review'` regardless of `newLifecycleState`. Mislabelling a completed case is exactly the kind of dishonest UI FW-0039 is meant to prevent. Reshaped to `stageFromEntry(entry)` — branches on `newLifecycleState` for `lifecycle-changed`, so `completed`/`terminated` correctly lights the Closed cell. Also reclassified `correspondence-received` from `'received'` to `'in-review'` per the WOS semantic read. Three new test cases pin the corrected mapping. Commit `885324c`.
+
+- **Final arch-review F-1 acknowledgment.** Added a "Non-form-surface caveat" sub-bullet to FW-0066 (`PLANNING.md`) so the FormRuntimePolicyExtractor port promotion picks up the second-shape decision when triggered. The slice-1 literal synthesis at the route boundary is acceptable today because there's no port yet to bypass.
+
+### Closed inline (a11y / sandbox-mode fixups)
+
+- **Axe failure: `<aside>` nested inside `<section>` landmark.** Reshaped `AiDisclosure` to use `<div>` with `aria-labelledby` retained. The `<aside>` complementary landmark inside the region landmark was rejected by axe. Commit `1fd2559`.
+
+- **Axe failure: stage-strip + status-subtitle contrast.** Non-current cells + subtitle used `--formspec-color-text-muted` which clocked 4.46 contrast on the surface-2 background (WCAG AA requires 4.5). Switched to the full `--formspec-color-text` token; current-cell accent still differentiates visually. Commit `1fd2559`.
+
+- **Demo composition shape upgrade.** Stub composition originally registered `demoApplicantStatusResource()` (single timeline entry) for `urn:wos:case_demo_0001`; that wouldn't drive the full `StatusRuntime` render. Added `demoApplicantCaseDetail()` to `src/demo/respondent-place.ts` and switched the stub registration. The old single-entry helper stayed in place (no consumer today). Commit `3265de6`.
+
+### Process notes
+
+- Review-in-loop applied per stack `CLAUDE.md` §Review discipline. The harness in this session does NOT expose a `Task` tool for dispatching parallel subagents, so reviews were run via the `formspec-specs:semi-formal-architecture-review` and `formspec-specs:semi-formal-code-review` skills inline.
+- Two reviews dispatched: (1) on the design doc before any implementation — caught F-1/F-3/F-4/F-5/F-6/F-7/F-8/F-9/F-10, addressed F-1/F-4/F-6/F-9 inline and acknowledged the rest in plan/design before writing code. (2) Code review after 4 commits (Tasks 1-4) — caught F-1 (bare-prefix URN bug), remediated before Task 5.
+- Two more reviews: (3) Code review after 5 more commits (Tasks 5-10) — caught F-1/F-2/F-3/F-4, remediated F-2/F-3/F-4 inline; F-1 (App.tsx dangling label) deferred to the next runtime addition. (4) Final architecture review on the complete slice — APPROVE verdict; only OBSERVATION-class findings; one was actioned (FW-0066 second-order obligation noted).
+- Submodule discipline preserved: every commit confined to formspec-web; parent stack-root pointer bump staged separately per the owner's instructions, not pushed.
+- Honesty-over-completion preserved: the "actual recent throughput" half is openly named as deferred in the design, plan, port doc, runtime-feature-resolution doc, and PLANNING close-out; the "no aggregate" copy is fixture-pinned to prevent dishonest edits.
+
+## Plan complete
