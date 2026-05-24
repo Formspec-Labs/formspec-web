@@ -98,9 +98,11 @@ Two implementation tiers under web ADR-0011, both produced by the same `duressAw
 
 **Alternative rejected: out-of-band only (recovery channel during signing).** Brief candidate #4. Rejected: doesn't work for the canonical scenario 2.3.1 where the respondent is on the abuser's device with no separate channel. Scoped into the trafficking-scenario partial coverage in §2.3.2 but not the primary affordance.
 
-**Composition with FW-0028 (passkey).** The `dual-passkey` mechanism composes with FW-0028's WebAuthn discipline. WebAuthn protocol does not natively distinguish credentials at the ceremony layer; the duress mark is a **convention on top of WebAuthn**: the issuer's signing-PIN-provisioning step labels each enrolled credential `(normal | duress)` in its server-side credential registry. The ceremony accepts any credential; the dispatcher consults the registry post-ceremony and decides whether to fire the duress event. **No WebAuthn protocol extension required.**
+**Composition with FW-0031 (passkey-first sign-in and signature binding).** The `dual-passkey` mechanism composes with FW-0031's WebAuthn discipline. WebAuthn protocol does not natively distinguish credentials at the ceremony layer; the duress mark is a **convention on top of WebAuthn**: the issuer's signing-PIN-provisioning step labels each enrolled credential `(normal | duress)` in its server-side credential registry. The ceremony accepts any credential; the dispatcher consults the registry post-ceremony and decides whether to fire the duress event. **No WebAuthn protocol extension required.**
 
-**Composition with FW-0021 (passkey enrollment surface).** Duress-credential enrollment must happen in a **separate trusted session** — the canonical pattern is enrollment-with-a-victim-services-counselor, or enrollment from a known-safe device the respondent owns alone. FW-0048 specifies the slot for the duress credential; the *enrollment surface* is FW-0021's design space (with a load-bearing constraint that the second enrollment must be invocable from a different session / device than the first).
+**Composition with FW-0031 (passkey enrollment surface).** Duress-credential enrollment must happen in a **separate trusted session** — the canonical pattern is enrollment-with-a-victim-services-counselor, or enrollment from a known-safe device the respondent owns alone. FW-0048 specifies the slot for the duress credential; the *enrollment surface* is FW-0031's design space (with a load-bearing constraint that the second enrollment must be invocable from a different session / device than the first).
+
+**Composition with FW-0028 (multi-IdP sign-in with no oversharing).** When `duressAware` is required by the form, the multi-IdP picker MUST NOT list IdPs that fail to satisfy the form's `duressAware` requirement — an IdP path that cannot deliver the dual-passkey / dual-pin / pin-second-entry mechanism resolves the form to `UnsupportedRequiredFeatureError` under [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md), so listing it would be a dead end. FW-0028's picker logic consumes the resolved `duressAware` profile and filters accordingly.
 
 ### 3.2 Q2 — Activation visibility: byte-identical success-path
 
@@ -175,21 +177,22 @@ The proposal: add `duressAware` to the [Feature Ownership Table at line 138](../
 
 **Rejected alternative: derive tier from template-class.** Considered because the high-risk template enumeration is already known (J-027 enumerates them). Rejected because (a) the template enumeration is jurisdictionally variable, and (b) explicit declaration surfaces the orchestration choice at the form-authoring edit boundary.
 
-### 4.2 Port shape — proposal: extend existing ports, no new `DuressChannel` port
+### 4.2 Port shape — adopter contract now; port shape deferred to FW-0059 build
 
-Per [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md): "don't speculate on port shapes before consumer code; port what's adopter-shaped; encapsulate the rest." Applying that discipline:
+Per [web ADR-0009 §"Not in the constitutional inventory" (b)](../adr/0009-hexagonal-architecture-ports-and-adapters.md): post-MVP ports await consumer code; front-loading speculative port contracts before real consumers exercise them is the anti-pattern web ADR-0006 documented retroactively (the originally-conceived `IssuerProvider` port turned out moot once the React surface landed and the engine `IssuerStore` was directly consumable). FW-0048 is a design row; FW-0059 is the build. The honest application of ADR-0009 §(b) is to specify the **adopter contract** here and let the port shape land with the build.
 
-**Proposal: extend two existing ports plus a thin new `SafetyRouting` port for the dispatch step.**
+**Adopter contract (what FW-0059 must satisfy).** The dispatch concern is adopter-shaped along two axes:
 
-| Port | What `duressAware` adds |
+| Adopter axis | What it implies |
 |---|---|
-| `IdentityProvider` (web ADR-0007) | The credential-selection moment during signing now returns a `(credential, isDuressCredential)` tuple where `isDuressCredential` is a server-side classification, not client-side state — the client cannot read which credential was used as duress (the WebAuthn ceremony returns only the credential ID; the duress classification is server-side per the issuer's credential-registry). **Shape change: minimal — `IdentityClaim` gains an opaque `signalChannel` field the resolver consults.** |
-| `SubmitTransport` | The submit envelope carries the `submission.duress-signaled` event with `payload_ref` ciphertext + `key_bag` HPKE wrap to the safety-team recipient per §5.2. **Shape change: minimal — the event is part of the canonical Response envelope per EXT-5; transport unchanged.** |
-| **New: `SafetyRouting`** | A new port: `dispatch(signal: HPKE_wrapped_bytes, target: opaque) → void`. Adapter-shaped (issuer-webhook adapter vs WOS-task adapter); conformance-suite tests dispatch + retry semantics. **Justified as a new port** because the dispatch target is genuinely adopter-shaped (NCADV-webhook / Slack-internal / WOS-task adapter each implement different transport patterns), and the dispatch step has its own failure semantics distinct from `SubmitTransport`. |
+| Issuer-webhook adapter | Posts HPKE-wrapped bytes (the ciphertext + recipient handle that resolved at form-load) to an issuer-configured endpoint (NCADV hotline integration, internal Slack channel webhook, lawyer-on-call CRM). Retry + dead-letter semantics owned by the adapter. |
+| WOS-task adapter | Enqueues a task for a `safety-reviewer` actorExtension in the issuer's WOS deployment. Per-tenant ACL closed-membership enforcement at the WOS layer. |
 
-**Why one new port and not zero.** The dispatch concern doesn't belong in `SubmitTransport`: the dispatch can succeed when the submit fails (the safety team must still be alerted even if the form submission errors out) and vice versa (the submit can succeed; the dispatch retry can lag). Separating the ports keeps each adapter's failure handling clean. Per ADR-0009 §"Not in the constitutional inventory" the bar for a new port is "the surface is genuinely adopter-shaped with distinct failure semantics" — `SafetyRouting` clears that bar.
+Both adapters need: (a) the HPKE-wrapped bytes from §5.2, (b) the resolved `routingTargetId` from the issuer-sidecar `safetyTeamRecipients[]`, (c) failure semantics distinct from `SubmitTransport` (the dispatch can succeed when submit fails — the safety team must still be alerted — and vice versa; the submit can succeed while the dispatch retry lags). **FW-0059 picks the port shape at build time** when both reference adapters are co-implemented; the spec-of-the-port emerges from the actual adapter pair, not from speculation. The minimal extensions to `IdentityProvider` (web ADR-0007) and `SubmitTransport` (the §5.2 event lives in the canonical Response envelope per EXT-5) are mechanical and land with the build.
 
-**Why not a `DuressCredentialStore` port.** The dual-credential registry is *server-side* per §3.1; the formspec-web client never sees the registry. The credential-registration step happens at FW-0021's signing-PIN / passkey-enrollment surface, which is itself a port (`IdentityProvider`). No new port needed at the credential-store layer.
+**Why not invent a `SafetyRouting` port here.** It is tempting to pin a `dispatch(signal: HPKE_wrapped_bytes, target: opaque) → void` shape now, but per ADR-0009 §(b) the bar is consumer code, not predicted-need: two real adapters (issuer-webhook + WOS-task) need to be reduced together for the port shape to be load-bearing. Until then, naming the port without two real adapters reduced against it is the same pre-consumer port speculation ADR-0006 retroactively flagged.
+
+**Why not a `DuressCredentialStore` port.** The dual-credential registry is *server-side* per §3.1; the formspec-web client never sees the registry. The credential-registration step happens at FW-0031's signing-PIN / passkey-enrollment surface, which is itself a port (`IdentityProvider`). No new port needed at the credential-store layer.
 
 ### 4.3 Resolution contract addition
 
@@ -208,7 +211,7 @@ duressAware?: {
 }
 ```
 
-The block is the resolver's read-only output. Adapters do not consume it directly; the shell does, and orchestrates the existing `IdentityProvider` + `SubmitTransport` + new `SafetyRouting` ports against it.
+The block is the resolver's read-only output. Adapters do not consume it directly; the shell does, and orchestrates the existing `IdentityProvider` + `SubmitTransport` ports plus the FW-0059-build safety-routing adapter (port shape to be picked at build time per §4.2) against it.
 
 **Sensitive-data discipline:** the `ceremonyHints.safetyRoutingDescription` field is for **issuer-side configuration display only** (used in admin / Studio surfaces, not in respondent surfaces). The respondent's view MUST NOT render any duress-related copy. The shell enforces this by rendering the same ceremony UI regardless of `duressAware` presence; the duress affordance is the *additional credential* the respondent can choose to authenticate with, not an additional visible button.
 
@@ -304,7 +307,7 @@ EXT-18 ([`thoughts/specs/2026-05-22-upstream-extension-queue.md:143`](2026-05-22
 issuerSidecar.safetyTeamRecipients: Array<{
   templateClassRef:      string                       // closed enum: "financial-poa" | "immigration-sponsorship" | "advance-directive" | "marriage-divorce" | "custody" | "benefits-redirect"
   recipientPublicKeyB64: string                       // X25519 public key per Trellis Core §9.4 suite 1
-  routingTargetId:       string                       // opaque ID dispatched to the SafetyRouting adapter
+  routingTargetId:       string                       // opaque ID dispatched to the safety-routing adapter (§4.2)
   jurisdictions:         Array<string>                // ISO 3166-2 codes the recipient covers; empty = global default
   validFromAt:           timestamp                    // RFC 3339
   validUntilAt?:         timestamp                    // RFC 3339 — for key rotation
@@ -321,7 +324,7 @@ issuerSidecar.safetyTeamRecipients: Array<{
 
 **XS-3 proposed content (consumer perspective):**
 
-1. **Boundary:** at `intake-handoff` plus the optional WOS-task dispatch. Formspec owns the per-event payload shape; Trellis carries the standard envelope (signed event with `payload_ref` ciphertext + `key_bag` wrap per Core §6.4 + §9.4); WOS optionally owns the `safety-reviewer` actorExtension; the SafetyRouting adapter is an adopter-shaped dispatch layer that targets either an issuer-side webhook or a WOS task.
+1. **Boundary:** at `intake-handoff` plus the optional WOS-task dispatch. Formspec owns the per-event payload shape; Trellis carries the standard envelope (signed event with `payload_ref` ciphertext + `key_bag` wrap per Core §6.4 + §9.4); WOS optionally owns the `safety-reviewer` actorExtension; the safety-routing adapter is an adopter-shaped dispatch layer that targets either an issuer-side webhook or a WOS task (port shape picked at FW-0059 build time per §4.2).
 2. **Trellis discipline (base pattern, works in Phase 1):** Core §6.4 (`payload_ref` carries the ChaCha20-Poly1305 ciphertext), §9.4 (`key_bag` carries the HPKE Base-mode DEK wrap to the safety-team recipient), §6.6 (Ed25519 over COSE_Sign1 signs the envelope). **No new Trellis substrate primitive required for the base duress pipeline.** The only Trellis-side work is event-type registration: per Core §6.7 + §14 the `submission.duress-signaled` event_type must be registered in the bound registry so the verifier obligation under §14.4 resolves at signing time and §13.2 fixed-position vector declarations (if any) are pinned for the event type. Event-type registration is Phase 1 work.
 3. **Phase 2+ advanced disclosure (deferred, surfaced honestly).** Any advanced post-hoc selective-disclosure manifest over the duress payload (e.g., disclosing a subset of the plaintext fields to an appellate-court audience while withholding others from FOIA) would require Trellis Phase 2+: OC-26 commitment-slot population at admit time + OC-27 Disclosure Manifest structure + OC-30 independent auditability + a Phase 2+ commitment scheme registered under Core §13.3. **FW-0048 does NOT require any of this for the base pattern** — the safety-team recipient receives the full plaintext via §9.4 unwrap; no selective-disclosure carve-out is needed for the MVP routing. The Phase 2+ dependency is surfaced here only so a future row scoping post-hoc selective disclosure over the duress payload knows the substrate gap.
 4. **WOS actorExtension:** `safety-reviewer` per S10.1, closed-membership-role at the WOS layer with per-tenant ACL preventing observability by rank-and-file caseworkers. **Optional** — `issuer-webhook` routing tier doesn't require WOS at all.
@@ -336,7 +339,7 @@ issuerSidecar.safetyTeamRecipients: Array<{
 
 - The Q1–Q4 framing decisions, scoped to formspec-web's consumer perspective.
 - The `duressAware` capability shape under [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — the resolver block in §4.3, the tier axes, the failure-semantics binding.
-- The `SafetyRouting` port shape (§4.2) — the conformance fixture pattern can be authored now even if the build waits.
+- The safety-routing adopter contract (§4.2) — the conformance fixture pattern over the adopter axes (issuer-webhook + WOS-task) can be authored now even though the port shape lands with FW-0059 build.
 - The per-party composition rule with FW-0050 (§7).
 
 **Waits on upstream:**
@@ -357,7 +360,7 @@ This is the section [FW-0050 design §7.2](2026-05-23-fw-0050-multi-party-submis
 The single-party sidecar shape from §5.1 carries a `partyRef?` field that is absent in single-party flows and present in multi-party flows:
 
 - **Single-party:** `partyRef` absent; the duress signal binds to the single `AuthoredSignature` in the Response.
-- **Multi-party:** `partyRef` present, carrying `urn:party:<roleId>:<sessionId>` per FW-0050 §3.3 (where `roleId` matches `Definition.parties[*].roleId` and `sessionId` is the per-party `IdentityProvider` session identifier). The duress signal binds to that specific party's `AuthoredSignature` and is scoped to that party's view only.
+- **Multi-party:** `partyRef` present, carrying an extended `urn:party:<roleId>:<sessionId>` URN built on the upstream `urn:party:` convention used in [`intake-handoff.schema.json:180`](../../../formspec/schemas/intake-handoff.schema.json) (`urn:party:person:applicant-456`-style). FW-0048 extends that convention with two additional axes — `roleId` (matches `Definition.parties[*].roleId`) and `sessionId` (per-party `IdentityProvider` session identifier) — so the duress signal binds to a specific party's `AuthoredSignature` and is scoped to that party's view only. The extended URN composition is filed as a new queue entry (proposed addition to EXT-30 framing or a sibling EXT-* row) so the upstream `urn:party:` family ratifies the extension explicitly per [web ADR-0004](../adr/0004-cross-repo-placement-consume-not-invent.md) (consume primitives, propose extensions explicitly).
 
 **Per-party invisibility guarantee.** Per FW-0050 §7.2: "Party B's duress signal must not be observable to Party A." This binds at three surfaces:
 
@@ -375,7 +378,7 @@ The per-party `partyRef` is part of the HPKE plaintext (inside the §5.2 plainte
 
 The FW-0061 build is responsible for:
 
-1. **Per-party `SafetyRouting.dispatch()` invocations.** Each party's `IdentityProvider` session, after the signing ceremony, fires its own duress-detection step server-side, producing zero or one HPKE-wrapped payloads per party. The `SafetyRouting` adapter dispatches each independently (per-party retry semantics; one party's dispatch failure MUST NOT block another party's dispatch).
+1. **Per-party safety-routing dispatch invocations.** Each party's `IdentityProvider` session, after the signing ceremony, fires its own duress-detection step server-side, producing one HPKE-wrapped payload per party (uniform shape per §3.4 — emitted whether or not duress was signaled). The safety-routing adapter dispatches each independently (per-party retry semantics; one party's dispatch failure MUST NOT block another party's dispatch). The port shape lands with FW-0059 build per §4.2.
 2. **Per-party event-level uniform shape.** Each party's signing ceremony emits a `submission.duress-signaled` event with byte-shape-uniform envelope (padded `payload_ref` ciphertext + `key_bag` entry to the safety-team recipient) per §3.4 + §5.2, whether or not that party signaled duress.
 3. **Cross-party visibility enforcement.** Per §7.1 above: receipts, status reads, and ceremony state MUST be byte-identical across all combinations of which parties signaled duress.
 4. **Multi-party fixture coverage.** FW-0061 conformance fixtures MUST include: (a) co-equal flow where Party A signaled duress, Party B did not; (b) co-equal flow where both parties signaled duress; (c) asymmetric flow where the asymmetricSecondary party signaled duress; (d) all corresponding "no party signaled duress" baselines. Receipts in (a)-(c) MUST be byte-identical to (d) modulo the HPKE-wrapped `payload_ref` ciphertext bytes (which differ in plaintext but match in shape).
@@ -389,7 +392,7 @@ Honest list of what FW-0048 design does NOT resolve:
 3. **Cool-off windows / secondary confirmation (scenario 2.3.3 deferral).** The elder-coercion-by-misrepresentation scenario class needs a different design (cool-off windows, secondary confirmation, fraud-pattern detection at issuer). Proposed as a separate FW row; **not FW-0048's scope.**
 4. **Jurisdictional admissibility.** Whether a duress-signaled signature is voidable, valid-pending-investigation, or subject to additional procedure varies by jurisdiction. **Legal-counsel work.** FW-0048 produces the artifact; admissibility is the issuer's compliance posture.
 5. **Post-signing repudiation.** Per §2.1 class (c): a respondent who escaped coercion and wants to retroactively repudiate a signed document uses **FW-0038 (amend / withdraw / dispute)**, not FW-0048. FW-0038's lifecycle event for `response.dispute-attached` (EXT-5 queued) is the canonical surface; whether `response.dispute-attached` should be HPKE-wrapped when the dispute reason is coercion is FW-0038's design question.
-6. **Webhook delivery reliability.** The `SafetyRouting` adapter's retry / dead-letter semantics when the issuer's webhook endpoint is unreachable. **FW-0059 build's call.** Default: at-least-once with exponential backoff; permanent failures escalate via an alerting channel the issuer configures separately.
+6. **Webhook delivery reliability.** The safety-routing adapter's retry / dead-letter semantics when the issuer's webhook endpoint is unreachable. **FW-0059 build's call.** Default: at-least-once with exponential backoff; permanent failures escalate via an alerting channel the issuer configures separately.
 7. **Duress signal during a federated-identity flow.** When the respondent authenticates via a federated IdP (Login.gov, ID.me) that does NOT expose a duress channel, the `dual-passkey` mechanism is unavailable — only `dual-pin` or `pin-second-entry` tiers apply. **Composition with FW-0030 is partial**; instances supporting federated IdP MUST also support at least one non-passkey duress mechanism if `duressAware` is required.
 8. **Issuer-side safety-team enrollment / key rotation.** How issuers register `safetyTeamRecipients[]` recipients, rotate keys, sunset old recipients. **Operational concern for FW-0059 build + issuer-side admin surface.** This design specifies the schema; the operational lifecycle is out of scope.
 9. **Bidirectional confirm-to-victim-services pattern.** Whether the safety-team recipient acknowledges receipt and routes the acknowledgement back through any surface to the respondent. **Risk: any respondent-visible acknowledgement defeats §3.2 invisibility.** Default: no acknowledgement surface; the safety team's intervention is the acknowledgement.
@@ -403,7 +406,7 @@ Honest list of what FW-0048 design does NOT resolve:
 | Q3: issuer-webhook routing (MVP-tier) + WOS-task (asymmetric-tier) | PROPOSAL | owner review |
 | Q4: HPKE-wrapped payload via Trellis Core §6.4 `payload_ref` + §9.4 `key_bag` (no §13 commitment-slot use; Phase 1) | PROPOSAL | owner review |
 | `duressAware` capability tier under ADR-0011 (mechanism × routingTier axes) | PROPOSAL | owner review + ADR-0011 evolution |
-| New `SafetyRouting` port (extend `IdentityProvider` + `SubmitTransport`; no new credential-store port) | PROPOSAL | owner review |
+| Safety-routing adopter contract now; port shape deferred to FW-0059 build per ADR-0009 §(b) (extend `IdentityProvider` + `SubmitTransport`; no new credential-store port) | PROPOSAL | owner review |
 | EXT-5 payload shape per §5.1 (extension of queued entry) | PROPOSAL to formspec | formspec spec-expert review |
 | EXT-30 (new) — issuer-sidecar `safetyTeamRecipients[]` block | PROPOSAL to formspec | formspec spec-expert review |
 | XS-3 (new) — cross-stack ADR for duress-signal pipeline | PROPOSAL to stack-root | stack-root architecture review |
@@ -417,7 +420,7 @@ Honest list of what FW-0048 design does NOT resolve:
 - [web ADR-0005](../adr/0005-mvp-scope-defer-cryptographic-substrate.md) — MVP scope (`duressAware` is post-MVP; this design is staging for post-MVP)
 - [web ADR-0006](../adr/0006-issuer-sidecar-spec-request.md) — issuer sidecar (EXT-30 lands as a block on this sidecar)
 - [web ADR-0007](../adr/0007-identity-provider-port.md) — IdentityProvider port (the credential-classification touchpoint per §4.2)
-- [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md) — hexagonal architecture (port-shape discipline; new `SafetyRouting` port justified per §4.2)
+- [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md) — hexagonal architecture (port-shape discipline; §(b) defers safety-routing port shape to FW-0059 build per §4.2)
 - [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — runtime feature resolution (the `duressAware` capability the design instantiates)
 - [FW-0050 design 2026-05-23](2026-05-23-fw-0050-multi-party-submission-design.md) — multi-party (§7.2 delegates per-party duress sidecar to this row; §7 above satisfies)
 - [Trellis Core §6.4](../../../trellis/specs/trellis-core.md) — `PayloadRef` shape (where the duress ciphertext lives per §5.2)
