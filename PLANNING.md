@@ -677,7 +677,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 
 ### FW-0056 — *(closed as live (slice 1); see [## Closed](#closed); follow-on FW-0070 for the sibling-factory parameterization refactor; FW-0066 trigger fired for the FormRuntimePolicyExtractor port promotion; production selective-presentation ceremony still blocked on SC-4 + EXT-18 + stack-root ADR-0116 substrate)*
 
-### FW-0057 — *(closed as live (slice 1); see [## Closed](#closed); follow-on FW-0078 for the post-XS-2 production cross-issuer adapter; draft resume blocked on EXT-26 + EXT-27; signed-record detail is FW-0009 / FW-0010 territory; lifecycle actions on past records are FW-0034 territory)*
+### FW-0057 — *(closed as live (slice 1); see [## Closed](#closed); follow-on FW-0078 for the post-XS-2 production cross-issuer adapter; follow-on FW-0079 for per-route identity gating (foot-gun blocked on FW-0078); follow-on FW-0080 for `consumes*` ladder consolidation into a `ReadonlySet<RuntimeFeatureKey>`; draft resume blocked on EXT-26 + EXT-27; signed-record detail is FW-0009 / FW-0010 territory; lifecycle actions on past records are FW-0034 territory)*
 
 ### FW-0058 — AI-agent filer chain (non-human capacity)
 
@@ -885,3 +885,23 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Done:** A production `RespondentHistorySource` adapter wired against XS-2 (multi-issuer client-side token bag per stack-root ADR-0068 D-1 + D-3) that fans out across the respondent's per-issuer authorization handles and aggregates a real cross-issuer timeline into the FW-0057 `HistorySnapshot` shape. Production composition flips `crossIssuerHistory` from `'unavailable'` to `'available'` and `/history` renders live entries instead of the disabled-cause copy.
 - **Blocked on:** XS-2 (filed in `thoughts/specs/2026-05-22-upstream-extension-queue.md`). Includes per-issuer failure handling (return partial snapshot when one sender is unreachable, not a whole-call throw), fan-out strategy (parallel vs serial vs windowed), and cache discipline (live fetch vs cached-with-revalidation; adopter-shaped).
 - **Anti-patterns:** AP-006 (silent failures). The slice-1 read path is honest; the production adapter must preserve that honesty under partial-failure conditions.
+
+### FW-0079 — Per-route identity gating in `buildProductionNarrowedComposition` (post-FW-0078)
+
+- **Phase:** Post-MVP (post-XS-2 substrate)
+- **Status:** open
+- **Persona:** Respondent
+- **Journey:** [J-043](JOURNEYS.md#j-043--show-me-every-form-ive-ever-submitted-started-or-signed)
+- **Done:** `buildProductionNarrowedComposition` in `src/composition/route-narrowing.ts` gates the real identity provider per-route on the capability the route actually consumes, not exclusively on `instanceCapabilities.respondentPlace`. Today's gate (`route.identityBound && instanceCapabilities.respondentPlace === 'available'`) is correct because every identity-bound narrowed route also consumes `respondentPlace` and `crossIssuerHistory` is always `'unavailable'` in production. Post-FW-0078, `/history` is identity-bound AND consumes `crossIssuerHistory` but does NOT consume `respondentPlace`; the current gate would short-circuit to noop identity even when history is `'available'`. Replace with a per-route capability check: when `route.consumesHistory && crossIssuerHistory === 'available'`, wire real identity even if `respondentPlace === 'unavailable'`. Same pattern extends to any future route that decouples its capability from `respondentPlace`. Likely a small refactor to `route-narrowing.ts:170-190`.
+- **Blocked on:** FW-0078 (production cross-issuer adapter). The gate's current shape is harmless today because the production posture always declares `crossIssuerHistory: 'unavailable'`; the foot-gun activates only when FW-0078 flips that declaration to `'available'`.
+- **Anti-patterns:** AP-002 (incomplete identity gating leaving an authenticated-only surface accessible without identity). Today the page renders a disabled-cause; post-FW-0078 it would render a live cross-issuer view without identity if the gate isn't reshaped.
+
+### FW-0080 — Consolidate `consumes*` boolean ladder on `RouteNarrowing` into a `ReadonlySet<RuntimeFeatureKey>`
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Maintainer (internal architectural debt)
+- **Journey:** N/A (refactor; preserves user-observable behavior)
+- **Done:** Replace the three `consumes*` boolean flags on `RouteNarrowing` (`consumesRespondentPlace`, `consumesStatus`, `consumesHistory`) with a single `consumes: ReadonlySet<RuntimeFeatureKey>` field driven by the existing `FEATURE_PORT_MAP`. Existing descriptors translate mechanically: `{consumesRespondentPlace: true, consumesStatus: true, consumesHistory: false, identityBound: true}` → `{consumes: new Set(['respondentPlace', 'status']), identityBound: true}`. `buildProductionNarrowedComposition` and `buildDemoNarrowedComposition` read membership from the set instead of switching on individual flags. The shape naturally accommodates `fileUpload` (already eligible per design line 158-161) and future feature keys without touching `RouteNarrowing`. Conformance and descriptor-matrix tests adapt automatically since the new shape is more uniform; the explicit-flag-per-key audit in `tests/composition/route-narrowing.test.ts` collapses into one set-membership check per key.
+- **Blocked on:** No upstream block; deferred until the next feature-key addition makes the consolidation forcing rather than optional. Reviewer of FW-0057 disagrees with the implementer's "trigger fires at flag #6" framing — argues the pattern is already a boolean ladder mirroring `RuntimeFeatureKey`. Track this row as the consolidation owner; pull forward when a sixth `RuntimeFeatureKey` (after `respondentPlace`, `status`, `documentPresentation`, `fileUpload`, `crossIssuerHistory`) lands or when a fourth `consumes*` flag is about to be added — whichever fires first.
+- **Anti-patterns:** AP-005 (descriptor-bloat — parallel boolean flag per feature key when the existing closed taxonomy is the natural index).

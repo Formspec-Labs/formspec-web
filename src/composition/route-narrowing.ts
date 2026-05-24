@@ -65,6 +65,12 @@ import type { Composition } from './types.ts';
  * adding a route requires touching one file (the route file) plus the
  * `chooseComposition` dispatch helper.
  */
+// TODO(FW-0080): consolidate the `consumes*` boolean ladder below into a
+// single `consumes: ReadonlySet<RuntimeFeatureKey>` driven by FEATURE_PORT_MAP.
+// The ladder mirrors RuntimeFeatureKey by hand; the set form scales to future
+// keys (fileUpload eligible per FW-0057 design line 158-161) without growing
+// the RouteNarrowing shape. Pull forward when a sixth RuntimeFeatureKey lands
+// or when a fourth `consumes*` flag is about to be added — whichever fires.
 export interface RouteNarrowing {
   /** Cite used in noop-adapter error messages (e.g. '/status'). */
   readonly routeCite: string;
@@ -173,6 +179,10 @@ function buildProductionNarrowedComposition({
   // construct OIDC / magic-link / anonymous-session machinery. When a real
   // production respondent-place adapter ships and the declaration moves to
   // `available`, this branch picks up real identity wiring automatically.
+  // TODO(FW-0079): per-route identity gating. Today's gate-on-respondentPlace
+  // is correct because crossIssuerHistory is always 'unavailable' in
+  // production; revisit when FW-0078 ships a production history adapter and
+  // `/history` is identity-bound but does NOT consume respondentPlace.
   const identityProvider: IdentityProvider =
     route.identityBound && instanceCapabilities.respondentPlace === 'available'
       ? buildRealIdentityProvider(config, notificationDelivery, serverUrl).provider
