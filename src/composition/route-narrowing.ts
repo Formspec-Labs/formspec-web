@@ -99,6 +99,13 @@ export type RouteNarrowingMode = 'default' | 'stub';
  * route descriptor); the demo-mode shape collapses into `'stub'`,
  * matching the existing `createDemoComposition` → `createStubComposition`
  * one-line delegation.
+ *
+ * Naming note: caller-side `mode: 'stub'` produces a Composition whose
+ * `composition.mode === 'demo'` (the runtime tag the React shell + the
+ * coherence assertion consume). Caller and runtime tags differ deliberately
+ * — caller names the FACTORY MODE (which adapters wire), runtime names the
+ * DEPLOYMENT POSTURE (which the shell renders). Same delegation pattern as
+ * `createDemoComposition` → `createStubComposition`.
  */
 export function createRouteNarrowedComposition({
   mode,
