@@ -8,6 +8,7 @@ import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts'
 import { STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
 import { assertCompositionCoherence } from '../../src/policy/composition-coherence.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
+import { sampleFormDefinition } from '../../src/adapter-conformance/fixtures.ts';
 import type { FormspecWebConfig, PortCompositionConfig } from '../../src/config/types.ts';
 
 const ALL_DESCRIPTORS: readonly RouteNarrowing[] = [
@@ -110,7 +111,7 @@ describe('createRouteNarrowedComposition — descriptor contracts (FW-0070)', ()
 
     it('formRuntimePolicyExtractor returns empty form policy (routes synthesize per-surface)', () => {
       const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      expect(c.formRuntimePolicyExtractor.extract({} as never)).toEqual({ features: {} });
+      expect(c.formRuntimePolicyExtractor.extract(sampleFormDefinition)).toEqual({ features: {} });
     });
   });
 });
