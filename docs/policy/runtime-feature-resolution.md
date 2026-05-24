@@ -23,6 +23,10 @@ The closed taxonomy lives in `src/policy/feature-keys.ts`. Today's keys:
 - `status` — WOS applicant-API status reader (FW-0039 seed).
 - `documentPresentation` — selective-presentation surface (FW-0056 slice 1
   extension, the first feature ADR beyond the seeded pair).
+- `fileUpload` — attachment persistence (FW-0033 slice 1 extension; first
+  key whose form-policy extractor introspects definition content — walks
+  the loaded definition for `dataType === 'attachment'` fields and
+  declares `required` when present).
 
 Future feature ADRs extend the taxonomy; the resolver rejects unknown keys
 with `InvalidRuntimePolicyError` so drift is caught at boot.
@@ -325,3 +329,39 @@ boots `IdentityProvider` discovery + authenticate before reading
 `respondentPlace` short-circuits before identity is required — there is no
 point asking the respondent to sign in to see "Your documents are not
 available." copy.
+
+## Worked example: the in-form upload affordance as a required capability (FW-0033 slice 1)
+
+`fileUpload` is the first feature key driven by **definition introspection**
+rather than literal route synthesis. The composition's `getFormRuntimePolicy`
+walks the loaded `FormDefinition` for any field with `dataType ===
+'attachment'`. If at least one is present, the form's policy declares
+`fileUpload: 'required'`; otherwise the key is absent from the form policy.
+
+The instance × org pair drives the form-load outcome:
+
+| Mode | Instance | Org | Form has attachment field | Page renders |
+|---|---|---|---|---|
+| any | `available` | `allowed` / `default-on` / `required` | yes | Form renders; field-component override uploads bytes through `AttachmentStore`; engine value becomes `AttachmentRef`. |
+| any | `available` | `forbidden` | yes | `FeaturePolicyConflictError` at form load (form requires what org forbids). |
+| any | `unavailable` | any | yes | `UnsupportedRequiredFeatureError` → policy-error page: "This form needs file uploads, but this site is not set up to receive files." |
+| `demo` | `demo-stub` | `allowed` | yes | Form renders against the in-memory stub adapter. |
+| `production` | `demo-stub` | any | yes | `assertCompositionCoherence` throws at composition boot — production rejects demo stubs. |
+| any | any | any | no | `fileUpload` resolves to `not-requested`; form renders without the capability. |
+
+The override (`FormspecWebAttachmentControl`, registered on the
+`FormspecProvider` `components.fields.FileUpload` slot) wraps the existing
+`formspec-react` file-picker UX so the bytes flow through the
+`AttachmentStore` port instead of staying in-process as raw `File` objects.
+The engine value at the attachment path becomes a serializable
+`AttachmentRef` (or `AttachmentRef[]` in `multiple` mode); the submit
+handoff carries the ref through `response.data` unchanged. No
+`IntakeHandoff` shape change. Adopters wire whatever object store they
+operate (S3, R2, Azure Blob, server-bundled, IPFS) — the conformance suite
+under `tests/adapter-conformance/attachment-store/` enforces the contract.
+
+This pattern generalizes for any future feature key whose form policy is
+derived from definition content (e.g., a `payment` key derived from the
+presence of fee-bearing fields). The walker stays inline in
+`getFormRuntimePolicy` until FW-0066 promotes the closure to a port with
+conformance fixtures.

@@ -14,6 +14,7 @@ const portSuites = new Map([
   ['NotificationDelivery', 'tests/adapter-conformance/notification-delivery/conformance.test.ts'],
   ['RespondentPlaceSource', 'tests/adapter-conformance/respondent-place-source/conformance.test.ts'],
   ['StatusReader', 'tests/adapter-conformance/status-reader/conformance.test.ts'],
+  ['AttachmentStore', 'tests/adapter-conformance/attachment-store/conformance.test.ts'],
 ]);
 const stubPortsByPath = new Map([
   ['src/adapters/stub/definition-source.ts', 'DefinitionSource'],
@@ -23,10 +24,12 @@ const stubPortsByPath = new Map([
   ['src/adapters/stub/notification-delivery.ts', 'NotificationDelivery'],
   ['src/adapters/stub/respondent-place-source.ts', 'RespondentPlaceSource'],
   ['src/adapters/stub/status-reader.ts', 'StatusReader'],
+  ['src/adapters/stub/attachment-store.ts', 'AttachmentStore'],
 ]);
 const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/respondent-place-source.ts', 'unavailableRespondentPlaceSource'],
   ['src/adapters/unavailable/status-reader.ts', 'unavailableStatusReader'],
+  ['src/adapters/unavailable/attachment-store.ts', 'unavailableAttachmentStore'],
 ]);
 const requiredHarnessExports = [
   'defineDefinitionSourceConformance',
@@ -36,6 +39,7 @@ const requiredHarnessExports = [
   'defineNotificationDeliveryConformance',
   'defineRespondentPlaceSourceConformance',
   'defineStatusReaderConformance',
+  'defineAttachmentStoreConformance',
 ];
 const requiredReadmePhrases = [
   'formspec-web/adapter-conformance',

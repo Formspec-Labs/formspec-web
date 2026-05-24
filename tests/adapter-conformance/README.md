@@ -24,3 +24,4 @@ Directory skeleton (one per current port):
 - `notification-delivery/`
 - `respondent-place-source/`
 - `status-reader/`
+- `attachment-store/`

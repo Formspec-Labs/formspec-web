@@ -238,16 +238,16 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 
 **Owning repo:** formspec
 **File:** `formspec/specs/assist/assist-spec.md` (small clarifications to draft 1.0.0)
-**Closes:** J-046 (codifies the FW-0051 §3.3 + §3.4 + §3.5 disciplines as recognized Provider postures in the upstream spec)
-**FW rows blocked:** none directly (FW-0051 design proceeds against the current draft 1.0.0). **However**, per FW-0051 inline architecture review Findings 1+2, candidates (1) + (2) + (4) are RECOMMENDED upstream codification — without them, FW-0051's privacy posture and AP-002 interop asymmetry rest on a soft floor.
+**Closes:** J-046 (codifies the FW-0051 §3.2 + §3.3 + §3.4 disciplines as recognized Provider postures in the upstream spec)
+**FW rows blocked:** none directly (FW-0051 design proceeds against the current draft 1.0.0). **However**, candidates (1) + (2) + (4) are RECOMMENDED upstream codification per FW-0051 §6.2 — without them, FW-0051's privacy posture (a different Provider could ship plaintext-by-default and remain spec-compliant) and AP-002 interop asymmetry (FW-0051's MUST reads as private deviation from the §4.3 (5) SHOULD floor rather than recognized posture) rest on a soft floor.
 **Shape:** four candidate clarifications per [FW-0051 design §6.2](2026-05-23-fw-0051-bring-your-own-assistant-design.md):
-1. **§4.4 `FieldDescription.value` masking semantics — RECOMMENDED uplift.** Add a non-normative note that Provider implementations MAY mask `value` by default and require explicit per-field reveal grant to unmask. Closes the soft-floor gap surfaced in architecture-review Finding 1.
-2. **§11 security/privacy — add per-act + per-field reveal as a SHOULD pattern — RECOMMENDED uplift.** New §11.8 SHOULD per FW-0051 §6.2 (2). Closes the soft-floor gap surfaced in architecture-review Finding 1.
+1. **§4.4 `FieldDescription.value` masking semantics — RECOMMENDED uplift.** Add a non-normative note that Provider implementations MAY mask `value` by default and require explicit per-field reveal grant to unmask. Closes the soft-floor gap (a different Provider could ship plaintext-by-default and remain compliant).
+2. **§11 security/privacy — add per-act + per-field reveal as a SHOULD pattern — RECOMMENDED uplift.** New §11.8 SHOULD per FW-0051 §6.2 (2). Same soft-floor gap as (1).
 3. **§6 profile-matching — per-assistant scope hook — OPTIONAL.** NOT proposed for slice 1; relies on browser's WebExtension permission model per FW-0051 §1.2 non-goal.
-4. **§3.3 mutation tools — runtime-policy-aware confirm-gate normative tightening — RECOMMENDED uplift.** New §4.3 (6) MUST per FW-0051 §6.2 (4). Codifies FW-0051's §3.4 Stage 2 MUST and closes the interop-asymmetry-honest-only-if-codified gap surfaced in architecture-review Finding 2.
+4. **§3.3 mutation tools — runtime-policy-aware confirm-gate normative tightening — RECOMMENDED uplift.** New §4.3 (6) MUST per FW-0051 §6.2 (4). Codifies FW-0051's §3.4 Stage 2 MUST and closes the interop-asymmetry-honest-only-if-codified gap (FW-0051's stricter behavior reads as private deviation from the §4.3 (5) SHOULD floor without this).
 **Cross-stack:** none. Single-spec upstream tightening; no cross-stack ratification required.
 **Fixture status:** none. The upstream tightening lands with fixture cases for the new normative floors when (1) + (2) + (4) ratify.
-**Status:** candidates (1) + (2) + (4) RECOMMENDED; (3) OPTIONAL — proposed 2026-05-23 by FW-0051 design + uplifted by FW-0051 inline architecture-review remediation 2026-05-23. Not blocking FW-0051 or FW-0062 build; land alongside (or shortly after) FW-0051 owner ratification.
+**Status:** candidates (1) + (2) + (4) RECOMMENDED; (3) OPTIONAL — proposed 2026-05-23 by FW-0051 design. Not blocking FW-0051 or FW-0062 build; land alongside (or shortly after) FW-0051 owner ratification.
 
 ### EXT-10: Receipt-domain prose update (drift fix)
 
@@ -431,6 +431,16 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **FW rows blocked:** M8 hosted/full-stack demo hardening
 **Shape:** production server Dockerfile/image plus documented runtime env for database/object-store dependencies.
 **Fixture status:** n/a.
+**Status:** not yet filed.
+
+### EXT-34: `AttachmentRef` wire-format ratification inside `IntakeHandoff`
+
+**Owning repo:** formspec (canonical IntakeHandoff schema + response-data field shapes) + stack-common (TS mirror) + formspec-server (server-side resolver)
+**Closes:** the FW-0033 slice 1 implementation fixture-pins an `AttachmentRef` shape — `{ kind: 'attachment-ref', uri, hash, size, mimeType, filename }` — and writes it into the engine value at every `dataType === 'attachment'` field. `buildIntakeHandoff` JSON-serializes the response into `extensions['x-formspec-response-data']`, carrying the ref through unchanged. The upstream service has no ratified contract for the ref shape — today the fixture-pinned web shape is the only authority, so a server-side resolver must mirror it from the formspec-web test fixtures. Ratify the wire shape (JSON Schema or CDDL) inside the canonical formspec response schema so adopters on both ends can validate interoperably.
+**FW rows blocked:** FW-0033 slice 2 (production resolver requires the shape; slice 1 is web-only so the gap is fixture-pinned, not blocking).
+**Shape:** add an `AttachmentRef` definition to `formspec/schemas/response.schema.json` (or a sidecar) so the response data schema can declare a `dataType: 'attachment'` field's value-shape as `AttachmentRef | AttachmentRef[]` (per single vs multiple mode). Mirror TS shape in `stack-common/packages/` per the integrity-stack precedent noted in the operational notes below. Server-side resolver consumes the ref's `uri` and resolves against the configured object store; `hash` + `size` enable adopter-side bytes-vs-metadata integrity checks before the service trusts the bytes the ref points at.
+**Honesty constraint:** the upstream ratification MUST NOT add a parallel `AttachmentRef` shape that is different from the slice-1 fixture-pinned shape; if changes are needed, evolve the existing shape (slice 1's discriminator `kind: 'attachment-ref'` is the load-bearing seam — it lets the server detect attachment values inside arbitrary response data without a heuristic) rather than fork. Slice 1 deliberately leaves no parallel sidecar plumbing — the ref IS the response value at the attachment path — so an upstream ratification that introduces a parallel envelope would force a slice-1 rewrite.
+**Fixture status:** none upstream; the web shape lives in `src/ports/attachment-store.ts` + `src/adapter-conformance/assertions.ts` + the stub adapter's deterministic URI scheme.
 **Status:** not yet filed.
 
 ### EXT-29: WOS applicant API recent-throughput projection

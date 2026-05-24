@@ -41,6 +41,8 @@ import type {
 } from '../ports/index.ts';
 import { ObligationItem } from './obligations-view.tsx';
 import { DocumentItem } from './documents-view.tsx';
+import { AttachmentStoreProvider } from './AttachmentStoreProvider.tsx';
+import { FormspecWebAttachmentControl } from './attachment-upload-control.tsx';
 import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
@@ -409,25 +411,28 @@ export function RespondentRuntime({
   return (
     <AppErrorBoundary>
       <RuntimeProfileProvider value={respondentState.runtimeProfile}>
-        <FormspecProvider
-          engine={respondentState.engine}
-          responseActionsDocument={responseActionsDocument}
-          onSubmit={(result) => {
-            void handleSubmit(result);
-          }}
-        >
-          <RespondentSurface
-            activeLocale={respondentState.activeLocale}
-            brandName={config.brand.name}
-            definition={respondentState.definition}
-            draftLoaded={respondentState.draftLoaded}
-            mode={composition.mode}
-            respondentPlaceState={respondentPlaceState}
-            resolvedIssuer={respondentState.resolvedIssuer}
-            submitState={submitState}
-            onLocaleChange={handleLocaleChange}
-          />
-        </FormspecProvider>
+        <AttachmentStoreProvider value={composition.attachmentStore}>
+          <FormspecProvider
+            engine={respondentState.engine}
+            responseActionsDocument={responseActionsDocument}
+            components={{ fields: { FileUpload: FormspecWebAttachmentControl } }}
+            onSubmit={(result) => {
+              void handleSubmit(result);
+            }}
+          >
+            <RespondentSurface
+              activeLocale={respondentState.activeLocale}
+              brandName={config.brand.name}
+              definition={respondentState.definition}
+              draftLoaded={respondentState.draftLoaded}
+              mode={composition.mode}
+              respondentPlaceState={respondentPlaceState}
+              resolvedIssuer={respondentState.resolvedIssuer}
+              submitState={submitState}
+              onLocaleChange={handleLocaleChange}
+            />
+          </FormspecProvider>
+        </AttachmentStoreProvider>
       </RuntimeProfileProvider>
     </AppErrorBoundary>
   );
@@ -895,13 +900,23 @@ function RuntimePolicyErrorPage({ error }: { error: RuntimePolicyError }) {
   return (
     <div className="shell__status shell__status--error" role="alert">
       <h1>This form cannot be loaded.</h1>
-      <p>
-        This form requires a capability this site does not currently support.
-        Try again later, or contact the sender for help.
-      </p>
+      <p>{runtimePolicyErrorCopy(error)}</p>
       <p className="support-code">Support reference: {error.code}</p>
     </div>
   );
+}
+
+/**
+ * Per-feature plain-language copy for runtime-policy errors at form load.
+ * FW-0033 adds the fileUpload row; other keys fall back to the generic
+ * sentence. Fixture-pinned in tests/app/respondent-runtime-attachment.test.tsx.
+ */
+function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
+  const featureKey = (error as { featureKey?: string }).featureKey;
+  if (featureKey === 'fileUpload') {
+    return 'This form needs file uploads, but this site is not set up to receive files.';
+  }
+  return 'This form requires a capability this site does not currently support. Try again later, or contact the sender for help.';
 }
 
 function FriendlyError({
