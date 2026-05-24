@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type { LayoutNode } from '@formspec-org/layout';
 import type { UseFieldResult } from '@formspec-org/react';
 import {
+  ATTACHMENT_DEFAULT_MAX_SIZE_BYTES,
   ATTACHMENT_DEFERRED_CAPABILITY_COPY,
   FormspecWebAttachmentControl,
 } from '../../src/app/attachment-upload-control.tsx';
@@ -290,6 +291,84 @@ describe('FormspecWebAttachmentControl', () => {
       await flush();
     });
     expect(harness.readValue()).toBeNull();
+  });
+
+  it('applies a sane default maxSize so an over-limit file is rejected even without prop override (L-2)', async () => {
+    // Default cap is 25 MiB. Build a File with size > default by stubbing size
+    // (a real ArrayBuffer of that size would slow the test).
+    const store = stubAttachmentStore();
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={store}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode()} />
+      </AttachmentStoreProvider>,
+    );
+
+    const big = await fileFromBytes(new Uint8Array([0]), 'big.bin');
+    Object.defineProperty(big, 'size', {
+      value: ATTACHMENT_DEFAULT_MAX_SIZE_BYTES + 1,
+      configurable: true,
+    });
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [big], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await flush();
+
+    expect(container?.textContent ?? '').toContain('larger than the upload limit');
+    expect(harness.readValue()).toBeNull();
+  });
+
+  it('client-side rejects a file whose MIME does not match `accept` (L-2)', async () => {
+    const store = stubAttachmentStore();
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={store}>
+        <FormspecWebAttachmentControl
+          field={harness.field}
+          node={makeNode({ accept: 'application/pdf,image/*' })}
+        />
+      </AttachmentStoreProvider>,
+    );
+
+    const txt = await fileFromBytes(new Uint8Array([1, 2]), 'note.txt', 'text/plain');
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [txt], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await flush();
+
+    // Mime-rejected code -> "That file type is not accepted here."
+    expect(container?.textContent ?? '').toContain('file type is not accepted');
+    expect(harness.readValue()).toBeNull();
+  });
+
+  it('accepts a file that matches `accept` via wildcard (L-2)', async () => {
+    const store = stubAttachmentStore();
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={store}>
+        <FormspecWebAttachmentControl
+          field={harness.field}
+          node={makeNode({ accept: 'image/*' })}
+        />
+      </AttachmentStoreProvider>,
+    );
+
+    const png = await fileFromBytes(new Uint8Array([1]), 'photo.png', 'image/png');
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [png], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await flush();
+
+    expect(harness.readValue()).toBeTruthy();
   });
 
   it('rejects a file that exceeds maxSize with a plain-language message', async () => {

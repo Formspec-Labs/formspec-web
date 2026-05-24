@@ -29,6 +29,14 @@ export const ATTACHMENT_DEFERRED_CAPABILITY_COPY =
 
 const ATTACHMENT_UPLOAD_FAILURE_COPY = 'We could not upload your file. Try again.';
 
+/**
+ * L-2: tab-killer guard. 25 MiB is large enough for typical attachment use
+ * (passport scans, lease documents, multi-page PDFs) and small enough that an
+ * accidental 10 GB drop won't OOM the browser tab. Adopters override per-field
+ * via `props.maxSize` (bytes). Documented in docs/ports/attachment-store.md.
+ */
+export const ATTACHMENT_DEFAULT_MAX_SIZE_BYTES = 25 * 1024 * 1024;
+
 type RowStatus =
   | { kind: 'uploading'; key: string; filename: string }
   | { kind: 'failed'; key: string; filename: string; message: string };
@@ -57,7 +65,10 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const accept = (node.props?.accept as string | undefined) ?? undefined;
   const multiple = node.props?.multiple === true;
   const dragDrop = node.props?.dragDrop !== false;
-  const maxSize = typeof node.props?.maxSize === 'number' ? node.props.maxSize : undefined;
+  // L-2: default tab-killer guard. Adopters override per-field via props.maxSize.
+  const maxSize = typeof node.props?.maxSize === 'number'
+    ? node.props.maxSize
+    : ATTACHMENT_DEFAULT_MAX_SIZE_BYTES;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<RowStatus[]>([]);
@@ -87,9 +98,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const handleFiles = useCallback(
     async (files: File[]) => {
       if (files.length === 0) return;
-      const sizeViolation = maxSize != null
-        ? files.find((file) => file.size > maxSize)
-        : undefined;
+      const sizeViolation = files.find((file) => file.size > maxSize);
       if (sizeViolation) {
         const key = `size-${Date.now()}-${sizeViolation.name}`;
         setPending((prev) => [
@@ -98,10 +107,32 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
             kind: 'failed',
             key,
             filename: sizeViolation.name,
-            message: `"${sizeViolation.name}" is larger than the upload limit of ${formatSize(maxSize ?? 0)}.`,
+            message: `"${sizeViolation.name}" is larger than the upload limit of ${formatSize(maxSize)}.`,
           },
         ]);
         return;
+      }
+
+      // L-2: client-side accept enforcement. If the field declares accept and
+      // a dropped/picked file doesn't match by extension or MIME, reject with
+      // a typed AttachmentUploadError so the code-keyed copy renders.
+      if (accept) {
+        const mimeViolation = files.find((file) => !matchesAccept(file, accept));
+        if (mimeViolation) {
+          const key = `mime-${Date.now()}-${mimeViolation.name}`;
+          setPending((prev) => [
+            ...prev,
+            {
+              kind: 'failed',
+              key,
+              filename: mimeViolation.name,
+              message: failureMessage(
+                new AttachmentUploadError('File type not accepted', { code: 'mime-rejected' }),
+              ),
+            },
+          ]);
+          return;
+        }
       }
 
       const incoming = multiple ? files : files.slice(0, 1);
@@ -146,7 +177,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       ]);
       writeBack(nextRefs);
     },
-    [attachmentStore, maxSize, multiple, writeBack],
+    [attachmentStore, accept, maxSize, multiple, writeBack],
   );
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
@@ -183,7 +214,6 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     // respondent — swallow + log.
     if (typeof attachmentStore.delete === 'function') {
       void attachmentStore.delete(uri).catch((err: unknown) => {
-        // eslint-disable-next-line no-console
         console.debug('AttachmentStore.delete failed (non-blocking)', err);
       });
     }
@@ -351,4 +381,35 @@ function failureMessage(reason: unknown): string {
     return ATTACHMENT_UPLOAD_FAILURE_COPY_BY_CODE[reason.code] ?? ATTACHMENT_UPLOAD_FAILURE_COPY;
   }
   return ATTACHMENT_UPLOAD_FAILURE_COPY;
+}
+
+/**
+ * Mirrors the HTML5 `<input accept>` matching rules adopters expect:
+ * - `.ext` matches by file extension (case-insensitive).
+ * - `mime/type` matches the exact File.type.
+ * - `mime/*` matches any MIME with that prefix (e.g., `image/*`).
+ * - Empty or missing accept matches everything (caller guards on `accept`
+ *   being truthy before calling).
+ */
+function matchesAccept(file: File, accept: string): boolean {
+  const tokens = accept
+    .split(',')
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean);
+  if (tokens.length === 0) return true;
+  const lowerName = file.name.toLowerCase();
+  const lowerType = (file.type || '').toLowerCase();
+  for (const token of tokens) {
+    if (token.startsWith('.')) {
+      if (lowerName.endsWith(token)) return true;
+      continue;
+    }
+    if (token.endsWith('/*')) {
+      const prefix = token.slice(0, token.length - 1); // keep trailing slash
+      if (lowerType.startsWith(prefix)) return true;
+      continue;
+    }
+    if (lowerType === token) return true;
+  }
+  return false;
 }

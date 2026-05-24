@@ -74,6 +74,24 @@ The OSS reference deployment declares `fileUpload: 'unavailable'` and wires
 factories (`/status`, `/obligations`, `/documents`) declare `unavailable`
 uniformly — those surfaces do not accept uploads.
 
+## Field-component guardrails (`<FormspecWebAttachmentControl>`)
+
+The respondent renderer applies two adopter-overridable guardrails on the
+file picker / drag-drop surface before bytes reach the AttachmentStore:
+
+- **`maxSize` (bytes)** — defaults to `25 * 1024 * 1024` (25 MiB). Large
+  enough for typical attachment use (passport scans, lease documents,
+  multi-page PDFs), small enough that an accidental 10 GB drop won't OOM
+  the browser tab. Adopters override per-field via the layout node's
+  `props.maxSize`.
+- **`accept` (string)** — same syntax as the HTML5 `<input accept>`
+  attribute (comma-separated list of file extensions like `.pdf`, exact
+  MIME types like `application/pdf`, or wildcards like `image/*`). When
+  set, the renderer rejects non-matching files client-side with a typed
+  `AttachmentUploadError({ code: 'mime-rejected' })`. Server-side
+  enforcement (the only enforcement that matters for security) remains the
+  adopter's responsibility — this is UX, not policy.
+
 ## Form-policy gate
 
 The default + stub composition's `getFormRuntimePolicy` walks the loaded
