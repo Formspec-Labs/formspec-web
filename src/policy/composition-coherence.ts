@@ -41,7 +41,8 @@ export type CompositionIncoherenceKind =
   | 'demo-stub-adapter-in-production-composition'
   | 'demo-stub-adapter-without-demo-stub-declaration'
   | 'demo-stub-declaration-without-demo-stub-adapter'
-  | 'available-declaration-paired-with-marked-adapter';
+  | 'available-declaration-paired-with-marked-adapter'
+  | 'shared-slot-declaration-conflict';
 
 export class CompositionIncoherenceError extends Error {
   constructor(
@@ -74,12 +75,37 @@ export function freezeComposition<T extends CompositionLike>(composition: T): T 
 }
 
 export function assertCompositionCoherence(composition: CompositionLike): void {
+  // Group keys by the port slot they map to. FW-0056 introduced shared slots
+  // (respondentPlace + documentPresentation both → respondentPlaceSource);
+  // every key on a shared slot declares independently. A key declaring
+  // 'unavailable' opts out of the slot (the consumer short-circuits before
+  // reading the adapter), so the adapter's marker only needs to satisfy the
+  // keys that DO consume it.
+  const portToKeys = new Map<string, readonly RuntimeFeatureKey[]>();
+  for (const featureKey of RUNTIME_FEATURE_KEYS) {
+    const portName = FEATURE_PORT_MAP[featureKey];
+    const existing = portToKeys.get(portName) ?? [];
+    portToKeys.set(portName, [...existing, featureKey]);
+  }
+
   for (const featureKey of RUNTIME_FEATURE_KEYS) {
     const portName = FEATURE_PORT_MAP[featureKey];
     const adapter = composition[portName];
     const declared = composition.instanceCapabilities[featureKey];
     const adapterIsUnavailable = isUnavailableAdapter(adapter);
     const adapterIsDemoStub = isDemoStubAdapter(adapter);
+    const slotKeys = portToKeys.get(portName) ?? [featureKey];
+    const slotIsShared = slotKeys.length > 1;
+    const slotHasNonUnavailableKey = slotKeys.some(
+      (k) => composition.instanceCapabilities[k] !== 'unavailable',
+    );
+    // On a shared slot, an 'unavailable' declaration means the consumer for
+    // that key short-circuits — the adapter's marker only needs to satisfy the
+    // sibling key(s) that DO consume the slot. Skip per-key adapter checks for
+    // this key when at least one sibling declaration keeps the slot live.
+    if (slotIsShared && declared === 'unavailable' && slotHasNonUnavailableKey) {
+      continue;
+    }
 
     if (adapterIsUnavailable && declared !== 'unavailable') {
       throw new CompositionIncoherenceError(
@@ -107,23 +133,68 @@ export function assertCompositionCoherence(composition: CompositionLike): void {
       throw new CompositionIncoherenceError(
         featureKey,
         'demo-stub-adapter-without-demo-stub-declaration',
-        `Adapter for "${featureKey}" (port "${portName}") is marked demo-stub, but instanceCapabilities declared "${declared}". The composition must declare "demo-stub".`,
+        sharedSlotMessage(
+          slotKeys,
+          slotIsShared,
+          composition,
+          portName,
+          `Adapter for "${featureKey}" (port "${portName}") is marked demo-stub, but instanceCapabilities declared "${declared}". The composition must declare "demo-stub".`,
+        ),
       );
     }
     if (declared === 'demo-stub' && !adapterIsDemoStub) {
       throw new CompositionIncoherenceError(
         featureKey,
         'demo-stub-declaration-without-demo-stub-adapter',
-        `instanceCapabilities declares "${featureKey}" demo-stub, but the wired adapter at port "${portName}" carries no DEMO_STUB_ADAPTER marker. Wire a stub* adapter or change the declaration.`,
+        sharedSlotMessage(
+          slotKeys,
+          slotIsShared,
+          composition,
+          portName,
+          `instanceCapabilities declares "${featureKey}" demo-stub, but the wired adapter at port "${portName}" carries no DEMO_STUB_ADAPTER marker. Wire a stub* adapter or change the declaration.`,
+        ),
       );
     }
 
     if (declared === 'available' && (adapterIsUnavailable || adapterIsDemoStub)) {
       throw new CompositionIncoherenceError(
         featureKey,
-        'available-declaration-paired-with-marked-adapter',
-        `instanceCapabilities declares "${featureKey}" available, but the wired adapter at port "${portName}" carries a provenance marker (${adapterIsUnavailable ? 'unavailable' : 'demo-stub'}). Wire a real production adapter or change the declaration.`,
+        slotIsShared
+          ? 'shared-slot-declaration-conflict'
+          : 'available-declaration-paired-with-marked-adapter',
+        sharedSlotMessage(
+          slotKeys,
+          slotIsShared,
+          composition,
+          portName,
+          `instanceCapabilities declares "${featureKey}" available, but the wired adapter at port "${portName}" carries a provenance marker (${adapterIsUnavailable ? 'unavailable' : 'demo-stub'}). Wire a real production adapter or change the declaration.`,
+        ),
       );
     }
   }
+}
+
+/**
+ * NIT-1 friendly-error UX: on a shared slot, name the conflict in
+ * adopter-readable terms — list the keys, their declarations, the slot, and
+ * the SC-4 transitional-clearance trigger so adopters who land a real wallet
+ * but no VP stack land in the right doc instead of staring at a per-key
+ * provenance error.
+ */
+function sharedSlotMessage(
+  slotKeys: readonly RuntimeFeatureKey[],
+  slotIsShared: boolean,
+  composition: CompositionLike,
+  portName: string,
+  baseMessage: string,
+): string {
+  if (!slotIsShared) return baseMessage;
+  const declarations = slotKeys
+    .map((k) => `${k}=${composition.instanceCapabilities[k]}`)
+    .join(', ');
+  return [
+    baseMessage,
+    `Port "${portName}" is shared between [${slotKeys.join(', ')}]; their declarations [${declarations}] together require a different adapter marker than the one wired.`,
+    'If you are an adopter with a real wallet but no Verifiable Presentation stack, this is the SC-4 transitional-clearance trigger — see thoughts/specs/2026-05-22-upstream-extension-queue.md SC-4.',
+  ].join(' ');
 }

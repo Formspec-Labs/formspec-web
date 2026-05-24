@@ -24,6 +24,7 @@ import {
   isUnavailableAdapter,
   markUnavailableAdapter,
 } from '../../src/policy/sentinel.ts';
+import { stubRespondentPlaceSource } from '../../src/adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../../src/adapters/stub/status-reader.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
@@ -158,5 +159,116 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
     (composition.instanceCapabilities as Record<string, unknown>).status = 'available';
     expect(() => assertCompositionCoherence(composition)).not.toThrow();
     expect(isUnavailableAdapter(composition.statusReader)).toBe(false);
+  });
+});
+
+// FW-0056 arch-review MED-1: when two RuntimeFeatureKeys map to the same
+// port slot (today: respondentPlace + documentPresentation both → the
+// respondentPlaceSource slot, per feature-port-map.ts), each key's
+// declaration is independent. A key declaring 'unavailable' opts out of the
+// slot — the consumer short-circuits before reading the adapter — so the
+// adapter's marker only needs to satisfy the keys that DO consume it. The
+// adapter must satisfy the union of non-unavailable declarations; if every
+// declaration on the shared slot is 'unavailable', the adapter itself must
+// be unavailable-marked.
+describe('Composition coherence — shared-slot independent declarations (FW-0056 MED-1)', () => {
+  function sharedSlotCompositionLike(
+    overrides: Pick<CompositionLike, 'mode' | 'instanceCapabilities' | 'respondentPlaceSource'>,
+  ): CompositionLike {
+    return {
+      statusReader: unavailableStatusReader(),
+      ...overrides,
+    };
+  }
+
+  it('accepts respondentPlace=demo-stub + documentPresentation=unavailable on a demo-stub-marked place adapter (the post-MED-1 demo stance)', () => {
+    const composition = sharedSlotCompositionLike({
+      mode: 'demo',
+      instanceCapabilities: {
+        respondentPlace: 'demo-stub',
+        status: 'unavailable',
+        documentPresentation: 'unavailable',
+      },
+      respondentPlaceSource: stubRespondentPlaceSource(),
+    });
+    expect(() => assertCompositionCoherence(composition)).not.toThrow();
+  });
+
+  it('accepts respondentPlace=unavailable + documentPresentation=unavailable on the unavailable place adapter (production posture)', () => {
+    const composition = sharedSlotCompositionLike({
+      mode: 'production',
+      instanceCapabilities: {
+        respondentPlace: 'unavailable',
+        status: 'unavailable',
+        documentPresentation: 'unavailable',
+      },
+      respondentPlaceSource: unavailableRespondentPlaceSource(),
+    });
+    expect(() => assertCompositionCoherence(composition)).not.toThrow();
+  });
+
+  it('accepts respondentPlace=demo-stub + documentPresentation=demo-stub on the demo-stub-marked place adapter (today\'s demo stance pre-MED-1)', () => {
+    const composition = sharedSlotCompositionLike({
+      mode: 'demo',
+      instanceCapabilities: {
+        respondentPlace: 'demo-stub',
+        status: 'unavailable',
+        documentPresentation: 'demo-stub',
+      },
+      respondentPlaceSource: stubRespondentPlaceSource(),
+    });
+    expect(() => assertCompositionCoherence(composition)).not.toThrow();
+  });
+
+  it('accepts respondentPlace=available + documentPresentation=unavailable on an unmarked place adapter (the wallet-but-no-VP scenario the design promised would trigger SC-4)', () => {
+    const realPlaceAdapter = { readPlace: async () => ({}) as never };
+    const composition = sharedSlotCompositionLike({
+      mode: 'production',
+      instanceCapabilities: {
+        respondentPlace: 'available',
+        status: 'unavailable',
+        documentPresentation: 'unavailable',
+      },
+      respondentPlaceSource: realPlaceAdapter as never,
+    });
+    expect(() => assertCompositionCoherence(composition)).not.toThrow();
+  });
+
+  it('rejects respondentPlace=demo-stub + documentPresentation=available on a demo-stub-marked place adapter (claiming production VP availability while substrate is demo-only)', () => {
+    const composition = sharedSlotCompositionLike({
+      mode: 'demo',
+      instanceCapabilities: {
+        respondentPlace: 'demo-stub',
+        status: 'unavailable',
+        documentPresentation: 'available',
+      },
+      respondentPlaceSource: stubRespondentPlaceSource(),
+    });
+    expect(() => assertCompositionCoherence(composition)).toThrow(
+      /documentPresentation|available|demo-stub/,
+    );
+  });
+
+  it('names the shared slot, both keys, and the SC-4 transitional clearance trigger when the union fails (NIT-1 friendly-error UX)', () => {
+    const composition = sharedSlotCompositionLike({
+      mode: 'demo',
+      instanceCapabilities: {
+        respondentPlace: 'demo-stub',
+        status: 'unavailable',
+        documentPresentation: 'available',
+      },
+      respondentPlaceSource: stubRespondentPlaceSource(),
+    });
+    try {
+      assertCompositionCoherence(composition);
+      throw new Error('expected assertCompositionCoherence to throw');
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toMatch(/respondentPlaceSource/);
+      expect(message).toMatch(/respondentPlace/);
+      expect(message).toMatch(/documentPresentation/);
+      expect(message).toMatch(/SC-4/);
+      expect(message).toMatch(/upstream-extension-queue/);
+    }
   });
 });
