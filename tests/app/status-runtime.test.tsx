@@ -379,6 +379,97 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
   });
 });
 
+/**
+ * Lifecycle badge coverage — `suspended` and `migrating` are transient WOS
+ * lifecycle states that previously fell to the default `in-review` stage
+ * (independent arch-review N-2). The badge surface renders honest
+ * plain-language copy and the pipeline-stage strip keeps showing the stage
+ * the case was at BEFORE the transient state.
+ */
+describe('StatusRuntime lifecycle badge (independent arch-review N-2)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('lifecycle-changed → suspended renders the Paused badge and keeps prior stage on the strip', async () => {
+    const composition = createStubComposition();
+    const detail: ApplicantCaseDetail = {
+      ...demoApplicantCaseDetail(),
+      statusTimeline: [
+        { event: 'case-created', occurredAt: '2026-05-23T12:00:00.000Z' },
+        { event: 'applicant-task-submitted', occurredAt: '2026-05-24T12:00:00.000Z' },
+        {
+          event: 'lifecycle-changed',
+          occurredAt: '2026-05-25T12:00:00.000Z',
+          newLifecycleState: 'suspended',
+        },
+      ],
+    };
+    patchStatusReader(composition, DEMO_URN, detail);
+    render(
+      <StatusRuntime
+        composition={composition}
+        config={departmentAppProfile}
+        route={{ caseUrn: DEMO_URN }}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('list', { name: /Application stages/i }),
+      ).not.toBeNull();
+    });
+    // Badge appears with honest "Paused" copy.
+    expect(screen.getByText(/^Paused\.$/)).toBeDefined();
+    // Vocabulary firewall: raw WOS token MUST NOT leak into user-visible prose.
+    expect(screen.queryByText(/suspended/i)).toBeNull();
+    // Pipeline stage stays at In review (from applicant-task-submitted),
+    // not back at Received.
+    const strip = screen.getByRole('list', { name: /Application stages/i });
+    const cells = within(strip).getAllByRole('listitem');
+    const current = cells.find((cell) => cell.getAttribute('aria-current') === 'step');
+    expect(current?.textContent).toBe('In review');
+  });
+
+  it('lifecycle-changed → migrating renders the Updating badge and keeps prior stage on the strip', async () => {
+    const composition = createStubComposition();
+    const detail: ApplicantCaseDetail = {
+      ...demoApplicantCaseDetail(),
+      statusTimeline: [
+        { event: 'case-created', occurredAt: '2026-05-23T12:00:00.000Z' },
+        { event: 'applicant-task-submitted', occurredAt: '2026-05-24T12:00:00.000Z' },
+        {
+          event: 'lifecycle-changed',
+          occurredAt: '2026-05-25T12:00:00.000Z',
+          newLifecycleState: 'migrating',
+        },
+      ],
+    };
+    patchStatusReader(composition, DEMO_URN, detail);
+    render(
+      <StatusRuntime
+        composition={composition}
+        config={departmentAppProfile}
+        route={{ caseUrn: DEMO_URN }}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('list', { name: /Application stages/i }),
+      ).not.toBeNull();
+    });
+    // Badge appears with honest "Updating" copy.
+    expect(screen.getByText(/^Updating\.$/)).toBeDefined();
+    // Vocabulary firewall: raw WOS token MUST NOT leak into user-visible prose.
+    expect(screen.queryByText(/migrating/i)).toBeNull();
+    // Pipeline stage stays at In review, not Received.
+    const strip = screen.getByRole('list', { name: /Application stages/i });
+    const cells = within(strip).getAllByRole('listitem');
+    const current = cells.find((cell) => cell.getAttribute('aria-current') === 'step');
+    expect(current?.textContent).toBe('In review');
+  });
+});
+
 describe('StatusRuntime policy-error path (code-review F-2)', () => {
   afterEach(() => {
     cleanup();

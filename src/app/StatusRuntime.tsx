@@ -198,10 +198,13 @@ function ReducedStatus({ resource }: { resource: ApplicantStatusResource }) {
 
 function ReadyStatus({ detail }: { detail: ApplicantCaseDetail }) {
   const currentStage = currentStageFromTimeline(detail.statusTimeline);
+  const lifecycleBadge = lifecycleBadgeFromTimeline(detail.statusTimeline);
   return (
     <section className="status-surface" aria-labelledby="status-title">
       <h1 id="status-title">Your application status</h1>
       <p className="status-surface__subtitle">{detail.summary.title ?? 'Application'}</p>
+
+      {lifecycleBadge ? <LifecycleBadge badge={lifecycleBadge} /> : null}
 
       <StageStrip current={currentStage} />
 
@@ -212,6 +215,61 @@ function ReadyStatus({ detail }: { detail: ApplicantCaseDetail }) {
       {detail.aiInvolvement ? <AiDisclosure involvement={detail.aiInvolvement} /> : null}
     </section>
   );
+}
+
+/**
+ * Lifecycle badge shown above the 5-stage strip when the case is in a
+ * transient lifecycle state that is orthogonal to pipeline progress.
+ *
+ * Per WOS kernel spec §"Lifecycle / Status" enum, `suspended` and
+ * `migrating` are status values that can occur at any pipeline point —
+ * they are NOT additional pipeline stages. The strip keeps showing the
+ * stage the case was in (e.g. `in-review`); the badge tells the
+ * respondent the case is currently paused or being updated.
+ *
+ * Vocabulary firewall: WOS internal tokens `suspended` / `migrating`
+ * NEVER leak into user-visible prose. Honest plain-language equivalents:
+ * - `suspended` → "Paused" (matches the WOS semantic that no events are
+ *   processed while suspended — work has stopped pending an external
+ *   condition).
+ * - `migrating` → "Updating" (matches the WOS semantic that the case is
+ *   being moved to a new workflow definition version — from the
+ *   respondent's point of view the workflow itself is being updated
+ *   beneath their case).
+ *
+ * Filed from FW-0039 closeout independent architecture review N-2 —
+ * before this, `suspended` and `migrating` lifecycle entries fell to the
+ * default `in-review` mapping and the respondent was told their paused
+ * case was "in review," which is dishonest.
+ */
+type LifecycleBadgeKind = 'paused' | 'updating';
+
+function LifecycleBadge({ badge }: { badge: LifecycleBadgeKind }) {
+  const label = badge === 'paused' ? 'Paused' : 'Updating';
+  const detail =
+    badge === 'paused'
+      ? 'Work on this application has been paused. You will see progress again once it resumes.'
+      : 'This application is being updated to a new version of the workflow. Progress will continue once the update finishes.';
+  return (
+    <p className="status-lifecycle-badge" role="status">
+      <strong>{label}.</strong> {detail}
+    </p>
+  );
+}
+
+function lifecycleBadgeFromTimeline(
+  timeline: readonly ApplicantStatusTimelineEntry[],
+): LifecycleBadgeKind | undefined {
+  const latest = timeline.at(-1);
+  if (!latest || latest.event !== 'lifecycle-changed') return undefined;
+  switch (latest.newLifecycleState) {
+    case 'suspended':
+      return 'paused';
+    case 'migrating':
+      return 'updating';
+    default:
+      return undefined;
+  }
 }
 
 type StageKey = 'received' | 'in-review' | 'decision-drafted' | 'issued' | 'closed';
@@ -341,9 +399,24 @@ function isApplicantCaseDetail(resource: ApplicantStatusResource): resource is A
 function currentStageFromTimeline(
   timeline: readonly ApplicantStatusTimelineEntry[],
 ): StageKey {
-  const latest = timeline.at(-1);
-  if (!latest) return 'received';
-  return stageFromEntry(latest);
+  // If the latest entry is a transient lifecycle state (suspended /
+  // migrating) the pipeline-stage strip should still reflect the
+  // pipeline-stage the case was at before the pause — the LifecycleBadge
+  // surface carries the transient-state copy. Walk back to the most recent
+  // non-transient timeline entry; fall through to `received` if none found
+  // (independent arch-review N-2).
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const entry = timeline[i];
+    if (entry === undefined) continue;
+    if (
+      entry.event === 'lifecycle-changed' &&
+      (entry.newLifecycleState === 'suspended' || entry.newLifecycleState === 'migrating')
+    ) {
+      continue;
+    }
+    return stageFromEntry(entry);
+  }
+  return 'received';
 }
 
 /**
