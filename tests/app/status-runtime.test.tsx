@@ -5,6 +5,7 @@ import {
   NO_AGGREGATE_COPY,
   PER_CASE_HEADER,
 } from '../../src/app/StatusRuntime.tsx';
+import { EmptyFormRuntimePolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { demoApplicantCaseDetail } from '../../src/demo/respondent-place.ts';
@@ -191,7 +192,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       composition.orgRuntimePolicy = {
         features: { respondentPlace: 'allowed', status: 'allowed' },
       };
-      composition.formRuntimePolicyExtractor = { extract: () => ({ features: {} }) };
+      composition.formRuntimePolicyExtractor = new EmptyFormRuntimePolicyExtractor();
       const spy = vi.spyOn(composition.statusReader, 'readStatus');
       render(
         <StatusRuntime

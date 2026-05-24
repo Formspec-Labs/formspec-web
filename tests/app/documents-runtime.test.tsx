@@ -12,6 +12,7 @@ import {
   PARITY_FIXTURE_DOCUMENT,
   renderParityFixture,
 } from './documents-view.test.tsx';
+import { EmptyFormRuntimePolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
@@ -342,7 +343,7 @@ describe('DocumentsRuntime (FW-0056 slice 1)', () => {
             documentPresentation: 'allowed',
           },
         },
-        formRuntimePolicyExtractor: { extract: () => ({ features: {} }) },
+        formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
       };
       const readSpy = vi.spyOn(productionComposition.respondentPlaceSource, 'readPlace');
 
@@ -580,7 +581,7 @@ function productionCompositionWithIdentity(
         fileUpload: 'allowed',
       },
     },
-    formRuntimePolicyExtractor: { extract: () => ({ features: {} }) },
+    formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
     identityProvider,
     respondentPlaceSource: {
       readPlace: vi.fn(async () => snapshotWith({ documents })),

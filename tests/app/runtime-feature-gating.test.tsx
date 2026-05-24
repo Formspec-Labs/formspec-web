@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
+import { EmptyFormRuntimePolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
 
@@ -18,7 +19,7 @@ describe('seeded feature gating on ResolvedRuntimeProfile (Codex Finding 2)', ()
     (composition as { respondentPlaceSource: unknown }).respondentPlaceSource =
       unavailableRespondentPlaceSource();
     (composition as { statusReader: unknown }).statusReader = unavailableStatusReader();
-    composition.formRuntimePolicyExtractor = { extract: () => ({ features: {} }) };
+    composition.formRuntimePolicyExtractor = new EmptyFormRuntimePolicyExtractor();
     composition.orgRuntimePolicy = { features: {} };
 
     const readPlaceSpy = vi.spyOn(composition.respondentPlaceSource, 'readPlace');
