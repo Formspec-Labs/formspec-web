@@ -62,3 +62,12 @@ export type {
 } from './attachment-store.ts';
 export { AttachmentUploadError } from './attachment-store.ts';
 export type { FormRuntimePolicyExtractor } from './form-runtime-policy-extractor.ts';
+export type {
+  RespondentHistorySource,
+  HistoryQuery,
+  HistorySnapshot,
+  HistoryEntry,
+  HistoryEntryKind,
+  HistoryIssuerRef,
+  HistoryDefinitionRef,
+} from './respondent-history-source.ts';

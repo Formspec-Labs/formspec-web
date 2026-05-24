@@ -18,6 +18,14 @@
  *     dataType === 'attachment'); FW-0066 trigger pulse #2 for the
  *     FormRuntimePolicyExtractor port promotion.
  *
+ * Extended at FW-0057 slice 1 (cross-issuer respondent history):
+ *   - crossIssuerHistory → gated against the new RespondentHistorySource
+ *     port (1:1 mapping; no transitional slot-sharing, port + key ship
+ *     together). Fifth narrowed surface (`/history`) consumes it via the
+ *     route-boundary synthesis pattern per ADR-0011 §"Non-form surface
+ *     synthesis" addendum. Production posture is `unavailable` until XS-2
+ *     (multi-issuer token bag) lands; demo posture is `demo-stub`.
+ *
  * Extension protocol: every future feature ADR adds its key here and to the
  * Composition's InstanceCapabilities declaration. No string-typed feature keys
  * outside this set — the resolver rejects unknown keys with
@@ -39,6 +47,7 @@ export const RUNTIME_FEATURE_KEYS = [
   'status',
   'documentPresentation',
   'fileUpload',
+  'crossIssuerHistory',
 ] as const;
 
 export type RuntimeFeatureKey = (typeof RUNTIME_FEATURE_KEYS)[number];

@@ -8,15 +8,17 @@ import {
 } from './feature-keys.ts';
 
 describe('RUNTIME_FEATURE_KEYS', () => {
-  it('extends the seeded pair with documentPresentation + fileUpload (append-only)', () => {
+  it('extends the seeded pair with documentPresentation + fileUpload + crossIssuerHistory (append-only)', () => {
     // Append-only: FW-0056 adds documentPresentation at the tail; FW-0033
-    // adds fileUpload after it. Re-sorting alphabetically would silently
-    // change the resolver-loop iteration order; new feature ADRs append.
+    // adds fileUpload after it; FW-0057 adds crossIssuerHistory after that.
+    // Re-sorting alphabetically would silently change the resolver-loop
+    // iteration order; new feature ADRs append.
     expect([...RUNTIME_FEATURE_KEYS]).toEqual([
       'respondentPlace',
       'status',
       'documentPresentation',
       'fileUpload',
+      'crossIssuerHistory',
     ]);
   });
 
@@ -25,6 +27,7 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isRuntimeFeatureKey(candidate)).toBe(true);
     expect(isRuntimeFeatureKey('documentPresentation')).toBe(true);
     expect(isRuntimeFeatureKey('fileUpload')).toBe(true);
+    expect(isRuntimeFeatureKey('crossIssuerHistory')).toBe(true);
     expect(isRuntimeFeatureKey('payment')).toBe(false);
   });
 
@@ -39,5 +42,6 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isLocaleConditionalFeatureKey('respondentPlace')).toBe(false);
     expect(isLocaleConditionalFeatureKey('documentPresentation')).toBe(false);
     expect(isLocaleConditionalFeatureKey('fileUpload')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('crossIssuerHistory')).toBe(false);
   });
 });
