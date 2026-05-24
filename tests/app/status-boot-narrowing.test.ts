@@ -143,4 +143,22 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     // The full-app factory in production mode constructs the HTTP adapters.
     expect(spies.httpDef).toHaveBeenCalled();
   });
+
+  it('chooseComposition picks the obligations-route factory when the URL is /obligations (FW-0055)', async () => {
+    const composition = chooseComposition({
+      href: 'http://localhost/obligations',
+      config: productionConfig(),
+    });
+    // The obligations-route factory does NOT construct HTTP definition / draft
+    // / submit adapters — those ports are noop because the surface never
+    // reads them.
+    await expect(composition.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    expect(spies.httpDef).not.toHaveBeenCalled();
+    expect(spies.httpDraft).not.toHaveBeenCalled();
+    expect(spies.httpSubmit).not.toHaveBeenCalled();
+    // Anonymous session bridge IS constructed because the obligations surface
+    // is identity-bound — the identity provider wiring path mirrors the
+    // full-app factory.
+    expect(spies.anonSession).toHaveBeenCalled();
+  });
 });

@@ -46,6 +46,21 @@ describe('App route selection (FW-0039 slice 1)', () => {
       ).not.toBeNull();
     });
   });
+
+  it('routes /obligations to the obligations runtime (FW-0055 slice 1)', async () => {
+    setHref('http://localhost/obligations');
+    const composition = createStubComposition();
+    render(
+      <CompositionProvider value={composition}>
+        <App config={departmentAppProfile} />
+      </CompositionProvider>,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('heading', { name: /What you owe/i, level: 1 }),
+      ).not.toBeNull();
+    });
+  });
 });
 
 function setHref(href: string): void {

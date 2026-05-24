@@ -4,6 +4,7 @@ import { demoSampleForm } from '../demo/index.ts';
 import type { Composition } from '../composition/types.ts';
 import { useComposition } from './hooks/useComposition.ts';
 import { parseStatusRoute, type StatusRouteParams } from './status-route.ts';
+import { parseObligationsRoute, type ObligationsRouteParams } from './obligations-route.ts';
 
 interface AppProps {
   config: FormspecWebConfig;
@@ -20,6 +21,12 @@ interface StatusRuntimeProps {
   route: StatusRouteParams;
 }
 
+interface ObligationsRuntimeProps {
+  composition: Composition;
+  config: FormspecWebConfig;
+  route: ObligationsRouteParams;
+}
+
 type RuntimeState =
   | { status: 'loading' }
   | {
@@ -32,6 +39,12 @@ type RuntimeState =
       route: 'status';
       Runtime: ComponentType<StatusRuntimeProps>;
       params: StatusRouteParams;
+    }
+  | {
+      status: 'ready';
+      route: 'obligations';
+      Runtime: ComponentType<ObligationsRuntimeProps>;
+      params: ObligationsRouteParams;
     }
   | { status: 'error'; error: unknown };
 
@@ -47,6 +60,7 @@ export function App({ config }: AppProps) {
     let cancelled = false;
     setRuntimeState({ status: 'loading' });
     const statusParams = parseStatusRoute(window.location.href);
+    const obligationsParams = statusParams ? null : parseObligationsRoute(window.location.href);
     const loader = statusParams
       ? import('./StatusRuntime.tsx').then((module) => ({
           status: 'ready' as const,
@@ -54,11 +68,18 @@ export function App({ config }: AppProps) {
           Runtime: module.StatusRuntime,
           params: statusParams,
         }))
-      : import('./RespondentRuntime.tsx').then((module) => ({
-          status: 'ready' as const,
-          route: 'form' as const,
-          Runtime: module.RespondentRuntime,
-        }));
+      : obligationsParams
+        ? import('./ObligationsRuntime.tsx').then((module) => ({
+            status: 'ready' as const,
+            route: 'obligations' as const,
+            Runtime: module.ObligationsRuntime,
+            params: obligationsParams,
+          }))
+        : import('./RespondentRuntime.tsx').then((module) => ({
+            status: 'ready' as const,
+            route: 'form' as const,
+            Runtime: module.RespondentRuntime,
+          }));
     void loader
       .then((next) => {
         if (!cancelled) {
@@ -88,6 +109,8 @@ export function App({ config }: AppProps) {
           {runtimeState.status === 'ready' && runtimeState.route === 'form' ? (
             <runtimeState.Runtime composition={composition} config={config} />
           ) : runtimeState.status === 'ready' && runtimeState.route === 'status' ? (
+            <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
+          ) : runtimeState.status === 'ready' && runtimeState.route === 'obligations' ? (
             <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
           ) : (
             <>

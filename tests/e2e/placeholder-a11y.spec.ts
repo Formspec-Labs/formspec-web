@@ -102,6 +102,20 @@ test('direct /status?case=urn:wos:case_demo_0001 renders the demo case (FW-0039 
   expect(accessibilityScanResults.violations).toEqual([]);
 });
 
+test('direct /obligations renders the dashboard with cross-sender framing (FW-0055 slice 1)', async ({ page }) => {
+  await page.goto('/obligations');
+  await expect(page.getByRole('heading', { name: 'What you owe', level: 1 })).toBeVisible();
+  await expect(
+    page.getByText(/across \d+ senders?\./),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Sender mute, batch, escalate, calendar export, and notification-budget visibility are not yet available on this site.'),
+  ).toBeVisible();
+
+  const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScanResults.violations).toEqual([]);
+});
+
 test('mobile viewport keeps primary controls at tap-target size', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
