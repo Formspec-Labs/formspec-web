@@ -5,6 +5,7 @@ export {
   defineFormRuntimePolicyExtractorConformance,
   defineIdentityProviderConformance,
   defineNotificationDeliveryConformance,
+  defineRespondentHistorySourceConformance,
   defineRespondentPlaceSourceConformance,
   defineStatusReaderConformance,
   defineSubmitTransportConformance,

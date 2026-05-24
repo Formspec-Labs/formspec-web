@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { unavailableAttachmentStore } from '../../src/adapters/unavailable/attachment-store.ts';
+import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
 import { isUnavailableAdapter, UNAVAILABLE_ADAPTER } from '../../src/policy/sentinel.ts';
@@ -26,6 +27,13 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
     expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('fileUpload');
   });
 
+  it('unavailableRespondentHistorySource is marked with featureKey "crossIssuerHistory"', () => {
+    const adapter = unavailableRespondentHistorySource();
+    expect(isUnavailableAdapter(adapter)).toBe(true);
+    if (!isUnavailableAdapter(adapter)) throw new Error('unreachable');
+    expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('crossIssuerHistory');
+  });
+
   it('marked adapters still throw on call (sentinel does not change runtime behavior)', async () => {
     await expect(unavailableRespondentPlaceSource().readPlace({} as never)).rejects.toThrow();
     await expect(
@@ -34,5 +42,6 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
     await expect(
       unavailableAttachmentStore().upload(new Blob(['x']), { filename: 'x', mimeType: 'text/plain' }),
     ).rejects.toThrow();
+    await expect(unavailableRespondentHistorySource().readHistory({})).rejects.toThrow();
   });
 });

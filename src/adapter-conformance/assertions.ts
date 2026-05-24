@@ -6,6 +6,7 @@ export {
   isApplicantStatusProjection,
   isRespondentPlaceSnapshot,
 } from '../shared/respondent-place.ts';
+export { isHistorySnapshot } from '../shared/respondent-history.ts';
 
 export const providerNativeIdentityKeys = [
   'acr',

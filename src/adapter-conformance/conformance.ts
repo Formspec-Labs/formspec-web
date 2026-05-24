@@ -9,6 +9,10 @@ import type {
   RespondentPlaceSource,
 } from '../ports/respondent-place-source.ts';
 import type {
+  HistorySnapshot,
+  RespondentHistorySource,
+} from '../ports/respondent-history-source.ts';
+import type {
   ApplicantStatusResource,
   StatusReader,
 } from '../ports/status-reader.ts';
@@ -27,6 +31,7 @@ import {
   isFormResponse,
   isIntakeHandoff,
   isApplicantStatusResource,
+  isHistorySnapshot,
   isRespondentPlaceSnapshot,
   leakedProviderNativeIdentityKeys,
 } from './assertions.ts';
@@ -37,6 +42,7 @@ import {
   sampleAttachmentMetadata,
   sampleFormDefinition,
   sampleFormResponse,
+  sampleHistorySnapshot,
   sampleIntakeHandoff,
   sampleApplicantStatusResource,
   sampleApplicantStatusProjection,
@@ -78,6 +84,11 @@ export interface RespondentPlaceSourceConformanceSubject {
 
 export interface AttachmentStoreConformanceSubject {
   adapter: AttachmentStore;
+}
+
+export interface RespondentHistorySourceConformanceSubject {
+  adapter: RespondentHistorySource;
+  replaceSnapshot(snapshot: HistorySnapshot): void | Promise<void>;
 }
 
 export interface FormRuntimePolicyExtractorConformanceSubject {
@@ -463,6 +474,95 @@ export function defineRespondentPlaceSourceConformance(
           .toThrow();
       });
     }
+  });
+}
+
+export function defineRespondentHistorySourceConformance(
+  name: string,
+  setup: () => RespondentHistorySourceConformanceSubject,
+): void {
+  describe(name, () => {
+    it('round-trips a HistorySnapshot through readHistory', async () => {
+      const subject = setup();
+      await subject.replaceSnapshot(sampleHistorySnapshot);
+      const found = await subject.adapter.readHistory({ subjectRef: 'respondent:conformance' });
+      expect(isHistorySnapshot(roundTripJson(found))).toBe(true);
+      expect(found).toEqual(sampleHistorySnapshot);
+    });
+
+    it('accepts an empty entries array (well-formed snapshot, no throw)', async () => {
+      const subject = setup();
+      const empty: HistorySnapshot = {
+        $formspecRespondentHistory: '1.0',
+        aggregationMode: 'client-wallet',
+        subjectRef: 'respondent:conformance',
+        entries: [],
+      };
+      await subject.replaceSnapshot(empty);
+      const found = await subject.adapter.readHistory({ subjectRef: 'respondent:conformance' });
+      expect(found.entries).toEqual([]);
+      expect(isHistorySnapshot(roundTripJson(found))).toBe(true);
+    });
+
+    it('rejects entries with a kind outside the closed taxonomy', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleHistorySnapshot,
+        entries: [
+          {
+            ...sampleHistorySnapshot.entries[0],
+            kind: 'archived-record',
+          },
+        ],
+      } as unknown as HistorySnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects.toThrow();
+    });
+
+    it('rejects an aggregationMode outside the closed string-literal set', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleHistorySnapshot,
+        aggregationMode: 'server-cross-tenant',
+      } as unknown as HistorySnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects.toThrow();
+    });
+
+    it('rejects a non-array entries field', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleHistorySnapshot,
+        entries: { id: 'not-an-array' },
+      } as unknown as HistorySnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects.toThrow();
+    });
+
+    it('rejects entries missing required fields', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleHistorySnapshot,
+        entries: [
+          {
+            id: 'missing-fields',
+            kind: 'submission',
+          },
+        ],
+      } as unknown as HistorySnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects.toThrow();
+    });
+
+    it('rejects entries with documentRefs that are not all strings', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleHistorySnapshot,
+        entries: [
+          {
+            ...sampleHistorySnapshot.entries[0],
+            documentRefs: ['valid', 42],
+          },
+        ],
+      } as unknown as HistorySnapshot;
+      await expect(Promise.resolve().then(() => subject.replaceSnapshot(invalid))).rejects.toThrow();
+    });
   });
 }
 

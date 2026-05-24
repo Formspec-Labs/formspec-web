@@ -3,6 +3,7 @@ import type { NotificationMessage } from '../ports/notification-delivery.ts';
 import type {
   ApplicantStatusProjection,
   ApplicantStatusResource,
+  HistorySnapshot,
   RespondentPlaceSnapshot,
 } from '../ports/index.ts';
 import { WOS_APPLICANT_SCHEMA_ID } from '../ports/index.ts';
@@ -160,3 +161,39 @@ export const sampleAttachmentMetadata = {
   filename: 'lease-agreement.pdf',
   mimeType: 'application/pdf',
 } as const;
+
+// FW-0057: cross-issuer history conformance fixture — three entries across
+// two issuers spanning all three closed kinds. Issuer names are display
+// strings (no protocol vocabulary); timestamps span a few days so the
+// round-trip preserves time ordering.
+export const sampleHistorySnapshot: HistorySnapshot = {
+  $formspecRespondentHistory: '1.0',
+  aggregationMode: 'client-wallet',
+  subjectRef: 'respondent:conformance',
+  entries: [
+    {
+      id: 'sample-draft',
+      kind: 'draft',
+      issuer: { name: 'Example Agency A', url: 'https://agency-a.example' },
+      timestamp: '2026-05-22T10:00:00.000Z',
+      title: 'Sample draft',
+    },
+    {
+      id: 'sample-submission',
+      kind: 'submission',
+      issuer: { name: 'Example Agency A', url: 'https://agency-a.example' },
+      timestamp: '2026-05-20T12:00:00.000Z',
+      title: 'Sample submission',
+      applicantStatusRef: 'urn:wos:case_conformance_0001',
+    },
+    {
+      id: 'sample-signed-record',
+      kind: 'signed-record',
+      issuer: { name: 'Example Agency B', url: 'https://agency-b.example' },
+      timestamp: '2026-05-15T09:30:00.000Z',
+      title: 'Sample signed record',
+      receiptRef: 'urn:formspec:receipt:sample-conformance',
+      documentRefs: ['doc-sample-0001'],
+    },
+  ],
+};
