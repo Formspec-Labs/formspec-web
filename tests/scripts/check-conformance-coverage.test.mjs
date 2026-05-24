@@ -287,6 +287,15 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/form-runtime-policy-extractor/conformance.test.ts',
+    suiteText(
+      'FormRuntimePolicyExtractor',
+      [['stub FormRuntimePolicyExtractor conformance', 'stubFormRuntimePolicyExtractor']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -301,6 +310,10 @@ function writeAdapterFiles(root, options) {
     ['src/adapters/stub/respondent-place-source.ts', 'export function stubRespondentPlaceSource() {}'],
     ['src/adapters/stub/status-reader.ts', 'export function stubStatusReader() {}'],
     ['src/adapters/stub/attachment-store.ts', 'export function stubAttachmentStore() {}'],
+    [
+      'src/adapters/stub/form-runtime-policy-extractor.ts',
+      'export function stubFormRuntimePolicyExtractor() {}',
+    ],
     [
       'src/adapters/unavailable/respondent-place-source.ts',
       'export function unavailableRespondentPlaceSource() {}',
@@ -367,6 +380,7 @@ function publicIndex() {
     '  defineRespondentPlaceSourceConformance,',
     '  defineStatusReaderConformance,',
     '  defineAttachmentStoreConformance,',
+    '  defineFormRuntimePolicyExtractorConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }
