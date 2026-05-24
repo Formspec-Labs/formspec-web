@@ -96,7 +96,7 @@ Two implementation tiers under web ADR-0011, both produced by the same `duressAw
 
 **Alternative rejected: long-press / hold-to-sign duration.** Brief candidate #2. Rejected: accessibility-hostile (motor-impairment users can't reliably distinguish hold times), discoverable in source, defeats Kerckhoffs (attacker watches the hold time).
 
-**Alternative rejected: out-of-band only (recovery channel during signing).** Brief candidate #4. Rejected: doesn't work for the canonical scenario 2.3.1 where the respondent is on the abuser's device with no separate channel. Scoped into the trafficking-scenario partial coverage in §2.3.2 but not the primary affordance.
+**Alternative rejected: out-of-band only (recovery channel during signing).** Brief candidate #4. Rejected: doesn't work for the canonical scenario 2.3.1 where the respondent is on the abuser's device with no separate channel. Out-of-band recovery channels are fully deferred to **FW-0030 federated-identity recovery** per §2.3.2 + §8 — they are not a partial-coverage extension of FW-0048; they are a separate row entirely.
 
 **Composition with FW-0031 (passkey-first sign-in and signature binding).** The `dual-passkey` mechanism composes with FW-0031's WebAuthn discipline. WebAuthn protocol does not natively distinguish credentials at the ceremony layer; the duress mark is a **convention on top of WebAuthn**: the issuer's signing-PIN-provisioning step labels each enrolled credential `(normal | duress)` in its server-side credential registry. The ceremony accepts any credential; the dispatcher consults the registry post-ceremony and decides whether to fire the duress event. **No WebAuthn protocol extension required.**
 
@@ -387,7 +387,7 @@ The FW-0061 build is responsible for:
 
 Honest list of what FW-0048 design does NOT resolve:
 
-1. **Severity band selection (Q4 deferral).** Whether the respondent picks the severity band at ceremony time (more agency; more cognitive load under duress) or whether the system picks the band from instance-configured policy (less agency; better predictability). **FW-0059 build's call.** Default in this design: system picks `active-concern` by default; respondent override is post-MVP.
+1. **Severity band selection (§3.4 sub-deferral).** Whether the respondent picks the severity band at ceremony time (more agency; more cognitive load under duress) or whether the system picks the band from instance-configured policy (less agency; better predictability). **FW-0059 build's call.** Default in this design: system picks `active-concern` by default; respondent override is post-MVP.
 2. **Out-of-band recovery channel (scenario 2.3.2 partial coverage).** A second affordance for survivors who cannot operate the coercer's device: a recovery-flow that triggers safety routing without requiring the respondent to fire the in-flow signal. Belongs to **FW-0030 federated-identity recovery** or a separate row; not FW-0048's scope.
 3. **Cool-off windows / secondary confirmation (scenario 2.3.3 deferral).** The elder-coercion-by-misrepresentation scenario class needs a different design (cool-off windows, secondary confirmation, fraud-pattern detection at issuer). Proposed as a separate FW row; **not FW-0048's scope.**
 4. **Jurisdictional admissibility.** Whether a duress-signaled signature is voidable, valid-pending-investigation, or subject to additional procedure varies by jurisdiction. **Legal-counsel work.** FW-0048 produces the artifact; admissibility is the issuer's compliance posture.
