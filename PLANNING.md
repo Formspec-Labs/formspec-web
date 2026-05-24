@@ -566,13 +566,14 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 ### FW-0048 — Coercion-aware signing: research and threat-model row
 
 - **Phase:** Post-MVP (design row)
-- **Status:** open
+- **Status:** in design
 - **Persona:** Signer / Platform
 - **Journey:** [J-027](JOURNEYS.md#j-027--when-im-being-coerced-give-me-a-back-channel-that-doesnt-tip-off-the-coercer)
 - **Done:** A worked threat-model and design output for coercion-aware signing on the high-risk template set — financial powers of attorney, immigration sponsorship, benefits redirection, advance directives, marriage and divorce filings. Names the discreet duress affordance, the routing target, how activation stays invisible.
-- **Blocked on:** queue EXT-5 (`submission.duress-signaled` ledger event with private-sidecar discipline per `trellis-operational-companion.md` §13 Disclosure Manifest) + legal-counsel involvement on evidentiary admissibility.
+- **Progress (2026-05-23):** Design proposal landed at [`thoughts/specs/2026-05-23-fw-0048-coercion-aware-signing-design.md`](thoughts/specs/2026-05-23-fw-0048-coercion-aware-signing-design.md). Q1–Q4 framing decisions, `duressAware` capability tier axes under [web ADR-0011](thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md), per-party sidecar shape satisfying FW-0050 §7.2 delegation (FW-0061 build constraints specified), and the cross-stack dependency chain (EXT-5 payload extension + EXT-18 consumer + new EXT-30 issuer-sidecar `safetyTeamRecipients[]` + new XS-3 cross-stack ADR spanning formspec + WOS + trellis) are PROPOSAL-status pending owner review.
+- **Blocked on:** queue EXT-5 payload-shape ratification + EXT-18 HPKE TS wrapper (queued for FW-0056; reused here) + new EXT-30 issuer-sidecar safety-team recipient registry + XS-3 cross-stack ADR + legal-counsel involvement on evidentiary admissibility (jurisdiction-specific; out of design scope).
 - **Anti-patterns:** AP-014, AP-021.
-- **Note:** The hardest journey in the corpus. The cowardly move is to call it out of scope; the careless move is to ship it without a threat model.
+- **Note:** The hardest journey in the corpus. The cowardly move is to call it out of scope; the careless move is to ship it without a threat model. Design is honestly scoped: optimized for the canonical DV-on-coercer's-device scenario; partial for trafficking; declines elder-coercion-by-misrepresentation (separate row).
 
 ### FW-0049 — Safe-address handling: research and design row
 
@@ -591,8 +592,8 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Persona:** Respondent / Signer / Platform
 - **Journey:** [J-041](JOURNEYS.md#j-041--multi-party-forms-many-respondents-one-submission-load-bearing-for-joint-legal-tax-immigration-custody-and-financial-work)
 - **Done:** Design output for joint-submission flows where each party authenticates independently, holds their own draft, sees only the parts the form's privacy model says they should see, signs their own attestations cryptographically separately.
-- **Progress (2026-05-23):** Design proposal landed at [`thoughts/specs/2026-05-23-fw-0050-multi-party-submission-design.md`](thoughts/specs/2026-05-23-fw-0050-multi-party-submission-design.md). Q1–Q4 framing decisions, the `multiParty` capability tier axis under [web ADR-0011](thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md), and the cross-stack dependency chain (XS-1 → EXT-3 + EXT-N for `parties` block → FW-0061) are PROPOSAL-status pending owner review.
-- **Blocked on:** queue XS-1 (multi-party intake cross-stack ADR spanning formspec + WOS + trellis) + EXT-3 (capacity primitive) + new EXT-N for Definition `parties` block.
+- **Progress (2026-05-23):** Design proposal landed at [`thoughts/specs/2026-05-23-fw-0050-multi-party-submission-design.md`](thoughts/specs/2026-05-23-fw-0050-multi-party-submission-design.md). Q1–Q4 framing decisions, the `multiParty` capability tier axis under [web ADR-0011](thoughts/adr/0011-runtime-feature-resolution-and-policy-gates.md), and the cross-stack dependency chain (XS-1 → EXT-3 + EXT-N for `parties` block → FW-0061) are PROPOSAL-status pending owner review. FW-0048 design (per-party duress sidecar shape per §7.2) landed 2026-05-23 at [`thoughts/specs/2026-05-23-fw-0048-coercion-aware-signing-design.md`](thoughts/specs/2026-05-23-fw-0048-coercion-aware-signing-design.md) — FW-0061 build consumes the FW-0048 §7 per-party shape directly.
+- **Blocked on:** queue XS-1 (multi-party intake cross-stack ADR spanning formspec + WOS + trellis) + EXT-3 (capacity primitive) + new EXT-N for Definition `parties` block. (FW-0048 design no longer blocks; build-time FW-0048→FW-0059 still must land before FW-0061 ships the per-party duress flow.)
 - **Anti-patterns:** AP-002, AP-014.
 
 ### FW-0051 — Bring-your-own-assistant: structure exposure and consent model
@@ -677,7 +678,8 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Persona:** Signer
 - **Journey:** [J-027](JOURNEYS.md#j-027--when-im-being-coerced-give-me-a-back-channel-that-doesnt-tip-off-the-coercer)
 - **Done:** The duress affordance designed in FW-0048 lands on the high-risk template set. Activation is invisible to a shoulder-surfer, routes to issuer-defined victim services without halting the form, and is recorded in the platform's private audit trail but not in the public receipt.
-- **Blocked on:** FW-0048 design + queue EXT-5 (`submission.duress-signaled` event) + private-sidecar discipline per `trellis-operational-companion.md` §13.
+- **Canonical shape:** [FW-0048 design 2026-05-23](thoughts/specs/2026-05-23-fw-0048-coercion-aware-signing-design.md) — dual-credential mechanism, byte-identical success-path, HPKE-wrapped Trellis §13 commitment-slot payload, `SafetyRouting` port + issuer-webhook vs WOS-task tiers. §5.1 specifies the EXT-5 payload shape; §7 specifies the per-party composition with FW-0050.
+- **Blocked on:** FW-0048 design (delivered) + queue EXT-5 payload-shape ratification (`submission.duress-signaled` event per FW-0048 §5.1) + EXT-18 (`@integrity-stack/hpke` TS wrapper; queued for FW-0056; reused here) + new EXT-30 (issuer-sidecar `safetyTeamRecipients[]` block per FW-0048 §6.4) + XS-3 cross-stack ADR (formspec + WOS + trellis per FW-0048 §6.5) + private-sidecar discipline per `trellis-operational-companion.md` §13.
 - **Anti-patterns:** AP-014, AP-021.
 
 ### FW-0060 — Safe-address handling build
