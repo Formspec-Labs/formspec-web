@@ -28,6 +28,11 @@ The closed taxonomy lives in `src/policy/feature-keys.ts`. Today's keys:
   key whose form-policy extractor introspects definition content — walks
   the loaded definition for `dataType === 'attachment'` fields and
   declares `required` when present).
+- `crossIssuerHistory` — cross-issuer respondent history (FW-0057 slice 1
+  extension; gated against the new `RespondentHistorySource` port, 1:1
+  mapping). Production declares `'unavailable'` until XS-2 (multi-issuer
+  client-side token bag) lands the production fan-out adapter; demo declares
+  `'demo-stub'` with an in-memory fixture aggregating across two fake senders.
 
 Future feature ADRs extend the taxonomy; the resolver rejects unknown keys
 with `InvalidRuntimePolicyError` so drift is caught at boot.
@@ -387,3 +392,34 @@ derived from definition content (e.g., a `payment` key derived from the
 presence of fee-bearing fields). New extractors land as
 `FormRuntimePolicyExtractor` adapters and compose into the composition's
 `CompositeFormRuntimePolicyExtractor` array.
+
+## Worked example: the /history route as an optional non-form surface (FW-0057 slice 1)
+
+The `/history` route (FW-0057 slice 1) is the fourth non-form surface to
+consume the synthesis pattern. It reads the new `crossIssuerHistory` capability
+key — the fifth key in the closed `RuntimeFeatureKey` taxonomy. `HistoryRuntime`
+synthesizes `form: { features: { crossIssuerHistory: 'optional' } }` at the
+route boundary — never `required`. The route IS the user's opt-in.
+
+The instance × org pair drives the rendered verdict:
+
+| Mode | `crossIssuerHistory` instance | `crossIssuerHistory` org | Page renders |
+|---|---|---|---|
+| any | `available` / `demo-stub` (demo) | `allowed` / `default-on` / `required` | "Your history" timeline with per-kind sections + cross-route hyperlinks. |
+| any | `available` | `forbidden` | "Your history is not available. This sender does not provide a history view here." |
+| any | `unavailable` | any | "Your history is not available. This site does not provide a history view." |
+| `demo` | `demo-stub` | `allowed` | Timeline with the cross-sender demo fixture (4 entries across 2 senders, 3 kinds). |
+| `production` | `demo-stub` | any | `assertCompositionCoherence` throws at composition boot — production rejects demo stubs. |
+
+Like `/obligations` and `/documents`, the `/history` route is **identity-
+bound**: the page boots `IdentityProvider` discovery + authenticate before
+reading `RespondentHistorySource`. The runtime-feature gate runs FIRST so a
+disabled `crossIssuerHistory` short-circuits before identity is required —
+there is no point asking the respondent to sign in to see "Your history is
+not available." copy.
+
+The cross-issuer aggregation that makes the surface load-bearing in production
+is blocked on XS-2 (multi-issuer client-side token bag per stack-root ADR-0068
+D-1 + D-3). The slice-1 `RespondentHistorySource` port models the SHAPE of
+cross-issuer history; the SUBSTRATE (per-issuer auth handles, fan-out
+strategy) is the adapter's concern and ships post-XS-2.

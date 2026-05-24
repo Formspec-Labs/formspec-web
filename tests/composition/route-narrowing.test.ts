@@ -4,6 +4,7 @@ import {
   type RouteNarrowing,
 } from '../../src/composition/route-narrowing.ts';
 import { DOCUMENTS_ROUTE_NARROWING } from '../../src/app/documents-route.ts';
+import { HISTORY_ROUTE_NARROWING } from '../../src/app/history-route.ts';
 import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts';
 import { STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
 import { assertCompositionCoherence } from '../../src/policy/composition-coherence.ts';
@@ -15,6 +16,7 @@ const ALL_DESCRIPTORS: readonly RouteNarrowing[] = [
   STATUS_ROUTE_NARROWING,
   OBLIGATIONS_ROUTE_NARROWING,
   DOCUMENTS_ROUTE_NARROWING,
+  HISTORY_ROUTE_NARROWING,
 ];
 
 function productionConfig(): FormspecWebConfig {
@@ -106,6 +108,8 @@ describe('createRouteNarrowedComposition — descriptor contracts (FW-0070)', ()
         respondentPlace: 'allowed',
         status: 'allowed',
         documentPresentation: 'allowed',
+        fileUpload: 'allowed',
+        crossIssuerHistory: 'allowed',
       });
     });
 
@@ -176,5 +180,30 @@ describe('createRouteNarrowedComposition — per-mode wiring posture (FW-0070)',
         c.statusReader.readStatus({ resourceRef: 'urn:wos:case_demo_0001' }),
       ).resolves.toBeDefined();
     }
+  });
+});
+
+describe('createRouteNarrowedComposition — consumesHistory flag wiring (FW-0057)', () => {
+  it('consumesHistory=true: stub mode wires the history stub + declares demo-stub', async () => {
+    const c = createRouteNarrowedComposition({ mode: 'stub', route: HISTORY_ROUTE_NARROWING });
+    expect(c.instanceCapabilities.crossIssuerHistory).toBe('demo-stub');
+    const snapshot = await c.respondentHistorySource.readHistory({});
+    expect(snapshot.entries.length).toBeGreaterThan(0);
+  });
+
+  it('consumesHistory=false: stub mode wires the unavailable sentinel + declares unavailable', async () => {
+    const c = createRouteNarrowedComposition({ mode: 'stub', route: STATUS_ROUTE_NARROWING });
+    expect(c.instanceCapabilities.crossIssuerHistory).toBe('unavailable');
+    await expect(c.respondentHistorySource.readHistory({})).rejects.toThrow();
+  });
+
+  it('production mode always wires the sentinel today (XS-2 not yet shipped)', async () => {
+    const c = createRouteNarrowedComposition({
+      mode: 'default',
+      config: productionConfig(),
+      route: HISTORY_ROUTE_NARROWING,
+    });
+    expect(c.instanceCapabilities.crossIssuerHistory).toBe('unavailable');
+    await expect(c.respondentHistorySource.readHistory({})).rejects.toThrow();
   });
 });
