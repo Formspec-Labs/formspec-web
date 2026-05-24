@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { freezeComposition, CompositionIncoherenceError } from './composition-coherence.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
+import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
+import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 
@@ -19,10 +21,12 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         // satisfies only the respondentPlace key.
         documentPresentation: 'unavailable',
         fileUpload: 'demo-stub',
+        crossIssuerHistory: 'demo-stub',
       } as const,
       respondentPlaceSource: stubRespondentPlaceSource(),
       statusReader: stubStatusReader(),
       attachmentStore: stubAttachmentStore(),
+      respondentHistorySource: stubRespondentHistorySource(),
     };
     expect(freezeComposition(composition)).toBe(composition);
   });
@@ -35,10 +39,12 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         status: 'available',
         documentPresentation: 'unavailable',
         fileUpload: 'unavailable',
+        crossIssuerHistory: 'unavailable',
       } as const,
       respondentPlaceSource: unavailableRespondentPlaceSource(),
       statusReader: stubStatusReader(),
       attachmentStore: unavailableAttachmentStore(),
+      respondentHistorySource: unavailableRespondentHistorySource(),
     };
     expect(() => freezeComposition(composition)).toThrow(CompositionIncoherenceError);
   });

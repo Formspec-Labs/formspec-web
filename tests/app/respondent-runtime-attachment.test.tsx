@@ -14,7 +14,9 @@ import { stubRespondentPlaceSource } from '../../src/adapters/stub/respondent-pl
 import { stubStatusReader } from '../../src/adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../../src/adapters/stub/submit-transport.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
+import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
+import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-history-source.ts';
 import {
   freezeComposition,
   type InstanceCapabilities,
@@ -71,12 +73,14 @@ function buildComposition({
         status: 'demo-stub',
         documentPresentation: 'unavailable',
         fileUpload: 'demo-stub',
+        crossIssuerHistory: 'demo-stub',
       }
     : {
         respondentPlace: 'unavailable',
         status: 'unavailable',
         documentPresentation: 'unavailable',
         fileUpload: 'unavailable',
+        crossIssuerHistory: 'unavailable',
       };
 
   const orgRuntimePolicy: OrgRuntimePolicy = {
@@ -85,6 +89,7 @@ function buildComposition({
       status: 'allowed',
       documentPresentation: 'allowed',
       fileUpload: 'allowed',
+      crossIssuerHistory: 'allowed',
     },
   };
 
@@ -101,6 +106,9 @@ function buildComposition({
       : unavailableRespondentPlaceSource(),
     statusReader: isDemo ? stubStatusReader() : unavailableStatusReader(),
     attachmentStore,
+    respondentHistorySource: isDemo
+      ? stubRespondentHistorySource()
+      : unavailableRespondentHistorySource(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new AttachmentRequirementExtractor(),

@@ -439,6 +439,8 @@ function productionCompositionWithIdentity(
       documentPresentation: 'available',
       // FW-0033: closed-taxonomy key — declare for resolver input validity.
       fileUpload: 'unavailable',
+      // FW-0057: closed-taxonomy key — declare for resolver input validity.
+      crossIssuerHistory: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
@@ -446,6 +448,7 @@ function productionCompositionWithIdentity(
         status: 'allowed',
         documentPresentation: 'allowed',
         fileUpload: 'allowed',
+        crossIssuerHistory: 'allowed',
       },
     },
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),

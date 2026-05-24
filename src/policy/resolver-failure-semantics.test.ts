@@ -17,6 +17,9 @@ const baseInstance = {
   // FW-0033: fileUpload is the third closed-taxonomy extension; same
   // honest-unavailable posture for these fixtures.
   fileUpload: 'unavailable',
+  // FW-0057: crossIssuerHistory is the fifth closed-taxonomy extension; same
+  // honest-unavailable posture.
+  crossIssuerHistory: 'unavailable',
 } as const;
 const emptyOrg = { features: {} } as const;
 
@@ -90,6 +93,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
         status: 'demo-stub',
         documentPresentation: 'unavailable',
         fileUpload: 'unavailable',
+        crossIssuerHistory: 'unavailable',
       },
       org: emptyOrg,
       form: { features: { status: 'required' } },
@@ -138,6 +142,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
           status: 'available',
           documentPresentation: 'unavailable',
           fileUpload: 'unavailable',
+          crossIssuerHistory: 'unavailable',
         },
         org: emptyOrg,
         form: { features: {} },

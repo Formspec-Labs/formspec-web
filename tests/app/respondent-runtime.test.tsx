@@ -286,6 +286,11 @@ function testComposition(
         throw new Error('upload not used in this test');
       }),
     },
+    respondentHistorySource: {
+      readHistory: vi.fn(async () => {
+        throw new Error('readHistory not used in this test');
+      }),
+    },
     // ADR-0011: production-mode composition with both seeded capabilities
     // available and the form opting both in. Without the form opt-in the
     // resolver would mark both `not-requested` (org=allowed + form=silent)
@@ -301,6 +306,9 @@ function testComposition(
       // attachment field, so 'unavailable' satisfies the resolver without
       // forcing an upload affordance into these tests.
       fileUpload: 'unavailable',
+      // FW-0057: closed-taxonomy key — in-form surface doesn't consume
+      // crossIssuerHistory; 'unavailable' keeps the resolver happy.
+      crossIssuerHistory: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
@@ -308,6 +316,7 @@ function testComposition(
         status: 'allowed',
         documentPresentation: 'allowed',
         fileUpload: 'allowed',
+        crossIssuerHistory: 'allowed',
       },
     },
     formRuntimePolicyExtractor: {

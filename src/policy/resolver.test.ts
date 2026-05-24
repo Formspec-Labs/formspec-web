@@ -14,6 +14,8 @@ const allAvailable: InstanceCapabilities = {
   documentPresentation: 'available',
   // FW-0033 slice 1: declare fileUpload so resolver validation passes.
   fileUpload: 'available',
+  // FW-0057 slice 1: declare crossIssuerHistory so resolver validation passes.
+  crossIssuerHistory: 'available',
 };
 
 const allowAllOrg: OrgRuntimePolicy = {
@@ -22,6 +24,7 @@ const allowAllOrg: OrgRuntimePolicy = {
     status: 'allowed',
     documentPresentation: 'allowed',
     fileUpload: 'allowed',
+    crossIssuerHistory: 'allowed',
   },
 };
 
