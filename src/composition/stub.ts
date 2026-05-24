@@ -69,6 +69,41 @@ export function createStubComposition(): Composition {
 }
 
 /**
+ * Obligations-route sibling of {@link createStubComposition} (FW-0055
+ * slice 1, coordinated with FW-0068).
+ *
+ * Wires the same demo `respondentPlaceSource` + `statusReader` + identity stubs
+ * the full stub composition uses, plus the demo `identityProvider` (the
+ * /obligations surface is identity-bound). Form-shaped MVP ports
+ * (definition / draft / submit) are noop because the obligations route never
+ * reads them. `instanceCapabilities` continues to describe what the demo
+ * deployment CAN do; the narrowing is the noop form ports only.
+ */
+export function createStubObligationsRouteComposition(): Composition {
+  const composition: Composition = {
+    mode: 'demo',
+    initialDefinitionUrl: 'about:not-constructed#fw-0055',
+    definitionSource: noopDefinitionSource(),
+    draftStore: noopDraftStore(),
+    submitTransport: noopSubmitTransport(),
+    identityProvider: stubIdentityProvider(),
+    respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
+    statusReader: stubStatusReader([
+      ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
+    ]),
+    instanceCapabilities: {
+      respondentPlace: 'demo-stub',
+      status: 'demo-stub',
+    } satisfies InstanceCapabilities,
+    orgRuntimePolicy: {
+      features: { respondentPlace: 'allowed', status: 'allowed' },
+    } satisfies OrgRuntimePolicy,
+    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
+  };
+  return freezeComposition(composition);
+}
+
+/**
  * Status-route sibling of {@link createStubComposition} (FW-0068).
  *
  * Wires the same demo `statusReader` + `respondentPlaceSource` stubs the full

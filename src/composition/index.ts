@@ -1,4 +1,16 @@
-export { createDefaultComposition, createDefaultStatusRouteComposition } from './default.ts';
-export { createDemoComposition, createDemoStatusRouteComposition } from './demo.ts';
-export { createStubComposition, createStubStatusRouteComposition } from './stub.ts';
+export {
+  createDefaultComposition,
+  createDefaultObligationsRouteComposition,
+  createDefaultStatusRouteComposition,
+} from './default.ts';
+export {
+  createDemoComposition,
+  createDemoObligationsRouteComposition,
+  createDemoStatusRouteComposition,
+} from './demo.ts';
+export {
+  createStubComposition,
+  createStubObligationsRouteComposition,
+  createStubStatusRouteComposition,
+} from './stub.ts';
 export type { Composition } from './types.ts';

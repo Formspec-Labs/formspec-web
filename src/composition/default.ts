@@ -30,7 +30,11 @@ import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import type { IntakeHandoff } from '../ports/submit-transport.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
-import { createDemoComposition, createDemoStatusRouteComposition } from './demo.ts';
+import {
+  createDemoComposition,
+  createDemoObligationsRouteComposition,
+  createDemoStatusRouteComposition,
+} from './demo.ts';
 import type { Composition } from './types.ts';
 
 /**
@@ -129,6 +133,65 @@ export function createDefaultStatusRouteComposition(
     draftStore: noopDraftStore(),
     submitTransport: noopSubmitTransport(),
     identityProvider: noopIdentityProvider(),
+    respondentPlaceSource: unavailableRespondentPlaceSource(),
+    statusReader: unavailableStatusReader(),
+    instanceCapabilities: {
+      respondentPlace: 'unavailable',
+      status: 'unavailable',
+    } satisfies InstanceCapabilities,
+    orgRuntimePolicy: {
+      features: { respondentPlace: 'allowed', status: 'allowed' },
+    } satisfies OrgRuntimePolicy,
+    getFormRuntimePolicy: (): FormRuntimePolicy => ({ features: {} }),
+  };
+  return freezeComposition(composition);
+}
+
+/**
+ * Obligations-route sibling of {@link createDefaultComposition} (FW-0055
+ * slice 1, coordinated with FW-0068).
+ *
+ * Wires `respondentPlaceSource` + `identityProvider` (real — the /obligations
+ * surface is identity-bound per design §"Why identity-required") + the runtime-
+ * profile / policy slots. Form-shaped MVP ports (`definitionSource`,
+ * `draftStore`, `submitTransport`) are noop because the obligations route never
+ * reads them. `statusReader` stays on the unavailable sentinel — the obligations
+ * page links to `/status` via hyperlink, not via direct port call.
+ *
+ * Mirrors the FW-0068 status-route factory's coherence funnel through
+ * `freezeComposition`.
+ */
+export function createDefaultObligationsRouteComposition(
+  config: FormspecWebConfig = departmentAppProfile,
+): Composition {
+  const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
+  if (!serverUrl) {
+    return createDemoObligationsRouteComposition();
+  }
+  const notificationDelivery = stubNotificationDelivery();
+  const baseHttpConfig = {
+    baseUrl: serverUrl,
+    tenantBinding: config.tenantBinding,
+  };
+  const initialDefinitionUrl = productionInitialDefinitionUrl(serverUrl);
+  // Identity-required surface: wire the real identity provider so the
+  // auth-required state can render. Anonymous-session bridge stays available
+  // for adopters who wire an anonymous identity binding, identical to the
+  // full-app factory.
+  const anonymousSessions = new AnonymousSessionBridge(baseHttpConfig);
+  const identityBinding = identityProviderFor(config, notificationDelivery, {
+    anonymousSessions,
+    initialDefinitionUrl,
+  });
+
+  const composition: Composition = {
+    mode: 'production',
+    initialDefinitionUrl: 'about:not-constructed#fw-0055',
+    definitionSource: noopDefinitionSource(),
+    draftStore: noopDraftStore(),
+    submitTransport: noopSubmitTransport(),
+    identityProvider: identityBinding.provider,
+    notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
     instanceCapabilities: {

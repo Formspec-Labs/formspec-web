@@ -1,10 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createStubComposition, createStubStatusRouteComposition } from '../../src/composition/stub.ts';
+import {
+  createStubComposition,
+  createStubObligationsRouteComposition,
+  createStubStatusRouteComposition,
+} from '../../src/composition/stub.ts';
 import {
   createDefaultComposition,
+  createDefaultObligationsRouteComposition,
   createDefaultStatusRouteComposition,
 } from '../../src/composition/default.ts';
-import { createDemoComposition, createDemoStatusRouteComposition } from '../../src/composition/demo.ts';
+import {
+  createDemoComposition,
+  createDemoObligationsRouteComposition,
+  createDemoStatusRouteComposition,
+} from '../../src/composition/demo.ts';
 import { applyBrandTheme, getUpstreamTokenRegistry } from '../../src/theme/theme.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import type { OidcClientDriver } from '../../src/adapters/identity/oidc.ts';
@@ -315,6 +324,57 @@ describe('composition root smoke', () => {
     const c = createDemoStatusRouteComposition();
     expect(c.mode).toBe('demo');
     expect(c.instanceCapabilities.status).toBe('demo-stub');
+  });
+
+  it('createDefaultObligationsRouteComposition wires respondentPlaceSource + real identityProvider; form-shaped MVP ports throw on call (FW-0055)', async () => {
+    const c = createDefaultObligationsRouteComposition();
+    expect(c.mode).toBe('demo');
+    expect(c.respondentPlaceSource).toBeDefined();
+    expect(c.identityProvider).toBeDefined();
+    expect(c.instanceCapabilities.respondentPlace).toBeDefined();
+    expect(c.orgRuntimePolicy.features).toBeDefined();
+    expect(c.getFormRuntimePolicy).toBeDefined();
+    // Form-shaped MVP ports are noop on this narrowed route.
+    await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    await expect(c.draftStore.load({ formUrl: 'https://x', subjectRef: 's' })).rejects.toThrow(/FW-0068/);
+    await expect(c.submitTransport.submit({} as never, 'k')).rejects.toThrow(/FW-0068/);
+    // Identity provider on the obligations route is REAL (not noop) — surface is identity-bound.
+    await expect(c.identityProvider.discover()).resolves.toBeDefined();
+  });
+
+  it('createDefaultObligationsRouteComposition in production mode keeps unavailable sentinel for respondentPlace (FW-0055)', () => {
+    const c = createDefaultObligationsRouteComposition({
+      ...departmentAppProfile,
+      ports: referenceHttpDataPorts(departmentAppProfile.ports),
+      referenceAdapters: {
+        formspecStack: {
+          ...departmentAppProfile.referenceAdapters?.formspecStack,
+          tenantHeaderDialect: 'formspec',
+          formspecServerUrl: 'https://formspec-server.example.test',
+        },
+      },
+    });
+    expect(c.mode).toBe('production');
+    expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
+    expect(c.instanceCapabilities.status).toBe('unavailable');
+  });
+
+  it('createStubObligationsRouteComposition delivers demo respondent-place + real identity; form-shaped ports noop (FW-0055)', async () => {
+    const c = createStubObligationsRouteComposition();
+    expect(c.mode).toBe('demo');
+    expect(c.instanceCapabilities.respondentPlace).toBe('demo-stub');
+    expect(c.instanceCapabilities.status).toBe('demo-stub');
+    const snapshot = await c.respondentPlaceSource.readPlace({});
+    expect(snapshot.obligations).toBeDefined();
+    expect((snapshot.obligations ?? []).length).toBeGreaterThan(0);
+    await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    await expect(c.identityProvider.discover()).resolves.toBeDefined();
+  });
+
+  it('createDemoObligationsRouteComposition delegates to the stub obligations-route variant (FW-0055)', () => {
+    const c = createDemoObligationsRouteComposition();
+    expect(c.mode).toBe('demo');
+    expect(c.instanceCapabilities.respondentPlace).toBe('demo-stub');
   });
 
   it('IdentityProvider subscribe receives initial null then update on authenticate', async () => {
