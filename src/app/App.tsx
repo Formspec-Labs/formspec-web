@@ -6,6 +6,7 @@ import { useComposition } from './hooks/useComposition.ts';
 import { parseStatusRoute, type StatusRouteParams } from './status-route.ts';
 import { parseObligationsRoute, type ObligationsRouteParams } from './obligations-route.ts';
 import { parseDocumentsRoute, type DocumentsRouteParams } from './documents-route.ts';
+import { parseHistoryRoute, type HistoryRouteParams } from './history-route.ts';
 
 interface AppProps {
   config: FormspecWebConfig;
@@ -34,6 +35,12 @@ interface DocumentsRuntimeProps {
   route: DocumentsRouteParams;
 }
 
+interface HistoryRuntimeProps {
+  composition: Composition;
+  config: FormspecWebConfig;
+  route: HistoryRouteParams;
+}
+
 type RuntimeState =
   | { status: 'loading' }
   | {
@@ -59,6 +66,12 @@ type RuntimeState =
       Runtime: ComponentType<DocumentsRuntimeProps>;
       params: DocumentsRouteParams;
     }
+  | {
+      status: 'ready';
+      route: 'history';
+      Runtime: ComponentType<HistoryRuntimeProps>;
+      params: HistoryRouteParams;
+    }
   | { status: 'error'; error: unknown };
 
 export function App({ config }: AppProps) {
@@ -76,6 +89,10 @@ export function App({ config }: AppProps) {
     const obligationsParams = statusParams ? null : parseObligationsRoute(window.location.href);
     const documentsParams =
       statusParams || obligationsParams ? null : parseDocumentsRoute(window.location.href);
+    const historyParams =
+      statusParams || obligationsParams || documentsParams
+        ? null
+        : parseHistoryRoute(window.location.href);
     const loader = statusParams
       ? import('./StatusRuntime.tsx').then((module) => ({
           status: 'ready' as const,
@@ -97,11 +114,18 @@ export function App({ config }: AppProps) {
               Runtime: module.DocumentsRuntime,
               params: documentsParams,
             }))
-          : import('./RespondentRuntime.tsx').then((module) => ({
-              status: 'ready' as const,
-              route: 'form' as const,
-              Runtime: module.RespondentRuntime,
-            }));
+          : historyParams
+            ? import('./HistoryRuntime.tsx').then((module) => ({
+                status: 'ready' as const,
+                route: 'history' as const,
+                Runtime: module.HistoryRuntime,
+                params: historyParams,
+              }))
+            : import('./RespondentRuntime.tsx').then((module) => ({
+                status: 'ready' as const,
+                route: 'form' as const,
+                Runtime: module.RespondentRuntime,
+              }));
     void loader
       .then((next) => {
         if (!cancelled) {
@@ -135,6 +159,8 @@ export function App({ config }: AppProps) {
           ) : runtimeState.status === 'ready' && runtimeState.route === 'obligations' ? (
             <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
           ) : runtimeState.status === 'ready' && runtimeState.route === 'documents' ? (
+            <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
+          ) : runtimeState.status === 'ready' && runtimeState.route === 'history' ? (
             <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
           ) : (
             <>

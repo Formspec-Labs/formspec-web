@@ -296,6 +296,15 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/respondent-history-source/conformance.test.ts',
+    suiteText(
+      'RespondentHistorySource',
+      [['stub RespondentHistorySource conformance', 'stubRespondentHistorySource']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -315,6 +324,10 @@ function writeAdapterFiles(root, options) {
       'export function stubFormRuntimePolicyExtractor() {}',
     ],
     [
+      'src/adapters/stub/respondent-history-source.ts',
+      'export function stubRespondentHistorySource() {}',
+    ],
+    [
       'src/adapters/unavailable/respondent-place-source.ts',
       'export function unavailableRespondentPlaceSource() {}',
     ],
@@ -322,6 +335,10 @@ function writeAdapterFiles(root, options) {
     [
       'src/adapters/unavailable/attachment-store.ts',
       'export function unavailableAttachmentStore() {}',
+    ],
+    [
+      'src/adapters/unavailable/respondent-history-source.ts',
+      'export function unavailableRespondentHistorySource() {}',
     ],
     [
       'src/adapters/http/definition-source.ts',
@@ -359,11 +376,13 @@ function defaultComposition() {
     'import { unavailableRespondentPlaceSource } from "../adapters/unavailable/respondent-place-source.ts";',
     'import { unavailableStatusReader } from "../adapters/unavailable/status-reader.ts";',
     'import { unavailableAttachmentStore } from "../adapters/unavailable/attachment-store.ts";',
+    'import { unavailableRespondentHistorySource } from "../adapters/unavailable/respondent-history-source.ts";',
     'export function createDefaultComposition() {',
     '  return {',
     '    respondentPlaceSource: unavailableRespondentPlaceSource(),',
     '    statusReader: unavailableStatusReader(),',
     '    attachmentStore: unavailableAttachmentStore(),',
+    '    respondentHistorySource: unavailableRespondentHistorySource(),',
     '  };',
     '}',
   ].join('\n');
@@ -381,6 +400,7 @@ function publicIndex() {
     '  defineStatusReaderConformance,',
     '  defineAttachmentStoreConformance,',
     '  defineFormRuntimePolicyExtractorConformance,',
+    '  defineRespondentHistorySourceConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }

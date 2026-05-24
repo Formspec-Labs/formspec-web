@@ -76,6 +76,21 @@ describe('App route selection (FW-0039 slice 1)', () => {
       ).not.toBeNull();
     });
   });
+
+  it('routes /history to the history runtime (FW-0057 slice 1)', async () => {
+    setHref('http://localhost/history');
+    const composition = createStubComposition();
+    render(
+      <CompositionProvider value={composition}>
+        <App config={departmentAppProfile} />
+      </CompositionProvider>,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('heading', { name: /Your history/i, level: 1 }),
+      ).not.toBeNull();
+    });
+  });
 });
 
 function setHref(href: string): void {

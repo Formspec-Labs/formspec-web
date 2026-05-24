@@ -259,4 +259,19 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.anonSession).not.toHaveBeenCalled();
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
   });
+
+  it('chooseComposition picks the history-route factory when the URL is /history (FW-0057)', async () => {
+    const composition = chooseComposition({
+      href: 'http://localhost/history',
+      config: productionConfig(),
+    });
+    await expect(composition.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    expect(spies.httpDef).not.toHaveBeenCalled();
+    expect(spies.httpDraft).not.toHaveBeenCalled();
+    expect(spies.httpSubmit).not.toHaveBeenCalled();
+    expect(spies.anonSession).not.toHaveBeenCalled();
+    expect(spies.oidcAdapter).not.toHaveBeenCalled();
+    // Production posture is unavailable → readHistory throws via the sentinel.
+    await expect(composition.respondentHistorySource.readHistory({})).rejects.toThrow(/not configured/);
+  });
 });

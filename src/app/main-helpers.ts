@@ -3,6 +3,7 @@ import { createRouteNarrowedComposition } from '../composition/route-narrowing.t
 import type { Composition } from '../composition/types.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import { DOCUMENTS_ROUTE_NARROWING, parseDocumentsRoute } from './documents-route.ts';
+import { HISTORY_ROUTE_NARROWING, parseHistoryRoute } from './history-route.ts';
 import { OBLIGATIONS_ROUTE_NARROWING, parseObligationsRoute } from './obligations-route.ts';
 import { STATUS_ROUTE_NARROWING, parseStatusRoute } from './status-route.ts';
 
@@ -44,6 +45,13 @@ export function chooseComposition({
       mode: 'default',
       config,
       route: DOCUMENTS_ROUTE_NARROWING,
+    });
+  }
+  if (parseHistoryRoute(href)) {
+    return createRouteNarrowedComposition({
+      mode: 'default',
+      config,
+      route: HISTORY_ROUTE_NARROWING,
     });
   }
   return createDefaultComposition(config);
