@@ -8,7 +8,6 @@ import type {
   ApplicantStatusResource,
   ApplicantStatusTimelineEntry,
   ApplicantTaskSummary,
-  ApplicantTimelineEvent,
 } from '../ports/index.ts';
 import {
   InvalidRuntimePolicyError,
@@ -36,8 +35,13 @@ type StatusViewState =
   | { kind: 'not-found' }
   | { kind: 'adapter-error' };
 
-const NO_AGGREGATE_COPY = 'Timing for similar applications is not yet available on this site.';
-const PER_CASE_HEADER = 'Time since each step on your application';
+/**
+ * Pinned per-step copy. Exported so a future locale-conditional copy ADR has
+ * a single seam to migrate, and so the literal strings can be asserted in
+ * fixture-style tests without rendering the component (code-review F-3).
+ */
+export const NO_AGGREGATE_COPY = 'Timing for similar applications is not yet available on this site.';
+export const PER_CASE_HEADER = 'Time since each step on your application';
 
 export function StatusRuntime({ composition, route }: StatusRuntimeProps) {
   const [view, setView] = useState<StatusViewState>({ kind: 'loading' });
@@ -339,22 +343,36 @@ function currentStageFromTimeline(
 ): StageKey {
   const latest = timeline.at(-1);
   if (!latest) return 'received';
-  return stageFromEvent(latest.event);
+  return stageFromEntry(latest);
 }
 
-function stageFromEvent(event: ApplicantTimelineEvent): StageKey {
-  switch (event) {
+/**
+ * Map a WOS applicant API timeline entry to one of the five public stages.
+ * Closed switch over the event enum; `lifecycle-changed` branches on
+ * `newLifecycleState` so a `completed` / `terminated` case lights up the
+ * `closed` cell rather than getting stuck in `in-review`. Misclassifying the
+ * current stage is exactly the kind of dishonesty FW-0039 is meant to avoid
+ * (code-review F-4).
+ */
+function stageFromEntry(entry: ApplicantStatusTimelineEntry): StageKey {
+  switch (entry.event) {
     case 'case-created':
-    case 'correspondence-received':
     case 'applicant-task-assigned':
       return 'received';
     case 'applicant-task-submitted':
     case 'correspondence-sent':
+    case 'correspondence-received':
       return 'in-review';
     case 'decision-reached':
       return 'issued';
     case 'lifecycle-changed':
-      return 'in-review';
+      switch (entry.newLifecycleState) {
+        case 'completed':
+        case 'terminated':
+          return 'closed';
+        default:
+          return 'in-review';
+      }
     default:
       return 'received';
   }

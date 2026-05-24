@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import { StatusRuntime } from '../../src/app/StatusRuntime.tsx';
+import {
+  StatusRuntime,
+  NO_AGGREGATE_COPY,
+  PER_CASE_HEADER,
+} from '../../src/app/StatusRuntime.tsx';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { demoApplicantCaseDetail } from '../../src/demo/respondent-place.ts';
@@ -11,8 +15,6 @@ import type {
 } from '../../src/ports/index.ts';
 
 const DEMO_URN = 'urn:wos:case_demo_0001';
-const NO_AGGREGATE_COPY = 'Timing for similar applications is not yet available on this site.';
-const PER_CASE_HEADER = 'Time since each step on your application';
 
 describe('StatusRuntime (FW-0039 slice 1)', () => {
   afterEach(() => {
@@ -265,3 +267,145 @@ function patchStatusReader(
     readStatus: vi.fn(async (req) => (req.resourceRef === urn ? resource : undefined)),
   };
 }
+
+describe('StatusRuntime copy constants (code-review F-3)', () => {
+  it('NO_AGGREGATE_COPY is the literal honest-framing string', () => {
+    expect(NO_AGGREGATE_COPY).toBe(
+      'Timing for similar applications is not yet available on this site.',
+    );
+  });
+
+  it('PER_CASE_HEADER is the literal per-case timing header', () => {
+    expect(PER_CASE_HEADER).toBe('Time since each step on your application');
+  });
+});
+
+describe('StatusRuntime stage mapping (code-review F-4)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('lifecycle-changed → completed lights the Closed cell', async () => {
+    const composition = createStubComposition();
+    const detail: ApplicantCaseDetail = {
+      ...demoApplicantCaseDetail(),
+      statusTimeline: [
+        { event: 'case-created', occurredAt: '2026-05-23T12:00:00.000Z' },
+        {
+          event: 'lifecycle-changed',
+          occurredAt: '2026-06-01T12:00:00.000Z',
+          newLifecycleState: 'completed',
+        },
+      ],
+    };
+    patchStatusReader(composition, DEMO_URN, detail);
+    render(
+      <StatusRuntime
+        composition={composition}
+        config={departmentAppProfile}
+        route={{ caseUrn: DEMO_URN }}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('list', { name: /Application stages/i }),
+      ).not.toBeNull();
+    });
+    const strip = screen.getByRole('list', { name: /Application stages/i });
+    const cells = within(strip).getAllByRole('listitem');
+    const current = cells.find((cell) => cell.getAttribute('aria-current') === 'step');
+    expect(current?.textContent).toBe('Closed');
+  });
+
+  it('lifecycle-changed → terminated lights the Closed cell', async () => {
+    const composition = createStubComposition();
+    const detail: ApplicantCaseDetail = {
+      ...demoApplicantCaseDetail(),
+      statusTimeline: [
+        { event: 'case-created', occurredAt: '2026-05-23T12:00:00.000Z' },
+        {
+          event: 'lifecycle-changed',
+          occurredAt: '2026-06-01T12:00:00.000Z',
+          newLifecycleState: 'terminated',
+        },
+      ],
+    };
+    patchStatusReader(composition, DEMO_URN, detail);
+    render(
+      <StatusRuntime
+        composition={composition}
+        config={departmentAppProfile}
+        route={{ caseUrn: DEMO_URN }}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('list', { name: /Application stages/i }),
+      ).not.toBeNull();
+    });
+    const strip = screen.getByRole('list', { name: /Application stages/i });
+    const cells = within(strip).getAllByRole('listitem');
+    const current = cells.find((cell) => cell.getAttribute('aria-current') === 'step');
+    expect(current?.textContent).toBe('Closed');
+  });
+
+  it('decision-reached lights the Issued cell', async () => {
+    const composition = createStubComposition();
+    const detail: ApplicantCaseDetail = {
+      ...demoApplicantCaseDetail(),
+      statusTimeline: [
+        { event: 'case-created', occurredAt: '2026-05-23T12:00:00.000Z' },
+        { event: 'decision-reached', occurredAt: '2026-06-01T12:00:00.000Z' },
+      ],
+    };
+    patchStatusReader(composition, DEMO_URN, detail);
+    render(
+      <StatusRuntime
+        composition={composition}
+        config={departmentAppProfile}
+        route={{ caseUrn: DEMO_URN }}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('list', { name: /Application stages/i }),
+      ).not.toBeNull();
+    });
+    const strip = screen.getByRole('list', { name: /Application stages/i });
+    const cells = within(strip).getAllByRole('listitem');
+    const current = cells.find((cell) => cell.getAttribute('aria-current') === 'step');
+    expect(current?.textContent).toBe('Issued');
+  });
+});
+
+describe('StatusRuntime policy-error path (code-review F-2)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('renders the policy-error page with the typed code when org policy is malformed', async () => {
+    const composition = createStubComposition();
+    // Inject an org policy with an unknown mode — validateInput throws
+    // InvalidRuntimePolicyError before the status decision runs.
+    composition.orgRuntimePolicy = {
+      features: { respondentPlace: 'allowed', status: 'not-a-real-mode' as never },
+    };
+    render(
+      <StatusRuntime
+        composition={composition}
+        config={departmentAppProfile}
+        route={{ caseUrn: DEMO_URN }}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/not configured correctly/i),
+      ).not.toBeNull();
+    });
+    // The typed RuntimePolicyError code surfaces as the support reference
+    // (not the URN, not raw stack). Mirrors the FW-0065 plumbing.
+    expect(screen.getByText(/Support reference:/i)).toBeDefined();
+  });
+});
