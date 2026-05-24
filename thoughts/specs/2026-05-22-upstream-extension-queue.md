@@ -71,8 +71,9 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Closes:** J-016 (withdraw / dispute / consent revoke), J-026 (decline as a first-class event), J-027 (duress signal), J-030 (deletion receipt), J-033 (bot protection cleared), J-017 (disclosure presented)
 **FW rows blocked:** FW-0007, FW-0026, FW-0036, FW-0038, FW-0043, FW-0048, FW-0049
 **Events to add:** `response.declined` (with optional `clauseReferences[]`, `reason`), `response.withdrawn`, `response.dispute-attached`, `consent.revoked`, `submission.duress-signaled` (with private-sidecar discipline per `trellis-operational-companion.md` §13 Disclosure Manifest), `data.erased`, `disclosure.presented`, `field.flagged-by-respondent`, `bot-protection-cleared`. File as one combined PR.
-**Fixture status:** none. Land each event-type with at least one fixture in `formspec/tests/fixtures/ledger/`.
-**Status:** not yet filed.
+**`submission.duress-signaled` payload shape — extended 2026-05-23 by [FW-0048 design §5.1](2026-05-23-fw-0048-coercion-aware-signing-design.md).** Carries `extensions["formspec.submission.duress-signal.v1"]` block: `{signalId, responseId, authoredSignatureRef?, partyRef? (for FW-0050 multi-party composition), capturedAt, mechanismUsed (dual-passkey | dual-pin | pin-second-entry), payloadCommitmentSlot (Trellis §13 commitment-slot ref — uniform-shape per OC-26, present whether or not duress was signaled), payloadHpkeRef? (HPKE-wrapped plaintext lives in issuer-side sidecar, not canonical record)}`. The plaintext wrapped behind `payloadHpkeRef` carries `{schemaVersion, duressSignaled, severityBand, routingTargetId, capturedAt, contextMetadata?}` per HPKE Base mode + Trellis Core §9.4 suite 1.
+**Fixture status:** none. Land each event-type with at least one fixture in `formspec/tests/fixtures/ledger/`. `submission.duress-signaled` fixtures must include the uniform-shape non-duress case (commitment slot populated, plaintext `duressSignaled: false`) so the fixture corpus exercises OC-26 uniform-presence discipline.
+**Status:** not yet filed. Payload-shape extension proposed 2026-05-23 by FW-0048 design.
 
 ### EXT-6: Definition metadata.register for hardship / tone suppression
 
@@ -144,10 +145,10 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 
 **Owning repo:** integrity-stack (TS package addition); formspec-web (consumer)
 **Closes:** RFC 9180 HPKE Base mode wrap/unwrap for client-side encryption (J-042 respondent-library: clients encrypt library contents with a passkey-derived key before upload; only the respondent can decrypt). Mirror of `integrity-stack/crates/integrity-hpke` (Trellis Core §9.4 suite 1: `DHKEM(X25519, HKDF-SHA256)` / `HKDF-SHA256` / `ChaCha20-Poly1305`).
-**FW rows blocked:** FW-0056 (respondent-side document library build)
+**FW rows blocked:** FW-0056 (respondent-side document library build); FW-0059 (coercion-aware signing build) — both consume the same wrapper per [FW-0048 design §5.2 + §6.3](2026-05-23-fw-0048-coercion-aware-signing-design.md).
 **Shape:** thin TS wrapper around [`hpke-js`](https://github.com/dajiaji/hpke-js) (mature, RFC 9180-spec'd, ChaCha20-Poly1305 support). Wrapper matches `integrity-hpke` API surface (`wrap(plaintext, recipient_public_key) → ciphertext`; `unwrap(ciphertext, recipient_private_key) → plaintext`). Conformance fixtures pulled from `integrity-bundle-fixtures` Rust corpus.
 **Per ADR-0009 §(d) hybrid principle:** pure TS path because (a) `hpke-js` is mature and RFC-spec'd, (b) HPKE Base mode is well-tested across implementations, (c) no signature-determinative byte-exactness risk.
-**Fixture status:** none. Sequenced with FW-0047 design (respondent-library trust model) ahead of FW-0056 build.
+**Fixture status:** none. Sequenced with FW-0047 design (respondent-library trust model) ahead of FW-0056 build; FW-0059 consumes the same wrapper for duress-payload wrap to safety-team recipient.
 **Status:** not yet filed.
 
 ### EXT-17: `@integrity-stack/event` — TS event-sequence mirror
@@ -200,6 +201,17 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Cross-stack:** lands as part of XS-1 ratification spanning formspec + WOS + trellis. Trellis substrate is unchanged (sequential per-party signing over digest-stable Formspec Signed Response Payload already works). XS-1 also carries a paired `response.schema.json` extension for disagreement-as-state (per FW-0050 design §5.4 + §6.2 (5)) so conflicting per-party field values can be carried with party attribution instead of silently merged.
 **Fixture status:** none. Land with `coEqual` joint-tax fixture + `asymmetric` immigration-sponsorship fixture + `coEqual` child-custody-with-disagreement fixture (per FW-0050 design §4 worked scenarios).
 **Status:** proposed 2026-05-23 by FW-0050 design; pending XS-1 ratification at stack-root.
+
+### EXT-30: Issuer-sidecar `safetyTeamRecipients[]` block (duress routing)
+
+**Owning repo:** formspec
+**File:** `formspec/schemas/issuer-sidecar.schema.json` (extends the issuer-sidecar per web ADR-0006)
+**Closes:** J-027 (issuer-side duress signal routing target registry)
+**FW rows blocked:** FW-0048 (design dependency), FW-0059 (build)
+**Shape:** add `safetyTeamRecipients: Array<{templateClassRef (closed enum: financial-poa | immigration-sponsorship | advance-directive | marriage-divorce | custody | benefits-redirect), recipientPublicKeyB64 (X25519 per Trellis Core §9.4 suite 1), routingTargetId (opaque), jurisdictions (Array<ISO 3166-2>), validFromAt, validUntilAt?}>` per [FW-0048 design §6.4](2026-05-23-fw-0048-coercion-aware-signing-design.md). NEVER exposed to respondents; consumed at form-load to identify the HPKE recipient public key the duress wrap targets. Privacy discipline binds: shell does not render the recipient list or jurisdiction list under any condition.
+**Cross-stack:** lands as part of XS-3 ratification (see below). Trellis substrate is unchanged (sidecar discipline already supports per-recipient HPKE wrap via §13 Disclosure Manifest + Core §9.4 suite 1 HPKE).
+**Fixture status:** none. Land with per-template recipient + key-rotation fixtures (`validUntilAt` set with overlapping windows + cutover semantics).
+**Status:** proposed 2026-05-23 by FW-0048 design; pending XS-3 ratification at stack-root.
 
 ### EXT-10: Receipt-domain prose update (drift fix)
 
@@ -270,6 +282,16 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Shape:** formspec `definition.schema.json` gets `parties` block at form level + per-item `visibleTo[]` / `editableBy[]` / `signedBy[]`. work-spec gets multi-respondent intake workflow pattern. Response gets `partySignatures[]` extension of `authoredSignatures[]` (depends on EXT-3 capacity primitive).
 **Fixture status:** none. Cross-stack ADR needed in `formspec-stack/thoughts/adr/`.
 **Status:** post-MVP per web ADR-0005.
+
+### XS-3: Coercion-aware signing pipeline (duress signal)
+
+**Spans:** formspec (`submission.duress-signaled` event payload + issuer-sidecar `safetyTeamRecipients[]`) + work-spec (optional `safety-reviewer` actorExtension for the `wos-task` routing tier) + trellis (no envelope change; binding §13 Disclosure Manifest discipline to the duress payload)
+**Closes:** J-027 (coercion-aware signing)
+**FW rows blocked:** FW-0048 (design — design dependency closed by this ADR's ratification), FW-0059 (build)
+**Recommended boundary:** at `intake-handoff` plus the optional WOS-task dispatch. Formspec owns the per-event payload shape; Trellis carries the sidecar discipline (§13 Disclosure Manifest withholding the duress slot from `respondent_facing_receipt`); WOS optionally owns the `safety-reviewer` actorExtension; the `SafetyRouting` adapter (formspec-web port per FW-0048 §4.2) targets either an issuer-side webhook or a WOS task.
+**Shape:** per [FW-0048 design §6.5](2026-05-23-fw-0048-coercion-aware-signing-design.md): (1) Trellis OC-26 + OC-27 + OC-30 bind unchanged (no new substrate primitive); (2) WOS `safety-reviewer` actorExtension is OPTIONAL — `issuer-webhook` routing doesn't require WOS at all; (3) receipt discipline — verifier MUST NOT distinguish duress-signaled and non-duress submissions in any user-visible way (byte-identical receipt path per §3.2); (4) per-party scoping per [FW-0050 §7.2](2026-05-23-fw-0050-multi-party-submission-design.md) and [FW-0048 §7](2026-05-23-fw-0048-coercion-aware-signing-design.md) — Party B's duress signal MUST NOT be observable to Party A through any surface (status / receipt / ceremony).
+**Fixture status:** none. Cross-stack ADR needed in `formspec-stack/thoughts/adr/`. Per [FW-0048 §7.3 (4)] multi-party fixture matrix lives in FW-0061 build.
+**Status:** proposed 2026-05-23 by FW-0048 design; pending stack-root ratification.
 
 ### XS-2: Respondent-side multi-tenant token bag
 
