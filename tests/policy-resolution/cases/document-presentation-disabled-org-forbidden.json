@@ -1,0 +1,31 @@
+{
+  "name": "document-presentation-disabled-org-forbidden",
+  "description": "FW-0056 slice 1: documentPresentation optional + org forbidden -> disabled with org-forbidden",
+  "mode": "production",
+  "instance": {
+    "respondentPlace": "available",
+    "status": "available",
+    "documentPresentation": "available"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "forbidden"
+    }
+  },
+  "form": {
+    "features": {
+      "documentPresentation": "optional"
+    }
+  },
+  "expect": {
+    "kind": "profile",
+    "enabled": [],
+    "disabled": {
+      "documentPresentation": "org-forbidden",
+      "respondentPlace": "not-requested",
+      "status": "not-requested"
+    }
+  }
+}

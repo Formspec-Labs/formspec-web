@@ -1,0 +1,31 @@
+{
+  "name": "document-presentation-disabled-no-instance",
+  "description": "FW-0056 slice 1: documentPresentation optional + instance unavailable -> disabled with optional-no-instance",
+  "mode": "production",
+  "instance": {
+    "respondentPlace": "available",
+    "status": "available",
+    "documentPresentation": "unavailable"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed"
+    }
+  },
+  "form": {
+    "features": {
+      "documentPresentation": "optional"
+    }
+  },
+  "expect": {
+    "kind": "profile",
+    "enabled": [],
+    "disabled": {
+      "documentPresentation": "optional-no-instance",
+      "respondentPlace": "not-requested",
+      "status": "not-requested"
+    }
+  }
+}

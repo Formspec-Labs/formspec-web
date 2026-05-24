@@ -17,14 +17,37 @@ resolved profile; it never inspects raw instance, org, or form policy.
 
 ## Feature keys
 
-The closed taxonomy lives in `src/policy/feature-keys.ts`. As of today the
-seeded keys are `respondentPlace` and `status`. Future feature ADRs extend
-the taxonomy; the resolver rejects unknown keys with
-`InvalidRuntimePolicyError` so drift is caught at boot.
+The closed taxonomy lives in `src/policy/feature-keys.ts`. Today's keys:
+
+- `respondentPlace` — wallet substrate (web ADR-0010, FW-0065 seed).
+- `status` — WOS applicant-API status reader (FW-0039 seed).
+- `documentPresentation` — selective-presentation surface (FW-0056 slice 1
+  extension, the first feature ADR beyond the seeded pair).
+
+Future feature ADRs extend the taxonomy; the resolver rejects unknown keys
+with `InvalidRuntimePolicyError` so drift is caught at boot.
 
 The tuple is **append-only**: future ADRs add keys at the end. Re-sorting
 silently changes the resolver loop's iteration order and the contract of the
 `RUNTIME_FEATURE_KEYS.toEqual(...)` tests.
+
+### Transitional port-slot sharing (FW-0056 slice 1)
+
+`feature-port-map.ts` maps `documentPresentation` to the same
+`respondentPlaceSource` slot as `respondentPlace`. The two keys share a slot
+because slice 1 has no Verifiable Presentation port to gate against — per web
+ADR-0009 §"Not in the constitutional inventory," no port is ratified before
+a consumer, and slice 1's selection action is local React state only. When
+SC-4 (Verifiable Presentation Profile) + EXT-18 (HPKE wrapper) land a real
+VP port, the slot mapping splits.
+
+While the slot is shared, the coherence assertion requires the two keys'
+declarations to agree (same slot, same provenance): both `'unavailable'`
+paired with the unavailable sentinel, or both `'demo-stub'` paired with the
+demo-stub-marked place adapter, or both `'available'` paired with an unmarked
+production adapter. The first adopter who wires a real wallet but no VP
+stack triggers the assertion — and that breakage is the correct trigger for
+the VP-port promotion.
 
 ## Resolver contract
 
@@ -264,3 +287,33 @@ discovery + authenticate before reading `RespondentPlaceSource`. The
 runtime-feature gate runs FIRST so a disabled `respondentPlace` short-
 circuits before identity is required — there is no point asking the
 respondent to sign in to see "Obligations are not shared." copy.
+
+## Worked example: the /documents route as an optional non-form surface (FW-0056 slice 1)
+
+The `/documents` route (FW-0056 slice 1) is the third non-form surface to
+consume the synthesis pattern. It reads BOTH `respondentPlace` (the wallet
+substrate) AND the new `documentPresentation` key (the selective-presentation
+gate). `DocumentsRuntime` synthesizes `form: { features: { respondentPlace:
+'optional', documentPresentation: 'optional' } }` at the route boundary —
+never `required`. The route IS the user's opt-in.
+
+The instance × org pair drives the rendered verdict. Document **listing** is
+gated on `respondentPlace`; the selection action **always** renders the
+deferred-presentation copy in slice 1 because no real VP ceremony exists in
+any composition yet (the action's copy is gated by the consumer, not by the
+`documentPresentation` declaration).
+
+| Mode | `respondentPlace` instance | `respondentPlace` org | Page renders |
+|---|---|---|---|
+| any | `available` / `demo-stub` (demo) | `allowed` / `default-on` / `required` | "Your documents" library with per-kind sections + selection disclosure. |
+| any | `available` | `forbidden` | "Your documents are not available. This sender does not provide a document library here." |
+| any | `unavailable` | any | "Your documents are not available. This site does not provide a document library." |
+| `demo` | `demo-stub` | `allowed` | Library with demo data. |
+| `production` | `demo-stub` | any | `assertCompositionCoherence` throws at composition boot. |
+
+Like `/obligations`, the `/documents` route is **identity-bound**: the page
+boots `IdentityProvider` discovery + authenticate before reading
+`RespondentPlaceSource`. The runtime-feature gate runs FIRST so a disabled
+`respondentPlace` short-circuits before identity is required — there is no
+point asking the respondent to sign in to see "Your documents are not
+available." copy.

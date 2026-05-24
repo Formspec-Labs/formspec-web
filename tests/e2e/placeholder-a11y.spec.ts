@@ -116,6 +116,26 @@ test('direct /obligations renders the dashboard with cross-sender framing (FW-00
   expect(accessibilityScanResults.violations).toEqual([]);
 });
 
+test('direct /documents renders the library with per-kind sections + deferred-presentation copy (FW-0056 slice 1)', async ({ page }) => {
+  await page.goto('/documents');
+  await expect(page.getByRole('heading', { name: 'Your documents', level: 1 })).toBeVisible();
+  await expect(page.getByText(/across \d+ kinds?\./)).toBeVisible();
+  await expect(
+    page.getByText('Selective presentation, derived-claim disclosure, per-presentation revocation, retention horizons, and client-side encryption are not yet available on this site.'),
+  ).toBeVisible();
+
+  // Selection action is captured intent only — clicking shows the deferred
+  // presentation copy.
+  const useButton = page.getByRole('button', { name: 'Use this document…' }).first();
+  await useButton.click();
+  await expect(
+    page.getByText('Selective presentation is not yet available on this site. When it lands, this button will share the document with the chosen scope.'),
+  ).toBeVisible();
+
+  const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
+  expect(accessibilityScanResults.violations).toEqual([]);
+});
+
 test('mobile viewport keeps primary controls at tap-target size', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
