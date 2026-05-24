@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubAttachmentStore } from '../../src/adapters/stub/attachment-store.ts';
 import { sampleAttachmentBlob, sampleAttachmentMetadata } from '../../src/adapter-conformance/fixtures.ts';
 import { isDemoStubAdapter } from '../../src/policy/sentinel.ts';
@@ -27,5 +27,22 @@ describe('stubAttachmentStore', () => {
 
   it('returns undefined for an unknown URI', () => {
     expect(stubAttachmentStore().getStoredBytes('attachment:nope')).toBeUndefined();
+  });
+
+  describe('when globalThis.crypto.subtle is unavailable (M-1: weak-hash fallback removed)', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('throws rather than silently degrading to a weaker hash', async () => {
+      // Simulate a context where WebCrypto subtle is missing (older Node, some
+      // limited service-worker polyfills, etc.). The demo stub MUST refuse to
+      // produce a hash; production adopters bring their own hashing path.
+      vi.stubGlobal('crypto', {});
+      const adapter = stubAttachmentStore();
+      await expect(adapter.upload(sampleAttachmentBlob(), sampleAttachmentMetadata)).rejects.toThrow(
+        /globalThis\.crypto\.subtle/,
+      );
+    });
   });
 });

@@ -15,9 +15,11 @@ export interface StubAttachmentStore extends AttachmentStore {
  *
  * - URIs are `attachment:demo-<counter>` so fixtures can assert presence
  *   without leaking adapter internals.
- * - `hash` is SHA-256 via WebCrypto; falls back to a deterministic
- *   fnv-style hash when subtle crypto is unavailable (mirrors
- *   `respondent-flow.ts:responseHash`).
+ * - `hash` is SHA-256 via WebCrypto. The stub is demo-only; production
+ *   adapters bring their own hashing. If `globalThis.crypto.subtle` is
+ *   unavailable, the stub THROWS — the previous fnv fallback (32-bit) had
+ *   weaker collision resistance than SHA-256 and risked silently degrading
+ *   if this adapter ever ran in a context where the demo guard slipped.
  * - Marked DEMO_STUB_ADAPTER per ADR-0011; the coherence assertion
  *   forbids this adapter in production mode.
  */
@@ -52,23 +54,20 @@ export function stubAttachmentStore(): StubAttachmentStore {
 }
 
 async function sha256(blob: Blob): Promise<string> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
   if (!globalThis.crypto?.subtle) {
-    return `sha256:${fallbackHash(bytes)}`;
+    // Stub is demo-only; production adopters bring their own hashing. Throwing
+    // here prevents accidental degradation to a weaker hash in any context
+    // where the demo-stub coherence guard slipped (older Node without
+    // webcrypto, limited service-worker polyfills, etc.).
+    throw new Error(
+      'AttachmentStore demo stub requires globalThis.crypto.subtle (WebCrypto). Available in browsers + Node 18+ + modern service workers; not available in older Node or limited service-worker contexts.',
+    );
   }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
   const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
   return `sha256:${hex(new Uint8Array(digest))}`;
 }
 
 function hex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function fallbackHash(bytes: Uint8Array): string {
-  let hash = 2166136261;
-  for (const byte of bytes) {
-    hash ^= byte;
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash.toString(16).padStart(8, '0');
 }
