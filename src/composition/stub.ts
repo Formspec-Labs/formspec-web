@@ -50,15 +50,17 @@ export function createStubComposition(): Composition {
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
-      // FW-0056 slice 1: documentPresentation transitionally shares the
-      // respondentPlaceSource slot (see feature-port-map.ts). Demo declares
-      // 'demo-stub' to match the demo-stub-marked place adapter; the UI
-      // surface (DocumentsRuntime) still renders the deferred-presentation
-      // copy on the "Use this document…" action because no real VP
-      // ceremony exists in slice 1 — the action's copy is gated by the
-      // consumer, not by this declaration. When SC-4 + EXT-18 land a real
-      // ceremony, this declaration and the slot mapping split.
-      documentPresentation: 'demo-stub',
+      // FW-0056 design line 121 + arch-review MED-1: NO demo VP stack — the
+      // substrate honestly does not exist anywhere, so the demo composition
+      // declares documentPresentation 'unavailable' alongside the demo-stub
+      // wallet. The shared-slot independent-declarations rule in the
+      // coherence assertion (composition-coherence.ts) makes this honest:
+      // documentPresentation='unavailable' opts out of the slot, so the
+      // demo-stub-marked respondentPlaceSource adapter satisfies the
+      // remaining respondentPlace='demo-stub' constraint. When SC-4 + EXT-18
+      // land a real VP port, the slot mapping splits and this declaration
+      // can move to 'demo-stub' or 'available' as the ceremony allows.
+      documentPresentation: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -107,18 +109,11 @@ export function createStubObligationsRouteComposition(): Composition {
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
-      // FW-0056 slice 1: documentPresentation transitionally shares the
-      // respondentPlaceSource slot (see feature-port-map.ts). Stub mode
-      // declares 'demo-stub' so the same demo-stub-marked place adapter
-      // coheres for both keys. The UI surface (DocumentsRuntime) still
-      // renders the deferred-presentation copy on the "Use this document…"
-      // action — because no real VP ceremony exists in any composition yet,
-      // the action's copy is gated by the consumer, not by this declaration.
-      // When the real VP port lands (SC-4 + EXT-18 + a future port ADR),
-      // this declaration AND the slot mapping split; until then, the
-      // coherence assertion's "same slot, same provenance" rule keeps both
-      // declarations honest.
-      documentPresentation: 'demo-stub',
+      // FW-0056 design line 121 + arch-review MED-1: no demo VP stack
+      // (substrate doesn't exist anywhere). Same posture as the full demo
+      // composition — see createStubComposition for the shared-slot honesty
+      // rationale.
+      documentPresentation: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -157,18 +152,11 @@ export function createStubStatusRouteComposition(): Composition {
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
-      // FW-0056 slice 1: documentPresentation transitionally shares the
-      // respondentPlaceSource slot (see feature-port-map.ts). Stub mode
-      // declares 'demo-stub' so the same demo-stub-marked place adapter
-      // coheres for both keys. The UI surface (DocumentsRuntime) still
-      // renders the deferred-presentation copy on the "Use this document…"
-      // action — because no real VP ceremony exists in any composition yet,
-      // the action's copy is gated by the consumer, not by this declaration.
-      // When the real VP port lands (SC-4 + EXT-18 + a future port ADR),
-      // this declaration AND the slot mapping split; until then, the
-      // coherence assertion's "same slot, same provenance" rule keeps both
-      // declarations honest.
-      documentPresentation: 'demo-stub',
+      // FW-0056 design line 121 + arch-review MED-1: no demo VP stack
+      // (substrate doesn't exist anywhere). Same posture as the full demo
+      // composition — see createStubComposition for the shared-slot honesty
+      // rationale.
+      documentPresentation: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -190,9 +178,12 @@ export function createStubStatusRouteComposition(): Composition {
  * stubs the full stub composition uses, plus the demo `identityProvider`
  * (the /documents surface is identity-bound). Form-shaped MVP ports
  * (definition / draft / submit) are noop because the documents route never
- * reads them. `instanceCapabilities` declares both `respondentPlace` and
- * `documentPresentation` as `demo-stub` — same slot, same provenance — per
- * the transitional port mapping documented in feature-port-map.ts.
+ * reads them. `instanceCapabilities` declares `respondentPlace` as
+ * `demo-stub` (the demo wallet IS demo-stub) and `documentPresentation` as
+ * `unavailable` (no demo VP stack exists — FW-0056 design line 121).
+ * The shared-slot independent-declarations rule in the coherence assertion
+ * makes this honest: the unavailable declaration opts out of the slot, so
+ * the demo-stub place adapter satisfies only the respondentPlace key.
  */
 export function createStubDocumentsRouteComposition(): Composition {
   const composition: Composition = {
@@ -209,7 +200,7 @@ export function createStubDocumentsRouteComposition(): Composition {
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
-      documentPresentation: 'demo-stub',
+      documentPresentation: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {

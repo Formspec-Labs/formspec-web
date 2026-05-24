@@ -11,11 +11,11 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
       instanceCapabilities: {
         respondentPlace: 'demo-stub',
         status: 'demo-stub',
-        // FW-0056: documentPresentation transitionally shares the
-        // respondentPlaceSource slot (see feature-port-map.ts). Declare
-        // 'demo-stub' here so the same demo respondent-place adapter (which
-        // IS demo-stub marked) coheres for both keys.
-        documentPresentation: 'demo-stub',
+        // FW-0056 design line 121 + arch-review MED-1: no demo VP stack;
+        // documentPresentation 'unavailable' opts out of the shared
+        // respondentPlaceSource slot, so the demo-stub place adapter
+        // satisfies only the respondentPlace key.
+        documentPresentation: 'unavailable',
       } as const,
       respondentPlaceSource: stubRespondentPlaceSource(),
       statusReader: stubStatusReader(),

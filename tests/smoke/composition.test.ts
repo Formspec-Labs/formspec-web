@@ -419,7 +419,9 @@ describe('composition root smoke', () => {
     const c = createStubDocumentsRouteComposition();
     expect(c.mode).toBe('demo');
     expect(c.instanceCapabilities.respondentPlace).toBe('demo-stub');
-    expect(c.instanceCapabilities.documentPresentation).toBe('demo-stub');
+    // FW-0056 design line 121 + arch-review MED-1: demo declares
+    // documentPresentation 'unavailable' because no demo VP stack exists.
+    expect(c.instanceCapabilities.documentPresentation).toBe('unavailable');
     const snapshot = await c.respondentPlaceSource.readPlace({});
     expect(snapshot.documents).toBeDefined();
     expect((snapshot.documents ?? []).length).toBeGreaterThan(0);
@@ -431,7 +433,7 @@ describe('composition root smoke', () => {
     const c = createDemoDocumentsRouteComposition();
     expect(c.mode).toBe('demo');
     expect(c.instanceCapabilities.respondentPlace).toBe('demo-stub');
-    expect(c.instanceCapabilities.documentPresentation).toBe('demo-stub');
+    expect(c.instanceCapabilities.documentPresentation).toBe('unavailable');
   });
 
   it('IdentityProvider subscribe receives initial null then update on authenticate', async () => {
