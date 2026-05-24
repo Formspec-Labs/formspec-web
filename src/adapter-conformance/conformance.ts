@@ -263,6 +263,34 @@ export function defineStatusReaderConformance(
         .toBeUndefined();
     });
 
+    /**
+     * URN-as-possession-factor uniform-`undefined` contract per
+     * `docs/ports/status-reader.md` §"URN-as-bearer-token semantics".
+     * Adapters MUST return `undefined` for unknown URNs — not a not-found-shaped
+     * object, not an error throw, and not a different shape than the
+     * "URN exists but is not yours" branch. Distinguishing the two would make
+     * `/status?case=...` an enumeration oracle.
+     *
+     * Filed from FW-0039 closeout independent architecture review M-2 — the
+     * port doc warned but no conformance test enforced. The enforcement now
+     * applies to EVERY StatusReader adapter (stub + future production
+     * adapters).
+     */
+    it('returns uniform undefined (no throw, no shape variance) for an obviously-unknown URN', async () => {
+      const subject = setup();
+      // High-entropy URN tail guaranteed not to collide with any registered
+      // fixture in any adapter's test setup.
+      const randomTail = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_NEVER_EXISTS`;
+      const obviouslyUnknown = `urn:wos:case_test_unknown_${randomTail}`;
+      const result = await subject.adapter.readStatus({
+        subjectRef: 'subject:never-exists',
+        submissionId: obviouslyUnknown,
+        resourceRef: obviouslyUnknown,
+      });
+      // Strictly undefined — not null, not {}, not a "not-found"-shaped object.
+      expect(result).toBeUndefined();
+    });
+
     it('rejects sidecar projection wrappers as StatusReader resources', async () => {
       const subject = setup();
       const invalid = sampleApplicantStatusProjection as unknown as ApplicantStatusResource;

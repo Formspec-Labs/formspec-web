@@ -63,6 +63,14 @@ Each feature can be:
 
 Org policy also carries limits: allowed origins, accepted IdPs, assurance floors, retention windows, payment methods, upload size limits, file classes, reviewer roles, safe-address jurisdiction rules, and deletion/legal-hold constraints.
 
+#### Non-form surface synthesis (addendum, FW-0039)
+
+The original §Form runtime policy text frames the form-policy layer as **form-owned only**. FW-0039 slice 1 surfaced a recognized pattern that bends the framing: **non-form surfaces** that consume a feature key (e.g., `/status?case={urn}` rendered by `StatusRuntime`) have no `FormDefinition` and therefore no form-policy layer of their own, but they still need the resolver to evaluate `instance × org` against an actual request. The pattern these surfaces use is to **synthesize a form-policy fragment at the route boundary** — `form: { features: { status: 'optional' } }` for the `/status` route — so the resolver sees a request and the natural `optional-no-instance | org-forbidden | form-forbidden` branches drive the plain-language "Status not shared" copy. The synthesis is strictly OPTIONAL — never `required` — so an unavailable instance falls off as `optional-no-instance` rather than raising a typed `UnsupportedRequiredFeatureError` that abuses the form-load error boundary for a surface that has no form.
+
+This is a recognized synthesis pattern, not a special case: any non-form surface that needs to gate on a feature key follows the same shape. The worked example lives in [`thoughts/plans/2026-05-23-fw-0039-post-submit-status-surface.md`](../plans/2026-05-23-fw-0039-post-submit-status-surface.md) (`src/app/StatusRuntime.tsx` §runtime-profile resolution).
+
+**Implication for FW-0066** (`FormRuntimePolicyExtractor` port promotion): when the trigger fires, the port must accommodate non-form-surface synthesis as a first-class operation — not a route-side hack. Either (a) the port accepts a second-shape "route-derived" request alongside the "definition-derived" request, or (b) non-form surfaces continue to bypass the port and assert the request literally with the same OPTIONAL-only discipline. FW-0066's row carries the choice; this addendum is the upstream authority the FW-0066 caveat sub-bullet points at.
+
 ### Form runtime policy
 
 Form policy is form-owned. It answers: "What does this form need?"

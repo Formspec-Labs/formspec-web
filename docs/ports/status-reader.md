@@ -34,13 +34,19 @@ depends on **two adapter-side responsibilities** the port does not enforce:
    The UUIDv7 tail is high-entropy but not opaque-token-class; a determined
    attacker can probe at scale without rate limiting. Production adapters
    MUST rate-limit unknown-URN reads server-side.
-2. **Return uniform "not found" for every unknown lookup.** Do NOT vary the
-   response shape between "this URN doesn't exist" and "this URN exists but
-   is not yours" — the consumer (`StatusRuntime`) renders the same
-   plain-language copy in both cases. Distinguishing the two would make
-   `/status?case=...` an enumeration oracle. Tenant-scope filtering remains
-   the adapter's responsibility per the contract above; the failure shape
-   stays `undefined`.
+2. **Return uniform `undefined` for every unknown lookup.** Adapters MUST
+   return strict `undefined` (not a not-found-shaped object, not an error
+   throw, not a different shape than the "URN exists but is not yours"
+   branch) for any unknown URN. The consumer (`StatusRuntime`) renders the
+   same plain-language copy in both cases. Distinguishing the two would
+   make `/status?case=...` an enumeration oracle. Tenant-scope filtering
+   remains the adapter's responsibility per the contract above; the
+   failure shape stays `undefined`. **Enforcement:** the shared conformance
+   suite case `returns uniform undefined (no throw, no shape variance) for
+   an obviously-unknown URN` in
+   `tests/adapter-conformance/status-reader/conformance.test.ts` exercises
+   this contract on every adapter; CI fails if an adapter returns anything
+   other than `undefined`.
 
 Adopters whose threat model rejects the URN-as-bearer-token model wire a
 different adapter (magic-link rotation, browser-bound proof, OAuth scope
