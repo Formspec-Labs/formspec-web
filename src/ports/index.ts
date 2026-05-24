@@ -61,3 +61,4 @@ export type {
   AttachmentUploadErrorCode,
 } from './attachment-store.ts';
 export { AttachmentUploadError } from './attachment-store.ts';
+export type { FormRuntimePolicyExtractor } from './form-runtime-policy-extractor.ts';

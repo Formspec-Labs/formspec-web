@@ -2,6 +2,7 @@ export {
   defineAttachmentStoreConformance,
   defineDefinitionSourceConformance,
   defineDraftStoreConformance,
+  defineFormRuntimePolicyExtractorConformance,
   defineIdentityProviderConformance,
   defineNotificationDeliveryConformance,
   defineRespondentPlaceSourceConformance,

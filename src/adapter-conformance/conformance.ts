@@ -14,6 +14,12 @@ import type {
 } from '../ports/status-reader.ts';
 import type { SubmitTransport } from '../ports/submit-transport.ts';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
+import type { FormRuntimePolicyExtractor } from '../ports/form-runtime-policy-extractor.ts';
+import {
+  RUNTIME_FEATURE_KEYS,
+  isFormFeaturePolicyMode,
+  isRuntimeFeatureKey,
+} from '../policy/index.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import {
   isAttachmentRef,
@@ -73,6 +79,19 @@ export interface RespondentPlaceSourceConformanceSubject {
 
 export interface AttachmentStoreConformanceSubject {
   adapter: AttachmentStore;
+}
+
+export interface FormRuntimePolicyExtractorConformanceSubject {
+  adapter: FormRuntimePolicyExtractor;
+  /**
+   * Optional fixture override. Adapter authors whose extractor only returns a
+   * meaningful policy for a specific definition shape (e.g., the demo-form
+   * URL-keyed extractor, the attachment-field walker fed an attachment-bearing
+   * definition) supply that definition here so the round-trip + closed-set
+   * checks run against the adapter's actual happy path. Omit to fall back to
+   * the bare `sampleFormDefinition` fixture.
+   */
+  definition?: FormDefinition;
 }
 
 export function defineDefinitionSourceConformance(
@@ -509,6 +528,74 @@ export function defineAttachmentStoreConformance(
       await subject.adapter.delete(ref.uri);
       // No exception is the contract — adopters may also choose to make
       // subsequent reads fail, but failure surface is adopter-shaped.
+    });
+  });
+}
+
+/**
+ * Conformance harness for `FormRuntimePolicyExtractor` (FW-0066, web ADR-0011
+ * §Form runtime policy). Encodes the five conformance invariants the port
+ * comment names. Adapter authors register their extractor with an optional
+ * `definition` fixture that exercises the adapter's happy path.
+ */
+export function defineFormRuntimePolicyExtractorConformance(
+  name: string,
+  setup: () => FormRuntimePolicyExtractorConformanceSubject,
+): void {
+  describe(name, () => {
+    it('returns a schema-valid FormRuntimePolicy for a real definition', () => {
+      const subject = setup();
+      const definition = subject.definition ?? sampleFormDefinition;
+      const policy = subject.adapter.extract(definition);
+      expect(policy).toBeDefined();
+      expect(typeof policy.features).toBe('object');
+      expect(policy.features).not.toBeNull();
+    });
+
+    it('returns an empty policy for an empty-items definition without throwing', () => {
+      const subject = setup();
+      const emptyDefinition: FormDefinition = {
+        ...sampleFormDefinition,
+        items: [],
+      };
+      const policy = subject.adapter.extract(emptyDefinition);
+      expect(policy.features).toEqual({});
+    });
+
+    it('is deterministic across repeated calls and JSON round-trips of the input', () => {
+      const subject = setup();
+      const definition = subject.definition ?? sampleFormDefinition;
+      const first = subject.adapter.extract(definition);
+      const second = subject.adapter.extract(definition);
+      const clone = roundTripJson(definition);
+      const third = subject.adapter.extract(clone);
+      expect(second).toEqual(first);
+      expect(third).toEqual(first);
+    });
+
+    it('only returns keys in the closed RUNTIME_FEATURE_KEYS taxonomy', () => {
+      const subject = setup();
+      const definition = subject.definition ?? sampleFormDefinition;
+      const policy = subject.adapter.extract(definition);
+      for (const key of Object.keys(policy.features)) {
+        expect(isRuntimeFeatureKey(key)).toBe(true);
+      }
+      // The closed-set tuple is the source of truth; failing this assertion
+      // means the adapter invented a key. Touch RUNTIME_FEATURE_KEYS so it
+      // stays referenced when the closed-set membership check above passes
+      // trivially (no extracted keys); otherwise unused-import lints would
+      // strip the tuple import from the harness module on a future refactor.
+      expect(Array.isArray(RUNTIME_FEATURE_KEYS)).toBe(true);
+    });
+
+    it('only returns modes in {forbidden, optional, required}', () => {
+      const subject = setup();
+      const definition = subject.definition ?? sampleFormDefinition;
+      const policy = subject.adapter.extract(definition);
+      for (const mode of Object.values(policy.features)) {
+        if (mode === undefined) continue;
+        expect(isFormFeaturePolicyMode(mode)).toBe(true);
+      }
     });
   });
 }
