@@ -21,6 +21,7 @@ export const DOCUMENTS_ROUTE_NARROWING: RouteNarrowing = {
   initialDefinitionUrlSentinel: 'about:not-constructed#fw-0056',
   consumesRespondentPlace: true,
   consumesStatus: false,
+  consumesHistory: false,
   identityBound: true,
 };
 

@@ -25,6 +25,12 @@ export const FEATURE_PORT_MAP = {
   // AttachmentStore implementation (S3 / R2 / Azure Blob / server-bundled /
   // IPFS / etc.) per deployment composition.
   fileUpload: 'attachmentStore',
+  // FW-0057 slice 1: 1:1 mapping. The RespondentHistorySource port + the
+  // crossIssuerHistory feature key ship together — no transitional slot-
+  // sharing. Substrate (multi-issuer auth via XS-2 token bag per stack-root
+  // ADR-0068 D-1 + D-3) is the adapter's concern, not the port's; production
+  // adapters land post-XS-2.
+  crossIssuerHistory: 'respondentHistorySource',
 } as const satisfies Readonly<Record<RuntimeFeatureKey, string>>;
 
 export type CompositionPortName = (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey];

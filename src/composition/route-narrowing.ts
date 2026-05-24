@@ -44,8 +44,11 @@ import {
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
+import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
+import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
+import { demoHistorySnapshot } from '../demo/respondent-history.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import {
   freezeComposition,
@@ -82,6 +85,17 @@ export interface RouteNarrowing {
   readonly consumesRespondentPlace: boolean;
   /** Whether the route reads the status reader. Today only `/status`. */
   readonly consumesStatus: boolean;
+  /**
+   * Whether the route reads the cross-issuer history (FW-0057). Today only
+   * `/history`. Drives the `respondentHistorySource` adapter wiring and the
+   * `instanceCapabilities.crossIssuerHistory` declaration: when `true`, the
+   * demo factory wires the stub fixture + declares `'demo-stub'`; when
+   * `false`, the demo factory wires the unavailable sentinel + declares
+   * `'unavailable'`. Production always wires the sentinel + declares
+   * `'unavailable'` today (post-XS-2 the production adapter ships and this
+   * branch picks it up automatically).
+   */
+  readonly consumesHistory: boolean;
   /**
    * Whether the surface is identity-bound. When `true` AND production
    * `respondentPlace` capability is `available`, the production factory
@@ -145,6 +159,12 @@ function buildProductionNarrowedComposition({
     // route needs an upload affordance, add a `consumesAttachmentStore` flag
     // to RouteNarrowing then.
     fileUpload: 'unavailable',
+    // FW-0057 slice 1: production composition has no cross-issuer history
+    // adapter yet (XS-2 token bag is upstream-queued); narrowed routes
+    // including /history declare 'unavailable' in production mode + render
+    // the disabled-cause copy honestly. When the production adapter ships,
+    // wire it conditionally on `route.consumesHistory` here.
+    crossIssuerHistory: 'unavailable',
   };
   const notificationDelivery = stubNotificationDelivery();
   // MED-4: identity is only wired when the gated respondent-place capability
@@ -169,6 +189,7 @@ function buildProductionNarrowedComposition({
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
     attachmentStore: unavailableAttachmentStore(),
+    respondentHistorySource: unavailableRespondentHistorySource(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -195,6 +216,9 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
     ]),
     attachmentStore: unavailableAttachmentStore(),
+    respondentHistorySource: route.consumesHistory
+      ? stubRespondentHistorySource(demoHistorySnapshot())
+      : unavailableRespondentHistorySource(),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -210,6 +234,11 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // stub mode and production mode declare unavailable to match the wired
       // sentinel.
       fileUpload: 'unavailable',
+      // FW-0057 slice 1: only the /history route consumes the cross-issuer
+      // history adapter. Other narrowed routes (status / obligations /
+      // documents) wire the unavailable sentinel + declare 'unavailable'
+      // because they don't render history.
+      crossIssuerHistory: route.consumesHistory ? 'demo-stub' : 'unavailable',
     },
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -224,6 +253,7 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       status: 'allowed',
       documentPresentation: 'allowed',
       fileUpload: 'allowed',
+      crossIssuerHistory: 'allowed',
     },
   };
 }

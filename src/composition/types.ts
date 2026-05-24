@@ -5,6 +5,7 @@ import type {
   FormRuntimePolicyExtractor,
   IdentityProvider,
   NotificationDelivery,
+  RespondentHistorySource,
   RespondentPlaceSource,
   StatusReader,
   SubmitTransport,
@@ -45,6 +46,13 @@ export interface Composition {
   statusReader: StatusReader;
   /** FW-0033 slice 1: object-store seam for attachment uploads (web ADR-0011 fileUpload). */
   attachmentStore: AttachmentStore;
+  /**
+   * FW-0057 slice 1: cross-issuer respondent-history seam (web ADR-0011
+   * crossIssuerHistory). Reads drafts + submissions + signed records
+   * aggregated across senders (post-XS-2 client-side fan-out). Slice 1 wires
+   * a stub fixture in demo and the unavailable sentinel in production.
+   */
+  respondentHistorySource: RespondentHistorySource;
   /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */
   instanceCapabilities: InstanceCapabilities;
   /** ADR-0011 §Org runtime policy — supplied by the composition root. */

@@ -8,6 +8,7 @@ import { stubDraftStore } from '../adapters/stub/draft-store.ts';
 import { stubFormRuntimePolicyExtractor } from '../adapters/stub/form-runtime-policy-extractor.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
+import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../adapters/stub/submit-transport.ts';
@@ -16,6 +17,7 @@ import {
   demoApplicantCaseDetail,
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
+import { demoHistorySnapshot } from '../demo/respondent-history.ts';
 import {
   freezeComposition,
   type InstanceCapabilities,
@@ -51,6 +53,7 @@ export function createStubComposition(): Composition {
       ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
     ]),
     attachmentStore: stubAttachmentStore(),
+    respondentHistorySource: stubRespondentHistorySource(demoHistorySnapshot()),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -70,6 +73,10 @@ export function createStubComposition(): Composition {
       // sample-form.json has no attachment field today; the stub is exercised
       // through synthetic-definition tests and the conformance suite.
       fileUpload: 'demo-stub',
+      // FW-0057 slice 1: in-memory history fixture (4 entries across 2 fake
+      // issuers, 3 kinds) satisfies the demo posture. Production declares
+      // 'unavailable' until XS-2 lands the multi-issuer fan-out adapter.
+      crossIssuerHistory: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -77,6 +84,7 @@ export function createStubComposition(): Composition {
         status: 'allowed',
         documentPresentation: 'allowed',
         fileUpload: 'allowed',
+        crossIssuerHistory: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
     // FW-0066: CompositeFormRuntimePolicyExtractor composes the demo-form

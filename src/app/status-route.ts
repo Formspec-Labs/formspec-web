@@ -20,6 +20,7 @@ export const STATUS_ROUTE_NARROWING: RouteNarrowing = {
   initialDefinitionUrlSentinel: 'about:not-constructed#fw-0068',
   consumesRespondentPlace: false,
   consumesStatus: true,
+  consumesHistory: false,
   identityBound: false,
 };
 

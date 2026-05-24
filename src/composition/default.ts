@@ -10,6 +10,7 @@ import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
+import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
@@ -72,6 +73,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
     attachmentStore: unavailableAttachmentStore(),
+    respondentHistorySource: unavailableRespondentHistorySource(),
     // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —
@@ -94,6 +96,11 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       // fields will fail-load with UnsupportedRequiredFeatureError until an
       // adapter is wired.
       fileUpload: 'unavailable',
+      // FW-0057 slice 1: cross-issuer history adapter requires XS-2 (multi-
+      // issuer client-side token bag per stack-root ADR-0068 D-1 + D-3).
+      // Production composition declares `unavailable` until that lands; the
+      // /history route honestly renders "Your history is not available." copy.
+      crossIssuerHistory: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -101,6 +108,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
         status: 'allowed',
         documentPresentation: 'allowed',
         fileUpload: 'allowed',
+        crossIssuerHistory: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
     // FW-0066: AttachmentRequirementExtractor wraps the FW-0033 walker as a
