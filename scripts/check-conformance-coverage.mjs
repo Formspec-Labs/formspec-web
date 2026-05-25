@@ -23,6 +23,7 @@ const portSuites = new Map([
   ['ScreenerDocumentSource', 'tests/adapter-conformance/screener-document-source/conformance.test.ts'],
   ['ReviewerSession', 'tests/adapter-conformance/reviewer-session/conformance.test.ts'],
   ['ReviewThreadStore', 'tests/adapter-conformance/review-thread-store/conformance.test.ts'],
+  ['SafeAddressDirectory', 'tests/adapter-conformance/safe-address-directory/conformance.test.ts'],
   ['LifecycleActionClient', 'tests/adapter-conformance/lifecycle-action-client/conformance.test.ts'],
 ]);
 const stubPortsByPath = new Map([
@@ -42,6 +43,7 @@ const stubPortsByPath = new Map([
   ['src/adapters/stub/screener-document-source.ts', 'ScreenerDocumentSource'],
   ['src/adapters/stub/reviewer-session.ts', 'ReviewerSession'],
   ['src/adapters/stub/review-thread-store.ts', 'ReviewThreadStore'],
+  ['src/adapters/stub/safe-address-directory.ts', 'SafeAddressDirectory'],
   ['src/adapters/stub/lifecycle-action-client.ts', 'LifecycleActionClient'],
 ]);
 const unavailableSentinelFactoriesByPath = new Map([
@@ -55,6 +57,7 @@ const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/screener-document-source.ts', 'unavailableScreenerDocumentSource'],
   ['src/adapters/unavailable/reviewer-session.ts', 'unavailableReviewerSession'],
   ['src/adapters/unavailable/review-thread-store.ts', 'unavailableReviewThreadStore'],
+  ['src/adapters/unavailable/safe-address-directory.ts', 'unavailableSafeAddressDirectory'],
   ['src/adapters/unavailable/lifecycle-action-client.ts', 'unavailableLifecycleActionClient'],
 ]);
 const requiredHarnessExports = [
@@ -74,6 +77,7 @@ const requiredHarnessExports = [
   'defineScreenerDocumentSourceConformance',
   'defineReviewerSessionConformance',
   'defineReviewThreadStoreConformance',
+  'defineSafeAddressDirectoryConformance',
   'defineLifecycleActionClientConformance',
 ];
 const requiredReadmePhrases = [
@@ -249,7 +253,7 @@ function portImplementedBy(classHeader) {
   }
   return (
     implementsMatch[1].match(
-      /\b(DefinitionSource|DraftStore|SubmitTransport|IdentityProvider|NotificationDelivery|RespondentPlaceSource|StatusReader|FormRuntimePolicyExtractor)\b/,
+      /\b(DefinitionSource|DraftStore|SubmitTransport|IdentityProvider|NotificationDelivery|RespondentPlaceSource|StatusReader|FormRuntimePolicyExtractor|SafeAddressDirectory)\b/,
     )?.[1] ?? null
   );
 }

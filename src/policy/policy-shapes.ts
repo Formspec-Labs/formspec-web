@@ -78,6 +78,44 @@ export interface TrustedReviewerRuntimeConfig extends ReviewThreadPolicySnapshot
   readonly posture: TrustedReviewerPosture;
 }
 
+export type SafeAddressAccessClass = 'safe-address' | 'safe-contact' | 'safe-employer';
+export type SafeAddressReceiptPostureTier = 'verifier-grade' | 'phase-1-fallback';
+
+export interface SafeAddressFieldPolicy {
+  readonly path: string;
+  readonly label?: string;
+  readonly accessClass: SafeAddressAccessClass;
+  /**
+   * Party-policy side of the FW-0049 x FW-0050 intersection. These are the
+   * already-resolved audience tokens or party/audience references for the
+   * protected value.
+   */
+  readonly visibleTo?: readonly string[];
+  /**
+   * Safe-address Privacy Profile side of the intersection. Defaults to the
+   * org/deployment authorized audience set when omitted.
+   */
+  readonly plaintextAudiences?: readonly string[];
+  /**
+   * Optional pre-resolved intersection emitted by an upstream policy engine.
+   * When present it must not be empty.
+   */
+  readonly effectiveAudiences?: readonly string[];
+}
+
+export interface SafeAddressRuntimeConfig {
+  readonly enabledClasses: readonly SafeAddressAccessClass[];
+  readonly receiptPostureTier: SafeAddressReceiptPostureTier;
+  readonly substituteAddressDirectoryRef: string;
+  readonly acpJurisdictionsAccepted: readonly string[];
+  readonly authorizedAudiences: readonly string[];
+  readonly fields: readonly SafeAddressFieldPolicy[];
+  readonly rendererHints?: {
+    readonly maskRenderToken?: string;
+    readonly revealAffordanceLabel?: string;
+  };
+}
+
 /**
  * FW-0040 slice 1: shape of `OrgRuntimePolicy.limits.embed`. The runtime
  * iframe-context gate matches the host page's origin against
@@ -303,6 +341,7 @@ export interface ResolvedRuntimeProfile {
   readonly limits: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
   readonly recordLifecycle?: ResolvedRecordLifecyclePolicy;
   readonly multiParty?: ResolvedMultiPartyPolicy;
+  readonly safeAddress?: SafeAddressRuntimeConfig;
 }
 
 export function getMultiPartyRuntimeConfig(
@@ -325,4 +364,11 @@ export function getTrustedReviewerRuntimeConfig(
     };
   }
   return value as TrustedReviewerRuntimeConfig;
+}
+
+export function getSafeAddressRuntimeConfig(
+  profile: ResolvedRuntimeProfile,
+): SafeAddressRuntimeConfig | undefined {
+  if (!profile.enabled.has('safeAddress')) return undefined;
+  return profile.safeAddress;
 }

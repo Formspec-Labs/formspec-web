@@ -20,6 +20,10 @@ import type {
   LifecycleActionClient,
   LifecycleActionSnapshot,
 } from '../ports/lifecycle-action-client.ts';
+import type {
+  SafeAddressDirectory,
+  SafeAddressJurisdiction,
+} from '../ports/safe-address-directory.ts';
 import type { SubmitTransport } from '../ports/submit-transport.ts';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { FormRuntimePolicyExtractor } from '../ports/form-runtime-policy-extractor.ts';
@@ -121,6 +125,13 @@ export interface StatusReaderConformanceSubject {
 export interface LifecycleActionClientConformanceSubject {
   adapter: LifecycleActionClient;
   registerLifecycle(snapshot: LifecycleActionSnapshot): void | Promise<void>;
+}
+
+export interface SafeAddressDirectoryConformanceSubject {
+  adapter: SafeAddressDirectory;
+  expectedJurisdiction: SafeAddressJurisdiction;
+  validCandidate: string;
+  invalidCandidate: string;
 }
 
 export interface RespondentPlaceSourceConformanceSubject {
@@ -1450,6 +1461,58 @@ export interface ReviewerSessionConformanceSubject {
 export interface ReviewThreadStoreConformanceSubject {
   adapter: ReviewThreadStore;
   reviewerSession: ReviewerSession;
+}
+
+export function defineSafeAddressDirectoryConformance(
+  name: string,
+  setup: () => SafeAddressDirectoryConformanceSubject,
+): void {
+  describe(name, () => {
+    it('lists supported substitute-address jurisdictions without plaintext registry contents', async () => {
+      const subject = setup();
+      const jurisdictions = await subject.adapter.supportedJurisdictions();
+      expect(jurisdictions).toContainEqual(subject.expectedJurisdiction);
+      for (const entry of jurisdictions) {
+        expect(entry.jurisdictionKey.length).toBeGreaterThan(0);
+        expect(entry.label.length).toBeGreaterThan(0);
+        expect(['safe-address', 'safe-contact', 'safe-employer']).toContain(entry.accessClass);
+        expect('substitutes' in entry).toBe(false);
+      }
+    });
+
+    it('validates a recognized substitute address for the requested jurisdiction', async () => {
+      const subject = setup();
+      const result = await subject.adapter.validateSubstituteAddress({
+        jurisdictionKey: subject.expectedJurisdiction.jurisdictionKey,
+        accessClass: subject.expectedJurisdiction.accessClass,
+        candidate: subject.validCandidate,
+      });
+      expect(result.valid).toBe(true);
+      if (result.valid) {
+        expect(result.jurisdictionKey).toBe(subject.expectedJurisdiction.jurisdictionKey);
+        expect(result.normalizedSubstitute.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('rejects unknown or unrecognized substitute addresses without throwing', async () => {
+      const subject = setup();
+      await expect(subject.adapter.validateSubstituteAddress({
+        jurisdictionKey: subject.expectedJurisdiction.jurisdictionKey,
+        accessClass: subject.expectedJurisdiction.accessClass,
+        candidate: subject.invalidCandidate,
+      })).resolves.toMatchObject({
+        valid: false,
+        reason: 'not-recognized',
+      });
+      await expect(subject.adapter.validateSubstituteAddress({
+        jurisdictionKey: 'missing-program',
+        candidate: subject.validCandidate,
+      })).resolves.toMatchObject({
+        valid: false,
+        reason: 'unknown-jurisdiction',
+      });
+    });
+  });
 }
 
 /**

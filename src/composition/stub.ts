@@ -6,6 +6,7 @@ import {
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
   RecordLifecycleExtractor,
+  SafeAddressPolicyExtractor,
   TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
@@ -22,9 +23,9 @@ import { createStubTrustedReviewerAdapters } from '../adapters/stub/review-threa
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
+import { stubSafeAddressDirectory } from '../adapters/stub/safe-address-directory.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../adapters/stub/submit-transport.ts';
-import { unavailablePreallocatedFeaturePort } from '../adapters/unavailable/preallocated-feature-port.ts';
 import { demoSampleForm, demoSampleFormUrl } from '../demo/index.ts';
 import { demoLocaleDocuments } from '../demo/locales.ts';
 import {
@@ -105,7 +106,7 @@ export function createStubComposition(): Composition {
     screenerDocumentSource: stubScreenerDocumentSource(demoScreenerCatalog()),
     reviewerSession: trustedReviewerAdapters.reviewerSession,
     reviewThreadStore: trustedReviewerAdapters.reviewThreadStore,
-    safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
+    safeAddressDirectory: stubSafeAddressDirectory(),
     lifecycleActionClient: stubLifecycleActionClient({
       initialSnapshots: [demoLifecycleActionSnapshot()],
     }),
@@ -163,7 +164,7 @@ export function createStubComposition(): Composition {
       // adopter wires durable capability URL + SC-6 storage adapters.
       trustedReviewer: 'demo-stub',
       bringYourOwnAssistant: 'unavailable',
-      safeAddress: 'unavailable',
+      safeAddress: 'demo-stub',
       duressAware: 'unavailable',
       multiParty: 'unavailable',
       recordLifecycle: 'demo-stub',
@@ -211,7 +212,14 @@ export function createStubComposition(): Composition {
       // mounts in an iframe so no allow-list entry is needed; adopters
       // override per their host integration. The literal '*' opts into
       // any-origin and MUST be documented per the adopter doc warning.
-      limits: { embed: { allowedOrigins: [] } },
+      limits: {
+        embed: { allowedOrigins: [] },
+        safeAddress: {
+          receiptPostureTier: 'phase-1-fallback',
+          acpJurisdictionsAccepted: ['CA-ACP', 'WA-ACP', 'USMS-WitSec'],
+          authorizedAudiences: ['issuer_verification'],
+        },
+      },
     } satisfies OrgRuntimePolicy,
     // FW-0066: CompositeFormRuntimePolicyExtractor composes the demo-form
     // URL-keyed seeded-pair opt-in (DemoFormPolicyExtractor) with the
@@ -231,6 +239,7 @@ export function createStubComposition(): Composition {
       new TrustedReviewerPolicyExtractor(),
       new MultiPartyPolicyExtractor(),
       new RecordLifecycleExtractor(),
+      new SafeAddressPolicyExtractor(),
     ]),
   };
   return freezeComposition(composition);

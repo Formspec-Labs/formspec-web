@@ -40,6 +40,10 @@ import {
   type ResolvedRecordLifecycleWindow,
   type ResolvedRecordLifecycleWithdrawablePolicy,
   type ResolvedRuntimeProfile,
+  type SafeAddressAccessClass,
+  type SafeAddressFieldPolicy,
+  type SafeAddressReceiptPostureTier,
+  type SafeAddressRuntimeConfig,
 } from './policy-shapes.ts';
 
 export interface ResolveRuntimeFeaturesInput {
@@ -83,6 +87,9 @@ export function resolveRuntimeFeatures(
   const multiParty = enabled.has('multiParty')
     ? resolveMultiPartyPolicy(limits.multiParty)
     : undefined;
+  const safeAddress = enabled.has('safeAddress')
+    ? resolveSafeAddressPolicy(input.org.limits?.safeAddress, input.form.limits?.safeAddress)
+    : undefined;
 
   return Object.freeze({
     mode: input.mode,
@@ -91,6 +98,7 @@ export function resolveRuntimeFeatures(
     limits: Object.freeze(limits),
     recordLifecycle,
     multiParty,
+    safeAddress,
   });
 }
 
@@ -239,6 +247,8 @@ function validateInput(input: ResolveRuntimeFeaturesInput): void {
   validateTrustedReviewerLimits(input.form.limits?.trustedReviewer, 'form');
   validateMultiPartyLimits(input.org.limits?.multiParty, 'org');
   validateMultiPartyLimits(input.form.limits?.multiParty, 'form');
+  validateSafeAddressLimits(input.org.limits?.safeAddress, 'org');
+  validateSafeAddressLimits(input.form.limits?.safeAddress, 'form');
   validateRecordLifecyclePolicy('org', input.org.recordLifecycle);
   validateRecordLifecyclePolicy('form', input.form.recordLifecycle);
 }
@@ -444,10 +454,14 @@ function validateMultiPartyLimits(value: unknown, layer: 'org' | 'form'): void {
       );
     }
     validateMultiPartyCardinality(layer, party.cardinality as MultiPartyRuntimeConfig['parties'][number]['cardinality']);
-    validateOptionalStringArray(layer, 'visibleTo', party.visibleTo as readonly string[] | undefined);
-    validateOptionalStringArray(layer, 'editableBy', party.editableBy as readonly string[] | undefined);
-    validateOptionalStringArray(layer, 'signedBy', party.signedBy as readonly string[] | undefined);
-    validateOptionalStringArray(layer, 'safeAddressAudience', party.safeAddressAudience as readonly string[] | undefined);
+    validateOptionalStringArray(layer, 'limits.multiParty.parties[].visibleTo', party.visibleTo);
+    validateOptionalStringArray(layer, 'limits.multiParty.parties[].editableBy', party.editableBy);
+    validateOptionalStringArray(layer, 'limits.multiParty.parties[].signedBy', party.signedBy);
+    validateOptionalStringArray(
+      layer,
+      'limits.multiParty.parties[].safeAddressAudience',
+      party.safeAddressAudience,
+    );
     if (party.safeAddressAudience && party.visibleTo) {
       const visibleSet = new Set(party.visibleTo);
       const intersection = party.safeAddressAudience.filter((entry) => visibleSet.has(entry));
@@ -527,17 +541,114 @@ function validateMultiPartyCardinality(
   }
 }
 
-function validateOptionalStringArray(
-  layer: 'org' | 'form',
-  property: string,
-  value: readonly string[] | undefined,
-): void {
+function validateSafeAddressLimits(value: unknown, layer: 'org' | 'form'): void {
   if (value === undefined) return;
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
+  if (!isPlainObject(value)) {
+    throw new InvalidRuntimePolicyError(layer, 'limits.safeAddress must be an object');
+  }
+  const candidate = value as {
+    receiptPostureTier?: unknown;
+    enabledClasses?: unknown;
+    acpJurisdictionsAccepted?: unknown;
+    authorizedAudiences?: unknown;
+    substituteAddressDirectoryRef?: unknown;
+    fields?: unknown;
+    rendererHints?: unknown;
+  };
+  if (
+    candidate.receiptPostureTier !== undefined &&
+    !isSafeAddressReceiptPostureTier(candidate.receiptPostureTier)
+  ) {
     throw new InvalidRuntimePolicyError(
       layer,
-      `limits.multiParty.parties[].${property} must be an array of non-empty strings`,
+      'limits.safeAddress.receiptPostureTier must be verifier-grade | phase-1-fallback',
     );
+  }
+  validateOptionalStringArray(layer, 'limits.safeAddress.enabledClasses', candidate.enabledClasses);
+  if (
+    Array.isArray(candidate.enabledClasses) &&
+    !candidate.enabledClasses.every((entry) => isSafeAddressAccessClass(entry))
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.safeAddress.enabledClasses entries must be safe-address | safe-contact | safe-employer',
+    );
+  }
+  validateOptionalStringArray(
+    layer,
+    'limits.safeAddress.acpJurisdictionsAccepted',
+    candidate.acpJurisdictionsAccepted,
+  );
+  validateOptionalStringArray(
+    layer,
+    'limits.safeAddress.authorizedAudiences',
+    candidate.authorizedAudiences,
+  );
+  if (
+    candidate.substituteAddressDirectoryRef !== undefined &&
+    (typeof candidate.substituteAddressDirectoryRef !== 'string' ||
+      candidate.substituteAddressDirectoryRef.length === 0)
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.safeAddress.substituteAddressDirectoryRef must be a non-empty string',
+    );
+  }
+  if (candidate.fields !== undefined && !Array.isArray(candidate.fields)) {
+    throw new InvalidRuntimePolicyError(layer, 'limits.safeAddress.fields must be an array');
+  }
+  for (const field of Array.isArray(candidate.fields) ? candidate.fields : []) {
+    validateSafeAddressField(layer, field);
+  }
+  if (candidate.rendererHints !== undefined && !isPlainObject(candidate.rendererHints)) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.safeAddress.rendererHints must be an object',
+    );
+  }
+}
+
+function validateSafeAddressField(layer: 'org' | 'form', value: unknown): void {
+  if (!isPlainObject(value)) {
+    throw new InvalidRuntimePolicyError(layer, 'limits.safeAddress.fields entries must be objects');
+  }
+  const field = value as unknown as SafeAddressFieldPolicy;
+  if (typeof field.path !== 'string' || !field.path.startsWith('/')) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.safeAddress.fields[].path must be an RFC 6901-style JSON pointer',
+    );
+  }
+  if (!isSafeAddressAccessClass(field.accessClass)) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.safeAddress.fields[].accessClass must be safe-address | safe-contact | safe-employer',
+    );
+  }
+  validateOptionalStringArray(layer, 'limits.safeAddress.fields[].visibleTo', field.visibleTo);
+  validateOptionalStringArray(
+    layer,
+    'limits.safeAddress.fields[].plaintextAudiences',
+    field.plaintextAudiences,
+  );
+  validateOptionalStringArray(
+    layer,
+    'limits.safeAddress.fields[].effectiveAudiences',
+    field.effectiveAudiences,
+  );
+}
+
+function validateOptionalStringArray(
+  layer: 'org' | 'form',
+  cite: string,
+  value: unknown,
+): void {
+  if (
+    value !== undefined &&
+    (!Array.isArray(value) ||
+      !value.every((entry) => typeof entry === 'string' && entry.length > 0))
+  ) {
+    throw new InvalidRuntimePolicyError(layer, `${cite} must be an array of non-empty strings`);
   }
 }
 
@@ -561,6 +672,156 @@ function resolveMultiPartyPolicy(value: unknown): MultiPartyRuntimeConfig {
       ? Object.freeze({ ...policy.deadlinePolicy })
       : undefined,
   });
+}
+
+function isSafeAddressAccessClass(value: unknown): value is SafeAddressAccessClass {
+  return value === 'safe-address' || value === 'safe-contact' || value === 'safe-employer';
+}
+
+function isSafeAddressReceiptPostureTier(
+  value: unknown,
+): value is SafeAddressReceiptPostureTier {
+  return value === 'verifier-grade' || value === 'phase-1-fallback';
+}
+
+function resolveSafeAddressPolicy(
+  orgLimit: unknown,
+  formLimit: unknown,
+): SafeAddressRuntimeConfig {
+  const org = safeAddressLimitObject(orgLimit);
+  const form = safeAddressLimitObject(formLimit);
+  const fields = fieldPolicies(form.fields);
+  const enabledClasses = stringArrayFrom(form.enabledClasses)
+    ?.filter(isSafeAddressAccessClass) ??
+    unique(fields.map((field) => field.accessClass));
+  const authorizedAudiences =
+    stringArrayFrom(form.authorizedAudiences) ??
+    stringArrayFrom(org.authorizedAudiences) ??
+    ['issuer_verification'];
+  const acpJurisdictionsAccepted =
+    stringArrayFrom(form.acpJurisdictionsAccepted) ??
+    stringArrayFrom(org.acpJurisdictionsAccepted) ??
+    [];
+  const receiptPostureTier =
+    (form.receiptPostureTier as SafeAddressReceiptPostureTier | undefined) ??
+    (org.receiptPostureTier as SafeAddressReceiptPostureTier | undefined) ??
+    'phase-1-fallback';
+
+  if (fields.length === 0) {
+    throw new InvalidRuntimePolicyError(
+      'form',
+      'safeAddress is enabled but no safe-* field policy was declared',
+    );
+  }
+  if (enabledClasses.length === 0) {
+    throw new InvalidRuntimePolicyError(
+      'form',
+      'safeAddress is enabled but no safe-* class was declared',
+    );
+  }
+  if (acpJurisdictionsAccepted.length === 0) {
+    throw new InvalidRuntimePolicyError(
+      'org',
+      'safeAddress is enabled but no accepted protection jurisdiction is configured',
+    );
+  }
+  if (authorizedAudiences.length === 0) {
+    throw new InvalidRuntimePolicyError(
+      'org',
+      'safeAddress is enabled but no authorized plaintext audience is configured',
+    );
+  }
+  for (const field of fields) {
+    assertSafeAddressIntersection(field, authorizedAudiences);
+  }
+
+  return Object.freeze({
+    enabledClasses: Object.freeze([...enabledClasses]),
+    receiptPostureTier,
+    substituteAddressDirectoryRef:
+      stringValue(form.substituteAddressDirectoryRef) ??
+      stringValue(org.substituteAddressDirectoryRef) ??
+      'composition:safeAddressDirectory',
+    acpJurisdictionsAccepted: Object.freeze([...acpJurisdictionsAccepted]),
+    authorizedAudiences: Object.freeze([...authorizedAudiences]),
+    fields: Object.freeze(fields.map(freezeSafeAddressField)),
+    rendererHints: safeAddressRendererHints(form.rendererHints ?? org.rendererHints),
+  });
+}
+
+function assertSafeAddressIntersection(
+  field: SafeAddressFieldPolicy,
+  defaultPlaintextAudiences: readonly string[],
+): void {
+  if (field.effectiveAudiences !== undefined) {
+    if (field.effectiveAudiences.length === 0) {
+      throw new InvalidRuntimePolicyError(
+        'form',
+        `safeAddress field "${field.path}" has an empty effective audience intersection`,
+      );
+    }
+    return;
+  }
+  const visibleTo = field.visibleTo;
+  const plaintextAudiences = field.plaintextAudiences ?? defaultPlaintextAudiences;
+  if (visibleTo !== undefined) {
+    const intersection = visibleTo.filter((entry) => plaintextAudiences.includes(entry));
+    if (intersection.length === 0) {
+      throw new InvalidRuntimePolicyError(
+        'form',
+        `safeAddress field "${field.path}" has no audience allowed by both party policy and safe-address policy`,
+      );
+    }
+  }
+}
+
+function safeAddressLimitObject(value: unknown): Record<string, unknown> {
+  return isPlainObject(value) ? value : {};
+}
+
+function fieldPolicies(value: unknown): readonly SafeAddressFieldPolicy[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => entry as SafeAddressFieldPolicy);
+}
+
+function freezeSafeAddressField(field: SafeAddressFieldPolicy): SafeAddressFieldPolicy {
+  return Object.freeze({
+    path: field.path,
+    label: field.label,
+    accessClass: field.accessClass,
+    visibleTo: field.visibleTo ? Object.freeze([...field.visibleTo]) : undefined,
+    plaintextAudiences: field.plaintextAudiences
+      ? Object.freeze([...field.plaintextAudiences])
+      : undefined,
+    effectiveAudiences: field.effectiveAudiences
+      ? Object.freeze([...field.effectiveAudiences])
+      : undefined,
+  });
+}
+
+function safeAddressRendererHints(value: unknown): SafeAddressRuntimeConfig['rendererHints'] {
+  if (!isPlainObject(value)) return undefined;
+  const maskRenderToken = stringValue(value.maskRenderToken);
+  const revealAffordanceLabel = stringValue(value.revealAffordanceLabel);
+  if (!maskRenderToken && !revealAffordanceLabel) return undefined;
+  return Object.freeze({
+    maskRenderToken,
+    revealAffordanceLabel,
+  });
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function stringArrayFrom(value: unknown): readonly string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+    : undefined;
+}
+
+function unique<T extends string>(values: readonly T[]): readonly T[] {
+  return [...new Set(values)];
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

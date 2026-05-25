@@ -6,7 +6,7 @@ import {
   PARITY_FIXTURE_OBLIGATION,
   renderParityFixture,
 } from './obligations-view.test.tsx';
-import { cleanup as rtlCleanup } from '@testing-library/react';
+import { cleanup as rtlCleanup, fireEvent } from '@testing-library/react';
 import type { Composition } from '../../src/composition/types.ts';
 import { departmentAppProfile, publicPortalProfile } from '../../src/profiles/profiles.ts';
 import type { FormspecWebConfig } from '../../src/config/types.ts';
@@ -362,6 +362,74 @@ describe('RespondentRuntime identity sign-in', () => {
 
     expect(text()).toContain('This form requires multiple signers');
     expect(composition.submitTransport.submit).not.toHaveBeenCalled();
+  });
+
+  it('masks safe-address fields by default and reveals per act', async () => {
+    const definition: FormDefinition = {
+      ...demoSampleForm,
+      url: 'https://test.example/forms/safe-address',
+      title: 'Safe address test',
+      items: [
+        {
+          key: 'protectedHomeAddress',
+          type: 'field',
+          dataType: 'string',
+          label: 'Protected home address',
+          accessControl: { class: 'safe-address' },
+        },
+      ],
+      extensions: {
+        'x-formspec-safe-address': {
+          mode: 'required',
+          acpJurisdictionsAccepted: ['CA-ACP'],
+          authorizedAudiences: ['issuer_verification'],
+          fields: [
+            {
+              path: '/protectedHomeAddress',
+              accessClass: 'safe-address',
+              visibleTo: ['issuer_verification'],
+            },
+          ],
+          rendererHints: {
+            maskRenderToken: '(protected)',
+            revealAffordanceLabel: 'Show protected value',
+          },
+        },
+      },
+    } as FormDefinition;
+    const identityProvider = new TestIdentityProvider();
+    const composition = testComposition(identityProvider, { definition });
+    composition.instanceCapabilities = {
+      ...composition.instanceCapabilities,
+      safeAddress: 'available',
+    };
+    composition.formRuntimePolicyExtractor = {
+      extract: () => ({
+        features: { respondentPlace: 'optional', status: 'optional', safeAddress: 'required' },
+        limits: {
+          safeAddress: definition.extensions?.['x-formspec-safe-address'],
+        },
+      }),
+    };
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Protected home address');
+    const input = container?.querySelector('.formspec-safe-address-field input') as HTMLInputElement;
+    if (!input) throw new Error('safe-address input not found');
+
+    await clickButton('Show protected value');
+    await act(async () => {
+      input.focus();
+      fireEvent.change(input, { target: { value: '123 Private St' } });
+      await tick();
+      input.blur();
+      await tick();
+    });
+    expect(input.value).toBe('(protected)');
+    await clickButton('Show protected value');
+    expect(input.value).toBe('123 Private St');
   });
 
   async function renderRuntime(

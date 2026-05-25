@@ -19,7 +19,9 @@ import {
   FormspecNode,
   FormspecProvider,
   IssuerChromeSlot,
+  DefaultField,
   useFormspecContext,
+  type FieldComponentProps,
   type SubmitResult,
 } from '@formspec-org/react';
 import type {
@@ -67,6 +69,7 @@ import {
   PaymentRequiresOnlineError,
   UnsupportedRequiredFeatureError,
   anyEnabledFeatureIsLocaleConditional,
+  getSafeAddressRuntimeConfig,
   isRuntimePolicyError,
   resolveRuntimeFeatures,
   type DisabledCause,
@@ -115,6 +118,7 @@ import {
   reviewerThreadIdForDraft,
   trustedReviewerPolicySnapshot,
 } from './trusted-reviewer.ts';
+import { useResolvedRuntimeProfile } from './hooks/useResolvedRuntimeProfile.ts';
 
 interface RespondentRuntimeProps {
   composition: Composition;
@@ -724,7 +728,15 @@ export function RespondentRuntime({
           <FormspecProvider
             engine={respondentState.engine}
             responseActionsDocument={responseActionsDocument}
-            components={{ fields: { FileUpload: FormspecWebAttachmentControl } }}
+            components={{
+              fields: {
+                Text: SafeAddressTextField,
+                TextInput: SafeAddressTextField,
+                DatePicker: SafeAddressTextField,
+                NumberInput: SafeAddressTextField,
+                FileUpload: FormspecWebAttachmentControl,
+              },
+            }}
             onSubmit={(result) => {
               void handleSubmit(result);
             }}
@@ -753,6 +765,96 @@ export function RespondentRuntime({
       </RuntimeProfileProvider>
     </AppErrorBoundary>
   );
+}
+
+function SafeAddressTextField(props: FieldComponentProps) {
+  const runtimeProfile = useResolvedRuntimeProfile();
+  const config = getSafeAddressRuntimeConfig(runtimeProfile);
+  const protectedField = config?.fields.find((field) => sameFieldPath(field.path, props.field.path));
+  const [revealed, setRevealed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  if (!protectedField) {
+    return <DefaultField {...props} />;
+  }
+  const { field, node } = props;
+  const showPlaintext = focused || revealed;
+  const maskToken = config?.rendererHints?.maskRenderToken ?? '(protected)';
+  const revealLabel = config?.rendererHints?.revealAffordanceLabel ?? 'Reveal protected value';
+  const value = field.value == null ? '' : String(field.value);
+  const displayValue = showPlaintext ? value : maskToken;
+  const showError = !!(field.error && field.touched);
+  const descriptionId = field.description ? `${field.id}-desc` : undefined;
+  const hintId = field.hint ? `${field.id}-hint` : undefined;
+  const describedBy = [descriptionId, hintId].filter(Boolean).join(' ') || undefined;
+  const requiredNode = field.required ? (
+    <abbr className="formspec-required usa-label--required" title="required">
+      {' *'}
+    </abbr>
+  ) : null;
+  return (
+    <div
+      className="formspec-field formspec-safe-address-field"
+      data-name={field.path}
+      style={node.style}
+    >
+      <label
+        htmlFor={field.id}
+        className={node.labelPosition === 'hidden' ? 'formspec-label formspec-sr-only' : 'formspec-label'}
+      >
+        {field.label}
+        {requiredNode}
+      </label>
+      {field.description ? (
+        <div id={descriptionId} className="formspec-description">
+          {field.description}
+        </div>
+      ) : null}
+      {field.hint ? (
+        <p id={hintId} className="formspec-hint">
+          {field.hint}
+        </p>
+      ) : null}
+      <div className="formspec-input-adornment">
+        <input
+          id={field.id}
+          name={field.path}
+          className="formspec-input"
+          type="text"
+          value={displayValue}
+          readOnly={field.readonly || !showPlaintext}
+          required={field.required}
+          aria-invalid={showError}
+          aria-required={field.required}
+          aria-describedby={describedBy}
+          autoComplete="off"
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            setRevealed(false);
+            field.touch();
+          }}
+          onChange={(event) => {
+            if (showPlaintext) field.setValue(event.currentTarget.value);
+          }}
+        />
+        <button
+          type="button"
+          className="formspec-safe-address-field__reveal"
+          aria-pressed={revealed}
+          onClick={() => setRevealed((current) => !current)}
+        >
+          {revealed ? 'Hide protected value' : revealLabel}
+        </button>
+      </div>
+      <p id={`${field.id}-error`} className="formspec-error" aria-live="polite">
+        {showError ? field.error : ''}
+      </p>
+    </div>
+  );
+}
+
+function sameFieldPath(configPath: string, runtimePath: string): boolean {
+  return configPath === runtimePath || configPath.replace(/^\//, '') === runtimePath.replace(/^\//, '');
 }
 
 async function bootIdentity(

@@ -32,6 +32,7 @@ import {
 } from '../policy/index.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { formatDate, formatDuration, labelFromToken } from './format.ts';
+import { renderSafeAddressProtectedText } from './safe-address.ts';
 import type { StatusRouteParams } from './status-route.ts';
 import './lifecycle-actions.css';
 
@@ -933,7 +934,7 @@ function messageForLifecycleReceipt(event: LifecycleTimelineEvent): string {
 }
 
 function renderProtectedText(value: LifecycleProtectedText, withheldCopy: string): string {
-  return value.accessClass?.startsWith('safe-') ? withheldCopy : value.text;
+  return renderSafeAddressProtectedText(value, withheldCopy);
 }
 
 function parseChangedFields(value: string): readonly LifecycleChangedField[] {

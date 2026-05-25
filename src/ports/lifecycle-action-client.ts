@@ -43,7 +43,7 @@ export interface LifecycleProtectedText {
   readonly text: string;
   /**
    * Omitted / `unclassified` renders openly. `safe-*` classes render masked
-   * on public receipt/status surfaces until FW-0060 supplies reveal policy.
+   * on public receipt/status/verifier surfaces per FW-0060.
    */
   readonly accessClass?: string;
 }

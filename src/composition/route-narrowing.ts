@@ -54,9 +54,9 @@ import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transpo
 import { unavailableLifecycleActionClient } from '../adapters/unavailable/lifecycle-action-client.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
-import { unavailablePreallocatedFeaturePort } from '../adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableReviewerSession } from '../adapters/unavailable/reviewer-session.ts';
 import { unavailableReviewThreadStore } from '../adapters/unavailable/review-thread-store.ts';
+import { unavailableSafeAddressDirectory } from '../adapters/unavailable/safe-address-directory.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
@@ -264,7 +264,7 @@ function buildProductionNarrowedComposition({
     screenerDocumentSource: unavailableScreenerDocumentSource(),
     reviewerSession: unavailableReviewerSession(),
     reviewThreadStore: unavailableReviewThreadStore(),
-    safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
+    safeAddressDirectory: unavailableSafeAddressDirectory(),
     lifecycleActionClient: unavailableLifecycleActionClient(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
@@ -314,7 +314,7 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       : unavailableScreenerDocumentSource(),
     reviewerSession: unavailableReviewerSession(),
     reviewThreadStore: unavailableReviewThreadStore(),
-    safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
+    safeAddressDirectory: unavailableSafeAddressDirectory(),
     lifecycleActionClient: route.consumes.has('recordLifecycle')
       ? stubLifecycleActionClient({ initialSnapshots: [demoLifecycleActionSnapshot()] })
       : unavailableLifecycleActionClient(),

@@ -137,4 +137,10 @@ export type {
   LifecycleDisputeRequest,
   LifecycleActionReceipt,
 } from './lifecycle-action-client.ts';
+export type {
+  SafeAddressDirectory,
+  SafeAddressJurisdiction,
+  SafeAddressValidationRequest,
+  SafeAddressValidationResult,
+} from './safe-address-directory.ts';
 export type { PreallocatedFeaturePort } from './preallocated-feature-port.ts';

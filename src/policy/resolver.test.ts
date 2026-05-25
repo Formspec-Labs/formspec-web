@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveRuntimeFeatures } from './resolver.ts';
 import {
   getMultiPartyRuntimeConfig,
+  getSafeAddressRuntimeConfig,
   getTrustedReviewerRuntimeConfig,
 } from './policy-shapes.ts';
 import type {
@@ -322,6 +323,109 @@ describe('resolveRuntimeFeatures — recordLifecycle policy (FW-0038)', () => {
         },
       }),
     ).toThrowError(/correctableFieldSet/);
+  });
+});
+
+describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
+  it('resolves the safeAddress runtime block when protected fields are valid', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: allAvailable,
+      org: {
+        ...allowAllOrg,
+        limits: {
+          safeAddress: {
+            acpJurisdictionsAccepted: ['CA-ACP'],
+            authorizedAudiences: ['issuer_verification'],
+          },
+        },
+      },
+      form: {
+        features: { safeAddress: 'required' },
+        limits: {
+          safeAddress: {
+            receiptPostureTier: 'phase-1-fallback',
+            fields: [
+              {
+                path: '/protectedHomeAddress',
+                label: 'Protected home address',
+                accessClass: 'safe-address',
+                visibleTo: ['issuer_verification'],
+              },
+            ],
+          },
+        },
+      },
+    });
+    const config = getSafeAddressRuntimeConfig(profile);
+    expect(config?.enabledClasses).toEqual(['safe-address']);
+    expect(config?.fields[0]?.path).toBe('/protectedHomeAddress');
+    expect(config?.acpJurisdictionsAccepted).toEqual(['CA-ACP']);
+  });
+
+  it('throws InvalidRuntimePolicyError for empty party-policy x safe-address intersections', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: {
+          ...allowAllOrg,
+          limits: {
+            safeAddress: {
+              acpJurisdictionsAccepted: ['CA-ACP'],
+              authorizedAudiences: ['issuer_verification'],
+            },
+          },
+        },
+        form: {
+          features: { safeAddress: 'required' },
+          limits: {
+            safeAddress: {
+              fields: [
+                {
+                  path: '/protectedHomeAddress',
+                  accessClass: 'safe-address',
+                  visibleTo: ['respondent_public_receipt'],
+                  plaintextAudiences: ['issuer_verification'],
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/no audience allowed by both party policy and safe-address policy/);
+  });
+
+  it('throws InvalidRuntimePolicyError for an explicitly empty effective audience result', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: {
+          ...allowAllOrg,
+          limits: {
+            safeAddress: {
+              acpJurisdictionsAccepted: ['CA-ACP'],
+              authorizedAudiences: ['issuer_verification'],
+            },
+          },
+        },
+        form: {
+          features: { safeAddress: 'required' },
+          limits: {
+            safeAddress: {
+              fields: [
+                {
+                  path: '/protectedHomeAddress',
+                  accessClass: 'safe-address',
+                  effectiveAudiences: [],
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/empty effective audience intersection/);
   });
 });
 

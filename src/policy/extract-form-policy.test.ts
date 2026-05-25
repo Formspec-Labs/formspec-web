@@ -9,6 +9,7 @@ import {
   extractPaymentRequirement,
   extractRecordLifecycleOptIn,
   extractRecordLifecyclePolicy,
+  extractSafeAddressPolicy,
 } from './extract-form-policy.ts';
 
 const baseDefinition = {
@@ -454,5 +455,84 @@ describe('extractRecordLifecycleOptIn', () => {
       extensions: { 'x-formspec-record-lifecycle': 'yes' },
     };
     expect(extractRecordLifecycleOptIn(malformed)).toBeUndefined();
+  });
+});
+
+describe('extractSafeAddressPolicy', () => {
+  it('returns undefined when no safe-address carrier or safe-* field is present', () => {
+    expect(extractSafeAddressPolicy({ ...baseDefinition, items: [] })).toBeUndefined();
+  });
+
+  it('extracts safe-* item classes into a required safeAddress policy', () => {
+    const definition = {
+      ...baseDefinition,
+      items: [
+        {
+          key: 'protectedHomeAddress',
+          type: 'field',
+          dataType: 'string',
+          label: 'Protected home address',
+          accessControl: {
+            class: 'safe-address',
+            plaintextAudiences: ['issuer_verification'],
+          },
+          visibleTo: ['issuer_verification'],
+        },
+      ],
+      extensions: {
+        'x-formspec-safe-address': {
+          acpJurisdictionsAccepted: ['CA-ACP'],
+        },
+      },
+    } as FormDefinition;
+    const policy = extractSafeAddressPolicy(definition);
+    expect(policy?.features.safeAddress).toBe('required');
+    expect(policy?.limits?.safeAddress).toMatchObject({
+      acpJurisdictionsAccepted: ['CA-ACP'],
+      fields: [
+        {
+          path: '/protectedHomeAddress',
+          accessClass: 'safe-address',
+          visibleTo: ['issuer_verification'],
+          plaintextAudiences: ['issuer_verification'],
+        },
+      ],
+    });
+  });
+
+  it('accepts the explicit extension field carrier and optional mode', () => {
+    const definition: FormDefinition = {
+      ...baseDefinition,
+      extensions: {
+        'x-formspec-safe-address': {
+          mode: 'optional',
+          receiptPostureTier: 'phase-1-fallback',
+          acpJurisdictionsAccepted: ['WA-ACP'],
+          fields: [
+            {
+              path: '/safeContact',
+              accessClass: 'safe-contact',
+              effectiveAudiences: ['issuer_verification'],
+            },
+          ],
+        },
+      },
+      items: [],
+    };
+    const policy = extractSafeAddressPolicy(definition);
+    expect(policy?.features.safeAddress).toBe('optional');
+    expect(policy?.limits?.safeAddress).toMatchObject({
+      enabledClasses: ['safe-contact'],
+      acpJurisdictionsAccepted: ['WA-ACP'],
+    });
+  });
+
+  it('treats false as an explicit form-level forbid', () => {
+    const definition: FormDefinition = {
+      ...baseDefinition,
+      extensions: { 'x-formspec-safe-address': false },
+      items: [],
+    };
+    expect(extractSafeAddressPolicy(definition)?.features.safeAddress).toBe('forbidden');
   });
 });

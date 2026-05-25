@@ -24,6 +24,7 @@ import {
   extractPaymentRequirement,
   extractRecordLifecycleOptIn,
   extractRecordLifecyclePolicy,
+  extractSafeAddressPolicy,
   extractTrustedReviewerPolicy,
 } from '../../policy/extract-form-policy.ts';
 import type { FormRuntimePolicy } from '../../policy/policy-shapes.ts';
@@ -83,6 +84,12 @@ export class RecordLifecycleExtractor implements FormRuntimePolicyExtractor {
 export class MultiPartyPolicyExtractor implements FormRuntimePolicyExtractor {
   extract(definition: FormDefinition): FormRuntimePolicy {
     return extractMultiPartyPolicy(definition) ?? { features: {} };
+  }
+}
+
+export class SafeAddressPolicyExtractor implements FormRuntimePolicyExtractor {
+  extract(definition: FormDefinition): FormRuntimePolicy {
+    return extractSafeAddressPolicy(definition) ?? { features: {} };
   }
 }
 

@@ -9,11 +9,11 @@ import type {
   NotificationDelivery,
   OfflineSubmitQueue,
   PaymentRailAdapter,
-  PreallocatedFeaturePort,
   ReviewerSession,
   ReviewThreadStore,
   RespondentHistorySource,
   RespondentPlaceSource,
+  SafeAddressDirectory,
   ScreenerDocumentSource,
   StatusReader,
   SubmitTransport,
@@ -118,7 +118,7 @@ export interface Composition {
    * FEATURE_PORT_MAP can reserve the names without allowing a production
    * composition to declare the capabilities available by accident.
    */
-  safeAddressDirectory: PreallocatedFeaturePort;
+  safeAddressDirectory: SafeAddressDirectory;
   /**
    * FW-0038: signed-record lifecycle actions on the status surface. The port
    * owns correction/amendment routing, withdrawal requests, dispute notes,

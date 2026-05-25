@@ -12,6 +12,7 @@ export {
   definePaymentRailAdapterConformance,
   defineRespondentHistorySourceConformance,
   defineRespondentPlaceSourceConformance,
+  defineSafeAddressDirectoryConformance,
   defineScreenerDocumentSourceConformance,
   defineStatusReaderConformance,
   defineSubmitTransportConformance,

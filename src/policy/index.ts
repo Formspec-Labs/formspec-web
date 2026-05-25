@@ -9,6 +9,7 @@ export {
 export {
   getTrustedReviewerRuntimeConfig,
   getMultiPartyRuntimeConfig,
+  getSafeAddressRuntimeConfig,
   getEmbedLimits,
   isCapabilityAvailability,
   isFormFeaturePolicyMode,
@@ -45,6 +46,10 @@ export {
   type ResolvedRecordLifecycleWithdrawablePolicy,
   type ResolvedRuntimeProfile,
   type ResolvedMultiPartyPolicy,
+  type SafeAddressAccessClass,
+  type SafeAddressFieldPolicy,
+  type SafeAddressReceiptPostureTier,
+  type SafeAddressRuntimeConfig,
   type TrustedReviewerRuntimeConfig,
 } from './policy-shapes.ts';
 export {

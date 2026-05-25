@@ -361,6 +361,15 @@ function createFixture(options = {}) {
   );
   write(
     root,
+    'tests/adapter-conformance/safe-address-directory/conformance.test.ts',
+    suiteText(
+      'SafeAddressDirectory',
+      [['stub SafeAddressDirectory conformance', 'stubSafeAddressDirectory']],
+      options,
+    ),
+  );
+  write(
+    root,
     'tests/adapter-conformance/lifecycle-action-client/conformance.test.ts',
     suiteText(
       'LifecycleActionClient',
@@ -415,6 +424,10 @@ function writeAdapterFiles(root, options) {
       'export function stubReviewThreadStore() {}',
     ],
     [
+      'src/adapters/stub/safe-address-directory.ts',
+      'export function stubSafeAddressDirectory() {}',
+    ],
+    [
       'src/adapters/stub/lifecycle-action-client.ts',
       'export function stubLifecycleActionClient() {}',
     ],
@@ -454,6 +467,10 @@ function writeAdapterFiles(root, options) {
     [
       'src/adapters/unavailable/review-thread-store.ts',
       'export function unavailableReviewThreadStore() {}',
+    ],
+    [
+      'src/adapters/unavailable/safe-address-directory.ts',
+      'export function unavailableSafeAddressDirectory() {}',
     ],
     [
       'src/adapters/unavailable/lifecycle-action-client.ts',
@@ -515,6 +532,7 @@ function defaultComposition() {
     '    screenerDocumentSource: unavailableScreenerDocumentSource(),',
     '    reviewerSession: unavailableReviewerSession(),',
     '    reviewThreadStore: unavailableReviewThreadStore(),',
+    '    safeAddressDirectory: unavailableSafeAddressDirectory(),',
     '    lifecycleActionClient: unavailableLifecycleActionClient(),',
     '  };',
     '}',
@@ -540,6 +558,7 @@ function publicIndex() {
     '  defineScreenerDocumentSourceConformance,',
     '  defineReviewerSessionConformance,',
     '  defineReviewThreadStoreConformance,',
+    '  defineSafeAddressDirectoryConformance,',
     '  defineLifecycleActionClientConformance,',
     "} from './conformance.ts';",
   ].join('\n');
