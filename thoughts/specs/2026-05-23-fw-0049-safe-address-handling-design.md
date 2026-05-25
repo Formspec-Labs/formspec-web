@@ -441,6 +441,16 @@ FW-0051 (bring-your-own-assistant) and FW-0049 (safe-address) compose at the Ass
 
 **FW-0060 build constraint addition (consumed by FW-0060 author directly):** the Assist Provider implementation under FW-0062 build MUST mask safe-*-class fields in `FieldDescription.value` unconditionally; the FW-0062 build's per-field reveal grant store MUST exclude safe-*-class fields from the unmaskable set. Conformance fixtures cover the safe-* + Assist composition case.
 
+### 7.3.6 FW-0058 composition (AI-agent filer — safe-* mask survives agent read)
+
+FW-0058 (AI-agent filer chain) and FW-0049 (safe-address) compose at the agent-introspection surface: when an AI agent files on behalf of a protected party (e.g., a property-management agent filing a tenant application on behalf of a survivor; a benefits-AI filing on behalf of a protected elder), **the safe-* mask survives the agent's WOS-governed read identically to the BYO-assistant case (§7.3.5).** Per [FW-0058 §7.3 in the 2026-05-24 design](2026-05-24-fw-0058-ai-agent-filer-chain-design.md): the agent itself does NOT gain visibility into the safe-* field; the agent submits the form WITHOUT seeing the plaintext value; the receipt carries the safe-* class declaration unchanged.
+
+**Operational pattern.** The agent operator may need additional inputs to fill safe-* fields (e.g., the protected party provides their safe-address out-of-band to the operator, who supplies it to the agent through a side channel); this is the operator's substrate concern, NOT FW-0049's. FW-0049's discipline binds the form's introspection surface — what the agent sees through the form's substrate — not what the operator may pre-load into the agent's runtime by other means.
+
+**Verifier rendering.** The verifier renders BOTH the four-party agent chain (per FW-0058 §3.3) AND the safe-* class declaration on the protected field. Both surfaces compose naturally as independent decorations on the receipt; neither suppresses the other.
+
+**FW-0060 build constraint addition:** the safe-* mask discipline applies uniformly across all programmatic readers — Assist Provider (FW-0051), agent introspection (FW-0058), and any future reader. The per-reader-type unmask exception list is intentionally empty for safe-*-class fields.
+
 ### 7.4 FW-0060 build constraints (consumed by FW-0060 author directly)
 
 The FW-0060 build is responsible for:

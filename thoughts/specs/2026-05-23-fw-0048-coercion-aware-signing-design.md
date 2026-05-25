@@ -380,6 +380,12 @@ FW-0051 (bring-your-own-assistant) and FW-0048 (coercion-aware signing) compose 
 
 **Substrate effect:** none on FW-0048's substrate paths (this section is informational, naming a policy-composition recommendation; the duress channel + per-party HPKE wrap + safety-routing adapter are unchanged). The `forbidden` posture is a per-form policy declaration enforced at form-load per [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md).
 
+### 7.2.6 FW-0058 composition (AI-agent filer — prompt-injection as coercion vector; recommended `forbidden` default for high-coercion templates)
+
+FW-0058 (AI-agent filer chain) and FW-0048 (coercion-aware signing) compose at the threat-model layer: a compromised LLM / prompt-injected agent IS structurally a coercion vector — an agent filing under attacker control is structurally identical to a coerced human signer per FW-0048 §3 threat model. **Per [FW-0058 §7.2 in the 2026-05-24 design](2026-05-24-fw-0058-ai-agent-filer-chain-design.md):** forms in this design's high-coercion-risk template set (§6.4) SHOULD declare `aiAgentFiler: forbidden` AND `duressAware: required`. Combined posture: no agent surface to be prompt-injected through, AND the duress channel is available if the (human) respondent is being coerced.
+
+**For forms that declare both `aiAgentFiler: allowed` AND `duressAware: required`,** the duress channel substrate (per §3 + §5) is available to the agent's invocation surface — the agent operator's runtime can emit a duress signal if it detects an injection (analogous to a human signaling duress via the dual-credential mechanism). The receipt is byte-identical per §3.2 (chain-observer opacity holds for agent-signaled duress identically). **Substrate effect:** none on FW-0048's substrate paths — the agent's `submission.duress-signaled` event rides the existing Trellis Core §6.4 `payload_ref` + §9.4 `key_bag` envelope; the only new bit is that the event's `partyRef?` (per FW-0050 §7.2) is replaced by `signerRef` carrying the agent's `AuthoredSignature.signerId` when the signer is an agent. No FW-0048 substrate change required.
+
 ### 7.3 FW-0061 build constraints (consumed by FW-0061 author directly)
 
 The FW-0061 build is responsible for:
