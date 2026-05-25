@@ -92,7 +92,7 @@ Each decision: the answer first, then the rationale, then the alternative consid
 
 **Substrate carries one bit.** The class token is the only access-control surface reaching any chain-observable artifact: the receipt, the verifier output, the Disclosure Manifest, the commitment-slot binding, the export bundle. To an adversary reading public bytes, every protected field is one bit (this field carries the protected class). The earlier shape's 3-way split would have made the class token itself a 2-bit oracle ("this submission carries a `safe-employer` field" narrows the adversary's correlation surface in exactly the population the pipeline exists to protect).
 
-**Renderer-only `subjectKind` discriminator.** Authoring tooling and rendering surfaces that need a finer-grained discriminator (e.g., to pick a mask label like "Protected Address" vs "Protected Employer") read it from **field-level Definition metadata called `subjectKind`**. The taxonomy is **closed**: `address | contact | employer`. The `subjectKind` value MUST NOT appear in the receipt, the verifier output, the Disclosure Manifest, the commitment-slot binding, the export bundle, or any other chain-observable artifact — it is renderer-only. A deployment whose forms can render mask copy from field-name context alone MAY omit `subjectKind`; the pipeline does not require it.
+**Renderer-only `accessControl.subjectKind` discriminator.** Authoring tooling and rendering surfaces that need a finer-grained discriminator (e.g., to pick a mask label like "Protected Address" vs "Protected Employer") read it from **field-level Definition metadata at `accessControl.subjectKind`** (sub-property of the gating `accessControl` block, co-located with `accessControl.class` so the renderer-tier discriminator travels with the substrate-tier class without leaking). The taxonomy is **closed**: `address | contact | employer`. The `accessControl.subjectKind` value MUST NOT appear in the receipt, the verifier output, the Disclosure Manifest, the commitment-slot binding, the export bundle, or any other chain-observable artifact — it is renderer-only. A deployment whose forms can render mask copy from field-name context alone MAY omit `accessControl.subjectKind`; the pipeline does not require it.
 
 **Substitution rules are per-validator, not per-class.** The validator port (`SafeAddressDirectory`, §4.2) accepts a candidate substitute value plus a jurisdiction + subject context. Per-subject heterogeneity (state-ACP PO Box semantics for an address field; relay-service semantics for a phone field; "decline to disclose" semantics for an employer field) lives inside the validator's per-deployment configuration. The class token does not need to encode that heterogeneity.
 
@@ -336,11 +336,16 @@ excludedAudiences: ["respondent_public_receipt", "verifier_public_output", "foia
 substitutionRule: {
   kind: "deployment-resolved-per-subject",
   validatorPortRef: "SafeAddressDirectory"
-  # Validator dispatches on field-level subjectKind metadata (address | contact | employer).
-  # Per-subject substitution heterogeneity (state-ACP PO Box for addresses; relay services for
-  # contact endpoints; heterogeneous employer concealment regimes) lives inside the validator's
-  # per-deployment configuration. The registry entry does not enumerate subject categories
-  # because subjectKind never reaches the substrate (see §3.1).
+  # Validator dispatches on field-level `accessControl.subjectKind` metadata
+  # (closed taxonomy: address | contact | employer). The schema hook is a
+  # sub-property of the gating `accessControl` block — co-located with
+  # `accessControl.class` so the renderer-tier discriminator travels with the
+  # substrate-tier class without leaking. Per-subject substitution heterogeneity
+  # (state-ACP PO Box for addresses; relay services for contact endpoints;
+  # heterogeneous employer concealment regimes) lives inside the validator's
+  # per-deployment configuration. The registry entry does not enumerate subject
+  # categories because `accessControl.subjectKind` never reaches the substrate
+  # (see §3.1 + ADR-0157 §3).
 }
 ```
 
