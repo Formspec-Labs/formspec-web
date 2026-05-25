@@ -68,6 +68,11 @@ interface ImageDraft {
   readonly legibilityWarning?: string;
 }
 
+interface FileValidationFailure {
+  readonly file: File;
+  readonly message: string;
+}
+
 function asArray(value: unknown): AttachmentRef[] {
   if (value == null) return [];
   if (Array.isArray(value)) {
@@ -100,6 +105,10 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
+  const cameraRequestIdRef = useRef(0);
+  const mountedRef = useRef(true);
+  const imageDraftRef = useRef<ImageDraft | null>(null);
+  const imageDraftQueueRef = useRef<ImageDraft[]>([]);
   const redactionSurfaceRef = useRef<HTMLDivElement>(null);
   const redactionStartRef = useRef<{ x: number; y: number } | null>(null);
   const [pending, setPending] = useState<RowStatus[]>([]);
@@ -107,20 +116,21 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [imageDraft, setImageDraft] = useState<ImageDraft | null>(null);
+  const [imageDraftQueue, setImageDraftQueue] = useState<ImageDraft[]>([]);
   const [activeRedaction, setActiveRedaction] = useState<RedactionRect | null>(null);
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false;
+      cameraRequestIdRef.current += 1;
       stopCamera(cameraStreamRef.current);
+      cameraStreamRef.current = null;
+      if (imageDraftRef.current) URL.revokeObjectURL(imageDraftRef.current.objectUrl);
+      for (const draft of imageDraftQueueRef.current) {
+        URL.revokeObjectURL(draft.objectUrl);
+      }
     };
   }, []);
-
-  const imageDraftObjectUrl = imageDraft?.objectUrl;
-  useEffect(() => {
-    return () => {
-      if (imageDraftObjectUrl) URL.revokeObjectURL(imageDraftObjectUrl);
-    };
-  }, [imageDraftObjectUrl]);
 
   const refs = asArray(field.value);
   // H-1 closure-stale race fix: every read of "what's currently in the field"
@@ -142,6 +152,72 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     },
     [field, multiple],
   );
+
+  const addFailedRows = useCallback((failures: readonly FileValidationFailure[]): void => {
+    if (failures.length === 0) return;
+    const failedAt = Date.now();
+    setPending((prev) => [
+      ...prev,
+      ...failures.map((failure, index): RowStatus => ({
+        kind: 'failed',
+        key: `validation-${failedAt}-${index}-${failure.file.name}`,
+        filename: failure.file.name,
+        message: failure.message,
+      })),
+    ]);
+  }, []);
+
+  const validateFile = useCallback(
+    (file: File): string | undefined => {
+      if (file.size > maxSize) {
+        return `"${file.name}" is larger than the upload limit of ${formatSize(maxSize)}.`;
+      }
+      if (accept && !matchesAccept(file, accept)) {
+        return failureMessage(new AttachmentUploadError('File type not accepted', { code: 'mime-rejected' }));
+      }
+      return undefined;
+    },
+    [accept, maxSize],
+  );
+
+  const replaceImageDraft = useCallback((next: ImageDraft | null): void => {
+    const previous = imageDraftRef.current;
+    if (previous && previous.objectUrl !== next?.objectUrl) {
+      URL.revokeObjectURL(previous.objectUrl);
+    }
+    imageDraftRef.current = next;
+    setImageDraft(next);
+    setActiveRedaction(null);
+    redactionStartRef.current = null;
+  }, []);
+
+  const replaceImageDraftQueue = useCallback((next: ImageDraft[]): void => {
+    imageDraftQueueRef.current = next;
+    setImageDraftQueue(next);
+  }, []);
+
+  const advanceImageDraftQueue = useCallback((): void => {
+    const [next, ...rest] = imageDraftQueueRef.current;
+    replaceImageDraftQueue(rest);
+    replaceImageDraft(next ?? null);
+  }, [replaceImageDraft, replaceImageDraftQueue]);
+
+  const enqueueImageDrafts = useCallback((files: readonly File[]): void => {
+    if (files.length === 0) return;
+    const drafts = files.map((file): ImageDraft => ({
+      file,
+      objectUrl: URL.createObjectURL(file),
+      redactions: [],
+      legibilityWarning: estimateLegibilityWarning(file),
+    }));
+    if (!imageDraftRef.current) {
+      const [first, ...rest] = drafts;
+      replaceImageDraft(first ?? null);
+      replaceImageDraftQueue([...imageDraftQueueRef.current, ...rest]);
+      return;
+    }
+    replaceImageDraftQueue([...imageDraftQueueRef.current, ...drafts]);
+  }, [replaceImageDraft, replaceImageDraftQueue]);
 
   const startUploads = useCallback(
     async (incoming: File[]) => {
@@ -172,12 +248,14 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       // synchronously; reading the closure-captured `refs` would resurrect a
       // ref the user just removed.
       const liveRefs = asArray(fieldValueRef.current);
-      let nextRefs: AttachmentRef[] = multiple ? [...liveRefs] : [];
+      let nextRefs: AttachmentRef[] = multiple ? [...liveRefs] : liveRefs.slice(0, 1);
+      let hasSuccessfulUpload = false;
       const finalRows: RowStatus[] = [];
       for (let index = 0; index < uploaded.length; index += 1) {
         const outcome = uploaded[index];
         const seed = seedRows[index];
         if (outcome.status === 'fulfilled') {
+          hasSuccessfulUpload = true;
           nextRefs = multiple ? [...nextRefs, outcome.value] : [outcome.value];
         } else {
           finalRows.push({
@@ -192,69 +270,48 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         ...prev.filter((row) => !seedRows.some((seed) => seed.key === row.key)),
         ...finalRows,
       ]);
-      writeBack(nextRefs);
+      if (hasSuccessfulUpload) {
+        writeBack(nextRefs);
+      }
     },
     [attachmentStore, multiple, writeBack],
   );
 
   const handleFiles = useCallback(
     async (files: File[]) => {
+      if (field.readonly) return;
       if (files.length === 0) return;
-      const sizeViolation = files.find((file) => file.size > maxSize);
-      if (sizeViolation) {
-        const key = `size-${Date.now()}-${sizeViolation.name}`;
-        setPending((prev) => [
-          ...prev,
-          {
-            kind: 'failed',
-            key,
-            filename: sizeViolation.name,
-            message: `"${sizeViolation.name}" is larger than the upload limit of ${formatSize(maxSize)}.`,
-          },
-        ]);
-        return;
-      }
-
-      // L-2: client-side accept enforcement. If the field declares accept and
-      // a dropped/picked file doesn't match by extension or MIME, reject with
-      // a typed AttachmentUploadError so the code-keyed copy renders.
-      if (accept) {
-        const mimeViolation = files.find((file) => !matchesAccept(file, accept));
-        if (mimeViolation) {
-          const key = `mime-${Date.now()}-${mimeViolation.name}`;
-          setPending((prev) => [
-            ...prev,
-            {
-              kind: 'failed',
-              key,
-              filename: mimeViolation.name,
-              message: failureMessage(
-                new AttachmentUploadError('File type not accepted', { code: 'mime-rejected' }),
-              ),
-            },
-          ]);
-          return;
-        }
-      }
 
       const incoming = multiple ? files : files.slice(0, 1);
-      const image = incoming.find((file) => file.type.startsWith('image/'));
-      if (image) {
-        setImageDraft((prev) => {
-          if (prev) URL.revokeObjectURL(prev.objectUrl);
-          return {
-            file: image,
-            objectUrl: URL.createObjectURL(image),
-            redactions: [],
-            legibilityWarning: estimateLegibilityWarning(image),
-          };
-        });
-        return;
+      const failures: FileValidationFailure[] = [];
+      if (!multiple && files.length > 1) {
+        failures.push(
+          ...files.slice(1).map((file): FileValidationFailure => ({
+            file,
+            message: 'Only one file can be uploaded here.',
+          })),
+        );
       }
+      const acceptedFiles: File[] = [];
+      for (const file of incoming) {
+        const validationMessage = validateFile(file);
+        if (validationMessage) {
+          failures.push({ file, message: validationMessage });
+        } else {
+          acceptedFiles.push(file);
+        }
+      }
+      addFailedRows(failures);
 
-      await startUploads(incoming);
+      const imageFiles = acceptedFiles.filter((file) => file.type.startsWith('image/'));
+      const uploadFiles = acceptedFiles.filter((file) => !file.type.startsWith('image/'));
+      enqueueImageDrafts(imageFiles);
+
+      if (uploadFiles.length > 0) {
+        await startUploads(uploadFiles);
+      }
     },
-    [accept, maxSize, multiple, startUploads],
+    [addFailedRows, enqueueImageDrafts, field.readonly, multiple, startUploads, validateFile],
   );
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
@@ -268,6 +325,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault();
     setIsDragOver(false);
+    if (field.readonly) return;
     void handleFiles(Array.from(event.dataTransfer.files));
   };
 
@@ -302,6 +360,10 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 
   const openCamera = async (): Promise<void> => {
     if (field.readonly) return;
+    const requestId = cameraRequestIdRef.current + 1;
+    cameraRequestIdRef.current = requestId;
+    stopCamera(cameraStreamRef.current);
+    cameraStreamRef.current = null;
     setCameraError(null);
     setCameraOpen(true);
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -313,19 +375,30 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         video: { facingMode: 'environment' },
         audio: false,
       });
+      if (!mountedRef.current || cameraRequestIdRef.current !== requestId) {
+        stopCamera(stream);
+        return;
+      }
       cameraStreamRef.current = stream;
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (!mountedRef.current || cameraRequestIdRef.current !== requestId || cameraStreamRef.current !== stream) {
+        stopCamera(stream);
+        if (cameraStreamRef.current === stream) cameraStreamRef.current = null;
+        return;
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => undefined);
       }
     } catch {
+      if (!mountedRef.current || cameraRequestIdRef.current !== requestId) return;
       setCameraError('We could not open the camera. Choose a file instead.');
       setCameraOpen(true);
     }
   };
 
   const closeCamera = (): void => {
+    cameraRequestIdRef.current += 1;
     stopCamera(cameraStreamRef.current);
     cameraStreamRef.current = null;
     setCameraOpen(false);
@@ -348,14 +421,17 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     const legibilityWarning = analyzeLegibility(context, width, height);
     const blob = await canvasToBlob(canvas, 'image/jpeg', 0.9);
     const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
-    setImageDraft((prev) => {
-      if (prev) URL.revokeObjectURL(prev.objectUrl);
-      return {
-        file,
-        objectUrl: URL.createObjectURL(file),
-        redactions: [],
-        legibilityWarning,
-      };
+    const validationMessage = validateFile(file);
+    if (validationMessage) {
+      addFailedRows([{ file, message: validationMessage }]);
+      closeCamera();
+      return;
+    }
+    replaceImageDraft({
+      file,
+      objectUrl: URL.createObjectURL(file),
+      redactions: [],
+      legibilityWarning,
     });
     closeCamera();
   };
@@ -390,18 +466,23 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     redactionStartRef.current = null;
     setActiveRedaction(null);
     if (rect.width < 0.01 || rect.height < 0.01) return;
-    setImageDraft({ ...imageDraft, redactions: [...imageDraft.redactions, rect] });
+    replaceImageDraft({ ...imageDraft, redactions: [...imageDraft.redactions, rect] });
   };
 
   const uploadImageDraft = async (): Promise<void> => {
     if (!imageDraft) return;
+    const draft = imageDraft;
     try {
-      const file = imageDraft.redactions.length > 0
-        ? await redactImageFile(imageDraft.file, imageDraft.redactions)
-        : imageDraft.file;
-      const objectUrl = imageDraft.objectUrl;
-      setImageDraft(null);
-      URL.revokeObjectURL(objectUrl);
+      const file = draft.redactions.length > 0
+        ? await redactImageFile(draft.file, draft.redactions)
+        : draft.file;
+      const validationMessage = validateFile(file);
+      if (validationMessage) {
+        addFailedRows([{ file, message: validationMessage }]);
+        advanceImageDraftQueue();
+        return;
+      }
+      advanceImageDraftQueue();
       await startUploads([file]);
     } catch {
       setPending((prev) => [
@@ -409,17 +490,16 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         {
           kind: 'failed',
           key: `redaction-${Date.now()}`,
-          filename: imageDraft.file.name,
+          filename: draft.file.name,
           message: 'We could not prepare that image. Choose the file again.',
         },
       ]);
+      advanceImageDraftQueue();
     }
   };
 
   const cancelImageDraft = (): void => {
-    if (imageDraft) URL.revokeObjectURL(imageDraft.objectUrl);
-    setImageDraft(null);
-    setActiveRedaction(null);
+    advanceImageDraftQueue();
   };
 
   const deskewImageDraft = async (): Promise<void> => {
@@ -427,8 +507,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     try {
       const file = await cropToDetectedPageEdges(imageDraft.file);
       const objectUrl = URL.createObjectURL(file);
-      URL.revokeObjectURL(imageDraft.objectUrl);
-      setImageDraft({
+      replaceImageDraft({
         ...imageDraft,
         file,
         objectUrl,
@@ -539,11 +618,17 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   ) : null;
 
   const redactionRects = imageDraft ? [...imageDraft.redactions, ...(activeRedaction ? [activeRedaction] : [])] : [];
+  const imageDraftQueueCopy = imageDraft && imageDraftQueue.length > 0 ? (
+    <p className="formspec-file-image-queue" role="status">
+      {imageDraftQueue.length} image{imageDraftQueue.length === 1 ? '' : 's'} waiting for review.
+    </p>
+  ) : null;
   const imageDraftPanel = imageDraft ? (
     <div className="formspec-file-image-review" aria-label="Image review before upload">
       {imageDraft.legibilityWarning ? (
         <p className="formspec-file-legibility" role="alert">{imageDraft.legibilityWarning}</p>
       ) : null}
+      {imageDraftQueueCopy}
       <div
         ref={redactionSurfaceRef}
         className="formspec-file-redaction-surface"
@@ -570,7 +655,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       </div>
       <div className="formspec-file-actions">
         <button type="button" className="formspec-button-secondary" onClick={() => {
-          setImageDraft({
+          replaceImageDraft({
             ...imageDraft,
             redactions: [
               ...imageDraft.redactions,
@@ -590,7 +675,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         <button
           type="button"
           className="formspec-button-secondary"
-          onClick={() => setImageDraft({ ...imageDraft, redactions: [] })}
+          onClick={() => replaceImageDraft({ ...imageDraft, redactions: [] })}
           disabled={imageDraft.redactions.length === 0}
         >
           Clear redactions
@@ -644,6 +729,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         onKeyDown={handleKey}
         onDragOver={(event) => {
           event.preventDefault();
+          if (field.readonly) return;
           setIsDragOver(true);
         }}
         onDragLeave={() => setIsDragOver(false)}

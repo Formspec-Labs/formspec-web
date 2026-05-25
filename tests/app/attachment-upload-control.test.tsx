@@ -116,9 +116,19 @@ afterEach(() => {
   root = undefined;
   container = undefined;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('FormspecWebAttachmentControl', () => {
+  const existingAttachment: AttachmentRef = {
+    kind: 'attachment-ref',
+    uri: 'attachment:demo-existing',
+    hash: 'sha256:00',
+    size: 4,
+    mimeType: 'application/pdf',
+    filename: 'existing.pdf',
+  };
+
   it('uploads a picked file through the AttachmentStore and writes the AttachmentRef into the engine value (single)', async () => {
     const store = stubAttachmentStore();
     const harness = makeFieldHarness();
@@ -199,6 +209,34 @@ describe('FormspecWebAttachmentControl', () => {
     expect(container?.textContent ?? '').toContain('could not reach the upload service');
     expect(container?.textContent ?? '').not.toContain('ECONNREFUSED');
     expect(harness.readValue()).toBeNull();
+  });
+
+  it('preserves an existing single attachment when a replacement upload fails', async () => {
+    const failing: AttachmentStore = {
+      upload: async () => {
+        throw new AttachmentUploadError('network down', { code: 'network' });
+      },
+    };
+    const harness = makeFieldHarness({ initial: existingAttachment });
+    render(
+      <AttachmentStoreProvider value={failing}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode()} />
+      </AttachmentStoreProvider>,
+    );
+
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [await fileFromBytes(new Uint8Array([9]), 'replacement.pdf')],
+      configurable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await flush();
+
+    expect(container?.textContent ?? '').toContain('could not reach the upload service');
+    expect(harness.readValue()).toEqual(existingAttachment);
   });
 
   it('calls AttachmentStore.delete on remove when the adopter implements it (M-2)', async () => {
@@ -348,6 +386,37 @@ describe('FormspecWebAttachmentControl', () => {
     expect(harness.readValue()).toBeNull();
   });
 
+  it('does not accept drag-drop uploads while readonly', async () => {
+    const uploadSpy = vi.fn(async (): Promise<AttachmentRef> => ({
+      kind: 'attachment-ref',
+      uri: 'attachment:readonly-drop',
+      hash: 'sha256:00',
+      size: 1,
+      mimeType: 'application/pdf',
+      filename: 'drop.pdf',
+    }));
+    const harness = makeFieldHarness({ initial: existingAttachment, readonly: true });
+    render(
+      <AttachmentStoreProvider value={{ upload: uploadSpy }}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ dragDrop: true })} />
+      </AttachmentStoreProvider>,
+    );
+
+    const dropZone = container!.querySelector('.formspec-file-drop-zone') as HTMLDivElement;
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true }) as DragEvent;
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: { files: [await fileFromBytes(new Uint8Array([1]), 'drop.pdf')] },
+      configurable: true,
+    });
+    await act(async () => {
+      dropZone.dispatchEvent(dropEvent);
+      await flush();
+    });
+
+    expect(uploadSpy).not.toHaveBeenCalled();
+    expect(harness.readValue()).toEqual(existingAttachment);
+  });
+
   it('opens image review for a file that matches `accept` via wildcard before upload', async () => {
     const store = stubAttachmentStore();
     const harness = makeFieldHarness();
@@ -379,6 +448,236 @@ describe('FormspecWebAttachmentControl', () => {
     await flush();
 
     expect(harness.readValue()).toBeTruthy();
+  });
+
+  it('uploads non-image siblings and queues every image from a multiple-file batch', async () => {
+    const uploadSpy = vi.fn(async (blob: Blob, metadata): Promise<AttachmentRef> => ({
+      kind: 'attachment-ref',
+      uri: `attachment:${metadata.filename}`,
+      hash: 'sha256:00',
+      size: blob.size,
+      mimeType: metadata.mimeType,
+      filename: metadata.filename,
+    }));
+    let observedValue: unknown = null;
+    function LiveHarness() {
+      const [value, setValue] = useState<unknown>(null);
+      useEffect(() => {
+        observedValue = value;
+      }, [value]);
+      const field = {
+        ...makeFieldHarness().field,
+        value,
+        setValue,
+      } as unknown as UseFieldResult;
+      return <FormspecWebAttachmentControl field={field} node={makeNode({ multiple: true })} />;
+    }
+    render(
+      <AttachmentStoreProvider value={{ upload: uploadSpy }}>
+        <LiveHarness />
+      </AttachmentStoreProvider>,
+    );
+
+    const files = [
+      await fileFromBytes(new Uint8Array([1]), 'a.pdf', 'application/pdf'),
+      await fileFromBytes(new Uint8Array([2]), 'photo.png', 'image/png'),
+      await fileFromBytes(new Uint8Array([3]), 'b.pdf', 'application/pdf'),
+      await fileFromBytes(new Uint8Array([4]), 'scan.jpg', 'image/jpeg'),
+    ];
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: files, configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await flush();
+
+    expect(uploadSpy).toHaveBeenCalledTimes(2);
+    expect(container?.textContent ?? '').toContain('1 image waiting for review');
+
+    for (let index = 0; index < 2; index += 1) {
+      const uploadBtn = Array.from(container!.querySelectorAll('button'))
+        .find((btn) => btn.textContent === 'Upload image');
+      await act(async () => {
+        uploadBtn?.click();
+        await flush();
+      });
+      await flush();
+    }
+
+    expect(uploadSpy).toHaveBeenCalledTimes(4);
+    expect((observedValue as AttachmentRef[]).map((ref) => ref.filename)).toEqual([
+      'a.pdf',
+      'b.pdf',
+      'photo.png',
+      'scan.jpg',
+    ]);
+  });
+
+  it('revalidates the rendered image before upload after on-device redaction', async () => {
+    vi.stubGlobal('Image', class {
+      onload: (() => void) | null = null;
+      naturalWidth = 10;
+      naturalHeight = 10;
+      width = 10;
+      height = 10;
+
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      fillRect: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray([0, 0, 0, 255]) }),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function toBlob(callback) {
+      callback(new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }));
+    } as HTMLCanvasElement['toBlob']);
+    const uploadSpy = vi.fn(async (): Promise<AttachmentRef> => ({
+      kind: 'attachment-ref',
+      uri: 'attachment:redacted',
+      hash: 'sha256:00',
+      size: 3,
+      mimeType: 'image/png',
+      filename: 'photo.png',
+    }));
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={{ upload: uploadSpy }}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ accept: 'image/*', maxSize: 2 })} />
+      </AttachmentStoreProvider>,
+    );
+
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [await fileFromBytes(new Uint8Array([1]), 'photo.png', 'image/png')],
+      configurable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    const addRedactionBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Add redaction box');
+    await act(async () => {
+      addRedactionBtn?.click();
+      await flush();
+    });
+    const uploadBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Upload image');
+    await act(async () => {
+      uploadBtn?.click();
+      await flush();
+    });
+    await flush();
+
+    expect(container?.textContent ?? '').toContain('larger than the upload limit');
+    expect(uploadSpy).not.toHaveBeenCalled();
+    expect(harness.readValue()).toBeNull();
+  });
+
+  it('enforces accept constraints on camera captures before image review upload', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    const stop = vi.fn();
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: vi.fn(async () => ({
+          getTracks: () => [{ stop }],
+        })),
+      },
+      configurable: true,
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray([0, 0, 0, 255]) }),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function toBlob(callback) {
+      callback(new Blob([new Uint8Array([1])], { type: 'image/jpeg' }));
+    } as HTMLCanvasElement['toBlob']);
+    const uploadSpy = vi.fn(async (): Promise<AttachmentRef> => ({
+      kind: 'attachment-ref',
+      uri: 'attachment:camera',
+      hash: 'sha256:00',
+      size: 1,
+      mimeType: 'image/jpeg',
+      filename: 'camera-capture.jpg',
+    }));
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={{ upload: uploadSpy }}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ accept: 'application/pdf' })} />
+      </AttachmentStoreProvider>,
+    );
+
+    const cameraBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Use camera');
+    await act(async () => {
+      cameraBtn?.click();
+      await flush();
+    });
+    const captureBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Capture image');
+    await act(async () => {
+      captureBtn?.click();
+      await flush();
+    });
+    await flush();
+
+    expect(container?.textContent ?? '').toContain('file type is not accepted');
+    expect(container?.textContent ?? '').not.toContain('Upload image');
+    expect(uploadSpy).not.toHaveBeenCalled();
+    expect(harness.readValue()).toBeNull();
+    expect(stop).toHaveBeenCalledTimes(1);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: originalMediaDevices,
+      configurable: true,
+    });
+  });
+
+  it('stops a camera stream that resolves after the control unmounts', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    let resolveStream: (stream: MediaStream) => void = () => {};
+    const streamPromise = new Promise<MediaStream>((resolve) => {
+      resolveStream = resolve;
+    });
+    const stop = vi.fn();
+    const stream = {
+      getTracks: () => [{ stop }],
+    } as unknown as MediaStream;
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: vi.fn(async () => streamPromise),
+      },
+      configurable: true,
+    });
+    render(
+      <AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode()} />
+      </AttachmentStoreProvider>,
+    );
+
+    const cameraBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Use camera');
+    await act(async () => {
+      cameraBtn?.click();
+      await flush();
+    });
+    act(() => {
+      root?.unmount();
+    });
+    root = undefined;
+    await act(async () => {
+      resolveStream(stream);
+      await flush();
+    });
+
+    expect(stop).toHaveBeenCalledTimes(1);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: originalMediaDevices,
+      configurable: true,
+    });
   });
 
   it('rejects a file that exceeds maxSize with a plain-language message', async () => {

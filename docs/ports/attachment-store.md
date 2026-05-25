@@ -67,7 +67,9 @@ uploadResumable(blob, metadata, { chunkSizeBytes, onProgress })
 The baseline `upload(blob)` method stays valid. The field renderer detects
 `uploadResumable` when present and reports byte-level progress on the upload
 row. Adopters use this extension for multipart object stores, tus-style
-uploads, or browser-stream-backed upload paths that survive flaky networks.
+uploads, or browser-stream-backed upload paths that report chunk progress
+and can support adapter-specific retry/resume behavior. The web port does
+not, by itself, guarantee reload-resumable in-flight uploads.
 
 Adapters that implement the extension MUST call `onProgress` with
 `loadedBytes`, `totalBytes`, `chunksUploaded`, and `chunkCount` as chunks
@@ -88,9 +90,10 @@ const composition: Composition = freezeComposition({
 ```
 
 The OSS reference demo wires `persistentDemoAttachmentStore()`, a
-DEMO_STUB_ADAPTER-marked localStorage-backed store. It survives page refresh
-so the bundled demo form can include an optional attachment field without
-misleading contributors. Production still declares `fileUpload:
+DEMO_STUB_ADAPTER-marked localStorage-backed store. Completed demo uploads
+persist across page refresh so the bundled demo form can include an optional
+attachment field without misleading contributors; in-flight demo uploads are
+not reload-resumable. Production still declares `fileUpload:
 'unavailable'` and wires `unavailableAttachmentStore()` until an adopter
 forks. The narrowed-route factories (`/status`, `/obligations`, `/documents`)
 declare `unavailable` uniformly — those surfaces do not accept uploads.

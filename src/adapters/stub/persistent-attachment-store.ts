@@ -30,7 +30,7 @@ const DEFAULT_CHUNK_SIZE_BYTES = 256 * 1024;
  *
  * This is intentionally demo-scoped, not a production object-store reference
  * adapter. It exists so the bundled OSS demo can include an attachment field
- * without losing uploaded bytes on reload.
+ * while completed demo uploads persist across reload.
  */
 export function persistentDemoAttachmentStore(
   options: PersistentDemoAttachmentStoreOptions = {},

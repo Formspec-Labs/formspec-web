@@ -239,7 +239,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Status:** live (slice 2 landed)
 - **Persona:** Respondent
 - **Journey:** [J-040](JOURNEYS.md#j-040--file-upload-as-a-primary-act-not-a-side-door-load-bearing-for-regulated-work)
-- **Done:** The `AttachmentStore` port gains a sibling `ResumableAttachmentStore` per web ADR-0009 narrow-port discipline so multi-MB attachments can survive flaky networks and tab reloads. Slice 1 `upload(blob)` stays — the field control upgrades to the resumable shape when the adopter wires it. Progress indicator on the upload row reports byte-level progress (vs slice 1's binary in-flight/done). The OSS demo store implements the extension locally; production multipart/tus/browser-stream adapters remain adopter-shaped.
+- **Done:** The `AttachmentStore` port gains a sibling `ResumableAttachmentStore` per web ADR-0009 narrow-port discipline so multi-MB attachments can report chunk progress and support adopter-specific retry/resume behavior. Slice 1 `upload(blob)` stays — the field control upgrades to the resumable shape when the adopter wires it. Progress indicator on the upload row reports byte-level progress (vs slice 1's binary in-flight/done). The OSS demo store implements chunked progress locally and persists completed demo uploads across reload; production multipart/tus/browser-stream adapters remain adopter-shaped.
 - **Blocked on:** no upstream block — slice-1 deferral. Port-shape ratification follows web ADR-0009 §"Not in the constitutional inventory" — ratified as its own ADR when this row's consumer code lands. Coordinates with the EXT-34 wire-format ratification (resumable refs may differ).
 - **Anti-patterns:** AP-008.
 
