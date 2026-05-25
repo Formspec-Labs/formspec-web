@@ -70,6 +70,7 @@ import {
   type ResolvedRuntimeProfile,
   type RuntimePolicyError,
 } from '../policy/index.ts';
+import { extractPaymentAmount } from '../policy/extract-form-policy.ts';
 import { RuntimeProfileProvider } from './RuntimeProfileProvider.tsx';
 import { formatDate, labelFromToken, slugToken } from './format.ts';
 import {
@@ -517,7 +518,7 @@ export function RespondentRuntime({
         // Show "Authorizing payment…" panel while authorize runs. The
         // helper resolves to a discriminated outcome that drives the rest
         // of the state machine.
-        const amount = extractPaymentAmountFromDefinition(respondentState.definition);
+        const amount = extractPaymentAmount(respondentState.definition);
         if (amount) {
           setSubmitState({ status: 'authorizing-payment', amount });
         }
@@ -536,13 +537,6 @@ export function RespondentRuntime({
               confirmation: paymentOutcome.confirmation,
               captureReceipt: paymentOutcome.captureReceipt,
             });
-            return;
-          case 'submitted-no-payment':
-            // Defensive: the helper falls through when the runtime profile
-            // does not enable payment; we only entered this branch because
-            // it does, so this branch is unreachable in practice. Wire
-            // safely.
-            setSubmitState({ status: 'confirmed', confirmation: paymentOutcome.confirmation });
             return;
           case 'authorize-failed':
             setSubmitState({ status: 'error', error: paymentOutcome.error });
@@ -1165,6 +1159,7 @@ function SubmitNotice({ state }: { state: SubmitState }) {
           {PAYMENT_CAPTURE_FAILED_BODY_PREFIX}{' '}
           <strong>{state.confirmation.referenceNumber}</strong>.
         </p>
+        <p className="submit-notice__detail">{PAYMENT_DEFERRED_CAPABILITY_COPY}</p>
       </section>
     );
   }
@@ -1214,18 +1209,6 @@ function readNavigatorOnLine(): boolean {
   // net. FW-0081 service worker addresses the discrepancy more cleanly.
   if (typeof navigator === 'undefined') return true;
   return navigator.onLine;
-}
-
-function extractPaymentAmountFromDefinition(definition: FormDefinition): Money | undefined {
-  const raw = definition.extensions?.['x-formspec-payment-amount'];
-  if (!raw || typeof raw !== 'object') return undefined;
-  const candidate = raw as { amountMinorUnits?: unknown; currency?: unknown };
-  if (typeof candidate.amountMinorUnits !== 'number') return undefined;
-  if (typeof candidate.currency !== 'string') return undefined;
-  return {
-    amountMinorUnits: candidate.amountMinorUnits,
-    currency: candidate.currency,
-  };
 }
 
 export function formatMoney(amount: Money): string {

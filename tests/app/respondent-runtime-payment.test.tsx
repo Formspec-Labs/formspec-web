@@ -5,6 +5,7 @@ import type { FormDefinition } from '@formspec-org/types';
 import {
   PAYMENT_AUTHORIZING_TITLE,
   PAYMENT_CAPTURE_FAILED_TITLE,
+  PAYMENT_DEFERRED_CAPABILITY_COPY,
   PAYMENT_RECEIVED_TITLE,
   PAYMENT_REQUIRES_ONLINE_COPY,
   PAYMENT_VOIDED_AFTER_SUBMIT_FAILURE_TITLE,
@@ -262,6 +263,10 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
 
     // Reference number from stub transport (RECORD-…); the copy must include it.
     expect(container?.textContent ?? '').toMatch(/reference\b/i);
+    // FW-0027 M-3: the capture-failed panel carries the deferred-capability
+    // reassurance the void-failed panel already has — the user must learn
+    // any pending charge will release automatically.
+    expect(container?.textContent ?? '').toContain(PAYMENT_DEFERRED_CAPABILITY_COPY);
   });
 
   it('fails-load with the plain-language unavailable copy when payment is required but instance unavailable', async () => {
@@ -450,7 +455,13 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
 
     expect(container?.textContent).toContain('$45.00 pending');
     expect(container?.textContent).toContain("You haven't been charged yet.");
-    // Resolve the authorize so the test cleans up cleanly.
+    // Wait until the spy actually entered the in-flight Promise (which is
+    // when `resolveAuth` becomes set). The "Authorizing payment…" panel
+    // renders before `submitWithPayment` awaits the three rail-key
+    // derivations (FW-0027 H-1+H-2 deterministic-derivation pushed the
+    // rail call past the panel render), so the panel visibility no longer
+    // co-implies the rail call is in flight.
+    await waitFor(() => resolveAuth !== undefined);
     resolveAuth?.(undefined as never);
     await waitFor(() => (container?.textContent ?? '').includes('Submission received'));
   });

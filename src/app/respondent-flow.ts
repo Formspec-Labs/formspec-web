@@ -286,8 +286,12 @@ export async function submitOrQueue(
  * reconciliation); overrides MUST be valid UUIDv7 values (the rail's
  * `assertUuidV7IdempotencyKey` rejects anything else).
  *
+ * Caller contract: only invoke when the resolved profile enables `payment`
+ * (the call site has already branched on `paymentEnabled`). The helper
+ * asserts the precondition; free-form submits go through `submitOrQueue`,
+ * not through here.
+ *
  * Outcomes:
- *   - 'submitted-no-payment'        — free form path; identical to today.
  *   - 'submitted-with-payment'      — happy path; authorize → submit → capture.
  *   - 'submit-failed-payment-voided' — submit threw after authorize; void
  *      released the hold; respondent sees user-protection copy.
@@ -302,7 +306,6 @@ export async function submitOrQueue(
  *      that names the pending charge will release itself.
  */
 export type SubmitWithPaymentOutcome =
-  | { readonly kind: 'submitted-no-payment'; readonly confirmation: SubmitConfirmation }
   | {
       readonly kind: 'submitted-with-payment';
       readonly confirmation: SubmitConfirmation;
@@ -360,13 +363,14 @@ export const PAYMENT_FALLBACK_METHOD_TOKEN = 'demo-method-stub';
 export async function submitWithPayment(
   input: SubmitWithPaymentInput,
 ): Promise<SubmitWithPaymentOutcome> {
-  const paymentEnabled = input.runtimeProfile.enabled.has('payment');
-  if (!paymentEnabled) {
-    const confirmation = await input.submitTransport.submit(
-      input.handoff,
-      input.idempotencyKey,
+  // Caller-contract assertion: the React shell branches on
+  // `paymentEnabled` before invoking. A non-payment composition reaches
+  // here only via test misuse; fail loudly instead of silently bypassing
+  // the rail.
+  if (!input.runtimeProfile.enabled.has('payment')) {
+    throw new Error(
+      'submitWithPayment invoked with payment disabled in the resolved profile; route free-form submits through submitOrQueue.',
     );
-    return { kind: 'submitted-no-payment', confirmation };
   }
 
   const amount = extractPaymentAmount(input.definition);

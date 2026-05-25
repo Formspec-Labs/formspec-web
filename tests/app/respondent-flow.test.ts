@@ -414,20 +414,24 @@ describe('submitOrQueue (FW-0044) — offline-aware submit routing', () => {
 });
 
 describe('submitWithPayment (FW-0027) — authorize → submit → capture-or-void orchestration', () => {
-  it('takes the no-payment path when the resolved profile does not enable payment', async () => {
+  it('FW-0027 M-2: throws when invoked with payment disabled — caller must branch on paymentEnabled before calling (free-form path is submitOrQueue)', async () => {
     const transport = stubSubmitTransport();
     const rail = stubPaymentRailAdapter();
     const authorizeSpy = vi.spyOn(rail, 'authorize');
-    const outcome = await submitWithPayment({
-      runtimeProfile: profile([]),
-      definition: demoSampleForm,
-      submitTransport: transport,
-      paymentRailAdapter: rail,
-      handoff: sampleIntakeHandoff,
-      idempotencyKey: generateIdempotencyKey(),
-    });
-    expect(outcome.kind).toBe('submitted-no-payment');
+    const submitSpy = vi.spyOn(transport, 'submit');
+    await expect(
+      submitWithPayment({
+        runtimeProfile: profile([]),
+        definition: demoSampleForm,
+        submitTransport: transport,
+        paymentRailAdapter: rail,
+        handoff: sampleIntakeHandoff,
+        idempotencyKey: generateIdempotencyKey(),
+      }),
+    ).rejects.toThrow(/payment disabled/);
+    // No rail call, no submit — fail loud, fail fast.
     expect(authorizeSpy).not.toHaveBeenCalled();
+    expect(submitSpy).not.toHaveBeenCalled();
   });
 
   it('authorizes, submits, and captures when payment is enabled (happy path)', async () => {
