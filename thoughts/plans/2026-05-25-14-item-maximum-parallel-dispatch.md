@@ -382,6 +382,23 @@ Verification run after remediation:
 
 - `git diff --check -- thoughts/adr/0155-multi-party-intake.md`
 
+### 2026-05-25 — W1.3 / XS-3 coercion-aware signing ADR review-loop closure
+
+Independent generic reviewer `019e5f60-ce17-77e3-ac67-9cd8ba08da9e` reviewed ADR 0156 for W1.3 / XS-3 and returned REQUEST CHANGES. Specialized `formspec-specs:*` reviewer roles were still not exposed, so this was a generic semi-formal review over the cross-stack ADR, FW-0048 / FW-0059 boundaries, and the upstream extension queue.
+
+Findings remediated:
+
+- HIGH F1: ADR 0156 used "authorizes" language while still `proposed`, overclaiming authority relative to FW-0048's proposal status and FW-0059's blocked state. Remediation: ADR 0156 now proposes the contract and does not authorize implementation until ratified.
+- MEDIUM F2: ADR 0156's FW-0059 blocker line preserved only broad Formspec/Trellis ratifications, dropping EXT-18 and private-sidecar discipline from the explicit gate. Remediation: the blocker now names ADR ratification, EXT-5 payload, EXT-18 HPKE wrapper availability, EXT-30 recipient registry, Trellis event-type registration, and private-sidecar discipline.
+- MEDIUM F3: cleartext `key_bag` recipient handles could leak role-specific safety-team routing. Remediation: ADR 0156 now requires a uniform opaque profile handle whenever role-specific routing would reveal sensitive party information, with role-to-recipient fan-out only after authorized safety-service decrypt; the upstream extension queue's EXT-5, EXT-30, and XS-3 entries now carry the same side-channel guard.
+
+Reviewer re-check returned APPROVE on both the ADR remediation and the extension-queue sync. ADR 0156 remains proposed; this closes the review loop for the recorded XS-3 ADR / queue-alignment slice, not owner ratification or downstream EXT/WOS/Trellis implementation.
+
+Verification run after remediation:
+
+- `git diff --check -- thoughts/adr/0156-coercion-aware-signing-pipeline.md`
+- `git diff --check -- thoughts/specs/2026-05-22-upstream-extension-queue.md`
+
 ### 2026-05-25 — Conservative W1/W2 cycle ledger
 
 Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dispatch table against current committed artifacts. Specialized `formspec-specs:*` scout/reviewer roles were not exposed in this runtime, so the check was a generic read-only scout pass. Disposition rule: implementation, ratification, or remediation commits are **not** enough to check off a row as closed unless the implementer→reviewer→remediator→verifier loop is explicit in the plan or commit evidence.
@@ -390,7 +407,7 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 |---|---|---|
 | W1.1 / ADR-0011 + EXT-5 bot-protection | `formspec-web` `a85ed7a`; `formspec` `92295d48`; review-loop closure recorded above | cycle-closed for the recorded ADR/spec slice; `preparerFiling` remains unavailable-only until FW-0037 build |
 | W1.2 / XS-1 multi-party intake ADR | stack root `b8c0814`, `83f33d1`; ADR 0155 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR slice; owner ratification and downstream schema/WOS/Trellis work remain open |
-| W1.3 / XS-3 coercion-aware signing ADR | stack root `61cd59b`; ADR 0156 remains proposed | authored, not cycle-closed |
+| W1.3 / XS-3 coercion-aware signing ADR | stack root `61cd59b`, `86f2f4a`; `formspec-web` `93cea73`; ADR 0156 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR / queue-alignment slice; owner ratification and downstream EXT/WOS/Trellis work remain open |
 | W1.4 / XS-4 safe-address + XS-5 record-lifecycle ADRs | stack root `1800448`, `c001309`, `522f858`; ADRs 0157/0158 remain proposed | authored/remediated, not cycle-closed |
 | W1.5 / SC-1, SC-2, SC-5 sidecars | `formspec` `0533fb9f`, `1dcce96d`, `f11f82be` | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
 | W1.6 / SC-4 identity binding profile | `formspec` `be21eb2b`, `5d34f058` | integrated/hardened, not cycle-closed |
@@ -405,4 +422,4 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W2.3 / FW-0060 safe-address build | `formspec-web` `6e02690`, `8e5a163`, `338ebd1`, `b53cbe3`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
 | W2.4 / FW-0061 multi-party build | `formspec-web` `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for XS-1/upstream ratification |
 
-Closeout consequence: W1.1, W1.2, W1.9, W1.10, W1.11, W1.12, W2.1, W2.2, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
+Closeout consequence: W1.1, W1.2, W1.3, W1.9, W1.10, W1.11, W1.12, W2.1, W2.2, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
