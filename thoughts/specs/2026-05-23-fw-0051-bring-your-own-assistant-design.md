@@ -393,6 +393,24 @@ A coercer who controls the respondent's assistant (malicious extension; coercer-
 
 **Cross-row touch — RESOLVED 2026-05-24.** [FW-0058 design landed](2026-05-24-fw-0058-ai-agent-filer-chain-design.md) with §7.7 reciprocating this vocabulary distinction in inverted framing (the symmetric mirror of this table). FW-0058 design also closes the EXT-3 `agentChain` deferral with the §3.2 10-property `AgentChainEntry` schema. The two-row composition (FW-0058 agent using FW-0051 BYO-assistant during its own fill) remains deferred per both rows; flagged for future when a real use case surfaces. PLANNING.md FW-0058 + FW-0051 cross-link bilaterally updated.
 
+### 7.8 FW-0042 — Trusted-reviewer (vocabulary clash; load-bearing distinction)
+
+**FW-0042 is HUMAN-reviewer (read+comment+optional-suggest); FW-0051 is AI-as-respondent-helper (per-act PROPOSE; respondent confirms each act).** The two rows are easy to confuse but architecturally distinct: BYO assistant is the **respondent's own tool** running in the respondent's tools; the trusted reviewer is a **separate human party** with their own session, their own identity boundary, their own trust profile. Per [FW-0042 §6.5 (cross-row touch with FW-0051)](2026-05-25-fw-0042-trusted-reviewer-design.md):
+
+| Axis | FW-0051 (BYO-assistant) | FW-0042 (trusted reviewer) |
+|---|---|---|
+| Actor | The respondent's AI tool | A separate human (lawyer / accountant / advocate / family member) |
+| Session | Runs in the respondent's session; no separate auth | Reviewer holds a capability URL (no account); optional Tier-2 IdP for higher-assurance scenarios |
+| What it can do | Per-act PROPOSE (respondent confirms) | READ + COMMENT (+ SUGGEST when allowed); the respondent applies suggestions |
+| Substrate | No actor-extension; EXT-2 `attestedBy: respondent, sourceRef: assistant-suggested` provenance | New SC-6 review-thread sidecar (off the signed Response); optional EXT-37 receipt hook |
+| Trust model | Assistant is untrusted by form; respondent confirms each act | Reviewer is named (Tier 2) or self-named (Tier 1); reviewer's advice is NOT attestation |
+
+**They compose at the respondent surface (per FW-0042 §6.7 pairwise rules).** A respondent MAY use BYO assistant while drafting AND share the live draft with a trusted reviewer. The reviewer can see the EXT-2 `attestedBy: respondent, sourceRef: assistant-suggested` per-field provenance — useful context for the reviewer ("the AI generated this; let me check it"). **The composition is informational; no new substrate.** The respondent's BYO-assistant MAY inform the respondent how to weigh a reviewer's suggestion (the assistant talks to the respondent, not to the reviewer), but the assistant CANNOT act on the reviewer's behalf AND the assistant CANNOT be the reviewer. The vocabulary firewall holds: assistant is the respondent's tool; reviewer is a separate party.
+
+**Substrate effect:** none on FW-0051's substrate paths — this section is informational, naming the vocabulary distinction so adopters don't conflate the two flows. The FW-0042 substrate (SC-6 sidecar, capability URL, ReviewerSession + ReviewThreadStore ports) is wholly separate from FW-0051's Assist Provider substrate.
+
+**Cross-row touch.** FW-0042 design's §6.7 four-way framing table includes FW-0051 as one column; this section reciprocates the distinction on the FW-0051 side so the firewall is visible from both rows.
+
 ## 8. Open questions / deferrals
 
 Honest list of what FW-0051 design does NOT resolve:

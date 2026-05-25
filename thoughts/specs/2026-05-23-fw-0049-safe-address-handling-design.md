@@ -451,6 +451,14 @@ FW-0058 (AI-agent filer chain) and FW-0049 (safe-address) compose at the agent-i
 
 **FW-0060 build constraint addition:** the safe-* mask discipline applies uniformly across all programmatic readers — Assist Provider (FW-0051), agent introspection (FW-0058), and any future reader. The per-reader-type unmask exception list is intentionally empty for safe-*-class fields.
 
+### 7.3.7 FW-0042 composition (trusted-reviewer — safe-* mask survives reviewer-read; suggest forbidden on safe-*)
+
+FW-0042 (share-draft-with-trusted-reviewer) and FW-0049 (safe-address) compose at the reviewer-introspection surface symmetrically with the FW-0051 / FW-0058 composition (§7.3.5 / §7.3.6). Per [FW-0042 §6.3 + §3.4](2026-05-25-fw-0042-trusted-reviewer-design.md): safe-*-class fields auto-mark as `respondentOnly: true` for reviewers, regardless of form-policy `respondentOnlyFieldPointers[]`. The reviewer's session renders the safe-* field as a masked label ("Respondent-only field — value hidden from reviewers"); the reviewer can leave a comment on the masked field (advising about a field they cannot see the value of — "Mom, double-check the SSN field looks right") but the suggest affordance is structurally HIDDEN (the reviewer cannot suggest a value for a field they cannot see, mirroring the FW-0051 + FW-0058 disciplines — a "blind" suggestion would leak information about expected value shapes via the input semantics).
+
+**Composition discipline matches the filer-side per FW-0037 §6.3.** The "comment OK; suggest forbidden" split applies symmetrically across the human-reviewer (FW-0042), AI-assistant (FW-0051), and AI-agent (FW-0058) readers — none can see safe-*-class plaintext, and none can author suggestions / writes against safe-*-class fields. The per-reader-type unmask exception list (§7.3.5 + §7.3.6) stays intentionally empty for safe-*-class fields; FW-0042's reviewer joins the same uniform discipline.
+
+**FW-0060 build constraint addition:** the reviewer-side renderer under FW-0109 (FW-0042 build row) MUST mask safe-*-class fields in the reviewer session; the suggest affordance MUST be structurally absent for safe-*-class fields (per FW-0042 §3.4 + §4.2 substrate refusal `SuggestionForbiddenOnRespondentOnlyFieldError`). Conformance fixtures cover the safe-* + reviewer-share composition case per FW-0042 §10 (fixture 9).
+
 ### 7.4 FW-0060 build constraints (consumed by FW-0060 author directly)
 
 The FW-0060 build is responsible for:

@@ -455,6 +455,24 @@ The verifier attests to **capacity** (the agent was acting under the named autho
 
 **Cross-row touch.** FW-0051 design's §7.6 names the FW-0058 distinction; FW-0037 design's §6.7 / §8.7 reciprocates with the three-way framing table + Compositions sub-table; this design's §7.7 now reciprocates the third leg per code-review HIGH F7 (closing the bilateral-update gap where PLANNING.md was touched but the DESIGN doc was not). **PLANNING.md cross-link bilaterally updated; DESIGN DOC cross-links now bilaterally updated.**
 
+### 7.7.1 FW-0042 — Trusted-reviewer (four-way framing extension)
+
+**Reciprocation per [FW-0042 §6.7](2026-05-25-fw-0042-trusted-reviewer-design.md).** FW-0058 (AI-agent-as-respondent who signs) and FW-0042 (separate human reviewer who reads + comments + optionally suggests) are the **inverse vocabulary distinction** at the actor axis: FW-0058 is non-human capacity at the *signer* boundary; FW-0042 is human capacity at the *reviewer* boundary, with the respondent staying in the signer seat (`capacity: "self"`). The three-way framing table above expands to four-way when FW-0042 enters the picture:
+
+| Axis | FW-0037 (human filer) | FW-0042 (human reviewer) | FW-0058 (AI-agent filer/signer) | FW-0051 (AI-as-assistant) |
+|---|---|---|---|---|
+| Who is the actor | A separate human from the signer | A separate human from the signer | An AI agent (non-human) | An AI in the respondent's tools |
+| What they can do | READ + AUTHOR + HANDOFF (not SIGN) | READ + COMMENT (+ SUGGEST when allowed) (not AUTHOR, not SIGN) | READ + AUTHOR + SIGN | Per-act PROPOSE (respondent confirms each act) |
+| Who signs the form | The human respondent (`capacity: "self"`) | The human respondent (`capacity: "self"`) | The AI agent (`capacity: "ai-agent"`) | The human respondent (`capacity: "self"`) |
+| Submission carrier | `metadata.filer` (EXT-36) on signed Response | SC-6 review-thread sidecar (off the signed Response); optional EXT-37 receipt hook | `agentChain` on `AuthoredSignature` (EXT-3) | `metadata.provenance[path]` (EXT-2) — off-bytes |
+| Form policy key | `preparerFiling` | `trustedReviewer` | `aiAgentFiler` | `bringYourOwnAssistant` |
+| Bytes signed | Different from no-filer case | **Identical to no-reviewer case** | Different from non-agent case | Identical to non-assisted case |
+| Threat focus | AP-014 coercion (helpful preparer steers signer) | AP-014 coercion (trusted reviewer is the coercer) | Prompt-injection + capacity-spoofing | Per-act respondent rejects |
+
+**Pairwise composition with FW-0058.** **FW-0042 + FW-0058 compose minimally** (an AI agent fills + signs per FW-0058; pre-signing, the agent's operator MAY have a human reviewer review the agent's draft per FW-0042). The reviewer in this case reviews the AI's pre-signed draft; the AI's signing capacity stays `ai-agent`; the SC-6 thread coexists with the agent's `agentChain`. Useful but unusual; deferred for slice 1 (analogous to the FW-0058 + FW-0051 composition deferral above). Per FW-0042 §6.7.
+
+**Cross-row touch.** FW-0042 design's §6.7 four-way framing table includes FW-0058 as one column with the bytes-signed contrast highlighted; this section reciprocates from the FW-0058 side so the firewall is visible from both rows.
+
 ## 8. Open questions / deferrals
 
 Honest list of what FW-0058 design does NOT resolve:
