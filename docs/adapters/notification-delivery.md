@@ -7,6 +7,11 @@ There is no `formspec-server` `/notifications` route in the current stack
 `MagicLinkAdapter` can consume the stub locally and surface the generated
 magic-link URL inline for development.
 
+FW-0041 uses the same port for public-terminal SMS receipts. The OSS reference
+composition still wires the stub adapter; adopter compositions that need real
+SMS wire a transport provider behind `NotificationDelivery` without changing
+the respondent runtime.
+
 Run:
 
 ```bash

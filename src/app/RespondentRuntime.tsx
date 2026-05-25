@@ -3,6 +3,7 @@ import {
   type ErrorInfo,
   type ReactNode,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -48,6 +49,7 @@ import { DocumentItem } from './documents-view.tsx';
 import { AttachmentStoreProvider } from './AttachmentStoreProvider.tsx';
 import { FormspecWebAttachmentControl } from './attachment-upload-control.tsx';
 import type { SubmitConfirmation } from '../ports/submit-transport.ts';
+import type { NotificationDelivery } from '../ports/notification-delivery.ts';
 import type {
   Authorization,
   CaptureReceipt,
@@ -86,6 +88,15 @@ import {
   submitWithPayment,
   verifyEmbedOriginAllowed,
 } from './respondent-flow.ts';
+import {
+  PUBLIC_TERMINAL_CLEARED_BODY,
+  PUBLIC_TERMINAL_CLEARED_TITLE,
+  PUBLIC_TERMINAL_SMS_INVALID_COPY,
+  PUBLIC_TERMINAL_SMS_SENT_COPY,
+  publicTerminalTrackingUrl,
+  publicTerminalVerifierCode,
+  sendPublicTerminalReceiptSms,
+} from './public-terminal-hygiene.ts';
 
 interface RespondentRuntimeProps {
   composition: Composition;
@@ -113,6 +124,7 @@ type RespondentState =
       draftLoaded: boolean;
       runtimeProfile: ResolvedRuntimeProfile;
     }
+  | { status: 'terminal-cleared' }
   | { status: 'error'; error: unknown };
 
 type ReadyRespondentState = Extract<RespondentState, { status: 'ready' }>;
@@ -145,6 +157,12 @@ type SubmitState =
   | { status: 'capture-failed'; confirmation: SubmitConfirmation; error: unknown }
   | { status: 'confirmed'; confirmation: SubmitConfirmation; captureReceipt?: CaptureReceipt };
 
+export type TerminalClearState =
+  | { status: 'idle' }
+  | { status: 'clearing' }
+  | { status: 'cleared' }
+  | { status: 'error'; error: unknown };
+
 type RespondentPlaceState =
   | { status: 'loading' }
   | { status: 'disabled' }
@@ -171,6 +189,10 @@ export function RespondentRuntime({
   const [respondentPlaceState, setRespondentPlaceState] = useState<RespondentPlaceState>({
     status: 'loading',
   });
+  const [terminalClearState, setTerminalClearState] = useState<TerminalClearState>({
+    status: 'idle',
+  });
+  const terminalClearRequestedRef = useRef(false);
   // applyReadyState is constructed inside the bootstrap useEffect (it closes
   // over the cancel/sequence state). Expose it via ref so locale-recompute
   // (ADR-0011 §Resolution) and any future identity-refresh path can reach it
@@ -185,8 +207,10 @@ export function RespondentRuntime({
     let unsubscribe: (() => void) | undefined;
     let activeClaim: IdentityClaim | null = null;
     let reloadSequence = 0;
+    terminalClearRequestedRef.current = false;
     setRespondentState({ status: 'loading' });
     setSubmitState({ status: 'idle' });
+    setTerminalClearState({ status: 'idle' });
 
     const applyReadyState = async (
       claim: IdentityClaim | null,
@@ -250,6 +274,10 @@ export function RespondentRuntime({
       // to a stale null and trip the subject-changed branch (code review H-1).
       activeClaim = boot.claim;
       unsubscribe = composition.identityProvider.subscribe((nextClaim) => {
+        if (terminalClearRequestedRef.current) {
+          activeClaim = nextClaim;
+          return;
+        }
         const invalidatedSubjectRef = subjectRefInvalidatedByIdentityChange(activeClaim, nextClaim);
         if (!identitySubjectChanged(activeClaim, nextClaim)) {
           activeClaim = nextClaim;
@@ -444,6 +472,10 @@ export function RespondentRuntime({
     );
   }
 
+  if (respondentState.status === 'terminal-cleared') {
+    return <TerminalClearedPanel />;
+  }
+
   const responseActionsDocument = createDemoSubmitResponseActions({
     definitionUrl: respondentState.definition.url,
   });
@@ -582,6 +614,24 @@ export function RespondentRuntime({
     }
   };
 
+  const handleClearTerminal = async (): Promise<void> => {
+    terminalClearRequestedRef.current = true;
+    setTerminalClearState({ status: 'clearing' });
+    try {
+      await composition.draftStore.delete(respondentState.draftKey);
+      if (respondentState.claim) {
+        await composition.identityProvider.revoke(respondentState.claim);
+      }
+      setSubmitState({ status: 'idle' });
+      setRespondentPlaceState({ status: 'disabled' });
+      setTerminalClearState({ status: 'cleared' });
+      setRespondentState({ status: 'terminal-cleared' });
+    } catch (error) {
+      terminalClearRequestedRef.current = false;
+      setTerminalClearState({ status: 'error', error });
+    }
+  };
+
 
   return (
     <AppErrorBoundary>
@@ -604,6 +654,9 @@ export function RespondentRuntime({
               respondentPlaceState={respondentPlaceState}
               resolvedIssuer={respondentState.resolvedIssuer}
               submitState={submitState}
+              terminalClearState={terminalClearState}
+              notificationDelivery={composition.notificationDelivery}
+              onClearTerminal={handleClearTerminal}
               onLocaleChange={handleLocaleChange}
             />
           </FormspecProvider>
@@ -792,6 +845,9 @@ function RespondentSurface({
   respondentPlaceState,
   resolvedIssuer,
   submitState,
+  terminalClearState,
+  notificationDelivery,
+  onClearTerminal,
   onLocaleChange,
 }: {
   activeLocale: string;
@@ -802,6 +858,9 @@ function RespondentSurface({
   respondentPlaceState: RespondentPlaceState;
   resolvedIssuer: ResolvedIssuer;
   submitState: SubmitState;
+  terminalClearState: TerminalClearState;
+  notificationDelivery?: NotificationDelivery;
+  onClearTerminal: () => Promise<void>;
   onLocaleChange: (locale: string) => void;
 }) {
   const { engine, layoutPlan } = useFormspecContext();
@@ -851,6 +910,9 @@ function RespondentSurface({
         <ConfirmationPanel
           confirmation={submitState.confirmation}
           captureReceipt={submitState.captureReceipt}
+          notificationDelivery={notificationDelivery}
+          terminalClearState={terminalClearState}
+          onClearTerminal={onClearTerminal}
         />
       ) : layoutPlan ? (
         <>
@@ -1228,23 +1290,138 @@ export function formatMoney(amount: Money): string {
 export function ConfirmationPanel({
   confirmation,
   captureReceipt,
+  notificationDelivery,
+  terminalClearState = { status: 'idle' },
+  onClearTerminal,
 }: {
   confirmation: SubmitConfirmation;
   captureReceipt?: CaptureReceipt;
+  notificationDelivery?: NotificationDelivery;
+  terminalClearState?: TerminalClearState;
+  onClearTerminal?: () => Promise<void> | void;
 }) {
+  const smsInputId = useId();
+  const [smsTo, setSmsTo] = useState('');
+  const [smsState, setSmsState] = useState<
+    { status: 'idle' } | { status: 'sending' } | { status: 'sent' } | { status: 'error'; error: string }
+  >({ status: 'idle' });
   const trackingHref = confirmation.caseUrn
     ? buildConfirmationTrackingUri(confirmation.caseUrn)
     : confirmation.trackingUri;
   const trackingLabel = confirmation.caseUrn ? 'Track this application' : 'Track this submission';
+  const verifierCode = publicTerminalVerifierCode(confirmation);
+
+  const handleSmsSend = async (): Promise<void> => {
+    if (!notificationDelivery) return;
+    setSmsState({ status: 'sending' });
+    try {
+      await sendPublicTerminalReceiptSms({
+        notificationDelivery,
+        confirmation,
+        phone: smsTo,
+      });
+      setSmsTo('');
+      setSmsState({ status: 'sent' });
+    } catch (error) {
+      setSmsState({
+        status: 'error',
+        error: error instanceof Error ? error.message : PUBLIC_TERMINAL_SMS_INVALID_COPY,
+      });
+    }
+  };
+
   return (
     <section className="confirmation-panel" aria-labelledby="confirmation-title" tabIndex={-1}>
       <h2 id="confirmation-title">Submission received</h2>
       <p>Reference number</p>
       <strong>{confirmation.referenceNumber}</strong>
+      <p>
+        Verifier code <strong>{verifierCode}</strong>
+      </p>
       {trackingHref ? <a href={trackingHref}>{trackingLabel}</a> : null}
       {captureReceipt ? <PaymentReceivedSubCard captureReceipt={captureReceipt} /> : null}
+      <div className="public-terminal-actions" aria-label="Public terminal actions">
+        <h3>Keep your proof</h3>
+        <p>
+          Print this confirmation, text it to a phone you control, then clear this computer
+          before leaving.
+        </p>
+        <div className="public-terminal-actions__row">
+          <button type="button" onClick={printConfirmation}>
+            Print confirmation
+          </button>
+          {onClearTerminal ? (
+            <button
+              type="button"
+              disabled={terminalClearState.status === 'clearing' || terminalClearState.status === 'cleared'}
+              onClick={() => {
+                void onClearTerminal();
+              }}
+            >
+              {terminalClearState.status === 'clearing' ? 'Clearing...' : 'Clear this computer'}
+            </button>
+          ) : null}
+        </div>
+        {notificationDelivery ? (
+          <div className="public-terminal-actions__sms">
+            <label htmlFor={smsInputId}>Text receipt to SMS</label>
+            <div className="public-terminal-actions__row">
+              <input
+                id={smsInputId}
+                value={smsTo}
+                inputMode="tel"
+                autoComplete="off"
+                placeholder="+1 555 010 1234"
+                onChange={(event) => setSmsTo(event.currentTarget.value)}
+              />
+              <button
+                type="button"
+                disabled={smsState.status === 'sending' || smsTo.trim().length === 0}
+                onClick={() => {
+                  void handleSmsSend();
+                }}
+              >
+                {smsState.status === 'sending' ? 'Sending...' : 'Text receipt'}
+              </button>
+            </div>
+            {smsState.status === 'sent' ? (
+              <p className="public-terminal-actions__status" role="status">
+                {PUBLIC_TERMINAL_SMS_SENT_COPY}
+              </p>
+            ) : null}
+            {smsState.status === 'error' ? (
+              <p className="public-terminal-actions__error" role="alert">
+                {smsState.error}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {terminalClearState.status === 'error' ? (
+          <p className="public-terminal-actions__error" role="alert">
+            {problemDetail(terminalClearState.error).message}
+          </p>
+        ) : null}
+        <p className="public-terminal-actions__print-url">
+          {publicTerminalTrackingUrl(confirmation) ?? ''}
+        </p>
+      </div>
     </section>
   );
+}
+
+function TerminalClearedPanel() {
+  return (
+    <div className="shell__status" role="status">
+      <h1>{PUBLIC_TERMINAL_CLEARED_TITLE}</h1>
+      <p>{PUBLIC_TERMINAL_CLEARED_BODY}</p>
+    </div>
+  );
+}
+
+function printConfirmation(): void {
+  if (typeof window !== 'undefined' && typeof window.print === 'function') {
+    window.print();
+  }
 }
 
 export function PaymentReceivedSubCard({ captureReceipt }: { captureReceipt: CaptureReceipt }) {

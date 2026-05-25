@@ -4,6 +4,11 @@
 outbound delivery, such as magic-link identity flows. It does not define
 templates, audience policy, or delivery semantics.
 
+FW-0041 also consumes this port from the confirmation panel to send a
+pre-rendered SMS receipt for public-terminal users. The shell supplies the
+reference number, short verifier code, and tracking URL; the adapter remains
+transport-only.
+
 Adapter contract:
 
 - Accept pre-rendered channel messages.
