@@ -5,6 +5,7 @@ import type { FormspecWebConfig } from '../config/types.ts';
 import { DOCUMENTS_ROUTE_NARROWING, parseDocumentsRoute } from './documents-route.ts';
 import { HISTORY_ROUTE_NARROWING, parseHistoryRoute } from './history-route.ts';
 import { OBLIGATIONS_ROUTE_NARROWING, parseObligationsRoute } from './obligations-route.ts';
+import { REVIEWER_ROUTE_NARROWING, parseReviewerRoute } from './reviewer-route.ts';
 import { SCREENER_ROUTE_NARROWING, parseScreenerRoute } from './screener-route.ts';
 import { STATUS_ROUTE_NARROWING, parseStatusRoute } from './status-route.ts';
 
@@ -60,6 +61,13 @@ export function chooseComposition({
       mode: 'default',
       config,
       route: SCREENER_ROUTE_NARROWING,
+    });
+  }
+  if (parseReviewerRoute(href)) {
+    return createRouteNarrowedComposition({
+      mode: 'default',
+      config,
+      route: REVIEWER_ROUTE_NARROWING,
     });
   }
   return createDefaultComposition(config);

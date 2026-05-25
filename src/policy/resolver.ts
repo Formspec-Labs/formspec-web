@@ -72,7 +72,11 @@ export function resolveRuntimeFeatures(
     });
     if (decision.kind === 'enabled') {
       enabled.add(key);
-      const limit = mergeFeatureLimits(input.org.limits?.[key], input.form.limits?.[key]);
+      const limit = mergeFeatureLimitsForKey(
+        key,
+        input.org.limits?.[key],
+        input.form.limits?.[key],
+      );
       if (limit !== undefined) {
         limits[key] = limit;
       }
@@ -299,6 +303,17 @@ function validateEmbedLimits(value: unknown): void {
   }
 }
 
+function mergeFeatureLimitsForKey(
+  key: RuntimeFeatureKey,
+  orgLimit: unknown,
+  formLimit: unknown,
+): unknown {
+  if (key === 'trustedReviewer') {
+    return mergeTrustedReviewerLimits(orgLimit, formLimit);
+  }
+  return mergeFeatureLimits(orgLimit, formLimit);
+}
+
 function mergeFeatureLimits(orgLimit: unknown, formLimit: unknown): unknown {
   if (orgLimit === undefined) return formLimit;
   if (formLimit === undefined) return orgLimit;
@@ -306,6 +321,27 @@ function mergeFeatureLimits(orgLimit: unknown, formLimit: unknown): unknown {
     return Object.freeze({ ...orgLimit, ...formLimit });
   }
   return formLimit;
+}
+
+function mergeTrustedReviewerLimits(orgLimit: unknown, formLimit: unknown): unknown {
+  const merged = mergeFeatureLimits(orgLimit, formLimit);
+  if (!isPlainObject(orgLimit) || !isPlainObject(formLimit) || !isPlainObject(merged)) {
+    return merged;
+  }
+  const orgAllowedRoles = stringArrayFrom(orgLimit.allowedRoles);
+  const formAllowedRoles = stringArrayFrom(formLimit.allowedRoles);
+  if (!orgAllowedRoles || !formAllowedRoles) {
+    return merged;
+  }
+  const orgRoleSet = new Set(orgAllowedRoles);
+  const allowedRoles = formAllowedRoles.filter((role) => orgRoleSet.has(role));
+  if (allowedRoles.length === 0) {
+    throw new FeaturePolicyConflictError(
+      'trustedReviewer',
+      'trusted-reviewer-role-intersection-empty',
+    );
+  }
+  return Object.freeze({ ...merged, allowedRoles });
 }
 
 function validateTrustedReviewerLimits(value: unknown, layer: 'org' | 'form'): void {

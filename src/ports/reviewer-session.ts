@@ -39,6 +39,7 @@ export type ReviewerSessionErrorCode =
   | 'capability-revoked'
   | 'capability-expired'
   | 'share-not-found'
+  | 'human-reviewer-unauthorized'
   | 'policy-forbidden';
 
 export class ReviewerSessionError extends Error {

@@ -10,6 +10,9 @@ import { ReviewerRuntime } from '../../src/app/ReviewerRuntime.tsx';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
 import {
   reviewerDraftSnapshotForResponse,
+  reviewerDraftRefForDraft,
+  reviewerThreadIdForDraft,
+  trustedReviewerPolicySnapshot,
   verifierReviewCapacityLine,
 } from '../../src/app/trusted-reviewer.ts';
 import { TrustedReviewerPolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
@@ -32,6 +35,7 @@ import type { Composition } from '../../src/composition/types.ts';
 import { publicPortalProfile } from '../../src/profiles/profiles.ts';
 import {
   freezeComposition,
+  resolveRuntimeFeatures,
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../../src/policy/index.ts';
@@ -172,7 +176,10 @@ describe('trusted reviewer runtime surfaces', () => {
     await waitForText('Stop sharing with everyone');
     await clickButton('Stop sharing with everyone');
     await waitForText('revoked');
-    const thread = await composition.reviewThreadStore.read({ threadId });
+    const thread = await composition.reviewThreadStore.read({
+      threadId,
+      sessionToken: respondentTokenForThread(threadId),
+    });
     expect(thread.shares.every((share) => share.revokedAt)).toBe(true);
     expect(thread.events.filter((event) => (
       event.payload.type === 'share-revoked'
@@ -230,7 +237,10 @@ describe('trusted reviewer runtime surfaces', () => {
     });
     await clickButton('Add comment');
     await waitForText('Review saved');
-    const thread = await composition.reviewThreadStore.read({ threadId: 'review-thread:test' });
+    const thread = await composition.reviewThreadStore.read({
+      threadId: 'review-thread:test',
+      sessionToken: respondentTokenForThread('review-thread:test'),
+    });
     const commentEvent = thread.events.find((event) => event.payload.type === 'comment-added');
     expect(commentEvent?.payload.type).toBe('comment-added');
     if (commentEvent?.payload.type !== 'comment-added') throw new Error('comment event not found');
@@ -275,6 +285,75 @@ describe('trusted reviewer runtime surfaces', () => {
     await waitForText('Ada Lovelace');
     expect(buttonLabels()).toContain('Add comment');
     expect(buttonLabels()).not.toContain('Add suggestion');
+  });
+
+  it('scopes review threads and draft refs by multi-party partyRef', () => {
+    const base = {
+      formUrl: REVIEW_FORM_URL,
+      formVersion: '1.0.0',
+      subjectRef: 'subject:demo',
+    };
+
+    expect(reviewerThreadIdForDraft({ ...base, partyRef: 'party-a' }))
+      .not.toBe(reviewerThreadIdForDraft({ ...base, partyRef: 'party-b' }));
+    expect(reviewerDraftRefForDraft({ ...base, partyRef: 'party-a' }).partyRef)
+      .toBe('party-a');
+  });
+
+  it('auto-masks safe-address fields from reviewer snapshots without duplicated reviewer policy', async () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'demo',
+      instance: {
+        ...allUnavailableCapabilities(),
+        safeAddress: 'demo-stub',
+        trustedReviewer: 'demo-stub',
+      },
+      org: {
+        features: {
+          ...allAllowedFeatures(),
+          safeAddress: 'allowed',
+          trustedReviewer: 'allowed',
+        },
+        limits: {
+          safeAddress: {
+            enabledClasses: ['safe-address'],
+            acpJurisdictionsAccepted: ['CA-ACP'],
+            authorizedAudiences: ['issuer-verification'],
+            receiptPostureTier: 'phase-1-fallback',
+          },
+        },
+      },
+      form: {
+        features: {
+          safeAddress: 'required',
+          trustedReviewer: 'optional',
+        },
+        limits: {
+          safeAddress: {
+            fields: [{ path: '/protectedAddress', accessClass: 'safe-address' }],
+          },
+          trustedReviewer: {
+            posture: 'suggest-allowed',
+            respondentOnlyFieldPointers: [],
+          },
+        },
+      },
+    });
+    const policySnapshot = trustedReviewerPolicySnapshot(profile);
+    expect(policySnapshot?.respondentOnlyFieldPointers).toContain('/data/protectedAddress');
+    if (!policySnapshot) throw new Error('trusted reviewer policy missing');
+
+    const draftSnapshot = await reviewerDraftSnapshotForResponse({
+      definition: reviewableForm(),
+      policySnapshot,
+      response: reviewResponse({ fullName: 'Ada Lovelace', protectedAddress: 'Hidden home' }),
+    });
+
+    const protectedField = draftSnapshot.fields.find((field) => (
+      field.fieldPointer === '/data/protectedAddress'
+    ));
+    expect(protectedField?.respondentOnly).toBe(true);
+    expect(protectedField).not.toHaveProperty('value');
   });
 
   it('verifier capacity copy is silent until reviewer trace is attached', () => {
@@ -328,6 +407,46 @@ function reviewResponse(data: Record<string, unknown>): FormResponse {
     status: 'in-progress',
     data,
     authored: '2026-05-25T00:00:00.000Z',
+  };
+}
+
+function allUnavailableCapabilities(): InstanceCapabilities {
+  return {
+    respondentPlace: 'unavailable',
+    status: 'unavailable',
+    documentPresentation: 'unavailable',
+    fileUpload: 'unavailable',
+    crossIssuerHistory: 'unavailable',
+    offlineSubmit: 'unavailable',
+    payment: 'unavailable',
+    embed: 'unavailable',
+    screener: 'unavailable',
+    trustedReviewer: 'unavailable',
+    bringYourOwnAssistant: 'unavailable',
+    safeAddress: 'unavailable',
+    duressAware: 'unavailable',
+    multiParty: 'unavailable',
+    recordLifecycle: 'unavailable',
+  };
+}
+
+function allAllowedFeatures(): OrgRuntimePolicy['features'] {
+  return {
+    respondentPlace: 'allowed',
+    status: 'allowed',
+    documentPresentation: 'allowed',
+    fileUpload: 'allowed',
+    crossIssuerHistory: 'allowed',
+    offlineSubmit: 'allowed',
+    payment: 'allowed',
+    embed: 'allowed',
+    screener: 'allowed',
+    trustedReviewer: 'allowed',
+    bringYourOwnAssistant: 'allowed',
+    safeAddress: 'allowed',
+    duressAware: 'allowed',
+    multiParty: 'allowed',
+    recordLifecycle: 'allowed',
   };
 }
 

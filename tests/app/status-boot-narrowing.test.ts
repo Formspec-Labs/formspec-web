@@ -274,4 +274,18 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     // Production posture is unavailable → readHistory throws via the sentinel.
     await expect(composition.respondentHistorySource.readHistory({})).rejects.toThrow(/not configured/);
   });
+
+  it('chooseComposition picks the reviewer-route factory when the URL is /r/:thread/:capability (FW-0113)', async () => {
+    const composition = chooseComposition({
+      href: 'http://localhost/r/review-thread%3Atest/capability%3Atest',
+      config: productionConfig(),
+    });
+    await expect(composition.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
+    expect(composition.instanceCapabilities.trustedReviewer).toBe('available');
+    expect(spies.httpDef).not.toHaveBeenCalled();
+    expect(spies.httpDraft).not.toHaveBeenCalled();
+    expect(spies.httpSubmit).not.toHaveBeenCalled();
+    expect(spies.anonSession).not.toHaveBeenCalled();
+    expect(spies.oidcAdapter).not.toHaveBeenCalled();
+  });
 });

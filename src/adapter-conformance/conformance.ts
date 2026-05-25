@@ -1765,6 +1765,20 @@ export function defineReviewerSessionConformance(
       await expect(subject.adapter.redeem({ capabilityUrl: nonmatchingUrl }))
         .rejects.toThrow();
     });
+
+    it('fails closed when the thread requires reviewer identity assurance', async () => {
+      const subject = setup();
+      const threadId = 'review-thread:conformance:assurance';
+      await subject.ensureThread(threadId, {
+        ...sampleReviewThreadPolicySnapshot,
+        reviewerAssuranceFloor: 'L2',
+      });
+      await expect(subject.adapter.mintShare({
+        threadId,
+        requestedScope: 'view+comment',
+        respondentSessionToken: respondentTokenForThread(threadId),
+      })).rejects.toThrow();
+    });
   });
 }
 
@@ -1782,9 +1796,24 @@ export function defineReviewThreadStoreConformance(
         policySnapshot: sampleReviewThreadPolicySnapshot,
       });
       expect(isReviewThread(thread)).toBe(true);
-      const found = await subject.adapter.read({ threadId });
+      const found = await subject.adapter.read({
+        threadId,
+        sessionToken: respondentTokenForThread(threadId),
+      });
       expect(found.threadId).toBe(threadId);
       expect(found.policySnapshot.posture).toBe('suggest-allowed');
+    });
+
+    it('rejects unscoped reads after reviewer token revocation', async () => {
+      const subject = setup();
+      const { threadId, sessionToken, shareId } = await createRedeemedReviewShare(subject);
+      await expect(subject.adapter.read({ threadId, sessionToken })).resolves.toMatchObject({ threadId });
+      await subject.reviewerSession.revoke({
+        shareId,
+        reason: 'respondent revoked',
+        respondentSessionToken: respondentTokenForThread(threadId),
+      });
+      await expect(subject.adapter.read({ threadId, sessionToken })).rejects.toThrow();
     });
 
     it('accepts reviewer comments and suggestions under a reviewer session token', async () => {

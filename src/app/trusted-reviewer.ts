@@ -28,6 +28,7 @@ export function reviewerThreadIdForDraft(draftKey: DraftKey): string {
     encodeURIComponent(draftKey.subjectRef ?? 'anonymous'),
     encodeURIComponent(draftKey.formUrl),
     encodeURIComponent(draftKey.formVersion ?? 'latest'),
+    encodeURIComponent(draftKey.partyRef ?? 'single-party'),
   ].join(':');
 }
 
@@ -36,6 +37,7 @@ export function reviewerDraftRefForDraft(draftKey: DraftKey): ReviewThreadDraftR
     formUrl: draftKey.formUrl,
     formVersion: draftKey.formVersion,
     subjectRef: draftKey.subjectRef,
+    partyRef: draftKey.partyRef,
   };
 }
 
@@ -44,13 +46,17 @@ export function trustedReviewerPolicySnapshot(
 ): ReviewThreadPolicySnapshot | undefined {
   const config = getTrustedReviewerRuntimeConfig(profile);
   if (!config || config.posture === 'forbidden') return undefined;
+  const respondentOnlyFieldPointers = unique([
+    ...config.respondentOnlyFieldPointers,
+    ...(profile.safeAddress?.fields.map((field) => safeAddressFieldToResponsePointer(field.path)) ?? []),
+  ]);
   return {
     posture: config.posture,
     allowedRoles: config.allowedRoles,
     reviewerAssuranceFloor: config.reviewerAssuranceFloor,
     maxActiveSharesPerDraft: config.maxActiveSharesPerDraft,
     defaultShareExpiresAtRule: config.defaultShareExpiresAtRule,
-    respondentOnlyFieldPointers: config.respondentOnlyFieldPointers,
+    respondentOnlyFieldPointers,
     reviewerSessionBindingRef: config.reviewerSessionBindingRef,
     reviewThreadStoreBindingRef: config.reviewThreadStoreBindingRef,
   };
@@ -194,6 +200,14 @@ function valueAtPath(data: Record<string, unknown>, path: readonly string[]): un
 
 function escapeJsonPointer(value: string): string {
   return value.replaceAll('~', '~0').replaceAll('/', '~1');
+}
+
+function safeAddressFieldToResponsePointer(path: string): string {
+  return `/data${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+function unique(values: readonly string[]): string[] {
+  return Array.from(new Set(values));
 }
 
 async function hashJsonValue(value: unknown): Promise<string> {

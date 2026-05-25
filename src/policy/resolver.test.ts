@@ -136,6 +136,49 @@ describe('resolveRuntimeFeatures (happy path)', () => {
     expect(config?.maxActiveSharesPerDraft).toBe(4);
     expect(config?.respondentOnlyFieldPointers).toEqual(['/data/protectedAddress']);
   });
+
+  it('intersects trustedReviewer allowedRoles across org and form policy', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: allAvailable,
+      org: {
+        features: { trustedReviewer: 'allowed' },
+        limits: { trustedReviewer: { allowedRoles: ['lawyer', 'advocate'] } },
+      },
+      form: {
+        features: { trustedReviewer: 'optional' },
+        limits: {
+          trustedReviewer: {
+            posture: 'comment-allowed',
+            allowedRoles: ['advocate', 'family-helper'],
+          },
+        },
+      },
+    });
+    expect(getTrustedReviewerRuntimeConfig(profile)?.allowedRoles).toEqual(['advocate']);
+  });
+
+  it('fails closed when trustedReviewer allowedRoles have an empty intersection', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: {
+          features: { trustedReviewer: 'allowed' },
+          limits: { trustedReviewer: { allowedRoles: ['lawyer'] } },
+        },
+        form: {
+          features: { trustedReviewer: 'optional' },
+          limits: {
+            trustedReviewer: {
+              posture: 'comment-allowed',
+              allowedRoles: ['family-helper'],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/trusted-reviewer-role-intersection-empty/);
+  });
 });
 
 describe('resolveRuntimeFeatures — limits.trustedReviewer validation (FW-0113)', () => {

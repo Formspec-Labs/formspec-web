@@ -51,6 +51,12 @@ export function stubReviewerSession(
       if (!grantedScope) {
         throw new ReviewerSessionError('trusted reviewer sharing is forbidden for this thread', 'policy-forbidden');
       }
+      if (thread.policySnapshot.reviewerAssuranceFloor) {
+        throw new ReviewerSessionError(
+          'This review requires reviewer identity verification, which is not available in the demo reviewer session.',
+          'human-reviewer-unauthorized',
+        );
+      }
       state.nextShareId += 1;
       const shareId = `stub-share-${state.nextShareId.toString().padStart(6, '0')}`;
       const capabilityToken: CapabilityToken = `capability:${shareId}:${state.nextShareId}`;

@@ -56,7 +56,10 @@ export function ReviewerRuntime({
       if (grant.threadId !== route.threadId) {
         throw new Error('This review link is not valid for the requested thread.');
       }
-      const thread = await composition.reviewThreadStore.read({ threadId: grant.threadId });
+      const thread = await composition.reviewThreadStore.read({
+        threadId: grant.threadId,
+        sessionToken: grant.sessionToken,
+      });
       if (!cancelled) {
         setState({ status: 'ready', grant, thread });
       }
@@ -66,10 +69,13 @@ export function ReviewerRuntime({
     return () => {
       cancelled = true;
     };
-  }, [composition, route.capabilityUrl]);
+  }, [composition, route.capabilityUrl, route.threadId]);
 
-  const refreshThread = async (threadId: string): Promise<void> => {
-    const thread = await composition.reviewThreadStore.read({ threadId });
+  const refreshThread = async (
+    threadId: string,
+    sessionToken: ReviewerSessionRedeemResult['sessionToken'],
+  ): Promise<void> => {
+    const thread = await composition.reviewThreadStore.read({ threadId, sessionToken });
     setState((current) => (
       current.status === 'ready' ? { ...current, thread } : current
     ));
@@ -91,7 +97,7 @@ export function ReviewerRuntime({
         },
         payload,
       });
-      await refreshThread(grant.threadId);
+      await refreshThread(grant.threadId, grant.sessionToken);
       setEventState({ status: 'saved' });
     } catch (error) {
       setEventState({ status: 'error', error });

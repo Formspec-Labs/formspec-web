@@ -36,7 +36,8 @@ export class UnsupportedRequiredFeatureError extends RuntimePolicyError {
 
 export type FeaturePolicyConflictKind =
   | 'org-required-form-forbidden'
-  | 'form-required-org-forbidden';
+  | 'form-required-org-forbidden'
+  | 'trusted-reviewer-role-intersection-empty';
 
 export class FeaturePolicyConflictError extends RuntimePolicyError {
   readonly code = 'FeaturePolicyConflict' as const;

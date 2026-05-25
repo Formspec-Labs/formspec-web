@@ -15,6 +15,7 @@ import {
 } from '../../src/adapter-conformance/fixtures.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { isUnavailableAdapter, UNAVAILABLE_ADAPTER } from '../../src/policy/sentinel.ts';
+import { respondentSessionToken } from '../../src/ports/reviewer-session.ts';
 
 describe('unavailable adapters carry the policy sentinel marker', () => {
   it('unavailableRespondentPlaceSource is marked with featureKey "respondentPlace"', () => {
@@ -117,7 +118,10 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
       unavailableReviewerSession().listShares({ threadId: 'thread:any' }),
     ).rejects.toThrow();
     await expect(
-      unavailableReviewThreadStore().read({ threadId: 'thread:any' }),
+      unavailableReviewThreadStore().read({
+        threadId: 'thread:any',
+        sessionToken: respondentSessionToken('thread:any'),
+      }),
     ).rejects.toThrow();
   });
 });

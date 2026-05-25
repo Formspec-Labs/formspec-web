@@ -1207,7 +1207,9 @@ function RespondentSurface({
         claim={claim}
         composition={composition}
         definition={definition}
-        draftKey={draftKey}
+        draftKey={multiPartyState?.progress.activePartyRef
+          ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef)
+          : draftKey}
         runtimeProfile={runtimeProfile}
       />
       <MultiPartyPanel
@@ -1334,6 +1336,7 @@ function TrustedReviewerPanel({
         requestedScope: reviewerScopeForPosture(policySnapshot.posture),
         audienceHint: audienceHint.trim() || undefined,
         respondentSessionToken: respondentToken,
+        partyRef: draftKey.partyRef,
       });
       await composition.reviewThreadStore.appendEvent({
         threadId,

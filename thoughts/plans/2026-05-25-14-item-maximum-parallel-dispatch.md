@@ -292,6 +292,34 @@ Verification run after remediation:
 - `npm run build`
 - `git diff --check`
 
+### 2026-05-25 — W2.1 / FW-0113 trusted-reviewer review-loop closure
+
+Independent generic reviewer `019e5f2a-f948-7952-b51e-910560b0748e` reviewed the FW-0113 trusted-reviewer build and returned REQUEST CHANGES. Specialized `formspec-specs:*` reviewer roles were still not exposed, so this was a generic semi-formal code review over the current implementation.
+
+Findings remediated:
+
+- BLOCKER F1: `ReviewThreadStore.read` accepted only a deterministic `threadId`, allowing a revoked reviewer who retained the ID to read the thread. Remediation: the port now requires `sessionToken`; the stub authorizes respondent tokens or active non-revoked/non-expired reviewer capabilities scoped to the thread; the HTTP adapter forwards `x-formspec-review-session`; `ReviewerRuntime` passes the capability grant token for initial reads and refreshes.
+- BLOCKER F2: safe-address fields were not automatically masked from reviewers. Remediation: `trustedReviewerPolicySnapshot()` unions `profile.safeAddress.fields` into the respondent-only pointer set, reviewer snapshots omit those values, reviewer UI suppresses suggestion controls for respondent-only fields, and the store rejects respondent-only suggestions.
+- HIGH F3: multi-party reviewer shares were not party-scoped. Remediation: reviewer thread IDs and draft refs include `partyRef`; `RespondentRuntime` passes the active party-scoped draft key and `partyRef` into `mintShare`.
+- HIGH F4: reviewer assurance floors parsed but did not enforce anything. Remediation: the stub `ReviewerSession` fails closed with `human-reviewer-unauthorized` when `reviewerAssuranceFloor` is present, because this slice has no Tier-2 reviewer IdP ceremony.
+- MEDIUM F5: `trustedReviewer.allowedRoles` used shallow merge semantics. Remediation: org/form role arrays now intersect, and empty intersections raise `trusted-reviewer-role-intersection-empty`.
+- MEDIUM F6: `/r/:threadId/:capability` rendered reviewer runtime but was not boot-narrowed. Remediation: a reviewer route descriptor consumes only `trustedReviewer`; `chooseComposition()` dispatches reviewer URLs into route narrowing; narrowed demo/production compositions wire only the reviewer ports for this surface.
+
+Reviewer re-check returned APPROVE with no remaining blockers. Residual risk is explicit: Tier-2 behavior is fail-closed until a reviewer-facing IdP upgrade ceremony exists, and HTTP reviewer adapters remain reference seeds whose server-side enforcement is an adopter/server contract.
+
+Verification run after remediation:
+
+- `npm test -- tests/app/trusted-reviewer-runtime.test.tsx tests/adapter-conformance/reviewer-session/conformance.test.ts tests/adapter-conformance/review-thread-store/conformance.test.ts tests/adapter-conformance/form-runtime-policy-extractor/conformance.test.ts tests/profiles/composition-coherence.test.ts tests/composition/route-narrowing.test.ts tests/app/status-boot-narrowing.test.ts src/policy/resolver.test.ts tests/adapters/unavailable-sentinel.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run test:unit`
+- `npm run test:conformance`
+- `npm run check:testing-plan`
+- `npm run check:mvp-audit`
+- `npm run check:conformance-coverage`
+- `npm run build`
+- `git diff --check`
+
 ### 2026-05-25 — Conservative W1/W2 cycle ledger
 
 Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dispatch table against current committed artifacts. Specialized `formspec-specs:*` scout/reviewer roles were not exposed in this runtime, so the check was a generic read-only scout pass. Disposition rule: implementation, ratification, or remediation commits are **not** enough to check off a row as closed unless the implementer→reviewer→remediator→verifier loop is explicit in the plan or commit evidence.
@@ -310,9 +338,9 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W1.10 / FW-0019 server Locale Documents | `formspec-web` `58522ad`, `7d2cc63`; review-loop closure recorded above | cycle-closed for the recorded build slice |
 | W1.11 / FW-0028 slice 2 assurance step-up | `formspec-web` `2f85951`, `986af74`; review-loop closure recorded above; EXT-8 remains external | cycle-closed for the recorded build slice |
 | W1.12 / FW-0073/0074/0076/0077 file-upload slice 2 | `formspec-web` `4e0a8d3`, `854040d`; review-loop closure recorded above | cycle-closed for the recorded build slice |
-| W2.1 / FW-0113 trusted reviewer build | `formspec-web` `5fc4d96`, `751d9a0`; FW-0113 row remains open/blocked | integrated/fixed, not cycle-closed |
+| W2.1 / FW-0113 trusted reviewer build | `formspec-web` `5fc4d96`, `751d9a0`; review-loop closure recorded above; FW-0113 row remains open/blocked on upstream ratifications and EXT-37 | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
 | W2.2 / FW-0038 record lifecycle build | `formspec-web` `d5f6a9b`, `01bb024`; FW-0038 row remains open/gated | integrated/fixed, not cycle-closed |
 | W2.3 / FW-0060 safe-address build | `formspec-web` `6e02690`, `8e5a163`, `338ebd1`, `b53cbe3`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
 | W2.4 / FW-0061 multi-party build | `formspec-web` `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for XS-1/upstream ratification |
 
-Closeout consequence: W1.9, W1.10, W1.11, W1.12, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
+Closeout consequence: W1.9, W1.10, W1.11, W1.12, W2.1, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.

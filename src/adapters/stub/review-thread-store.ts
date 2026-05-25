@@ -71,6 +71,7 @@ export function stubReviewThreadStore(
           'thread-not-found',
         );
       }
+      assertTokenCanReadThread(state, args.threadId, args.sessionToken);
       return snapshotThread(state, thread);
     },
 
@@ -184,6 +185,37 @@ function assertTokenMatchesAuthor(
     );
   }
   return share;
+}
+
+function assertTokenCanReadThread(
+  state: StubTrustedReviewerState,
+  threadId: string,
+  sessionToken: string,
+): void {
+  if (isRespondentSessionToken(sessionToken)) {
+    if (!respondentTokenAuthorizesThread(sessionToken, threadId)) {
+      throw new ReviewThreadStoreError(
+        'Respondent session token is not scoped to this thread',
+        'session-role-mismatch',
+      );
+    }
+    return;
+  }
+
+  const shareId = state.capabilityTokens.get(sessionToken);
+  if (!shareId) {
+    throw new ReviewThreadStoreError('Reviewer capability token is invalid', 'session-role-mismatch');
+  }
+  const share = state.shares.get(shareId);
+  if (!share || share.revokedAt || shareIsExpired(share)) {
+    throw new ReviewThreadStoreError('Reviewer capability token is not active', 'session-role-mismatch');
+  }
+  if (share.threadId !== threadId) {
+    throw new ReviewThreadStoreError(
+      'Reviewer capability token is not scoped to this thread',
+      'session-role-mismatch',
+    );
+  }
 }
 
 function assertPayloadAllowed(

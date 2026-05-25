@@ -44,9 +44,13 @@ export class HttpReviewThreadStore {
     );
   }
 
-  async read(args: { threadId: string }): Promise<ReviewThread> {
+  async read(args: {
+    threadId: string;
+    sessionToken: CapabilityToken | RespondentSessionToken;
+  }): Promise<ReviewThread> {
     return this.client.getJson<ReviewThread>(
       `${this.prefix}/threads/${encodeURIComponent(args.threadId)}`,
+      { headers: { 'x-formspec-review-session': args.sessionToken } },
     );
   }
 

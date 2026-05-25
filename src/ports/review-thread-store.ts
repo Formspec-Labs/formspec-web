@@ -152,7 +152,10 @@ export interface ReviewThreadStore {
     policySnapshot: ReviewThreadPolicySnapshot;
   }): Promise<ReviewThread>;
 
-  read(args: { threadId: string }): Promise<ReviewThread>;
+  read(args: {
+    threadId: string;
+    sessionToken: CapabilityToken | RespondentSessionToken;
+  }): Promise<ReviewThread>;
 
   appendEvent(args: {
     threadId: string;

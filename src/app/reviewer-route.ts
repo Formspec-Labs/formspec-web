@@ -1,6 +1,14 @@
+import type { RuntimeFeatureKey } from '../policy/index.ts';
 import type { ReviewerRouteParams } from './trusted-reviewer.ts';
 
 export type { ReviewerRouteParams } from './trusted-reviewer.ts';
+
+export const REVIEWER_ROUTE_NARROWING = {
+  routeCite: '/r/:threadId/:capability',
+  initialDefinitionUrlSentinel: 'route:/reviewer',
+  consumes: new Set<RuntimeFeatureKey>(['trustedReviewer']),
+  identityBound: false,
+} as const;
 
 export function parseReviewerRoute(href: string): ReviewerRouteParams | null {
   const url = new URL(href);

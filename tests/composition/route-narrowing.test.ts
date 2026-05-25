@@ -6,6 +6,7 @@ import {
 import { DOCUMENTS_ROUTE_NARROWING } from '../../src/app/documents-route.ts';
 import { HISTORY_ROUTE_NARROWING } from '../../src/app/history-route.ts';
 import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts';
+import { REVIEWER_ROUTE_NARROWING } from '../../src/app/reviewer-route.ts';
 import { STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
 import { assertCompositionCoherence } from '../../src/policy/composition-coherence.ts';
 import { isRuntimeFeatureKey } from '../../src/policy/feature-keys.ts';
@@ -18,6 +19,7 @@ const ALL_DESCRIPTORS: readonly RouteNarrowing[] = [
   OBLIGATIONS_ROUTE_NARROWING,
   DOCUMENTS_ROUTE_NARROWING,
   HISTORY_ROUTE_NARROWING,
+  REVIEWER_ROUTE_NARROWING,
 ];
 
 function productionConfig(): FormspecWebConfig {
@@ -260,6 +262,10 @@ describe('RouteNarrowing.consumes — closed-taxonomy Set shape (FW-0080)', () =
 
   it('HISTORY_ROUTE_NARROWING consumes exactly {crossIssuerHistory}', () => {
     expect(Array.from(HISTORY_ROUTE_NARROWING.consumes).sort()).toEqual(['crossIssuerHistory']);
+  });
+
+  it('REVIEWER_ROUTE_NARROWING consumes exactly {trustedReviewer}', () => {
+    expect(Array.from(REVIEWER_ROUTE_NARROWING.consumes).sort()).toEqual(['trustedReviewer']);
   });
 
   it('no descriptor consumes fileUpload / offlineSubmit / payment / embed today (no narrowed-route consumer)', () => {

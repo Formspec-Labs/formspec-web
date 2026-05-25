@@ -43,7 +43,10 @@ import {
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
+import { createStubTrustedReviewerAdapters } from '../adapters/stub/review-thread-store.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
+import { createHttpReviewerSession } from '../adapters/http/reviewer-session.ts';
+import { createHttpReviewThreadStore } from '../adapters/http/review-thread-store.ts';
 import {
   demoApplicantCaseDetail,
   demoLifecycleActionSnapshot,
@@ -206,7 +209,7 @@ function buildProductionNarrowedComposition({
     // `route.consumes.has('screener')` here (mirrors the
     // crossIssuerHistory pattern).
     screener: 'unavailable',
-    trustedReviewer: 'unavailable',
+    trustedReviewer: route.consumes.has('trustedReviewer') ? 'available' : 'unavailable',
     bringYourOwnAssistant: 'unavailable',
     safeAddress: 'unavailable',
     duressAware: 'unavailable',
@@ -262,8 +265,12 @@ function buildProductionNarrowedComposition({
     // + render the disabled-cause copy honestly. Adopter forks branch on
     // `route.consumes.has('screener')` to wire their real adapter.
     screenerDocumentSource: unavailableScreenerDocumentSource(),
-    reviewerSession: unavailableReviewerSession(),
-    reviewThreadStore: unavailableReviewThreadStore(),
+    reviewerSession: route.consumes.has('trustedReviewer')
+      ? createHttpReviewerSession({ baseUrl: serverUrl, tenantBinding: config.tenantBinding })
+      : unavailableReviewerSession(),
+    reviewThreadStore: route.consumes.has('trustedReviewer')
+      ? createHttpReviewThreadStore({ baseUrl: serverUrl, tenantBinding: config.tenantBinding })
+      : unavailableReviewThreadStore(),
     safeAddressDirectory: unavailableSafeAddressDirectory(),
     lifecycleActionClient: unavailableLifecycleActionClient(),
     instanceCapabilities,
@@ -278,6 +285,9 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
   // posture, not per-surface narrowing. Every demo narrowed route declares
   // the same `demo-stub` posture as the full stub composition and wires the
   // same demo stub adapters.
+  const trustedReviewerAdapters = route.consumes.has('trustedReviewer')
+    ? createStubTrustedReviewerAdapters()
+    : undefined;
   const composition: Composition = {
     mode: 'demo',
     initialDefinitionUrl: route.initialDefinitionUrlSentinel,
@@ -312,8 +322,8 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     screenerDocumentSource: route.consumes.has('screener')
       ? stubScreenerDocumentSource(demoScreenerCatalog())
       : unavailableScreenerDocumentSource(),
-    reviewerSession: unavailableReviewerSession(),
-    reviewThreadStore: unavailableReviewThreadStore(),
+    reviewerSession: trustedReviewerAdapters?.reviewerSession ?? unavailableReviewerSession(),
+    reviewThreadStore: trustedReviewerAdapters?.reviewThreadStore ?? unavailableReviewThreadStore(),
     safeAddressDirectory: unavailableSafeAddressDirectory(),
     lifecycleActionClient: route.consumes.has('recordLifecycle')
       ? stubLifecycleActionClient({ initialSnapshots: [demoLifecycleActionSnapshot()] })
@@ -352,7 +362,7 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // declare 'unavailable' because they don't render pre-flight
       // routing.
       screener: route.consumes.has('screener') ? 'demo-stub' : 'unavailable',
-      trustedReviewer: 'unavailable',
+      trustedReviewer: route.consumes.has('trustedReviewer') ? 'demo-stub' : 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'unavailable',
       duressAware: 'unavailable',
