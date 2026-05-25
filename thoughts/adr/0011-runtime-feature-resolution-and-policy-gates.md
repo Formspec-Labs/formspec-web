@@ -46,7 +46,9 @@ Examples:
 | `embed` | iframe/web component transport and CSP/origin enforcement |
 | `multiParty` | Party/session orchestration and per-party visibility support |
 | `safeAddress` | Privacy/redaction substrate and verifier-compatible protected fields |
-| `reviewerPreparer` | Reviewer/preparer sharing, role, and permission model |
+| `trustedReviewer` | `ReviewerSession` + `ReviewThreadStore`; both ports must be wired for the feature to be available |
+
+The original "reviewer/preparer" umbrella is split by feature. FW-0037 preparer filing and FW-0042 trusted review are sibling capabilities, not sub-modes behind one runtime key. This ADR ratifies the FW-0042 key only: `trustedReviewer` covers respondent-controlled read/comment/suggest review and does not cover a preparer who authors answers or hands off to the signer.
 
 Demo stubs MAY satisfy demo capabilities only when the composition is explicitly in demo mode. Production stubs do not satisfy production capabilities. Production unavailable sentinels satisfy only "known unavailable" checks; they do not enable features.
 
@@ -147,7 +149,7 @@ Silent downgrade is forbidden for required features. A payment-required form wit
 | Embed/widget | iframe/web component transport | allowed origins and CSP | form embeddable |
 | Multi-party | party/session orchestration | allowed party roles | party model declared |
 | Safe address | privacy/redaction substrate | jurisdictional protection policy | protected fields declared |
-| Reviewer/preparer | sharing and role model | allowed reviewer/preparer roles | review/preparer allowed |
+| Trusted reviewer | `ReviewerSession` + `ReviewThreadStore` ports | allowed reviewer roles, share scope, expiration, and revocation policy | reviewer sharing forbidden/comment-allowed/suggest-allowed |
 
 ## DI and Port Rule
 
@@ -163,6 +165,10 @@ This extends web ADR-0009 and ADR-0010:
 - Production unavailable sentinels fail closed.
 - App code consumes `ResolvedRuntimeProfile`, not service-specific adapters or raw policy documents.
 - Conformance suites verify adapter behavior; policy-resolution tests verify feature activation and failure semantics.
+
+### Multi-port feature bindings
+
+Some feature keys require more than one port. `trustedReviewer` is the first ratified multi-port binding: it is available only when both `ReviewerSession` and `ReviewThreadStore` are wired. A one-slot shortcut is forbidden because minting/revoking reviewer access without a durable review thread, or storing a thread without scoped reviewer sessions, overclaims the feature and violates the fail-closed rule above.
 
 ## Rationale
 
@@ -186,7 +192,7 @@ This extends web ADR-0009 and ADR-0010:
 
 - This ADR does not define the final JSON schema for instance, org, or form policy documents.
 - This ADR does not add every future feature port now.
-- This ADR does not force every deployment to enable respondent-place, payments, multi-party flows, safe-address handling, or reviewer/preparer flows.
+- This ADR does not force every deployment to enable respondent-place, payments, multi-party flows, safe-address handling, preparer filing, or trusted-reviewer flows.
 - This ADR does not make formspec-web the owner of upstream primitives. Per web ADR-0004, upstream specs still own portable primitive shape.
 
 ## Follow-on Work
@@ -212,3 +218,4 @@ This extends web ADR-0009 and ADR-0010:
 - Implementation plan: [`thoughts/plans/2026-05-24-fw-0044-offline-capable-fill.md`](../plans/2026-05-24-fw-0044-offline-capable-fill.md) — IN-FORM (no standalone route) consumer; introduces `offlineSubmit` to the closed `RuntimeFeatureKey` taxonomy + the new `OfflineSubmitQueue` port (FW-0044 slice 1: in-memory demo stub, production wiring blocked on FW-0082 IndexedDB reference adapter). **Sixth key — explicit FW-0080 consolidation trigger fired** (the `consumes*` boolean ladder on `RouteNarrowing` should consolidate into a `ReadonlySet<RuntimeFeatureKey>`; FW-0080 row is now imminent). Form-policy extractor reads `extensions['x-formspec-offline-submit'] === true` and declares `'optional'` — NOT `'required'` — because offline is a graceful enhancement, not a hard requirement; declaring `required` would fail-load every offline-marked form on every instance that cannot do offline.
 - Implementation plan: [`thoughts/plans/2026-05-24-fw-0027-multi-rail-payment.md`](../plans/2026-05-24-fw-0027-multi-rail-payment.md) — IN-FORM (no standalone route) consumer; introduces `payment` to the closed `RuntimeFeatureKey` taxonomy + the new `PaymentRailAdapter` port (FW-0027 slice 1: in-memory demo stub authorizing / capturing / voiding against an in-process Map; production wiring is adopter-side per the row's "no upstream block" framing — Stripe / W3C Payment Request / Square / PayNearMe / in-person POS reference adapters are filed as FW-0089 / FW-0090 / FW-0091 / FW-0092 / FW-0093). **Seventh key** in the closed taxonomy. Form-policy extractor reads `extensions['x-formspec-payment-required'] === true` and declares `'required'` — matching the FW-0033 attachment shape; payment is a HARD blocker, not a graceful enhancement (a fee-bearing form on an instance with no rail cannot be honestly submitted). Runtime composes authorize → submit → capture-or-void around the existing `SubmitTransport.submit` so the user's account sees ONLY a successful charge OR no charge — never an orphan charge with a failed submission. Offline + payment composition is hard-rejected at the runtime layer for slice 1 (the authorization expires before a queued submit could replay; FW-0101 lifts the restriction post-substrate).
 - Implementation plan: [`thoughts/plans/2026-05-24-fw-0040-embed.md`](../plans/2026-05-24-fw-0040-embed.md) — IN-FORM (no standalone route) consumer; introduces `embed` to the closed `RuntimeFeatureKey` taxonomy + the new `EmbedTransport` port (FW-0040 slice 1: in-memory demo stub defaulting to "not embedded"; production wiring is adopter-side per the row's "no upstream block" framing — Custom Element wrapper FW-0053 and production postMessage / penpal / comlink wrappers FW-0102 / FW-0103 are filed). **Eighth key** in the closed taxonomy. Form-policy extractor reads `extensions['x-formspec-embeddable'] === true` and declares `'optional'` — an embeddable form still mounts directly on its issuer's URL; declaring `'required'` would fail-load every embeddable form accessed directly. The iframe-context gate at form load (`verifyEmbedOriginAllowed`) verifies the host page's origin against `orgRuntimePolicy.limits.embed.allowedOrigins`; mismatches throw `EmbedOriginNotAllowedError` and the form-load error boundary renders the plain-language "this form is not set up to be shown on this site." copy. The slice-1 design [`thoughts/specs/2026-05-24-fw-0040-embed-design.md`](../specs/2026-05-24-fw-0040-embed-design.md) materializes the §"Instance capabilities" + §"Feature Ownership Table" `embed` row.
+- Design proposal: [`thoughts/specs/2026-05-25-fw-0042-trusted-reviewer-design.md`](../specs/2026-05-25-fw-0042-trusted-reviewer-design.md) — ratifies `trustedReviewer` as the FW-0042 sibling key under the split-keys discipline. Production enablement requires both `ReviewerSession` and `ReviewThreadStore`; a one-port mapping is not sufficient.
