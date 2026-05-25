@@ -17,6 +17,8 @@ import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
 import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-history-source.ts';
+import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
+import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import {
   freezeComposition,
   type InstanceCapabilities,
@@ -74,6 +76,7 @@ function buildComposition({
         documentPresentation: 'unavailable',
         fileUpload: 'demo-stub',
         crossIssuerHistory: 'demo-stub',
+        offlineSubmit: 'demo-stub',
       }
     : {
         respondentPlace: 'unavailable',
@@ -81,6 +84,7 @@ function buildComposition({
         documentPresentation: 'unavailable',
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
+        offlineSubmit: 'unavailable',
       };
 
   const orgRuntimePolicy: OrgRuntimePolicy = {
@@ -90,6 +94,7 @@ function buildComposition({
       documentPresentation: 'allowed',
       fileUpload: 'allowed',
       crossIssuerHistory: 'allowed',
+      offlineSubmit: 'allowed',
     },
   };
 
@@ -109,6 +114,9 @@ function buildComposition({
     respondentHistorySource: isDemo
       ? stubRespondentHistorySource()
       : unavailableRespondentHistorySource(),
+    offlineSubmitQueue: isDemo
+      ? stubOfflineSubmitQueue({ transport: submitTransport })
+      : unavailableOfflineSubmitQueue(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new AttachmentRequirementExtractor(),

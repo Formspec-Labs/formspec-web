@@ -20,6 +20,9 @@ const baseInstance = {
   // FW-0057: crossIssuerHistory is the fifth closed-taxonomy extension; same
   // honest-unavailable posture.
   crossIssuerHistory: 'unavailable',
+  // FW-0044: offlineSubmit is the sixth closed-taxonomy extension; same
+  // honest-unavailable posture.
+  offlineSubmit: 'unavailable',
 } as const;
 const emptyOrg = { features: {} } as const;
 
@@ -94,6 +97,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
         documentPresentation: 'unavailable',
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
+        offlineSubmit: 'unavailable',
       },
       org: emptyOrg,
       form: { features: { status: 'required' } },
@@ -143,6 +147,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
           documentPresentation: 'unavailable',
           fileUpload: 'unavailable',
           crossIssuerHistory: 'unavailable',
+          offlineSubmit: 'unavailable',
         },
         org: emptyOrg,
         form: { features: {} },

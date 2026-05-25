@@ -7,11 +7,13 @@
     "status": "available",
     "documentPresentation": "unavailable",
     "fileUpload": "unavailable",
-    "crossIssuerHistory": "unavailable"
+    "crossIssuerHistory": "unavailable",
+    "offlineSubmit": "unavailable"
   },
   "org": {
     "features": {
-      "crossIssuerHistory": "allowed"
+      "crossIssuerHistory": "allowed",
+      "offlineSubmit": "allowed"
     }
   },
   "form": {

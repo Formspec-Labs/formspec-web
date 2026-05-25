@@ -16,7 +16,10 @@
  *   in the array override earlier entries on a key collision (call-site
  *   ordering is the precedence signal).
  */
-import { extractAttachmentRequirement } from '../../policy/extract-form-policy.ts';
+import {
+  extractAttachmentRequirement,
+  extractOfflineSubmitOptIn,
+} from '../../policy/extract-form-policy.ts';
 import type { FormRuntimePolicy } from '../../policy/policy-shapes.ts';
 import type { FormRuntimePolicyExtractor } from '../../ports/form-runtime-policy-extractor.ts';
 import type { FormDefinition } from '../../ports/definition-source.ts';
@@ -31,6 +34,13 @@ export class AttachmentRequirementExtractor implements FormRuntimePolicyExtracto
   extract(definition: FormDefinition): FormRuntimePolicy {
     const fileUpload = extractAttachmentRequirement(definition);
     return fileUpload ? { features: { fileUpload } } : { features: {} };
+  }
+}
+
+export class OfflineSubmitRequirementExtractor implements FormRuntimePolicyExtractor {
+  extract(definition: FormDefinition): FormRuntimePolicy {
+    const offlineSubmit = extractOfflineSubmitOptIn(definition);
+    return offlineSubmit ? { features: { offlineSubmit } } : { features: {} };
   }
 }
 

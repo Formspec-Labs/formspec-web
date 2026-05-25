@@ -457,6 +457,7 @@ function productionCompositionWithIdentity(
       documentPresentation: 'available',
       fileUpload: 'unavailable',
       crossIssuerHistory: 'available',
+      offlineSubmit: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
@@ -465,6 +466,7 @@ function productionCompositionWithIdentity(
         documentPresentation: 'allowed',
         fileUpload: 'allowed',
         crossIssuerHistory: 'allowed',
+        offlineSubmit: 'allowed',
       },
     },
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),

@@ -37,3 +37,22 @@ function hasAttachmentField(items: readonly FormItem[] | undefined): boolean {
   }
   return false;
 }
+
+/**
+ * FW-0044 form-policy walker. Returns `'optional'` when the definition
+ * declares `extensions['x-formspec-offline-submit']: true`; returns
+ * `undefined` otherwise. Any non-boolean / non-`true` value (false, "yes",
+ * undefined, omitted) declines.
+ *
+ * `'optional'` not `'required'` — see design §"Optional, not required":
+ * forms that want offline support work fine ONLINE without a queue; the
+ * extractor declares an opt-in, not a hard requirement. The resolver
+ * disables the feature with `optional-no-instance` when the instance
+ * cannot satisfy it; the form still loads.
+ */
+export function extractOfflineSubmitOptIn(
+  definition: FormDefinition,
+): FormFeaturePolicyMode | undefined {
+  const value = definition.extensions?.['x-formspec-offline-submit'];
+  return value === true ? 'optional' : undefined;
+}

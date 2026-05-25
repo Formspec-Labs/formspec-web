@@ -31,6 +31,12 @@ export const FEATURE_PORT_MAP = {
   // ADR-0068 D-1 + D-3) is the adapter's concern, not the port's; production
   // adapters land post-XS-2.
   crossIssuerHistory: 'respondentHistorySource',
+  // FW-0044 slice 1: 1:1 mapping. The OfflineSubmitQueue port + the
+  // offlineSubmit feature key ship together — no transitional slot-sharing.
+  // Substrate (IndexedDB / OPFS / service-worker) is the adapter's concern;
+  // the slice-1 stub is in-memory only and the reference deployment declares
+  // 'unavailable'.
+  offlineSubmit: 'offlineSubmitQueue',
 } as const satisfies Readonly<Record<RuntimeFeatureKey, string>>;
 
 export type CompositionPortName = (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey];

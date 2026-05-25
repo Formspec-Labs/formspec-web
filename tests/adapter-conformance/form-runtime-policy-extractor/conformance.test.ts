@@ -3,6 +3,7 @@ import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
   EmptyFormRuntimePolicyExtractor,
+  OfflineSubmitRequirementExtractor,
 } from '../../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import {
   DemoFormPolicyExtractor,
@@ -62,5 +63,18 @@ defineFormRuntimePolicyExtractorConformance(
       new AttachmentRequirementExtractor(),
     ]),
     definition: { ...attachmentBearingDefinition, url: demoSampleFormUrl },
+  }),
+);
+
+const offlineOptInDefinition: FormDefinition = {
+  ...sampleFormDefinition,
+  extensions: { 'x-formspec-offline-submit': true },
+};
+
+defineFormRuntimePolicyExtractorConformance(
+  'OfflineSubmitRequirementExtractor conformance (offline-opt-in definition)',
+  () => ({
+    adapter: new OfflineSubmitRequirementExtractor(),
+    definition: offlineOptInDefinition,
   }),
 );

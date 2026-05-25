@@ -44,6 +44,7 @@ import {
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
+import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
@@ -171,6 +172,9 @@ function buildProductionNarrowedComposition({
     // the disabled-cause copy honestly. When the production adapter ships,
     // wire it conditionally on `route.consumesHistory` here.
     crossIssuerHistory: 'unavailable',
+    // FW-0044 slice 1: narrowed routes do not submit forms; no queue
+    // affordance is reachable. Uniform unavailable across all descriptors.
+    offlineSubmit: 'unavailable',
   };
   const notificationDelivery = stubNotificationDelivery();
   // MED-4: identity is only wired when the gated respondent-place capability
@@ -200,6 +204,13 @@ function buildProductionNarrowedComposition({
     statusReader: unavailableStatusReader(),
     attachmentStore: unavailableAttachmentStore(),
     respondentHistorySource: unavailableRespondentHistorySource(),
+    // FW-0044 slice 1: narrowed routes do not submit forms (no form-fill
+    // surface). Uniformly unavailable across all descriptors today; if a
+    // future route ever needs an offline-queue affordance, add a
+    // `consumesOfflineSubmit` flag — or (per FW-0080's explicit trigger
+    // fired by this row) finish the `consumes*` boolean-ladder
+    // consolidation first.
+    offlineSubmitQueue: unavailableOfflineSubmitQueue(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -229,6 +240,10 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     respondentHistorySource: route.consumesHistory
       ? stubRespondentHistorySource(demoHistorySnapshot())
       : unavailableRespondentHistorySource(),
+    // FW-0044 slice 1: no narrowed route renders a form; no queue affordance
+    // is reachable. Uniform unavailable across all descriptors regardless of
+    // mode (the sentinel pairs with the 'unavailable' declaration).
+    offlineSubmitQueue: unavailableOfflineSubmitQueue(),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -249,6 +264,9 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // documents) wire the unavailable sentinel + declare 'unavailable'
       // because they don't render history.
       crossIssuerHistory: route.consumesHistory ? 'demo-stub' : 'unavailable',
+      // FW-0044 slice 1: narrowed routes do not submit forms; uniform
+      // unavailable to match the wired sentinel.
+      offlineSubmit: 'unavailable',
     },
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -264,6 +282,7 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       documentPresentation: 'allowed',
       fileUpload: 'allowed',
       crossIssuerHistory: 'allowed',
+      offlineSubmit: 'allowed',
     },
   };
 }

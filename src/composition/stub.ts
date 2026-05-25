@@ -1,6 +1,7 @@
 import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
+  OfflineSubmitRequirementExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
@@ -8,6 +9,7 @@ import { stubDraftStore } from '../adapters/stub/draft-store.ts';
 import { stubFormRuntimePolicyExtractor } from '../adapters/stub/form-runtime-policy-extractor.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
+import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
@@ -40,12 +42,13 @@ export function createStubComposition(): Composition {
   definitionSource.registerDefinition(demoSampleForm.url, demoSampleForm, demoSampleForm.version);
   definitionSource.registerDefinition(demoSampleForm.url, demoSampleForm);
 
+  const submitTransport = stubSubmitTransport();
   const composition: Composition = {
     mode: 'demo',
     initialDefinitionUrl: demoSampleFormUrl,
     definitionSource,
     draftStore: stubDraftStore(),
-    submitTransport: stubSubmitTransport(),
+    submitTransport,
     identityProvider: stubIdentityProvider(),
     notificationDelivery: stubNotificationDelivery(),
     respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
@@ -54,6 +57,11 @@ export function createStubComposition(): Composition {
     ]),
     attachmentStore: stubAttachmentStore(),
     respondentHistorySource: stubRespondentHistorySource(demoHistorySnapshot()),
+    // FW-0044 slice 1: in-memory queue paired with the same stub transport at
+    // construction time (FW-0064 cohort discipline). The slice-1 stub loses
+    // queued submissions on page reload — that is the 'demo-stub' posture's
+    // honest cost; the production IndexedDB adapter (FW-0082) is filed.
+    offlineSubmitQueue: stubOfflineSubmitQueue({ transport: submitTransport }),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -77,6 +85,13 @@ export function createStubComposition(): Composition {
       // issuers, 3 kinds) satisfies the demo posture. Production declares
       // 'unavailable' until XS-2 lands the multi-issuer fan-out adapter.
       crossIssuerHistory: 'demo-stub',
+      // FW-0044 slice 1: in-memory queue adapter satisfies the demo posture.
+      // Per the design's §"Demo form posture" decision, the bundled
+      // sample-form.json does not declare `x-formspec-offline-submit: true`
+      // today; the stub is exercised through synthetic-definition tests +
+      // the conformance suite. Production declares 'unavailable' until the
+      // IndexedDB adapter (FW-0082) ships a reload-surviving substrate.
+      offlineSubmit: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -85,18 +100,21 @@ export function createStubComposition(): Composition {
         documentPresentation: 'allowed',
         fileUpload: 'allowed',
         crossIssuerHistory: 'allowed',
+        offlineSubmit: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
     // FW-0066: CompositeFormRuntimePolicyExtractor composes the demo-form
     // URL-keyed seeded-pair opt-in (DemoFormPolicyExtractor) with the
-    // attachment-field walker (AttachmentRequirementExtractor) into one
-    // FormRuntimePolicyExtractor port instance. Order matters: later
-    // extractors override earlier ones on a key collision, but the two
-    // extractors here target disjoint keys (respondentPlace / status vs
-    // fileUpload) so the order is informational.
+    // attachment-field walker (AttachmentRequirementExtractor) and the
+    // FW-0044 offline-extension walker (OfflineSubmitRequirementExtractor)
+    // into one FormRuntimePolicyExtractor port instance. Order matters:
+    // later extractors override earlier ones on a key collision, but the
+    // three extractors here target disjoint keys (respondentPlace / status
+    // vs fileUpload vs offlineSubmit) so the order is informational.
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
       stubFormRuntimePolicyExtractor(),
       new AttachmentRequirementExtractor(),
+      new OfflineSubmitRequirementExtractor(),
     ]),
   };
   return freezeComposition(composition);

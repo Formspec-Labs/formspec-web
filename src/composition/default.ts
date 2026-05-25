@@ -4,12 +4,17 @@ import {
   AnonymousSessionBridge,
   HttpAnonymousIdentityProvider,
 } from '../adapters/http/anonymous-session.ts';
-import { AttachmentRequirementExtractor } from '../adapters/composing/form-runtime-policy-extractor.ts';
+import {
+  AttachmentRequirementExtractor,
+  CompositeFormRuntimePolicyExtractor,
+  OfflineSubmitRequirementExtractor,
+} from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
+import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
@@ -74,6 +79,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     statusReader: unavailableStatusReader(),
     attachmentStore: unavailableAttachmentStore(),
     respondentHistorySource: unavailableRespondentHistorySource(),
+    offlineSubmitQueue: unavailableOfflineSubmitQueue(),
     // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —
@@ -101,6 +107,14 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       // Production composition declares `unavailable` until that lands; the
       // /history route honestly renders "Your history is not available." copy.
       crossIssuerHistory: 'unavailable',
+      // FW-0044 slice 1: the OSS reference composition does not ship a
+      // production queue adapter — adopters fork to wire IndexedDB / OPFS /
+      // service-worker-backed substrate per their deployment. Forms that
+      // declare `x-formspec-offline-submit: true` load normally (the
+      // extractor declares `optional`, not `required`); the offline path is
+      // not reachable until an adapter is wired. FW-0082 carries the
+      // production IndexedDB reference adapter.
+      offlineSubmit: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -109,13 +123,18 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
         documentPresentation: 'allowed',
         fileUpload: 'allowed',
         crossIssuerHistory: 'allowed',
+        offlineSubmit: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
-    // FW-0066: AttachmentRequirementExtractor wraps the FW-0033 walker as a
-    // FormRuntimePolicyExtractor port instance. Production deployments compose
-    // additional extractors here as future feature ADRs land definition-
-    // introspective walkers (via CompositeFormRuntimePolicyExtractor).
-    formRuntimePolicyExtractor: new AttachmentRequirementExtractor(),
+    // FW-0066: composite extractor wraps the FW-0033 attachment-field walker
+    // AND the FW-0044 offline-extension walker as
+    // FormRuntimePolicyExtractor port instances. Production deployments
+    // compose additional extractors here as future feature ADRs land
+    // definition-introspective walkers.
+    formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
+      new AttachmentRequirementExtractor(),
+      new OfflineSubmitRequirementExtractor(),
+    ]),
   };
   return freezeComposition(composition);
 }

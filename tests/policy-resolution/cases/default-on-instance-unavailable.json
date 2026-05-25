@@ -7,13 +7,15 @@
     "status": "available",
     "documentPresentation": "unavailable",
     "fileUpload": "unavailable",
-    "crossIssuerHistory": "unavailable"
+    "crossIssuerHistory": "unavailable",
+    "offlineSubmit": "unavailable"
   },
   "org": {
     "features": {
       "respondentPlace": "default-on",
       "fileUpload": "allowed",
-      "crossIssuerHistory": "allowed"
+      "crossIssuerHistory": "allowed",
+      "offlineSubmit": "allowed"
     }
   },
   "form": {
@@ -26,7 +28,8 @@
       "respondentPlace": "default-on-no-instance",
       "status": "not-requested",
       "fileUpload": "not-requested",
-      "crossIssuerHistory": "not-requested"
+      "crossIssuerHistory": "not-requested",
+      "offlineSubmit": "not-requested"
     }
   }
 }

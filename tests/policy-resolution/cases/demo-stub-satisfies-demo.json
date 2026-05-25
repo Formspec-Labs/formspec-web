@@ -7,11 +7,13 @@
     "status": "demo-stub",
     "documentPresentation": "unavailable",
     "fileUpload": "unavailable",
-    "crossIssuerHistory": "demo-stub"
+    "crossIssuerHistory": "demo-stub",
+    "offlineSubmit": "unavailable"
   },
   "org": {
     "features": {
-      "crossIssuerHistory": "allowed"
+      "crossIssuerHistory": "allowed",
+      "offlineSubmit": "allowed"
     }
   },
   "form": {
@@ -27,7 +29,8 @@
     "disabled": {
       "respondentPlace": "not-requested",
       "fileUpload": "not-requested",
-      "crossIssuerHistory": "not-requested"
+      "crossIssuerHistory": "not-requested",
+      "offlineSubmit": "not-requested"
     }
   }
 }

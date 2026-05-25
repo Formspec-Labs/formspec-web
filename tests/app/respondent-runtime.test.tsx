@@ -291,6 +291,13 @@ function testComposition(
         throw new Error('readHistory not used in this test');
       }),
     },
+    offlineSubmitQueue: {
+      enqueue: vi.fn(async () => {
+        throw new Error('enqueue not used in this test');
+      }),
+      replay: vi.fn(async () => []),
+      pending: vi.fn(async () => []),
+    },
     // ADR-0011: production-mode composition with both seeded capabilities
     // available and the form opting both in. Without the form opt-in the
     // resolver would mark both `not-requested` (org=allowed + form=silent)
@@ -309,6 +316,10 @@ function testComposition(
       // FW-0057: closed-taxonomy key — in-form surface doesn't consume
       // crossIssuerHistory; 'unavailable' keeps the resolver happy.
       crossIssuerHistory: 'unavailable',
+      // FW-0044: closed-taxonomy key — this test does not exercise the
+      // offline path; the form does not declare it, so 'unavailable' is
+      // honest and the resolver records 'not-requested'.
+      offlineSubmit: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
@@ -317,6 +328,7 @@ function testComposition(
         documentPresentation: 'allowed',
         fileUpload: 'allowed',
         crossIssuerHistory: 'allowed',
+        offlineSubmit: 'allowed',
       },
     },
     formRuntimePolicyExtractor: {

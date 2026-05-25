@@ -45,7 +45,6 @@
 import type {
   IntakeHandoff,
   SubmitConfirmation,
-  SubmitTransport,
 } from './submit-transport.ts';
 
 export type { IntakeHandoff, SubmitTransport } from './submit-transport.ts';

@@ -5,6 +5,7 @@ import type {
   FormRuntimePolicyExtractor,
   IdentityProvider,
   NotificationDelivery,
+  OfflineSubmitQueue,
   RespondentHistorySource,
   RespondentPlaceSource,
   StatusReader,
@@ -53,6 +54,15 @@ export interface Composition {
    * a stub fixture in demo and the unavailable sentinel in production.
    */
   respondentHistorySource: RespondentHistorySource;
+  /**
+   * FW-0044 slice 1: queued offline-submit seam (web ADR-0011 offlineSubmit).
+   * The runtime routes through this adapter when the device is offline AND
+   * the resolved profile enables `offlineSubmit`; otherwise the synchronous
+   * `submitTransport` path runs unchanged. Production wires the unavailable
+   * sentinel today; the stub composition wires an in-memory queue paired
+   * with the stub transport via FW-0064-style construction injection.
+   */
+  offlineSubmitQueue: OfflineSubmitQueue;
   /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */
   instanceCapabilities: InstanceCapabilities;
   /** ADR-0011 §Org runtime policy — supplied by the composition root. */

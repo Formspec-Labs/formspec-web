@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { FormDefinition } from '@formspec-org/types';
-import { extractAttachmentRequirement } from './extract-form-policy.ts';
+import {
+  extractAttachmentRequirement,
+  extractOfflineSubmitOptIn,
+} from './extract-form-policy.ts';
 
 const baseDefinition = {
   $formspec: '1.0',
@@ -78,5 +81,48 @@ describe('extractAttachmentRequirement', () => {
       ],
     };
     expect(extractAttachmentRequirement(definition)).toBe('required');
+  });
+});
+
+describe('extractOfflineSubmitOptIn', () => {
+  const offlineBase: FormDefinition = {
+    ...baseDefinition,
+    items: [],
+  };
+
+  it('returns undefined when the offline extension is absent', () => {
+    expect(extractOfflineSubmitOptIn(offlineBase)).toBeUndefined();
+  });
+
+  it('returns "optional" when extensions["x-formspec-offline-submit"] is true', () => {
+    const definition: FormDefinition = {
+      ...offlineBase,
+      extensions: { 'x-formspec-offline-submit': true },
+    };
+    expect(extractOfflineSubmitOptIn(definition)).toBe('optional');
+  });
+
+  it('returns undefined when extensions["x-formspec-offline-submit"] is false', () => {
+    const definition: FormDefinition = {
+      ...offlineBase,
+      extensions: { 'x-formspec-offline-submit': false },
+    };
+    expect(extractOfflineSubmitOptIn(definition)).toBeUndefined();
+  });
+
+  it('returns undefined for a non-boolean string value', () => {
+    const definition: FormDefinition = {
+      ...offlineBase,
+      extensions: { 'x-formspec-offline-submit': 'yes' as unknown as boolean },
+    };
+    expect(extractOfflineSubmitOptIn(definition)).toBeUndefined();
+  });
+
+  it('returns undefined for an object truthy value', () => {
+    const definition: FormDefinition = {
+      ...offlineBase,
+      extensions: { 'x-formspec-offline-submit': { enabled: true } as unknown as boolean },
+    };
+    expect(extractOfflineSubmitOptIn(definition)).toBeUndefined();
   });
 });
