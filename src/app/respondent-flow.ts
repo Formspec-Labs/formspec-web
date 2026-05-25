@@ -17,12 +17,18 @@ import type {
   CaptureReceipt,
   PaymentRailAdapter,
 } from '../ports/payment-rail-adapter.ts';
+import type { EmbedTransport } from '../ports/embed-transport.ts';
 import type {
   SubmitConfirmation,
   SubmitTransport,
 } from '../ports/submit-transport.ts';
 import { extractPaymentAmount } from '../policy/extract-form-policy.ts';
-import type { ResolvedRuntimeProfile } from '../policy/index.ts';
+import {
+  EmbedOriginNotAllowedError,
+  type EmbedLimits,
+  type OrgRuntimePolicy,
+  type ResolvedRuntimeProfile,
+} from '../policy/index.ts';
 import { generateIdempotencyKey, type IdempotencyKey } from '../shared/idempotency-key.ts';
 
 export function hydrateEngineFromResponse(engine: IFormEngine, response?: FormResponse): void {
@@ -410,4 +416,84 @@ function readMethodToken(input: SubmitWithPaymentInput): string {
     return fromDefinition;
   }
   return PAYMENT_FALLBACK_METHOD_TOKEN;
+}
+
+
+/**
+ * FW-0040 iframe-context gate.
+ *
+ * When the form runtime is mounted inside a host iframe AND the resolved
+ * runtime profile enables `embed`, this helper verifies the host origin
+ * against `orgRuntimePolicy.limits.embed.allowedOrigins`. Throws
+ * `EmbedOriginNotAllowedError` when the host origin is missing, unknown,
+ * or not in the allow-list; no-ops when the form is loaded directly
+ * (top-level window) OR when `embed` is disabled OR when the wildcard `*`
+ * is in the allow-list.
+ *
+ * Synchronous so the form-load boundary can call it inline after
+ * `resolveRuntimeFeatures(...)` without changing the existing await flow.
+ * Production transport adapters that resolve `hostOrigin()` via a
+ * postMessage handshake MUST complete that handshake in the adapter
+ * constructor / init() before being passed to `freezeComposition`.
+ */
+export interface VerifyEmbedOriginAllowedInput {
+  readonly runtimeProfile: ResolvedRuntimeProfile;
+  readonly orgRuntimePolicy: OrgRuntimePolicy;
+  readonly embedTransport: EmbedTransport;
+}
+
+export function verifyEmbedOriginAllowed(
+  input: VerifyEmbedOriginAllowedInput,
+): void {
+  if (!input.runtimeProfile.enabled.has("embed")) {
+    return;
+  }
+  if (!input.embedTransport.isEmbedded()) {
+    return;
+  }
+  const hostOrigin = input.embedTransport.hostOrigin();
+  if (hostOrigin === null) {
+    throw new EmbedOriginNotAllowedError(
+      "embed transport reports the form is in an iframe but the host origin could not be determined",
+    );
+  }
+  const limits = (input.orgRuntimePolicy.limits?.embed ?? undefined) as
+    | EmbedLimits
+    | undefined;
+  const allowed = limits?.allowedOrigins ?? [];
+  if (!matchesAllowedOrigin(hostOrigin, allowed)) {
+    throw new EmbedOriginNotAllowedError(
+      `host origin "${hostOrigin}" is not in the allowed-origins list`,
+    );
+  }
+}
+
+/**
+ * FW-0040 origin matcher. Accepts the wildcard `*` (allow any) or exact
+ * origin matches via URL normalization (case-insensitive scheme + host,
+ * port-sensitive per WHATWG URL spec). Returns false when the allow-list
+ * is empty.
+ */
+export function matchesAllowedOrigin(
+  hostOrigin: string,
+  allowed: readonly string[],
+): boolean {
+  if (allowed.length === 0) return false;
+  let normalizedHost: string;
+  try {
+    normalizedHost = new URL(hostOrigin).origin;
+  } catch {
+    return false;
+  }
+  for (const entry of allowed) {
+    if (entry === "*") return true;
+    let normalizedEntry: string;
+    try {
+      normalizedEntry = new URL(entry).origin;
+    } catch {
+      continue;
+    }
+    if (normalizedEntry === normalizedHost) return true;
+  }
+  return false;
 }

@@ -588,3 +588,143 @@ describe('submitWithPayment (FW-0027) — authorize → submit → capture-or-vo
     ).rejects.toThrow(/payment-amount/);
   });
 });
+
+
+import {
+  matchesAllowedOrigin,
+  verifyEmbedOriginAllowed,
+} from "../../src/app/respondent-flow.ts";
+import { stubEmbedTransport } from "../../src/adapters/stub/embed-transport.ts";
+import { unavailableEmbedTransport } from "../../src/adapters/unavailable/embed-transport.ts";
+import { EmbedOriginNotAllowedError } from "../../src/policy/errors.ts";
+import type { OrgRuntimePolicy } from "../../src/policy/index.ts";
+
+function org(allowedOrigins: readonly string[] = []): OrgRuntimePolicy {
+  return {
+    features: { embed: "allowed" },
+    limits: { embed: { allowedOrigins } },
+  };
+}
+
+describe("matchesAllowedOrigin", () => {
+  it("returns false for an empty allow-list", () => {
+    expect(matchesAllowedOrigin("https://allowed.example.test", [])).toBe(false);
+  });
+
+  it("accepts wildcard", () => {
+    expect(matchesAllowedOrigin("https://anywhere.example", ["*"])).toBe(true);
+  });
+
+  it("matches an exact origin", () => {
+    expect(
+      matchesAllowedOrigin("https://allowed.example.test", ["https://allowed.example.test"]),
+    ).toBe(true);
+  });
+
+  it("rejects a different origin", () => {
+    expect(
+      matchesAllowedOrigin("https://attacker.example.test", ["https://allowed.example.test"]),
+    ).toBe(false);
+  });
+
+  it("rejects a malformed host origin", () => {
+    expect(matchesAllowedOrigin("not-a-url", ["https://allowed.example.test"])).toBe(false);
+  });
+});
+
+describe("verifyEmbedOriginAllowed", () => {
+  it("no-ops when embed is disabled in the resolved profile", () => {
+    expect(() =>
+      verifyEmbedOriginAllowed({
+        runtimeProfile: profile([]),
+        orgRuntimePolicy: org([]),
+        embedTransport: stubEmbedTransport({
+          embedded: true,
+          hostOrigin: "https://attacker.example.test",
+        }),
+      }),
+    ).not.toThrow();
+  });
+
+  it("no-ops when not embedded (top-level window)", () => {
+    expect(() =>
+      verifyEmbedOriginAllowed({
+        runtimeProfile: profile(["embed"]),
+        orgRuntimePolicy: org(["https://allowed.example.test"]),
+        embedTransport: stubEmbedTransport({ embedded: false }),
+      }),
+    ).not.toThrow();
+  });
+
+  it("no-ops when embedded and host origin is in the allow-list", () => {
+    expect(() =>
+      verifyEmbedOriginAllowed({
+        runtimeProfile: profile(["embed"]),
+        orgRuntimePolicy: org(["https://allowed.example.test"]),
+        embedTransport: stubEmbedTransport({
+          embedded: true,
+          hostOrigin: "https://allowed.example.test",
+        }),
+      }),
+    ).not.toThrow();
+  });
+
+  it("no-ops when the wildcard is in the allow-list", () => {
+    expect(() =>
+      verifyEmbedOriginAllowed({
+        runtimeProfile: profile(["embed"]),
+        orgRuntimePolicy: org(["*"]),
+        embedTransport: stubEmbedTransport({
+          embedded: true,
+          hostOrigin: "https://anywhere.example.test",
+        }),
+      }),
+    ).not.toThrow();
+  });
+
+  it("throws EmbedOriginNotAllowedError when embedded with disallowed origin", () => {
+    expect(() =>
+      verifyEmbedOriginAllowed({
+        runtimeProfile: profile(["embed"]),
+        orgRuntimePolicy: org(["https://allowed.example.test"]),
+        embedTransport: stubEmbedTransport({
+          embedded: true,
+          hostOrigin: "https://attacker.example.test",
+        }),
+      }),
+    ).toThrow(EmbedOriginNotAllowedError);
+  });
+
+  it("throws EmbedOriginNotAllowedError when embedded with null host origin (fail-closed)", () => {
+    expect(() =>
+      verifyEmbedOriginAllowed({
+        runtimeProfile: profile(["embed"]),
+        orgRuntimePolicy: org(["https://allowed.example.test"]),
+        embedTransport: stubEmbedTransport({ embedded: true }),
+      }),
+    ).toThrow(EmbedOriginNotAllowedError);
+  });
+
+  it("throws EmbedOriginNotAllowedError when allow-list is empty and embedded", () => {
+    expect(() =>
+      verifyEmbedOriginAllowed({
+        runtimeProfile: profile(["embed"]),
+        orgRuntimePolicy: org([]),
+        embedTransport: stubEmbedTransport({
+          embedded: true,
+          hostOrigin: "https://allowed.example.test",
+        }),
+      }),
+    ).toThrow(EmbedOriginNotAllowedError);
+  });
+
+  it("no-ops with the unavailable sentinel (isEmbedded returns false)", () => {
+    expect(() =>
+      verifyEmbedOriginAllowed({
+        runtimeProfile: profile(["embed"]),
+        orgRuntimePolicy: org(["https://allowed.example.test"]),
+        embedTransport: unavailableEmbedTransport(),
+      }),
+    ).not.toThrow();
+  });
+});

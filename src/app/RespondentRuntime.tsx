@@ -57,6 +57,7 @@ import type {
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
 import {
+  EmbedOriginNotAllowedError,
   FeaturePolicyConflictError,
   InvalidRuntimePolicyError,
   OrgPolicyUnsatisfiedError,
@@ -82,6 +83,7 @@ import {
   subjectRefInvalidatedByIdentityChange,
   submitOrQueue,
   submitWithPayment,
+  verifyEmbedOriginAllowed,
 } from './respondent-flow.ts';
 
 interface RespondentRuntimeProps {
@@ -690,6 +692,16 @@ async function createReadyState(
     org: composition.orgRuntimePolicy,
     form: formPolicy,
   });
+  // FW-0040: iframe-context gate. No-op when the form is loaded as the
+  // top-level window OR when `embed` is disabled. Throws
+  // EmbedOriginNotAllowedError when the form is mounted in an iframe whose
+  // host origin is not in the org's allow-list; the catch in
+  // applyReadyState routes the error to the form-load boundary.
+  verifyEmbedOriginAllowed({
+    runtimeProfile,
+    orgRuntimePolicy: composition.orgRuntimePolicy,
+    embedTransport: composition.embedTransport,
+  });
   const draftKey: DraftKey = {
     formUrl: definition.url,
     formVersion: definition.version,
@@ -1279,6 +1291,9 @@ function RuntimePolicyErrorPage({ error }: { error: RuntimePolicyError }) {
  * a structural untyped read into the typed-error surface.
  */
 function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
+  if (error instanceof EmbedOriginNotAllowedError) {
+    return 'This form is not set up to be shown on this site.';
+  }
   if (
     error instanceof UnsupportedRequiredFeatureError ||
     error instanceof FeaturePolicyConflictError ||
