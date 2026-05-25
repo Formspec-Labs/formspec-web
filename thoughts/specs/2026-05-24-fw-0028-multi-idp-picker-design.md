@@ -54,11 +54,16 @@ with `listAvailable()` + `select(idpId)`.** Two reasons to reject:
    `formAssuranceRequirements` parameter was added at FW-0063 specifically
    to support per-assurance filtering. Coining a second port duplicates the
    shape and would force the conformance suite + every adopter doc to fork.
-2. **Multi-IdP composition is structurally identical to other composing
-   adapters in the codebase.** `CompositeFormRuntimePolicyExtractor`
-   composes `FormRuntimePolicyExtractor[]`; `CompositeIdentityProvider`
-   composes `IdentityProvider[]` the same way. The composing pattern is the
-   substrate primitive; new ports cost more.
+2. **Multi-IdP composition reuses the composing-adapter substrate
+   primitive.** `CompositeFormRuntimePolicyExtractor` composes
+   `FormRuntimePolicyExtractor[]`; `CompositeIdentityProvider` composes
+   `IdentityProvider[]`. The two diverge on two axes: the identity composite
+   is async (each wrapped port returns Promises) and state-bearing
+   (subscribe lifecycle, owner cache populated at discover, claim-owner
+   cache populated at authenticate) where the policy-extractor composite
+   is sync and pure. The shared substrate is the "wrap an ordered N-tuple
+   of port instances behind one port slot, dedup by call-site ordering"
+   pattern; new ports would cost more.
 
 **Rejected alternative (b): extend `IdentityProvider` with a separate
 `select()` method distinct from `authenticate()`.** The current port already
@@ -295,7 +300,7 @@ contract exactly.
 
 New tests:
 
-- `tests/adapters/composing/identity-provider.test.ts` — composite-specific:
+- `tests/adapters/identity/composite.test.ts` — composite-specific:
   - `discover()` returns the union of wrapped providers' options.
   - `discover('L3')` filters out wrapped providers that return only sub-L3
     options.
@@ -430,8 +435,8 @@ covers multi-IdP picker. Verification:
   axes are exactly the picker + per-assurance filter surface.
 - ADR-0011 §"Closed taxonomy" `identityContinuity` description:
   *"Identity provider/session adapter with assurance continuity"*.
-  Multi-IdP composition is a strict subset of identity-provider/session
-  adapter coverage.
+  Multi-IdP composition is a strict subset of identity/session adapter
+  coverage.
 
 No `multiIdP` row in the Feature Ownership Table. No ADR-0011 amendment
 required for this slice. The PLANNING row already states this:
