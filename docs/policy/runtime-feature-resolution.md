@@ -42,9 +42,9 @@ The closed taxonomy lives in `src/policy/feature-keys.ts`. Today's keys:
   and declares `'optional'` (NOT `'required'` — offline is a graceful
   enhancement). Production declares `'unavailable'` until the IndexedDB
   reference adapter (FW-0082) ships; demo declares `'demo-stub'` with an
-  in-memory queue paired with the stub transport. This sixth extension
-  is the explicit FW-0080 consolidation trigger (`consumes*` boolean
-  ladder on `RouteNarrowing` → `ReadonlySet<RuntimeFeatureKey>`).
+  in-memory queue paired with the stub transport. The sixth-key landing
+  fired FW-0080, which consolidated the `consumes*` boolean ladder on
+  `RouteNarrowing` into a single `consumes: ReadonlySet<RuntimeFeatureKey>`.
 
 Future feature ADRs extend the taxonomy; the resolver rejects unknown keys
 with `InvalidRuntimePolicyError` so drift is caught at boot.
@@ -479,9 +479,10 @@ devices.") on the `'queued'` state. Forbidden in the rendered DOM:
 The narrowed-route compositions (`/status`, `/obligations`, `/documents`,
 `/history`) declare `offlineSubmit: 'unavailable'` and wire
 `unavailableOfflineSubmitQueue()` because no narrowed surface submits a
-form. Uniform across descriptors — no `consumesOfflineSubmit` flag on
-`RouteNarrowing` (FW-0080 consolidation trigger fired by this sixth
-key; consolidation row is imminent).
+form. Uniform across descriptors — no descriptor adds `'offlineSubmit'`
+to its `consumes` set today (FW-0080 closed the boolean-ladder shape;
+the closed-taxonomy `consumes: ReadonlySet<RuntimeFeatureKey>` makes
+this a one-line addition the day a narrowed surface needs the queue).
 
 Production posture: `'unavailable'` until FW-0082 lands the production
 IndexedDB queue (with EXT-18 HPKE at-rest encryption). Demo posture:
