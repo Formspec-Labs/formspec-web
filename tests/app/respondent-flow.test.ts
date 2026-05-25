@@ -4,7 +4,9 @@ import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
 import {
   assertIdentityPolicySatisfied,
+  buildMultiPartyAggregateResponse,
   buildIntakeHandoff,
+  createMultiPartyPersistedState,
   createMultiPartySignerProgress,
   formAssuranceFloorForDefinition,
   hydrateEngineFromData,
@@ -13,7 +15,10 @@ import {
   isIdentityInteractionStarted,
   multiPartyComplete,
   multiPartyDraftKey,
+  multiPartyStateDraftResponse,
+  multiPartyStateFromDraft,
   recordMultiPartySigner,
+  recordMultiPartySignerState,
   requiredMultiPartySlots,
   selectBootIdentityOption,
   signInOptionsForIdentityPolicy,
@@ -148,6 +153,85 @@ describe('respondent flow helpers', () => {
           { partyRef: 'spouse-b', subjectRef: 'subject-b' },
         ],
       },
+    });
+  });
+
+  it('persists multi-party signer progress and submits an aggregate response', async () => {
+    const idempotencyKeyA = generateIdempotencyKey();
+    const idempotencyKeyB = generateIdempotencyKey();
+    const policy = multiPartyPolicy();
+    const responseA = {
+      ...sampleFormResponse,
+      id: idempotencyKeyA,
+      data: { spouseAName: 'Ada Lovelace' },
+    };
+    const responseB = {
+      ...sampleFormResponse,
+      id: idempotencyKeyB,
+      data: { spouseBName: 'Grace Hopper' },
+    };
+
+    const afterA = await recordMultiPartySignerState({
+      claim: claim('subject-a'),
+      idempotencyKey: idempotencyKeyA,
+      policy,
+      response: responseA,
+      state: createMultiPartyPersistedState(policy),
+    });
+    const restored = multiPartyStateFromDraft(
+      multiPartyStateDraftResponse({ definition: demoSampleForm, state: afterA }),
+      policy,
+    );
+    expect(restored.progress.activePartyRef).toBe('spouse-b');
+    expect(restored.responses).toEqual([{ partyRef: 'spouse-a', response: responseA }]);
+
+    const afterB = await recordMultiPartySignerState({
+      claim: claim('subject-b'),
+      idempotencyKey: idempotencyKeyB,
+      policy,
+      response: responseB,
+      state: restored,
+    });
+    const aggregate = buildMultiPartyAggregateResponse({
+      definition: demoSampleForm,
+      id: idempotencyKeyB,
+      state: afterB,
+    });
+    expect(aggregate.data).toMatchObject({
+      spouseAName: 'Ada Lovelace',
+      spouseBName: 'Grace Hopper',
+    });
+    const aggregateExtensions = aggregate.extensions as Record<string, unknown>;
+    expect(aggregateExtensions['x-formspec-multi-party']).toMatchObject({
+      partySignatures: [
+        { partyRef: 'spouse-a', subjectRef: 'subject-a' },
+        { partyRef: 'spouse-b', subjectRef: 'subject-b' },
+      ],
+      partyResponses: [
+        { partyRef: 'spouse-a', response: responseA },
+        { partyRef: 'spouse-b', response: responseB },
+      ],
+    });
+
+    const handoff = await buildIntakeHandoff({
+      definition: demoSampleForm,
+      response: aggregate,
+      validationReport: null,
+      draftKey: multiPartyDraftKey(
+        { formUrl: demoSampleForm.url, formVersion: demoSampleForm.version, subjectRef: 'subject-b' },
+        afterB.progress.activePartyRef,
+      ),
+      claim: claim('subject-b'),
+      idempotencyKey: idempotencyKeyB,
+      multiParty: {
+        policy,
+        progress: afterB.progress,
+        activePartyRef: afterB.progress.activePartyRef,
+      },
+    });
+    expect(handoff.extensions?.['x-formspec-response-data']).toMatchObject({
+      spouseAName: 'Ada Lovelace',
+      spouseBName: 'Grace Hopper',
     });
   });
 

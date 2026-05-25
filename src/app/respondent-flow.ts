@@ -289,11 +289,24 @@ export interface MultiPartySignerProgress {
   readonly signatures: readonly MultiPartySignatureRecord[];
 }
 
+export interface MultiPartyStoredResponse {
+  readonly partyRef: string;
+  readonly response: FormResponse;
+}
+
+export interface MultiPartyPersistedState {
+  readonly progress: MultiPartySignerProgress;
+  readonly responses: readonly MultiPartyStoredResponse[];
+}
+
 export interface MultiPartyHandoffContext {
   readonly policy: ResolvedMultiPartyPolicy;
   readonly progress: MultiPartySignerProgress;
   readonly activePartyRef: string;
 }
+
+const MULTI_PARTY_PROGRESS_PARTY_REF = '__formspec-multi-party-progress';
+const MULTI_PARTY_DATA_KEY = 'x-formspec-multi-party';
 
 export function requiredMultiPartySlots(
   policy: ResolvedMultiPartyPolicy,
@@ -319,6 +332,15 @@ export function createMultiPartySignerProgress(
     throw new Error('multiParty requires at least one required party slot');
   }
   return { activePartyRef: first.partyRef, signatures: [] };
+}
+
+export function createMultiPartyPersistedState(
+  policy: ResolvedMultiPartyPolicy,
+): MultiPartyPersistedState {
+  return {
+    progress: createMultiPartySignerProgress(policy),
+    responses: [],
+  };
 }
 
 export async function recordMultiPartySigner({
@@ -386,6 +408,160 @@ export function multiPartyDraftKey(base: DraftKey, partyRef: string | undefined)
   return partyRef ? { ...base, partyRef } : base;
 }
 
+export function multiPartyProgressDraftKey(base: DraftKey): DraftKey {
+  const scope = stableFormScope(base.formUrl, base.formVersion);
+  return {
+    formUrl: base.formUrl,
+    formVersion: base.formVersion,
+    subjectRef: `formspec:multi-party:${scope}`,
+    partyRef: MULTI_PARTY_PROGRESS_PARTY_REF,
+  };
+}
+
+export function multiPartyStateFromDraft(
+  response: FormResponse | undefined,
+  policy: ResolvedMultiPartyPolicy,
+): MultiPartyPersistedState {
+  if (!response) return createMultiPartyPersistedState(policy);
+  const raw = response.data[MULTI_PARTY_DATA_KEY];
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return createMultiPartyPersistedState(policy);
+  }
+  const candidate = raw as {
+    activePartyRef?: unknown;
+    signatures?: unknown;
+    responses?: unknown;
+  };
+  const slots = requiredMultiPartySlots(policy);
+  const slotRefs = new Set(slots.map((slot) => slot.partyRef));
+  const activePartyRef =
+    typeof candidate.activePartyRef === 'string' && slotRefs.has(candidate.activePartyRef)
+      ? candidate.activePartyRef
+      : slots[0]?.partyRef;
+  if (!activePartyRef) return createMultiPartyPersistedState(policy);
+  const signatures = Array.isArray(candidate.signatures)
+    ? candidate.signatures.filter(isMultiPartySignatureRecord)
+    : [];
+  const responses = Array.isArray(candidate.responses)
+    ? candidate.responses.filter(isMultiPartyStoredResponse)
+    : [];
+  return {
+    progress: {
+      activePartyRef,
+      signatures: signatures.filter((signature) => slotRefs.has(signature.partyRef)),
+    },
+    responses: responses.filter((entry) => slotRefs.has(entry.partyRef)),
+  };
+}
+
+export function multiPartyStateDraftResponse({
+  definition,
+  state,
+}: {
+  definition: FormDefinition;
+  state: MultiPartyPersistedState;
+}): FormResponse {
+  return {
+    $formspecResponse: '1.0',
+    definitionUrl: definition.url,
+    definitionVersion: definition.version,
+    status: 'in-progress',
+    data: {
+      [MULTI_PARTY_DATA_KEY]: {
+        activePartyRef: state.progress.activePartyRef,
+        signatures: state.progress.signatures,
+        responses: state.responses,
+      },
+    },
+    authored: new Date().toISOString(),
+  };
+}
+
+export async function recordMultiPartySignerState({
+  claim,
+  idempotencyKey,
+  policy,
+  response,
+  state,
+}: {
+  claim: IdentityClaim | null;
+  idempotencyKey: IdempotencyKey;
+  policy: ResolvedMultiPartyPolicy;
+  response: FormResponse;
+  state: MultiPartyPersistedState;
+}): Promise<MultiPartyPersistedState> {
+  const activePartyRef = state.progress.activePartyRef;
+  const progress = await recordMultiPartySigner({
+    claim,
+    idempotencyKey,
+    policy,
+    progress: state.progress,
+    response,
+  });
+  const responses = [
+    ...state.responses.filter((entry) => entry.partyRef !== activePartyRef),
+    { partyRef: activePartyRef, response },
+  ];
+  return { progress, responses };
+}
+
+export function buildMultiPartyAggregateResponse({
+  definition,
+  id,
+  state,
+}: {
+  definition: FormDefinition;
+  id: string;
+  state: MultiPartyPersistedState;
+}): FormResponse {
+  const signedResponses = state.progress.signatures.map((signature) => {
+    const stored = state.responses.find((entry) => entry.partyRef === signature.partyRef);
+    if (!stored) {
+      throw new Error(`Missing response slice for party "${signature.partyRef}".`);
+    }
+    return {
+      partyRef: signature.partyRef,
+      roleId: signature.roleId,
+      subjectRef: signature.subjectRef,
+      response: stored.response,
+    };
+  });
+  const mergedData = Object.assign(
+    {},
+    ...signedResponses.map((entry) => entry.response.data),
+  ) as Record<string, unknown>;
+  mergedData[MULTI_PARTY_DATA_KEY] = {
+    partySignatures: state.progress.signatures,
+    partyResponses: signedResponses.map((entry) => ({
+      partyRef: entry.partyRef,
+      roleId: entry.roleId,
+      subjectRef: entry.subjectRef,
+      responseId: entry.response.id,
+      responseData: entry.response.data,
+    })),
+  };
+  return {
+    $formspecResponse: '1.0',
+    definitionUrl: definition.url,
+    definitionVersion: definition.version,
+    status: 'completed',
+    id,
+    data: mergedData,
+    authored: new Date().toISOString(),
+    extensions: {
+      [MULTI_PARTY_DATA_KEY]: {
+        partySignatures: state.progress.signatures,
+        partyResponses: signedResponses.map((entry) => ({
+          partyRef: entry.partyRef,
+          roleId: entry.roleId,
+          subjectRef: entry.subjectRef,
+          response: entry.response,
+        })),
+      },
+    },
+  };
+}
+
 function labelFromPartyRef(partyRef: string): string {
   return partyRef
     .replace(/[-_:]+/g, ' ')
@@ -412,6 +588,36 @@ function fallbackHash(bytes: Uint8Array): string {
     hash = Math.imul(hash, 16777619);
   }
   return hash.toString(16).padStart(8, '0');
+}
+
+function stableFormScope(formUrl: string, formVersion: string | undefined): string {
+  return fallbackHash(new TextEncoder().encode(`${formUrl}|${formVersion ?? 'latest'}`));
+}
+
+function isMultiPartySignatureRecord(value: unknown): value is MultiPartySignatureRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<Record<keyof MultiPartySignatureRecord, unknown>>;
+  return (
+    typeof candidate.partyRef === 'string' &&
+    typeof candidate.roleId === 'string' &&
+    typeof candidate.subjectRef === 'string' &&
+    typeof candidate.responseRef === 'string' &&
+    typeof candidate.responseHash === 'string' &&
+    typeof candidate.signedAt === 'string'
+  );
+}
+
+function isMultiPartyStoredResponse(value: unknown): value is MultiPartyStoredResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as { partyRef?: unknown; response?: unknown };
+  const response = candidate.response;
+  return (
+    typeof candidate.partyRef === 'string' &&
+    !!response &&
+    typeof response === 'object' &&
+    !Array.isArray(response) &&
+    (response as { $formspecResponse?: unknown }).$formspecResponse === '1.0'
+  );
 }
 
 export function buildConfirmationTrackingUri(caseUrn: string): string {

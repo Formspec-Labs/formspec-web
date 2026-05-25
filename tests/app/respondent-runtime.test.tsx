@@ -13,6 +13,7 @@ import type { FormspecWebConfig } from '../../src/config/types.ts';
 import type { FormRuntimePolicy } from '../../src/policy/index.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import type { IdentityClaim, IdentityProvider, IdpOption } from '../../src/ports/identity-provider.ts';
+import type { IntakeHandoff } from '../../src/ports/submit-transport.ts';
 import type {
   ApplicantStatusResource,
   FormDefinition,
@@ -21,6 +22,8 @@ import type {
   RespondentSubmissionRecord,
 } from '../../src/ports/index.ts';
 import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
+import { multiPartyProgressDraftKey } from '../../src/app/respondent-flow.ts';
+import { stubDraftStore } from '../../src/adapters/stub/draft-store.ts';
 
 describe('RespondentRuntime identity sign-in', () => {
   let root: Root | undefined;
@@ -432,6 +435,91 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(input.value).toBe('123 Private St');
   });
 
+  it('persists multi-party progress across identity changes and submits aggregate party responses', async () => {
+    const identityProvider = new SwitchingIdentityProvider('subject-a');
+    const definition: FormDefinition = {
+      $formspec: '1.0',
+      url: 'https://test.example/forms/joint',
+      version: '1.0.0',
+      title: 'Joint filing',
+      items: [],
+    };
+    const formPolicy: FormRuntimePolicy = {
+      features: { respondentPlace: 'optional', status: 'optional', multiParty: 'required' },
+      limits: {
+        multiParty: {
+          tier: 'coEqual',
+          invitationChannel: 'magic-link',
+          parties: [
+            {
+              roleId: 'spouse-a',
+              label: 'Spouse A',
+              role: 'coEqual',
+              cardinality: { min: 1, max: 1 },
+              visibilityScope: 'shared',
+            },
+            {
+              roleId: 'spouse-b',
+              label: 'Spouse B',
+              role: 'coEqual',
+              cardinality: { min: 1, max: 1 },
+              visibilityScope: 'shared',
+            },
+          ],
+        },
+      },
+    };
+    const composition = testComposition(identityProvider, { definition, formPolicy });
+    composition.draftStore = stubDraftStore();
+    composition.instanceCapabilities = {
+      ...composition.instanceCapabilities,
+      multiParty: 'available',
+    };
+    composition.orgRuntimePolicy = {
+      ...composition.orgRuntimePolicy,
+      features: {
+        ...composition.orgRuntimePolicy.features,
+        multiParty: 'allowed',
+      },
+    };
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Current signer: Spouse A');
+    await clickSubmit();
+    await waitForText('Spouse B can review their part and sign next.');
+    expect(composition.submitTransport.submit).not.toHaveBeenCalled();
+    await expect(composition.draftStore.load(multiPartyProgressDraftKey({
+      formUrl: definition.url,
+      formVersion: definition.version,
+    }))).resolves.toBeDefined();
+
+    await act(async () => {
+      identityProvider.switchTo('subject-b');
+      await tick();
+    });
+    await waitFor(() => text().includes('Current signer: Spouse B') && !text().includes('Saved for the next signer'));
+    await clickSubmit();
+    await waitForText('TEST-0001');
+
+    expect(composition.submitTransport.submit).toHaveBeenCalledOnce();
+    const handoff = vi.mocked(composition.submitTransport.submit).mock.calls[0]?.[0] as IntakeHandoff;
+    expect(handoff.extensions?.['x-formspec-multi-party']).toMatchObject({
+      partySignatures: [
+        { partyRef: 'spouse-a', subjectRef: 'subject-a' },
+        { partyRef: 'spouse-b', subjectRef: 'subject-b' },
+      ],
+    });
+    const responseData = handoff.extensions?.['x-formspec-response-data'] as Record<string, unknown>;
+    expect(responseData['x-formspec-multi-party']).toMatchObject({
+      partyResponses: [
+        { partyRef: 'spouse-a', subjectRef: 'subject-a' },
+        { partyRef: 'spouse-b', subjectRef: 'subject-b' },
+      ],
+    });
+  });
+
   async function renderRuntime(
     composition: Composition,
     config: FormspecWebConfig = departmentAppProfile,
@@ -456,11 +544,35 @@ describe('RespondentRuntime identity sign-in', () => {
     });
   }
 
+  async function clickSubmit(): Promise<void> {
+    const button = Array.from(container?.querySelectorAll('button') ?? [])
+      .find((candidate) => candidate.textContent?.toLowerCase().includes('submit'));
+    if (!button) {
+      throw new Error('submit button not found');
+    }
+    await act(async () => {
+      button.click();
+      await tick();
+    });
+  }
+
   async function waitForText(expected: string, timeoutMs = 2000): Promise<void> {
     const started = Date.now();
     while (!text().includes(expected)) {
       if (Date.now() - started > timeoutMs) {
         throw new Error(`Timed out waiting for text: ${expected}\n\n${text()}`);
+      }
+      await act(async () => {
+        await tick();
+      });
+    }
+  }
+
+  async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+    const started = Date.now();
+    while (!predicate()) {
+      if (Date.now() - started > timeoutMs) {
+        throw new Error(`Timed out waiting for condition\n\n${text()}`);
       }
       await act(async () => {
         await tick();
@@ -513,6 +625,51 @@ class TestIdentityProvider implements IdentityProvider {
 
   private get error(): unknown {
     return this.init.error;
+  }
+
+  async revoke(_claim: IdentityClaim): Promise<void> {
+    this.current = null;
+    for (const listener of this.listeners) {
+      listener(null);
+    }
+  }
+
+  subscribe(listener: (claim: IdentityClaim | null) => void): () => void {
+    this.listeners.add(listener);
+    listener(this.current);
+    return () => this.listeners.delete(listener);
+  }
+}
+
+class SwitchingIdentityProvider implements IdentityProvider {
+  readonly authenticate = vi.fn(async (_option: IdpOption): Promise<IdentityClaim> => {
+    this.current = testClaimForSubject(this.subjectRef);
+    for (const listener of this.listeners) {
+      listener(this.current);
+    }
+    return this.current;
+  });
+
+  readonly discover = vi.fn(async (): Promise<IdpOption[]> => [
+    {
+      kind: 'oidc',
+      issuer: 'https://idp.example.test',
+      displayName: 'Example IdP',
+      minAssurance: 'L2',
+    },
+  ]);
+
+  private readonly listeners = new Set<(claim: IdentityClaim | null) => void>();
+  private current: IdentityClaim | null = null;
+
+  constructor(private subjectRef: string) {}
+
+  switchTo(subjectRef: string): void {
+    this.subjectRef = subjectRef;
+    this.current = testClaimForSubject(subjectRef);
+    for (const listener of this.listeners) {
+      listener(this.current);
+    }
   }
 
   async revoke(_claim: IdentityClaim): Promise<void> {
@@ -769,6 +926,18 @@ function testClaimForOption(option: IdpOption): IdentityClaim {
     credentialType: option.kind === 'oidc' ? 'oidc-token' : 'provider-assertion',
     subjectBinding: 'respondent',
     assuranceLevel: option.minAssurance,
+    privacyTier: 'pseudonymous',
+  };
+}
+
+function testClaimForSubject(subjectRef: string): IdentityClaim {
+  return {
+    provider: 'https://idp.example.test',
+    adapter: 'test-oidc',
+    subjectRef,
+    credentialType: 'oidc-token',
+    subjectBinding: 'respondent',
+    assuranceLevel: 'L2',
     privacyTier: 'pseudonymous',
   };
 }

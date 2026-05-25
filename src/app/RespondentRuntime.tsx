@@ -81,9 +81,9 @@ import { RuntimeProfileProvider } from './RuntimeProfileProvider.tsx';
 import { formatDate, labelFromToken, slugToken } from './format.ts';
 import {
   assertIdentityPolicySatisfied,
+  buildMultiPartyAggregateResponse,
   buildConfirmationTrackingUri,
   buildIntakeHandoff,
-  createMultiPartySignerProgress,
   formAssuranceFloorForDefinition,
   hydrateEngineFromResponse,
   identityClaimMeetsAssurance,
@@ -91,7 +91,10 @@ import {
   isIdentityInteractionStarted,
   multiPartyComplete,
   multiPartyDraftKey,
-  recordMultiPartySigner,
+  multiPartyProgressDraftKey,
+  multiPartyStateDraftResponse,
+  multiPartyStateFromDraft,
+  recordMultiPartySignerState,
   requiredMultiPartySlots,
   selectBootIdentityOption,
   signInOptionsForIdentityPolicy,
@@ -99,6 +102,7 @@ import {
   submitOrQueue,
   submitWithPayment,
   verifyEmbedOriginAllowed,
+  type MultiPartyPersistedState,
   type MultiPartySignerProgress,
 } from './respondent-flow.ts';
 import {
@@ -146,6 +150,7 @@ type RespondentState =
       resolvedIssuer: ResolvedIssuer;
       activeLocale: string;
       draftLoaded: boolean;
+      multiPartyState: MultiPartyPersistedState | null;
       runtimeProfile: ResolvedRuntimeProfile;
     }
   | { status: 'terminal-cleared' }
@@ -222,7 +227,7 @@ export function RespondentRuntime({
   const [terminalClearState, setTerminalClearState] = useState<TerminalClearState>({
     status: 'idle',
   });
-  const [multiPartyProgress, setMultiPartyProgress] = useState<MultiPartySignerProgress | null>(null);
+  const [multiPartyState, setMultiPartyState] = useState<MultiPartyPersistedState | null>(null);
   const terminalClearRequestedRef = useRef(false);
   // applyReadyState is constructed inside the bootstrap useEffect (it closes
   // over the cancel/sequence state). Expose it via ref so locale-recompute
@@ -243,7 +248,7 @@ export function RespondentRuntime({
     setRespondentState({ status: 'loading' });
     setSubmitState({ status: 'idle' });
     setTerminalClearState({ status: 'idle' });
-    setMultiPartyProgress(null);
+    setMultiPartyState(null);
 
     const applyReadyState = async (
       claim: IdentityClaim | null,
@@ -271,10 +276,12 @@ export function RespondentRuntime({
           engine?.dispose();
           engine = readyState.engine;
           pendingAssuranceFloor = undefined;
+          setMultiPartyState(readyState.multiPartyState);
         } else {
           engine?.dispose();
           engine = undefined;
           pendingAssuranceFloor = readyState.assuranceFloor;
+          setMultiPartyState(null);
         }
         setRespondentState(readyState);
       } catch (error) {
@@ -557,12 +564,10 @@ export function RespondentRuntime({
     try {
       await respondentState.engine.getResolvedIssuer();
       const multiPartyPolicy = respondentState.runtimeProfile.multiParty;
-      const currentMultiPartyProgress = multiPartyPolicy
-        ? multiPartyProgress ?? createMultiPartySignerProgress(multiPartyPolicy)
-        : null;
+      const currentMultiPartyState = multiPartyPolicy ? respondentState.multiPartyState : null;
       const activeDraftKey = multiPartyDraftKey(
         respondentState.draftKey,
-        currentMultiPartyProgress?.activePartyRef,
+        currentMultiPartyState?.progress.activePartyRef,
       );
       await composition.draftStore.save(activeDraftKey, result.response);
 
@@ -586,42 +591,59 @@ export function RespondentRuntime({
           : undefined,
       });
       await composition.draftStore.save(activeDraftKey, completedResponse);
-      let completedMultiPartyProgress: MultiPartySignerProgress | null = null;
-      if (multiPartyPolicy && currentMultiPartyProgress) {
-        completedMultiPartyProgress = await recordMultiPartySigner({
+      let completedMultiPartyState: MultiPartyPersistedState | null = null;
+      if (multiPartyPolicy && currentMultiPartyState) {
+        completedMultiPartyState = await recordMultiPartySignerState({
           claim: respondentState.claim,
           idempotencyKey,
           policy: multiPartyPolicy,
-          progress: currentMultiPartyProgress,
           response: completedResponse,
+          state: currentMultiPartyState,
         });
-        setMultiPartyProgress(completedMultiPartyProgress);
-        if (!multiPartyComplete(multiPartyPolicy, completedMultiPartyProgress)) {
+        await composition.draftStore.save(
+          multiPartyProgressDraftKey(respondentState.draftKey),
+          multiPartyStateDraftResponse({
+            definition: respondentState.definition,
+            state: completedMultiPartyState,
+          }),
+        );
+        setMultiPartyState(completedMultiPartyState);
+        if (!multiPartyComplete(multiPartyPolicy, completedMultiPartyState.progress)) {
           const slots = requiredMultiPartySlots(multiPartyPolicy);
           const nextSlot = slots.find(
-            (slot) => slot.partyRef === completedMultiPartyProgress?.activePartyRef,
+            (slot) => slot.partyRef === completedMultiPartyState?.progress.activePartyRef,
           );
           setSubmitState({
             status: 'awaiting-next-party',
             nextPartyLabel: nextSlot?.label ?? 'the next signer',
-            signedCount: completedMultiPartyProgress.signatures.length,
+            signedCount: completedMultiPartyState.progress.signatures.length,
             totalCount: slots.length,
           });
           return;
         }
       }
+      const submittedResponse = multiPartyPolicy && completedMultiPartyState
+        ? buildMultiPartyAggregateResponse({
+            definition: respondentState.definition,
+            id: idempotencyKey,
+            state: completedMultiPartyState,
+          })
+        : completedResponse;
+      if (multiPartyPolicy && completedMultiPartyState) {
+        await composition.draftStore.save(activeDraftKey, submittedResponse);
+      }
       const handoff = await buildIntakeHandoff({
         definition: respondentState.definition,
-        response: completedResponse,
+        response: submittedResponse,
         validationReport: result.validationReport,
         draftKey: activeDraftKey,
         claim: respondentState.claim,
         idempotencyKey,
-        multiParty: multiPartyPolicy && completedMultiPartyProgress
+        multiParty: multiPartyPolicy && completedMultiPartyState
           ? {
               policy: multiPartyPolicy,
-              progress: completedMultiPartyProgress,
-              activePartyRef: completedMultiPartyProgress.activePartyRef,
+              progress: completedMultiPartyState.progress,
+              activePartyRef: completedMultiPartyState.progress.activePartyRef,
             }
           : undefined,
       });
@@ -753,7 +775,7 @@ export function RespondentRuntime({
               respondentPlaceState={respondentPlaceState}
               resolvedIssuer={respondentState.resolvedIssuer}
               runtimeProfile={respondentState.runtimeProfile}
-              multiPartyProgress={multiPartyProgress}
+              multiPartyState={multiPartyState}
               submitState={submitState}
               terminalClearState={terminalClearState}
               notificationDelivery={composition.notificationDelivery}
@@ -984,7 +1006,17 @@ async function createReadyState(
     formVersion: definition.version,
     subjectRef: claim?.subjectRef,
   };
-  const draft = await composition.draftStore.load(draftKey);
+  const multiPartyState = runtimeProfile.multiParty
+    ? multiPartyStateFromDraft(
+        await composition.draftStore.load(multiPartyProgressDraftKey(draftKey)),
+        runtimeProfile.multiParty,
+      )
+    : null;
+  const draft = await composition.draftStore.load(
+    multiPartyState
+      ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef)
+      : draftKey,
+  );
   const activeLocale = options.locale ?? defaultLocaleForDefinition(definition);
 
   const engine = createFormEngine(definition, {
@@ -1010,6 +1042,7 @@ async function createReadyState(
     resolvedIssuer,
     activeLocale,
     draftLoaded: draft !== undefined,
+    multiPartyState,
     runtimeProfile,
   };
 }
@@ -1071,7 +1104,7 @@ function RespondentSurface({
   respondentPlaceState,
   resolvedIssuer,
   runtimeProfile,
-  multiPartyProgress,
+  multiPartyState,
   submitState,
   terminalClearState,
   notificationDelivery,
@@ -1089,7 +1122,7 @@ function RespondentSurface({
   respondentPlaceState: RespondentPlaceState;
   resolvedIssuer: ResolvedIssuer;
   runtimeProfile: ResolvedRuntimeProfile;
-  multiPartyProgress: MultiPartySignerProgress | null;
+  multiPartyState: MultiPartyPersistedState | null;
   submitState: SubmitState;
   terminalClearState: TerminalClearState;
   notificationDelivery?: NotificationDelivery;
@@ -1146,7 +1179,7 @@ function RespondentSurface({
         runtimeProfile={runtimeProfile}
       />
       <MultiPartyPanel
-        progress={multiPartyProgress}
+        progress={multiPartyState?.progress ?? null}
         runtimeProfile={runtimeProfile}
       />
 
