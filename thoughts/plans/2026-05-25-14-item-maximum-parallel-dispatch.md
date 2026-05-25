@@ -190,3 +190,28 @@ Verification run before root pointer `2effdc3`:
 - `npm run check:conformance-coverage`
 - `npm run build`
 - `git diff --check`
+
+### 2026-05-25 — Conservative W1/W2 cycle ledger
+
+Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dispatch table against current committed artifacts. Specialized `formspec-specs:*` scout/reviewer roles were not exposed in this runtime, so the check was a generic read-only scout pass. Disposition rule: implementation, ratification, or remediation commits are **not** enough to check off a row as closed unless the implementer→reviewer→remediator→verifier loop is explicit in the plan or commit evidence.
+
+| Row | Current evidence | Cycle disposition |
+|---|---|---|
+| W1.1 / ADR-0011 + EXT-5 bot-protection | `formspec-web` `a85ed7a`; `formspec` `92295d48` | integrated, not cycle-closed — implementation/ratification evidence exists; reviewer/verifier evidence is not explicit |
+| W1.2 / XS-1 multi-party intake ADR | stack root `b8c0814`; ADR 0155 remains proposed | authored, not cycle-closed |
+| W1.3 / XS-3 coercion-aware signing ADR | stack root `61cd59b`; ADR 0156 remains proposed | authored, not cycle-closed |
+| W1.4 / XS-4 safe-address + XS-5 record-lifecycle ADRs | stack root `1800448`, `c001309`, `522f858`; ADRs 0157/0158 remain proposed | authored/remediated, not cycle-closed |
+| W1.5 / SC-1, SC-2, SC-5 sidecars | `formspec` `0533fb9f`, `1dcce96d`, `f11f82be` | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
+| W1.6 / SC-4 identity binding profile | `formspec` `be21eb2b`, `5d34f058` | integrated/hardened, not cycle-closed |
+| W1.7 / SC-6 review-thread sidecar | `formspec` `7c162c8a` | integrated, not cycle-closed |
+| W1.8 / EXT ratifications batch | `formspec` `425d9933`, `042dec3e` | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
+| W1.9 / FW-0041 public-terminal hygiene | `formspec-web` `ddff89a`, `8cff5eb`; `PLANNING.md` marks slice live | integrated/fixed, not cycle-closed |
+| W1.10 / FW-0019 server Locale Documents | `formspec-web` `58522ad`, `7d2cc63`; `PLANNING.md` marks live | integrated/fixed, not cycle-closed — no explicit trivial-skip approval or verifier evidence |
+| W1.11 / FW-0028 slice 2 assurance step-up | `formspec-web` `2f85951`, `986af74`; `PLANNING.md` marks slice 2 shipped; EXT-8 remains external | integrated/fixed, not cycle-closed |
+| W1.12 / FW-0073/0074/0076/0077 file-upload slice 2 | `formspec-web` `4e0a8d3`, `854040d`; `PLANNING.md` marks bundled rows live | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
+| W2.1 / FW-0113 trusted reviewer build | `formspec-web` `5fc4d96`, `751d9a0`; FW-0113 row remains open/blocked | integrated/fixed, not cycle-closed |
+| W2.2 / FW-0038 record lifecycle build | `formspec-web` `d5f6a9b`, `01bb024`; FW-0038 row remains open/gated | integrated/fixed, not cycle-closed |
+| W2.3 / FW-0060 safe-address build | `formspec-web` `6e02690`, `8e5a163`, `338ebd1`, `b53cbe3`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
+| W2.4 / FW-0061 multi-party build | `formspec-web` `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for XS-1/upstream ratification |
+
+Closeout consequence: only W2.3 and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
