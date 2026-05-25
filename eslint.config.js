@@ -11,7 +11,7 @@ import importPlugin from 'eslint-plugin-import';
 export default tseslint.config(
   {
     ignores: [
-      '.claude/**',
+      '.claude/worktrees/**',
       'dist/**',
       'node_modules/**',
       'coverage/**',
