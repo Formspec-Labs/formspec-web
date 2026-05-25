@@ -48,7 +48,7 @@ import type {
   SubmitTransport,
 } from './submit-transport.ts';
 
-export type { SubmitTransport };
+export type { IntakeHandoff, SubmitTransport } from './submit-transport.ts';
 
 export interface QueuedSubmit {
   /**
