@@ -28,14 +28,14 @@ describe('parseHistoryRoute', () => {
 });
 
 describe('HISTORY_ROUTE_NARROWING descriptor', () => {
-  it('cites /history and identity-bound + consumesHistory', () => {
+  it('cites /history and identity-bound + consumes crossIssuerHistory', () => {
     expect(HISTORY_ROUTE_NARROWING.routeCite).toBe('/history');
     expect(HISTORY_ROUTE_NARROWING.identityBound).toBe(true);
-    expect(HISTORY_ROUTE_NARROWING.consumesHistory).toBe(true);
+    expect(HISTORY_ROUTE_NARROWING.consumes.has('crossIssuerHistory')).toBe(true);
   });
 
   it('does NOT consume respondent-place or status (those are sibling surfaces)', () => {
-    expect(HISTORY_ROUTE_NARROWING.consumesRespondentPlace).toBe(false);
-    expect(HISTORY_ROUTE_NARROWING.consumesStatus).toBe(false);
+    expect(HISTORY_ROUTE_NARROWING.consumes.has('respondentPlace')).toBe(false);
+    expect(HISTORY_ROUTE_NARROWING.consumes.has('status')).toBe(false);
   });
 });

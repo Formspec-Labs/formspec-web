@@ -35,9 +35,9 @@
  *     same draft path, same idempotency key. Form-policy extractor reads
  *     `definition.extensions['x-formspec-offline-submit'] === true` and
  *     declares `'optional'` (not `'required'`; see design §"Optional, not
- *     required"). SIXTH key — explicit FW-0080 trigger fired (the
- *     `consumes*` boolean ladder on `RouteNarrowing` should consolidate
- *     into a `ReadonlySet<RuntimeFeatureKey>`; see FW-0080 row body).
+ *     required"). SIXTH key — landing fired FW-0080, which consolidated
+ *     the `consumes*` boolean ladder on `RouteNarrowing` into a
+ *     `consumes: ReadonlySet<RuntimeFeatureKey>` field.
  *
  * Extension protocol: every future feature ADR adds its key here and to the
  * Composition's InstanceCapabilities declaration. No string-typed feature keys

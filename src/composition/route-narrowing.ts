@@ -1,5 +1,5 @@
 /**
- * Parameterized route-narrowing factory (FW-0070).
+ * Parameterized route-narrowing factory (FW-0070, FW-0080).
  *
  * Replaces the 4 × 3 = 12 sibling factory functions that landed inline
  * across FW-0068 (`/status`), FW-0055 (`/obligations`), and FW-0056
@@ -12,14 +12,19 @@
  *   `submitTransport`) are unconditionally noop. No narrowed route reads
  *   them — that is the definition of "narrowed."
  * - `statusReader` is the demo stub in `'stub'` mode, the unavailable
- *   sentinel in `'default'` mode. The `consumesStatus` descriptor flag
- *   exists so future routes can opt OUT of the demo stub on `/status`-style
- *   surfaces, but every shipped descriptor today keeps the existing
- *   instanceCapabilities posture (FW-0068 Finding 1).
+ *   sentinel in `'default'` mode. Uniform across narrowed routes per the
+ *   FW-0068 Finding 1 reshape (instanceCapabilities describes deployment
+ *   posture, not per-surface narrowing).
  * - `respondentPlaceSource` mirrors `statusReader` — demo stub in `'stub'`
  *   mode (the place sidecar is non-trivial in demo so the post-FW-0068
  *   reshape kept the demo stub even on `/status`), unavailable sentinel in
  *   `'default'` mode.
+ * - `respondentHistorySource` is driven by `consumes.has('crossIssuerHistory')`:
+ *   demo factory wires the stub + declares `'demo-stub'` when consumed,
+ *   sentinel + `'unavailable'` otherwise. Production always wires the
+ *   sentinel today (XS-2 token bag is upstream-queued); when the
+ *   production adapter ships, wire it conditionally on the same membership
+ *   check.
  * - Identity provider: per `identityBound` + the MED-4 gate (production
  *   wires the real provider only when `respondentPlace === 'available'`;
  *   today's posture is always `'unavailable'`, so production always
@@ -55,6 +60,7 @@ import {
   freezeComposition,
   type InstanceCapabilities,
   type OrgRuntimePolicy,
+  type RuntimeFeatureKey,
 } from '../policy/index.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
@@ -65,13 +71,23 @@ import type { Composition } from './types.ts';
  * Per-route narrowing descriptor. Co-located with the route parser so
  * adding a route requires touching one file (the route file) plus the
  * `chooseComposition` dispatch helper.
+ *
+ * `consumes` is the closed-taxonomy set of `RuntimeFeatureKey` values
+ * the route reads (FW-0080 consolidation of the prior `consumes*` boolean
+ * ladder). Adding a future feature key with a narrowed surface needs one
+ * Set entry — no new boolean flag on this interface. Membership drives
+ * adapter wiring for every key that has per-route narrowing semantics
+ * today (`crossIssuerHistory`); per the FW-0068 Finding 1 reshape,
+ * `respondentPlace` + `status` keep uniform demo-stub / unavailable
+ * wiring across narrowed routes regardless of membership, but their
+ * presence in the set documents the route's intent honestly.
+ *
+ * `identityBound` stays a dedicated boolean — it is not a `consumes*`
+ * pattern. It gates real-vs-noop identity adapter wiring via the MED-4
+ * gate (production wires the real provider only when
+ * `respondentPlace === 'available'`; today always short-circuits to noop).
+ * FW-0079 revisits per-route identity gating post-FW-0078.
  */
-// TODO(FW-0080): consolidate the `consumes*` boolean ladder below into a
-// single `consumes: ReadonlySet<RuntimeFeatureKey>` driven by FEATURE_PORT_MAP.
-// The ladder mirrors RuntimeFeatureKey by hand; the set form scales to future
-// keys (fileUpload eligible per FW-0057 design line 158-161) without growing
-// the RouteNarrowing shape. Pull forward when a sixth RuntimeFeatureKey lands
-// or when a fourth `consumes*` flag is about to be added — whichever fires.
 export interface RouteNarrowing {
   /** Cite used in noop-adapter error messages (e.g. '/status'). */
   readonly routeCite: string;
@@ -82,27 +98,14 @@ export interface RouteNarrowing {
    */
   readonly initialDefinitionUrlSentinel: string;
   /**
-   * Whether the route reads the respondent-place sidecar. Drives identity
-   * wiring via the MED-4 gate and (today) clarifies intent in the
-   * descriptor table; the place adapter slot keeps the same demo-stub /
-   * unavailable wiring on every narrowed route per the FW-0068 Finding 1
-   * reshape (instanceCapabilities describes deployment posture, not
-   * per-surface narrowing).
+   * Closed-set of `RuntimeFeatureKey` values the route reads. Per-route
+   * narrowed wiring derives from membership: today only
+   * `crossIssuerHistory` drives a wiring switch (demo factory chooses
+   * stub vs sentinel + `'demo-stub'` vs `'unavailable'` declaration).
+   * `fileUpload` and `offlineSubmit` have no narrowed-route consumer
+   * today — they stay uniformly `'unavailable'` across descriptors.
    */
-  readonly consumesRespondentPlace: boolean;
-  /** Whether the route reads the status reader. Today only `/status`. */
-  readonly consumesStatus: boolean;
-  /**
-   * Whether the route reads the cross-issuer history (FW-0057). Today only
-   * `/history`. Drives the `respondentHistorySource` adapter wiring and the
-   * `instanceCapabilities.crossIssuerHistory` declaration: when `true`, the
-   * demo factory wires the stub fixture + declares `'demo-stub'`; when
-   * `false`, the demo factory wires the unavailable sentinel + declares
-   * `'unavailable'`. Production always wires the sentinel + declares
-   * `'unavailable'` today (post-XS-2 the production adapter ships and this
-   * branch picks it up automatically).
-   */
-  readonly consumesHistory: boolean;
+  readonly consumes: ReadonlySet<RuntimeFeatureKey>;
   /**
    * Whether the surface is identity-bound. When `true` AND production
    * `respondentPlace` capability is `available`, the production factory
@@ -163,14 +166,15 @@ function buildProductionNarrowedComposition({
     documentPresentation: 'unavailable',
     // FW-0033 slice 1: narrowed routes do not accept uploads. Uniformly
     // unavailable across all narrowed-route descriptors today; if a future
-    // route needs an upload affordance, add a `consumesAttachmentStore` flag
-    // to RouteNarrowing then.
+    // route needs an upload affordance, add `'fileUpload'` to the
+    // descriptor's `consumes` set (FW-0080 shape) and branch the
+    // attachmentStore slot here.
     fileUpload: 'unavailable',
     // FW-0057 slice 1: production composition has no cross-issuer history
     // adapter yet (XS-2 token bag is upstream-queued); narrowed routes
     // including /history declare 'unavailable' in production mode + render
     // the disabled-cause copy honestly. When the production adapter ships,
-    // wire it conditionally on `route.consumesHistory` here.
+    // wire it conditionally on `route.consumes.has('crossIssuerHistory')` here.
     crossIssuerHistory: 'unavailable',
     // FW-0044 slice 1: narrowed routes do not submit forms; no queue
     // affordance is reachable. Uniform unavailable across all descriptors.
@@ -206,10 +210,9 @@ function buildProductionNarrowedComposition({
     respondentHistorySource: unavailableRespondentHistorySource(),
     // FW-0044 slice 1: narrowed routes do not submit forms (no form-fill
     // surface). Uniformly unavailable across all descriptors today; if a
-    // future route ever needs an offline-queue affordance, add a
-    // `consumesOfflineSubmit` flag — or (per FW-0080's explicit trigger
-    // fired by this row) finish the `consumes*` boolean-ladder
-    // consolidation first.
+    // future route ever needs an offline-queue affordance, add
+    // `'offlineSubmit'` to the descriptor's `consumes` set and branch
+    // here per FW-0080's closed-taxonomy shape.
     offlineSubmitQueue: unavailableOfflineSubmitQueue(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
@@ -237,7 +240,7 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
     ]),
     attachmentStore: unavailableAttachmentStore(),
-    respondentHistorySource: route.consumesHistory
+    respondentHistorySource: route.consumes.has('crossIssuerHistory')
       ? stubRespondentHistorySource(demoHistorySnapshot())
       : unavailableRespondentHistorySource(),
     // FW-0044 slice 1: no narrowed route renders a form; no queue affordance
@@ -263,7 +266,7 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // history adapter. Other narrowed routes (status / obligations /
       // documents) wire the unavailable sentinel + declare 'unavailable'
       // because they don't render history.
-      crossIssuerHistory: route.consumesHistory ? 'demo-stub' : 'unavailable',
+      crossIssuerHistory: route.consumes.has('crossIssuerHistory') ? 'demo-stub' : 'unavailable',
       // FW-0044 slice 1: narrowed routes do not submit forms; uniform
       // unavailable to match the wired sentinel.
       offlineSubmit: 'unavailable',

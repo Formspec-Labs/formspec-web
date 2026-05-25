@@ -8,6 +8,7 @@ import { HISTORY_ROUTE_NARROWING } from '../../src/app/history-route.ts';
 import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts';
 import { STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
 import { assertCompositionCoherence } from '../../src/policy/composition-coherence.ts';
+import { isRuntimeFeatureKey } from '../../src/policy/feature-keys.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { sampleFormDefinition } from '../../src/adapter-conformance/fixtures.ts';
 import type { FormspecWebConfig, PortCompositionConfig } from '../../src/config/types.ts';
@@ -183,15 +184,17 @@ describe('createRouteNarrowedComposition — per-mode wiring posture (FW-0070)',
   });
 });
 
-describe('createRouteNarrowedComposition — consumesHistory flag wiring (FW-0057)', () => {
-  it('consumesHistory=true: stub mode wires the history stub + declares demo-stub', async () => {
+describe('createRouteNarrowedComposition — crossIssuerHistory consumption (FW-0057, FW-0080)', () => {
+  it('descriptor consumes crossIssuerHistory: stub mode wires the history stub + declares demo-stub', async () => {
+    expect(HISTORY_ROUTE_NARROWING.consumes.has('crossIssuerHistory')).toBe(true);
     const c = createRouteNarrowedComposition({ mode: 'stub', route: HISTORY_ROUTE_NARROWING });
     expect(c.instanceCapabilities.crossIssuerHistory).toBe('demo-stub');
     const snapshot = await c.respondentHistorySource.readHistory({});
     expect(snapshot.entries.length).toBeGreaterThan(0);
   });
 
-  it('consumesHistory=false: stub mode wires the unavailable sentinel + declares unavailable', async () => {
+  it('descriptor does NOT consume crossIssuerHistory: stub mode wires the unavailable sentinel + declares unavailable', async () => {
+    expect(STATUS_ROUTE_NARROWING.consumes.has('crossIssuerHistory')).toBe(false);
     const c = createRouteNarrowedComposition({ mode: 'stub', route: STATUS_ROUTE_NARROWING });
     expect(c.instanceCapabilities.crossIssuerHistory).toBe('unavailable');
     await expect(c.respondentHistorySource.readHistory({})).rejects.toThrow();
@@ -205,5 +208,42 @@ describe('createRouteNarrowedComposition — consumesHistory flag wiring (FW-005
     });
     expect(c.instanceCapabilities.crossIssuerHistory).toBe('unavailable');
     await expect(c.respondentHistorySource.readHistory({})).rejects.toThrow();
+  });
+});
+
+// FW-0080: the `consumes*` boolean ladder (consumesRespondentPlace /
+// consumesStatus / consumesHistory) consolidated into a single
+// `consumes: ReadonlySet<RuntimeFeatureKey>` driven by the closed
+// RuntimeFeatureKey taxonomy. Adding a future feature key with a narrowed
+// surface needs ONE Set entry, not a new boolean flag on RouteNarrowing.
+describe('RouteNarrowing.consumes — closed-taxonomy Set shape (FW-0080)', () => {
+  it.each(ALL_DESCRIPTORS)('descriptor %j carries a ReadonlySet<RuntimeFeatureKey>', (route) => {
+    expect(route.consumes).toBeInstanceOf(Set);
+    for (const key of route.consumes) {
+      expect(isRuntimeFeatureKey(key)).toBe(true);
+    }
+  });
+
+  it('STATUS_ROUTE_NARROWING consumes exactly {status}', () => {
+    expect(Array.from(STATUS_ROUTE_NARROWING.consumes).sort()).toEqual(['status']);
+  });
+
+  it('OBLIGATIONS_ROUTE_NARROWING consumes exactly {respondentPlace}', () => {
+    expect(Array.from(OBLIGATIONS_ROUTE_NARROWING.consumes).sort()).toEqual(['respondentPlace']);
+  });
+
+  it('DOCUMENTS_ROUTE_NARROWING consumes exactly {respondentPlace}', () => {
+    expect(Array.from(DOCUMENTS_ROUTE_NARROWING.consumes).sort()).toEqual(['respondentPlace']);
+  });
+
+  it('HISTORY_ROUTE_NARROWING consumes exactly {crossIssuerHistory}', () => {
+    expect(Array.from(HISTORY_ROUTE_NARROWING.consumes).sort()).toEqual(['crossIssuerHistory']);
+  });
+
+  it('no descriptor consumes fileUpload or offlineSubmit today (no narrowed-route consumer)', () => {
+    for (const route of ALL_DESCRIPTORS) {
+      expect(route.consumes.has('fileUpload')).toBe(false);
+      expect(route.consumes.has('offlineSubmit')).toBe(false);
+    }
   });
 });

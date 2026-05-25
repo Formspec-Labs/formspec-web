@@ -9,7 +9,7 @@ import type { RouteNarrowing } from '../composition/route-narrowing.ts';
 export type DocumentsRouteParams = Record<string, never>;
 
 /**
- * Route-narrowing descriptor for `/documents` (FW-0070).
+ * Route-narrowing descriptor for `/documents` (FW-0070, FW-0080).
  *
  * Documents surface reads `respondentPlaceSource` (Respondent Library
  * sidecar `documents[]` + `presentationPolicies[]`) + is identity-bound
@@ -19,9 +19,7 @@ export type DocumentsRouteParams = Record<string, never>;
 export const DOCUMENTS_ROUTE_NARROWING: RouteNarrowing = {
   routeCite: '/documents',
   initialDefinitionUrlSentinel: 'about:not-constructed#fw-0056',
-  consumesRespondentPlace: true,
-  consumesStatus: false,
-  consumesHistory: false,
+  consumes: new Set(['respondentPlace']),
   identityBound: true,
 };
 

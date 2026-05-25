@@ -9,7 +9,7 @@ import type { RouteNarrowing } from '../composition/route-narrowing.ts';
 export type HistoryRouteParams = Record<string, never>;
 
 /**
- * Route-narrowing descriptor for `/history` (FW-0057 + FW-0070).
+ * Route-narrowing descriptor for `/history` (FW-0057, FW-0070, FW-0080).
  *
  * History surface reads `respondentHistorySource` (cross-issuer aggregation
  * via XS-2 token bag in production, demo fixture in stub mode) + is
@@ -21,9 +21,7 @@ export type HistoryRouteParams = Record<string, never>;
 export const HISTORY_ROUTE_NARROWING: RouteNarrowing = {
   routeCite: '/history',
   initialDefinitionUrlSentinel: 'about:not-constructed#fw-0057',
-  consumesRespondentPlace: false,
-  consumesStatus: false,
-  consumesHistory: true,
+  consumes: new Set(['crossIssuerHistory']),
   identityBound: true,
 };
 

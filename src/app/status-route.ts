@@ -8,7 +8,7 @@ export interface StatusRouteParams {
 const WOS_URN_PREFIX = 'urn:wos:';
 
 /**
- * Route-narrowing descriptor for `/status` (FW-0070).
+ * Route-narrowing descriptor for `/status` (FW-0070, FW-0080).
  *
  * Status surface reads `statusReader` only — no respondent-place reads, no
  * identity binding (URN is the bearer per FW-0039). Form-shaped ports
@@ -18,9 +18,7 @@ const WOS_URN_PREFIX = 'urn:wos:';
 export const STATUS_ROUTE_NARROWING: RouteNarrowing = {
   routeCite: '/status',
   initialDefinitionUrlSentinel: 'about:not-constructed#fw-0068',
-  consumesRespondentPlace: false,
-  consumesStatus: true,
-  consumesHistory: false,
+  consumes: new Set(['status']),
   identityBound: false,
 };
 
