@@ -735,14 +735,14 @@ function resolveSafeAddressPolicy(
     );
   }
   if (safeAddressTierRank(receiptPostureTier) > safeAddressTierRank(deploymentReceiptPostureTier)) {
-    throw new InvalidRuntimePolicyError(
-      'form',
+    throw new UnsupportedRequiredFeatureError(
+      'safeAddress',
       `safeAddress receiptPostureTier "${receiptPostureTier}" exceeds deployment capability "${deploymentReceiptPostureTier}"`,
     );
   }
-  for (const field of fields) {
-    assertSafeAddressIntersection(field, authorizedAudiences);
-  }
+  const resolvedFields = fields.map((field) =>
+    resolveSafeAddressFieldAudience(field, authorizedAudiences),
+  );
 
   return Object.freeze({
     enabledClasses: Object.freeze([...enabledClasses]),
@@ -753,15 +753,15 @@ function resolveSafeAddressPolicy(
       'composition:safeAddressDirectory',
     acpJurisdictionsAccepted: Object.freeze([...acpJurisdictionsAccepted]),
     authorizedAudiences: Object.freeze([...authorizedAudiences]),
-    fields: Object.freeze(fields.map(freezeSafeAddressField)),
+    fields: Object.freeze(resolvedFields.map(freezeSafeAddressField)),
     rendererHints: safeAddressRendererHints(form.rendererHints ?? org.rendererHints),
   });
 }
 
-function assertSafeAddressIntersection(
+function resolveSafeAddressFieldAudience(
   field: SafeAddressFieldPolicy,
   defaultPlaintextAudiences: readonly string[],
-): void {
+): SafeAddressFieldPolicy {
   if (field.effectiveAudiences !== undefined) {
     if (field.effectiveAudiences.length === 0) {
       throw new InvalidRuntimePolicyError(
@@ -769,10 +769,41 @@ function assertSafeAddressIntersection(
         `safeAddress field "${field.path}" has an empty effective audience intersection`,
       );
     }
-    return;
+    const unauthorized = field.effectiveAudiences.filter(
+      (entry) => !defaultPlaintextAudiences.includes(entry),
+    );
+    if (unauthorized.length > 0) {
+      throw new InvalidRuntimePolicyError(
+        'form',
+        `safeAddress field "${field.path}" includes an effective audience not authorized by safe-address policy`,
+      );
+    }
+    if (field.visibleTo !== undefined) {
+      const notVisible = field.effectiveAudiences.filter(
+        (entry) => !field.visibleTo?.includes(entry),
+      );
+      if (notVisible.length > 0) {
+        throw new InvalidRuntimePolicyError(
+          'form',
+          `safeAddress field "${field.path}" includes an effective audience not allowed by party policy`,
+        );
+      }
+    }
+    return {
+      ...field,
+      plaintextAudiences: field.effectiveAudiences,
+      effectiveAudiences: field.effectiveAudiences,
+    };
   }
   const visibleTo = field.visibleTo;
-  const plaintextAudiences = field.plaintextAudiences ?? defaultPlaintextAudiences;
+  const plaintextAudiences = (field.plaintextAudiences ?? defaultPlaintextAudiences)
+    .filter((entry) => defaultPlaintextAudiences.includes(entry));
+  if (plaintextAudiences.length === 0) {
+    throw new InvalidRuntimePolicyError(
+      'form',
+      `safeAddress field "${field.path}" has no plaintext audience authorized by safe-address policy`,
+    );
+  }
   if (visibleTo !== undefined) {
     const intersection = visibleTo.filter((entry) => plaintextAudiences.includes(entry));
     if (intersection.length === 0) {
@@ -781,7 +812,9 @@ function assertSafeAddressIntersection(
         `safeAddress field "${field.path}" has no audience allowed by both party policy and safe-address policy`,
       );
     }
+    return { ...field, plaintextAudiences: intersection };
   }
+  return { ...field, plaintextAudiences };
 }
 
 function safeAddressLimitObject(value: unknown): Record<string, unknown> {

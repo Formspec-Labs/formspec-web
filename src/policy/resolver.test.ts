@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveRuntimeFeatures } from './resolver.ts';
+import { UnsupportedRequiredFeatureError } from './errors.ts';
 import {
   getMultiPartyRuntimeConfig,
   getSafeAddressRuntimeConfig,
@@ -397,6 +398,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
     const config = getSafeAddressRuntimeConfig(profile);
     expect(config?.acpJurisdictionsAccepted).toEqual(['CA-ACP']);
     expect(config?.authorizedAudiences).toEqual(['issuer_verification']);
+    expect(config?.fields[0]?.plaintextAudiences).toEqual(['issuer_verification']);
   });
 
   it('rejects verifier-grade form posture when the deployment only supports fallback', () => {
@@ -429,7 +431,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
           },
         },
       }),
-    ).toThrowError(/exceeds deployment capability/);
+    ).toThrow(UnsupportedRequiredFeatureError);
   });
 
   it('allows verifier-grade form posture when the deployment supports it', () => {
@@ -463,6 +465,140 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
     });
 
     expect(getSafeAddressRuntimeConfig(profile)?.receiptPostureTier).toBe('verifier-grade');
+  });
+
+  it('intersects form plaintext audiences with the org safe-address audience set', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: allAvailable,
+      org: {
+        ...allowAllOrg,
+        limits: {
+          safeAddress: {
+            acpJurisdictionsAccepted: ['CA-ACP'],
+            authorizedAudiences: ['issuer_verification'],
+          },
+        },
+      },
+      form: {
+        features: { safeAddress: 'required' },
+        limits: {
+          safeAddress: {
+            fields: [
+              {
+                path: '/protectedHomeAddress',
+                accessClass: 'safe-address',
+                visibleTo: ['issuer_verification', 'respondent_public_receipt'],
+                plaintextAudiences: ['issuer_verification', 'respondent_public_receipt'],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const config = getSafeAddressRuntimeConfig(profile);
+    expect(config?.fields[0]?.plaintextAudiences).toEqual(['issuer_verification']);
+  });
+
+  it('rejects form plaintext audiences outside the org safe-address audience set', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: {
+          ...allowAllOrg,
+          limits: {
+            safeAddress: {
+              acpJurisdictionsAccepted: ['CA-ACP'],
+              authorizedAudiences: ['issuer_verification'],
+            },
+          },
+        },
+        form: {
+          features: { safeAddress: 'required' },
+          limits: {
+            safeAddress: {
+              fields: [
+                {
+                  path: '/protectedHomeAddress',
+                  accessClass: 'safe-address',
+                  visibleTo: ['respondent_public_receipt'],
+                  plaintextAudiences: ['respondent_public_receipt'],
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/no plaintext audience authorized by safe-address policy/);
+  });
+
+  it('rejects effective audiences outside the org safe-address audience set', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: {
+          ...allowAllOrg,
+          limits: {
+            safeAddress: {
+              acpJurisdictionsAccepted: ['CA-ACP'],
+              authorizedAudiences: ['issuer_verification'],
+            },
+          },
+        },
+        form: {
+          features: { safeAddress: 'required' },
+          limits: {
+            safeAddress: {
+              fields: [
+                {
+                  path: '/protectedHomeAddress',
+                  accessClass: 'safe-address',
+                  effectiveAudiences: ['respondent_public_receipt'],
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/effective audience not authorized by safe-address policy/);
+  });
+
+  it('sanitizes effective audiences before exposing resolved field policy', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: allAvailable,
+      org: {
+        ...allowAllOrg,
+        limits: {
+          safeAddress: {
+            acpJurisdictionsAccepted: ['CA-ACP'],
+            authorizedAudiences: ['issuer_verification'],
+          },
+        },
+      },
+      form: {
+        features: { safeAddress: 'required' },
+        limits: {
+          safeAddress: {
+            fields: [
+              {
+                path: '/protectedHomeAddress',
+                accessClass: 'safe-address',
+                plaintextAudiences: ['respondent_public_receipt'],
+                effectiveAudiences: ['issuer_verification'],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const config = getSafeAddressRuntimeConfig(profile);
+    expect(config?.fields[0]?.plaintextAudiences).toEqual(['issuer_verification']);
+    expect(config?.fields[0]?.effectiveAudiences).toEqual(['issuer_verification']);
   });
 
   it('throws InvalidRuntimePolicyError for empty party-policy x safe-address intersections', () => {

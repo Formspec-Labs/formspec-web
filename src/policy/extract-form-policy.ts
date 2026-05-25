@@ -301,7 +301,7 @@ export function extractSafeAddressPolicy(
     substituteAddressDirectoryRef:
       block.substituteAddressDirectoryRef ?? 'composition:safeAddressDirectory',
     acpJurisdictionsAccepted: block.acpJurisdictionsAccepted ?? [],
-    authorizedAudiences: block.authorizedAudiences ?? ['issuer_verification'],
+    authorizedAudiences: block.authorizedAudiences ?? [],
     fields,
     rendererHints: block.rendererHints,
   };

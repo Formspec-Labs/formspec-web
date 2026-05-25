@@ -489,6 +489,7 @@ describe('extractSafeAddressPolicy', () => {
     expect(policy?.features.safeAddress).toBe('required');
     expect(policy?.limits?.safeAddress).toMatchObject({
       acpJurisdictionsAccepted: ['CA-ACP'],
+      authorizedAudiences: [],
       fields: [
         {
           path: '/protectedHomeAddress',
