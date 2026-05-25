@@ -95,6 +95,7 @@ import {
   PUBLIC_TERMINAL_CLEARED_TITLE,
   PUBLIC_TERMINAL_SMS_INVALID_COPY,
   PUBLIC_TERMINAL_SMS_SENT_COPY,
+  canSendPublicTerminalReceiptSms,
   publicTerminalTrackingUrl,
   publicTerminalVerifierCode,
   sendPublicTerminalReceiptSms,
@@ -1594,9 +1595,10 @@ export function ConfirmationPanel({
     : confirmation.trackingUri;
   const trackingLabel = confirmation.caseUrn ? 'Track this application' : 'Track this submission';
   const verifierCode = publicTerminalVerifierCode(confirmation);
+  const canSendSmsReceipt = canSendPublicTerminalReceiptSms(notificationDelivery);
 
   const handleSmsSend = async (): Promise<void> => {
-    if (!notificationDelivery) return;
+    if (!canSendSmsReceipt) return;
     setSmsState({ status: 'sending' });
     try {
       await sendPublicTerminalReceiptSms({
@@ -1627,8 +1629,9 @@ export function ConfirmationPanel({
       <div className="public-terminal-actions" aria-label="Public terminal actions">
         <h3>Keep your proof</h3>
         <p>
-          Print this confirmation, text it to a phone you control, then clear this computer
-          before leaving.
+          {canSendSmsReceipt
+            ? 'Print this confirmation, text it to a phone you control, then clear this computer before leaving.'
+            : 'Print this confirmation, then clear this computer before leaving.'}
         </p>
         <div className="public-terminal-actions__row">
           <button type="button" onClick={printConfirmation}>
@@ -1646,7 +1649,7 @@ export function ConfirmationPanel({
             </button>
           ) : null}
         </div>
-        {notificationDelivery ? (
+        {canSendSmsReceipt ? (
           <div className="public-terminal-actions__sms">
             <label htmlFor={smsInputId}>Text receipt to SMS</label>
             <div className="public-terminal-actions__row">

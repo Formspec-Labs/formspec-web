@@ -54,7 +54,7 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
   });
 
   it('sends an SMS receipt through NotificationDelivery', async () => {
-    const notifications = stubNotificationDelivery();
+    const notifications = stubNotificationDelivery({ capabilities: { sms: 'real' } });
     render(
       <ConfirmationPanel
         confirmation={confirmation}
@@ -81,7 +81,7 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
   });
 
   it('validates the SMS destination before calling the delivery port', async () => {
-    const notifications = stubNotificationDelivery();
+    const notifications = stubNotificationDelivery({ capabilities: { sms: 'real' } });
     render(
       <ConfirmationPanel
         confirmation={confirmation}
@@ -98,6 +98,21 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
       expect(screen.getByRole('alert').textContent).toContain(PUBLIC_TERMINAL_SMS_INVALID_COPY);
     });
     expect(notifications.sent).toHaveLength(0);
+  });
+
+  it('does not offer or report SMS delivery for the default test stub', () => {
+    const notifications = stubNotificationDelivery();
+    render(
+      <ConfirmationPanel
+        confirmation={confirmation}
+        notificationDelivery={notifications}
+      />,
+    );
+
+    expect(screen.queryByLabelText('Text receipt to SMS')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Text receipt' })).toBeNull();
+    expect(screen.queryByText(PUBLIC_TERMINAL_SMS_SENT_COPY)).toBeNull();
+    expect(screen.getByText('Print this confirmation, then clear this computer before leaving.')).not.toBeNull();
   });
 });
 
@@ -124,6 +139,8 @@ describe('RespondentRuntime public-terminal cleanup (FW-0041)', () => {
     await waitForText('Public Terminal Form');
     await clickButton('Submit');
     await waitForText('Submission received');
+    expect(text()).not.toContain('Text receipt');
+    expect(text()).not.toContain(PUBLIC_TERMINAL_SMS_SENT_COPY);
 
     await clickButton('Clear this computer');
     await waitForText(PUBLIC_TERMINAL_CLEARED_TITLE);

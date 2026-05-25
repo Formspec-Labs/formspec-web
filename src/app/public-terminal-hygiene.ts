@@ -32,6 +32,12 @@ export async function sendPublicTerminalReceiptSms({
   );
 }
 
+export function canSendPublicTerminalReceiptSms(
+  notificationDelivery: NotificationDelivery | undefined,
+): notificationDelivery is NotificationDelivery {
+  return notificationDelivery?.capabilities?.sms === 'real';
+}
+
 export function publicTerminalReceiptSmsBody(confirmation: SubmitConfirmation): string {
   const base = `Form submitted. Reference ${confirmation.referenceNumber}. Verifier code ${publicTerminalVerifierCode(confirmation)}.`;
   const trackingUrl = publicTerminalTrackingUrl(confirmation);

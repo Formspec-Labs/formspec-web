@@ -15,6 +15,10 @@
  */
 
 export type NotificationChannel = 'email' | 'sms' | 'push';
+export type NotificationDeliveryCapability = 'real' | 'test';
+export type NotificationDeliveryCapabilities = Partial<
+  Record<NotificationChannel, NotificationDeliveryCapability>
+>;
 
 export interface NotificationMessage {
   channel: NotificationChannel;
@@ -29,6 +33,11 @@ export interface NotificationMessage {
 }
 
 export interface NotificationDelivery {
+  /**
+   * Channel capability provenance. UI may only claim respondent-visible
+   * delivery for channels marked `real`; `test` covers no-op/capture stubs.
+   */
+  readonly capabilities?: NotificationDeliveryCapabilities;
   /**
    * Send a pre-rendered message.
    *
