@@ -263,6 +263,13 @@ describe('RespondentRuntime offline integration (FW-0044)', () => {
     // Stub submit transport accepts unconditionally — so the form
     // confirms; the load-bearing assertion is that the queue path was NOT
     // taken.
+    //
+    // FW-0088 covers the integration gap this case can't pin: a production
+    // HTTP transport would throw under `navigator.onLine === false`, and
+    // the runtime would surface FriendlyError ("We could not submit this
+    // form.") instead of "Submission received". Slice 1 ships with the
+    // stub-transport asymmetry; FW-0088 wires a recording transport that
+    // throws on offline so the production-shaped error UX is pinned.
     await waitFor(
       () =>
         (container?.textContent ?? '').includes('Submission received') ||

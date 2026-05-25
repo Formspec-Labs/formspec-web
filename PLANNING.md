@@ -966,6 +966,18 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Done:** The bundled `sample-form.json` declares `extensions['x-formspec-offline-submit']: true` AND `npm run dev` users dropping their network see the "Saved for later" UX flow end-to-end — without losing the queued submission on a refresh. Today's slice-1 in-memory stub disappears on reload; declaring the opt-in on the demo form would leak that imperfection into the "what the OSS reference shows" surface.
 - **Blocked on:** FW-0082 (production IndexedDB queue with reload-survival). Until that lands, the demo form stays silent on offline.
 
+### FW-0088 — Offline submit: integration test for offline+disabled+throwing-transport friendly-error path
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent (substrate honesty under the offline+disabled+production combination)
+- **Journey:** [J-045](JOURNEYS.md#j-045--i-have-no-signal--let-me-finish-the-form-anyway-and-let-it-submit-itself-when-im-back-online) (negative-path correctness for non-opt-in forms on offline networks)
+- **Gap (from FW-0044 architecture review, arch M-3):** `tests/app/respondent-runtime-offline.test.tsx`'s "falls through to the synchronous transport path when offline but the form does not opt in" case wires the stub submit transport, which accepts unconditionally. So when the user is offline AND the form did not opt in AND the runtime falls through to the synchronous path, the DOM ends up showing "Submission received" — because the stub transport doesn't know it's offline. A real production HTTP transport would throw (fetch with no network), and the runtime would surface the friendly error path ("We could not submit this form."). The current suite cannot tell the difference between "the queue path was correctly NOT taken" (the load-bearing assertion the case pins) and "the user got the wrong outcome." Slice 1 ships with this gap because the load-bearing assertion is the queue-not-taken one, and the existing fall-through assertion is honestly bracketed in the test body.
+- **Done:** A new integration case in `tests/app/respondent-runtime-offline.test.tsx` (or a sibling file) wires a recording submit transport that throws synchronously when `navigator.onLine === false`. The case asserts: (a) the offline queue was NOT consulted (existing invariant), AND (b) the DOM surfaces the friendly-error path ("We could not submit this form." or analogous plain-language copy from `FriendlyError`). Pins the production-shaped behavior under the offline-and-disabled combination so future regressions in the synchronous-path error UX are caught.
+- **Blocked on:** Nothing upstream. Pure test-side fixture work; the recording transport pattern already exists in `createRecordingSubmitTransport()` (FW-0044 added it for the conformance suite) and the friendly-error surface is in place.
+- **Anti-patterns:** AP-006 (silent failures in the offline+disabled+production combination going unnoticed because the stub-transport test happens to succeed).
+- **Note:** Filed by the FW-0044 remediation pass; the slice-1 test acknowledges the gap inline so the next implementer reading the test can find this row immediately.
+
 ### FW-0044 — Offline-capable form-fill with deferred submit (slice 1) — OfflineSubmitQueue port + in-form offline detection + queue routing + UX
 
 - **Phase:** Post-MVP
