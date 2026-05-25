@@ -14,6 +14,7 @@ import {
   AttachmentUploadError,
   type AttachmentRef,
   type AttachmentStore,
+  type ResumableAttachmentStore,
 } from '../../src/ports/attachment-store.ts';
 
 interface FieldHarness {
@@ -347,7 +348,7 @@ describe('FormspecWebAttachmentControl', () => {
     expect(harness.readValue()).toBeNull();
   });
 
-  it('accepts a file that matches `accept` via wildcard (L-2)', async () => {
+  it('opens image review for a file that matches `accept` via wildcard before upload', async () => {
     const store = stubAttachmentStore();
     const harness = makeFieldHarness();
     render(
@@ -364,6 +365,15 @@ describe('FormspecWebAttachmentControl', () => {
     Object.defineProperty(input, 'files', { value: [png], configurable: true });
     await act(async () => {
       input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await flush();
+
+    expect(container?.textContent ?? '').toContain('Upload image');
+    const uploadBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Upload image');
+    await act(async () => {
+      uploadBtn?.click();
       await flush();
     });
     await flush();
@@ -400,6 +410,88 @@ describe('FormspecWebAttachmentControl', () => {
       </AttachmentStoreProvider>,
     );
     expect(container?.textContent ?? '').toContain(ATTACHMENT_DEFERRED_CAPABILITY_COPY);
+  });
+
+  it('uses the resumable upload extension when the adapter provides it and renders progress', async () => {
+    let finishUpload: () => void = () => {};
+    const finishPromise = new Promise<void>((resolve) => {
+      finishUpload = resolve;
+    });
+    const store: ResumableAttachmentStore = {
+      upload: async () => {
+        throw new Error('baseline upload should not be used');
+      },
+      uploadResumable: async (_blob, metadata, options) => {
+        options?.onProgress?.({
+          loadedBytes: 1,
+          totalBytes: 4,
+          chunksUploaded: 1,
+          chunkCount: 4,
+        });
+        await finishPromise;
+        options?.onProgress?.({
+          loadedBytes: 4,
+          totalBytes: 4,
+          chunksUploaded: 4,
+          chunkCount: 4,
+        });
+        return {
+          kind: 'attachment-ref',
+          uri: 'attachment:resumable',
+          hash: 'sha256:00',
+          size: 4,
+          mimeType: metadata.mimeType,
+          filename: metadata.filename,
+        };
+      },
+    };
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={store}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode()} />
+      </AttachmentStoreProvider>,
+    );
+
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [await fileFromBytes(new Uint8Array([1, 2, 3, 4]), 'x.pdf')],
+      configurable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    expect(container?.textContent ?? '').toContain('Uploading 25%');
+    await act(async () => {
+      finishUpload();
+      await flush();
+    });
+    await flush();
+    expect((harness.readValue() as AttachmentRef).uri).toBe('attachment:resumable');
+  });
+
+  it('surfaces camera capture unavailability without blocking file pick', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: undefined,
+      configurable: true,
+    });
+    render(
+      <AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode()} />
+      </AttachmentStoreProvider>,
+    );
+    const cameraBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Use camera');
+    await act(async () => {
+      cameraBtn?.click();
+      await flush();
+    });
+    expect(container?.textContent ?? '').toContain('Camera capture is not available');
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: originalMediaDevices,
+      configurable: true,
+    });
   });
 
   it('does NOT resurrect a concurrently-removed ref when an upload settles after the remove (H-1 closure-stale race)', async () => {

@@ -913,3 +913,44 @@ select {
   border-radius: 0.375rem;
   cursor: pointer;
 }
+
+.formspec-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.formspec-file-camera,
+.formspec-file-image-review {
+  margin-top: 0.875rem;
+}
+
+.formspec-file-camera-preview,
+.formspec-file-redaction-image {
+  display: block;
+  max-width: 100%;
+}
+
+.formspec-file-redaction-surface {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  border: 1px solid #9aa6b2;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.formspec-file-redaction-box {
+  position: absolute;
+  display: block;
+  background: #000;
+  border: 1px solid #fff;
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.formspec-file-legibility {
+  margin: 0 0 0.5rem;
+  color: #8a5a00;
+}

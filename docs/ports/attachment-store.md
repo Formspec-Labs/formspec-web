@@ -56,6 +56,24 @@ the file to the system." Read paths (retention sweeps, audit retention,
 receipt portals, selective-proof viewers per FW-0009 / FW-0010) live on a
 future `AttachmentReader` port, filed separately.
 
+## Optional resumable upload extension
+
+FW-0076 adds `ResumableAttachmentStore` as a narrow optional extension:
+
+```ts
+uploadResumable(blob, metadata, { chunkSizeBytes, onProgress })
+```
+
+The baseline `upload(blob)` method stays valid. The field renderer detects
+`uploadResumable` when present and reports byte-level progress on the upload
+row. Adopters use this extension for multipart object stores, tus-style
+uploads, or browser-stream-backed upload paths that survive flaky networks.
+
+Adapters that implement the extension MUST call `onProgress` with
+`loadedBytes`, `totalBytes`, `chunksUploaded`, and `chunkCount` as chunks
+commit. A final `AttachmentRef` still has the same serializable shape as the
+baseline port.
+
 ## Composition wiring
 
 The full-app composition exposes the slot:
@@ -69,10 +87,13 @@ const composition: Composition = freezeComposition({
 });
 ```
 
-The OSS reference deployment declares `fileUpload: 'unavailable'` and wires
-`unavailableAttachmentStore()` until an adopter forks. The narrowed-route
-factories (`/status`, `/obligations`, `/documents`) declare `unavailable`
-uniformly — those surfaces do not accept uploads.
+The OSS reference demo wires `persistentDemoAttachmentStore()`, a
+DEMO_STUB_ADAPTER-marked localStorage-backed store. It survives page refresh
+so the bundled demo form can include an optional attachment field without
+misleading contributors. Production still declares `fileUpload:
+'unavailable'` and wires `unavailableAttachmentStore()` until an adopter
+forks. The narrowed-route factories (`/status`, `/obligations`, `/documents`)
+declare `unavailable` uniformly — those surfaces do not accept uploads.
 
 ## Field-component guardrails (`<FormspecWebAttachmentControl>`)
 
@@ -109,16 +130,26 @@ not set up to receive files."
 The port name, the `AttachmentRef.kind` discriminator, the URI scheme, the
 content hash, and the MIME type never appear in respondent-facing UI text.
 The field-component override exports `ATTACHMENT_DEFERRED_CAPABILITY_COPY`
-as the fixture-pinned plain-language string for the deferred-capability
-sub-line ("Camera capture, edge detection, on-device redaction, and saving
-to your document library are not yet available here.").
+as the fixture-pinned plain-language string for the one remaining
+upload-adjacent deferred capability: "Saving to your document library is not
+yet available here."
+
+## Capture, legibility, and redaction
+
+FW-0073/FW-0074 add an in-page camera path to
+`FormspecWebAttachmentControl`. The control opens `getUserMedia`, captures a
+still frame into a canvas, warns on basic legibility failures (small
+resolution, low contrast, likely glare), and then routes the captured `File`
+through the same `AttachmentStore` upload path.
+
+Image picks and camera captures enter an on-device review step before upload.
+The respondent can draw redaction boxes; the control overwrites those pixels
+on a canvas and uploads only the rendered redacted image. The original local
+image is not passed to `AttachmentStore.upload()` when redactions exist.
 
 ## What slice 1 does not ship
 
-- Camera capture, deskew, edge detection, legibility check (FW-0073).
-- On-device redaction (FW-0074).
 - Save-to-library compose with FW-0056 (FW-0075).
-- Resumable / chunked / progressive uploads (FW-0076).
 - A production reference adapter for any specific object store. Adopters
   fork the composition file (<100 lines) and wire their own.
 - A canonical wire-format ratification for `AttachmentRef` inside the

@@ -22,6 +22,18 @@ export interface AttachmentUploadMetadata {
   readonly mimeType: string;
 }
 
+export interface AttachmentUploadProgress {
+  readonly loadedBytes: number;
+  readonly totalBytes: number;
+  readonly chunksUploaded: number;
+  readonly chunkCount: number;
+}
+
+export interface AttachmentResumableUploadOptions {
+  readonly chunkSizeBytes?: number;
+  readonly onProgress?: (progress: AttachmentUploadProgress) => void;
+}
+
 export interface AttachmentRef {
   /**
    * Discriminator literal so server-side / verifier detection inside
@@ -80,4 +92,23 @@ export interface AttachmentStore {
    * respondent's flow.
    */
   delete?(uri: string): Promise<void>;
+}
+
+/**
+ * Optional FW-0076 extension. The original `upload(blob)` method remains the
+ * baseline contract; adopters wire `uploadResumable` when their object store
+ * can survive chunk retries / tab reloads and report byte-level progress.
+ */
+export interface ResumableAttachmentStore extends AttachmentStore {
+  uploadResumable(
+    blob: Blob,
+    metadata: AttachmentUploadMetadata,
+    options?: AttachmentResumableUploadOptions,
+  ): Promise<AttachmentRef>;
+}
+
+export function isResumableAttachmentStore(
+  store: AttachmentStore,
+): store is ResumableAttachmentStore {
+  return typeof (store as { uploadResumable?: unknown }).uploadResumable === 'function';
 }

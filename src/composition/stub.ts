@@ -7,7 +7,6 @@ import {
   RecordLifecycleExtractor,
   TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
-import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../adapters/stub/draft-store.ts';
 import { stubEmbedTransport } from '../adapters/stub/embed-transport.ts';
@@ -17,6 +16,7 @@ import { stubLifecycleActionClient } from '../adapters/stub/lifecycle-action-cli
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts';
 import { stubPaymentRailAdapter } from '../adapters/stub/payment-rail-adapter.ts';
+import { persistentDemoAttachmentStore } from '../adapters/stub/persistent-attachment-store.ts';
 import { createStubTrustedReviewerAdapters } from '../adapters/stub/review-thread-store.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
@@ -77,7 +77,7 @@ export function createStubComposition(): Composition {
     statusReader: stubStatusReader([
       ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
     ]),
-    attachmentStore: stubAttachmentStore(),
+    attachmentStore: persistentDemoAttachmentStore(),
     respondentHistorySource: stubRespondentHistorySource(demoHistorySnapshot()),
     // FW-0044 slice 1: in-memory queue paired with the same stub transport at
     // construction time (FW-0064 cohort discipline). The slice-1 stub loses
@@ -122,10 +122,8 @@ export function createStubComposition(): Composition {
       // land a real VP port, the slot mapping splits and this declaration
       // can move to 'demo-stub' or 'available' as the ceremony allows.
       documentPresentation: 'unavailable',
-      // FW-0033 slice 1: in-memory stub adapter satisfies the demo posture.
-      // Per the design's §"Demo form posture" decision, the bundled
-      // sample-form.json has no attachment field today; the stub is exercised
-      // through synthetic-definition tests and the conformance suite.
+      // FW-0077: localStorage-backed demo attachment store survives refresh,
+      // so the bundled sample form can honestly include an attachment field.
       fileUpload: 'demo-stub',
       // FW-0057 slice 1: in-memory history fixture (4 entries across 2 fake
       // issuers, 3 kinds) satisfies the demo posture. Production declares

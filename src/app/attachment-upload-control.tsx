@@ -13,19 +13,32 @@
  * shape, the URI, the hash, the MIME type literally, or the port. Respondent
  * sees "file", "upload", "remove".
  */
-import { useCallback, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type KeyboardEvent,
+  type PointerEvent,
+} from 'react';
 import type { FieldComponentProps } from '@formspec-org/react';
 import {
   AttachmentUploadError,
   type AttachmentRef,
   type AttachmentStore,
   type AttachmentUploadErrorCode,
+  isResumableAttachmentStore,
 } from '../ports/attachment-store.ts';
 import { useAttachmentStore } from './AttachmentStoreProvider.tsx';
 
 /** Honest deferred-capability copy — fixture-pinned per FW-0033 §"Vocabulary firewall". */
 export const ATTACHMENT_DEFERRED_CAPABILITY_COPY =
-  'Camera capture, edge detection, on-device redaction, and saving to your document library are not yet available here.';
+  'Saving to your document library is not yet available here.';
+
+export const ATTACHMENT_LEGIBILITY_WARNING_COPY =
+  'This image may be hard to read. Check focus, lighting, and glare before uploading.';
 
 const ATTACHMENT_UPLOAD_FAILURE_COPY = 'We could not upload your file. Try again.';
 
@@ -38,8 +51,22 @@ const ATTACHMENT_UPLOAD_FAILURE_COPY = 'We could not upload your file. Try again
 export const ATTACHMENT_DEFAULT_MAX_SIZE_BYTES = 25 * 1024 * 1024;
 
 type RowStatus =
-  | { kind: 'uploading'; key: string; filename: string }
+  | { kind: 'uploading'; key: string; filename: string; progressPercent?: number }
   | { kind: 'failed'; key: string; filename: string; message: string };
+
+interface RedactionRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+interface ImageDraft {
+  readonly file: File;
+  readonly objectUrl: string;
+  readonly redactions: RedactionRect[];
+  readonly legibilityWarning?: string;
+}
 
 function asArray(value: unknown): AttachmentRef[] {
   if (value == null) return [];
@@ -71,8 +98,29 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     : ATTACHMENT_DEFAULT_MAX_SIZE_BYTES;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const redactionSurfaceRef = useRef<HTMLDivElement>(null);
+  const redactionStartRef = useRef<{ x: number; y: number } | null>(null);
   const [pending, setPending] = useState<RowStatus[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [imageDraft, setImageDraft] = useState<ImageDraft | null>(null);
+  const [activeRedaction, setActiveRedaction] = useState<RedactionRect | null>(null);
+
+  useEffect(() => {
+    return () => {
+      stopCamera(cameraStreamRef.current);
+    };
+  }, []);
+
+  const imageDraftObjectUrl = imageDraft?.objectUrl;
+  useEffect(() => {
+    return () => {
+      if (imageDraftObjectUrl) URL.revokeObjectURL(imageDraftObjectUrl);
+    };
+  }, [imageDraftObjectUrl]);
 
   const refs = asArray(field.value);
   // H-1 closure-stale race fix: every read of "what's currently in the field"
@@ -93,6 +141,60 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       }
     },
     [field, multiple],
+  );
+
+  const startUploads = useCallback(
+    async (incoming: File[]) => {
+      const startedAt = Date.now();
+      const seedRows = incoming.map((file, index): RowStatus => ({
+        kind: 'uploading',
+        key: `up-${startedAt}-${index}-${file.name}`,
+        filename: file.name,
+      }));
+      setPending((prev) => [...prev, ...seedRows]);
+
+      const uploaded = await Promise.allSettled(
+        incoming.map(async (file, index) =>
+          uploadOne(attachmentStore, file, (progressPercent) => {
+            setPending((prev) =>
+              prev.map((row) =>
+                row.key === seedRows[index].key && row.kind === 'uploading'
+                  ? { ...row, progressPercent }
+                  : row,
+              ),
+            );
+          }),
+        ),
+      );
+
+      // H-1: read field.value FRESH at settlement time via fieldValueRef.
+      // Concurrent removes during the in-flight upload update field.value
+      // synchronously; reading the closure-captured `refs` would resurrect a
+      // ref the user just removed.
+      const liveRefs = asArray(fieldValueRef.current);
+      let nextRefs: AttachmentRef[] = multiple ? [...liveRefs] : [];
+      const finalRows: RowStatus[] = [];
+      for (let index = 0; index < uploaded.length; index += 1) {
+        const outcome = uploaded[index];
+        const seed = seedRows[index];
+        if (outcome.status === 'fulfilled') {
+          nextRefs = multiple ? [...nextRefs, outcome.value] : [outcome.value];
+        } else {
+          finalRows.push({
+            kind: 'failed',
+            key: seed.key,
+            filename: seed.filename,
+            message: failureMessage(outcome.reason),
+          });
+        }
+      }
+      setPending((prev) => [
+        ...prev.filter((row) => !seedRows.some((seed) => seed.key === row.key)),
+        ...finalRows,
+      ]);
+      writeBack(nextRefs);
+    },
+    [attachmentStore, multiple, writeBack],
   );
 
   const handleFiles = useCallback(
@@ -136,48 +238,23 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       }
 
       const incoming = multiple ? files : files.slice(0, 1);
-      const startedAt = Date.now();
-      const seedRows = incoming.map((file, index): RowStatus => ({
-        kind: 'uploading',
-        key: `up-${startedAt}-${index}-${file.name}`,
-        filename: file.name,
-      }));
-      setPending((prev) => [...prev, ...seedRows]);
-
-      const uploaded = await Promise.allSettled(
-        incoming.map(async (file, index) =>
-          uploadOne(attachmentStore, file, seedRows[index].key),
-        ),
-      );
-
-      // H-1: read field.value FRESH at settlement time via fieldValueRef.
-      // Concurrent removes during the in-flight upload update field.value
-      // synchronously; reading the closure-captured `refs` would resurrect a
-      // ref the user just removed.
-      const liveRefs = asArray(fieldValueRef.current);
-      let nextRefs: AttachmentRef[] = multiple ? [...liveRefs] : [];
-      const finalRows: RowStatus[] = [];
-      for (let index = 0; index < uploaded.length; index += 1) {
-        const outcome = uploaded[index];
-        const seed = seedRows[index];
-        if (outcome.status === 'fulfilled') {
-          nextRefs = multiple ? [...nextRefs, outcome.value] : [outcome.value];
-        } else {
-          finalRows.push({
-            kind: 'failed',
-            key: seed.key,
-            filename: seed.filename,
-            message: failureMessage(outcome.reason),
-          });
-        }
+      const image = incoming.find((file) => file.type.startsWith('image/'));
+      if (image) {
+        setImageDraft((prev) => {
+          if (prev) URL.revokeObjectURL(prev.objectUrl);
+          return {
+            file: image,
+            objectUrl: URL.createObjectURL(image),
+            redactions: [],
+            legibilityWarning: estimateLegibilityWarning(image),
+          };
+        });
+        return;
       }
-      setPending((prev) => [
-        ...prev.filter((row) => !seedRows.some((seed) => seed.key === row.key)),
-        ...finalRows,
-      ]);
-      writeBack(nextRefs);
+
+      await startUploads(incoming);
     },
-    [attachmentStore, accept, maxSize, multiple, writeBack],
+    [accept, maxSize, multiple, startUploads],
   );
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
@@ -223,6 +300,153 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     setPending((prev) => prev.filter((row) => row.key !== key));
   };
 
+  const openCamera = async (): Promise<void> => {
+    if (field.readonly) return;
+    setCameraError(null);
+    setCameraOpen(true);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera capture is not available in this browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false,
+      });
+      cameraStreamRef.current = stream;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => undefined);
+      }
+    } catch {
+      setCameraError('We could not open the camera. Choose a file instead.');
+      setCameraOpen(true);
+    }
+  };
+
+  const closeCamera = (): void => {
+    stopCamera(cameraStreamRef.current);
+    cameraStreamRef.current = null;
+    setCameraOpen(false);
+  };
+
+  const captureImage = async (): Promise<void> => {
+    const video = videoRef.current;
+    if (!video) return;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setCameraError('We could not capture an image. Choose a file instead.');
+      return;
+    }
+    context.drawImage(video, 0, 0, width, height);
+    const legibilityWarning = analyzeLegibility(context, width, height);
+    const blob = await canvasToBlob(canvas, 'image/jpeg', 0.9);
+    const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
+    setImageDraft((prev) => {
+      if (prev) URL.revokeObjectURL(prev.objectUrl);
+      return {
+        file,
+        objectUrl: URL.createObjectURL(file),
+        redactions: [],
+        legibilityWarning,
+      };
+    });
+    closeCamera();
+  };
+
+  const redactionPoint = (event: PointerEvent<HTMLDivElement>): { x: number; y: number } => {
+    const rect = redactionSurfaceRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    return {
+      x: clamp((event.clientX - rect.left) / rect.width),
+      y: clamp((event.clientY - rect.top) / rect.height),
+    };
+  };
+
+  const beginRedaction = (event: PointerEvent<HTMLDivElement>): void => {
+    if (!imageDraft || field.readonly) return;
+    const point = redactionPoint(event);
+    redactionStartRef.current = point;
+    setActiveRedaction({ x: point.x, y: point.y, width: 0, height: 0 });
+  };
+
+  const updateRedaction = (event: PointerEvent<HTMLDivElement>): void => {
+    const start = redactionStartRef.current;
+    if (!start) return;
+    const point = redactionPoint(event);
+    setActiveRedaction(normalizeRect(start, point));
+  };
+
+  const finishRedaction = (event: PointerEvent<HTMLDivElement>): void => {
+    const start = redactionStartRef.current;
+    if (!start || !imageDraft) return;
+    const rect = normalizeRect(start, redactionPoint(event));
+    redactionStartRef.current = null;
+    setActiveRedaction(null);
+    if (rect.width < 0.01 || rect.height < 0.01) return;
+    setImageDraft({ ...imageDraft, redactions: [...imageDraft.redactions, rect] });
+  };
+
+  const uploadImageDraft = async (): Promise<void> => {
+    if (!imageDraft) return;
+    try {
+      const file = imageDraft.redactions.length > 0
+        ? await redactImageFile(imageDraft.file, imageDraft.redactions)
+        : imageDraft.file;
+      const objectUrl = imageDraft.objectUrl;
+      setImageDraft(null);
+      URL.revokeObjectURL(objectUrl);
+      await startUploads([file]);
+    } catch {
+      setPending((prev) => [
+        ...prev,
+        {
+          kind: 'failed',
+          key: `redaction-${Date.now()}`,
+          filename: imageDraft.file.name,
+          message: 'We could not prepare that image. Choose the file again.',
+        },
+      ]);
+    }
+  };
+
+  const cancelImageDraft = (): void => {
+    if (imageDraft) URL.revokeObjectURL(imageDraft.objectUrl);
+    setImageDraft(null);
+    setActiveRedaction(null);
+  };
+
+  const deskewImageDraft = async (): Promise<void> => {
+    if (!imageDraft) return;
+    try {
+      const file = await cropToDetectedPageEdges(imageDraft.file);
+      const objectUrl = URL.createObjectURL(file);
+      URL.revokeObjectURL(imageDraft.objectUrl);
+      setImageDraft({
+        ...imageDraft,
+        file,
+        objectUrl,
+        legibilityWarning: estimateLegibilityWarning(file),
+      });
+    } catch {
+      setPending((prev) => [
+        ...prev,
+        {
+          kind: 'failed',
+          key: `deskew-${Date.now()}`,
+          filename: imageDraft.file.name,
+          message: 'We could not clean up the image edges. You can still upload it.',
+        },
+      ]);
+    }
+  };
+
   const hiddenInput = (
     <input
       ref={fileInputRef}
@@ -266,7 +490,11 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         <li key={row.key} className={`formspec-file-pending-item formspec-file-pending-${row.kind}`}>
           <span className="formspec-file-pending-name">{row.filename}</span>
           {row.kind === 'uploading' ? (
-            <span className="formspec-file-pending-status" role="status">Uploading…</span>
+            <span className="formspec-file-pending-status" role="status">
+              {typeof row.progressPercent === 'number'
+                ? `Uploading ${row.progressPercent}%`
+                : 'Uploading...'}
+            </span>
           ) : (
             <>
               <span className="formspec-file-pending-status formspec-error" role="alert">{row.message}</span>
@@ -289,6 +517,94 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     <p className="formspec-file-deferred">{ATTACHMENT_DEFERRED_CAPABILITY_COPY}</p>
   );
 
+  const cameraPanel = cameraOpen ? (
+    <div className="formspec-file-camera" aria-label="Camera capture">
+      {cameraError ? <p className="formspec-error" role="alert">{cameraError}</p> : null}
+      <video
+        ref={videoRef}
+        className="formspec-file-camera-preview"
+        playsInline
+        muted
+        aria-label="Camera preview"
+      />
+      <div className="formspec-file-actions">
+        <button type="button" className="formspec-button-secondary" onClick={() => void captureImage()}>
+          Capture image
+        </button>
+        <button type="button" className="formspec-button-secondary" onClick={closeCamera}>
+          Close camera
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  const redactionRects = imageDraft ? [...imageDraft.redactions, ...(activeRedaction ? [activeRedaction] : [])] : [];
+  const imageDraftPanel = imageDraft ? (
+    <div className="formspec-file-image-review" aria-label="Image review before upload">
+      {imageDraft.legibilityWarning ? (
+        <p className="formspec-file-legibility" role="alert">{imageDraft.legibilityWarning}</p>
+      ) : null}
+      <div
+        ref={redactionSurfaceRef}
+        className="formspec-file-redaction-surface"
+        role="application"
+        aria-label="Draw boxes over information you want to redact"
+        onPointerDown={beginRedaction}
+        onPointerMove={updateRedaction}
+        onPointerUp={finishRedaction}
+      >
+        <img src={imageDraft.objectUrl} alt="Preview before upload" className="formspec-file-redaction-image" />
+        {redactionRects.map((rect, index) => (
+          <span
+            key={`${rect.x}-${rect.y}-${rect.width}-${rect.height}-${index}`}
+            className="formspec-file-redaction-box"
+            style={{
+              left: `${rect.x * 100}%`,
+              top: `${rect.y * 100}%`,
+              width: `${rect.width * 100}%`,
+              height: `${rect.height * 100}%`,
+            }}
+            aria-hidden="true"
+          />
+        ))}
+      </div>
+      <div className="formspec-file-actions">
+        <button type="button" className="formspec-button-secondary" onClick={() => {
+          setImageDraft({
+            ...imageDraft,
+            redactions: [
+              ...imageDraft.redactions,
+              { x: 0.25, y: 0.25, width: 0.5, height: 0.2 },
+            ],
+          });
+        }}>
+          Add redaction box
+        </button>
+        <button
+          type="button"
+          className="formspec-button-secondary"
+          onClick={() => void deskewImageDraft()}
+        >
+          Detect page edges
+        </button>
+        <button
+          type="button"
+          className="formspec-button-secondary"
+          onClick={() => setImageDraft({ ...imageDraft, redactions: [] })}
+          disabled={imageDraft.redactions.length === 0}
+        >
+          Clear redactions
+        </button>
+        <button type="button" className="formspec-button-secondary" onClick={() => void uploadImageDraft()}>
+          Upload image
+        </button>
+        <button type="button" className="formspec-button-secondary" onClick={cancelImageDraft}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   if (!dragDrop) {
     return (
       <>
@@ -301,6 +617,16 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         >
           Choose file{multiple ? 's' : ''}
         </button>
+        <button
+          type="button"
+          className="formspec-button-secondary"
+          onClick={() => void openCamera()}
+          disabled={field.readonly}
+        >
+          Use camera
+        </button>
+        {cameraPanel}
+        {imageDraftPanel}
         {refList}
         {pendingList}
         {deferredCopy}
@@ -340,9 +666,19 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           >
             Choose file{multiple ? 's' : ''}
           </button>
+          <button
+            type="button"
+            className="formspec-button-secondary"
+            onClick={() => void openCamera()}
+            disabled={field.readonly}
+          >
+            Use camera
+          </button>
         </div>
       </div>
       {hiddenInput}
+      {cameraPanel}
+      {imageDraftPanel}
       {refList}
       {pendingList}
       {deferredCopy}
@@ -353,8 +689,21 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 async function uploadOne(
   store: AttachmentStore,
   file: File,
-  _rowKey: string,
+  onProgress: (progressPercent: number) => void,
 ): Promise<AttachmentRef> {
+  if (isResumableAttachmentStore(store)) {
+    return store.uploadResumable(file, {
+      filename: file.name,
+      mimeType: file.type || 'application/octet-stream',
+    }, {
+      onProgress: (progress) => {
+        const percent = progress.totalBytes === 0
+          ? 100
+          : Math.min(100, Math.round((progress.loadedBytes / progress.totalBytes) * 100));
+        onProgress(percent);
+      },
+    });
+  }
   return store.upload(file, {
     filename: file.name,
     mimeType: file.type || 'application/octet-stream',
@@ -412,4 +761,165 @@ function matchesAccept(file: File, accept: string): boolean {
     if (lowerType === token) return true;
   }
   return false;
+}
+
+function stopCamera(stream: MediaStream | null): void {
+  stream?.getTracks().forEach((track) => track.stop());
+}
+
+function clamp(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function normalizeRect(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): RedactionRect {
+  return {
+    x: Math.min(start.x, end.x),
+    y: Math.min(start.y, end.y),
+    width: Math.abs(end.x - start.x),
+    height: Math.abs(end.y - start.y),
+  };
+}
+
+function estimateLegibilityWarning(file: File): string | undefined {
+  if (!file.type.startsWith('image/')) return undefined;
+  return file.size < 4096 ? ATTACHMENT_LEGIBILITY_WARNING_COPY : undefined;
+}
+
+function analyzeLegibility(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): string | undefined {
+  if (width < 900 || height < 600) return ATTACHMENT_LEGIBILITY_WARNING_COPY;
+  const sampleWidth = Math.min(width, 96);
+  const sampleHeight = Math.min(height, 96);
+  const data = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
+  let min = 255;
+  let max = 0;
+  let glarePixels = 0;
+  for (let index = 0; index < data.length; index += 4) {
+    const luminance = Math.round((data[index] + data[index + 1] + data[index + 2]) / 3);
+    min = Math.min(min, luminance);
+    max = Math.max(max, luminance);
+    if (luminance > 245) glarePixels += 1;
+  }
+  const pixels = data.length / 4;
+  if (max - min < 32 || glarePixels / pixels > 0.35) {
+    return ATTACHMENT_LEGIBILITY_WARNING_COPY;
+  }
+  return undefined;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+        return;
+      }
+      reject(new Error('canvas.toBlob returned null'));
+    }, type, quality);
+  });
+}
+
+async function redactImageFile(file: File, redactions: RedactionRect[]): Promise<File> {
+  const image = await loadImage(file);
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas unavailable');
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#000';
+  for (const rect of redactions) {
+    context.fillRect(
+      Math.round(rect.x * canvas.width),
+      Math.round(rect.y * canvas.height),
+      Math.round(rect.width * canvas.width),
+      Math.round(rect.height * canvas.height),
+    );
+  }
+  const type = file.type || 'image/png';
+  const blob = await canvasToBlob(canvas, type, 0.92);
+  return new File([blob], file.name, { type, lastModified: Date.now() });
+}
+
+async function cropToDetectedPageEdges(file: File): Promise<File> {
+  const image = await loadImage(file);
+  const source = document.createElement('canvas');
+  source.width = image.naturalWidth || image.width;
+  source.height = image.naturalHeight || image.height;
+  const sourceContext = source.getContext('2d');
+  if (!sourceContext) throw new Error('Canvas unavailable');
+  sourceContext.drawImage(image, 0, 0, source.width, source.height);
+  const bounds = detectPageBounds(sourceContext, source.width, source.height);
+  if (!bounds) return file;
+
+  const output = document.createElement('canvas');
+  output.width = bounds.width;
+  output.height = bounds.height;
+  const outputContext = output.getContext('2d');
+  if (!outputContext) throw new Error('Canvas unavailable');
+  outputContext.drawImage(
+    source,
+    bounds.x,
+    bounds.y,
+    bounds.width,
+    bounds.height,
+    0,
+    0,
+    bounds.width,
+    bounds.height,
+  );
+  const type = file.type || 'image/png';
+  const blob = await canvasToBlob(output, type, 0.92);
+  return new File([blob], file.name, { type, lastModified: Date.now() });
+}
+
+function detectPageBounds(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): { x: number; y: number; width: number; height: number } | undefined {
+  const data = context.getImageData(0, 0, width, height).data;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const luminance = Math.round((data[index] + data[index + 1] + data[index + 2]) / 3);
+      if (luminance < 245) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+  if (minX >= maxX || minY >= maxY) return undefined;
+  const cropWidth = maxX - minX + 1;
+  const cropHeight = maxY - minY + 1;
+  if (cropWidth > width * 0.94 && cropHeight > height * 0.94) return undefined;
+  return { x: minX, y: minY, width: cropWidth, height: cropHeight };
+}
+
+function loadImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Image load failed'));
+    };
+    image.src = url;
+  });
 }

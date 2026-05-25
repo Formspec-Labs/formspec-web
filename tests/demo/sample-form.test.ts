@@ -31,6 +31,12 @@ describe('demo sample form fixture', () => {
     expect(demoSampleForm.binds?.some((bind) => bind.relevant)).toBe(true);
   });
 
+  it('includes an optional attachment field for the refresh-surviving demo upload path', () => {
+    expect(JSON.stringify(demoSampleForm.items)).toContain('"dataType":"attachment"');
+    const bindPaths = new Set(demoSampleForm.binds?.map((bind) => bind.path));
+    expect(bindPaths.has('supportingDocument')).toBe(false);
+  });
+
   it('declares mobile keyboard hints for contact fields', () => {
     expect(JSON.stringify(demoSampleForm.items)).toContain('"inputMode":"email"');
     expect(JSON.stringify(demoSampleForm.items)).toContain('"inputMode":"tel"');

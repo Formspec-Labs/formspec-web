@@ -149,6 +149,13 @@
       "label": "Anything else we should know?",
       "dataType": "text",
       "hint": "Optional."
+    },
+    {
+      "key": "supportingDocument",
+      "type": "field",
+      "label": "Supporting document",
+      "dataType": "attachment",
+      "hint": "Optional. Add a photo or PDF that supports your intake."
     }
   ],
   "binds": [
