@@ -332,6 +332,15 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/screener-document-source/conformance.test.ts',
+    suiteText(
+      'ScreenerDocumentSource',
+      [['stub ScreenerDocumentSource conformance', 'stubScreenerDocumentSource']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -367,6 +376,10 @@ function writeAdapterFiles(root, options) {
       'export function stubEmbedTransport() {}',
     ],
     [
+      'src/adapters/stub/screener-document-source.ts',
+      'export function stubScreenerDocumentSource() {}',
+    ],
+    [
       'src/adapters/unavailable/respondent-place-source.ts',
       'export function unavailableRespondentPlaceSource() {}',
     ],
@@ -390,6 +403,10 @@ function writeAdapterFiles(root, options) {
     [
       'src/adapters/unavailable/embed-transport.ts',
       'export function unavailableEmbedTransport() {}',
+    ],
+    [
+      'src/adapters/unavailable/screener-document-source.ts',
+      'export function unavailableScreenerDocumentSource() {}',
     ],
     [
       'src/adapters/http/definition-source.ts',
@@ -431,6 +448,7 @@ function defaultComposition() {
     'import { unavailableOfflineSubmitQueue } from "../adapters/unavailable/offline-submit-queue.ts";',
     'import { unavailablePaymentRailAdapter } from "../adapters/unavailable/payment-rail-adapter.ts";',
     'import { unavailableEmbedTransport } from "../adapters/unavailable/embed-transport.ts";',
+    'import { unavailableScreenerDocumentSource } from "../adapters/unavailable/screener-document-source.ts";',
     'export function createDefaultComposition() {',
     '  return {',
     '    respondentPlaceSource: unavailableRespondentPlaceSource(),',
@@ -440,6 +458,7 @@ function defaultComposition() {
     '    offlineSubmitQueue: unavailableOfflineSubmitQueue(),',
     '    paymentRailAdapter: unavailablePaymentRailAdapter(),',
     '    embedTransport: unavailableEmbedTransport(),',
+    '    screenerDocumentSource: unavailableScreenerDocumentSource(),',
     '  };',
     '}',
   ].join('\n');
@@ -461,6 +480,7 @@ function publicIndex() {
     '  defineOfflineSubmitQueueConformance,',
     '  definePaymentRailAdapterConformance,',
     '  defineEmbedTransportConformance,',
+    '  defineScreenerDocumentSourceConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }

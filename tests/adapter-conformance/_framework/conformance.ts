@@ -11,6 +11,7 @@ export {
   definePaymentRailAdapterConformance,
   defineRespondentHistorySourceConformance,
   defineRespondentPlaceSourceConformance,
+  defineScreenerDocumentSourceConformance,
   defineStatusReaderConformance,
   defineSubmitTransportConformance,
 } from '../../../src/adapter-conformance/index.ts';

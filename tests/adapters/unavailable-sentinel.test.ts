@@ -5,6 +5,7 @@ import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/of
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
+import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
 import {
   samplePaymentAmount,
@@ -63,6 +64,13 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
     expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('embed');
   });
 
+  it('unavailableScreenerDocumentSource is marked with featureKey "screener"', () => {
+    const adapter = unavailableScreenerDocumentSource();
+    expect(isUnavailableAdapter(adapter)).toBe(true);
+    if (!isUnavailableAdapter(adapter)) throw new Error('unreachable');
+    expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('screener');
+  });
+
   it('marked adapters still throw on call (sentinel does not change runtime behavior)', async () => {
     await expect(unavailableRespondentPlaceSource().readPlace({} as never)).rejects.toThrow();
     await expect(
@@ -86,5 +94,8 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
         'https://allowed.example.test',
       ),
     ).toThrow();
+    await expect(
+      unavailableScreenerDocumentSource().readScreener({ url: 'urn:any' }),
+    ).rejects.toThrow();
   });
 });

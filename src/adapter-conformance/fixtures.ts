@@ -1,5 +1,6 @@
 import type { FormDefinition, FormResponse, IntakeHandoff } from '@formspec-org/types';
 import type { NotificationMessage } from '../ports/notification-delivery.ts';
+import type { ScreenerDocumentInput } from '../ports/screener-document-source.ts';
 import type {
   ApplicantStatusProjection,
   ApplicantStatusResource,
@@ -219,6 +220,45 @@ export const sampleHistorySnapshot: HistorySnapshot = {
       title: 'Sample signed record',
       receiptRef: 'urn:formspec:receipt:sample-conformance',
       documentRefs: ['doc-sample-0001'],
+    },
+  ],
+};
+
+/** Sample Screener Document (FW-0046) for conformance harness round-trip. */
+export const sampleScreenerDocument: ScreenerDocumentInput = {
+  $formspecScreener: '1.0',
+  url: 'urn:conformance:formspec-web:screener:sample',
+  version: '1.0.0',
+  title: 'Conformance sample screener',
+  items: [
+    {
+      key: 'sample_choice',
+      type: 'field',
+      dataType: 'choice',
+      label: 'Pick one',
+      options: [
+        { value: 'a', label: 'A' },
+        { value: 'b', label: 'B' },
+      ],
+    },
+  ],
+  binds: [{ path: 'sample_choice', required: 'true' }],
+  evaluation: [
+    {
+      id: 'phase-1',
+      strategy: 'first-match',
+      routes: [
+        {
+          condition: "$sample_choice = 'a'",
+          target: 'urn:conformance:form:a',
+          label: 'Route A',
+        },
+        {
+          condition: 'true',
+          target: 'urn:conformance:form:default',
+          label: 'Default',
+        },
+      ],
     },
   ],
 };

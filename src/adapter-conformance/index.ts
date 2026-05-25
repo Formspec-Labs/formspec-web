@@ -11,6 +11,7 @@ export {
   definePaymentRailAdapterConformance,
   defineRespondentHistorySourceConformance,
   defineRespondentPlaceSourceConformance,
+  defineScreenerDocumentSourceConformance,
   defineStatusReaderConformance,
   defineSubmitTransportConformance,
   type AttachmentStoreConformanceSubject,
@@ -26,6 +27,7 @@ export {
   type RecordingSubmitTransportCall,
   type RespondentHistorySourceConformanceSubject,
   type RespondentPlaceSourceConformanceSubject,
+  type ScreenerDocumentSourceConformanceSubject,
   type StatusReaderConformanceSubject,
   type SubmitTransportConformanceSubject,
 } from './conformance.ts';
@@ -59,4 +61,5 @@ export {
   samplePaymentAmount,
   samplePaymentMethodToken,
   sampleRespondentPlaceSnapshot,
+  sampleScreenerDocument,
 } from './fixtures.ts';

@@ -5,6 +5,7 @@ import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-q
 import { stubPaymentRailAdapter } from '../../src/adapters/stub/payment-rail-adapter.ts';
 import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../../src/adapters/stub/respondent-place-source.ts';
+import { stubScreenerDocumentSource } from '../../src/adapters/stub/screener-document-source.ts';
 import { stubStatusReader } from '../../src/adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../../src/adapters/stub/submit-transport.ts';
 import { DEMO_STUB_ADAPTER, isDemoStubAdapter } from '../../src/policy/sentinel.ts';
@@ -57,5 +58,12 @@ describe('stub adapters that back runtime feature keys carry the demo-stub marke
     expect(isDemoStubAdapter(adapter)).toBe(true);
     if (!isDemoStubAdapter(adapter)) throw new Error('unreachable');
     expect(adapter[DEMO_STUB_ADAPTER].featureKey).toBe('embed');
+  });
+
+  it('stubScreenerDocumentSource is marked with featureKey "screener"', () => {
+    const adapter = stubScreenerDocumentSource();
+    expect(isDemoStubAdapter(adapter)).toBe(true);
+    if (!isDemoStubAdapter(adapter)) throw new Error('unreachable');
+    expect(adapter[DEMO_STUB_ADAPTER].featureKey).toBe('screener');
   });
 });

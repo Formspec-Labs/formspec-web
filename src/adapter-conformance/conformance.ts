@@ -33,6 +33,12 @@ import type {
   EmbedMessageFromHost,
   EmbedTransport,
 } from '../ports/embed-transport.ts';
+import type {
+  ScreenerDocumentInput,
+  ScreenerDocumentSource,
+} from '../ports/screener-document-source.ts';
+import { ScreenerDocumentNotFoundError } from '../ports/screener-document-source.ts';
+import { isScreenerDocumentInput } from '../shared/screener-document.ts';
 import type { IntakeHandoff, SubmitConfirmation } from '../ports/submit-transport.ts';
 import {
   isFormFeaturePolicyMode,
@@ -67,6 +73,7 @@ import {
   samplePaymentAmount,
   samplePaymentMethodToken,
   sampleRespondentPlaceSnapshot,
+  sampleScreenerDocument,
 } from './fixtures.ts';
 
 export interface DefinitionSourceConformanceSubject {
@@ -1164,6 +1171,18 @@ export interface EmbedTransportConformanceSubject {
   embeddedSubject?: () => { adapter: EmbedTransport };
 }
 
+export interface ScreenerDocumentSourceConformanceSubject {
+  adapter: ScreenerDocumentSource;
+  /**
+   * Registers the document for the suite's lookup tests. Catalog
+   * adapters that load from an immutable source (static bundle, IPFS
+   * URI) can implement this as a no-op when the URN already lives in
+   * the catalog AND the fixture matches the existing entry; mismatch
+   * MUST throw.
+   */
+  registerScreener(document: ScreenerDocumentInput): void | Promise<void>;
+}
+
 /**
  * Conformance harness for `EmbedTransport` (FW-0040, web ADR-0011 §embed).
  * Encodes the iframe-context + transport invariants the port comment names —
@@ -1231,6 +1250,68 @@ export function defineEmbedTransportConformance(
     it("EmbedMessage shape carries the host-handshake variant", () => {
       const message: EmbedMessage = sampleEmbedMessage;
       expect(message.kind).toBe("host-handshake");
+    });
+  });
+}
+
+/**
+ * Conformance harness for `ScreenerDocumentSource` (FW-0046, web
+ * ADR-0011 §screener). Encodes the catalog-lookup contract the port
+ * comment names — round-trip through JSON, URN-keyed lookup,
+ * not-found discriminator, closed `$formspecScreener` literal,
+ * required-fields guard.
+ */
+export function defineScreenerDocumentSourceConformance(
+  name: string,
+  setup: () => ScreenerDocumentSourceConformanceSubject,
+): void {
+  describe(name, () => {
+    it('round-trips a ScreenerDocumentInput through readScreener', async () => {
+      const subject = setup();
+      await subject.registerScreener(sampleScreenerDocument);
+      const found = await subject.adapter.readScreener({ url: sampleScreenerDocument.url });
+      expect(isScreenerDocumentInput(roundTripJson(found))).toBe(true);
+      expect(found.url).toBe(sampleScreenerDocument.url);
+      expect(found.version).toBe(sampleScreenerDocument.version);
+      expect(found.title).toBe(sampleScreenerDocument.title);
+    });
+
+    it('throws ScreenerDocumentNotFoundError on URN miss', async () => {
+      const subject = setup();
+      await subject.registerScreener(sampleScreenerDocument);
+      await expect(
+        subject.adapter.readScreener({ url: 'urn:conformance:missing-screener' }),
+      ).rejects.toBeInstanceOf(ScreenerDocumentNotFoundError);
+    });
+
+    it('rejects a fixture missing the $formspecScreener literal', async () => {
+      const subject = setup();
+      const invalid = {
+        ...sampleScreenerDocument,
+        $formspecScreener: '2.0',
+      } as unknown as ScreenerDocumentInput;
+      await expect(Promise.resolve().then(() => subject.registerScreener(invalid))).rejects.toThrow();
+    });
+
+    it('rejects a fixture missing required url field', async () => {
+      const subject = setup();
+      const { url: _omit, ...rest } = sampleScreenerDocument;
+      const invalid = rest as unknown as ScreenerDocumentInput;
+      await expect(Promise.resolve().then(() => subject.registerScreener(invalid))).rejects.toThrow();
+    });
+
+    it('rejects a fixture missing required evaluation field', async () => {
+      const subject = setup();
+      const { evaluation: _omit, ...rest } = sampleScreenerDocument;
+      const invalid = rest as unknown as ScreenerDocumentInput;
+      await expect(Promise.resolve().then(() => subject.registerScreener(invalid))).rejects.toThrow();
+    });
+
+    it('rejects a fixture missing required items field', async () => {
+      const subject = setup();
+      const { items: _omit, ...rest } = sampleScreenerDocument;
+      const invalid = rest as unknown as ScreenerDocumentInput;
+      await expect(Promise.resolve().then(() => subject.registerScreener(invalid))).rejects.toThrow();
     });
   });
 }
