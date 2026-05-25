@@ -86,24 +86,35 @@ describe('respondent flow helpers', () => {
     expect(handoff.responseHash).toMatch(/^sha256:[a-f0-9]+$/);
   });
 
-  it('auto-selects anonymous identity at boot when the picker will not render', () => {
+  it('selects no boot identity when no anonymous option is on offer', () => {
+    // Without anonymous in the discovered set there is nothing for boot to
+    // auto-select; the picker (or boot-time auth-required surface) decides.
     expect(
       selectBootIdentityOption([
         { kind: 'oidc', issuer: 'https://idp.example.test', displayName: 'IdP', minAssurance: 'L3' },
         { kind: 'magic-link', channel: 'email', minAssurance: 'L2' },
       ]),
     ).toBeUndefined();
-    // No picker → boot auto-selects anonymous (e.g., demo mode, or
-    // oidc-required where the policy filters anonymous out of the picker
-    // anyway).
+  });
+
+  it('auto-selects anonymous at boot when anonymous is on offer and the picker will not render', () => {
+    // Picker suppressed (demo mode, oidc-required where the policy filters
+    // anonymous out anyway, or single-option deployments) → boot
+    // auto-selects anonymous if present.
     expect(
       selectBootIdentityOption([
         { kind: 'oidc', issuer: 'https://idp.example.test', displayName: 'IdP', minAssurance: 'L3' },
         { kind: 'anonymous', minAssurance: 'L1' },
       ]),
     ).toMatchObject({ kind: 'anonymous' });
-    // FW-0028: when the picker is about to render, suppress the auto-select
-    // so the user actually sees the choice.
+    expect(
+      selectBootIdentityOption([{ kind: 'anonymous', minAssurance: 'L1' }]),
+    ).toMatchObject({ kind: 'anonymous' });
+  });
+
+  it('FW-0028: suppresses anonymous auto-select at boot when the picker will render', () => {
+    // The user must see the choice; without this gate, anonymous-allowed
+    // deployments would silently boot anonymous and never reach the picker.
     expect(
       selectBootIdentityOption(
         [
@@ -113,10 +124,6 @@ describe('respondent flow helpers', () => {
         true,
       ),
     ).toBeUndefined();
-    // Single anonymous option — auto-select stays.
-    expect(
-      selectBootIdentityOption([{ kind: 'anonymous', minAssurance: 'L1' }]),
-    ).toMatchObject({ kind: 'anonymous' });
   });
 
   it('offers OIDC-only options for production OIDC-required profiles (anonymous filtered out)', () => {

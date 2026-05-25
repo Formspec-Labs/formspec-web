@@ -49,7 +49,12 @@ export class CompositeIdentityProvider implements IdentityProvider {
   constructor(private readonly providers: readonly IdentityProvider[]) {}
 
   async discover(formAssuranceRequirements?: AssuranceLevel): Promise<IdpOption[]> {
-    const perProvider = await Promise.all(
+    // `Promise.allSettled` (not `Promise.all`) so one wrapped provider's
+    // discover failure does not collapse the picker. Partial discovery is
+    // better UX than a blank picker — adopters with three IdPs configured
+    // and one IdP whose `.well-known/openid-configuration` is briefly
+    // unreachable still see the other two (code review L-3).
+    const settled = await Promise.allSettled(
       this.providers.map(async (provider) => {
         const offered = await provider.discover(formAssuranceRequirements);
         return { provider, offered };
@@ -57,7 +62,12 @@ export class CompositeIdentityProvider implements IdentityProvider {
     );
     const cache = new Map<string, IdentityProvider>();
     const result: IdpOption[] = [];
-    for (const { provider, offered } of perProvider) {
+    for (const entry of settled) {
+      if (entry.status === 'rejected') {
+        console.warn('CompositeIdentityProvider.discover: wrapped provider failed', entry.reason);
+        continue;
+      }
+      const { provider, offered } = entry.value;
       for (const option of offered) {
         const key = optionKey(option);
         if (cache.has(key)) continue; // first-wins dedup

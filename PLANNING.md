@@ -340,7 +340,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Persona:** Respondent / Signer
 - **Journey:** [J-013](JOURNEYS.md#j-013--dont-make-me-re-prove-who-i-am-every-time)
 - **Done:** A respondent who proved their identity in session one does not re-prove it in sessions two and three. A step-up happens only when the next field genuinely needs a higher assurance level than the user already has.
-- **Blocked on:** queue EXT-8 (form-side assurance annotation, verification pending). Uses FW-0063's `IdentityProvider` + existing `respondent-ledger-spec.md` §6.6 assurance taxonomy.
+- **Blocked on:** queue EXT-8 (form-side assurance annotation, verification pending). Uses FW-0063's `IdentityProvider` + existing `respondent-ledger-spec.md` §6.6 assurance taxonomy. Today FW-0028 slice 1's `bootIdentity` passes a synthesized `'L1'` floor to `IdentityProvider.discover()` at [`src/app/RespondentRuntime.tsx`](src/app/RespondentRuntime.tsx) so the call shape is in place; this row swaps the synthesized floor for the form-declared one (read out of the loaded `FormDefinition` once EXT-8 ratifies) and adds the re-discover-on-form-load + step-up surfaces (code review L-4).
 - **Anti-patterns:** AP-020, AP-022.
 
 ### FW-0021 — Field-level "why are you asking this?"
