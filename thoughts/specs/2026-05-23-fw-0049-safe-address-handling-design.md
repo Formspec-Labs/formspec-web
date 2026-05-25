@@ -457,7 +457,7 @@ FW-0042 (share-draft-with-trusted-reviewer) and FW-0049 (safe-address) compose a
 
 **Composition discipline matches the filer-side per FW-0037 §6.3.** The "comment OK; suggest forbidden" split applies symmetrically across the human-reviewer (FW-0042), AI-assistant (FW-0051), and AI-agent (FW-0058) readers — none can see safe-*-class plaintext, and none can author suggestions / writes against safe-*-class fields. The per-reader-type unmask exception list (§7.3.5 + §7.3.6) stays intentionally empty for safe-*-class fields; FW-0042's reviewer joins the same uniform discipline.
 
-**FW-0060 build constraint addition:** the reviewer-side renderer under FW-0109 (FW-0042 build row) MUST mask safe-*-class fields in the reviewer session; the suggest affordance MUST be structurally absent for safe-*-class fields (per FW-0042 §3.4 + §4.2 substrate refusal `SuggestionForbiddenOnRespondentOnlyFieldError`). Conformance fixtures cover the safe-* + reviewer-share composition case per FW-0042 §10 (fixture 9).
+**FW-0060 build constraint addition:** the reviewer-side renderer under FW-0113 (FW-0042 build row) MUST mask safe-*-class fields in the reviewer session; the suggest affordance MUST be structurally absent for safe-*-class fields (per FW-0042 §3.4 + §4.2 substrate refusal `SuggestionForbiddenOnRespondentOnlyFieldError`). Conformance fixtures cover the safe-* + reviewer-share composition case per FW-0042 §10 (fixture 9).
 
 ### 7.4 FW-0060 build constraints (consumed by FW-0060 author directly)
 
