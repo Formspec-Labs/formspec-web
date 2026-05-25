@@ -6,6 +6,7 @@ import type { UseFieldResult } from '@formspec-org/react';
 import {
   ATTACHMENT_DEFAULT_MAX_SIZE_BYTES,
   ATTACHMENT_DEFERRED_CAPABILITY_COPY,
+  ATTACHMENT_LEGIBILITY_WARNING_COPY,
   FormspecWebAttachmentControl,
 } from '../../src/app/attachment-upload-control.tsx';
 import { AttachmentStoreProvider } from '../../src/app/AttachmentStoreProvider.tsx';
@@ -86,6 +87,21 @@ async function fileFromBytes(bytes: Uint8Array, name: string, type = 'applicatio
   // Cast through ArrayBufferLike → BlobPart to avoid TS DOM lib's
   // SharedArrayBuffer-vs-ArrayBuffer mismatch (the runtime accepts both).
   return new File([bytes as unknown as BlobPart], name, { type });
+}
+
+function stubLoadedImage({ width = 10, height = 10 }: { width?: number; height?: number } = {}): void {
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    naturalWidth = width;
+    naturalHeight = height;
+    width = width;
+    height = height;
+
+    set src(_value: string) {
+      queueMicrotask(() => this.onload?.());
+    }
+  });
 }
 
 let root: Root | undefined;
@@ -418,6 +434,7 @@ describe('FormspecWebAttachmentControl', () => {
   });
 
   it('opens image review for a file that matches `accept` via wildcard before upload', async () => {
+    stubLoadedImage();
     const store = stubAttachmentStore();
     const harness = makeFieldHarness();
     render(
@@ -450,7 +467,37 @@ describe('FormspecWebAttachmentControl', () => {
     expect(harness.readValue()).toBeTruthy();
   });
 
+  it('uses canvas legibility analysis for picked images before upload', async () => {
+    stubLoadedImage({ width: 1280, height: 720 });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray(96 * 96 * 4).fill(120) }),
+    } as unknown as CanvasRenderingContext2D);
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl
+          field={harness.field}
+          node={makeNode({ accept: 'image/*' })}
+        />
+      </AttachmentStoreProvider>,
+    );
+
+    const png = await fileFromBytes(new Uint8Array(5000).fill(1), 'photo.png', 'image/png');
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [png], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await flush();
+
+    expect(container?.textContent ?? '').toContain(ATTACHMENT_LEGIBILITY_WARNING_COPY);
+    expect(harness.readValue()).toBeNull();
+  });
+
   it('uploads non-image siblings and queues every image from a multiple-file batch', async () => {
+    stubLoadedImage();
     const uploadSpy = vi.fn(async (blob: Blob, metadata): Promise<AttachmentRef> => ({
       kind: 'attachment-ref',
       uri: `attachment:${metadata.filename}`,
@@ -575,6 +622,213 @@ describe('FormspecWebAttachmentControl', () => {
     expect(container?.textContent ?? '').toContain('larger than the upload limit');
     expect(uploadSpy).not.toHaveBeenCalled();
     expect(harness.readValue()).toBeNull();
+  });
+
+  it('uploads only the rendered redacted image when redactions exist', async () => {
+    stubLoadedImage({ width: 10, height: 10 });
+    const fillRect = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      fillRect,
+      getImageData: () => ({ data: new Uint8ClampedArray([0, 0, 0, 255]) }),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function toBlob(callback) {
+      callback(new Blob([new Uint8Array([9, 8, 7])], { type: 'image/png' }));
+    } as HTMLCanvasElement['toBlob']);
+    let uploadedBytes: number[] = [];
+    const uploadSpy = vi.fn(async (blob: Blob, metadata): Promise<AttachmentRef> => {
+      uploadedBytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+      return {
+        kind: 'attachment-ref',
+        uri: 'attachment:redacted',
+        hash: 'sha256:00',
+        size: blob.size,
+        mimeType: metadata.mimeType,
+        filename: metadata.filename,
+      };
+    });
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={{ upload: uploadSpy }}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ accept: 'image/*' })} />
+      </AttachmentStoreProvider>,
+    );
+
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [await fileFromBytes(new Uint8Array([1, 2, 3, 4]), 'photo.png', 'image/png')],
+      configurable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await flush();
+    const addRedactionBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Add redaction box');
+    await act(async () => {
+      addRedactionBtn?.click();
+      await flush();
+    });
+    const uploadBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Upload image');
+    await act(async () => {
+      uploadBtn?.click();
+      await flush();
+    });
+    await flush();
+
+    expect(fillRect).toHaveBeenCalledWith(3, 3, 5, 2);
+    expect(uploadSpy).toHaveBeenCalledTimes(1);
+    expect(uploadedBytes).toEqual([9, 8, 7]);
+    expect((harness.readValue() as AttachmentRef).filename).toBe('photo.png');
+  });
+
+  it('clears stale redaction coordinates when page-edge detection crops the image', async () => {
+    stubLoadedImage({ width: 4, height: 4 });
+    const pageData = new Uint8ClampedArray(4 * 4 * 4).fill(255);
+    for (let y = 1; y <= 2; y += 1) {
+      for (let x = 1; x <= 2; x += 1) {
+        const index = (y * 4 + x) * 4;
+        pageData[index] = 0;
+        pageData[index + 1] = 0;
+        pageData[index + 2] = 0;
+      }
+    }
+    const fillRect = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      fillRect,
+      getImageData: () => ({ data: pageData }),
+    } as unknown as CanvasRenderingContext2D);
+    let toBlobCalls = 0;
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function toBlob(callback) {
+      toBlobCalls += 1;
+      callback(new Blob([new Uint8Array(toBlobCalls === 1 ? [4, 4, 4] : [9, 9, 9])], { type: 'image/png' }));
+    } as HTMLCanvasElement['toBlob']);
+    let uploadedBytes: number[] = [];
+    const uploadSpy = vi.fn(async (blob: Blob, metadata): Promise<AttachmentRef> => {
+      uploadedBytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+      return {
+        kind: 'attachment-ref',
+        uri: 'attachment:cropped',
+        hash: 'sha256:00',
+        size: blob.size,
+        mimeType: metadata.mimeType,
+        filename: metadata.filename,
+      };
+    });
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={{ upload: uploadSpy }}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ accept: 'image/*' })} />
+      </AttachmentStoreProvider>,
+    );
+
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [await fileFromBytes(new Uint8Array([1, 2, 3, 4]), 'photo.png', 'image/png')],
+      configurable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+    });
+    await flush();
+    const addRedactionBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Add redaction box');
+    await act(async () => {
+      addRedactionBtn?.click();
+      await flush();
+    });
+    const detectBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Detect page edges');
+    await act(async () => {
+      detectBtn?.click();
+      await flush();
+    });
+    await flush();
+    const uploadBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Upload image');
+    await act(async () => {
+      uploadBtn?.click();
+      await flush();
+    });
+    await flush();
+
+    expect(fillRect).not.toHaveBeenCalled();
+    expect(toBlobCalls).toBe(1);
+    expect(uploadSpy).toHaveBeenCalledTimes(1);
+    expect(uploadedBytes).toEqual([4, 4, 4]);
+  });
+
+  it('uploads a successful camera capture through the same AttachmentStore path', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    const stop = vi.fn();
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: vi.fn(async () => ({
+          getTracks: () => [{ stop }],
+        })),
+      },
+      configurable: true,
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray(96 * 96 * 4) }),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function toBlob(callback) {
+      callback(new Blob([new Uint8Array([5, 6, 7])], { type: 'image/jpeg' }));
+    } as HTMLCanvasElement['toBlob']);
+    let uploadedBytes: number[] = [];
+    const uploadSpy = vi.fn(async (blob: Blob, metadata): Promise<AttachmentRef> => {
+      uploadedBytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+      return {
+        kind: 'attachment-ref',
+        uri: 'attachment:camera',
+        hash: 'sha256:00',
+        size: blob.size,
+        mimeType: metadata.mimeType,
+        filename: metadata.filename,
+      };
+    });
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={{ upload: uploadSpy }}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ accept: 'image/*' })} />
+      </AttachmentStoreProvider>,
+    );
+
+    const cameraBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Use camera');
+    await act(async () => {
+      cameraBtn?.click();
+      await flush();
+    });
+    const captureBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Capture image');
+    await act(async () => {
+      captureBtn?.click();
+      await flush();
+    });
+    await flush();
+    const uploadBtn = Array.from(container!.querySelectorAll('button'))
+      .find((btn) => btn.textContent === 'Upload image');
+    await act(async () => {
+      uploadBtn?.click();
+      await flush();
+    });
+    await flush();
+
+    expect(uploadSpy).toHaveBeenCalledTimes(1);
+    expect(uploadedBytes).toEqual([5, 6, 7]);
+    expect((harness.readValue() as AttachmentRef).filename).toBe('camera-capture.jpg');
+    expect(stop).toHaveBeenCalledTimes(1);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: originalMediaDevices,
+      configurable: true,
+    });
   });
 
   it('enforces accept constraints on camera captures before image review upload', async () => {

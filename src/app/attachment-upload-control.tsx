@@ -202,14 +202,20 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     replaceImageDraft(next ?? null);
   }, [replaceImageDraft, replaceImageDraftQueue]);
 
-  const enqueueImageDrafts = useCallback((files: readonly File[]): void => {
+  const enqueueImageDrafts = useCallback(async (files: readonly File[]): Promise<void> => {
     if (files.length === 0) return;
-    const drafts = files.map((file): ImageDraft => ({
+    const drafts = await Promise.all(files.map(async (file): Promise<ImageDraft> => ({
       file,
       objectUrl: URL.createObjectURL(file),
       redactions: [],
-      legibilityWarning: estimateLegibilityWarning(file),
-    }));
+      legibilityWarning: await analyzeImageFileLegibility(file),
+    })));
+    if (!mountedRef.current) {
+      for (const draft of drafts) {
+        URL.revokeObjectURL(draft.objectUrl);
+      }
+      return;
+    }
     if (!imageDraftRef.current) {
       const [first, ...rest] = drafts;
       replaceImageDraft(first ?? null);
@@ -305,11 +311,9 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 
       const imageFiles = acceptedFiles.filter((file) => file.type.startsWith('image/'));
       const uploadFiles = acceptedFiles.filter((file) => !file.type.startsWith('image/'));
-      enqueueImageDrafts(imageFiles);
-
-      if (uploadFiles.length > 0) {
-        await startUploads(uploadFiles);
-      }
+      const enqueuePromise = enqueueImageDrafts(imageFiles);
+      const uploadPromise = uploadFiles.length > 0 ? startUploads(uploadFiles) : Promise.resolve();
+      await Promise.all([enqueuePromise, uploadPromise]);
     },
     [addFailedRows, enqueueImageDrafts, field.readonly, multiple, startUploads, validateFile],
   );
@@ -507,11 +511,13 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     try {
       const file = await cropToDetectedPageEdges(imageDraft.file);
       const objectUrl = URL.createObjectURL(file);
+      const imageChanged = file !== imageDraft.file;
       replaceImageDraft({
         ...imageDraft,
         file,
         objectUrl,
-        legibilityWarning: estimateLegibilityWarning(file),
+        redactions: imageChanged ? [] : imageDraft.redactions,
+        legibilityWarning: await analyzeImageFileLegibility(file),
       });
     } catch {
       setPending((prev) => [
@@ -872,6 +878,24 @@ function normalizeRect(
 function estimateLegibilityWarning(file: File): string | undefined {
   if (!file.type.startsWith('image/')) return undefined;
   return file.size < 4096 ? ATTACHMENT_LEGIBILITY_WARNING_COPY : undefined;
+}
+
+async function analyzeImageFileLegibility(file: File): Promise<string | undefined> {
+  if (!file.type.startsWith('image/')) return undefined;
+  try {
+    const image = await loadImage(file);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) return estimateLegibilityWarning(file);
+    context.drawImage(image, 0, 0, width, height);
+    return analyzeLegibility(context, width, height);
+  } catch {
+    return estimateLegibilityWarning(file);
+  }
 }
 
 function analyzeLegibility(

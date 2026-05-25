@@ -264,6 +264,34 @@ Verification run after remediation:
 - `npm run build`
 - `git diff --check`
 
+### 2026-05-25 — W1.12 / FW-0073-FW-0077 file-upload review-loop closure
+
+Independent generic reviewer `019e5f1d-3f24-7801-90dc-e473f5c860cb` reviewed the FW-0073 / FW-0074 / FW-0076 / FW-0077 bundled file-upload slice and returned REQUEST CHANGES. Specialized `formspec-specs:*` reviewer roles were still not exposed, so this was a generic semi-formal code review over the current implementation.
+
+Findings remediated:
+
+- BLOCKER F1: redaction boxes survived page-edge detection in the wrong coordinate space. Remediation: `Detect page edges` now clears existing redaction boxes when `cropToDetectedPageEdges()` returns a changed `File`, preventing stale normalized rectangles from being burned into the cropped image.
+- WARNING F2: picked-image legibility warnings used only the small-file heuristic, while camera captures used the actual resolution / contrast / glare canvas analysis. Remediation: picked images now decode through `analyzeImageFileLegibility()` and use the same canvas heuristic as camera captures, with the small-file heuristic only as a fallback.
+- WARNING F3: `persistentDemoAttachmentStore().getStoredBytes()` trusted localStorage JSON/base64. Remediation: persisted entries are shape-validated, malformed JSON/bad shape/bad base64 returns `undefined`, and storage access falls back defensively when browser storage throws.
+- WARNING F4: tests did not prove successful camera/redacted upload payloads. Remediation: runtime tests now assert the exact bytes passed to the store for successful redacted uploads and successful camera captures; an additional regression proves redact → detect page edges → upload does not burn stale redaction rectangles.
+
+Adopter-shape clarification added while closing the row: `AttachmentStore` is explicitly a dependency-injected boundary. Production adapters may implement direct pre-signed URL uploads, adopter file-proxy services, S3/R2/Azure Blob/server-bundled/vendor-managed/IPFS storage, and optional client-side / zero-trust encryption behind the injected adapter. The respondent renderer does not branch on storage topology, keys, encryption metadata, or proxy policy.
+
+Reviewer re-check returned APPROVE with no remaining blockers or warnings for W1.12 closure.
+
+Verification run after remediation:
+
+- `npm test -- tests/app/attachment-upload-control.test.tsx tests/adapters/persistent-attachment-store.test.ts tests/demo/sample-form.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run test:unit`
+- `npm run test:conformance`
+- `npm run check:testing-plan`
+- `npm run check:mvp-audit`
+- `npm run check:conformance-coverage`
+- `npm run build`
+- `git diff --check`
+
 ### 2026-05-25 — Conservative W1/W2 cycle ledger
 
 Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dispatch table against current committed artifacts. Specialized `formspec-specs:*` scout/reviewer roles were not exposed in this runtime, so the check was a generic read-only scout pass. Disposition rule: implementation, ratification, or remediation commits are **not** enough to check off a row as closed unless the implementer→reviewer→remediator→verifier loop is explicit in the plan or commit evidence.
@@ -281,10 +309,10 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W1.9 / FW-0041 public-terminal hygiene | `formspec-web` `ddff89a`, `8cff5eb`; review-loop closure recorded above | cycle-closed for the recorded build slice |
 | W1.10 / FW-0019 server Locale Documents | `formspec-web` `58522ad`, `7d2cc63`; review-loop closure recorded above | cycle-closed for the recorded build slice |
 | W1.11 / FW-0028 slice 2 assurance step-up | `formspec-web` `2f85951`, `986af74`; review-loop closure recorded above; EXT-8 remains external | cycle-closed for the recorded build slice |
-| W1.12 / FW-0073/0074/0076/0077 file-upload slice 2 | `formspec-web` `4e0a8d3`, `854040d`; `PLANNING.md` marks bundled rows live | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
+| W1.12 / FW-0073/0074/0076/0077 file-upload slice 2 | `formspec-web` `4e0a8d3`, `854040d`; review-loop closure recorded above | cycle-closed for the recorded build slice |
 | W2.1 / FW-0113 trusted reviewer build | `formspec-web` `5fc4d96`, `751d9a0`; FW-0113 row remains open/blocked | integrated/fixed, not cycle-closed |
 | W2.2 / FW-0038 record lifecycle build | `formspec-web` `d5f6a9b`, `01bb024`; FW-0038 row remains open/gated | integrated/fixed, not cycle-closed |
 | W2.3 / FW-0060 safe-address build | `formspec-web` `6e02690`, `8e5a163`, `338ebd1`, `b53cbe3`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
 | W2.4 / FW-0061 multi-party build | `formspec-web` `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for XS-1/upstream ratification |
 
-Closeout consequence: W1.9, W1.10, W1.11, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
+Closeout consequence: W1.9, W1.10, W1.11, W1.12, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.

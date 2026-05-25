@@ -7,10 +7,11 @@
  * `buildIntakeHandoff` runs. The handoff carries the ref through
  * `response.data` JSON unchanged — no parallel sidecar plumbing.
  *
- * Adopters wire S3 / R2 / Azure Blob / server-bundled / IPFS / etc. for
- * storage independently of the submit endpoint. The reference deployment
- * composition declares `unavailable` honestly until an adopter wires a real
- * adapter.
+ * Adopters dependency-inject a real adapter: direct browser uploads via
+ * pre-signed URLs, adopter file-proxy services, optional client-side or
+ * zero-trust file encryption, S3 / R2 / Azure Blob / server-bundled /
+ * vendor-managed / IPFS storage, etc. The reference deployment composition
+ * declares `unavailable` honestly until an adopter wires a real adapter.
  *
  * See FW-0033 slice 1 design + `docs/ports/attachment-store.md`.
  */

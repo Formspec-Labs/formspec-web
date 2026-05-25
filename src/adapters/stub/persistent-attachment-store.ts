@@ -97,8 +97,15 @@ export function persistentDemoAttachmentStore(
     getStoredBytes(uri: string): Blob | undefined {
       const raw = getItem(itemKey(namespace, uri), storage, memoryFallback);
       if (!raw) return undefined;
-      const stored = JSON.parse(raw) as StoredAttachment;
-      return new Blob([base64ToBytes(stored.bytesBase64) as unknown as BlobPart], {
+      const stored = parseStoredAttachment(raw);
+      if (!stored) return undefined;
+      let bytes: Uint8Array;
+      try {
+        bytes = base64ToBytes(stored.bytesBase64);
+      } catch {
+        return undefined;
+      }
+      return new Blob([bytes as unknown as BlobPart], {
         type: stored.ref.mimeType,
       });
     },
@@ -136,7 +143,11 @@ function nextCounter(namespace: string, storage: Storage | undefined, fallback: 
 }
 
 function getItem(key: string, storage: Storage | undefined, fallback: Map<string, string>): string | null {
-  return storage?.getItem(key) ?? fallback.get(key) ?? null;
+  try {
+    return storage?.getItem(key) ?? fallback.get(key) ?? null;
+  } catch {
+    return fallback.get(key) ?? null;
+  }
 }
 
 function setItem(
@@ -146,18 +157,53 @@ function setItem(
   fallback: Map<string, string>,
 ): void {
   if (storage) {
-    storage.setItem(key, value);
-    return;
+    try {
+      storage.setItem(key, value);
+      fallback.delete(key);
+      return;
+    } catch {
+      // Fall through to the in-memory fallback for disabled or quota-limited storage.
+    }
   }
   fallback.set(key, value);
 }
 
 function removeItem(key: string, storage: Storage | undefined, fallback: Map<string, string>): void {
   if (storage) {
-    storage.removeItem(key);
-    return;
+    try {
+      storage.removeItem(key);
+    } catch {
+      // Best-effort demo cleanup; the fallback is still cleared below.
+    }
   }
   fallback.delete(key);
+}
+
+function parseStoredAttachment(raw: string): StoredAttachment | undefined {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isStoredAttachment(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isStoredAttachment(value: unknown): value is StoredAttachment {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as { ref?: unknown; bytesBase64?: unknown };
+  return typeof record.bytesBase64 === 'string' && isStoredAttachmentRef(record.ref);
+}
+
+function isStoredAttachmentRef(value: unknown): value is AttachmentRef {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<AttachmentRef>;
+  return record.kind === 'attachment-ref'
+    && typeof record.uri === 'string'
+    && typeof record.hash === 'string'
+    && typeof record.size === 'number'
+    && Number.isFinite(record.size)
+    && typeof record.mimeType === 'string'
+    && typeof record.filename === 'string';
 }
 
 function concatBytes(chunks: Uint8Array[], size: number): Uint8Array {

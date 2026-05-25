@@ -31,6 +31,30 @@ describe('persistentDemoAttachmentStore', () => {
     expect(await stored?.text()).toBe('hello');
   });
 
+  it('ignores malformed persisted entries instead of throwing', () => {
+    const namespace = 'test:malformed-persistent-attachments';
+    const adapter = persistentDemoAttachmentStore({ namespace, storage });
+    const validRef = {
+      kind: 'attachment-ref',
+      uri: 'attachment:bad-base64',
+      hash: 'sha256:00',
+      size: 5,
+      mimeType: 'text/plain',
+      filename: 'bad.txt',
+    };
+
+    storage.setItem(`${namespace}:item:attachment:bad-json`, '{not-json');
+    storage.setItem(`${namespace}:item:attachment:bad-shape`, JSON.stringify({ bytesBase64: 'aGVsbG8=' }));
+    storage.setItem(`${namespace}:item:attachment:bad-base64`, JSON.stringify({
+      ref: validRef,
+      bytesBase64: '%%%not-base64%%%',
+    }));
+
+    expect(adapter.getStoredBytes('attachment:bad-json')).toBeUndefined();
+    expect(adapter.getStoredBytes('attachment:bad-shape')).toBeUndefined();
+    expect(adapter.getStoredBytes('attachment:bad-base64')).toBeUndefined();
+  });
+
   it('reports byte-level progress through the resumable extension', async () => {
     const adapter = persistentDemoAttachmentStore({
       namespace: 'test:resumable',

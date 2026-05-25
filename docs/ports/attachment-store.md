@@ -31,11 +31,21 @@ npm test -- tests/adapter-conformance/attachment-store
 
 ## Why upload is separate from `SubmitTransport`
 
-Storage and submission are orthogonal adopter concerns. Adopters wire S3,
-R2, Azure Blob, server-bundled, or IPFS for storage independently of the
-endpoint that accepts the submit handoff. Uploading progressively during
-form fill (rather than in a single submit-time batch) also surfaces errors
-at the field, not at the end of a multi-megabyte POST.
+Storage and submission are orthogonal adopter concerns. The port is a
+dependency-injected boundary: adopters can implement direct browser uploads
+against pre-signed URLs, proxy uploads through their own file service, or
+wire S3, R2, Azure Blob, server-bundled, vendor-managed, or IPFS storage
+behind the adapter independently of the endpoint that accepts the submit
+handoff. Uploading progressively during form fill (rather than in a single
+submit-time batch) also surfaces errors at the field, not at the end of a
+multi-megabyte POST.
+
+Security posture is also adapter-shaped. Adopters can inject stores that do
+client-side envelope encryption, route through a zero-trust file service, or
+delegate encryption to their object-storage infrastructure. The respondent
+renderer does not inspect keys, encryption metadata, malware-scanning state,
+or storage topology; those concerns remain behind the injected adapter and
+the returned opaque `AttachmentRef`.
 
 ## Optional `delete` for in-flight remove
 
@@ -75,6 +85,18 @@ Adapters that implement the extension MUST call `onProgress` with
 `loadedBytes`, `totalBytes`, `chunksUploaded`, and `chunkCount` as chunks
 commit. A final `AttachmentRef` still has the same serializable shape as the
 baseline port.
+
+Pre-signed direct-upload adapters can use `uploadResumable` to request a
+session URL, stream chunks to object storage, and return the final opaque
+`AttachmentRef`. Proxy adapters can instead POST the chunks to an adopter
+service that relays to S3/R2/vendor storage; the respondent renderer does
+not branch on which topology the injected adapter chooses.
+
+Encrypted or zero-trust adapters can use the same extension to report chunk
+progress while encrypting before upload or while a proxy service performs
+policy checks and encryption. This port does not standardize key management
+or encryption evidence; a future adapter profile can ratify those semantics
+without changing the field renderer.
 
 ## Composition wiring
 
