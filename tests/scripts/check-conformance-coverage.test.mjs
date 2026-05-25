@@ -323,6 +323,15 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/embed-transport/conformance.test.ts',
+    suiteText(
+      'EmbedTransport',
+      [['stub EmbedTransport conformance', 'stubEmbedTransport']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -354,6 +363,10 @@ function writeAdapterFiles(root, options) {
       'export function stubPaymentRailAdapter() {}',
     ],
     [
+      'src/adapters/stub/embed-transport.ts',
+      'export function stubEmbedTransport() {}',
+    ],
+    [
       'src/adapters/unavailable/respondent-place-source.ts',
       'export function unavailableRespondentPlaceSource() {}',
     ],
@@ -373,6 +386,10 @@ function writeAdapterFiles(root, options) {
     [
       'src/adapters/unavailable/payment-rail-adapter.ts',
       'export function unavailablePaymentRailAdapter() {}',
+    ],
+    [
+      'src/adapters/unavailable/embed-transport.ts',
+      'export function unavailableEmbedTransport() {}',
     ],
     [
       'src/adapters/http/definition-source.ts',
@@ -413,6 +430,7 @@ function defaultComposition() {
     'import { unavailableRespondentHistorySource } from "../adapters/unavailable/respondent-history-source.ts";',
     'import { unavailableOfflineSubmitQueue } from "../adapters/unavailable/offline-submit-queue.ts";',
     'import { unavailablePaymentRailAdapter } from "../adapters/unavailable/payment-rail-adapter.ts";',
+    'import { unavailableEmbedTransport } from "../adapters/unavailable/embed-transport.ts";',
     'export function createDefaultComposition() {',
     '  return {',
     '    respondentPlaceSource: unavailableRespondentPlaceSource(),',
@@ -421,6 +439,7 @@ function defaultComposition() {
     '    respondentHistorySource: unavailableRespondentHistorySource(),',
     '    offlineSubmitQueue: unavailableOfflineSubmitQueue(),',
     '    paymentRailAdapter: unavailablePaymentRailAdapter(),',
+    '    embedTransport: unavailableEmbedTransport(),',
     '  };',
     '}',
   ].join('\n');
@@ -441,6 +460,7 @@ function publicIndex() {
     '  defineRespondentHistorySourceConformance,',
     '  defineOfflineSubmitQueueConformance,',
     '  definePaymentRailAdapterConformance,',
+    '  defineEmbedTransportConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }

@@ -21,6 +21,7 @@ import {
   type StubOfflineSubmitQueue,
 } from '../../src/adapters/stub/offline-submit-queue.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
+import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import {
   freezeComposition,
@@ -107,6 +108,7 @@ function buildComposition({
     crossIssuerHistory: 'demo-stub',
     offlineSubmit: offlineQueueAvailable ? 'demo-stub' : 'unavailable',
     payment: 'unavailable',
+    embed: 'unavailable',
   };
   const orgRuntimePolicy: OrgRuntimePolicy = {
     features: {
@@ -117,6 +119,7 @@ function buildComposition({
       crossIssuerHistory: 'allowed',
       offlineSubmit: 'allowed',
       payment: 'allowed',
+      embed: 'allowed',
     },
   };
 
@@ -134,6 +137,7 @@ function buildComposition({
     respondentHistorySource: stubRespondentHistorySource(),
     offlineSubmitQueue,
     paymentRailAdapter: unavailablePaymentRailAdapter(),
+    embedTransport: unavailableEmbedTransport(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([

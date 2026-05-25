@@ -82,3 +82,9 @@ export type {
   Authorization,
   CaptureReceipt,
 } from './payment-rail-adapter.ts';
+export type {
+  EmbedTransport,
+  EmbedMessage,
+  EmbedMessageFromHost,
+  Unsubscribe as EmbedUnsubscribe,
+} from './embed-transport.ts';

@@ -52,8 +52,25 @@ export interface OrgRuntimePolicy {
    * Opaque per-feature limits. ADR-0011 §Org runtime policy enumerates
    * examples (allowed origins, retention windows, payment methods). Each
    * feature ADR defines the limit shape for its key.
+   *
+   * FW-0040 defines `limits.embed` as `EmbedLimits` ({ allowedOrigins: string[] }):
+   * the iframe-context gate matches the host page's origin against this
+   * allow-list. An empty array fails-closed; the literal `'*'` opts into
+   * any-origin (production adopters who use this MUST document it). The
+   * resolver validates this shape at boot.
    */
   readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
+}
+
+/**
+ * FW-0040 slice 1: shape of `OrgRuntimePolicy.limits.embed`. The runtime
+ * iframe-context gate matches the host page's origin against
+ * `allowedOrigins` and fails-closed when no entry matches. An empty array
+ * means "no origins allowed." A single `'*'` entry means "any origin
+ * allowed" (production adopters MUST document this).
+ */
+export interface EmbedLimits {
+  readonly allowedOrigins: readonly string[];
 }
 
 /** ADR-0011 §Form runtime policy. */

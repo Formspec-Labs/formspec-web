@@ -2,6 +2,7 @@ import type { FormDefinition } from '@formspec-org/types';
 import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
+  EmbeddableExtractor,
   EmptyFormRuntimePolicyExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
@@ -93,5 +94,18 @@ defineFormRuntimePolicyExtractorConformance(
   () => ({
     adapter: new PaymentRequirementExtractor(),
     definition: paymentRequiredDefinition,
+  }),
+);
+
+const embeddableDefinition: FormDefinition = {
+  ...sampleFormDefinition,
+  extensions: { 'x-formspec-embeddable': true },
+};
+
+defineFormRuntimePolicyExtractorConformance(
+  'EmbeddableExtractor conformance (embeddable definition)',
+  () => ({
+    adapter: new EmbeddableExtractor(),
+    definition: embeddableDefinition,
   }),
 );

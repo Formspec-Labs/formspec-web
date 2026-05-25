@@ -18,6 +18,7 @@
  */
 import {
   extractAttachmentRequirement,
+  extractEmbeddableOptIn,
   extractOfflineSubmitOptIn,
   extractPaymentRequirement,
 } from '../../policy/extract-form-policy.ts';
@@ -49,6 +50,13 @@ export class PaymentRequirementExtractor implements FormRuntimePolicyExtractor {
   extract(definition: FormDefinition): FormRuntimePolicy {
     const payment = extractPaymentRequirement(definition);
     return payment ? { features: { payment } } : { features: {} };
+  }
+}
+
+export class EmbeddableExtractor implements FormRuntimePolicyExtractor {
+  extract(definition: FormDefinition): FormRuntimePolicy {
+    const embed = extractEmbeddableOptIn(definition);
+    return embed ? { features: { embed } } : { features: {} };
   }
 }
 

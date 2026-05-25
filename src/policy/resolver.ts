@@ -214,6 +214,53 @@ function validateInput(input: ResolveRuntimeFeaturesInput): void {
       );
     }
   }
+  validateEmbedLimits(input.org.limits?.embed);
+}
+
+/**
+ * FW-0040 slice 1: the `limits.embed.allowedOrigins` shape is normative —
+ * the iframe-context gate cannot make a fail-closed decision when entries
+ * are malformed. Validate at boot so drift is caught before any form loads.
+ */
+function validateEmbedLimits(value: unknown): void {
+  if (value === undefined) return;
+  if (typeof value !== 'object' || value === null) {
+    throw new InvalidRuntimePolicyError(
+      'org',
+      'limits.embed must be an object with an allowedOrigins array',
+    );
+  }
+  const limits = value as { allowedOrigins?: unknown };
+  if (!Array.isArray(limits.allowedOrigins)) {
+    throw new InvalidRuntimePolicyError(
+      'org',
+      'limits.embed.allowedOrigins must be an array',
+    );
+  }
+  for (const entry of limits.allowedOrigins) {
+    if (typeof entry !== 'string' || entry.length === 0) {
+      throw new InvalidRuntimePolicyError(
+        'org',
+        'limits.embed.allowedOrigins entries must be non-empty strings',
+      );
+    }
+    if (entry === '*') continue;
+    let parsed: URL;
+    try {
+      parsed = new URL(entry);
+    } catch {
+      throw new InvalidRuntimePolicyError(
+        'org',
+        `limits.embed.allowedOrigins entry "${entry}" is not a valid URL`,
+      );
+    }
+    if (parsed.origin !== entry) {
+      throw new InvalidRuntimePolicyError(
+        'org',
+        `limits.embed.allowedOrigins entry "${entry}" must be an origin (no path / query / fragment)`,
+      );
+    }
+  }
 }
 
 function freezeSet<T>(set: Set<T>): ReadonlySet<T> {

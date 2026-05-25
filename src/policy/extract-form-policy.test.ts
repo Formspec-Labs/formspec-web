@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FormDefinition } from '@formspec-org/types';
 import {
   extractAttachmentRequirement,
+  extractEmbeddableOptIn,
   extractOfflineSubmitOptIn,
   extractPaymentAmount,
   extractPaymentRequirement,
@@ -256,5 +257,45 @@ describe('extractPaymentAmount', () => {
       },
     };
     expect(extractPaymentAmount(noAmount)).toBeUndefined();
+  });
+});
+
+describe("extractEmbeddableOptIn", () => {
+  const embedBase: FormDefinition = {
+    ...baseDefinition,
+    items: [],
+  };
+
+  it("returns undefined when the embeddable extension is absent", () => {
+    expect(extractEmbeddableOptIn(embedBase)).toBeUndefined();
+  });
+
+  it("returns optional when the embeddable extension is true", () => {
+    const definition: FormDefinition = {
+      ...embedBase,
+      extensions: { "x-formspec-embeddable": true },
+    };
+    expect(extractEmbeddableOptIn(definition)).toBe("optional");
+  });
+
+  it("returns undefined when the embeddable extension is false", () => {
+    const definition: FormDefinition = {
+      ...embedBase,
+      extensions: { "x-formspec-embeddable": false },
+    };
+    expect(extractEmbeddableOptIn(definition)).toBeUndefined();
+  });
+
+  it("ignores non-boolean truthy values", () => {
+    const stringValue: FormDefinition = {
+      ...embedBase,
+      extensions: { "x-formspec-embeddable": "yes" as unknown as boolean },
+    };
+    expect(extractEmbeddableOptIn(stringValue)).toBeUndefined();
+    const numericValue: FormDefinition = {
+      ...embedBase,
+      extensions: { "x-formspec-embeddable": 1 as unknown as boolean },
+    };
+    expect(extractEmbeddableOptIn(numericValue)).toBeUndefined();
   });
 });

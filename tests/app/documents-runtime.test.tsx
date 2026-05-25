@@ -575,6 +575,7 @@ function productionCompositionWithIdentity(
       crossIssuerHistory: 'unavailable',
       offlineSubmit: 'unavailable',
       payment: 'unavailable',
+      embed: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {

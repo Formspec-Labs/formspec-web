@@ -49,6 +49,19 @@
  *     shape; payment is a hard blocker, not a graceful enhancement). SEVENTH
  *     key in the closed taxonomy.
  *
+ * Extended at FW-0040 slice 1 (embed: form-in-host-page substrate):
+ *   - embed → gated against the new EmbedTransport port (1:1 mapping).
+ *     IN-FORM consumer (no standalone route) — the runtime detects an
+ *     iframe context at form load and verifies the host origin against
+ *     `orgRuntimePolicy.limits.embed.allowedOrigins`. Form-policy
+ *     extractor reads `definition.extensions['x-formspec-embeddable']
+ *     === true` and declares `'optional'` (an embeddable form still
+ *     mounts directly on its issuer's URL; declaring `required` would
+ *     fail-load every embeddable form when accessed directly). EIGHTH
+ *     key in the closed taxonomy. Custom Element wrapper defers to
+ *     FW-0053; production transport adapters (postMessage RPC, penpal /
+ *     comlink) defer to FW-0102.
+ *
  * Extension protocol: every future feature ADR adds its key here and to the
  * Composition's InstanceCapabilities declaration. No string-typed feature keys
  * outside this set — the resolver rejects unknown keys with
@@ -73,6 +86,7 @@ export const RUNTIME_FEATURE_KEYS = [
   'crossIssuerHistory',
   'offlineSubmit',
   'payment',
+  'embed',
 ] as const;
 
 export type RuntimeFeatureKey = (typeof RUNTIME_FEATURE_KEYS)[number];

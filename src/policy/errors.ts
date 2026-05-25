@@ -12,7 +12,8 @@ export type RuntimePolicyErrorCode =
   | 'UnsupportedRequiredFeature'
   | 'FeaturePolicyConflict'
   | 'OrgPolicyUnsatisfied'
-  | 'InvalidRuntimePolicy';
+  | 'InvalidRuntimePolicy'
+  | 'EmbedOriginNotAllowed';
 
 export abstract class RuntimePolicyError extends Error {
   abstract readonly code: RuntimePolicyErrorCode;
@@ -67,6 +68,21 @@ export class InvalidRuntimePolicyError extends RuntimePolicyError {
     reason: string,
   ) {
     super(`Invalid ${documentKind} runtime policy: ${reason}`);
+  }
+}
+
+/**
+ * FW-0040 slice 1: thrown by the iframe-context gate at form load when the
+ * form is mounted inside a host iframe whose origin is not in the org's
+ * `limits.embed.allowedOrigins` allow-list. The featureKey is always
+ * `'embed'`; the form-load error boundary catches this and renders the
+ * plain-language "this form is not set up to be shown on this site." copy.
+ */
+export class EmbedOriginNotAllowedError extends RuntimePolicyError {
+  readonly code = 'EmbedOriginNotAllowed' as const;
+  readonly featureKey = 'embed' as const;
+  constructor(reason: string) {
+    super(`Embed origin not allowed: ${reason}`);
   }
 }
 

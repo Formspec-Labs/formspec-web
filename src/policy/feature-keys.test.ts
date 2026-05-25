@@ -8,12 +8,13 @@ import {
 } from './feature-keys.ts';
 
 describe('RUNTIME_FEATURE_KEYS', () => {
-  it('extends the seeded pair with documentPresentation + fileUpload + crossIssuerHistory + offlineSubmit + payment (append-only)', () => {
+  it('extends the seeded pair with documentPresentation + fileUpload + crossIssuerHistory + offlineSubmit + payment + embed (append-only)', () => {
     // Append-only: FW-0056 adds documentPresentation at the tail; FW-0033
     // adds fileUpload after it; FW-0057 adds crossIssuerHistory after that;
     // FW-0044 adds offlineSubmit (sixth key); FW-0027 adds payment (seventh
-    // key) after that. Re-sorting alphabetically would silently change the
-    // resolver-loop iteration order; new feature ADRs append.
+    // key); FW-0040 adds embed (eighth key) after that. Re-sorting
+    // alphabetically would silently change the resolver-loop iteration
+    // order; new feature ADRs append.
     expect([...RUNTIME_FEATURE_KEYS]).toEqual([
       'respondentPlace',
       'status',
@@ -22,6 +23,7 @@ describe('RUNTIME_FEATURE_KEYS', () => {
       'crossIssuerHistory',
       'offlineSubmit',
       'payment',
+      'embed',
     ]);
   });
 
@@ -33,6 +35,7 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isRuntimeFeatureKey('crossIssuerHistory')).toBe(true);
     expect(isRuntimeFeatureKey('offlineSubmit')).toBe(true);
     expect(isRuntimeFeatureKey('payment')).toBe(true);
+    expect(isRuntimeFeatureKey('embed')).toBe(true);
     expect(isRuntimeFeatureKey('fictional')).toBe(false);
   });
 
@@ -50,5 +53,6 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isLocaleConditionalFeatureKey('crossIssuerHistory')).toBe(false);
     expect(isLocaleConditionalFeatureKey('offlineSubmit')).toBe(false);
     expect(isLocaleConditionalFeatureKey('payment')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('embed')).toBe(false);
   });
 });

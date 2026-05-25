@@ -1,10 +1,10 @@
 {
-  "name": "optional-falls-off",
-  "description": "form optional; instance unavailable; org allows -> disabled with optional-no-instance",
+  "name": "embed-disabled-no-instance",
+  "description": "FW-0040 slice 1: form optional + instance unavailable -> optional-no-instance",
   "mode": "production",
   "instance": {
     "respondentPlace": "unavailable",
-    "status": "available",
+    "status": "unavailable",
     "documentPresentation": "unavailable",
     "fileUpload": "unavailable",
     "crossIssuerHistory": "unavailable",
@@ -15,6 +15,8 @@
   "org": {
     "features": {
       "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
       "fileUpload": "allowed",
       "crossIssuerHistory": "allowed",
       "offlineSubmit": "allowed",
@@ -24,19 +26,14 @@
   },
   "form": {
     "features": {
-      "respondentPlace": "optional"
+      "embed": "optional"
     }
   },
   "expect": {
     "kind": "profile",
     "enabled": [],
     "disabled": {
-      "respondentPlace": "optional-no-instance",
-      "status": "not-requested",
-      "fileUpload": "not-requested",
-      "crossIssuerHistory": "not-requested",
-      "offlineSubmit": "not-requested",
-      "payment": "not-requested"
+      "embed": "optional-no-instance"
     }
   }
 }

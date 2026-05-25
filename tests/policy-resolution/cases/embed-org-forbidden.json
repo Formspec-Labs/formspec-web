@@ -1,42 +1,37 @@
 {
-  "name": "optional-falls-off",
-  "description": "form optional; instance unavailable; org allows -> disabled with optional-no-instance",
+  "name": "embed-org-forbidden",
+  "description": "FW-0040 slice 1: org forbids embed; form silent -> org-forbidden",
   "mode": "production",
   "instance": {
     "respondentPlace": "unavailable",
-    "status": "available",
+    "status": "unavailable",
     "documentPresentation": "unavailable",
     "fileUpload": "unavailable",
     "crossIssuerHistory": "unavailable",
     "offlineSubmit": "unavailable",
     "payment": "unavailable",
-    "embed": "unavailable"
+    "embed": "available"
   },
   "org": {
     "features": {
       "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
       "fileUpload": "allowed",
       "crossIssuerHistory": "allowed",
       "offlineSubmit": "allowed",
       "payment": "allowed",
-      "embed": "allowed"
+      "embed": "forbidden"
     }
   },
   "form": {
-    "features": {
-      "respondentPlace": "optional"
-    }
+    "features": {}
   },
   "expect": {
     "kind": "profile",
     "enabled": [],
     "disabled": {
-      "respondentPlace": "optional-no-instance",
-      "status": "not-requested",
-      "fileUpload": "not-requested",
-      "crossIssuerHistory": "not-requested",
-      "offlineSubmit": "not-requested",
-      "payment": "not-requested"
+      "embed": "org-forbidden"
     }
   }
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { stubAttachmentStore } from '../../src/adapters/stub/attachment-store.ts';
+import { stubEmbedTransport } from '../../src/adapters/stub/embed-transport.ts';
 import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
 import { stubPaymentRailAdapter } from '../../src/adapters/stub/payment-rail-adapter.ts';
 import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-history-source.ts';
@@ -49,5 +50,12 @@ describe('stub adapters that back runtime feature keys carry the demo-stub marke
     expect(isDemoStubAdapter(adapter)).toBe(true);
     if (!isDemoStubAdapter(adapter)) throw new Error('unreachable');
     expect(adapter[DEMO_STUB_ADAPTER].featureKey).toBe('payment');
+  });
+
+  it('stubEmbedTransport is marked with featureKey "embed"', () => {
+    const adapter = stubEmbedTransport();
+    expect(isDemoStubAdapter(adapter)).toBe(true);
+    if (!isDemoStubAdapter(adapter)) throw new Error('unreachable');
+    expect(adapter[DEMO_STUB_ADAPTER].featureKey).toBe('embed');
   });
 });

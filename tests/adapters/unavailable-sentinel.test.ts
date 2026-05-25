@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { unavailableAttachmentStore } from '../../src/adapters/unavailable/attachment-store.ts';
+import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
@@ -55,6 +56,13 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
     expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('payment');
   });
 
+  it('unavailableEmbedTransport is marked with featureKey "embed"', () => {
+    const adapter = unavailableEmbedTransport();
+    expect(isUnavailableAdapter(adapter)).toBe(true);
+    if (!isUnavailableAdapter(adapter)) throw new Error('unreachable');
+    expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('embed');
+  });
+
   it('marked adapters still throw on call (sentinel does not change runtime behavior)', async () => {
     await expect(unavailableRespondentPlaceSource().readPlace({} as never)).rejects.toThrow();
     await expect(
@@ -72,5 +80,11 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
         generateIdempotencyKey(),
       ),
     ).rejects.toThrow();
+    expect(() =>
+      unavailableEmbedTransport().postMessage(
+        { kind: 'host-handshake', hostOrigin: 'https://allowed.example.test' },
+        'https://allowed.example.test',
+      ),
+    ).toThrow();
   });
 });

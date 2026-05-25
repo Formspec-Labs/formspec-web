@@ -9,7 +9,8 @@
     "fileUpload": "unavailable",
     "crossIssuerHistory": "unavailable",
     "offlineSubmit": "unavailable",
-    "payment": "unavailable"
+    "payment": "unavailable",
+    "embed": "unavailable"
   },
   "org": {
     "features": {
@@ -19,7 +20,8 @@
       "fileUpload": "allowed",
       "crossIssuerHistory": "allowed",
       "offlineSubmit": "allowed",
-      "payment": "allowed"
+      "payment": "allowed",
+      "embed": "allowed"
     }
   },
   "form": {
@@ -37,7 +39,8 @@
       "fileUpload": "not-requested",
       "crossIssuerHistory": "not-requested",
       "offlineSubmit": "optional-no-instance",
-      "payment": "not-requested"
+      "payment": "not-requested",
+      "embed": "not-requested"
     }
   }
 }

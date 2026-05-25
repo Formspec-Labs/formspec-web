@@ -364,6 +364,12 @@ function testComposition(
       }),
       voidAuthorization: vi.fn(async () => undefined),
     },
+    embedTransport: {
+      isEmbedded: vi.fn(() => false),
+      hostOrigin: vi.fn(() => null),
+      postMessage: vi.fn(() => undefined),
+      subscribeFromHost: vi.fn(() => () => undefined),
+    },
     // ADR-0011: production-mode composition with both seeded capabilities
     // available and the form opting both in. Without the form opt-in the
     // resolver would mark both `not-requested` (org=allowed + form=silent)
@@ -390,6 +396,9 @@ function testComposition(
       // payment path; the form does not declare it, so 'unavailable' is
       // honest and the resolver records 'not-requested'.
       payment: 'unavailable',
+      // FW-0040: closed-taxonomy key — this test does not exercise the
+      // embed path; the form does not declare it.
+      embed: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
@@ -400,6 +409,7 @@ function testComposition(
         crossIssuerHistory: 'allowed',
         offlineSubmit: 'allowed',
         payment: 'allowed',
+        embed: 'allowed',
       },
     },
     formRuntimePolicyExtractor: {

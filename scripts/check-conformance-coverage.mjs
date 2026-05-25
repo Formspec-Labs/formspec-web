@@ -19,6 +19,7 @@ const portSuites = new Map([
   ['RespondentHistorySource', 'tests/adapter-conformance/respondent-history-source/conformance.test.ts'],
   ['OfflineSubmitQueue', 'tests/adapter-conformance/offline-submit-queue/conformance.test.ts'],
   ['PaymentRailAdapter', 'tests/adapter-conformance/payment-rail-adapter/conformance.test.ts'],
+  ['EmbedTransport', 'tests/adapter-conformance/embed-transport/conformance.test.ts'],
 ]);
 const stubPortsByPath = new Map([
   ['src/adapters/stub/definition-source.ts', 'DefinitionSource'],
@@ -33,6 +34,7 @@ const stubPortsByPath = new Map([
   ['src/adapters/stub/respondent-history-source.ts', 'RespondentHistorySource'],
   ['src/adapters/stub/offline-submit-queue.ts', 'OfflineSubmitQueue'],
   ['src/adapters/stub/payment-rail-adapter.ts', 'PaymentRailAdapter'],
+  ['src/adapters/stub/embed-transport.ts', 'EmbedTransport'],
 ]);
 const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/respondent-place-source.ts', 'unavailableRespondentPlaceSource'],
@@ -41,6 +43,7 @@ const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/respondent-history-source.ts', 'unavailableRespondentHistorySource'],
   ['src/adapters/unavailable/offline-submit-queue.ts', 'unavailableOfflineSubmitQueue'],
   ['src/adapters/unavailable/payment-rail-adapter.ts', 'unavailablePaymentRailAdapter'],
+  ['src/adapters/unavailable/embed-transport.ts', 'unavailableEmbedTransport'],
 ]);
 const requiredHarnessExports = [
   'defineDefinitionSourceConformance',
@@ -55,6 +58,7 @@ const requiredHarnessExports = [
   'defineRespondentHistorySourceConformance',
   'defineOfflineSubmitQueueConformance',
   'definePaymentRailAdapterConformance',
+  'defineEmbedTransportConformance',
 ];
 const requiredReadmePhrases = [
   'formspec-web/adapter-conformance',

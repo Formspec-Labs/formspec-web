@@ -1,16 +1,16 @@
 {
-  "name": "file-upload-demo-stub-satisfies-required",
-  "description": "FW-0033 slice 1: demo mode + form requires fileUpload + instance demo-stub -> enabled",
-  "mode": "demo",
+  "name": "embed-optional-allowed",
+  "description": "FW-0040 slice 1: org allowed + form optional + instance available -> enabled",
+  "mode": "production",
   "instance": {
-    "respondentPlace": "demo-stub",
-    "status": "demo-stub",
+    "respondentPlace": "unavailable",
+    "status": "unavailable",
     "documentPresentation": "unavailable",
-    "fileUpload": "demo-stub",
-    "crossIssuerHistory": "demo-stub",
+    "fileUpload": "unavailable",
+    "crossIssuerHistory": "unavailable",
     "offlineSubmit": "unavailable",
     "payment": "unavailable",
-    "embed": "unavailable"
+    "embed": "available"
   },
   "org": {
     "features": {
@@ -22,22 +22,24 @@
       "offlineSubmit": "allowed",
       "payment": "allowed",
       "embed": "allowed"
+    },
+    "limits": {
+      "embed": { "allowedOrigins": ["https://allowed.example.test"] }
     }
   },
   "form": {
     "features": {
-      "fileUpload": "required"
+      "embed": "optional"
     }
   },
   "expect": {
     "kind": "profile",
-    "enabled": [
-      "fileUpload"
-    ],
+    "enabled": ["embed"],
     "disabled": {
       "respondentPlace": "not-requested",
       "status": "not-requested",
       "documentPresentation": "not-requested",
+      "fileUpload": "not-requested",
       "crossIssuerHistory": "not-requested",
       "offlineSubmit": "not-requested",
       "payment": "not-requested"

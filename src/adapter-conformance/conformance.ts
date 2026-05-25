@@ -28,6 +28,11 @@ import type {
   Money,
   PaymentRailAdapter,
 } from '../ports/payment-rail-adapter.ts';
+import type {
+  EmbedMessage,
+  EmbedMessageFromHost,
+  EmbedTransport,
+} from '../ports/embed-transport.ts';
 import type { IntakeHandoff, SubmitConfirmation } from '../ports/submit-transport.ts';
 import {
   isFormFeaturePolicyMode,
@@ -48,8 +53,10 @@ import {
 import {
   differentAttachmentBlob,
   roundTripJson,
+  sampleAllowedHostOrigin,
   sampleAttachmentBlob,
   sampleAttachmentMetadata,
+  sampleEmbedMessage,
   sampleFormDefinition,
   sampleFormResponse,
   sampleHistorySnapshot,
@@ -1141,6 +1148,89 @@ export function definePaymentRailAdapterConformance(
       await expect(
         subject.adapter.authorize(empty, samplePaymentMethodToken, generateIdempotencyKey()),
       ).rejects.toThrow();
+    });
+  });
+}
+
+
+export interface EmbedTransportConformanceSubject {
+  adapter: EmbedTransport;
+  /**
+   * Adapters whose `isEmbedded()` cannot be toggled by construction expose a
+   * setup hook here that returns the adapter in its embedded posture. Stub
+   * adapters (constructed with `{ embedded: true, hostOrigin }`) pass undefined
+   * and the suite uses the same subject for both branches.
+   */
+  embeddedSubject?: () => { adapter: EmbedTransport };
+}
+
+/**
+ * Conformance harness for `EmbedTransport` (FW-0040, web ADR-0011 §embed).
+ * Encodes the iframe-context + transport invariants the port comment names —
+ * boolean isEmbedded, string|null hostOrigin, wildcard rejection, origin
+ * shape enforcement, subscribeFromHost cleanup, no handler-payload mutation.
+ */
+export function defineEmbedTransportConformance(
+  name: string,
+  setup: () => EmbedTransportConformanceSubject,
+): void {
+  describe(name, () => {
+    it("isEmbedded() returns a boolean", () => {
+      const subject = setup();
+      const value: unknown = subject.adapter.isEmbedded();
+      expect(typeof value).toBe("boolean");
+    });
+
+    it("hostOrigin() returns a string or null", () => {
+      const subject = setup();
+      const value = subject.adapter.hostOrigin();
+      if (value !== null) {
+        expect(typeof value).toBe("string");
+        // Round-trip through URL to assert origin shape (no path / query / fragment).
+        expect(() => new URL(value)).not.toThrow();
+      }
+    });
+
+    it("postMessage rejects wildcard targetOrigin", () => {
+      const subject = setup();
+      expect(() => subject.adapter.postMessage(sampleEmbedMessage, "*")).toThrow();
+    });
+
+    it("postMessage rejects non-origin strings with a path", () => {
+      const subject = setup();
+      expect(() =>
+        subject.adapter.postMessage(sampleEmbedMessage, `${sampleAllowedHostOrigin}/path`),
+      ).toThrow();
+    });
+
+    it("postMessage rejects the empty string", () => {
+      const subject = setup();
+      expect(() => subject.adapter.postMessage(sampleEmbedMessage, "")).toThrow();
+    });
+
+    it("subscribeFromHost returns an Unsubscribe that detaches the listener", () => {
+      const subject = setup();
+      const received: EmbedMessageFromHost[] = [];
+      const handler = (envelope: EmbedMessageFromHost): void => {
+        received.push(envelope);
+      };
+      const unsubscribe = subject.adapter.subscribeFromHost(handler);
+      expect(typeof unsubscribe).toBe("function");
+      // Calling twice is idempotent (no-op the second time).
+      unsubscribe();
+      expect(() => unsubscribe()).not.toThrow();
+    });
+
+    it("postMessage with a well-formed origin does not throw", () => {
+      const subject = setup();
+      expect(() =>
+        subject.adapter.postMessage(sampleEmbedMessage, sampleAllowedHostOrigin),
+      ).not.toThrow();
+    });
+
+    it("EmbedMessage shape carries the host-handshake variant", () => {
+      const message: EmbedMessage = sampleEmbedMessage;
+      expect(message.kind).toBe("host-handshake");
     });
   });
 }

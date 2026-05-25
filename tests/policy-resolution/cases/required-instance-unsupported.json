@@ -9,13 +9,15 @@
     "fileUpload": "unavailable",
     "crossIssuerHistory": "unavailable",
     "offlineSubmit": "unavailable",
-    "payment": "unavailable"
+    "payment": "unavailable",
+    "embed": "unavailable"
   },
   "org": {
     "features": {
       "crossIssuerHistory": "allowed",
       "offlineSubmit": "allowed",
-      "payment": "allowed"
+      "payment": "allowed",
+      "embed": "allowed"
     }
   },
   "form": {

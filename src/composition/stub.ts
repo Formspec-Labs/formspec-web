@@ -1,12 +1,14 @@
 import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
+  EmbeddableExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../adapters/stub/draft-store.ts';
+import { stubEmbedTransport } from '../adapters/stub/embed-transport.ts';
 import { stubFormRuntimePolicyExtractor } from '../adapters/stub/form-runtime-policy-extractor.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
@@ -70,6 +72,12 @@ export function createStubComposition(): Composition {
     // gates the demo flip on a method-picker UX); the stub is exercised
     // through synthetic-definition tests + the conformance suite.
     paymentRailAdapter: stubPaymentRailAdapter(),
+    // FW-0040 slice 1: in-memory embed-transport adapter; defaults to
+    // `embedded: false` because the bundled demo loads as the top-level
+    // window. Synthetic-definition tests opt into the embedded branch by
+    // composing a fresh stub with `{ embedded: true, hostOrigin }`; the
+    // bundled demo never exercises the iframe-context gate.
+    embedTransport: stubEmbedTransport({ embedded: false }),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -107,6 +115,14 @@ export function createStubComposition(): Composition {
       // stub is exercised through synthetic-definition tests + the
       // conformance suite + the runtime test matrix.
       payment: 'demo-stub',
+      // FW-0040 slice 1: in-memory embed-transport adapter satisfies the
+      // demo posture. The bundled demo loads top-level so `isEmbedded()`
+      // returns false and the iframe-context gate no-ops; synthetic
+      // tests opt into the embedded branch with a freshly-constructed
+      // stub. The bundled demo form does NOT declare
+      // `x-formspec-embeddable: true` today (FW-0106 gates the demo flip
+      // on a worked host-page demo, FW-0053 + FW-0102).
+      embed: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -117,7 +133,13 @@ export function createStubComposition(): Composition {
         crossIssuerHistory: 'allowed',
         offlineSubmit: 'allowed',
         payment: 'allowed',
+        embed: 'allowed',
       },
+      // FW-0040 slice 1: fail-closed default — the bundled demo never
+      // mounts in an iframe so no allow-list entry is needed; adopters
+      // override per their host integration. The literal '*' opts into
+      // any-origin and MUST be documented per the adopter doc warning.
+      limits: { embed: { allowedOrigins: [] } },
     } satisfies OrgRuntimePolicy,
     // FW-0066: CompositeFormRuntimePolicyExtractor composes the demo-form
     // URL-keyed seeded-pair opt-in (DemoFormPolicyExtractor) with the
@@ -133,6 +155,7 @@ export function createStubComposition(): Composition {
       new AttachmentRequirementExtractor(),
       new OfflineSubmitRequirementExtractor(),
       new PaymentRequirementExtractor(),
+      new EmbeddableExtractor(),
     ]),
   };
   return freezeComposition(composition);

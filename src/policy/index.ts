@@ -13,6 +13,7 @@ export {
   type CapabilityAvailability,
   type DisabledCause,
   type DisabledReason,
+  type EmbedLimits,
   type FormFeaturePolicyMode,
   type FormRuntimePolicy,
   type InstanceCapabilities,
@@ -21,6 +22,7 @@ export {
   type ResolvedRuntimeProfile,
 } from './policy-shapes.ts';
 export {
+  EmbedOriginNotAllowedError,
   FeaturePolicyConflictError,
   InvalidRuntimePolicyError,
   OrgPolicyUnsatisfiedError,

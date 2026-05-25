@@ -3,6 +3,7 @@ import type { NotificationMessage } from '../ports/notification-delivery.ts';
 import type {
   ApplicantStatusProjection,
   ApplicantStatusResource,
+  EmbedMessage,
   HistorySnapshot,
   Money,
   RespondentPlaceSnapshot,
@@ -174,6 +175,17 @@ export const samplePaymentAmount: Money = {
 };
 
 export const samplePaymentMethodToken = 'demo-method-stub';
+
+// FW-0040: embed-transport conformance fixtures. The host origin is a
+// fixed test-domain string so adopter conformance assertions against the
+// allow-list have a deterministic comparison value; the message is the
+// slice-1 handshake variant.
+export const sampleAllowedHostOrigin = 'https://allowed.example.test';
+
+export const sampleEmbedMessage: EmbedMessage = {
+  kind: 'host-handshake',
+  hostOrigin: sampleAllowedHostOrigin,
+};
 
 // FW-0057: cross-issuer history conformance fixture — three entries across
 // two issuers spanning all three closed kinds. Issuer names are display

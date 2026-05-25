@@ -2,6 +2,7 @@ import type {
   AttachmentStore,
   DefinitionSource,
   DraftStore,
+  EmbedTransport,
   FormRuntimePolicyExtractor,
   IdentityProvider,
   NotificationDelivery,
@@ -75,6 +76,17 @@ export interface Composition {
    * composition (CompositePaymentRailAdapter) is FW-0094.
    */
   paymentRailAdapter: PaymentRailAdapter;
+  /**
+   * FW-0040 slice 1: embed-transport seam (web ADR-0011 embed). The runtime
+   * detects an iframe-mount context at form load and verifies the host
+   * origin against `orgRuntimePolicy.limits.embed.allowedOrigins`; when
+   * the form is loaded directly (top-level window) the transport is unused.
+   * Production wires the unavailable sentinel today (no OSS reference
+   * host-page adapter ships); adopters fork to wire raw postMessage,
+   * penpal / comlink, or the future Custom Element message channel
+   * (FW-0053, FW-0102, FW-0103).
+   */
+  embedTransport: EmbedTransport;
   /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */
   instanceCapabilities: InstanceCapabilities;
   /** ADR-0011 §Org runtime policy — supplied by the composition root. */

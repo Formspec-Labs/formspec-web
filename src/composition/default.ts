@@ -7,6 +7,7 @@ import {
 import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
+  EmbeddableExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
@@ -15,6 +16,7 @@ import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
+import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
@@ -83,6 +85,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     respondentHistorySource: unavailableRespondentHistorySource(),
     offlineSubmitQueue: unavailableOfflineSubmitQueue(),
     paymentRailAdapter: unavailablePaymentRailAdapter(),
+    embedTransport: unavailableEmbedTransport(),
     // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —
@@ -126,6 +129,14 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       // "This form requires payment, but this site is not set up to accept
       // payments." copy until an adapter is wired.
       payment: 'unavailable',
+      // FW-0040 slice 1: the OSS reference composition does not ship a
+      // production embed transport. Adopters fork to wire postMessage RPC,
+      // penpal / comlink wrappers, or the future Custom Element message
+      // channel (FW-0053, FW-0102, FW-0103) per their host integration.
+      // Forms loaded inside an iframe on this composition fail-closed at
+      // form load with the "this form is not set up to be shown on this
+      // site." copy until an adapter is wired.
+      embed: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -136,7 +147,14 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
         crossIssuerHistory: 'allowed',
         offlineSubmit: 'allowed',
         payment: 'allowed',
+        embed: 'allowed',
       },
+      // FW-0040 slice 1: fail-closed default. Adopters who wire a
+      // production embed transport MUST also populate
+      // `limits.embed.allowedOrigins` with the host page origins they
+      // expect to be embedded under; the literal '*' opts into any-origin
+      // and MUST be documented per the adopter doc warning.
+      limits: { embed: { allowedOrigins: [] } },
     } satisfies OrgRuntimePolicy,
     // FW-0066: composite extractor wraps the FW-0033 attachment-field walker,
     // the FW-0044 offline-extension walker, and the FW-0027 payment-extension
@@ -147,6 +165,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       new AttachmentRequirementExtractor(),
       new OfflineSubmitRequirementExtractor(),
       new PaymentRequirementExtractor(),
+      new EmbeddableExtractor(),
     ]),
   };
   return freezeComposition(composition);

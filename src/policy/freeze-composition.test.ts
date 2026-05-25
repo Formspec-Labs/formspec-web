@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { freezeComposition, CompositionIncoherenceError } from './composition-coherence.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
+import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
+import { stubEmbedTransport } from '../adapters/stub/embed-transport.ts';
 import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts';
 import { stubPaymentRailAdapter } from '../adapters/stub/payment-rail-adapter.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
@@ -29,6 +31,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         crossIssuerHistory: 'demo-stub',
         offlineSubmit: 'demo-stub',
         payment: 'demo-stub',
+        embed: 'demo-stub',
       } as const,
       respondentPlaceSource: stubRespondentPlaceSource(),
       statusReader: stubStatusReader(),
@@ -36,6 +39,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
       respondentHistorySource: stubRespondentHistorySource(),
       offlineSubmitQueue: stubOfflineSubmitQueue({ transport: stubSubmitTransport() }),
       paymentRailAdapter: stubPaymentRailAdapter(),
+      embedTransport: stubEmbedTransport(),
     };
     expect(freezeComposition(composition)).toBe(composition);
   });
@@ -51,6 +55,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
+        embed: 'unavailable',
       } as const,
       respondentPlaceSource: unavailableRespondentPlaceSource(),
       statusReader: stubStatusReader(),
@@ -58,6 +63,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
       respondentHistorySource: unavailableRespondentHistorySource(),
       offlineSubmitQueue: unavailableOfflineSubmitQueue(),
       paymentRailAdapter: unavailablePaymentRailAdapter(),
+      embedTransport: unavailableEmbedTransport(),
     };
     expect(() => freezeComposition(composition)).toThrow(CompositionIncoherenceError);
   });

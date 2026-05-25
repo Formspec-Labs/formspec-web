@@ -25,6 +25,7 @@ import {
 } from '../../src/adapters/stub/payment-rail-adapter.ts';
 import { unavailableAttachmentStore } from '../../src/adapters/unavailable/attachment-store.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
+import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
@@ -89,6 +90,10 @@ function buildPaymentComposition(args: {
     crossIssuerHistory: 'demo-stub',
     offlineSubmit: 'unavailable',
     payment: args.paymentAvailable,
+    // FW-0040 sibling-row coordination: this test does not exercise the
+    // embed path; the runtime composition needs the closed-taxonomy key
+    // declared for resolver input validity.
+    embed: 'unavailable',
   };
   const orgRuntimePolicy: OrgRuntimePolicy = {
     features: {
@@ -99,6 +104,7 @@ function buildPaymentComposition(args: {
       crossIssuerHistory: 'allowed',
       offlineSubmit: 'allowed',
       payment: 'allowed',
+      embed: 'allowed',
     },
   };
 
@@ -118,6 +124,10 @@ function buildPaymentComposition(args: {
     // assertion accepts the slot regardless of payment availability.
     offlineSubmitQueue: unavailableOfflineSubmitQueue(),
     paymentRailAdapter,
+    // FW-0040 sibling-row coordination: declare the embedTransport slot so
+    // the closed-taxonomy contract is satisfied. The fail-closed default
+    // never fires because this test never mounts in an iframe.
+    embedTransport: unavailableEmbedTransport(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
@@ -277,6 +287,8 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
       respondentHistorySource: unavailableRespondentHistorySource(),
       offlineSubmitQueue: unavailableOfflineSubmitQueue(),
       paymentRailAdapter: unavailablePaymentRailAdapter(),
+      // FW-0040 sibling-row coordination: closed-taxonomy slot.
+      embedTransport: unavailableEmbedTransport(),
       instanceCapabilities: {
         respondentPlace: 'unavailable',
         status: 'unavailable',
@@ -285,6 +297,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
+        embed: 'unavailable',
       } as InstanceCapabilities,
       orgRuntimePolicy: {
         features: {
@@ -295,6 +308,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
           crossIssuerHistory: 'allowed',
           offlineSubmit: 'allowed',
           payment: 'allowed',
+          embed: 'allowed',
         },
       } satisfies OrgRuntimePolicy,
       formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([

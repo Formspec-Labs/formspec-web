@@ -44,6 +44,12 @@ export const FEATURE_PORT_MAP = {
   // adapter per composition. Reference adapters (Stripe / Square / W3C
   // Payment Request / PayNearMe / in-person POS) are adopter-side rows.
   payment: 'paymentRailAdapter',
+  // FW-0040 slice 1: 1:1 mapping. The EmbedTransport port + the embed
+  // feature key ship together — no transitional slot-sharing. The Custom
+  // Element wrapper (FW-0053) consumes this port; production transport
+  // adapters (postMessage RPC, penpal / comlink wrappers) are adopter-side
+  // rows (FW-0102 + FW-0103).
+  embed: 'embedTransport',
 } as const satisfies Readonly<Record<RuntimeFeatureKey, string>>;
 
 export type CompositionPortName = (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey];

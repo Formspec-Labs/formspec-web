@@ -49,6 +49,7 @@ import {
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
+import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
@@ -183,6 +184,11 @@ function buildProductionNarrowedComposition({
     // FW-0027 slice 1: narrowed routes do not submit forms; no payment
     // affordance is reachable. Uniform unavailable across all descriptors.
     payment: 'unavailable',
+    // FW-0040 slice 1: no narrowed route mounts a form, so no iframe-
+    // context gate fires regardless of host. Uniform unavailable across
+    // all descriptors; a future narrowed surface that needs to mount in
+    // a host iframe would add `'embed'` to its `consumes` set and branch.
+    embed: 'unavailable',
   };
   const notificationDelivery = stubNotificationDelivery();
   // MED-4: identity is only wired when the gated respondent-place capability
@@ -223,6 +229,11 @@ function buildProductionNarrowedComposition({
     // a future route needing payment would add `'payment'` to its
     // `consumes` set and branch here.
     paymentRailAdapter: unavailablePaymentRailAdapter(),
+    // FW-0040 slice 1: narrowed routes do not mount forms in host iframes;
+    // no embed-transport substrate is reachable. Uniform unavailable across
+    // all descriptors; a future narrowed surface needing embed would add
+    // `'embed'` to its `consumes` set and branch here.
+    embedTransport: unavailableEmbedTransport(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -259,6 +270,10 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     // FW-0027 slice 1: no narrowed route renders a form; no payment
     // affordance is reachable. Uniform unavailable regardless of mode.
     paymentRailAdapter: unavailablePaymentRailAdapter(),
+    // FW-0040 slice 1: no narrowed route mounts in a host iframe; no
+    // embed-transport substrate is reachable. Uniform unavailable
+    // regardless of mode.
+    embedTransport: unavailableEmbedTransport(),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -285,6 +300,9 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // FW-0027 slice 1: narrowed routes do not submit forms; uniform
       // unavailable to match the wired sentinel.
       payment: 'unavailable',
+      // FW-0040 slice 1: narrowed routes do not mount forms in host
+      // iframes; uniform unavailable to match the wired sentinel.
+      embed: 'unavailable',
     },
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -302,6 +320,11 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       crossIssuerHistory: 'allowed',
       offlineSubmit: 'allowed',
       payment: 'allowed',
+      embed: 'allowed',
     },
+    // FW-0040 slice 1: narrowed routes don't mount in host iframes, so
+    // the allow-list is irrelevant — fail-closed default mirrors the
+    // full-app composition shape.
+    limits: { embed: { allowedOrigins: [] } },
   };
 }

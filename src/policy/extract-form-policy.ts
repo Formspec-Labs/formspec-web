@@ -78,6 +78,24 @@ export function extractPaymentRequirement(
 }
 
 /**
+ * FW-0040 form-policy walker. Returns `'optional'` when the definition
+ * declares `extensions['x-formspec-embeddable']: true`; returns `undefined`
+ * otherwise. Any non-boolean / non-`true` value declines.
+ *
+ * `'optional'` not `'required'` — see design §"Optional, not required":
+ * an embeddable form still mounts directly on its issuer's URL. The
+ * iframe-context gate fires at runtime when the form actually loads inside
+ * an iframe; declaring `required` would fail-load every embeddable form
+ * accessed directly.
+ */
+export function extractEmbeddableOptIn(
+  definition: FormDefinition,
+): FormFeaturePolicyMode | undefined {
+  const value = definition.extensions?.['x-formspec-embeddable'];
+  return value === true ? 'optional' : undefined;
+}
+
+/**
  * FW-0027 amount walker. Returns the well-formed `Money` value when the
  * definition declares `extensions['x-formspec-payment-amount']` with an
  * integer `amountMinorUnits` and a non-empty `currency`; returns `undefined`

@@ -3,6 +3,7 @@ export {
   defineAttachmentStoreConformance,
   defineDefinitionSourceConformance,
   defineDraftStoreConformance,
+  defineEmbedTransportConformance,
   defineFormRuntimePolicyExtractorConformance,
   defineIdentityProviderConformance,
   defineNotificationDeliveryConformance,

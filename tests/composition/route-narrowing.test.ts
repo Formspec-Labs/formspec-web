@@ -242,11 +242,12 @@ describe('RouteNarrowing.consumes — closed-taxonomy Set shape (FW-0080)', () =
     expect(Array.from(HISTORY_ROUTE_NARROWING.consumes).sort()).toEqual(['crossIssuerHistory']);
   });
 
-  it('no descriptor consumes fileUpload / offlineSubmit / payment today (no narrowed-route consumer)', () => {
+  it('no descriptor consumes fileUpload / offlineSubmit / payment / embed today (no narrowed-route consumer)', () => {
     for (const route of ALL_DESCRIPTORS) {
       expect(route.consumes.has('fileUpload')).toBe(false);
       expect(route.consumes.has('offlineSubmit')).toBe(false);
       expect(route.consumes.has('payment')).toBe(false);
+      expect(route.consumes.has('embed')).toBe(false);
     }
   });
 });

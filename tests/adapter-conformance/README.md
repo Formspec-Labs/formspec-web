@@ -29,3 +29,4 @@ Directory skeleton (one per current port):
 - `respondent-history-source/`
 - `offline-submit-queue/`
 - `payment-rail-adapter/`
+- `embed-transport/`

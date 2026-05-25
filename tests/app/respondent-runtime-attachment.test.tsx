@@ -19,6 +19,7 @@ import { unavailableStatusReader } from '../../src/adapters/unavailable/status-r
 import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-history-source.ts';
 import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
+import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import {
   freezeComposition,
@@ -79,6 +80,7 @@ function buildComposition({
         crossIssuerHistory: 'demo-stub',
         offlineSubmit: 'demo-stub',
         payment: 'unavailable',
+        embed: 'unavailable',
       }
     : {
         respondentPlace: 'unavailable',
@@ -88,6 +90,7 @@ function buildComposition({
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
+        embed: 'unavailable',
       };
 
   const orgRuntimePolicy: OrgRuntimePolicy = {
@@ -99,6 +102,7 @@ function buildComposition({
       crossIssuerHistory: 'allowed',
       offlineSubmit: 'allowed',
       payment: 'allowed',
+      embed: 'allowed',
     },
   };
 
@@ -122,6 +126,7 @@ function buildComposition({
       ? stubOfflineSubmitQueue({ transport: submitTransport })
       : unavailableOfflineSubmitQueue(),
     paymentRailAdapter: unavailablePaymentRailAdapter(),
+    embedTransport: unavailableEmbedTransport(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new AttachmentRequirementExtractor(),

@@ -26,6 +26,9 @@ const baseInstance = {
   // FW-0027: payment is the seventh closed-taxonomy extension; same
   // honest-unavailable posture for these fixtures.
   payment: 'unavailable',
+  // FW-0040: embed is the eighth closed-taxonomy extension; same
+  // honest-unavailable posture for these fixtures.
+  embed: 'unavailable',
 } as const;
 const emptyOrg = { features: {} } as const;
 
@@ -102,6 +105,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
+        embed: 'unavailable',
       },
       org: emptyOrg,
       form: { features: { status: 'required' } },
@@ -155,6 +159,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
           crossIssuerHistory: 'unavailable',
           offlineSubmit: 'unavailable',
           payment: 'unavailable',
+          embed: 'unavailable',
         },
         org: emptyOrg,
         form: { features: {} },
