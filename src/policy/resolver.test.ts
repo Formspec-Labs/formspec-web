@@ -501,6 +501,107 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
     expect(config?.fields[0]?.plaintextAudiences).toEqual(['issuer_verification']);
   });
 
+  it('intersects form authorized audiences with the org safe-address audience set', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: allAvailable,
+      org: {
+        ...allowAllOrg,
+        limits: {
+          safeAddress: {
+            acpJurisdictionsAccepted: ['CA-ACP'],
+            authorizedAudiences: ['issuer_verification'],
+          },
+        },
+      },
+      form: {
+        features: { safeAddress: 'required' },
+        limits: {
+          safeAddress: {
+            authorizedAudiences: ['issuer_verification', 'respondent_public_receipt'],
+            fields: [
+              {
+                path: '/protectedHomeAddress',
+                accessClass: 'safe-address',
+                visibleTo: ['issuer_verification'],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(getSafeAddressRuntimeConfig(profile)?.authorizedAudiences)
+      .toEqual(['issuer_verification']);
+  });
+
+  it('rejects form authorized audiences outside the org safe-address audience set', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: {
+          ...allowAllOrg,
+          limits: {
+            safeAddress: {
+              acpJurisdictionsAccepted: ['CA-ACP'],
+              authorizedAudiences: ['issuer_verification'],
+            },
+          },
+        },
+        form: {
+          features: { safeAddress: 'required' },
+          limits: {
+            safeAddress: {
+              authorizedAudiences: ['respondent_public_receipt'],
+              fields: [
+                {
+                  path: '/protectedHomeAddress',
+                  accessClass: 'safe-address',
+                  visibleTo: ['respondent_public_receipt'],
+                  plaintextAudiences: ['respondent_public_receipt'],
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/no authorized plaintext audience/);
+  });
+
+  it('rejects form-level authorized audience broadening for effective audiences', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: {
+          ...allowAllOrg,
+          limits: {
+            safeAddress: {
+              acpJurisdictionsAccepted: ['CA-ACP'],
+              authorizedAudiences: ['issuer_verification'],
+            },
+          },
+        },
+        form: {
+          features: { safeAddress: 'required' },
+          limits: {
+            safeAddress: {
+              authorizedAudiences: ['respondent_public_receipt'],
+              fields: [
+                {
+                  path: '/protectedHomeAddress',
+                  accessClass: 'safe-address',
+                  effectiveAudiences: ['respondent_public_receipt'],
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/no authorized plaintext audience/);
+  });
+
   it('rejects form plaintext audiences outside the org safe-address audience set', () => {
     expect(() =>
       resolveRuntimeFeatures({

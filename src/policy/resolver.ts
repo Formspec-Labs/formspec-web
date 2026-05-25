@@ -695,10 +695,10 @@ function resolveSafeAddressPolicy(
     nonEmptyStringArrayFrom(form.enabledClasses)?.filter(isSafeAddressAccessClass) ??
     nonEmptyStringArrayFrom(org.enabledClasses)?.filter(isSafeAddressAccessClass) ??
     unique(fields.map((field) => field.accessClass));
-  const authorizedAudiences =
-    nonEmptyStringArrayFrom(form.authorizedAudiences) ??
-    stringArrayFrom(org.authorizedAudiences) ??
-    ['issuer_verification'];
+  const authorizedAudiences = resolveSafeAddressAuthorizedAudiences(
+    org.authorizedAudiences,
+    form.authorizedAudiences,
+  );
   const acpJurisdictionsAccepted =
     nonEmptyStringArrayFrom(form.acpJurisdictionsAccepted) ??
     stringArrayFrom(org.acpJurisdictionsAccepted) ??
@@ -865,6 +865,16 @@ function stringArrayFrom(value: unknown): readonly string[] | undefined {
 function nonEmptyStringArrayFrom(value: unknown): readonly string[] | undefined {
   const entries = stringArrayFrom(value);
   return entries && entries.length > 0 ? entries : undefined;
+}
+
+function resolveSafeAddressAuthorizedAudiences(
+  orgValue: unknown,
+  formValue: unknown,
+): readonly string[] {
+  const orgAudiences = stringArrayFrom(orgValue) ?? ['issuer_verification'];
+  const formAudiences = nonEmptyStringArrayFrom(formValue);
+  if (!formAudiences) return orgAudiences;
+  return formAudiences.filter((entry) => orgAudiences.includes(entry));
 }
 
 function safeAddressTierRank(tier: SafeAddressReceiptPostureTier): number {
