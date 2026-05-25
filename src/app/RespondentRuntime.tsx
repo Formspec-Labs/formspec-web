@@ -219,6 +219,11 @@ export function RespondentRuntime({
           authenticating: false,
         });
       }
+      // Invariant: subscribe's `activeClaim` closure must reflect boot before
+      // the listener fires. Without this, a replay-shaped subscribe (e.g.,
+      // future OIDC re-hydrate emitting boot.claim) would compare nextClaim
+      // to a stale null and trip the subject-changed branch (code review H-1).
+      activeClaim = boot.claim;
       unsubscribe = composition.identityProvider.subscribe((nextClaim) => {
         const invalidatedSubjectRef = subjectRefInvalidatedByIdentityChange(activeClaim, nextClaim);
         if (!identitySubjectChanged(activeClaim, nextClaim)) {

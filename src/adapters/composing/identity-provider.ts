@@ -13,6 +13,14 @@
  * by option-key — kind + the kind-specific identity field) and delegates.
  * Duplicate offers across wrapped providers: first-wins (call-site ordering).
  *
+ * Owner cache: the first `discover(floor)` populates a `optionKey → provider`
+ * map keyed by floor; subsequent `authenticate(option)` calls read the cache
+ * instead of re-running every wrapped provider's `discover()`. Closes the
+ * `ownerFor` O(N×D) scan AND the per-authenticate `discover()` network
+ * amplification (code review H-2 + arch H-1). `revoke(claim)` routes through
+ * the same cache via the claim's `provider`+`adapter` fields — the owning
+ * provider gets the revoke; siblings do not (code review M-2).
+ *
  * `subscribe` collapses the initial-`null` fan-out (one per wrapped provider)
  * into a single synchronous `listener(null)` so the existing
  * `defineIdentityProviderConformance` `[null, claim, null]` expectation
@@ -27,13 +35,38 @@ import type {
 } from '../../ports/identity-provider.ts';
 
 export class CompositeIdentityProvider implements IdentityProvider {
+  // Populated by `discover()` — `optionKey → owning provider`. Captures the
+  // floor-filtered set so a follow-on `authenticate(option)` finds the same
+  // provider that offered the option (arch H-1: floor consistency).
+  private optionOwnerCache: Map<string, IdentityProvider> | null = null;
+  // Populated by subscribe fan-out — `subjectRef → owning provider`. Lets
+  // `revoke(claim)` route to the provider that issued the claim instead of
+  // broadcasting (code review M-2). Subject-ref provenance is the only
+  // routing signal that survives the magic-link `optionKey` vs claim shape
+  // mismatch (claim carries `provider`/`adapter` but not `channel`).
+  private claimOwnerCache: Map<string, IdentityProvider> = new Map();
+
   constructor(private readonly providers: readonly IdentityProvider[]) {}
 
   async discover(formAssuranceRequirements?: AssuranceLevel): Promise<IdpOption[]> {
     const perProvider = await Promise.all(
-      this.providers.map((provider) => provider.discover(formAssuranceRequirements)),
+      this.providers.map(async (provider) => {
+        const offered = await provider.discover(formAssuranceRequirements);
+        return { provider, offered };
+      }),
     );
-    return dedupeByKey(perProvider.flat());
+    const cache = new Map<string, IdentityProvider>();
+    const result: IdpOption[] = [];
+    for (const { provider, offered } of perProvider) {
+      for (const option of offered) {
+        const key = optionKey(option);
+        if (cache.has(key)) continue; // first-wins dedup
+        cache.set(key, provider);
+        result.push(option);
+      }
+    }
+    this.optionOwnerCache = cache;
+    return result;
   }
 
   async authenticate(option: IdpOption): Promise<IdentityClaim> {
@@ -41,21 +74,36 @@ export class CompositeIdentityProvider implements IdentityProvider {
     if (!owner) {
       throw new Error('No identity provider can authenticate this option');
     }
-    return owner.authenticate(option);
+    const claim = await owner.authenticate(option);
+    this.claimOwnerCache.set(claim.subjectRef, owner);
+    return claim;
   }
 
   async revoke(claim: IdentityClaim): Promise<void> {
-    await Promise.all(this.providers.map((provider) => provider.revoke(claim)));
+    const owner = this.claimOwnerCache.get(claim.subjectRef);
+    if (owner) {
+      this.claimOwnerCache.delete(claim.subjectRef);
+      await owner.revoke(claim);
+      return;
+    }
+    // Claim wasn't issued through this composite (e.g., the host code
+    // synthesized one for testing, or a prior session was restored via a
+    // different code path). Fall back to broadcast — adapters that don't
+    // recognize the claim no-op per their own contract.
+    await Promise.allSettled(
+      this.providers.map((provider) => provider.revoke(claim)),
+    );
   }
 
   subscribe(listener: (claim: IdentityClaim | null) => void): Unsubscribe {
     // Each wrapped provider delivers the current value on subscribe and
     // emits on authenticate / revoke. With N providers we would see N
     // initial `null` events at subscribe time, and a `revoke()` fan-out
-    // produces N redundant `null` emissions because revoke is broadcast
-    // across all wrapped providers. Collapse equal consecutive emissions
-    // so the conformance contract — `[null, claim, null]` for a single
-    // authenticate→revoke cycle — holds for the composite.
+    // produces N redundant `null` emissions when one happens. Collapse
+    // equal consecutive emissions so the conformance contract —
+    // `[null, claim, null]` for a single authenticate→revoke cycle —
+    // holds for the composite. claimEquivalent is provider+adapter+subject
+    // emission dedup, NOT same-subject-across-providers dedup (arch L-3).
     let lastEmitted: IdentityClaim | null | undefined = undefined; // sentinel
     const dedupedListener = (claim: IdentityClaim | null): void => {
       if (claimEquivalent(lastEmitted, claim)) return;
@@ -76,13 +124,14 @@ export class CompositeIdentityProvider implements IdentityProvider {
 
   private async ownerFor(option: IdpOption): Promise<IdentityProvider | undefined> {
     const target = optionKey(option);
-    for (const provider of this.providers) {
-      const offered = await provider.discover();
-      if (offered.some((candidate) => optionKey(candidate) === target)) {
-        return provider;
-      }
+    let cache = this.optionOwnerCache;
+    if (!cache) {
+      // `authenticate` called before `discover` — populate the cache by
+      // running discover at no floor and routing through the populated map.
+      await this.discover();
+      cache = this.optionOwnerCache;
     }
-    return undefined;
+    return cache?.get(target);
   }
 }
 
@@ -101,20 +150,14 @@ function claimEquivalent(
   return a.subjectRef === b.subjectRef && a.provider === b.provider && a.adapter === b.adapter;
 }
 
+// Identity-key derived from the user-facing IdP shape (kind + the
+// kind-specific identity field). Intentionally excludes `displayName` and
+// `minAssurance` — a deployment with two same-issuer OIDC entries that
+// differ only in display label SHOULD dedupe to one. If two adapters offer
+// the same option with different assurance floors, first-wins is correct
+// per the design's call-site ordering rule (code review L-2).
 function optionKey(option: IdpOption): string {
   if (option.kind === 'oidc') return `oidc:${option.issuer}`;
   if (option.kind === 'magic-link') return `magic-link:${option.channel}`;
   return 'anonymous';
-}
-
-function dedupeByKey(options: readonly IdpOption[]): IdpOption[] {
-  const seen = new Set<string>();
-  const result: IdpOption[] = [];
-  for (const option of options) {
-    const key = optionKey(option);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(option);
-  }
-  return result;
 }

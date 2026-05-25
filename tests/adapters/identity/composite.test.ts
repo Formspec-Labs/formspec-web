@@ -179,6 +179,76 @@ describe('CompositeIdentityProvider', () => {
     expect(options).toHaveLength(1);
     expect(options[0].kind).toBe('anonymous');
   });
+
+  it('caches the option→owner map at discover() so authenticate does not re-discover (code review H-2)', async () => {
+    const oidcClaim: IdentityClaim = {
+      provider: 'https://idp-cache.example.test',
+      adapter: 'stub-oidc@0',
+      subjectRef: 'oidc:cache-subject',
+      credentialType: 'oidc-token',
+      subjectBinding: 'respondent',
+      assuranceLevel: 'L3',
+      privacyTier: 'pseudonymous',
+    };
+    const oidcOption: IdpOption = {
+      kind: 'oidc',
+      issuer: 'https://idp-cache.example.test',
+      displayName: 'Cache IdP',
+      minAssurance: 'L3',
+    };
+    const oidc = stubProvider({ options: [oidcOption], claim: oidcClaim });
+    const anon = stubProvider({ options: [{ kind: 'anonymous', minAssurance: 'L1' }] });
+    const composite = new CompositeIdentityProvider([oidc, anon]);
+
+    await composite.discover();
+    await composite.authenticate(oidcOption);
+    await composite.authenticate(oidcOption);
+    await composite.authenticate(oidcOption);
+
+    expect(oidc.discover).toHaveBeenCalledTimes(1);
+    expect(anon.discover).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes revoke(claim) to the owning provider only (code review M-2)', async () => {
+    const oidcClaim: IdentityClaim = {
+      provider: 'https://idp-rev.example.test',
+      adapter: 'stub-oidc@0',
+      subjectRef: 'oidc:rev-subject',
+      credentialType: 'oidc-token',
+      subjectBinding: 'respondent',
+      assuranceLevel: 'L3',
+      privacyTier: 'pseudonymous',
+    };
+    const oidcOption: IdpOption = {
+      kind: 'oidc',
+      issuer: 'https://idp-rev.example.test',
+      displayName: 'Rev IdP',
+      minAssurance: 'L3',
+    };
+    const oidc = stubProvider({ options: [oidcOption], claim: oidcClaim });
+    const anon = stubProvider({ options: [{ kind: 'anonymous', minAssurance: 'L1' }] });
+    const composite = new CompositeIdentityProvider([oidc, anon]);
+
+    await composite.discover();
+    const claim = await composite.authenticate(oidcOption);
+    await composite.revoke(claim);
+
+    expect(oidc.revoke).toHaveBeenCalledWith(claim);
+    expect(anon.revoke).not.toHaveBeenCalled();
+  });
+
+  it('emits initial null only once even when wrapped providers sync-emit at subscribe time (code review L-1)', () => {
+    const a = new AnonymousAdapter();
+    const b = new AnonymousAdapter();
+    const c = new AnonymousAdapter();
+    const composite = new CompositeIdentityProvider([a, b, c]);
+
+    const received: Array<IdentityClaim | null> = [];
+    const unsubscribe = composite.subscribe((claim) => received.push(claim));
+    unsubscribe();
+
+    expect(received).toEqual([null]);
+  });
 });
 
 function stubProvider({
