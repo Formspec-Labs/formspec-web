@@ -13,7 +13,10 @@ import { stubRespondentPlaceSource } from '../../src/adapters/stub/respondent-pl
 import { stubStatusReader } from '../../src/adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../../src/adapters/stub/submit-transport.ts';
 import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-history-source.ts';
-import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
+import {
+  stubOfflineSubmitQueue,
+  type StubOfflineSubmitQueue,
+} from '../../src/adapters/stub/offline-submit-queue.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import {
   freezeComposition,
@@ -63,6 +66,18 @@ function nonOfflineFormDefinition(): FormDefinition {
   } as FormDefinition;
 }
 
+type CompositionWithStubQueue = Composition & {
+  offlineSubmitQueue: StubOfflineSubmitQueue;
+};
+
+function buildComposition(args: {
+  definition: FormDefinition;
+  offlineQueueAvailable: true;
+}): CompositionWithStubQueue;
+function buildComposition(args: {
+  definition: FormDefinition;
+  offlineQueueAvailable: boolean;
+}): Composition;
 function buildComposition({
   definition,
   offlineQueueAvailable,
@@ -199,10 +214,7 @@ describe('RespondentRuntime offline integration (FW-0044)', () => {
 
     expect(enqueueSpy).toHaveBeenCalledTimes(1);
     expect(transportSpy).not.toHaveBeenCalled();
-    const pendingCount = (
-      composition.offlineSubmitQueue as unknown as { _internalPendingCount(): number }
-    )._internalPendingCount();
-    expect(pendingCount).toBe(1);
+    expect(composition.offlineSubmitQueue._internalPendingCount()).toBe(1);
     expect(container?.textContent).toContain("We'll send it when you reconnect.");
   });
 
@@ -225,10 +237,7 @@ describe('RespondentRuntime offline integration (FW-0044)', () => {
     });
     await waitFor(() => (container?.textContent ?? '').includes('Submission received'));
 
-    const pendingCount = (
-      composition.offlineSubmitQueue as unknown as { _internalPendingCount(): number }
-    )._internalPendingCount();
-    expect(pendingCount).toBe(0);
+    expect(composition.offlineSubmitQueue._internalPendingCount()).toBe(0);
     expect(container?.textContent).toContain('Submission received');
   });
 
@@ -275,6 +284,77 @@ describe('RespondentRuntime offline integration (FW-0044)', () => {
 
     expect(enqueueSpy).not.toHaveBeenCalled();
     expect(transportSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('listener tolerates rapid online-event flapping while queued (HIGH-1)', async () => {
+    // Pins the dep-array narrowing on the 'online' listener effect: keying
+    // off whole `submitState` re-binds the listener on every transition,
+    // including the listener's own `setSubmitState({status:'confirmed'})`
+    // mid-callback. Future transient states (e.g. 'draining') would silently
+    // drop a second 'online' event under the old shape. The narrowed key
+    // (queued-key | null) only re-binds when the queue identity changes,
+    // not on intra-callback transitions.
+    const composition = buildComposition({
+      definition: offlineCapableFormDefinition(),
+      offlineQueueAvailable: true,
+    });
+    const replaySpy = vi.spyOn(composition.offlineSubmitQueue, 'replay');
+
+    await renderRuntime(composition);
+    await waitFor(() => Boolean(container?.querySelector('button')));
+    setOnline(false);
+    await clickSubmit();
+    await waitFor(() => (container?.textContent ?? '').includes('Saved for later'));
+
+    setOnline(true);
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('online'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => (container?.textContent ?? '').includes('Submission received'));
+
+    // First successful drain transitions out of 'queued' synchronously; any
+    // subsequent 'online' event arriving before React commits the listener
+    // teardown is a no-op because the queue is empty. replay() may be called
+    // more than once in flight, but no extra confirmations / errors surface.
+    expect(replaySpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(composition.offlineSubmitQueue._internalPendingCount()).toBe(0);
+    // Confirmation panel rendered exactly once.
+    const confirmationHeadings = Array.from(
+      container!.querySelectorAll('h2'),
+    ).filter((h) => (h.textContent ?? '').includes('Submission received'));
+    expect(confirmationHeadings).toHaveLength(1);
+  });
+
+  it('rejects a second submit click while a submission is queued offline (MED multi-submit)', async () => {
+    // Pins the slice-1 invariant: at most one queued submit per session.
+    // Without the 'queued' guard on handleSubmit, a second click while
+    // offline would enqueue twice (with a fresh idempotency key) and the
+    // UI would only track the most-recent key. FW-0084 multi-tab + any
+    // future multi-submit will need explicit fan-out handling.
+    const composition = buildComposition({
+      definition: offlineCapableFormDefinition(),
+      offlineQueueAvailable: true,
+    });
+    const enqueueSpy = vi.spyOn(composition.offlineSubmitQueue, 'enqueue');
+
+    await renderRuntime(composition);
+    await waitFor(() => Boolean(container?.querySelector('button')));
+    setOnline(false);
+    await clickSubmit();
+    await waitFor(() => (container?.textContent ?? '').includes('Saved for later'));
+
+    // Second click after the queued state has rendered. Without the guard
+    // this enqueues a second time; with the guard it short-circuits.
+    await clickSubmit();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+    expect(composition.offlineSubmitQueue._internalPendingCount()).toBe(1);
   });
 
   it('vocabulary firewall — DOM does not leak queue / IndexedDB / service-worker / port jargon', async () => {

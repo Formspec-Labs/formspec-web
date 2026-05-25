@@ -298,10 +298,19 @@ export function RespondentRuntime({
   // duplicates if the user manually retries. Hook lives BEFORE conditional
   // returns to satisfy React's rules-of-hooks; effect body itself early-
   // returns when not in the 'queued' state.
+  //
+  // Slice 1 invariant: at most one queued submit per session. The listener
+  // keys off the queued idempotency key so intra-callback transitions (e.g.
+  // the listener's own `setSubmitState({status:'confirmed'})`) do not tear
+  // down the listener mid-flight. FW-0084 multi-tab + any future
+  // multi-submit will need explicit fan-out handling here. Mirrors the
+  // narrowed-deps pattern at the `placeSubjectRef` effect above.
+  const queuedIdempotencyKey =
+    submitState.status === 'queued' ? submitState.idempotencyKey : null;
   useEffect(() => {
-    if (submitState.status !== 'queued') return undefined;
+    if (queuedIdempotencyKey === null) return undefined;
     if (typeof window === 'undefined') return undefined;
-    const queuedKey = submitState.idempotencyKey;
+    const queuedKey = queuedIdempotencyKey;
     let cancelled = false;
     const onlineListener = (): void => {
       void (async () => {
@@ -331,7 +340,7 @@ export function RespondentRuntime({
       cancelled = true;
       window.removeEventListener('online', onlineListener);
     };
-  }, [submitState, composition.offlineSubmitQueue]);
+  }, [queuedIdempotencyKey, composition.offlineSubmitQueue]);
 
   const handleSignIn = async (option: IdpOption): Promise<void> => {
     setRespondentState((current) =>
@@ -414,7 +423,11 @@ export function RespondentRuntime({
   };
 
   const handleSubmit = async (result: SubmitResult): Promise<void> => {
-    if (submitState.status === 'submitting' || submitState.status === 'confirmed') {
+    if (
+      submitState.status === 'submitting' ||
+      submitState.status === 'confirmed' ||
+      submitState.status === 'queued'
+    ) {
       return;
     }
 
