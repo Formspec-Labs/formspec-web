@@ -22,7 +22,10 @@ import type {
   RespondentSubmissionRecord,
 } from '../../src/ports/index.ts';
 import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
-import { multiPartyProgressDraftKey } from '../../src/app/respondent-flow.ts';
+import {
+  multiPartyDraftKey,
+  multiPartyProgressDraftKey,
+} from '../../src/app/respondent-flow.ts';
 import { stubDraftStore } from '../../src/adapters/stub/draft-store.ts';
 
 describe('RespondentRuntime identity sign-in', () => {
@@ -494,6 +497,15 @@ describe('RespondentRuntime identity sign-in', () => {
       formUrl: definition.url,
       formVersion: definition.version,
     }))).resolves.toBeDefined();
+    await clickSubmit();
+    await act(async () => {
+      await tick();
+    });
+    expect(composition.submitTransport.submit).not.toHaveBeenCalled();
+    await expect(composition.draftStore.load(multiPartyDraftKey({
+      formUrl: definition.url,
+      formVersion: definition.version,
+    }, 'spouse-b'))).resolves.toBeUndefined();
 
     await act(async () => {
       identityProvider.switchTo('subject-b');

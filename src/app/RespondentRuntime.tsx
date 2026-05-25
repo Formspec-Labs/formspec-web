@@ -553,6 +553,7 @@ export function RespondentRuntime({
       submitState.status === 'submitting' ||
       submitState.status === 'confirmed' ||
       submitState.status === 'queued' ||
+      submitState.status === 'awaiting-next-party' ||
       submitState.status === 'authorizing-payment' ||
       submitState.status === 'capturing-payment' ||
       submitState.status === 'voiding-payment'
@@ -608,6 +609,11 @@ export function RespondentRuntime({
           }),
         );
         setMultiPartyState(completedMultiPartyState);
+        setRespondentState((current) =>
+          current.status === 'ready'
+            ? { ...current, multiPartyState: completedMultiPartyState }
+            : current,
+        );
         if (!multiPartyComplete(multiPartyPolicy, completedMultiPartyState.progress)) {
           const slots = requiredMultiPartySlots(multiPartyPolicy);
           const nextSlot = slots.find(
