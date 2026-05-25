@@ -26,3 +26,5 @@ Directory skeleton (one per current port):
 - `status-reader/`
 - `attachment-store/`
 - `form-runtime-policy-extractor/`
+- `respondent-history-source/`
+- `offline-submit-queue/`
