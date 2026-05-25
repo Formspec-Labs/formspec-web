@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { FormDefinition } from '@formspec-org/types';
-import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
+import {
+  OFFLINE_DEFERRED_CAPABILITY_COPY,
+  RespondentRuntime,
+} from '../../src/app/RespondentRuntime.tsx';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { stubAttachmentStore } from '../../src/adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../../src/adapters/stub/definition-source.ts';
@@ -216,6 +219,10 @@ describe('RespondentRuntime offline integration (FW-0044)', () => {
     expect(transportSpy).not.toHaveBeenCalled();
     expect(composition.offlineSubmitQueue._internalPendingCount()).toBe(1);
     expect(container?.textContent).toContain("We'll send it when you reconnect.");
+    // Fixture-pin the deferred-capability copy via the exported constant so
+    // the L-1 honesty fix (the demo + production reference both lose drafts
+    // on browser restart today) can't drift back to mode-asymmetric phrasing.
+    expect(container?.textContent).toContain(OFFLINE_DEFERRED_CAPABILITY_COPY);
   });
 
   it('replays the queue on the online event and surfaces the confirmation', async () => {

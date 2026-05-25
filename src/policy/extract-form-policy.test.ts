@@ -125,4 +125,23 @@ describe('extractOfflineSubmitOptIn', () => {
     };
     expect(extractOfflineSubmitOptIn(definition)).toBeUndefined();
   });
+
+  it('returns undefined for the numeric 1 (strict equality, not truthy)', () => {
+    // Pins the `=== true` contract: numeric coercion does NOT opt in.
+    const definition: FormDefinition = {
+      ...offlineBase,
+      extensions: { 'x-formspec-offline-submit': 1 as unknown as boolean },
+    };
+    expect(extractOfflineSubmitOptIn(definition)).toBeUndefined();
+  });
+
+  it('returns undefined for the string "true" (strict equality, not coerced)', () => {
+    // Pins the `=== true` contract: the literal string "true" is not boolean
+    // true and MUST NOT opt in.
+    const definition: FormDefinition = {
+      ...offlineBase,
+      extensions: { 'x-formspec-offline-submit': 'true' as unknown as boolean },
+    };
+    expect(extractOfflineSubmitOptIn(definition)).toBeUndefined();
+  });
 });

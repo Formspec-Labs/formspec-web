@@ -968,8 +968,12 @@ function SubmitNotice({ state }: { state: SubmitState }) {
 /** FW-0044 fixture-pinned copy for the "saved for later" panel. */
 export const QUEUED_FOR_LATER_TITLE = 'Saved for later';
 export const QUEUED_FOR_LATER_BODY = "We'll send it when you reconnect.";
+// Honest in both modes: the demo stub queue is in-memory and the production
+// reference adapter is the unavailable sentinel, so "saved for later" does
+// not yet survive browser restarts in either composition. FW-0082 (IndexedDB
+// adapter + at-rest encryption) is the row that flips this.
 export const OFFLINE_DEFERRED_CAPABILITY_COPY =
-  'Offline submit support is experimental. Production deployments do not currently keep your draft across browser restarts or across other devices.';
+  'Offline submit support is experimental. Saved-for-later does not yet survive browser restarts or move across devices on any deployment.';
 
 function QueuedForLaterPanel() {
   return (
