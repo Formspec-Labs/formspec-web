@@ -1,14 +1,15 @@
 /**
- * Shape A conformance fixtures — F1..F4 per ADR-0155 §8.4.
- *
- * SPIKE only; will be deleted with the losing shape per ADR-0155 §8.7.
+ * F1..F4 conformance fixtures for the `MultiPartyCommit` port per
+ * ADR-0155 §8.4. Originally authored as the Shape A spike scenarios;
+ * retained as the live conformance suite for the locked port until
+ * FW-0061 ships the production adapter.
  */
 import { describe, expect, it } from 'vitest';
 
 import { stubDraftStore } from '../../../src/adapters/stub/draft-store.ts';
 import { stubIdentityProvider } from '../../../src/adapters/stub/identity-provider.ts';
 import { stubSubmitTransport } from '../../../src/adapters/stub/submit-transport.ts';
-import { createInMemoryCommitA } from '../../../src/composition/spike/multi-party-commit-A/in-memory.ts';
+import { createInMemoryMultiPartyCommit } from '../../../src/composition/spike/multi-party-commit-A/in-memory.ts';
 import {
   runAbandonment,
   runHappyPath,
@@ -19,14 +20,14 @@ import {
 
 function makePorts(): ScenarioPorts {
   return {
-    commit: createInMemoryCommitA(),
+    commit: createInMemoryMultiPartyCommit(),
     draftStore: stubDraftStore(),
     identityProvider: stubIdentityProvider(),
     submitTransport: stubSubmitTransport(),
   };
 }
 
-describe('Shape A — multi-party-commit-A (2PC explicit states)', () => {
+describe('MultiPartyCommit port — F1..F4 conformance (2PC explicit states)', () => {
   it('F1 happy-path — both parties prepare, commit, joint submission completes', async () => {
     const outcome = await runHappyPath(makePorts());
     expect(outcome.kind).toBe('completed');

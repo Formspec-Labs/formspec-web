@@ -1,18 +1,34 @@
 /**
- * Shape A — 2PC explicit-state commitment protocol port (SPIKE only).
+ * MultiPartyCommit port — multi-party commitment protocol per
+ * [ADR-0155 §8 (Spike-and-Observe protocol)](../../../thoughts/adr/0155-multi-party-intake.md).
+ *
+ * Locks the 2PC explicit-state shape (formerly "Shape A" in the spike).
+ * The shape was selected by the FW-0115 Spike-and-Observe pass against the
+ * eventual-consistency alternative; see the verdict at
+ * `../../thoughts/spikes/2026-05-25-multi-party-commit-spike-observation.md`
+ * §3. The load-bearing asymmetry: this port's `PreparationWindow` + `tickClock`
+ * compose natively with FW-0050 §7.2's per-party deadlines, while the
+ * losing shape forced consumers to layer a sibling timer port.
  *
  * Per-party state is the explicit triple `Prepared | Committed | Aborted`,
- * lifted from a `Drafting` baseline. A coordinator (the runtime) drives
+ * lifted from a `Drafting` baseline. A coordinator (the adapter) drives
  * transitions; each `prepare` opens a bounded preparation window; window
- * expiry triggers automatic `abort`. Amendment-after-prepare is represented
- * by re-`prepare` on the affected party which CASCADES — any other
- * party whose visible-field set intersects the amended fields drops from
- * `Prepared` / `Committed` back to `Drafting` and must re-`prepare`.
+ * expiry triggers automatic `abort('windowExpired')`. Amendment-after-prepare
+ * CASCADES — any other party whose visible-field set intersects the amended
+ * fields drops from `Prepared` / `Committed` back to `Aborted('amendedAway')`
+ * and must re-`prepare`.
  *
- * Spike scope: this lives under `src/composition/spike/` and is not a real
- * production port. The spike's verdict (per ADR-0155 §8) decides whether
- * Shape A or Shape B (or a third shape) lands as the locked port at
- * `src/ports/multi-party-commit.ts`.
+ * Primary consumer: FW-0061 (multi-party submission build). FW-0061 uses
+ * the preallocated `multiParty` RuntimeFeatureKey at position 14 of
+ * `RUNTIME_FEATURE_KEYS` (see `../policy/feature-keys.ts`); no new key is
+ * minted for this port.
+ *
+ * Adapter status. An in-memory reference adapter lives at
+ * `../composition/spike/multi-party-commit-A/in-memory.ts`, with the F1..F4
+ * scenario harness from ADR-0155 §8.4 alongside. They are retained
+ * deliberately as the working reference implementation until FW-0061 ships
+ * the production adapter — do not delete them as "spike scaffold." The
+ * losing Shape B was deleted per ADR-0155 §8.7 "throw away the loser."
  */
 
 export type PartyRef = string;
@@ -33,7 +49,7 @@ export interface PartyDeclaration {
   readonly visibleFields: ReadonlySet<FieldId>;
 }
 
-/** Per-party state in Shape A's explicit-states FSM. */
+/** Per-party state in the 2PC explicit-states FSM. */
 export type PartyState =
   | { kind: 'Drafting' }
   | { kind: 'Prepared'; preparedDigest: ResponseDigest; expiresAtMs: number }
@@ -77,9 +93,9 @@ export interface PreparationWindow {
 }
 
 /**
- * Shape A — 2PC explicit-state commitment protocol port.
+ * Multi-party 2PC explicit-state commitment protocol port.
  */
-export interface MultiPartyCommitA {
+export interface MultiPartyCommit {
   /** Bind a party to the draft. Idempotent on existing partyRef. */
   addParty(declaration: PartyDeclaration): Promise<void>;
 
@@ -112,7 +128,10 @@ export interface MultiPartyCommitA {
    * Per-party abort. Reason discriminates abandonment from caller-initiated
    * abort; window-expiry aborts are coordinator-internal.
    */
-  abort(partyRef: PartyRef, reason: Extract<AbortReason, 'partyAbandoned' | 'caller'>): Promise<PartyState>;
+  abort(
+    partyRef: PartyRef,
+    reason: Extract<AbortReason, 'partyAbandoned' | 'caller'>,
+  ): Promise<PartyState>;
 
   /** Read-only snapshot. */
   snapshot(): CommitmentSnapshot;

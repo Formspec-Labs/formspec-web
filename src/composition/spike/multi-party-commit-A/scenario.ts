@@ -1,15 +1,16 @@
 /**
- * Shape A scenario harness — SPIKE only.
+ * F1..F4 scenario harness against the `MultiPartyCommit` port.
  *
- * Wires `MultiPartyCommitA` (this shape's new port) with the real
- * `DraftStore`, `IdentityProvider`, and `SubmitTransport` ports per
- * ADR-0155 §5 and §8.4. The four scenario runners exercised by the
- * conformance fixtures live here.
+ * Retained from the FW-0115 spike as the working reference exercise of the
+ * locked port (see `../../../ports/multi-party-commit.ts`). Wires the
+ * commitment port with the real `DraftStore`, `IdentityProvider`, and
+ * `SubmitTransport` ports per ADR-0155 §5 and §8.4. The four scenario
+ * runners are the live conformance fixtures until FW-0061 supplies its
+ * production equivalent.
  *
- * Per ADR-0155 §8.5 the §8.4 fixtures are scored on consumer LOC and
- * port-method call counts. To keep the comparison honest, `recordCall`
- * wraps every call to the commitment port; the test harness exposes the
- * count for the observation report.
+ * The `instrument()` wrapper records every commit-port call so the
+ * §8.5 observation tally remains reproducible; tests assert the counts
+ * stay non-zero so regressions surface in CI.
  */
 
 import type {
@@ -31,16 +32,16 @@ import type {
   AmendmentResult,
   CommitmentSnapshot,
   FieldId,
-  MultiPartyCommitA,
+  MultiPartyCommit,
   PartyDeclaration,
   PartyRef,
   PartyState,
   PreparationWindow,
   Signature,
-} from './port.ts';
+} from '../../../ports/multi-party-commit.ts';
 
 export interface ScenarioPorts {
-  readonly commit: MultiPartyCommitA;
+  readonly commit: MultiPartyCommit;
   readonly draftStore: DraftStore;
   readonly identityProvider: IdentityProvider;
   readonly submitTransport: SubmitTransport;
@@ -58,12 +59,12 @@ export interface ScenarioOutcome {
 }
 
 /** Count every commit-port call so the spike observation tally is honest. */
-function instrument(commit: MultiPartyCommitA): {
-  wrapped: MultiPartyCommitA;
+function instrument(commit: MultiPartyCommit): {
+  wrapped: MultiPartyCommit;
   callLog: ScenarioCallLog;
 } {
   let count = 0;
-  const wrapped: MultiPartyCommitA = {
+  const wrapped: MultiPartyCommit = {
     async addParty(d: PartyDeclaration) {
       count += 1;
       return commit.addParty(d);

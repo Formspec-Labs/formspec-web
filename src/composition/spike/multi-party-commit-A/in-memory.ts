@@ -1,5 +1,12 @@
 /**
- * Shape A in-memory implementation — SPIKE only.
+ * In-memory reference adapter for the `MultiPartyCommit` port.
+ *
+ * Retained from the FW-0115 spike as the working reference implementation
+ * until FW-0061 ships the production adapter. The directory name preserves
+ * the spike provenance (Shape A — 2PC explicit states) so the verdict trail
+ * stays legible; do not delete it as "spike scaffold." See the port file
+ * `../../../ports/multi-party-commit.ts` for the spec authority and the
+ * verdict pointer.
  *
  * Reference 2PC coordinator + per-party state machine. Computes the shared
  * response digest deterministically from accumulated edits across parties;
@@ -12,27 +19,27 @@ import type {
   AmendmentResult,
   CommitmentSnapshot,
   FieldId,
-  MultiPartyCommitA,
+  MultiPartyCommit,
   PartyDeclaration,
   PartyRef,
   PartyState,
   PreparationWindow,
   ResponseDigest,
   Signature,
-} from './port.ts';
+} from '../../../ports/multi-party-commit.ts';
 
 interface PartyRecord {
   readonly declaration: PartyDeclaration;
   state: PartyState;
 }
 
-export interface InMemoryCommitAOptions {
+export interface InMemoryMultiPartyCommitOptions {
   readonly clockMs?: number;
 }
 
-export function createInMemoryCommitA(
-  options: InMemoryCommitAOptions = {},
-): MultiPartyCommitA {
+export function createInMemoryMultiPartyCommit(
+  options: InMemoryMultiPartyCommitOptions = {},
+): MultiPartyCommit {
   const parties = new Map<PartyRef, PartyRecord>();
   const fieldValues = new Map<FieldId, unknown>();
   let clockMs = options.clockMs ?? 0;
