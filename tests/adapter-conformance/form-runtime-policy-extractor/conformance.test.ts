@@ -4,9 +4,11 @@ import {
   CompositeFormRuntimePolicyExtractor,
   EmbeddableExtractor,
   EmptyFormRuntimePolicyExtractor,
+  MultiPartyPolicyExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
   RecordLifecycleExtractor,
+  SafeAddressPolicyExtractor,
   TrustedReviewerPolicyExtractor,
 } from '../../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import {
@@ -144,5 +146,66 @@ defineFormRuntimePolicyExtractorConformance(
   () => ({
     adapter: new RecordLifecycleExtractor(),
     definition: recordLifecycleDefinition,
+  }),
+);
+
+const multiPartyDefinition: FormDefinition = {
+  ...sampleFormDefinition,
+  extensions: {
+    'x-formspec-multi-party': {
+      tier: 'coEqual',
+      invitationChannel: 'magic-link',
+      parties: [
+        {
+          roleId: 'spouse-a',
+          label: 'Spouse A',
+          role: 'coEqual',
+          cardinality: { min: 1, max: 1 },
+          visibilityScope: 'shared',
+        },
+        {
+          roleId: 'spouse-b',
+          label: 'Spouse B',
+          role: 'coEqual',
+          cardinality: { min: 1, max: 1 },
+          visibilityScope: 'shared',
+        },
+      ],
+    },
+  },
+};
+
+defineFormRuntimePolicyExtractorConformance(
+  'MultiPartyPolicyExtractor conformance (multi-party definition)',
+  () => ({
+    adapter: new MultiPartyPolicyExtractor(),
+    definition: multiPartyDefinition,
+  }),
+);
+
+const safeAddressDefinition: FormDefinition = {
+  ...sampleFormDefinition,
+  items: [
+    {
+      key: 'protectedHomeAddress',
+      type: 'field',
+      dataType: 'string',
+      label: 'Protected home address',
+      accessControl: { class: 'safe-address' },
+    },
+  ],
+  extensions: {
+    'x-formspec-safe-address': {
+      acpJurisdictionsAccepted: ['CA-ACP'],
+      authorizedAudiences: ['issuer_verification'],
+    },
+  },
+};
+
+defineFormRuntimePolicyExtractorConformance(
+  'SafeAddressPolicyExtractor conformance (safe-address definition)',
+  () => ({
+    adapter: new SafeAddressPolicyExtractor(),
+    definition: safeAddressDefinition,
   }),
 );
