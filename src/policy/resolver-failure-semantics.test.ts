@@ -29,6 +29,9 @@ const baseInstance = {
   // FW-0040: embed is the eighth closed-taxonomy extension; same
   // honest-unavailable posture for these fixtures.
   embed: 'unavailable',
+  // FW-0046: screener is the ninth closed-taxonomy extension; same
+  // honest-unavailable posture for these fixtures.
+  screener: 'unavailable',
 } as const;
 const emptyOrg = { features: {} } as const;
 
@@ -106,6 +109,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       },
       org: emptyOrg,
       form: { features: { status: 'required' } },
@@ -160,6 +164,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
           offlineSubmit: 'unavailable',
           payment: 'unavailable',
           embed: 'unavailable',
+          screener: 'unavailable',
         },
         org: emptyOrg,
         form: { features: {} },

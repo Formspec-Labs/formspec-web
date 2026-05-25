@@ -370,6 +370,11 @@ function testComposition(
       postMessage: vi.fn(() => undefined),
       subscribeFromHost: vi.fn(() => () => undefined),
     },
+    screenerDocumentSource: {
+      readScreener: vi.fn(async () => {
+        throw new Error('respondent runtime tests do not exercise screener');
+      }),
+    },
     // ADR-0011: production-mode composition with both seeded capabilities
     // available and the form opting both in. Without the form opt-in the
     // resolver would mark both `not-requested` (org=allowed + form=silent)
@@ -399,6 +404,9 @@ function testComposition(
       // FW-0040: closed-taxonomy key — this test does not exercise the
       // embed path; the form does not declare it.
       embed: 'unavailable',
+      // FW-0046: closed-taxonomy key — the in-form respondent surface
+      // doesn't consume the screener; 'unavailable' satisfies the resolver.
+      screener: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
@@ -410,6 +418,7 @@ function testComposition(
         offlineSubmit: 'allowed',
         payment: 'allowed',
         embed: 'allowed',
+        screener: 'allowed',
       },
     },
     formRuntimePolicyExtractor: {

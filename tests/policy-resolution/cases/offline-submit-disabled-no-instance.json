@@ -10,7 +10,8 @@
     "crossIssuerHistory": "unavailable",
     "offlineSubmit": "unavailable",
     "payment": "unavailable",
-    "embed": "unavailable"
+    "embed": "unavailable",
+    "screener": "unavailable"
   },
   "org": {
     "features": {
@@ -21,7 +22,8 @@
       "crossIssuerHistory": "allowed",
       "offlineSubmit": "allowed",
       "payment": "allowed",
-      "embed": "allowed"
+      "embed": "allowed",
+      "screener": "allowed"
     }
   },
   "form": {
@@ -40,7 +42,8 @@
       "crossIssuerHistory": "not-requested",
       "offlineSubmit": "optional-no-instance",
       "payment": "not-requested",
-      "embed": "not-requested"
+      "embed": "not-requested",
+      "screener": "not-requested"
     }
   }
 }

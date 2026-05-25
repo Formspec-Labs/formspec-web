@@ -10,14 +10,16 @@
     "crossIssuerHistory": "unavailable",
     "offlineSubmit": "unavailable",
     "payment": "unavailable",
-    "embed": "unavailable"
+    "embed": "unavailable",
+    "screener": "unavailable"
   },
   "org": {
     "features": {
       "crossIssuerHistory": "allowed",
       "offlineSubmit": "allowed",
       "payment": "allowed",
-      "embed": "allowed"
+      "embed": "allowed",
+      "screener": "allowed"
     }
   },
   "form": {

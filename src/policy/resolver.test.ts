@@ -22,6 +22,8 @@ const allAvailable: InstanceCapabilities = {
   payment: 'available',
   // FW-0040 slice 1: declare embed so resolver validation passes.
   embed: 'available',
+  // FW-0046 slice 1: declare screener so resolver validation passes.
+  screener: 'available',
 };
 
 const allowAllOrg: OrgRuntimePolicy = {
@@ -34,6 +36,7 @@ const allowAllOrg: OrgRuntimePolicy = {
     offlineSubmit: 'allowed',
     payment: 'allowed',
     embed: 'allowed',
+    screener: 'allowed',
   },
 };
 

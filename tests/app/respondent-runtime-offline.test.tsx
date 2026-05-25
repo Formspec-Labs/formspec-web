@@ -23,6 +23,7 @@ import {
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
+import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import {
   freezeComposition,
   type InstanceCapabilities,
@@ -109,6 +110,7 @@ function buildComposition({
     offlineSubmit: offlineQueueAvailable ? 'demo-stub' : 'unavailable',
     payment: 'unavailable',
     embed: 'unavailable',
+    screener: 'unavailable',
   };
   const orgRuntimePolicy: OrgRuntimePolicy = {
     features: {
@@ -120,6 +122,7 @@ function buildComposition({
       offlineSubmit: 'allowed',
       payment: 'allowed',
       embed: 'allowed',
+      screener: 'allowed',
     },
   };
 
@@ -138,6 +141,7 @@ function buildComposition({
     offlineSubmitQueue,
     paymentRailAdapter: unavailablePaymentRailAdapter(),
     embedTransport: unavailableEmbedTransport(),
+    screenerDocumentSource: unavailableScreenerDocumentSource(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([

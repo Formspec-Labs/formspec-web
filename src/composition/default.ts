@@ -21,6 +21,7 @@ import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-s
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
+import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import {
@@ -86,6 +87,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     offlineSubmitQueue: unavailableOfflineSubmitQueue(),
     paymentRailAdapter: unavailablePaymentRailAdapter(),
     embedTransport: unavailableEmbedTransport(),
+    screenerDocumentSource: unavailableScreenerDocumentSource(),
     // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —
@@ -137,6 +139,13 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       // form load with the "this form is not set up to be shown on this
       // site." copy until an adapter is wired.
       embed: 'unavailable',
+      // FW-0046 slice 1: the OSS reference composition does not ship a
+      // production screener catalog adapter — adopters fork to wire a
+      // catalog service, static bundle, IPFS-pinned JSON, or an
+      // authoring-tool preview path per their deployment. The /screener
+      // route renders the plain-language "Pre-flight routing is not
+      // available on this site." copy until an adapter is wired.
+      screener: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -148,6 +157,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
         offlineSubmit: 'allowed',
         payment: 'allowed',
         embed: 'allowed',
+        screener: 'allowed',
       },
       // FW-0040 slice 1: fail-closed default. Adopters who wire a
       // production embed transport MUST also populate

@@ -447,6 +447,8 @@ function productionCompositionWithIdentity(
       payment: 'unavailable',
       // FW-0040: closed-taxonomy key — declare for resolver input validity.
       embed: 'unavailable',
+      // FW-0046: closed-taxonomy key — declare for resolver input validity.
+      screener: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {

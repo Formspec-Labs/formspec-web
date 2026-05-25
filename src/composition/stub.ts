@@ -16,6 +16,7 @@ import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts
 import { stubPaymentRailAdapter } from '../adapters/stub/payment-rail-adapter.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
+import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../adapters/stub/submit-transport.ts';
 import { demoSampleForm, demoSampleFormUrl } from '../demo/index.ts';
@@ -24,6 +25,7 @@ import {
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
 import { demoHistorySnapshot } from '../demo/respondent-history.ts';
+import { demoScreenerCatalog } from '../demo/screener.ts';
 import {
   freezeComposition,
   type InstanceCapabilities,
@@ -78,6 +80,12 @@ export function createStubComposition(): Composition {
     // composing a fresh stub with `{ embedded: true, hostOrigin }`; the
     // bundled demo never exercises the iframe-context gate.
     embedTransport: stubEmbedTransport({ embedded: false }),
+    // FW-0046 slice 1: in-memory catalog adapter seeded with the demo
+    // three-question screener. Production declares 'unavailable' until
+    // adopters wire a real catalog adapter; the stub satisfies the demo
+    // posture so the /screener route renders the upstream
+    // <FormspecScreener> end-to-end in `npm run dev`.
+    screenerDocumentSource: stubScreenerDocumentSource(demoScreenerCatalog()),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -123,6 +131,12 @@ export function createStubComposition(): Composition {
       // `x-formspec-embeddable: true` today (FW-0106 gates the demo flip
       // on a worked host-page demo, FW-0053 + FW-0102).
       embed: 'demo-stub',
+      // FW-0046 slice 1: in-memory screener catalog seeded with the
+      // bundled three-question fixture (J-047 demo). The /screener route
+      // exercises the upstream <FormspecScreener> against this fixture
+      // end-to-end. Production declares 'unavailable' until adopters
+      // wire a real catalog adapter.
+      screener: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -134,6 +148,7 @@ export function createStubComposition(): Composition {
         offlineSubmit: 'allowed',
         payment: 'allowed',
         embed: 'allowed',
+        screener: 'allowed',
       },
       // FW-0040 slice 1: fail-closed default — the bundled demo never
       // mounts in an iframe so no allow-list entry is needed; adopters

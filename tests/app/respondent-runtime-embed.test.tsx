@@ -16,6 +16,7 @@ import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-
 import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
 import { stubEmbedTransport } from '../../src/adapters/stub/embed-transport.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
+import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import {
   freezeComposition,
   type InstanceCapabilities,
@@ -76,6 +77,7 @@ function buildComposition(args: BuildOptions): Composition {
     offlineSubmit: 'demo-stub',
     payment: 'unavailable',
     embed: 'demo-stub',
+    screener: 'unavailable',
   };
   const orgRuntimePolicy: OrgRuntimePolicy = {
     features: {
@@ -87,6 +89,7 @@ function buildComposition(args: BuildOptions): Composition {
       offlineSubmit: 'allowed',
       payment: 'allowed',
       embed: 'allowed',
+      screener: 'allowed',
     },
     limits: { embed: { allowedOrigins: args.allowedOrigins } },
   };
@@ -109,6 +112,7 @@ function buildComposition(args: BuildOptions): Composition {
       embedded: args.embedded,
       hostOrigin: args.hostOrigin,
     }),
+    screenerDocumentSource: unavailableScreenerDocumentSource(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([

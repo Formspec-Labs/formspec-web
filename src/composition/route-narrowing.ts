@@ -54,9 +54,12 @@ import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-s
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
+import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
+import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
 import { demoHistorySnapshot } from '../demo/respondent-history.ts';
+import { demoScreenerCatalog } from '../demo/screener.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import {
   freezeComposition,
@@ -189,6 +192,14 @@ function buildProductionNarrowedComposition({
     // all descriptors; a future narrowed surface that needs to mount in
     // a host iframe would add `'embed'` to its `consumes` set and branch.
     embed: 'unavailable',
+    // FW-0046 slice 1: production composition has no screener catalog
+    // adapter yet (adopters fork per their deployment). Narrowed routes
+    // including /screener declare 'unavailable' in production mode +
+    // render the disabled-cause copy honestly. When the adopter wires a
+    // real catalog adapter, branch this slot on
+    // `route.consumes.has('screener')` here (mirrors the
+    // crossIssuerHistory pattern).
+    screener: 'unavailable',
   };
   const notificationDelivery = stubNotificationDelivery();
   // MED-4: identity is only wired when the gated respondent-place capability
@@ -234,6 +245,11 @@ function buildProductionNarrowedComposition({
     // all descriptors; a future narrowed surface needing embed would add
     // `'embed'` to its `consumes` set and branch here.
     embedTransport: unavailableEmbedTransport(),
+    // FW-0046 slice 1: production composition has no screener catalog
+    // adapter yet. Narrowed routes including /screener wire the sentinel
+    // + render the disabled-cause copy honestly. Adopter forks branch on
+    // `route.consumes.has('screener')` to wire their real adapter.
+    screenerDocumentSource: unavailableScreenerDocumentSource(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -274,6 +290,12 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     // embed-transport substrate is reachable. Uniform unavailable
     // regardless of mode.
     embedTransport: unavailableEmbedTransport(),
+    // FW-0046 slice 1: only the /screener route consumes the screener
+    // catalog. Other narrowed routes wire the unavailable sentinel +
+    // declare 'unavailable' because they don't render the screener.
+    screenerDocumentSource: route.consumes.has('screener')
+      ? stubScreenerDocumentSource(demoScreenerCatalog())
+      : unavailableScreenerDocumentSource(),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -303,6 +325,11 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // FW-0040 slice 1: narrowed routes do not mount forms in host
       // iframes; uniform unavailable to match the wired sentinel.
       embed: 'unavailable',
+      // FW-0046 slice 1: only the /screener descriptor consumes the
+      // screener catalog. Other narrowed routes wire the sentinel +
+      // declare 'unavailable' because they don't render pre-flight
+      // routing.
+      screener: route.consumes.has('screener') ? 'demo-stub' : 'unavailable',
     },
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -321,6 +348,7 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       offlineSubmit: 'allowed',
       payment: 'allowed',
       embed: 'allowed',
+      screener: 'allowed',
     },
     // FW-0040 slice 1: narrowed routes don't mount in host iframes, so
     // the allow-list is irrelevant — fail-closed default mirrors the

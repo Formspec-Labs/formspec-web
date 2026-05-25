@@ -30,6 +30,7 @@ import { unavailableAttachmentStore } from '../../src/adapters/unavailable/attac
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
+import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
@@ -98,6 +99,10 @@ function buildPaymentComposition(args: {
     // embed path; the runtime composition needs the closed-taxonomy key
     // declared for resolver input validity.
     embed: 'unavailable',
+    // FW-0046 sibling-row coordination: this test does not exercise the
+    // pre-flight screener path; declare 'unavailable' for resolver
+    // input validity.
+    screener: 'unavailable',
   };
   const orgRuntimePolicy: OrgRuntimePolicy = {
     features: {
@@ -109,6 +114,7 @@ function buildPaymentComposition(args: {
       offlineSubmit: 'allowed',
       payment: 'allowed',
       embed: 'allowed',
+      screener: 'allowed',
     },
   };
 
@@ -132,6 +138,9 @@ function buildPaymentComposition(args: {
     // the closed-taxonomy contract is satisfied. The fail-closed default
     // never fires because this test never mounts in an iframe.
     embedTransport: unavailableEmbedTransport(),
+    // FW-0046: declare the screener slot so the closed-taxonomy contract
+    // is satisfied. The runtime never reads it on the in-form payment path.
+    screenerDocumentSource: unavailableScreenerDocumentSource(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
@@ -297,6 +306,8 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
       paymentRailAdapter: unavailablePaymentRailAdapter(),
       // FW-0040 sibling-row coordination: closed-taxonomy slot.
       embedTransport: unavailableEmbedTransport(),
+      // FW-0046 sibling-row coordination: closed-taxonomy slot.
+      screenerDocumentSource: unavailableScreenerDocumentSource(),
       instanceCapabilities: {
         respondentPlace: 'unavailable',
         status: 'unavailable',
@@ -306,6 +317,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       } as InstanceCapabilities,
       orgRuntimePolicy: {
         features: {
@@ -317,6 +329,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
           offlineSubmit: 'allowed',
           payment: 'allowed',
           embed: 'allowed',
+          screener: 'allowed',
         },
       } satisfies OrgRuntimePolicy,
       formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
@@ -395,6 +408,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
       offlineSubmitQueue: stubOfflineSubmitQueue({ transport: submitTransport }),
       paymentRailAdapter: stubPaymentRailAdapter({ railLabel: 'Card' }),
       embedTransport: unavailableEmbedTransport(),
+      screenerDocumentSource: unavailableScreenerDocumentSource(),
       instanceCapabilities: {
         respondentPlace: 'demo-stub',
         status: 'demo-stub',
@@ -404,6 +418,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
         offlineSubmit: 'demo-stub',
         payment: 'demo-stub',
         embed: 'unavailable',
+        screener: 'unavailable',
       } as InstanceCapabilities,
       orgRuntimePolicy: {
         features: {
@@ -415,6 +430,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
           offlineSubmit: 'allowed',
           payment: 'allowed',
           embed: 'allowed',
+          screener: 'allowed',
         },
       } satisfies OrgRuntimePolicy,
       formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([

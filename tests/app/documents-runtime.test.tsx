@@ -576,6 +576,7 @@ function productionCompositionWithIdentity(
       offlineSubmit: 'unavailable',
       payment: 'unavailable',
       embed: 'unavailable',
+      screener: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {

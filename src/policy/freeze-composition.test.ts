@@ -6,12 +6,14 @@ import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-s
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
+import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubEmbedTransport } from '../adapters/stub/embed-transport.ts';
 import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts';
 import { stubPaymentRailAdapter } from '../adapters/stub/payment-rail-adapter.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
+import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../adapters/stub/submit-transport.ts';
 
@@ -32,6 +34,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         offlineSubmit: 'demo-stub',
         payment: 'demo-stub',
         embed: 'demo-stub',
+        screener: 'demo-stub',
       } as const,
       respondentPlaceSource: stubRespondentPlaceSource(),
       statusReader: stubStatusReader(),
@@ -40,6 +43,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
       offlineSubmitQueue: stubOfflineSubmitQueue({ transport: stubSubmitTransport() }),
       paymentRailAdapter: stubPaymentRailAdapter(),
       embedTransport: stubEmbedTransport(),
+      screenerDocumentSource: stubScreenerDocumentSource(),
     };
     expect(freezeComposition(composition)).toBe(composition);
   });
@@ -56,6 +60,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       } as const,
       respondentPlaceSource: unavailableRespondentPlaceSource(),
       statusReader: stubStatusReader(),
@@ -64,6 +69,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
       offlineSubmitQueue: unavailableOfflineSubmitQueue(),
       paymentRailAdapter: unavailablePaymentRailAdapter(),
       embedTransport: unavailableEmbedTransport(),
+      screenerDocumentSource: unavailableScreenerDocumentSource(),
     };
     expect(() => freezeComposition(composition)).toThrow(CompositionIncoherenceError);
   });

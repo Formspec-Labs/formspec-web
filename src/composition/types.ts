@@ -10,6 +10,7 @@ import type {
   PaymentRailAdapter,
   RespondentHistorySource,
   RespondentPlaceSource,
+  ScreenerDocumentSource,
   StatusReader,
   SubmitTransport,
 } from '../ports/index.ts';
@@ -87,6 +88,19 @@ export interface Composition {
    * (FW-0053, FW-0102, FW-0103).
    */
   embedTransport: EmbedTransport;
+  /**
+   * FW-0046 slice 1: screener-document seam (web ADR-0011 screener). The
+   * `/screener?doc={urn}` route loads a Screener Document through this
+   * port and mounts the upstream `<FormspecScreener>` from
+   * `@formspec-org/react` to drive the three-questions-not-four-hundred
+   * pre-flight surface (J-047). Production wires the unavailable sentinel
+   * today (no OSS reference catalog adapter ships); demo wires
+   * `stubScreenerDocumentSource` seeded with the bundled three-question
+   * fixture; adopters fork to wire a catalog service, a static bundle,
+   * an IPFS-pinned JSON, or an authoring-tool preview path per their
+   * deployment.
+   */
+  screenerDocumentSource: ScreenerDocumentSource;
   /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */
   instanceCapabilities: InstanceCapabilities;
   /** ADR-0011 §Org runtime policy — supplied by the composition root. */

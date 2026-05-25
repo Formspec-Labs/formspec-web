@@ -26,6 +26,7 @@ import { unavailableStatusReader } from '../../src/adapters/unavailable/status-r
 import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
+import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import { HISTORY_ROUTE_NARROWING } from '../../src/app/history-route.ts';
 
 // Build a minimal production-mode CompositionLike directly. `createDefaultComposition()`
@@ -57,6 +58,7 @@ function productionCompositionLike(overrides: Partial<CompositionLike> = {}): Co
       // FW-0040: closed-taxonomy key paired with the unavailable
       // embedTransport sentinel.
       embed: 'unavailable',
+      screener: 'unavailable',
     },
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
@@ -65,6 +67,7 @@ function productionCompositionLike(overrides: Partial<CompositionLike> = {}): Co
     offlineSubmitQueue: unavailableOfflineSubmitQueue(),
     paymentRailAdapter: unavailablePaymentRailAdapter(),
     embedTransport: unavailableEmbedTransport(),
+    screenerDocumentSource: unavailableScreenerDocumentSource(),
     ...overrides,
   };
 }
@@ -145,6 +148,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       },
       statusReader: stubStatusReader(),
     });
@@ -163,6 +167,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       },
     });
     expect(() => assertCompositionCoherence(composition)).toThrow(/status/);
@@ -208,6 +213,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
       offlineSubmitQueue: unavailableOfflineSubmitQueue(),
       paymentRailAdapter: unavailablePaymentRailAdapter(),
       embedTransport: unavailableEmbedTransport(),
+      screenerDocumentSource: unavailableScreenerDocumentSource(),
       ...overrides,
     };
   }
@@ -224,6 +230,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -242,6 +249,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       },
       respondentPlaceSource: unavailableRespondentPlaceSource(),
     });
@@ -260,6 +268,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -279,6 +288,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       },
       respondentPlaceSource: realPlaceAdapter as never,
     });
@@ -297,6 +307,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -317,6 +328,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         offlineSubmit: 'unavailable',
         payment: 'unavailable',
         embed: 'unavailable',
+        screener: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });

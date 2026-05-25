@@ -10,7 +10,8 @@
     "crossIssuerHistory": "unavailable",
     "offlineSubmit": "unavailable",
     "payment": "unavailable",
-    "embed": "available"
+    "embed": "available",
+    "screener": "unavailable"
   },
   "org": {
     "features": {
@@ -21,10 +22,15 @@
       "crossIssuerHistory": "allowed",
       "offlineSubmit": "allowed",
       "payment": "allowed",
-      "embed": "allowed"
+      "embed": "allowed",
+      "screener": "allowed"
     },
     "limits": {
-      "embed": { "allowedOrigins": ["https://allowed.example.test"] }
+      "embed": {
+        "allowedOrigins": [
+          "https://allowed.example.test"
+        ]
+      }
     }
   },
   "form": {
@@ -34,7 +40,9 @@
   },
   "expect": {
     "kind": "profile",
-    "enabled": ["embed"],
+    "enabled": [
+      "embed"
+    ],
     "disabled": {
       "respondentPlace": "not-requested",
       "status": "not-requested",
@@ -42,7 +50,8 @@
       "fileUpload": "not-requested",
       "crossIssuerHistory": "not-requested",
       "offlineSubmit": "not-requested",
-      "payment": "not-requested"
+      "payment": "not-requested",
+      "screener": "not-requested"
     }
   }
 }
