@@ -465,8 +465,13 @@ function readMethodToken(input: SubmitWithPaymentInput): string {
  * Synchronous so the form-load boundary can call it inline after
  * `resolveRuntimeFeatures(...)` without changing the existing await flow.
  * Production transport adapters that resolve `hostOrigin()` via a
- * postMessage handshake MUST complete that handshake in the adapter
- * constructor / init() before being passed to `freezeComposition`.
+ * postMessage handshake return `null` from `hostOrigin()` until handshake
+ * completes; the runtime gate fails closed on `null` (no origin matches
+ * the allow-list). Adopters needing pre-resolved origin SHOULD complete
+ * the handshake in their adapter factory (async function returning a
+ * resolved transport) before passing the result into the composition
+ * factory — the composition factory itself stays sync (no port-level
+ * init hook; the optional `EmbedTransport.ready?` is filed as FW-0102).
  */
 export interface VerifyEmbedOriginAllowedInput {
   readonly runtimeProfile: ResolvedRuntimeProfile;

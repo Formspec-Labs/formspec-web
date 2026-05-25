@@ -354,7 +354,7 @@ FW-0037 build (formspec-web) — when an adopter deployment needs the flow
 
 FW-0037 is structurally a Formspec-only design — Trellis is byte-neutral (`metadata.filer` rides as response metadata through the standard chain unchanged); WOS has no filer-actor extension needed (the signer is the WOS-visible actor; the filer is invisible to WOS governance per §1.2 non-goal); PKAF is distinct scope (`AILineage` is assertion-side; filer-side has no PKAF analog).
 
-**Subsystem-count honesty.** Only Formspec ratifies anything beyond the current substrate (EXT-N for `metadata.filer`). ADR-0011 amendment is a small clarification (one paragraph naming the two sub-flows). **No new cross-stack ratification path.** Smallest cross-stack footprint of any post-MVP design row to date — even lighter than FW-0036 (which closed one EXT-5 payload; FW-0037 introduces one EXT-N carrier).
+**Subsystem-count honesty.** Only Formspec ratifies anything beyond the current substrate (EXT-N for `metadata.filer`). ADR-0011 amendment is a small clarification (one paragraph naming the two sub-flows). **No new cross-stack ratification path.** Smallest slice-1 cross-stack footprint of any post-MVP design row to date (per §6.4 slice-1 disclaimer — architecture-final footprint depends on whether a future row promotes per-filer-actor WOS governance) — even lighter than FW-0036 (which closed one EXT-5 payload; FW-0037 introduces one EXT-N carrier).
 
 ### 6.4 What FW-0037 ratifies standalone (slice 1 honesty)
 
