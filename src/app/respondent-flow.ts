@@ -77,12 +77,16 @@ export function signInOptionsForIdentityPolicy({
   if (identityMode === 'oidc-required') {
     return options.filter((option) => option.kind === 'oidc');
   }
-  // FW-0028: anonymous-allowed deployments show the picker when there is a
-  // real choice — anonymous boot auto-selects when no other path exists, so
-  // a single-option deployment never reaches the picker. With two or more
-  // options the user picks (anonymous renders as "Continue without an
-  // account" in `AuthRequiredSurface`).
-  return options.length > 1 ? [...options] : [];
+  // FW-0028: anonymous-allowed picker rule. The picker renders when EITHER
+  // the deployment offers a real choice (multiple options) OR the single
+  // available option requires explicit user action (OIDC redirect, magic
+  // link request, passkey ceremony — anything that is not auto-selectable
+  // anonymous boot). The `length > 1` short-circuit silently dropped users
+  // through to applyReadyState(null) when the only configured option was a
+  // single OIDC IdP in anonymous-allowed mode (code review M-3).
+  if (options.length === 0) return [];
+  if (options.length === 1 && options[0].kind === 'anonymous') return [];
+  return [...options];
 }
 
 export function subjectRefInvalidatedByIdentityChange(

@@ -195,6 +195,50 @@ describe('respondent flow helpers', () => {
     ).toEqual([]);
   });
 
+  it('FW-0028 M-3: single interactive option in anonymous-allowed mode renders the picker (no silent auto-skip)', () => {
+    // Anonymous-allowed deployment with one OIDC option and no anonymous
+    // path: the prior `length > 1` predicate short-circuited to `[]` →
+    // applyReadyState(null) → form rendered with no claim. The OIDC button
+    // was offered but never reachable. The corrected predicate keeps the
+    // single-anonymous auto-select but renders the picker when the only
+    // option requires explicit user action.
+    const oidc = {
+      kind: 'oidc',
+      issuer: 'https://idp-single.example.test',
+      displayName: 'Solo IdP',
+      minAssurance: 'L2',
+    } as const;
+    expect(
+      signInOptionsForIdentityPolicy({
+        options: [oidc],
+        identityMode: 'anonymous-allowed',
+        runtimeMode: 'production',
+      }),
+    ).toEqual([oidc]);
+    // Single magic-link option — same rule, renders the picker so the user
+    // can request the link.
+    const magic = {
+      kind: 'magic-link',
+      channel: 'email',
+      minAssurance: 'L2',
+    } as const;
+    expect(
+      signInOptionsForIdentityPolicy({
+        options: [magic],
+        identityMode: 'anonymous-allowed',
+        runtimeMode: 'production',
+      }),
+    ).toEqual([magic]);
+    // Single anonymous — boot auto-selects (no picker).
+    expect(
+      signInOptionsForIdentityPolicy({
+        options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+        identityMode: 'anonymous-allowed',
+        runtimeMode: 'production',
+      }),
+    ).toEqual([]);
+  });
+
   it('recognizes the narrow identity redirect-started signal', () => {
     const redirectStarted = new Error('redirect started');
     redirectStarted.name = 'IdentityInteractionStartedError';

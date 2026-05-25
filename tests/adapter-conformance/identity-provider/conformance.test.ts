@@ -107,3 +107,35 @@ defineIdentityProviderConformance('composite IdentityProvider conformance', () =
     }),
   ]),
 }));
+
+// FW-0028 code review M-4: the composite must also satisfy conformance over
+// the OIDC interaction model (richer than anonymous + magic-link — redirect,
+// async retry, claim re-hydrate). Without this arm the composite contract
+// test passed without ever exercising the OIDC adapter path.
+defineIdentityProviderConformance(
+  'composite IdentityProvider conformance with OIDC arm',
+  () => {
+    const driver: OidcClientDriver = {
+      getUser: async () => ({
+        access_token: 'composite-oidc-access',
+        id_token: 'composite-oidc-id',
+        profile: {
+          sub: 'composite-oidc-subject',
+          acr: 'urn:formspec:assurance:l3',
+        },
+      }),
+    };
+    return {
+      adapter: new CompositeIdentityProvider([
+        new OidcAdapter({
+          issuer: 'https://idp-composite.example.test',
+          clientId: 'formspec-web',
+          minAssurance: 'L3',
+          driver,
+          subjectRefFactory: () => 'oidc:composite-conformance-subject',
+        }),
+        new AnonymousAdapter(),
+      ]),
+    };
+  },
+);
