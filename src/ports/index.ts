@@ -88,3 +88,9 @@ export type {
   EmbedMessageFromHost,
   Unsubscribe as EmbedUnsubscribe,
 } from './embed-transport.ts';
+export type {
+  ScreenerDocumentSource,
+  ScreenerDocumentQuery,
+  ScreenerDocumentInput,
+} from './screener-document-source.ts';
+export { ScreenerDocumentNotFoundError } from './screener-document-source.ts';

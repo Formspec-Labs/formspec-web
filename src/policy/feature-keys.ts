@@ -62,6 +62,22 @@
  *     FW-0053; production transport adapters (postMessage RPC, penpal /
  *     comlink) defer to FW-0102.
  *
+ * Extended at FW-0046 slice 1 (pre-flight routing: the screener surface):
+ *   - screener → gated against the new ScreenerDocumentSource port
+ *     (1:1 mapping). Standalone-route consumer (`/screener?doc={urn}`) —
+ *     no form is mounted; the surface loads a Screener Document
+ *     (`formspec/specs/screener/screener-spec.md`), renders the upstream
+ *     `<FormspecScreener>` (`@formspec-org/react`), shows the
+ *     determination's reasoning, and links to the routed form. NINTH key
+ *     in the closed taxonomy. Form-policy is synthesized at the route
+ *     boundary as `'optional'` (web ADR-0011 §"Non-form surface synthesis"
+ *     addendum) — the route itself IS the opt-in; declaring `'required'`
+ *     would raise the typed form-load error on instances that don't
+ *     publish a screener catalog. Production declares `'unavailable'`
+ *     until an adopter wires a real catalog adapter; demo wires
+ *     `stubScreenerDocumentSource` seeded with the bundled three-question
+ *     fixture.
+ *
  * Extension protocol: every future feature ADR adds its key here and to the
  * Composition's InstanceCapabilities declaration. No string-typed feature keys
  * outside this set — the resolver rejects unknown keys with
@@ -87,6 +103,7 @@ export const RUNTIME_FEATURE_KEYS = [
   'offlineSubmit',
   'payment',
   'embed',
+  'screener',
 ] as const;
 
 export type RuntimeFeatureKey = (typeof RUNTIME_FEATURE_KEYS)[number];

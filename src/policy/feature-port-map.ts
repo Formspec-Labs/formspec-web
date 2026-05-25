@@ -50,6 +50,14 @@ export const FEATURE_PORT_MAP = {
   // adapters (postMessage RPC, penpal / comlink wrappers) are adopter-side
   // rows (FW-0102 + FW-0103).
   embed: 'embedTransport',
+  // FW-0046 slice 1: 1:1 mapping. The ScreenerDocumentSource port + the
+  // screener feature key ship together — no transitional slot-sharing.
+  // The upstream `<FormspecScreener>` + `useScreener()` from
+  // `@formspec-org/react` ship the consumer surface; this port owns
+  // "where does the screener catalog live" only. Production adapters
+  // (catalog service / static bundle / authoring-tool preview) are
+  // adopter-side per web ADR-0004.
+  screener: 'screenerDocumentSource',
 } as const satisfies Readonly<Record<RuntimeFeatureKey, string>>;
 
 export type CompositionPortName = (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey];
