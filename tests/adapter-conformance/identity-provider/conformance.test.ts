@@ -2,6 +2,7 @@ import {
   AnonymousSessionBridge,
   HttpAnonymousIdentityProvider,
 } from '../../../src/adapters/http/anonymous-session.ts';
+import { CompositeIdentityProvider } from '../../../src/adapters/composing/identity-provider.ts';
 import { AnonymousAdapter } from '../../../src/adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../../../src/adapters/identity/magic-link.ts';
 import { OidcAdapter, type OidcClientDriver } from '../../../src/adapters/identity/oidc.ts';
@@ -81,4 +82,28 @@ defineIdentityProviderConformance('magic-link IdentityProvider conformance', () 
       privacyTier: 'pseudonymous',
     }),
   }),
+}));
+
+// FW-0028 — the composing adapter that aggregates multiple IdentityProviders
+// behind one port slot must itself satisfy the same conformance contract.
+defineIdentityProviderConformance('composite IdentityProvider conformance', () => ({
+  adapter: new CompositeIdentityProvider([
+    new AnonymousAdapter(),
+    new MagicLinkAdapter({
+      notificationDelivery: stubNotificationDelivery(),
+      callbackUrl: 'https://formspec.example.test/magic-link/callback',
+      to: 'respondent@example.test',
+      minAssurance: 'L3',
+      exchange: async (): Promise<IdentityClaim> => ({
+        provider: 'magic-link',
+        adapter: 'magic-link@0',
+        subjectRef: 'magic:conformance-subject',
+        credentialType: 'provider-assertion',
+        credentialRef: 'magic-link:conformance',
+        subjectBinding: 'respondent',
+        assuranceLevel: 'L3',
+        privacyTier: 'pseudonymous',
+      }),
+    }),
+  ]),
 }));
