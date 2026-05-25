@@ -4,13 +4,13 @@ import type { Composition } from '../composition/types.ts';
 import type {
   ReviewThread,
   ReviewThreadEvent,
+  ReviewThreadFieldSnapshot,
 } from '../ports/review-thread-store.ts';
 import type { ReviewerSessionRedeemResult } from '../ports/reviewer-session.ts';
 import type { ReviewerRouteParams } from './trusted-reviewer.ts';
 import {
-  activeReviewerCount,
+  formatReviewDraftValue,
   reviewAttestationStatus,
-  verifierReviewCapacityLine,
 } from './trusted-reviewer.ts';
 
 interface ReviewerRuntimeProps {
@@ -53,6 +53,9 @@ export function ReviewerRuntime({
       const grant = await composition.reviewerSession.redeem({
         capabilityUrl: route.capabilityUrl,
       });
+      if (grant.threadId !== route.threadId) {
+        throw new Error('This review link is not valid for the requested thread.');
+      }
       const thread = await composition.reviewThreadStore.read({ threadId: grant.threadId });
       if (!cancelled) {
         setState({ status: 'ready', grant, thread });
@@ -113,20 +116,33 @@ export function ReviewerRuntime({
   }
 
   const canSuggest = state.grant.grantedScope === 'view+comment+suggest';
-  const reviewerCount = activeReviewerCount(state.thread);
+  const draftFields = state.thread.draftSnapshot?.fields ?? [];
+  const selectedField = draftFields.find((field) => field.fieldPointer === fieldPointer)
+    ?? draftFields[0];
+  const selectedFieldPointer = selectedField?.fieldPointer ?? fieldPointer;
+  const canSuggestSelectedField = canSuggest && !selectedField?.respondentOnly;
 
   return (
     <section className="reviewer-shell" aria-labelledby="respondent-title">
       <header className="respondent-header respondent-header--unbranded">
         <p className="respondent-header__kicker">{config.brand.name}</p>
         <h1 id="respondent-title">Review draft</h1>
-        <p>{verifierReviewCapacityLine({ signerName: 'respondent', reviewerCount })}</p>
+        <p>Draft review only. Receipt reviewer trace is not attached.</p>
       </header>
 
       <div className="reviewer-shell__summary" aria-live="polite">
         <span>{state.grant.grantedScope}</span>
         <span>{reviewAttestationStatus(state.thread)}</span>
       </div>
+
+      <ReviewDraftSnapshot
+        fields={draftFields}
+        selectedField={selectedField}
+        selectedFieldPointer={selectedFieldPointer}
+        fallbackFieldPointer={fieldPointer}
+        fieldPointerId={fieldPointerId}
+        onSelectField={setFieldPointer}
+      />
 
       <div className="reviewer-shell__controls">
         <label htmlFor={reviewerNameId}>Your name</label>
@@ -135,12 +151,6 @@ export function ReviewerRuntime({
           value={displayName}
           autoComplete="name"
           onChange={(event) => setDisplayName(event.currentTarget.value)}
-        />
-        <label htmlFor={fieldPointerId}>Field anchor</label>
-        <input
-          id={fieldPointerId}
-          value={fieldPointer}
-          onChange={(event) => setFieldPointer(event.currentTarget.value)}
         />
         <label htmlFor={commentId}>Comment</label>
         <textarea
@@ -155,14 +165,17 @@ export function ReviewerRuntime({
           onClick={() => {
             void appendReviewerEvent(state.grant, {
               type: 'comment-added',
-              anchor: { fieldPointer },
+              anchor: {
+                fieldPointer: selectedFieldPointer,
+                valueHashAtAnchor: selectedField?.valueHashAtSnapshot,
+              },
               body: commentBody,
             }).then(() => setCommentBody(''));
           }}
         >
           Add comment
         </button>
-        {canSuggest ? (
+        {canSuggestSelectedField ? (
           <>
             <label htmlFor={suggestionId}>Suggestion</label>
             <input
@@ -176,7 +189,10 @@ export function ReviewerRuntime({
               onClick={() => {
                 void appendReviewerEvent(state.grant, {
                   type: 'suggestion-added',
-                  anchor: { fieldPointer },
+                  anchor: {
+                    fieldPointer: selectedFieldPointer,
+                    valueHashAtAnchor: selectedField?.valueHashAtSnapshot,
+                  },
                   proposedValue: suggestionValue,
                 }).then(() => setSuggestionValue(''));
               }}
@@ -198,6 +214,66 @@ export function ReviewerRuntime({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ReviewDraftSnapshot({
+  fallbackFieldPointer,
+  fieldPointerId,
+  fields,
+  onSelectField,
+  selectedField,
+  selectedFieldPointer,
+}: {
+  fallbackFieldPointer: string;
+  fieldPointerId: string;
+  fields: readonly ReviewThreadFieldSnapshot[];
+  onSelectField: (fieldPointer: string) => void;
+  selectedField: ReviewThreadFieldSnapshot | undefined;
+  selectedFieldPointer: string;
+}) {
+  if (fields.length === 0) {
+    return (
+      <div className="reviewer-shell__draft">
+        <p className="place-list__empty">No draft snapshot is attached to this review thread.</p>
+        <label htmlFor={fieldPointerId}>Field anchor</label>
+        <input
+          id={fieldPointerId}
+          value={fallbackFieldPointer}
+          onChange={(event) => onSelectField(event.currentTarget.value)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="reviewer-shell__draft">
+      <div className="reviewer-shell__field-picker">
+        <label htmlFor={fieldPointerId}>Field anchor</label>
+        <select
+          id={fieldPointerId}
+          value={selectedFieldPointer}
+          onChange={(event) => onSelectField(event.currentTarget.value)}
+        >
+          {fields.map((field) => (
+            <option key={field.fieldPointer} value={field.fieldPointer}>
+              {field.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {selectedField ? (
+        <div className="reviewer-shell__field-snapshot" aria-live="polite">
+          <strong>{selectedField.label}</strong>
+          <span>{selectedField.fieldPointer}</span>
+          <p>
+            {selectedField.respondentOnly
+              ? 'Respondent-only field. Value hidden from reviewers.'
+              : formatReviewDraftValue(selectedField.value)}
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

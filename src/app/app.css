@@ -237,10 +237,42 @@ select {
   gap: 0.55rem;
 }
 
+.reviewer-shell__draft,
+.reviewer-shell__field-picker,
+.reviewer-shell__field-snapshot {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.reviewer-shell__field-snapshot {
+  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: #fbfcfb;
+}
+
+.reviewer-shell__field-snapshot strong,
+.reviewer-shell__field-snapshot span,
+.reviewer-shell__field-snapshot p {
+  overflow-wrap: anywhere;
+}
+
+.reviewer-shell__field-snapshot p {
+  margin: 0;
+  color: var(--formspec-color-foreground, #1f2933);
+}
+
+.reviewer-shell__field-snapshot span {
+  color: var(--formspec-color-muted, #5d6b66);
+  font-size: 0.82rem;
+}
+
 .trusted-reviewer__controls input,
 .trusted-reviewer__link,
 .reviewer-shell__controls input,
-.reviewer-shell__controls textarea {
+.reviewer-shell__controls textarea,
+.reviewer-shell__field-picker input,
+.reviewer-shell__field-picker select {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--formspec-color-border, #c9d3cd);

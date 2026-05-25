@@ -2,10 +2,16 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { fireEvent } from '@testing-library/react';
-import type { FormDefinition } from '@formspec-org/types';
+import type {
+  FormDefinition,
+  FormResponse,
+} from '@formspec-org/types';
 import { ReviewerRuntime } from '../../src/app/ReviewerRuntime.tsx';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
-import { verifierReviewCapacityLine } from '../../src/app/trusted-reviewer.ts';
+import {
+  reviewerDraftSnapshotForResponse,
+  verifierReviewCapacityLine,
+} from '../../src/app/trusted-reviewer.ts';
 import { TrustedReviewerPolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import { stubAttachmentStore } from '../../src/adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../../src/adapters/stub/definition-source.ts';
@@ -42,6 +48,7 @@ function reviewableForm(): FormDefinition {
     title: 'Reviewable Form',
     items: [
       { key: 'fullName', type: 'field', dataType: 'string', label: 'Full name' },
+      { key: 'protectedAddress', type: 'field', dataType: 'string', label: 'Protected address' },
     ],
     extensions: {
       'x-formspec-trusted-reviewer': {
@@ -152,7 +159,28 @@ describe('trusted reviewer runtime surfaces', () => {
     await waitForText('revoked');
   });
 
-  it('reviewer shell renders comment/suggestion controls without submit or sign buttons', async () => {
+  it('respondent can revoke all active reviewer links with one gesture', async () => {
+    const composition = buildComposition();
+    await renderRespondent(composition);
+    await waitForText('Share this draft');
+    await clickButton('Create reviewer link');
+    await waitForButtonCount('Revoke', 1);
+    await clickButton('Create reviewer link');
+    await waitForButtonCount('Revoke', 2);
+    const threadId = latestReviewerThreadId();
+
+    await waitForText('Stop sharing with everyone');
+    await clickButton('Stop sharing with everyone');
+    await waitForText('revoked');
+    const thread = await composition.reviewThreadStore.read({ threadId });
+    expect(thread.shares.every((share) => share.revokedAt)).toBe(true);
+    expect(thread.events.filter((event) => (
+      event.payload.type === 'share-revoked'
+      && event.payload.reason === 'respondent panic revoked'
+    ))).toHaveLength(2);
+  });
+
+  it('reviewer shell renders draft field context and anchors comments without submit or sign buttons', async () => {
     const composition = buildComposition();
     const policySnapshot: ReviewThreadPolicySnapshot = {
       posture: 'suggest-allowed',
@@ -160,23 +188,39 @@ describe('trusted reviewer runtime surfaces', () => {
       reviewerSessionBindingRef: 'composition:reviewerSession',
       reviewThreadStoreBindingRef: 'composition:reviewThreadStore',
     };
+    const response = reviewResponse({ fullName: 'Grace Hopper', protectedAddress: 'Hidden home' });
+    const draftSnapshot = await reviewerDraftSnapshotForResponse({
+      definition: reviewableForm(),
+      policySnapshot,
+      response,
+    });
     await composition.reviewThreadStore.ensureThread({
       threadId: 'review-thread:test',
       draftRef: { formUrl: REVIEW_FORM_URL },
+      draftSnapshot,
       policySnapshot,
     });
     const minted = await composition.reviewerSession.mintShare({
       threadId: 'review-thread:test',
       requestedScope: 'view+comment+suggest',
-      respondentSessionToken: respondentSessionToken('test'),
+      respondentSessionToken: respondentTokenForThread('review-thread:test'),
     });
 
     await renderReviewer(composition, minted.capabilityUrl);
     await waitForText('Review draft');
+    await waitForText('Grace Hopper');
+    expect(container?.textContent).toContain('Full name');
+    expect(container?.textContent).not.toContain('Hidden home');
+    expect(container?.textContent).not.toContain('signed by respondent');
     expect(buttonLabels()).toContain('Add comment');
     expect(buttonLabels()).toContain('Add suggestion');
     expect(buttonLabels()).not.toContain('Submit');
     expect(buttonLabels()).not.toContain('Sign');
+
+    const fieldSelector = container?.querySelector<HTMLSelectElement>('select');
+    if (!fieldSelector) throw new Error('field selector not found');
+    expect(Array.from(fieldSelector.options).map((option) => option.textContent))
+      .toEqual(['Full name', 'Protected address']);
 
     const comment = container?.querySelector<HTMLTextAreaElement>('textarea');
     if (!comment) throw new Error('comment textarea not found');
@@ -187,12 +231,61 @@ describe('trusted reviewer runtime surfaces', () => {
     await clickButton('Add comment');
     await waitForText('Review saved');
     const thread = await composition.reviewThreadStore.read({ threadId: 'review-thread:test' });
-    expect(thread.events.some((event) => event.payload.type === 'comment-added')).toBe(true);
+    const commentEvent = thread.events.find((event) => event.payload.type === 'comment-added');
+    expect(commentEvent?.payload.type).toBe('comment-added');
+    if (commentEvent?.payload.type !== 'comment-added') throw new Error('comment event not found');
+    expect(commentEvent.payload.anchor.fieldPointer).toBe('/data/fullName');
+    expect(commentEvent.payload.anchor.valueHashAtAnchor).toBe(
+      draftSnapshot.fields.find((field) => field.fieldPointer === '/data/fullName')?.valueHashAtSnapshot,
+    );
+
+    await act(async () => {
+      fireEvent.change(fieldSelector, { target: { value: '/data/protectedAddress' } });
+      await tick();
+    });
+    expect(container?.textContent).toContain('Respondent-only field. Value hidden from reviewers.');
+    expect(buttonLabels()).not.toContain('Add suggestion');
+  });
+
+  it('reviewer shell hides suggestions for comment-only grants', async () => {
+    const composition = buildComposition();
+    const policySnapshot: ReviewThreadPolicySnapshot = {
+      posture: 'suggest-allowed',
+      respondentOnlyFieldPointers: [],
+      reviewerSessionBindingRef: 'composition:reviewerSession',
+      reviewThreadStoreBindingRef: 'composition:reviewThreadStore',
+    };
+    await composition.reviewThreadStore.ensureThread({
+      threadId: 'review-thread:comment-only',
+      draftRef: { formUrl: REVIEW_FORM_URL },
+      draftSnapshot: await reviewerDraftSnapshotForResponse({
+        definition: reviewableForm(),
+        policySnapshot,
+        response: reviewResponse({ fullName: 'Ada Lovelace' }),
+      }),
+      policySnapshot,
+    });
+    const minted = await composition.reviewerSession.mintShare({
+      threadId: 'review-thread:comment-only',
+      requestedScope: 'view+comment',
+      respondentSessionToken: respondentTokenForThread('review-thread:comment-only'),
+    });
+
+    await renderReviewer(composition, minted.capabilityUrl, 'review-thread:comment-only');
+    await waitForText('Ada Lovelace');
+    expect(buttonLabels()).toContain('Add comment');
+    expect(buttonLabels()).not.toContain('Add suggestion');
   });
 
   it('verifier capacity copy is silent until reviewer trace is attached', () => {
     expect(verifierReviewCapacityLine({ signerName: 'Jordan' })).toBe('signed by Jordan');
     expect(verifierReviewCapacityLine({ signerName: 'Jordan', reviewerCount: 2 }))
+      .toBe('signed by Jordan');
+    expect(verifierReviewCapacityLine({
+      signerName: 'Jordan',
+      reviewerCount: 2,
+      reviewerTraceAttached: true,
+    }))
       .toBe('signed by Jordan · reviewed by 2 parties before signing');
   });
 });
@@ -207,7 +300,11 @@ async function renderRespondent(composition: Composition): Promise<void> {
   });
 }
 
-async function renderReviewer(composition: Composition, capabilityUrl: string): Promise<void> {
+async function renderReviewer(
+  composition: Composition,
+  capabilityUrl: string,
+  threadId = 'review-thread:test',
+): Promise<void> {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -216,11 +313,26 @@ async function renderReviewer(composition: Composition, capabilityUrl: string): 
       <ReviewerRuntime
         composition={composition}
         config={publicPortalProfile}
-        route={{ threadId: 'review-thread:test', capabilityUrl }}
+        route={{ threadId, capabilityUrl }}
       />,
     );
     await tick();
   });
+}
+
+function reviewResponse(data: Record<string, unknown>): FormResponse {
+  return {
+    $formspecResponse: '1.0',
+    definitionUrl: REVIEW_FORM_URL,
+    definitionVersion: '1.0.0',
+    status: 'in-progress',
+    data,
+    authored: '2026-05-25T00:00:00.000Z',
+  };
+}
+
+function respondentTokenForThread(threadId: string) {
+  return respondentSessionToken(`test:thread=${encodeURIComponent(threadId)}`);
 }
 
 async function clickButton(label: string): Promise<void> {
@@ -248,6 +360,30 @@ async function waitForText(expected: string, timeoutMs = 4000): Promise<void> {
 function buttonLabels(): string[] {
   return Array.from(container?.querySelectorAll('button') ?? [])
     .map((button) => button.textContent ?? '');
+}
+
+async function waitForButtonCount(label: string, expected: number, timeoutMs = 4000): Promise<void> {
+  const started = Date.now();
+  while (buttonLabels().filter((candidate) => candidate === label).length !== expected) {
+    if (Date.now() - started > timeoutMs) {
+      throw new Error(`Timed out waiting for ${expected} ${label} buttons\n\n${container?.textContent ?? ''}`);
+    }
+    await act(async () => {
+      await tick();
+    });
+  }
+}
+
+function latestReviewerThreadId(): string {
+  const reviewerLink = container?.querySelector<HTMLInputElement>(
+    'input[aria-label="Reviewer link"]',
+  )?.value;
+  if (!reviewerLink) throw new Error('reviewer link not found');
+  const url = new URL(reviewerLink);
+  const segments = url.pathname.split('/').filter(Boolean);
+  const threadId = segments[1] ? decodeURIComponent(segments[1]) : undefined;
+  if (!threadId) throw new Error(`thread id not found in reviewer link: ${reviewerLink}`);
+  return threadId;
 }
 
 function tick(): Promise<void> {

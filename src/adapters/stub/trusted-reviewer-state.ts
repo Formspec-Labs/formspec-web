@@ -34,3 +34,16 @@ export function eventsForThread(
 ): ReviewThreadEvent[] {
   return [...thread.events];
 }
+
+export function respondentTokenAuthorizesThread(
+  sessionToken: string | undefined,
+  threadId: string,
+): boolean {
+  return typeof sessionToken === 'string'
+    && sessionToken.startsWith('respondent:')
+    && sessionToken.endsWith(`:thread=${encodeURIComponent(threadId)}`);
+}
+
+export function shareIsExpired(share: ReviewerShare, now = Date.now()): boolean {
+  return typeof share.expiresAt === 'string' && Date.parse(share.expiresAt) <= now;
+}

@@ -9,6 +9,8 @@ import { isRespondentSessionToken } from '../../ports/reviewer-session.ts';
 import {
   createStubTrustedReviewerState,
   eventsForThread,
+  respondentTokenAuthorizesThread,
+  shareIsExpired,
   sharesForThread,
   type StubTrustedReviewerState,
 } from './trusted-reviewer-state.ts';
@@ -32,13 +34,26 @@ export function stubReviewThreadStore(
 
     async ensureThread(args) {
       const existing = state.threads.get(args.threadId);
-      if (existing) return snapshotThread(state, existing);
+      if (existing) {
+        if (args.draftSnapshot) {
+          const now = new Date().toISOString();
+          const updated: ReviewThread = {
+            ...existing,
+            draftSnapshot: cloneDraftSnapshot(args.draftSnapshot),
+            updatedAt: now,
+          };
+          state.threads.set(args.threadId, updated);
+          return snapshotThread(state, updated);
+        }
+        return snapshotThread(state, existing);
+      }
 
       const now = new Date().toISOString();
       const thread: ReviewThread = {
         $formspecReviewThread: '1.0',
         threadId: args.threadId,
         draftRef: args.draftRef,
+        draftSnapshot: args.draftSnapshot ? cloneDraftSnapshot(args.draftSnapshot) : undefined,
         policySnapshot: args.policySnapshot,
         shares: [],
         events: [],
@@ -67,8 +82,8 @@ export function stubReviewThreadStore(
           'thread-not-found',
         );
       }
-      assertTokenMatchesAuthor(state, args.sessionToken, args.author);
-      assertPayloadAllowed(thread, args.payload, args.sessionToken);
+      const share = assertTokenMatchesAuthor(state, args.threadId, args.sessionToken, args.author);
+      assertPayloadAllowed(state, thread, args.payload, args.sessionToken, share);
 
       state.nextEventId += 1;
       const now = new Date().toISOString();
@@ -88,9 +103,12 @@ export function stubReviewThreadStore(
     },
 
     async pinForReceipt(args) {
-      if (!isRespondentSessionToken(args.sessionToken)) {
+      if (
+        !isRespondentSessionToken(args.sessionToken)
+        || !respondentTokenAuthorizesThread(args.sessionToken, args.threadId)
+      ) {
         throw new ReviewThreadStoreError(
-          'pinForReceipt requires a respondent session token',
+          'pinForReceipt requires a respondent session token scoped to this thread',
           'session-role-mismatch',
         );
       }
@@ -125,17 +143,24 @@ export function createStubTrustedReviewerAdapters(options: { baseUrl?: string } 
 
 function assertTokenMatchesAuthor(
   state: StubTrustedReviewerState,
+  threadId: string,
   sessionToken: string,
   author: ReviewThreadEvent['author'],
-): void {
+): ReviewThread['shares'][number] | undefined {
   if (isRespondentSessionToken(sessionToken)) {
+    if (!respondentTokenAuthorizesThread(sessionToken, threadId)) {
+      throw new ReviewThreadStoreError(
+        'Respondent session token is not scoped to this thread',
+        'session-role-mismatch',
+      );
+    }
     if (author.kind !== 'respondent') {
       throw new ReviewThreadStoreError(
         'Respondent session token cannot author reviewer events',
         'session-role-mismatch',
       );
     }
-    return;
+    return undefined;
   }
 
   const shareId = state.capabilityTokens.get(sessionToken);
@@ -143,8 +168,14 @@ function assertTokenMatchesAuthor(
     throw new ReviewThreadStoreError('Reviewer capability token is invalid', 'session-role-mismatch');
   }
   const share = state.shares.get(shareId);
-  if (!share || share.revokedAt) {
+  if (!share || share.revokedAt || shareIsExpired(share)) {
     throw new ReviewThreadStoreError('Reviewer capability token is not active', 'session-role-mismatch');
+  }
+  if (share.threadId !== threadId) {
+    throw new ReviewThreadStoreError(
+      'Reviewer capability token is not scoped to this thread',
+      'session-role-mismatch',
+    );
   }
   if (author.kind !== 'reviewer' || author.shareId !== shareId) {
     throw new ReviewThreadStoreError(
@@ -152,12 +183,15 @@ function assertTokenMatchesAuthor(
       'session-role-mismatch',
     );
   }
+  return share;
 }
 
 function assertPayloadAllowed(
+  state: StubTrustedReviewerState,
   thread: ReviewThread,
   payload: ReviewThreadEvent['payload'],
   sessionToken: string,
+  reviewerShare: ReviewThread['shares'][number] | undefined,
 ): void {
   const respondentToken = isRespondentSessionToken(sessionToken);
   if (
@@ -172,9 +206,38 @@ function assertPayloadAllowed(
         'session-role-mismatch',
       );
     }
+    const shareId = 'shareId' in payload ? payload.shareId : undefined;
+    if (shareId) {
+      const share = state.shares.get(shareId);
+      if (!share || share.threadId !== thread.threadId) {
+        throw new ReviewThreadStoreError(
+          `${payload.type} must target a share on the same thread`,
+          'session-role-mismatch',
+        );
+      }
+    }
+  }
+
+  if (payload.type === 'comment-added' && reviewerShare?.grantedScope === 'view') {
+    throw new ReviewThreadStoreError(
+      'Reviewer comment requires a view+comment scope',
+      'scope-forbidden',
+    );
   }
 
   if (payload.type === 'suggestion-added') {
+    if (!reviewerShare) {
+      throw new ReviewThreadStoreError(
+        'Reviewer suggestion requires a reviewer capability token',
+        'session-role-mismatch',
+      );
+    }
+    if (reviewerShare.grantedScope !== 'view+comment+suggest') {
+      throw new ReviewThreadStoreError(
+        'Reviewer suggestion requires a view+comment+suggest scope',
+        'scope-forbidden',
+      );
+    }
     if (thread.policySnapshot.posture !== 'suggest-allowed') {
       throw new ReviewThreadStoreError(
         'Reviewer suggestions are not allowed by the thread policy snapshot',
@@ -196,8 +259,18 @@ function snapshotThread(
 ): ReviewThread {
   return {
     ...thread,
+    draftSnapshot: thread.draftSnapshot ? cloneDraftSnapshot(thread.draftSnapshot) : undefined,
     shares: sharesForThread(state, thread.threadId).map((share) => ({ ...share })),
     events: eventsForThread(thread).map((event) => ({ ...event })),
+  };
+}
+
+function cloneDraftSnapshot(
+  draftSnapshot: NonNullable<ReviewThread['draftSnapshot']>,
+): NonNullable<ReviewThread['draftSnapshot']> {
+  return {
+    ...draftSnapshot,
+    fields: draftSnapshot.fields.map((field) => ({ ...field })),
   };
 }
 

@@ -101,6 +101,7 @@ import {
 } from './public-terminal-hygiene.ts';
 import {
   reviewerDraftRefForDraft,
+  reviewerDraftSnapshotForResponse,
   reviewerScopeForPosture,
   reviewerThreadIdForDraft,
   trustedReviewerPolicySnapshot,
@@ -928,6 +929,7 @@ function RespondentSurface({
       <TrustedReviewerPanel
         claim={claim}
         composition={composition}
+        definition={definition}
         draftKey={draftKey}
         runtimeProfile={runtimeProfile}
       />
@@ -963,14 +965,17 @@ type TrustedReviewerState =
 function TrustedReviewerPanel({
   claim,
   composition,
+  definition,
   draftKey,
   runtimeProfile,
 }: {
   claim: IdentityClaim | null;
   composition: Composition;
+  definition: FormDefinition;
   draftKey: DraftKey;
   runtimeProfile: ResolvedRuntimeProfile;
 }) {
+  const { engine } = useFormspecContext();
   const audienceId = useId();
   const [audienceHint, setAudienceHint] = useState('');
   const [state, setState] = useState<TrustedReviewerState>({ status: 'disabled' });
@@ -980,7 +985,7 @@ function TrustedReviewerPanel({
   );
   const threadId = reviewerThreadIdForDraft(draftKey);
   const respondentToken = respondentSessionToken(
-    `${claim?.subjectRef ?? draftKey.subjectRef ?? 'anonymous'}:${threadId}`,
+    `${claim?.subjectRef ?? draftKey.subjectRef ?? 'anonymous'}:thread=${encodeURIComponent(threadId)}`,
   );
 
   useEffect(() => {
@@ -1007,6 +1012,10 @@ function TrustedReviewerPanel({
     return null;
   }
 
+  const activeShares = state.status === 'ready'
+    ? state.shares.filter((share) => !share.revokedAt)
+    : [];
+
   const reloadShares = async (latestUrl?: string): Promise<void> => {
     const shares = await composition.reviewerSession.listShares({
       threadId,
@@ -1020,14 +1029,19 @@ function TrustedReviewerPanel({
       current.status === 'ready' ? { status: 'loading' } : current
     ));
     try {
+      const responseSnapshot = engine.getResponse({ profile: 'off' });
+      await composition.draftStore.save(draftKey, responseSnapshot);
+      const draftSnapshot = await reviewerDraftSnapshotForResponse({
+        definition,
+        policySnapshot,
+        response: responseSnapshot,
+      });
       await composition.reviewThreadStore.ensureThread({
         threadId,
         draftRef: reviewerDraftRefForDraft(draftKey),
+        draftSnapshot,
         policySnapshot,
       });
-      const activeShares = state.status === 'ready'
-        ? state.shares.filter((share) => !share.revokedAt)
-        : [];
       if (
         policySnapshot.maxActiveSharesPerDraft &&
         activeShares.length >= policySnapshot.maxActiveSharesPerDraft
@@ -1060,26 +1074,45 @@ function TrustedReviewerPanel({
     }
   };
 
+  const revokeShareWithReason = async (share: ReviewerShare, reason: string): Promise<void> => {
+    await composition.reviewerSession.revoke({
+      shareId: share.shareId,
+      reason,
+      respondentSessionToken: respondentToken,
+    });
+    await composition.reviewThreadStore.appendEvent({
+      threadId,
+      sessionToken: respondentToken,
+      author: {
+        kind: 'respondent',
+        subjectRef: claim?.subjectRef ?? draftKey.subjectRef,
+      },
+      payload: {
+        type: 'share-revoked',
+        shareId: share.shareId,
+        reason,
+      },
+    });
+  };
+
   const revokeShare = async (share: ReviewerShare): Promise<void> => {
     try {
-      await composition.reviewerSession.revoke({
-        shareId: share.shareId,
-        reason: 'respondent revoked',
-        respondentSessionToken: respondentToken,
-      });
-      await composition.reviewThreadStore.appendEvent({
-        threadId,
-        sessionToken: respondentToken,
-        author: {
-          kind: 'respondent',
-          subjectRef: claim?.subjectRef ?? draftKey.subjectRef,
-        },
-        payload: {
-          type: 'share-revoked',
-          shareId: share.shareId,
-          reason: 'respondent revoked',
-        },
-      });
+      await revokeShareWithReason(share, 'respondent revoked');
+      await reloadShares();
+    } catch (error) {
+      setState({ status: 'error', error });
+    }
+  };
+
+  const revokeAllActiveShares = async (): Promise<void> => {
+    if (state.status !== 'ready') return;
+    const sharesToRevoke = state.shares.filter((share) => !share.revokedAt);
+    if (sharesToRevoke.length === 0) return;
+    setState({ status: 'loading' });
+    try {
+      for (const share of sharesToRevoke) {
+        await revokeShareWithReason(share, 'respondent panic revoked');
+      }
       await reloadShares();
     } catch (error) {
       setState({ status: 'error', error });
@@ -1111,6 +1144,17 @@ function TrustedReviewerPanel({
         >
           Create reviewer link
         </button>
+        {activeShares.length > 0 ? (
+          <button
+            type="button"
+            disabled={state.status === 'loading'}
+            onClick={() => {
+              void revokeAllActiveShares();
+            }}
+          >
+            Stop sharing with everyone
+          </button>
+        ) : null}
       </div>
       {state.status === 'loading' ? (
         <div className="submit-notice" role="status">

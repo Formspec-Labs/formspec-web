@@ -9,6 +9,8 @@ import {
 import { isRespondentSessionToken } from '../../ports/reviewer-session.ts';
 import {
   createStubTrustedReviewerState,
+  respondentTokenAuthorizesThread,
+  shareIsExpired,
   sharesForThread,
   type StubTrustedReviewerState,
 } from './trusted-reviewer-state.ts';
@@ -32,14 +34,22 @@ export function stubReviewerSession(
     _state: state,
 
     async mintShare(args) {
-      if (!state.threads.has(args.threadId)) {
+      const thread = state.threads.get(args.threadId);
+      if (!thread) {
         throw new ReviewerSessionError(
           `Review thread ${args.threadId} does not exist`,
           'capability-invalid',
         );
       }
-      if (args.respondentSessionToken && !isRespondentSessionToken(args.respondentSessionToken)) {
+      if (!args.respondentSessionToken || !isRespondentSessionToken(args.respondentSessionToken)) {
         throw new ReviewerSessionError('mintShare requires a respondent session token', 'policy-forbidden');
+      }
+      if (!respondentTokenAuthorizesThread(args.respondentSessionToken, args.threadId)) {
+        throw new ReviewerSessionError('respondent session token is not scoped to this thread', 'policy-forbidden');
+      }
+      const grantedScope = boundedScope(args.requestedScope, thread.policySnapshot.posture);
+      if (!grantedScope) {
+        throw new ReviewerSessionError('trusted reviewer sharing is forbidden for this thread', 'policy-forbidden');
       }
       state.nextShareId += 1;
       const shareId = `stub-share-${state.nextShareId.toString().padStart(6, '0')}`;
@@ -48,7 +58,7 @@ export function stubReviewerSession(
       const share: ReviewerShare = {
         shareId,
         threadId: args.threadId,
-        grantedScope: boundedScope(args.requestedScope),
+        grantedScope,
         capabilityUrl,
         audienceHint: args.audienceHint,
         createdAt: new Date().toISOString(),
@@ -61,8 +71,8 @@ export function stubReviewerSession(
     },
 
     async redeem(args) {
-      const token = capabilityTokenFromUrl(args.capabilityUrl);
-      const shareId = state.capabilityTokens.get(token);
+      const capability = capabilityTokenFromUrl(args.capabilityUrl);
+      const shareId = state.capabilityTokens.get(capability.token);
       if (!shareId) {
         throw new ReviewerSessionError('Reviewer capability URL is invalid', 'capability-invalid');
       }
@@ -73,8 +83,11 @@ export function stubReviewerSession(
       if (share.revokedAt) {
         throw new ReviewerSessionError(`Reviewer share ${shareId} has been revoked`, 'capability-revoked');
       }
-      if (share.expiresAt && Date.parse(share.expiresAt) <= Date.now()) {
+      if (shareIsExpired(share)) {
         throw new ReviewerSessionError(`Reviewer share ${shareId} has expired`, 'capability-expired');
+      }
+      if (capability.threadId && capability.threadId !== share.threadId) {
+        throw new ReviewerSessionError('Reviewer capability URL is not valid for this thread', 'capability-invalid');
       }
       const thread = state.threads.get(share.threadId);
       if (!thread) {
@@ -85,19 +98,22 @@ export function stubReviewerSession(
         threadId: share.threadId,
         grantedScope: share.grantedScope,
         threadPolicySnapshot: thread.policySnapshot,
-        sessionToken: token,
+        sessionToken: capability.token,
         audienceHint: share.audienceHint,
         expiresAt: share.expiresAt,
       };
     },
 
     async revoke(args) {
-      if (args.respondentSessionToken && !isRespondentSessionToken(args.respondentSessionToken)) {
+      if (!args.respondentSessionToken || !isRespondentSessionToken(args.respondentSessionToken)) {
         throw new ReviewerSessionError('revoke requires a respondent session token', 'policy-forbidden');
       }
       const share = state.shares.get(args.shareId);
       if (!share) {
         throw new ReviewerSessionError(`Reviewer share ${args.shareId} was not found`, 'share-not-found');
+      }
+      if (!respondentTokenAuthorizesThread(args.respondentSessionToken, share.threadId)) {
+        throw new ReviewerSessionError('respondent session token is not scoped to this thread', 'policy-forbidden');
       }
       state.shares.set(args.shareId, {
         ...share,
@@ -107,8 +123,11 @@ export function stubReviewerSession(
     },
 
     async listShares(args) {
-      if (args.respondentSessionToken && !isRespondentSessionToken(args.respondentSessionToken)) {
+      if (!args.respondentSessionToken || !isRespondentSessionToken(args.respondentSessionToken)) {
         throw new ReviewerSessionError('listShares requires a respondent session token', 'policy-forbidden');
+      }
+      if (!respondentTokenAuthorizesThread(args.respondentSessionToken, args.threadId)) {
+        throw new ReviewerSessionError('respondent session token is not scoped to this thread', 'policy-forbidden');
       }
       return sharesForThread(state, args.threadId).map((share) => ({ ...share }));
     },
@@ -120,17 +139,28 @@ export function stubReviewerSession(
   });
 }
 
-function capabilityTokenFromUrl(value: string): string {
+function capabilityTokenFromUrl(value: string): { token: string; threadId?: string } {
   try {
     const parsed = new URL(value, 'https://review.example.test');
-    const last = parsed.pathname.split('/').filter(Boolean).at(-1);
-    if (last) return decodeURIComponent(last);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const token = segments.at(-1);
+    const threadId = segments[0] === 'r' && segments.length >= 3
+      ? decodeURIComponent(segments[1] ?? '')
+      : undefined;
+    if (token) return { token: decodeURIComponent(token), threadId };
   } catch {
     // Fall through to plain-token handling.
   }
-  return value;
+  return { token: value };
 }
 
-function boundedScope(scope: ReviewerScope): ReviewerScope {
-  return scope;
+function boundedScope(
+  requestedScope: ReviewerScope,
+  posture: 'forbidden' | 'comment-allowed' | 'suggest-allowed',
+): ReviewerScope | undefined {
+  if (posture === 'forbidden') return undefined;
+  if (posture === 'comment-allowed' && requestedScope === 'view+comment+suggest') {
+    return 'view+comment';
+  }
+  return requestedScope;
 }

@@ -1,5 +1,6 @@
 import type {
   ReviewThread,
+  ReviewThreadDraftSnapshot,
   ReviewThreadDraftRef,
   ReviewThreadEvent,
   ReviewThreadPolicySnapshot,
@@ -30,12 +31,14 @@ export class HttpReviewThreadStore {
   async ensureThread(args: {
     threadId: string;
     draftRef: ReviewThreadDraftRef;
+    draftSnapshot?: ReviewThreadDraftSnapshot;
     policySnapshot: ReviewThreadPolicySnapshot;
   }): Promise<ReviewThread> {
     return this.client.postJson<ReviewThread>(
       `${this.prefix}/threads/${encodeURIComponent(args.threadId)}`,
       {
         draft_ref: args.draftRef,
+        draft_snapshot: args.draftSnapshot,
         policy_snapshot: args.policySnapshot,
       },
     );

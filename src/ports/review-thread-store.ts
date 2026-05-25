@@ -28,10 +28,26 @@ export interface ReviewThreadDraftRef {
   readonly partyRef?: string;
 }
 
+export interface ReviewThreadFieldSnapshot {
+  readonly fieldPointer: string;
+  readonly fieldKey: string;
+  readonly label: string;
+  readonly respondentOnly: boolean;
+  readonly value?: unknown;
+  readonly valueHashAtSnapshot?: string;
+}
+
+export interface ReviewThreadDraftSnapshot {
+  readonly capturedAt: string;
+  readonly responseHash?: string;
+  readonly fields: readonly ReviewThreadFieldSnapshot[];
+}
+
 export interface ReviewThread {
   readonly $formspecReviewThread: '1.0';
   readonly threadId: string;
   readonly draftRef: ReviewThreadDraftRef;
+  readonly draftSnapshot?: ReviewThreadDraftSnapshot;
   readonly policySnapshot: ReviewThreadPolicySnapshot;
   readonly shares: readonly ReviewerShare[];
   readonly events: readonly ReviewThreadEvent[];
@@ -105,6 +121,7 @@ export type ReviewThreadStoreErrorCode =
   | 'unavailable'
   | 'thread-not-found'
   | 'session-role-mismatch'
+  | 'scope-forbidden'
   | 'suggestion-forbidden'
   | 'respondent-only-field'
   | 'invalid-thread';
@@ -131,6 +148,7 @@ export interface ReviewThreadStore {
   ensureThread(args: {
     threadId: string;
     draftRef: ReviewThreadDraftRef;
+    draftSnapshot?: ReviewThreadDraftSnapshot;
     policySnapshot: ReviewThreadPolicySnapshot;
   }): Promise<ReviewThread>;
 
