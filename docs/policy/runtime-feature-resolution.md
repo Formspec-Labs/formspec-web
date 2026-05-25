@@ -33,6 +33,18 @@ The closed taxonomy lives in `src/policy/feature-keys.ts`. Today's keys:
   mapping). Production declares `'unavailable'` until XS-2 (multi-issuer
   client-side token bag) lands the production fan-out adapter; demo declares
   `'demo-stub'` with an in-memory fixture aggregating across two fake senders.
+- `offlineSubmit` — queued offline-submit substrate (FW-0044 slice 1
+  extension; **sixth key** in the closed taxonomy; gated against the new
+  `OfflineSubmitQueue` port, 1:1 mapping). IN-FORM consumer — no
+  standalone route; the runtime detects offline at submit time and routes
+  through the queue when the resolved profile enables the feature.
+  Form-policy extractor walks `definition.extensions['x-formspec-offline-submit']`
+  and declares `'optional'` (NOT `'required'` — offline is a graceful
+  enhancement). Production declares `'unavailable'` until the IndexedDB
+  reference adapter (FW-0082) ships; demo declares `'demo-stub'` with an
+  in-memory queue paired with the stub transport. This sixth extension
+  is the explicit FW-0080 consolidation trigger (`consumes*` boolean
+  ladder on `RouteNarrowing` → `ReadonlySet<RuntimeFeatureKey>`).
 
 Future feature ADRs extend the taxonomy; the resolver rejects unknown keys
 with `InvalidRuntimePolicyError` so drift is caught at boot.
@@ -423,3 +435,59 @@ is blocked on XS-2 (multi-issuer client-side token bag per stack-root ADR-0068
 D-1 + D-3). The slice-1 `RespondentHistorySource` port models the SHAPE of
 cross-issuer history; the SUBSTRATE (per-issuer auth handles, fan-out
 strategy) is the adapter's concern and ships post-XS-2.
+
+## Worked example: the in-form offline-aware submit (FW-0044 slice 1)
+
+`offlineSubmit` is the second feature key driven by **definition
+introspection** (after `fileUpload`) and the first IN-FORM key whose
+runtime branch is **network-state-conditional**. The composition's
+`formRuntimePolicyExtractor` (specifically the
+`OfflineSubmitRequirementExtractor` reference adapter at
+`src/adapters/composing/form-runtime-policy-extractor.ts`) walks the
+loaded `FormDefinition` for `extensions['x-formspec-offline-submit'] === true`.
+When present, the form's policy declares `offlineSubmit: 'optional'`.
+
+The optional declaration is load-bearing: forms that opt into offline
+support work fine ONLINE without a queue. The resolver enables the
+feature when the instance can satisfy it; when it cannot, the resolver
+records `optional-no-instance` and the form loads normally — `required`
+would dishonestly fail-load every offline-marked form on every instance
+that cannot do offline.
+
+At submit time, `RespondentRuntime`'s `submitOrQueue` helper reads
+`navigator.onLine` and `runtimeProfile.enabled.has('offlineSubmit')`:
+
+| `navigator.onLine` | `offlineSubmit` enabled | Route |
+|---|---|---|
+| `true` | any | Synchronous `SubmitTransport.submit` (the existing happy path). |
+| `false` | `true` | `OfflineSubmitQueue.enqueue(handoff, key)` + `'queued'` SubmitState + window `'online'` listener that drains via `replay()`. |
+| `false` | `false` | Synchronous `SubmitTransport.submit` (falls through to the existing inline error path; the runtime never reaches the queue). |
+
+The queue preserves the original UUIDv7 idempotency key through replay
+(port-level conformance invariant), so the server's same-key contract
+suppresses any duplicates if the user manually retries the submit after
+reconnecting.
+
+The respondent-facing UI renders "Saved for later. We'll send it when
+you reconnect." plus a fixture-pinned deferred-capability sub-line
+("Offline submit support is experimental. Production deployments do not
+currently keep your draft across browser restarts or across other
+devices.") on the `'queued'` state. Forbidden in the rendered DOM:
+`enqueue`, `replay`, `idempotency`, `IndexedDB`, `service worker`,
+`OfflineSubmitQueue`, `offlineSubmit`, `QueuedSubmit`.
+
+The narrowed-route compositions (`/status`, `/obligations`, `/documents`,
+`/history`) declare `offlineSubmit: 'unavailable'` and wire
+`unavailableOfflineSubmitQueue()` because no narrowed surface submits a
+form. Uniform across descriptors — no `consumesOfflineSubmit` flag on
+`RouteNarrowing` (FW-0080 consolidation trigger fired by this sixth
+key; consolidation row is imminent).
+
+Production posture: `'unavailable'` until FW-0082 lands the production
+IndexedDB queue (with EXT-18 HPKE at-rest encryption). Demo posture:
+`'demo-stub'` with the in-memory queue paired with the stub transport.
+Slice 1's stub loses queued submissions on page reload — that is the
+honest cost of the `'demo-stub'` posture; the bundled `sample-form.json`
+does NOT declare `x-formspec-offline-submit: true` today to avoid leaking
+that imperfection into the "what `npm run dev` shows" surface (FW-0087
+flips the demo declaration once FW-0082 ships).
