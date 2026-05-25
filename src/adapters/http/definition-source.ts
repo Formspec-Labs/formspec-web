@@ -91,7 +91,6 @@ export function extractLocaleDocuments(
     ...localeDocumentsFromValue(payload.locales),
     ...localeDocumentsFromValue(payload.locale_documents),
     ...localeDocumentsFromValue(payload.localeDocuments),
-    ...localeDocumentsFromValue(payload.locale_refs),
   ]).filter((document) => document.targetDefinition.url === definition.url);
 }
 

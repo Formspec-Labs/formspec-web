@@ -66,19 +66,22 @@ describe('HttpDefinitionSource', () => {
     expect(requests).toHaveLength(1);
   });
 
-  it('accepts locale_documents / localeDocuments arrays and ignores legacy locale_refs strings', async () => {
+  it('accepts locale_documents / localeDocuments arrays and ignores legacy locale_refs', async () => {
     const snakeCaseLocale = localeDocumentFor(sampleFormDefinition.url, 'es', {
       '$form.title': 'Titulo desde locale_documents',
     });
     const camelCaseLocale = localeDocumentFor(sampleFormDefinition.url, 'fr', {
       '$form.title': 'Titre depuis localeDocuments',
     });
+    const legacyRefDocument = localeDocumentFor(sampleFormDefinition.url, 'de', {
+      '$form.title': 'Title from a legacy ref field',
+    });
     const { fetch } = recordingFetch(() =>
       jsonResponse({
         definition: sampleFormDefinition,
         locale_documents: [snakeCaseLocale],
         localeDocuments: [camelCaseLocale],
-        locale_refs: ['en', 'es', 'fr'],
+        locale_refs: ['en', 'es', 'fr', legacyRefDocument],
       }),
     );
     const adapter = new HttpDefinitionSource({
@@ -90,6 +93,30 @@ describe('HttpDefinitionSource', () => {
       snakeCaseLocale,
       camelCaseLocale,
     ]);
+  });
+
+  it('reuses the original runtime payload when Locale Documents are requested with the same source URL', async () => {
+    const localeDocument = localeDocumentFor(sampleFormDefinition.url, 'es', {
+      '$form.title': 'Titulo desde el servidor',
+    });
+    const { fetch, requests } = recordingFetch(() =>
+      jsonResponse({
+        definition: sampleFormDefinition,
+        locales: { es: localeDocument },
+      }),
+    );
+    const adapter = new HttpDefinitionSource({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+    });
+
+    await expect(adapter.getDefinition(sampleFormDefinition.url)).resolves.toEqual(
+      sampleFormDefinition,
+    );
+    await expect(adapter.getLocaleDocuments(sampleFormDefinition.url)).resolves.toEqual([
+      localeDocument,
+    ]);
+    expect(requests).toHaveLength(1);
   });
 });
 

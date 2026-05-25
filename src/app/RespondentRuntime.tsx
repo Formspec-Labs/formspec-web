@@ -1054,7 +1054,6 @@ async function createReadyState(
   });
   const localeDocuments = await composition.definitionSource.getLocaleDocuments?.(
     composition.initialDefinitionUrl,
-    definition.version,
   );
   for (const localeDocument of localeDocuments ?? []) {
     engine.loadLocale(localeDocument);

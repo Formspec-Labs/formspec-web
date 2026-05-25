@@ -155,6 +155,7 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 - **Done:** The respondent reads the form in their language, sees the legally controlling text marked plainly, and writes narrative fields in their own words. Names in multiple scripts are first-class.
 - **Anti-patterns:** —
 - **Note:** The respondent runtime loads Locale Documents through the composition's DefinitionSource: the demo source seeds the bundled English/Spanish sidecars, and the HTTP source extracts concrete server-supplied Locale Documents from runtime payload `locales` / `locale_documents` / `localeDocuments` fields. Legacy `locale_refs` string arrays remain refs only and do not synthesize translations. Certified-translator attribution on narrative translations is post-MVP (see queue EXT-2 for the Response per-value provenance dependency).
+- **Review-cycle hardening (2026-05-25):** The runtime now passes the same original definition source URL to `getDefinition()` and `getLocaleDocuments()` so HTTP compositions reuse one runtime payload for the Definition plus Locale Documents instead of refetching by returned canonical version. The HTTP adapter no longer treats `locale_refs` as a possible Locale Document container; even document-shaped legacy ref values are ignored unless the server supplies concrete documents through `locales`, `locale_documents`, or `localeDocuments`.
 
 ### FW-0063 — `IdentityProvider` port + conformance suite + ≥1 reference adapter
 

@@ -215,6 +215,30 @@ Verification run after remediation:
 - `npm run check:mvp-audit`
 - `git diff --check`
 
+### 2026-05-25 — W1.10 / FW-0019 Locale Documents review-loop closure
+
+Independent generic reviewer `019e5f05-b3e0-7663-9993-3b2f543fcfbd` reviewed the FW-0019 server Locale Documents migration and returned REQUEST CHANGES. Specialized `formspec-specs:*` reviewer roles were still not exposed, so this was a generic semi-formal code review over the current implementation.
+
+Findings remediated:
+
+- BLOCKER F1: `RespondentRuntime` loaded the Definition from `composition.initialDefinitionUrl` but asked for Locale Documents with the returned canonical `definition.version`, causing `HttpDefinitionSource` to fetch the same runtime endpoint under a different cache key and potentially mix Definition A with Locale Documents from payload B. Remediation: runtime now calls `getLocaleDocuments(composition.initialDefinitionUrl)` with the same source URL / no version shape as `getDefinition`, and a real-HTTP runtime test proves one `/runtime/forms/{form_id}` request supplies both the Definition and Locale Documents.
+- WARNING F2: `HttpDefinitionSource` still parsed `locale_refs` as a possible Locale Document container. Remediation: locale extraction is limited to `locales`, `locale_documents`, and `localeDocuments`; a negative regression includes a valid Locale Document-shaped value in `locale_refs` and expects it to be ignored.
+
+Reviewer re-check returned APPROVE with no remaining blockers or warnings for W1.10 closure.
+
+Verification run after remediation:
+
+- `npm test -- tests/adapters/http/definition-source.test.ts tests/app/respondent-runtime.test.tsx tests/adapter-conformance/definition-source/conformance.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run test:unit`
+- `npm run test:conformance`
+- `npm run check:testing-plan`
+- `npm run check:mvp-audit`
+- `npm run check:conformance-coverage`
+- `npm run build`
+- `git diff --check`
+
 ### 2026-05-25 — Conservative W1/W2 cycle ledger
 
 Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dispatch table against current committed artifacts. Specialized `formspec-specs:*` scout/reviewer roles were not exposed in this runtime, so the check was a generic read-only scout pass. Disposition rule: implementation, ratification, or remediation commits are **not** enough to check off a row as closed unless the implementer→reviewer→remediator→verifier loop is explicit in the plan or commit evidence.
@@ -230,7 +254,7 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W1.7 / SC-6 review-thread sidecar | `formspec` `7c162c8a` | integrated, not cycle-closed |
 | W1.8 / EXT ratifications batch | `formspec` `425d9933`, `042dec3e` | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
 | W1.9 / FW-0041 public-terminal hygiene | `formspec-web` `ddff89a`, `8cff5eb`; review-loop closure recorded above | cycle-closed for the recorded build slice |
-| W1.10 / FW-0019 server Locale Documents | `formspec-web` `58522ad`, `7d2cc63`; `PLANNING.md` marks live | integrated/fixed, not cycle-closed — no explicit trivial-skip approval or verifier evidence |
+| W1.10 / FW-0019 server Locale Documents | `formspec-web` `58522ad`, `7d2cc63`; review-loop closure recorded above | cycle-closed for the recorded build slice |
 | W1.11 / FW-0028 slice 2 assurance step-up | `formspec-web` `2f85951`, `986af74`; `PLANNING.md` marks slice 2 shipped; EXT-8 remains external | integrated/fixed, not cycle-closed |
 | W1.12 / FW-0073/0074/0076/0077 file-upload slice 2 | `formspec-web` `4e0a8d3`, `854040d`; `PLANNING.md` marks bundled rows live | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
 | W2.1 / FW-0113 trusted reviewer build | `formspec-web` `5fc4d96`, `751d9a0`; FW-0113 row remains open/blocked | integrated/fixed, not cycle-closed |

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
+import { HttpDefinitionSource } from '../../src/adapters/http/definition-source.ts';
 import {
   PARITY_FIXTURE_OBLIGATION,
   renderParityFixture,
@@ -27,6 +28,7 @@ import {
   multiPartyProgressDraftKey,
 } from '../../src/app/respondent-flow.ts';
 import { stubDraftStore } from '../../src/adapters/stub/draft-store.ts';
+import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
 
 describe('RespondentRuntime identity sign-in', () => {
   let root: Root | undefined;
@@ -106,10 +108,7 @@ describe('RespondentRuntime identity sign-in', () => {
     await clickButton('Spanish');
     await waitForText('Solicitud desde el servidor');
 
-    expect(composition.definitionSource.getLocaleDocuments).toHaveBeenCalledWith(
-      demoSampleForm.url,
-      demoSampleForm.version,
-    );
+    expect(composition.definitionSource.getLocaleDocuments).toHaveBeenCalledWith(demoSampleForm.url);
   });
 
   it('loads Locale Documents from the original runtime definition URL', async () => {
@@ -145,10 +144,52 @@ describe('RespondentRuntime identity sign-in', () => {
     await waitForText('Solicitud desde el servidor');
 
     expect(composition.definitionSource.getDefinition).toHaveBeenCalledWith(runtimeDefinitionUrl);
-    expect(composition.definitionSource.getLocaleDocuments).toHaveBeenCalledWith(
-      runtimeDefinitionUrl,
-      canonicalDefinition.version,
+    expect(composition.definitionSource.getLocaleDocuments).toHaveBeenCalledWith(runtimeDefinitionUrl);
+  });
+
+  it('uses one HTTP runtime payload for the definition and Locale Documents', async () => {
+    const identityProvider = new TestIdentityProvider();
+    const runtimeDefinitionUrl =
+      'https://formspec-server.example.test/runtime/forms/demo-benefits-intake-live';
+    const canonicalDefinition: FormDefinition = {
+      ...demoSampleForm,
+      url: 'https://benefits.example.gov/forms/demo-benefits-intake',
+      version: '2026.05.25',
+    };
+    const serverLocaleDocument: LocaleDocument = {
+      $formspecLocale: '1.0',
+      url: 'https://formspec-server.example.test/runtime/locales/demo-benefits-intake-live/es',
+      version: '1.0.0',
+      locale: 'es',
+      targetDefinition: { url: canonicalDefinition.url },
+      strings: {
+        '$form.title': 'Solicitud desde un solo payload',
+      },
+    };
+    const { fetch, requests } = recordingFetch(() =>
+      jsonResponse({
+        definition: canonicalDefinition,
+        locales: { es: serverLocaleDocument },
+      }),
     );
+    const composition: Composition = {
+      ...testComposition(identityProvider, { initialDefinitionUrl: runtimeDefinitionUrl }),
+      definitionSource: new HttpDefinitionSource({
+        baseUrl: 'https://formspec-server.example.test',
+        fetchImpl: fetch,
+      }),
+    };
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Demo Benefits Intake');
+    await clickButton('Spanish');
+    await waitForText('Solicitud desde un solo payload');
+
+    expect(requests.map((request) => request.url)).toEqual([
+      'https://formspec-server.example.test/runtime/forms/demo-benefits-intake-live',
+    ]);
   });
 
   it('renders respondent-place history, saved files, and status feedback', async () => {
