@@ -413,6 +413,43 @@ Verification run after remediation:
 
 - `git diff --check -- thoughts/adr/0158-record-lifecycle-three-act-mapping.md`
 
+### 2026-05-25 — W1.5-W1.8 formspec sidecar / extension review-loop closure
+
+Independent generic reviewers closed the W1.5-W1.8 formspec-side loop after current-disk remediation. Specialized `formspec-specs:*` reviewer roles were still not exposed, so these were generic semi-formal reviews over the current schema/spec/test artifacts.
+
+Cycle status:
+
+| Row | Reviewer evidence | Closure |
+|---|---|---|
+| W1.5 / SC-1, SC-2, SC-5 sidecars | Hegel `019e5f86-325c-7632-b61c-437e290256d9` returned APPROVE on the closed deletion-receipt and WYSIWYS sidecar hardening | cycle-closed in `formspec` `e95a8a21` |
+| W1.6 / SC-4 identity binding profile | Sagan `019e5f86-8e09-71b3-b491-979f3d307099` returned APPROVE on the closed identity-binding profile hardening | cycle-closed in `formspec` `e95a8a21` |
+| W1.7 / SC-6 review-thread sidecar | Beauvoir `019e5f86-8e75-7dd1-be0e-f7dded774e8e` returned REQUEST CHANGES, then APPROVE after re-check | cycle-closed in `formspec` `e95a8a21` |
+| W1.8 / EXT ratifications batch | Zeno `019e5f86-8eda-7ff2-881b-ab0ae297f54c` returned REQUEST CHANGES across response metadata path-key edge cases, then APPROVE after re-check | cycle-closed in `formspec` `e95a8a21` |
+
+Findings remediated:
+
+- W1.7: Review Thread examples no longer store live `capabilityUrl` bearer URLs; share records use `capabilityUrlDigest`. The schema is closed to arbitrary `extensions` at the document, share, author, anchor, event, payload, snapshot, policy, draft-ref, and hash-chain levels, preventing bearer URL, privacy, or authority smuggling.
+- W1.8: Response metadata path keys now align to Definition item-key syntax. Dot-path segments require `^[a-zA-Z][a-zA-Z0-9_]*$`; JSON Pointer form must start with a Definition item key, with numeric indices or `*` wildcards allowed only after that root item segment. Negative coverage includes label-like, pointer-label-like, leading-underscore, hyphenated, `/0`, and `/*` keys.
+- Cross-row sidecar hardening: Deletion Receipt, WYSIWYS Ceremony, and Identity Binding Profile sidecars are closed against extension payloads that would smuggle erased values, preimage forks, raw evidence, unrelated origins, or other authority-changing data.
+
+Deviation / steering note:
+
+- A stale W1.8 review pass read an older disk state during the remediation loop. Current worktree state was treated as authoritative, fresh current-disk reviewers were used, and closure was recorded only after W1.7 and W1.8 returned explicit APPROVE on the final disk state.
+- The formspec commit hook required regenerated `docs/spec.html` for the core spec metadata-key text. Full `make docs` attempted to install docs extras into system Python and failed under PEP 668; the HTML-docs hook output was inspected and included because it exactly reflects the source Markdown change.
+
+Verification run after final remediation:
+
+- `.venv/bin/python -m pytest -p no:cacheprovider tests/conformance/schemas/test_review_thread_schema.py tests/conformance/schemas/test_response_schema.py -q` — 132 passed
+- `node scripts/generate-spec-artifacts.mjs --check --only=specs/audit/deletion-receipt-spec.md`
+- `node scripts/generate-spec-artifacts.mjs --check --only=specs/registry/wysiwys-ceremony-spec.md`
+- `node scripts/generate-spec-artifacts.mjs --check --only=specs/identity-binding/identity-binding-profile-spec.md`
+- `node scripts/generate-spec-artifacts.mjs --check --only=specs/review-thread/review-thread-spec.md`
+- `node scripts/generate-spec-artifacts.mjs --check --only=specs/core/spec.md`
+- `npm run test:contract-surfaces`
+- `npm run --workspace @formspec-org/types test`
+- `npm run --workspace @formspec-org/engine test:unit`
+- `git diff --check`
+
 ### 2026-05-25 — Conservative W1/W2 cycle ledger
 
 Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dispatch table against current committed artifacts. Specialized `formspec-specs:*` scout/reviewer roles were not exposed in this runtime, so the check was a generic read-only scout pass. Disposition rule: implementation, ratification, or remediation commits are **not** enough to check off a row as closed unless the implementer→reviewer→remediator→verifier loop is explicit in the plan or commit evidence.
@@ -423,10 +460,10 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W1.2 / XS-1 multi-party intake ADR | stack root `b8c0814`, `83f33d1`; ADR 0155 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR slice; owner ratification and downstream schema/WOS/Trellis work remain open |
 | W1.3 / XS-3 coercion-aware signing ADR | stack root `61cd59b`, `86f2f4a`; `formspec-web` `93cea73`; ADR 0156 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR / queue-alignment slice; owner ratification and downstream EXT/WOS/Trellis work remain open |
 | W1.4 / XS-4 safe-address + XS-5 record-lifecycle ADRs | stack root `1800448`, `c001309`, `522f858`, `e7a4d01`; ADRs 0157/0158 remain proposed; review-loop closure recorded above | cycle-closed for the recorded ADR slice; owner ratification and downstream EXT/WOS/Trellis work remain open |
-| W1.5 / SC-1, SC-2, SC-5 sidecars | `formspec` `0533fb9f`, `1dcce96d`, `f11f82be` | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
-| W1.6 / SC-4 identity binding profile | `formspec` `be21eb2b`, `5d34f058` | integrated/hardened, not cycle-closed |
-| W1.7 / SC-6 review-thread sidecar | `formspec` `7c162c8a` | integrated, not cycle-closed |
-| W1.8 / EXT ratifications batch | `formspec` `425d9933`, `042dec3e` | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
+| W1.5 / SC-1, SC-2, SC-5 sidecars | `formspec` `0533fb9f`, `1dcce96d`, `f11f82be`, `e95a8a21`; review-loop closure recorded above | cycle-closed for the recorded sidecar hardening slice |
+| W1.6 / SC-4 identity binding profile | `formspec` `be21eb2b`, `5d34f058`, `e95a8a21`; review-loop closure recorded above | cycle-closed for the recorded identity-binding hardening slice |
+| W1.7 / SC-6 review-thread sidecar | `formspec` `7c162c8a`, `e95a8a21`; review-loop closure recorded above | cycle-closed for the recorded review-thread sidecar slice |
+| W1.8 / EXT ratifications batch | `formspec` `425d9933`, `042dec3e`, `e95a8a21`; review-loop closure recorded above | cycle-closed for the recorded EXT/response-metadata ratification slice |
 | W1.9 / FW-0041 public-terminal hygiene | `formspec-web` `ddff89a`, `8cff5eb`; review-loop closure recorded above | cycle-closed for the recorded build slice |
 | W1.10 / FW-0019 server Locale Documents | `formspec-web` `58522ad`, `7d2cc63`; review-loop closure recorded above | cycle-closed for the recorded build slice |
 | W1.11 / FW-0028 slice 2 assurance step-up | `formspec-web` `2f85951`, `986af74`; review-loop closure recorded above; EXT-8 remains external | cycle-closed for the recorded build slice |
@@ -436,4 +473,4 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W2.3 / FW-0060 safe-address build | `formspec-web` `6e02690`, `8e5a163`, `338ebd1`, `b53cbe3`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
 | W2.4 / FW-0061 multi-party build | `formspec-web` `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for XS-1/upstream ratification |
 
-Closeout consequence: W1.1, W1.2, W1.3, W1.4, W1.9, W1.10, W1.11, W1.12, W2.1, W2.2, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
+Closeout consequence: W1.1-W1.12 and W2.1-W2.4 are checked off as cycle-closed in this plan for the recorded slices. Owner ratification, downstream upstream-extension implementation, and explicitly deferred product gates remain outside this dispatch closeout where the row text names them.
