@@ -391,7 +391,7 @@ A coercer who controls the respondent's assistant (malicious extension; coercer-
 
 **They can compose.** A form filled by an AI agent (FW-0058) may consult an external assistant (FW-0051) during its own fill. The composition would be FW-0058 wrapping FW-0051 — the AI agent acts as the respondent-role-equivalent and the BYO-assistant runs in the agent's tools. **Out of scope for slice 1; flag for future.**
 
-**Cross-row touch.** FW-0058 row gets a small body update making the FW-0058-vs-FW-0051 distinction explicit. **PLANNING.md update §8 below.**
+**Cross-row touch — RESOLVED 2026-05-24.** [FW-0058 design landed](2026-05-24-fw-0058-ai-agent-filer-chain-design.md) with §7.7 reciprocating this vocabulary distinction in inverted framing (the symmetric mirror of this table). FW-0058 design also closes the EXT-3 `agentChain` deferral with the §3.2 10-property `AgentChainEntry` schema. The two-row composition (FW-0058 agent using FW-0051 BYO-assistant during its own fill) remains deferred per both rows; flagged for future when a real use case surfaces. PLANNING.md FW-0058 + FW-0051 cross-link bilaterally updated.
 
 ## 8. Open questions / deferrals
 
