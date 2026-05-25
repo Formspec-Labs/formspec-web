@@ -356,6 +356,39 @@ export async function recordMultiPartySigner({
   progress: MultiPartySignerProgress;
   response: FormResponse;
 }): Promise<MultiPartySignerProgress> {
+  const activeSlot = assertMultiPartySignerCanSubmit({ claim, policy, progress });
+  if (!claim) {
+    throw new Error('Multi-party forms require each signer to authenticate before signing.');
+  }
+  const nextSignatures: MultiPartySignatureRecord[] = [
+    ...progress.signatures,
+    {
+      partyRef: activeSlot.partyRef,
+      roleId: activeSlot.roleId,
+      subjectRef: claim.subjectRef,
+      responseRef: `response:${response.id ?? idempotencyKey}`,
+      responseHash: await responseHash(response),
+      signedAt: new Date().toISOString(),
+    },
+  ];
+  const nextSlot = requiredMultiPartySlots(policy).find(
+    (slot) => !nextSignatures.some((signature) => signature.partyRef === slot.partyRef),
+  );
+  return {
+    activePartyRef: nextSlot?.partyRef ?? activeSlot.partyRef,
+    signatures: nextSignatures,
+  };
+}
+
+export function assertMultiPartySignerCanSubmit({
+  claim,
+  policy,
+  progress,
+}: {
+  claim: IdentityClaim | null;
+  policy: ResolvedMultiPartyPolicy;
+  progress: MultiPartySignerProgress;
+}): MultiPartyPartySlot {
   if (!claim) {
     throw new Error('Multi-party forms require each signer to authenticate before signing.');
   }
@@ -376,24 +409,7 @@ export async function recordMultiPartySigner({
   if (!activeSlot) {
     throw new Error(`Unknown active party "${progress.activePartyRef}".`);
   }
-  const nextSignatures: MultiPartySignatureRecord[] = [
-    ...progress.signatures,
-    {
-      partyRef: activeSlot.partyRef,
-      roleId: activeSlot.roleId,
-      subjectRef: claim.subjectRef,
-      responseRef: `response:${response.id ?? idempotencyKey}`,
-      responseHash: await responseHash(response),
-      signedAt: new Date().toISOString(),
-    },
-  ];
-  const nextSlot = requiredMultiPartySlots(policy).find(
-    (slot) => !nextSignatures.some((signature) => signature.partyRef === slot.partyRef),
-  );
-  return {
-    activePartyRef: nextSlot?.partyRef ?? activeSlot.partyRef,
-    signatures: nextSignatures,
-  };
+  return activeSlot;
 }
 
 export function multiPartyComplete(

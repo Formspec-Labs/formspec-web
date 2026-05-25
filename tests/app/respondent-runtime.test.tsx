@@ -660,6 +660,23 @@ describe('RespondentRuntime identity sign-in', () => {
     }, 'spouse-b'))).resolves.toBeUndefined();
 
     await act(async () => {
+      root?.unmount();
+      await tick();
+    });
+    container?.remove();
+    root = undefined;
+    container = undefined;
+    await renderRuntime(composition);
+    await waitForText('Current signer: Spouse B');
+    await clickSubmit();
+    await waitForText('Each party must sign with a distinct authenticated identity.');
+    expect(composition.submitTransport.submit).not.toHaveBeenCalled();
+    await expect(composition.draftStore.load(multiPartyDraftKey({
+      formUrl: definition.url,
+      formVersion: definition.version,
+    }, 'spouse-b'))).resolves.toBeUndefined();
+
+    await act(async () => {
       identityProvider.switchTo('subject-b');
       await tick();
     });

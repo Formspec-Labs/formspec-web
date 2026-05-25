@@ -80,6 +80,7 @@ import { extractPaymentAmount } from '../policy/extract-form-policy.ts';
 import { RuntimeProfileProvider } from './RuntimeProfileProvider.tsx';
 import { formatDate, labelFromToken, slugToken } from './format.ts';
 import {
+  assertMultiPartySignerCanSubmit,
   assertIdentityPolicySatisfied,
   buildMultiPartyAggregateResponse,
   buildConfirmationTrackingUri,
@@ -567,6 +568,13 @@ export function RespondentRuntime({
       await respondentState.engine.getResolvedIssuer();
       const multiPartyPolicy = respondentState.runtimeProfile.multiParty;
       const currentMultiPartyState = multiPartyPolicy ? respondentState.multiPartyState : null;
+      if (multiPartyPolicy && currentMultiPartyState) {
+        assertMultiPartySignerCanSubmit({
+          claim: respondentState.claim,
+          policy: multiPartyPolicy,
+          progress: currentMultiPartyState.progress,
+        });
+      }
       const activeDraftKey = multiPartyDraftKey(
         respondentState.draftKey,
         currentMultiPartyState?.progress.activePartyRef,
