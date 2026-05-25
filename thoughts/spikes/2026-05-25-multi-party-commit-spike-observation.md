@@ -157,15 +157,22 @@ Per ADR-0155 §8.7:
   `src/ports/multi-party-commit.ts` as the locked port.
 - The losing shape (Shape B — eventual-consistency) is deleted
   (`src/composition/spike/multi-party-commit-B/` and its test).
-- The spike directory + test for Shape A is also deleted; the port
-  lives at its production location and the spike scaffold is gone.
-- The scenario harness for Shape A is retained as a worked example
-  under the new port file's reference adapter location — TBD by the
-  FW-0061 build wave.
+- **Shape A's spike directory is RETAINED** at
+  `src/composition/spike/multi-party-commit-A/` (`in-memory.ts`,
+  `scenario.ts`, plus the matching test under `tests/composition/spike/`)
+  as the in-memory reference adapter for the locked port — until
+  FW-0061 ships the production adapter. The locked port file's
+  doc-comment header pins this rationale so future agents don't
+  delete it as "spike scaffold."
+- The local `port.ts` inside `multi-party-commit-A/` was deleted
+  when the locked port shipped at `src/ports/multi-party-commit.ts`;
+  the adapter and scenario re-point at the locked port.
+- The measurement script
+  (`scripts/spike-multi-party-commit-measure.mjs`) was deleted —
+  the §8.5 measurement was one-shot and is preserved in this report.
 
-ADR-0155 §8 is updated with §8.8 LOCKED block, §8.3 annotation marking
-Shape A as the winner and Shape B as discarded, and §8.10 recording
-the verdict + this observation report's path.
+ADR-0155 §8 is updated with §8.10 recording the verdict + this
+observation report's path.
 
 ## 5. Honest deferrals not in the spike's scope
 
