@@ -1290,10 +1290,11 @@ function RuntimePolicyErrorPage({ error }: { error: RuntimePolicyError }) {
  * generic copy. The previous `(error as { featureKey?: string })` cast bled
  * a structural untyped read into the typed-error surface.
  *
- * Branch ordering: instanceof early-return for EmbedOriginNotAllowedError
- * (the error class IS the discriminator — no featureKey lookup needed)
- * then featureKey switch for the three featureKey-bearing subclasses.
- * Typed-error-map refactor (Record<RuntimeFeatureKey, copy fn>) is FW-0107.
+ * Branch ordering: instanceof early-return for class-discriminated
+ * errors (EmbedOriginNotAllowedError — the error class IS the
+ * discriminator; no featureKey lookup needed) precedes the featureKey
+ * cascade for the three featureKey-bearing subclasses. Typed-error-map
+ * refactor (Record<RuntimeFeatureKey, copy fn>) is FW-0108.
  */
 function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
   if (error instanceof EmbedOriginNotAllowedError) {
