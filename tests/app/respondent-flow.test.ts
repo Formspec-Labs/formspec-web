@@ -319,6 +319,15 @@ function profile(enabled: ReadonlyArray<string> = []): ResolvedRuntimeProfile {
   } as ResolvedRuntimeProfile;
 }
 
+function productionProfile(enabled: ReadonlyArray<string> = []): ResolvedRuntimeProfile {
+  return {
+    mode: 'production',
+    enabled: new Set(enabled as ReadonlyArray<RuntimeFeatureKey>),
+    disabled: new Map(),
+    limits: {},
+  } as ResolvedRuntimeProfile;
+}
+
 function paymentRequiredDefinition(): FormDefinition {
   return {
     $formspec: '1.0',
@@ -616,6 +625,21 @@ describe('submitWithPayment (FW-0027) — authorize → submit → capture-or-vo
     // Both outcomes are happy-path; only one charge moved.
     expect(first.kind).toBe('submitted-with-payment');
     expect(second.kind).toBe('submitted-with-payment');
+  });
+
+  it('FW-0027 N-2: throws in production mode when no methodToken override and no form-declared method token (no demo-stub default leak)', async () => {
+    const transport = stubSubmitTransport();
+    const rail = stubPaymentRailAdapter();
+    await expect(
+      submitWithPayment({
+        runtimeProfile: productionProfile(['payment']),
+        definition: paymentRequiredDefinition(),
+        submitTransport: transport,
+        paymentRailAdapter: rail,
+        handoff: sampleIntakeHandoff,
+        idempotencyKey: generateIdempotencyKey(),
+      }),
+    ).rejects.toThrow(/payment method token/i);
   });
 
   it('throws when payment is enabled but the form has no amount declared', async () => {

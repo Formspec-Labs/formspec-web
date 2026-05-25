@@ -340,9 +340,12 @@ export interface SubmitWithPaymentInput {
   /**
    * Method token sourced from the form extension or — in production — from
    * a rail-specific picker UX. Slice 1 reads `definition.extensions
-   * ['x-formspec-payment-method-token']` if present; the helper falls back
-   * to a literal `'demo-method-stub'` so synthetic-definition tests have a
-   * predictable input.
+   * ['x-formspec-payment-method-token']` if present. The helper falls back
+   * to a literal `'demo-method-stub'` ONLY when the resolved profile is in
+   * demo mode (synthetic-definition tests + demo composition); in
+   * production the helper throws when neither the override nor the form
+   * extension supplies a token (N-2: a `'demo-method-stub'` default in
+   * production would silently flow into adopter rail SDKs).
    */
   readonly methodToken?: string;
   /**
@@ -439,7 +442,12 @@ function readMethodToken(input: SubmitWithPaymentInput): string {
   if (typeof fromDefinition === 'string' && fromDefinition.length > 0) {
     return fromDefinition;
   }
-  return PAYMENT_FALLBACK_METHOD_TOKEN;
+  if (input.runtimeProfile.mode === 'demo') {
+    return PAYMENT_FALLBACK_METHOD_TOKEN;
+  }
+  throw new Error(
+    'No payment method token available: caller did not supply `methodToken`, and the form did not declare extensions["x-formspec-payment-method-token"]. Production compositions must wire a rail-specific picker UX that provides the token.',
+  );
 }
 
 

@@ -56,6 +56,10 @@ export function stubPaymentRailAdapter(
   const authorizationsByKey = new Map<string, Authorization>();
   const capturesByKey = new Map<string, CaptureReceipt>();
   const voidsByKey = new Set<string>();
+  // L-2: closure-local counter — each `stubPaymentRailAdapter()` instance
+  // gets its own sequence, so parallel test compositions never collide on
+  // adapter-minted ids. Tests that need to assert on the id format pin the
+  // `stub-auth-NNNNNN` shape, not specific values.
   let nextId = 0;
   let pendingAuthorizeError: { error: unknown } | undefined;
   let pendingCaptureError: { error: unknown } | undefined;
