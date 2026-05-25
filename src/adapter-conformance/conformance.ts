@@ -573,6 +573,46 @@ export function defineLifecycleActionClientConformance(
       expect(receipt.event.kind).toBe('withdrawal');
     });
 
+    it('submitWithdrawal rejects post-determination review unless action availability authorizes it', async () => {
+      const subject = setup();
+      await subject.registerLifecycle(sampleLifecycleActionSnapshot);
+      await expect(
+        subject.adapter.submitWithdrawal(
+          {
+            caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+            reason: 'The decision should be reviewed.',
+            rescissionRequested: true,
+          },
+          generateIdempotencyKey(),
+        ),
+      ).rejects.toThrow(/post-determination|review|not available/i);
+
+      await subject.registerLifecycle({
+        ...sampleLifecycleActionSnapshot,
+        actions: sampleLifecycleActionSnapshot.actions.map((action) =>
+          action.action === 'withdraw'
+            ? {
+                ...action,
+                postDeterminationIntent: 'rescission-requested' as const,
+                requiresIssuerAcceptance: true,
+              }
+            : action,
+        ),
+      });
+      const receipt = await subject.adapter.submitWithdrawal(
+        {
+          caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+          reason: 'The decision should be reviewed.',
+          rescissionRequested: true,
+        },
+        generateIdempotencyKey(),
+      );
+      expect(receipt.event.kind).toBe('withdrawal');
+      if (receipt.event.kind !== 'withdrawal') throw new Error('unreachable');
+      expect(receipt.event.rescissionRequested).toBe(true);
+      expect(receipt.event.requiresIssuerAcceptance).toBe(true);
+    });
+
     it('submitDispute appends a dispute event', async () => {
       const subject = setup();
       await subject.registerLifecycle(sampleLifecycleActionSnapshot);

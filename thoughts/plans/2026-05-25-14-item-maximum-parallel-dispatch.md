@@ -320,6 +320,30 @@ Verification run after remediation:
 - `npm run build`
 - `git diff --check`
 
+### 2026-05-25 — W2.2 / FW-0038 record-lifecycle review-loop closure
+
+Independent generic reviewer `019e5f41-39c1-7592-ada5-70aeff950207` reviewed the FW-0038 record-lifecycle build and returned REQUEST CHANGES. Specialized `formspec-specs:*` reviewer roles were still not exposed, so this was a generic semi-formal code review over the current implementation.
+
+Finding remediated:
+
+- BLOCKER F1: withdrawal could submit a post-determination rescission request without policy authorization. `RecordLifecycleWithdrawablePolicy` and the resolver preserved `postDeterminationIntent` / `requiresIssuerAcceptance`, but `effectiveLifecycleAction()` dropped those fields, `WithdrawActionForm` always rendered the review checkbox, and the stub accepted `rescissionRequested` even when action availability did not authorize it. Remediation: `LifecycleActionAvailability` now carries `postDeterminationIntent` + `requiresIssuerAcceptance`; `effectiveLifecycleAction()` preserves them from resolved withdrawable policy; `WithdrawActionForm` renders and submits the review request only when policy declares `postDeterminationIntent: 'rescission-requested'` and issuer acceptance; the stub rejects unauthorized `rescissionRequested: true` before appending a withdrawal event. Runtime, conformance, and stub tests cover unauthorized rejection plus authorized success.
+
+Reviewer re-check returned APPROVE with no remaining blockers. Residual risk is explicit: submitted correction/dispute reason classification remains adapter/event-supplied, and FW-0060 reveal plus FW-0061 multi-party approval flows remain named deferred compositions.
+
+Verification run after remediation:
+
+- `npm test -- tests/app/status-runtime.test.tsx tests/adapter-conformance/lifecycle-action-client/conformance.test.ts tests/adapters/lifecycle-action-client-stub.test.ts`
+- `npm test -- tests/app/status-runtime.test.tsx tests/adapter-conformance/lifecycle-action-client/conformance.test.ts tests/adapters/lifecycle-action-client-stub.test.ts tests/adapters/lifecycle-action-client-unavailable.test.ts src/policy/extract-form-policy.test.ts src/policy/resolver.test.ts tests/composition/route-narrowing.test.ts tests/profiles/composition-coherence.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run test:unit`
+- `npm run test:conformance`
+- `npm run check:testing-plan`
+- `npm run check:mvp-audit`
+- `npm run check:conformance-coverage`
+- `npm run build`
+- `git diff --check`
+
 ### 2026-05-25 — Conservative W1/W2 cycle ledger
 
 Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dispatch table against current committed artifacts. Specialized `formspec-specs:*` scout/reviewer roles were not exposed in this runtime, so the check was a generic read-only scout pass. Disposition rule: implementation, ratification, or remediation commits are **not** enough to check off a row as closed unless the implementer→reviewer→remediator→verifier loop is explicit in the plan or commit evidence.
@@ -339,8 +363,8 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W1.11 / FW-0028 slice 2 assurance step-up | `formspec-web` `2f85951`, `986af74`; review-loop closure recorded above; EXT-8 remains external | cycle-closed for the recorded build slice |
 | W1.12 / FW-0073/0074/0076/0077 file-upload slice 2 | `formspec-web` `4e0a8d3`, `854040d`; review-loop closure recorded above | cycle-closed for the recorded build slice |
 | W2.1 / FW-0113 trusted reviewer build | `formspec-web` `5fc4d96`, `751d9a0`; review-loop closure recorded above; FW-0113 row remains open/blocked on upstream ratifications and EXT-37 | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
-| W2.2 / FW-0038 record lifecycle build | `formspec-web` `d5f6a9b`, `01bb024`; FW-0038 row remains open/gated | integrated/fixed, not cycle-closed |
+| W2.2 / FW-0038 record lifecycle build | `formspec-web` `d5f6a9b`, `01bb024`; review-loop closure recorded above; FW-0038 row remains open/gated on upstream ratifications and WOS adapter availability | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
 | W2.3 / FW-0060 safe-address build | `formspec-web` `6e02690`, `8e5a163`, `338ebd1`, `b53cbe3`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
 | W2.4 / FW-0061 multi-party build | `formspec-web` `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for XS-1/upstream ratification |
 
-Closeout consequence: W1.9, W1.10, W1.11, W1.12, W2.1, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
+Closeout consequence: W1.9, W1.10, W1.11, W1.12, W2.1, W2.2, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.

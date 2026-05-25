@@ -117,6 +117,7 @@ export function stubLifecycleActionClient(
       const action = assertActionEnabled(snapshotFor(request.caseUrn), 'withdraw');
       assertReasonIfRequired(action, request.reason, 'Withdrawal reason is required');
       assertPartyScope(action, request);
+      assertRescissionPolicy(action, request.rescissionRequested);
       const event: WithdrawalLifecycleEvent = {
         kind: 'withdrawal',
         eventId: nextEventId('withdrawal'),
@@ -279,6 +280,19 @@ function assertPartyScope(
   const scope = request.partyScope ?? action.partyScope;
   if (scope === 'all-parties-must-agree' && request.allPartiesApproved !== true) {
     throw new Error('All parties must approve withdrawal before it can be submitted');
+  }
+}
+
+function assertRescissionPolicy(
+  action: LifecycleActionAvailability,
+  rescissionRequested: boolean | undefined,
+): void {
+  if (rescissionRequested !== true) return;
+  if (
+    action.postDeterminationIntent !== 'rescission-requested' ||
+    action.requiresIssuerAcceptance !== true
+  ) {
+    throw new Error('Post-determination withdrawal review is not available for this record');
   }
 }
 

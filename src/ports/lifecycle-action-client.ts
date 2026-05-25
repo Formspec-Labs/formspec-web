@@ -30,6 +30,8 @@ export interface LifecycleActionAvailability {
   readonly requiresEvidence?: boolean;
   readonly signerOnly?: boolean;
   readonly partyScope?: 'any-party' | 'all-parties-must-agree';
+  readonly postDeterminationIntent?: 'rescission-requested';
+  readonly requiresIssuerAcceptance?: boolean;
 }
 
 export type LifecycleEventKind =

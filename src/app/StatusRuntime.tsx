@@ -480,7 +480,12 @@ function LifecycleActionsPanel({
           onSubmit={(reason, rescissionRequested) => {
             void submit('withdraw', () =>
               client.submitWithdrawal(
-                { caseUrn, reason, rescissionRequested, partyScope: withdrawAction.partyScope },
+                {
+                  caseUrn,
+                  reason,
+                  rescissionRequested: rescissionRequested ? true : undefined,
+                  partyScope: withdrawAction.partyScope,
+                },
                 generateIdempotencyKey(),
               ),
             );
@@ -564,6 +569,14 @@ function effectiveLifecycleAction(
     requiresEvidence: 'requiresEvidence' in policy ? policy.requiresEvidence : base.requiresEvidence,
     signerOnly: 'signerOnly' in policy ? policy.signerOnly : base.signerOnly,
     partyScope: 'partyScope' in policy ? policy.partyScope : base.partyScope,
+    postDeterminationIntent:
+      'postDeterminationIntent' in policy
+        ? policy.postDeterminationIntent
+        : base.postDeterminationIntent,
+    requiresIssuerAcceptance:
+      'requiresIssuerAcceptance' in policy
+        ? policy.requiresIssuerAcceptance
+        : base.requiresIssuerAcceptance,
   };
 }
 
@@ -743,6 +756,9 @@ function WithdrawActionForm({
   const [rescissionRequested, setRescissionRequested] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requiresReason = action.requiresReason ?? true;
+  const allowPostDeterminationReview =
+    action.postDeterminationIntent === 'rescission-requested' &&
+    action.requiresIssuerAcceptance === true;
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     const trimmedReason = reason.trim();
@@ -751,7 +767,10 @@ function WithdrawActionForm({
       return;
     }
     setError(null);
-    onSubmit(trimmedReason.length > 0 ? trimmedReason : undefined, rescissionRequested);
+    onSubmit(
+      trimmedReason.length > 0 ? trimmedReason : undefined,
+      allowPostDeterminationReview && rescissionRequested,
+    );
   };
   return (
     <form className="status-lifecycle-actions__form" onSubmit={handleSubmit}>
@@ -766,14 +785,16 @@ function WithdrawActionForm({
       {action.partyScope === 'all-parties-must-agree' ? (
         <p>All-party withdrawal approval is not available in this slice.</p>
       ) : null}
-      <label className="status-lifecycle-actions__check">
-        <input
-          type="checkbox"
-          checked={rescissionRequested}
-          onChange={(event) => setRescissionRequested(event.currentTarget.checked)}
-        />
-        Request review of a decision already issued
-      </label>
+      {allowPostDeterminationReview ? (
+        <label className="status-lifecycle-actions__check">
+          <input
+            type="checkbox"
+            checked={rescissionRequested}
+            onChange={(event) => setRescissionRequested(event.currentTarget.checked)}
+          />
+          Request review of a decision already issued
+        </label>
+      ) : null}
       {error ? (
         <p className="status-lifecycle-actions__error" role="alert">
           {error}

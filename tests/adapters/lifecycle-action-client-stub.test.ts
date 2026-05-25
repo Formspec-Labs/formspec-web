@@ -134,4 +134,19 @@ describe('stubLifecycleActionClient', () => {
     const snapshot = adapter._internalSnapshot(sampleLifecycleActionSnapshot.caseUrn);
     expect(snapshot?.events.at(-1)?.kind).toBe('withdrawal');
   });
+
+  it('rejects post-determination withdrawal review unless the record action authorizes it', async () => {
+    const adapter = stubLifecycleActionClient();
+    adapter.registerLifecycle(sampleLifecycleActionSnapshot);
+    await expect(
+      adapter.submitWithdrawal(
+        {
+          caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+          reason: 'Please review the decision.',
+          rescissionRequested: true,
+        },
+        generateIdempotencyKey(),
+      ),
+    ).rejects.toThrow(/post-determination withdrawal review/i);
+  });
 });

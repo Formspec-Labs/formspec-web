@@ -432,6 +432,115 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       });
     });
 
+    it('does not expose or submit post-determination review without withdrawal policy authorization', async () => {
+      const composition = createStubComposition();
+      composition.orgRuntimePolicy = {
+        ...composition.orgRuntimePolicy,
+        recordLifecycle: {
+          withdrawable: {
+            enabled: true,
+            requiresReason: false,
+            preDeterminationKernelMode: 'applicant-withdrawn',
+            partyScope: 'any-party',
+          },
+        },
+      };
+      const submitWithdrawal = vi.fn(
+        async (
+          request: Parameters<LifecycleActionClient['submitWithdrawal']>[0],
+        ): Promise<LifecycleActionReceipt> => ({
+        action: 'withdraw',
+        event: {
+          kind: 'withdrawal',
+          eventId: 'evt-withdraw-no-rescission',
+          occurredAt: '2026-05-25T12:00:00.000Z',
+          verified: true,
+          rescissionRequested: request.rescissionRequested,
+        },
+        snapshot: lifecycleSnapshot({
+          actions: [{ action: 'withdraw', enabled: true }],
+        }),
+      }));
+      composition.lifecycleActionClient = lifecycleClientFor({
+        actions: [{ action: 'withdraw', enabled: true }],
+        submitWithdrawal,
+      });
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Withdraw this submission' })).not.toBeNull();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Withdraw this submission' }));
+      expect(
+        screen.queryByLabelText(/Request review of a decision already issued/i),
+      ).toBeNull();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Withdraw this submission' }).at(-1)!);
+      await waitFor(() => {
+        expect(submitWithdrawal).toHaveBeenCalled();
+      });
+      expect(submitWithdrawal.mock.calls[0]?.[0].rescissionRequested).toBeUndefined();
+    });
+
+    it('submits post-determination review only when withdrawal policy enables it', async () => {
+      const composition = createStubComposition();
+      composition.orgRuntimePolicy = {
+        ...composition.orgRuntimePolicy,
+        recordLifecycle: {
+          withdrawable: {
+            enabled: true,
+            requiresReason: false,
+            preDeterminationKernelMode: 'applicant-withdrawn',
+            postDeterminationIntent: 'rescission-requested',
+            requiresIssuerAcceptance: true,
+            partyScope: 'any-party',
+          },
+        },
+      };
+      const submitWithdrawal = vi.fn(
+        async (
+          request: Parameters<LifecycleActionClient['submitWithdrawal']>[0],
+        ): Promise<LifecycleActionReceipt> => ({
+        action: 'withdraw',
+        event: {
+          kind: 'withdrawal',
+          eventId: 'evt-withdraw-rescission',
+          occurredAt: '2026-05-25T12:00:00.000Z',
+          verified: true,
+          rescissionRequested: request.rescissionRequested,
+          requiresIssuerAcceptance: request.rescissionRequested ? true : undefined,
+        },
+        snapshot: lifecycleSnapshot({
+          actions: [{ action: 'withdraw', enabled: true }],
+        }),
+      }));
+      composition.lifecycleActionClient = lifecycleClientFor({
+        actions: [{ action: 'withdraw', enabled: true }],
+        submitWithdrawal,
+      });
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Withdraw this submission' })).not.toBeNull();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Withdraw this submission' }));
+      fireEvent.click(screen.getByLabelText(/Request review of a decision already issued/i));
+      fireEvent.click(screen.getAllByRole('button', { name: 'Withdraw this submission' }).at(-1)!);
+      await waitFor(() => {
+        expect(submitWithdrawal).toHaveBeenCalled();
+      });
+      expect(submitWithdrawal.mock.calls[0]?.[0].rescissionRequested).toBe(true);
+    });
+
     it('disables all-party withdrawal because approval orchestration is deferred', async () => {
       const composition = createStubComposition();
       composition.orgRuntimePolicy = {
