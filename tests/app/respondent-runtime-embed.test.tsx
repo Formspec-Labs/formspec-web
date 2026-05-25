@@ -249,6 +249,11 @@ describe('RespondentRuntime — iframe-context gate (FW-0040)', () => {
       'postMessage',
       'iframe',
       'embed-transport',
+      'EmbedMessage',
+      'EmbedMessageFromHost',
+      'Unsubscribe',
+      'EmbedLimits',
+      'subscribeFromHost',
     ];
     for (const token of forbidden) {
       expect(text).not.toContain(token);

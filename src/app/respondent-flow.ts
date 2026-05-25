@@ -25,11 +25,16 @@ import type {
 import { extractPaymentAmount } from '../policy/extract-form-policy.ts';
 import {
   EmbedOriginNotAllowedError,
-  type EmbedLimits,
+  getEmbedLimits,
   type OrgRuntimePolicy,
   type ResolvedRuntimeProfile,
 } from '../policy/index.ts';
-import { generateIdempotencyKey, type IdempotencyKey } from '../shared/idempotency-key.ts';
+import {
+  assertUuidV7IdempotencyKey,
+  deriveUuidV7FromString,
+  generateIdempotencyKey,
+  type IdempotencyKey,
+} from '../shared/idempotency-key.ts';
 
 export function hydrateEngineFromResponse(engine: IFormEngine, response?: FormResponse): void {
   if (!response) {
@@ -270,15 +275,17 @@ export async function submitOrQueue(
  *       respondent UI carries the load-bearing "your form did not submit,
  *       and the payment was not charged" copy.
  *
- * Idempotency-key discipline: each rail call gets a fresh UUIDv7 (the rail
- * port requires UUIDv7-shaped keys; queue EXT-14 convention). Optional
- * caller-supplied overrides (`authorizeKey` / `captureKey` / `voidKey`)
- * exist for adopters who want to derive a deterministic family from a
- * caller-side identity (e.g., for server-side reconciliation). The runtime
- * itself does not retry the orchestration — the React shell's submit-state
- * machine early-returns on in-flight transitions so authorize/capture/void
- * each run at most once per orchestration; same-key adapter contracts back
- * up that discipline for the reconciliation-driven case.
+ * Idempotency-key discipline: the three rail calls are derived
+ * deterministically from the orchestration `idempotencyKey` —
+ * `deriveUuidV7FromString(key, 'authorize' | 'capture' | 'void')` produces
+ * UUIDv7-shaped values that satisfy the port-side validator AND collapse to
+ * the SAME triple on any runtime retry. The rail's same-key contract then
+ * suppresses duplicate holds / captures / voids — no second authorization,
+ * no double-charge, no orphan release. Optional caller-supplied overrides
+ * (`authorizeKey` / `captureKey` / `voidKey`) exist for adopters who want
+ * to derive the family from a caller-side identity (e.g., server-side
+ * reconciliation); overrides MUST be valid UUIDv7 values (the rail's
+ * `assertUuidV7IdempotencyKey` rejects anything else).
  *
  * Outcomes:
  *   - 'submitted-no-payment'        — free form path; identical to today.
@@ -337,10 +344,12 @@ export interface SubmitWithPaymentInput {
    */
   readonly methodToken?: string;
   /**
-   * Optional caller-supplied rail-call keys. Adopters who want to derive a
-   * deterministic key family from a caller-side identity (e.g., for server-
-   * side reconciliation) override these. The runtime defaults to fresh
-   * UUIDv7 keys per call.
+   * Optional caller-supplied rail-call keys. Adopters who want to derive
+   * the key family from a caller-side identity (e.g., for server-side
+   * reconciliation) override these; the value MUST be a valid UUIDv7. The
+   * runtime defaults to deterministic derivation from `idempotencyKey` so
+   * a retry of the orchestration collapses to the SAME authorize/capture/
+   * void triple — see `submitWithPayment` lifecycle doc.
    */
   readonly authorizeKey?: string;
   readonly captureKey?: string;
@@ -373,9 +382,9 @@ export async function submitWithPayment(
   }
 
   const methodToken = readMethodToken(input);
-  const authorizeKey = input.authorizeKey ?? generateIdempotencyKey();
-  const captureKey = input.captureKey ?? generateIdempotencyKey();
-  const voidKey = input.voidKey ?? generateIdempotencyKey();
+  const authorizeKey = await resolveRailKey(input.authorizeKey, input.idempotencyKey, 'authorize');
+  const captureKey = await resolveRailKey(input.captureKey, input.idempotencyKey, 'capture');
+  const voidKey = await resolveRailKey(input.voidKey, input.idempotencyKey, 'void');
 
   let authorization: Authorization;
   try {
@@ -457,9 +466,7 @@ export function verifyEmbedOriginAllowed(
       "embed transport reports the form is in an iframe but the host origin could not be determined",
     );
   }
-  const limits = (input.orgRuntimePolicy.limits?.embed ?? undefined) as
-    | EmbedLimits
-    | undefined;
+  const limits = getEmbedLimits(input.orgRuntimePolicy);
   const allowed = limits?.allowedOrigins ?? [];
   if (!matchesAllowedOrigin(hostOrigin, allowed)) {
     throw new EmbedOriginNotAllowedError(

@@ -73,6 +73,19 @@ export interface EmbedLimits {
   readonly allowedOrigins: readonly string[];
 }
 
+/**
+ * Typed accessor for `OrgRuntimePolicy.limits.embed`. The resolver validates
+ * the shape at boot via `validateEmbedLimits`; callers must use this accessor
+ * instead of casting `limits.embed as EmbedLimits` so that any future shape
+ * widening flows through a single seam. Returns `undefined` when no embed
+ * limits are declared (resolver-validated equivalent of "fail-closed default").
+ */
+export function getEmbedLimits(policy: OrgRuntimePolicy): EmbedLimits | undefined {
+  const value = policy.limits?.embed;
+  if (value === undefined) return undefined;
+  return value as EmbedLimits;
+}
+
 /** ADR-0011 §Form runtime policy. */
 export type FormFeaturePolicyMode = 'forbidden' | 'optional' | 'required';
 

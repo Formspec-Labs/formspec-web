@@ -7,6 +7,7 @@ export {
   type RuntimeFeatureKey,
 } from './feature-keys.ts';
 export {
+  getEmbedLimits,
   isCapabilityAvailability,
   isFormFeaturePolicyMode,
   isOrgFeaturePolicyMode,
