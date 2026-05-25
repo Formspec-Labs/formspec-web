@@ -1,0 +1,167 @@
+---
+title: 14-item maximum-parallel dispatch
+date: 2026-05-25
+status: in progress
+scope: cross-stack — formspec-web + formspec + work-spec + trellis + formspec-stack root
+rows: FW-0015 / FW-0019 / FW-0028 slice 2 / FW-0038 / FW-0041 / FW-0060 / FW-0061 / FW-0073 / FW-0074 / FW-0076 / FW-0077 / FW-0113 + ADR-0011 amendment + EXT-5/EXT-1/EXT-2/EXT-4/EXT-7/EXT-8 + XS-1/XS-3/XS-4/XS-5 + SC-1/SC-2/SC-4/SC-5/SC-6
+---
+
+# Plan — 14-item maximum-parallel dispatch
+
+## §0 Reality check
+
+"All in parallel" has real dependency edges. The honest shape:
+
+- **Wave 1** (pure spec/ADR/doc authoring + formspec-web-local builds): genuinely independent; can fan out without coordination.
+- **Wave 2** (builds for landed designs): logically depend on Wave 1 outputs, but **can dispatch speculatively in parallel** — design port shapes + draft code + write tests against the *proposed-but-not-yet-landed* upstream shapes (the designs already pin those shapes), then validate-and-adjust when Wave 1 ratifies. Worst-case rework is small because the design proposals are already PROPOSAL-status and the shapes are locked.
+- **Single coordination chokepoint** that *cannot* race: the `RUNTIME_FEATURE_KEYS` append-only tuple in `feature-keys.ts`. Pre-allocate positions before dispatch.
+
+Orchestrator context cost is the only real ceiling. The plan bundles related work to keep agent count ~20 not ~87.
+
+## §1 Pre-flight namespace allocation (do FIRST, before any dispatch)
+
+Done inline; costs ~5 minutes, prevents 14 hours of collision.
+
+**RuntimeFeatureKey positions (append-only):**
+
+- Position 10: `trustedReviewer` (FW-0113)
+- Position 11: `bringYourOwnAssistant` (FW-0062 future; not in this batch but reserved)
+- Position 12: `safeAddress` (FW-0060)
+- Position 13: `duressAware` (FW-0059 future; not in this batch)
+- Position 14: `multiParty` (FW-0061)
+- Position 15: `recordLifecycle` (FW-0038; normative FW-0034 key — not `correctableSubmission`)
+
+**FEATURE_PORT_MAP** entries pinned to match (verified before Wave A dispatch):
+
+| Position | RuntimeFeatureKey | FEATURE_PORT_MAP binding |
+|---:|---|---|
+| 10 | `trustedReviewer` | `["reviewerSession", "reviewThreadStore"]` |
+| 11 | `bringYourOwnAssistant` | `[]` — unavailable-only reservation until FW-0062 chooses the Assist Provider port shape |
+| 12 | `safeAddress` | `"safeAddressDirectory"` |
+| 13 | `duressAware` | `[]` — unavailable-only reservation until FW-0059 chooses the safety-routing port shape |
+| 14 | `multiParty` | `[]` — unavailable-only reservation until FW-0061 materializes the existing-port extension proof |
+| 15 | `recordLifecycle` | `"lifecycleActionClient"` |
+
+Implementation note: `FEATURE_PORT_MAP` now accepts one-to-many port bindings so FW-0113 can require both `ReviewerSession` and `ReviewThreadStore`. Empty bindings are unavailable-only; `assertCompositionCoherence` rejects any composition that declares those reserved keys as available/demo-stub before a concrete backing port is landed.
+
+**PLANNING.md row reservations** (each agent updates its own row only; explicit-paths commits):
+
+- FW-0073 / FW-0074 / FW-0076 / FW-0077 rows already exist
+- FW-0113 exists
+- FW-0038 exists
+- FW-0060 exists
+- FW-0061 exists
+- FW-0019 exists
+- FW-0028 row (slice 2 update to existing)
+- FW-0015 owner-action — different mechanism (see §3)
+
+**Sidecar / ADR / EXT numbers**: all already allocated in the various design docs. No new numbers minted.
+
+**Port name allocations** (each Wave-2 build owns these ports exclusively):
+
+- FW-0113: `ReviewerSession`, `ReviewThreadStore`
+- FW-0038: `LifecycleActionClient` (per FW-0034 §3)
+- FW-0060: `SafeAddressDirectory` (FW-0049 §4.2; masking is render discipline, not the port)
+- FW-0061: no new `PartyAuthority` preallocation. FW-0050 §3.2 extends `DraftStore`, `IdentityProvider`, and `SubmitTransport`; FW-0061 may ratify a new port only if consumer code proves one is forced.
+
+**Verification (pre-Wave A):** `npm run typecheck` and `npm run test:unit` pass after the namespace patch. Architecture scout returned BLOCKER/HIGH findings on stale names and one-slot reviewer mapping; all are remediated or justified in §9.
+
+## §2 Wave 1 dispatch (12 parallel subagents)
+
+All in isolated worktrees; explicit-paths commits; no push; no parent-pointer bump.
+
+| # | Agent | Scope | Repo |
+|---|---|---|---|
+| W1.1 | **ADR-amendments-batch** | web ADR-0011 amendment to enumerate `trustedReviewer` (rides FW-0037 amendment per split-keys discipline; small) + EXT-5 payload ratification for `bot-protection-cleared` (per FW-0036 §4.4) | formspec-web + formspec |
+| W1.2 | **XS-ADR-1** | XS-1 cross-stack ADR (multi-party intake spanning formspec + WOS + trellis per FW-0050 design §7) | formspec-stack root |
+| W1.3 | **XS-ADR-3** | XS-3 cross-stack ADR (coercion-aware signing per FW-0048 §6.5) | formspec-stack root |
+| W1.4 | **XS-ADR-4-5** | XS-4 (safe-address per FW-0049 §6) + XS-5 (correction-path per FW-0034 §6.4) — both touch formspec + WOS + trellis | formspec-stack root |
+| W1.5 | **SC-1-2-5-batch** | SC-1 (Notification Template) + SC-2 (Deletion Receipt) + SC-5 (WYSIWYS Ceremony) sidecar specs — all small, all formspec-side | formspec |
+| W1.6 | **SC-4** | SC-4 (Identity Binding Profile with WebAuthn binding) — load-bearing for FW-0031; standalone agent because it's substantive | formspec |
+| W1.7 | **SC-6** | SC-6 (Review Thread Sidecar per FW-0042 §3.2) — load-bearing for FW-0113; standalone | formspec |
+| W1.8 | **EXT-ratifications-batch** | EXT-1 reduction + EXT-2 + EXT-4 + EXT-7 + EXT-8 — all formspec spec ratifications | formspec |
+| W1.9 | **FW-0041** | Public-terminal hygiene build (`NotificationDelivery` port + UI cleanup) | formspec-web |
+| W1.10 | **FW-0019** | Server Locale Documents migration | formspec-web |
+| W1.11 | **FW-0028-slice-2** | Form-driven assurance step-up (requires EXT-8 from W1.8 — speculative against the proposed shape; W1.8 + W1.11 coordinate via the EXT-8 design proposal) | formspec-web |
+| W1.12 | **file-upload-slice-2** | FW-0073 + FW-0074 + FW-0076 + FW-0077 bundled — same domain (camera capture / on-device redaction / resumable / demo attachment) shares helpers and tests | formspec-web |
+
+**FW-0015** (owner sign-off on design tokens) is **NOT a subagent task** — it requires owner action. Owner prompt at end of plan dispatch.
+
+## §3 Wave 2 dispatch (4 parallel subagents — speculative)
+
+Dispatched **simultaneously with Wave 1**, NOT after. Each Wave 2 agent reads its design's PROPOSAL shape + Wave 1 in-flight outputs (worst case: each Wave 2 agent waits 0 minutes; the speculative shape comes from the design doc, not from Wave 1's commits).
+
+| # | Agent | Scope | Depends on (speculative) |
+|---|---|---|---|
+| W2.1 | **FW-0113 build** | Trusted-reviewer build slice 1 — `ReviewerSession` + `ReviewThreadStore` ports + adapters + reviewer-UI shell + respondent share/revoke + verifier render | W1.1 (ADR-0011 amendment) + W1.7 (SC-6) |
+| W2.2 | **FW-0038 build** | Correction-path build — `LifecycleActionClient` port + UI for amend/withdraw/dispute + EXT-5 event consumers | W1.8 (EXT-5) + W1.4 (XS-5) |
+| W2.3 | **FW-0060 build** | Safe-address handling build — `safeAddress` runtime gate + mask discipline + verifier render | W1.8 (EXT-1 reduction) + W1.4 (XS-4) |
+| W2.4 | **FW-0061 build** | Multi-party submission build — `multiParty` runtime gate + existing `DraftStore` / `IdentityProvider` / `SubmitTransport` extensions + per-party signer flow; do not mint `PartyAuthority` unless the build proves FW-0050 §3.2's conditional clause fires | W1.2 (XS-1) + W1.8 (EXT-3) |
+
+## §4 Review / remediate / verify cadence
+
+The orchestrator batches the review cycle to control context cost:
+
+1. **Implementer wave** (Wave 1 + Wave 2 dispatched simultaneously) — 16 agents in flight at once.
+2. **As each agent completes**, do NOT immediately dispatch reviewer. Instead, accumulate completions into review batches.
+3. **Review batches** (dispatched in groups of 4 reviewers in parallel) — each reviewer covers one completed work product. Established pattern: independent reviewer, never the implementer.
+4. **Remediator** dispatched per finding cluster (one per work product needing it).
+5. **Verifier** dispatched per remediator.
+
+Worst case: 16 implementer + 16 reviewer + ~10 remediator + ~10 verifier = ~52 total agents. Mitigation: skip reviewer entirely for **truly trivial** items (W1.10 FW-0019 if it's pure data migration; W1.1 EXT-5 payload if it's a single-line schema add) — but **never** skip reviewer for builds (Wave 2 all need full cycle) or for any spec authoring.
+
+## §5 Risk callouts + mitigations
+
+**R1 — `feature-keys.ts` contention.** Four Wave-2 builds consume preallocated keys (FW-0113 `trustedReviewer`, FW-0038 `recordLifecycle`, FW-0060 `safeAddress`, FW-0061 `multiParty`). Mitigation: the tuple is preallocated before Wave A, and each agent prompt pins its exact key. The agents commit in deterministic order during the review phase, not the implementation phase, so race risk is on the order of merge-text-conflict (resolvable, not corruption).
+
+**R2 — Speculative Wave 2 against shifting Wave 1 shapes.** If a Wave 1 reviewer pushes back on (e.g.) SC-6's port shape, FW-0113 has to adjust. Mitigation: every Wave 2 agent's prompt names "speculative against PROPOSAL shape in design doc X §Y; if PROPOSAL shifts during Wave 1 review, expect remediation in your verifier cycle." Cost is bounded because design shapes are PROPOSAL-status — owner-reviewed at design time.
+
+**R3 — PLANNING.md write contention.** Mitigation: each agent owns ONE row; explicit-paths commits per parallel-craftsman safety memory rule. Cherry-pick if branch divergence happens (proven workable from this session).
+
+**R4 — Cross-repo commit ordering.** Wave 1 + Wave 2 touch formspec-web + formspec + work-spec + trellis + formspec-stack root. The "N+1 commits" submodule discipline (one per affected submodule + parent pointer bump) holds. Each agent commits inside its own submodule; orchestrator restages parent pointer at end of each session pass.
+
+**R5 — XS-N cross-stack ADRs touch ratified subsystems.** XS-1 / XS-3 / XS-4 / XS-5 modify the seam contracts of formspec + WOS + trellis. Mitigation: XS agents (W1.2 / W1.3 / W1.4) authoring is doc-only; the implementing rows (W2.1 / W2.2 / W2.3 / W2.4) carry the actual binding code. No subsystem invariant breaks in Wave 1.
+
+**R6 — Token / context budget.** This dispatch is bigger than any single prior session. Mitigation: dispatch in two waves of 8 agents each (not all 16 at once). Wave A: W1.1, W1.2, W1.5, W1.8, W1.9, W1.10, W2.1, W2.2. Wave B (dispatched ~30 min later): W1.3, W1.4, W1.6, W1.7, W1.11, W1.12, W2.3, W2.4. This stretches orchestrator load.
+
+**R7 — FW-0015 owner-action gate.** Owner prompt mid-plan: "FW-0015 design-tokens candidate sign-off — approve, revise, or reject?"
+
+## §6 Concrete dispatch script
+
+1. **Verify pre-allocation** of the 6 feature-key positions in PLANNING.md (one quick commit; explicit paths).
+2. **Dispatch Wave A (8 agents)** in a single message: W1.1, W1.2, W1.5, W1.8, W1.9, W1.10, W2.1, W2.2 — each with isolated worktree, run_in_background, scoped prompt naming the design citation + commit discipline + speculative-shape callout.
+3. **Dispatch Wave B (8 agents)** in a single message ~30 min later: W1.3, W1.4, W1.6, W1.7, W1.11, W1.12, W2.3, W2.4.
+4. **As completions arrive**, batch into reviewer dispatches (4 reviewers at a time).
+5. **As reviews arrive**, dispatch remediators per finding cluster.
+6. **As remediators land**, dispatch verifiers per work product.
+7. **At end of session**: single parent-pointer bump commit + summary report. Do NOT push.
+8. **Prompt owner**: FW-0015 sign-off needed.
+
+## §7 Honest projection
+
+- **Wave A end-to-end (implementer → verifier)**: ~6–10 orchestrator turns.
+- **Wave B end-to-end**: ~6–10 turns.
+- **Total session**: 16 implementer agents + ~16 reviewers + ~8 remediators + ~8 verifiers = **~48 agent dispatches** producing **~50–80 commits** across **5 submodules**.
+- **Real PR landed**: roughly 14 closed/ratifiable rows + the implicit ratification of 1 ADR amendment + 1 EXT payload + 5 EXT ratifications + 6 XS ADRs + 5 SC sidecars.
+- **Risk of incomplete close-out**: HIGH — some work will land in "verified-ratifiable" status pending owner sign-off (per the FW-0042 pattern); some Wave 2 builds may need a second remediation pass after Wave 1 shapes harden.
+
+## §8 Confirmation gates (before kickoff)
+
+1. Is this scope shape right, or trim/expand any rows?
+2. Wave A / Wave B split (~30 min stretch), or all 16 dispatched in one shot?
+3. Skip-reviewer for trivial items (W1.10, W1.1 EXT-5 payload): OK, or full-cycle every row?
+4. FW-0015 owner sign-off: now (before dispatch) or end-of-session?
+
+On "go", start at §6 step 1.
+
+## §9 Deviations
+
+### 2026-05-25 — Pre-Wave A namespace architecture scout remediation
+
+Independent scout `019e5e39-e16a-7431-b450-24d761bdd075` returned a BLOCK Wave A verdict on the original §1 shape. Remediation applied before dispatch:
+
+- BLOCKER F1: `correctableSubmission` replaced with `recordLifecycle` at position 15. Evidence: FW-0034/FW-0038 canonical shape names `recordLifecycle`; `correctableSubmission` was plan drift.
+- BLOCKER F2: `FEATURE_PORT_MAP` now supports one-feature-to-many-port bindings; `trustedReviewer` maps to both `reviewerSession` and `reviewThreadStore`.
+- HIGH F3: FW-0060 port allocation corrected from `SafeAddressMaskingPolicy` to `SafeAddressDirectory`.
+- HIGH F4: FW-0061 `PartyAuthority` preallocation removed. `multiParty` is reserved unavailable-only until FW-0061 proves whether a new port is forced; the normative design extends `DraftStore`, `IdentityProvider`, and `SubmitTransport`.
+- MED F5: `bringYourOwnAssistant`, `duressAware`, and `multiParty` have empty `FEATURE_PORT_MAP` bindings. This keeps the RuntimeFeatureKey positions reserved while `assertCompositionCoherence` rejects any non-`unavailable` declaration until the deferred build rows land a concrete port/capability-proof shape.

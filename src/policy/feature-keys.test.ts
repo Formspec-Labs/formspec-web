@@ -8,12 +8,13 @@ import {
 } from './feature-keys.ts';
 
 describe('RUNTIME_FEATURE_KEYS', () => {
-  it('extends the seeded pair with documentPresentation + fileUpload + crossIssuerHistory + offlineSubmit + payment + embed + screener (append-only)', () => {
+  it('extends the seeded pair through the 2026-05-25 namespace preallocation (append-only)', () => {
     // Append-only: FW-0056 adds documentPresentation at the tail; FW-0033
     // adds fileUpload after it; FW-0057 adds crossIssuerHistory after that;
     // FW-0044 adds offlineSubmit (sixth key); FW-0027 adds payment (seventh
     // key); FW-0040 adds embed (eighth key); FW-0046 adds screener (ninth
-    // key). Re-sorting alphabetically would silently change the
+    // key). The 2026-05-25 dispatch preallocates positions 10-15 before
+    // Wave A. Re-sorting alphabetically would silently change the
     // resolver-loop iteration order; new feature ADRs append.
     expect([...RUNTIME_FEATURE_KEYS]).toEqual([
       'respondentPlace',
@@ -25,6 +26,12 @@ describe('RUNTIME_FEATURE_KEYS', () => {
       'payment',
       'embed',
       'screener',
+      'trustedReviewer',
+      'bringYourOwnAssistant',
+      'safeAddress',
+      'duressAware',
+      'multiParty',
+      'recordLifecycle',
     ]);
   });
 
@@ -38,6 +45,12 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isRuntimeFeatureKey('payment')).toBe(true);
     expect(isRuntimeFeatureKey('embed')).toBe(true);
     expect(isRuntimeFeatureKey('screener')).toBe(true);
+    expect(isRuntimeFeatureKey('trustedReviewer')).toBe(true);
+    expect(isRuntimeFeatureKey('bringYourOwnAssistant')).toBe(true);
+    expect(isRuntimeFeatureKey('safeAddress')).toBe(true);
+    expect(isRuntimeFeatureKey('duressAware')).toBe(true);
+    expect(isRuntimeFeatureKey('multiParty')).toBe(true);
+    expect(isRuntimeFeatureKey('recordLifecycle')).toBe(true);
     expect(isRuntimeFeatureKey('fictional')).toBe(false);
   });
 
@@ -57,5 +70,11 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isLocaleConditionalFeatureKey('payment')).toBe(false);
     expect(isLocaleConditionalFeatureKey('embed')).toBe(false);
     expect(isLocaleConditionalFeatureKey('screener')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('trustedReviewer')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('bringYourOwnAssistant')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('safeAddress')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('duressAware')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('multiParty')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('recordLifecycle')).toBe(false);
   });
 });

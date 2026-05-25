@@ -26,6 +26,7 @@ import { unavailableStatusReader } from '../../src/adapters/unavailable/status-r
 import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
+import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import { HISTORY_ROUTE_NARROWING } from '../../src/app/history-route.ts';
 import { SCREENER_ROUTE_NARROWING } from '../../src/app/screener-route.ts';
@@ -60,6 +61,12 @@ function productionCompositionLike(overrides: Partial<CompositionLike> = {}): Co
       // embedTransport sentinel.
       embed: 'unavailable',
       screener: 'unavailable',
+      trustedReviewer: 'unavailable',
+      bringYourOwnAssistant: 'unavailable',
+      safeAddress: 'unavailable',
+      duressAware: 'unavailable',
+      multiParty: 'unavailable',
+      recordLifecycle: 'unavailable',
     },
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
@@ -69,6 +76,7 @@ function productionCompositionLike(overrides: Partial<CompositionLike> = {}): Co
     paymentRailAdapter: unavailablePaymentRailAdapter(),
     embedTransport: unavailableEmbedTransport(),
     screenerDocumentSource: unavailableScreenerDocumentSource(),
+    ...unavailablePreallocatedFeaturePorts(),
     ...overrides,
   };
 }
@@ -151,6 +159,12 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       },
       statusReader: stubStatusReader(),
     });
@@ -170,6 +184,12 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       },
     });
     expect(() => assertCompositionCoherence(composition)).toThrow(/status/);
@@ -216,6 +236,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
       paymentRailAdapter: unavailablePaymentRailAdapter(),
       embedTransport: unavailableEmbedTransport(),
       screenerDocumentSource: unavailableScreenerDocumentSource(),
+      ...unavailablePreallocatedFeaturePorts(),
       ...overrides,
     };
   }
@@ -233,6 +254,12 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -252,6 +279,12 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       },
       respondentPlaceSource: unavailableRespondentPlaceSource(),
     });
@@ -271,6 +304,12 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -291,6 +330,12 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       },
       respondentPlaceSource: realPlaceAdapter as never,
     });
@@ -310,6 +355,12 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -331,6 +382,12 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });

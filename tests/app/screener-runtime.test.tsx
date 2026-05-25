@@ -11,15 +11,14 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type * as FormsEngine from '@formspec-org/engine';
 
 // Pass-through mock for `@formspec-org/engine` so the M1 test can
 // override `wasmEvaluateScreenerDocument` for ONE call to prove the
 // soft-error path. All other tests get the real implementation via
 // `importActual`.
 vi.mock('@formspec-org/engine', async () => {
-  const actual = await vi.importActual<typeof import('@formspec-org/engine')>(
-    '@formspec-org/engine',
-  );
+  const actual = await vi.importActual<typeof FormsEngine>('@formspec-org/engine');
   return { ...actual };
 });
 import * as engineModule from '@formspec-org/engine';
@@ -54,6 +53,7 @@ import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-q
 import { stubPaymentRailAdapter } from '../../src/adapters/stub/payment-rail-adapter.ts';
 import { stubEmbedTransport } from '../../src/adapters/stub/embed-transport.ts';
 import { stubFormRuntimePolicyExtractor } from '../../src/adapters/stub/form-runtime-policy-extractor.ts';
+import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 import type { Composition } from '../../src/composition/types.ts';
 import type {
   InstanceCapabilities,
@@ -86,6 +86,12 @@ function buildComposition(options: BuildOptions = {}): Composition {
     payment: 'demo-stub',
     embed: 'demo-stub',
     screener: availability,
+    trustedReviewer: 'unavailable',
+    bringYourOwnAssistant: 'unavailable',
+    safeAddress: 'unavailable',
+    duressAware: 'unavailable',
+    multiParty: 'unavailable',
+    recordLifecycle: 'unavailable',
   };
   const orgRuntimePolicy: OrgRuntimePolicy = {
     features: {
@@ -117,6 +123,7 @@ function buildComposition(options: BuildOptions = {}): Composition {
     paymentRailAdapter: stubPaymentRailAdapter(),
     embedTransport: stubEmbedTransport({ embedded: false }),
     screenerDocumentSource: screenerSource,
+    ...unavailablePreallocatedFeaturePorts(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: stubFormRuntimePolicyExtractor(),

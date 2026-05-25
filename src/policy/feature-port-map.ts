@@ -6,6 +6,8 @@
  */
 import type { RuntimeFeatureKey } from './feature-keys.ts';
 
+export type FeaturePortBinding = string | readonly string[];
+
 export const FEATURE_PORT_MAP = {
   respondentPlace: 'respondentPlaceSource',
   status: 'statusReader',
@@ -58,6 +60,40 @@ export const FEATURE_PORT_MAP = {
   // (catalog service / static bundle / authoring-tool preview) are
   // adopter-side per web ADR-0004.
   screener: 'screenerDocumentSource',
-} as const satisfies Readonly<Record<RuntimeFeatureKey, string>>;
+  // FW-0113 preallocation: trusted reviewer requires both ports. A one-slot
+  // mapping would let an adopter declare the feature available while one half
+  // of the substrate is missing, so the coherence assertion supports
+  // one-feature-to-many-port bindings.
+  trustedReviewer: ['reviewerSession', 'reviewThreadStore'],
+  // FW-0062 future reservation. FW-0051 defers the Assist Provider port shape
+  // until consumer code lands, so this key is unavailable-only until its build
+  // row replaces the empty binding.
+  bringYourOwnAssistant: [],
+  // FW-0060 preallocation. FW-0049 names SafeAddressDirectory as the first
+  // adopter-shaped seam; masking is render discipline, not the DI port.
+  safeAddress: 'safeAddressDirectory',
+  // FW-0059 future reservation. FW-0048 explicitly defers the safety-routing
+  // port shape until the issuer-webhook and WOS-task adapters are reduced
+  // together, so this key is unavailable-only until that build lands.
+  duressAware: [],
+  // FW-0061 preallocation. FW-0050 rejects a new PartyAuthority port for the
+  // current design and extends existing DraftStore / IdentityProvider /
+  // SubmitTransport semantics instead. The empty binding keeps the key
+  // unavailable-only until FW-0061 materializes a concrete capability proof.
+  multiParty: [],
+  // FW-0038 preallocation. FW-0034 names the capability `recordLifecycle`;
+  // the build owns the LifecycleActionClient transport shape.
+  recordLifecycle: 'lifecycleActionClient',
+} as const satisfies Readonly<Record<RuntimeFeatureKey, FeaturePortBinding>>;
 
-export type CompositionPortName = (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey];
+type FeaturePortEntry = (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey];
+type FlattenPortEntry<T> = T extends readonly (infer PortName)[]
+  ? PortName & string
+  : T & string;
+
+export type CompositionPortName = FlattenPortEntry<FeaturePortEntry>;
+
+export function featurePortNames(featureKey: RuntimeFeatureKey): readonly CompositionPortName[] {
+  const entry = FEATURE_PORT_MAP[featureKey] as FeaturePortBinding;
+  return (Array.isArray(entry) ? entry : [entry]) as readonly CompositionPortName[];
+}

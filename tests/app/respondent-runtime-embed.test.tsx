@@ -16,6 +16,7 @@ import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-
 import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
 import { stubEmbedTransport } from '../../src/adapters/stub/embed-transport.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
+import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import {
   freezeComposition,
@@ -78,6 +79,12 @@ function buildComposition(args: BuildOptions): Composition {
     payment: 'unavailable',
     embed: 'demo-stub',
     screener: 'unavailable',
+    trustedReviewer: 'unavailable',
+    bringYourOwnAssistant: 'unavailable',
+    safeAddress: 'unavailable',
+    duressAware: 'unavailable',
+    multiParty: 'unavailable',
+    recordLifecycle: 'unavailable',
   };
   const orgRuntimePolicy: OrgRuntimePolicy = {
     features: {
@@ -113,6 +120,7 @@ function buildComposition(args: BuildOptions): Composition {
       hostOrigin: args.hostOrigin,
     }),
     screenerDocumentSource: unavailableScreenerDocumentSource(),
+    ...unavailablePreallocatedFeaturePorts(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([

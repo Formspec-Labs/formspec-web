@@ -17,6 +17,7 @@ import type {
   RespondentPlaceSnapshot,
   RespondentSubmissionRecord,
 } from '../../src/ports/index.ts';
+import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 
 describe('RespondentRuntime identity sign-in', () => {
   let root: Root | undefined;
@@ -375,6 +376,7 @@ function testComposition(
         throw new Error('respondent runtime tests do not exercise screener');
       }),
     },
+    ...unavailablePreallocatedFeaturePorts(),
     // ADR-0011: production-mode composition with both seeded capabilities
     // available and the form opting both in. Without the form opt-in the
     // resolver would mark both `not-requested` (org=allowed + form=silent)
@@ -407,6 +409,12 @@ function testComposition(
       // FW-0046: closed-taxonomy key — the in-form respondent surface
       // doesn't consume the screener; 'unavailable' satisfies the resolver.
       screener: 'unavailable',
+      trustedReviewer: 'unavailable',
+      bringYourOwnAssistant: 'unavailable',
+      safeAddress: 'unavailable',
+      duressAware: 'unavailable',
+      multiParty: 'unavailable',
+      recordLifecycle: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {

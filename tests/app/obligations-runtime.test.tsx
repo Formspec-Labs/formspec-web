@@ -449,6 +449,12 @@ function productionCompositionWithIdentity(
       embed: 'unavailable',
       // FW-0046: closed-taxonomy key — declare for resolver input validity.
       screener: 'unavailable',
+      trustedReviewer: 'unavailable',
+      bringYourOwnAssistant: 'unavailable',
+      safeAddress: 'unavailable',
+      duressAware: 'unavailable',
+      multiParty: 'unavailable',
+      recordLifecycle: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {

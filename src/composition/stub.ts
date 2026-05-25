@@ -19,6 +19,7 @@ import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-sou
 import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../adapters/stub/submit-transport.ts';
+import { unavailablePreallocatedFeaturePort } from '../adapters/unavailable/preallocated-feature-port.ts';
 import { demoSampleForm, demoSampleFormUrl } from '../demo/index.ts';
 import {
   demoApplicantCaseDetail,
@@ -86,6 +87,13 @@ export function createStubComposition(): Composition {
     // posture so the /screener route renders the upstream
     // <FormspecScreener> end-to-end in `npm run dev`.
     screenerDocumentSource: stubScreenerDocumentSource(demoScreenerCatalog()),
+    reviewerSession: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewerSession'),
+    reviewThreadStore: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewThreadStore'),
+    safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
+    lifecycleActionClient: unavailablePreallocatedFeaturePort(
+      'recordLifecycle',
+      'LifecycleActionClient',
+    ),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -137,6 +145,15 @@ export function createStubComposition(): Composition {
       // end-to-end. Production declares 'unavailable' until adopters
       // wire a real catalog adapter.
       screener: 'demo-stub',
+      // 2026-05-25 namespace preallocation. No demo substrate exists for
+      // these rows yet; keep them unavailable until their build rows land
+      // concrete adapters / deferred port contracts.
+      trustedReviewer: 'unavailable',
+      bringYourOwnAssistant: 'unavailable',
+      safeAddress: 'unavailable',
+      duressAware: 'unavailable',
+      multiParty: 'unavailable',
+      recordLifecycle: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -149,6 +166,12 @@ export function createStubComposition(): Composition {
         payment: 'allowed',
         embed: 'allowed',
         screener: 'allowed',
+        trustedReviewer: 'allowed',
+        bringYourOwnAssistant: 'allowed',
+        safeAddress: 'allowed',
+        duressAware: 'allowed',
+        multiParty: 'allowed',
+        recordLifecycle: 'allowed',
       },
       // FW-0040 slice 1: fail-closed default — the bundled demo never
       // mounts in an iframe so no allow-list entry is needed; adopters

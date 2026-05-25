@@ -52,6 +52,7 @@ import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-s
 import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
+import { unavailablePreallocatedFeaturePort } from '../adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
@@ -200,6 +201,12 @@ function buildProductionNarrowedComposition({
     // `route.consumes.has('screener')` here (mirrors the
     // crossIssuerHistory pattern).
     screener: 'unavailable',
+    trustedReviewer: 'unavailable',
+    bringYourOwnAssistant: 'unavailable',
+    safeAddress: 'unavailable',
+    duressAware: 'unavailable',
+    multiParty: 'unavailable',
+    recordLifecycle: 'unavailable',
   };
   const notificationDelivery = stubNotificationDelivery();
   // MED-4: identity is only wired when the gated respondent-place capability
@@ -250,6 +257,13 @@ function buildProductionNarrowedComposition({
     // + render the disabled-cause copy honestly. Adopter forks branch on
     // `route.consumes.has('screener')` to wire their real adapter.
     screenerDocumentSource: unavailableScreenerDocumentSource(),
+    reviewerSession: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewerSession'),
+    reviewThreadStore: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewThreadStore'),
+    safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
+    lifecycleActionClient: unavailablePreallocatedFeaturePort(
+      'recordLifecycle',
+      'LifecycleActionClient',
+    ),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -296,6 +310,13 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     screenerDocumentSource: route.consumes.has('screener')
       ? stubScreenerDocumentSource(demoScreenerCatalog())
       : unavailableScreenerDocumentSource(),
+    reviewerSession: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewerSession'),
+    reviewThreadStore: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewThreadStore'),
+    safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
+    lifecycleActionClient: unavailablePreallocatedFeaturePort(
+      'recordLifecycle',
+      'LifecycleActionClient',
+    ),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -330,6 +351,12 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // declare 'unavailable' because they don't render pre-flight
       // routing.
       screener: route.consumes.has('screener') ? 'demo-stub' : 'unavailable',
+      trustedReviewer: 'unavailable',
+      bringYourOwnAssistant: 'unavailable',
+      safeAddress: 'unavailable',
+      duressAware: 'unavailable',
+      multiParty: 'unavailable',
+      recordLifecycle: 'unavailable',
     },
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -349,6 +376,12 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       payment: 'allowed',
       embed: 'allowed',
       screener: 'allowed',
+      trustedReviewer: 'allowed',
+      bringYourOwnAssistant: 'allowed',
+      safeAddress: 'allowed',
+      duressAware: 'allowed',
+      multiParty: 'allowed',
+      recordLifecycle: 'allowed',
     },
     // FW-0040 slice 1: narrowed routes don't mount in host iframes, so
     // the allow-list is irrelevant — fail-closed default mirrors the

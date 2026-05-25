@@ -4,6 +4,7 @@ import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-s
 import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
+import { unavailablePreallocatedFeaturePorts } from '../adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
@@ -35,6 +36,12 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         payment: 'demo-stub',
         embed: 'demo-stub',
         screener: 'demo-stub',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       } as const,
       respondentPlaceSource: stubRespondentPlaceSource(),
       statusReader: stubStatusReader(),
@@ -44,6 +51,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
       paymentRailAdapter: stubPaymentRailAdapter(),
       embedTransport: stubEmbedTransport(),
       screenerDocumentSource: stubScreenerDocumentSource(),
+      ...unavailablePreallocatedFeaturePorts(),
     };
     expect(freezeComposition(composition)).toBe(composition);
   });
@@ -61,6 +69,12 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       } as const,
       respondentPlaceSource: unavailableRespondentPlaceSource(),
       statusReader: stubStatusReader(),
@@ -70,6 +84,7 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
       paymentRailAdapter: unavailablePaymentRailAdapter(),
       embedTransport: unavailableEmbedTransport(),
       screenerDocumentSource: unavailableScreenerDocumentSource(),
+      ...unavailablePreallocatedFeaturePorts(),
     };
     expect(() => freezeComposition(composition)).toThrow(CompositionIncoherenceError);
   });

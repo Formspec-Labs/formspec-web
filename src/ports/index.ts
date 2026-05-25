@@ -94,3 +94,4 @@ export type {
   ScreenerDocumentInput,
 } from './screener-document-source.ts';
 export { ScreenerDocumentNotFoundError } from './screener-document-source.ts';
+export type { PreallocatedFeaturePort } from './preallocated-feature-port.ts';

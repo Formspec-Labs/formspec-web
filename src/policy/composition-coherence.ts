@@ -18,7 +18,7 @@
  * roots MUST also call it at boot.
  */
 import { RUNTIME_FEATURE_KEYS, type RuntimeFeatureKey } from './feature-keys.ts';
-import { FEATURE_PORT_MAP } from './feature-port-map.ts';
+import { featurePortNames, type CompositionPortName } from './feature-port-map.ts';
 import { isDemoStubAdapter, isUnavailableAdapter } from './sentinel.ts';
 import type { InstanceCapabilities } from './policy-shapes.ts';
 
@@ -32,7 +32,7 @@ export type CompositionLike = {
   readonly mode: 'demo' | 'production';
   readonly instanceCapabilities: InstanceCapabilities;
 } & {
-  readonly [P in (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey]]: unknown;
+  readonly [P in CompositionPortName]: unknown;
 };
 
 export type CompositionIncoherenceKind =
@@ -42,7 +42,8 @@ export type CompositionIncoherenceKind =
   | 'demo-stub-adapter-without-demo-stub-declaration'
   | 'demo-stub-declaration-without-demo-stub-adapter'
   | 'available-declaration-paired-with-marked-adapter'
-  | 'shared-slot-declaration-conflict';
+  | 'shared-slot-declaration-conflict'
+  | 'feature-without-port-binding';
 
 export class CompositionIncoherenceError extends Error {
   constructor(
@@ -83,93 +84,106 @@ export function assertCompositionCoherence(composition: CompositionLike): void {
   // keys that DO consume it.
   const portToKeys = new Map<string, readonly RuntimeFeatureKey[]>();
   for (const featureKey of RUNTIME_FEATURE_KEYS) {
-    const portName = FEATURE_PORT_MAP[featureKey];
-    const existing = portToKeys.get(portName) ?? [];
-    portToKeys.set(portName, [...existing, featureKey]);
+    for (const portName of featurePortNames(featureKey)) {
+      const existing = portToKeys.get(portName) ?? [];
+      portToKeys.set(portName, [...existing, featureKey]);
+    }
   }
 
   for (const featureKey of RUNTIME_FEATURE_KEYS) {
-    const portName = FEATURE_PORT_MAP[featureKey];
-    const adapter = composition[portName];
     const declared = composition.instanceCapabilities[featureKey];
-    const adapterIsUnavailable = isUnavailableAdapter(adapter);
-    const adapterIsDemoStub = isDemoStubAdapter(adapter);
-    const slotKeys = portToKeys.get(portName) ?? [featureKey];
-    const slotIsShared = slotKeys.length > 1;
-    const slotHasNonUnavailableKey = slotKeys.some(
-      (k) => composition.instanceCapabilities[k] !== 'unavailable',
-    );
-    // On a shared slot, an 'unavailable' declaration means the consumer for
-    // that key short-circuits — the adapter's marker only needs to satisfy the
-    // sibling key(s) that DO consume the slot. Skip per-key adapter checks for
-    // this key when at least one sibling declaration keeps the slot live.
-    if (slotIsShared && declared === 'unavailable' && slotHasNonUnavailableKey) {
+    const portNames = featurePortNames(featureKey);
+    if (portNames.length === 0) {
+      if (declared !== 'unavailable') {
+        throw new CompositionIncoherenceError(
+          featureKey,
+          'feature-without-port-binding',
+          `instanceCapabilities declares "${featureKey}" ${declared}, but FEATURE_PORT_MAP has no backing port binding yet. Keep the capability "unavailable" until the feature build lands a concrete adapter-backed port contract.`,
+        );
+      }
       continue;
     }
+    for (const portName of portNames) {
+      const adapter = composition[portName];
+      const adapterIsUnavailable = isUnavailableAdapter(adapter);
+      const adapterIsDemoStub = isDemoStubAdapter(adapter);
+      const slotKeys = portToKeys.get(portName) ?? [featureKey];
+      const slotIsShared = slotKeys.length > 1;
+      const slotHasNonUnavailableKey = slotKeys.some(
+        (k) => composition.instanceCapabilities[k] !== 'unavailable',
+      );
+      // On a shared slot, an 'unavailable' declaration means the consumer for
+      // that key short-circuits — the adapter's marker only needs to satisfy the
+      // sibling key(s) that DO consume the slot. Skip per-key adapter checks for
+      // this key when at least one sibling declaration keeps the slot live.
+      if (slotIsShared && declared === 'unavailable' && slotHasNonUnavailableKey) {
+        continue;
+      }
 
-    if (adapterIsUnavailable && declared !== 'unavailable') {
-      throw new CompositionIncoherenceError(
-        featureKey,
-        'sentinel-without-unavailable-declaration',
-        `Adapter for "${featureKey}" (port "${portName}") is marked unavailable, but instanceCapabilities declared "${declared}". The composition must declare "unavailable".`,
-      );
-    }
-    if (declared === 'unavailable' && !adapterIsUnavailable) {
-      throw new CompositionIncoherenceError(
-        featureKey,
-        'unavailable-declaration-without-sentinel',
-        `instanceCapabilities declares "${featureKey}" unavailable, but the wired adapter at port "${portName}" carries no UNAVAILABLE_ADAPTER sentinel. Wire an unavailable* adapter or change the declaration.`,
-      );
-    }
+      if (adapterIsUnavailable && declared !== 'unavailable') {
+        throw new CompositionIncoherenceError(
+          featureKey,
+          'sentinel-without-unavailable-declaration',
+          `Adapter for "${featureKey}" (port "${portName}") is marked unavailable, but instanceCapabilities declared "${declared}". The composition must declare "unavailable".`,
+        );
+      }
+      if (declared === 'unavailable' && !adapterIsUnavailable) {
+        throw new CompositionIncoherenceError(
+          featureKey,
+          'unavailable-declaration-without-sentinel',
+          `instanceCapabilities declares "${featureKey}" unavailable, but the wired adapter at port "${portName}" carries no UNAVAILABLE_ADAPTER sentinel. Wire an unavailable* adapter or change the declaration.`,
+        );
+      }
 
-    if (adapterIsDemoStub && composition.mode === 'production') {
-      throw new CompositionIncoherenceError(
-        featureKey,
-        'demo-stub-adapter-in-production-composition',
-        `Adapter for "${featureKey}" (port "${portName}") is marked demo-stub, but the composition is in production mode. Demo stubs MUST NOT back production capabilities (ADR-0011 §Instance capabilities).`,
-      );
-    }
-    if (adapterIsDemoStub && declared !== 'demo-stub') {
-      throw new CompositionIncoherenceError(
-        featureKey,
-        'demo-stub-adapter-without-demo-stub-declaration',
-        sharedSlotMessage(
-          slotKeys,
-          slotIsShared,
-          composition,
-          portName,
-          `Adapter for "${featureKey}" (port "${portName}") is marked demo-stub, but instanceCapabilities declared "${declared}". The composition must declare "demo-stub".`,
-        ),
-      );
-    }
-    if (declared === 'demo-stub' && !adapterIsDemoStub) {
-      throw new CompositionIncoherenceError(
-        featureKey,
-        'demo-stub-declaration-without-demo-stub-adapter',
-        sharedSlotMessage(
-          slotKeys,
-          slotIsShared,
-          composition,
-          portName,
-          `instanceCapabilities declares "${featureKey}" demo-stub, but the wired adapter at port "${portName}" carries no DEMO_STUB_ADAPTER marker. Wire a stub* adapter or change the declaration.`,
-        ),
-      );
-    }
+      if (adapterIsDemoStub && composition.mode === 'production') {
+        throw new CompositionIncoherenceError(
+          featureKey,
+          'demo-stub-adapter-in-production-composition',
+          `Adapter for "${featureKey}" (port "${portName}") is marked demo-stub, but the composition is in production mode. Demo stubs MUST NOT back production capabilities (ADR-0011 §Instance capabilities).`,
+        );
+      }
+      if (adapterIsDemoStub && declared !== 'demo-stub') {
+        throw new CompositionIncoherenceError(
+          featureKey,
+          'demo-stub-adapter-without-demo-stub-declaration',
+          sharedSlotMessage(
+            slotKeys,
+            slotIsShared,
+            composition,
+            portName,
+            `Adapter for "${featureKey}" (port "${portName}") is marked demo-stub, but instanceCapabilities declared "${declared}". The composition must declare "demo-stub".`,
+          ),
+        );
+      }
+      if (declared === 'demo-stub' && !adapterIsDemoStub) {
+        throw new CompositionIncoherenceError(
+          featureKey,
+          'demo-stub-declaration-without-demo-stub-adapter',
+          sharedSlotMessage(
+            slotKeys,
+            slotIsShared,
+            composition,
+            portName,
+            `instanceCapabilities declares "${featureKey}" demo-stub, but the wired adapter at port "${portName}" carries no DEMO_STUB_ADAPTER marker. Wire a stub* adapter or change the declaration.`,
+          ),
+        );
+      }
 
-    if (declared === 'available' && (adapterIsUnavailable || adapterIsDemoStub)) {
-      throw new CompositionIncoherenceError(
-        featureKey,
-        slotIsShared
-          ? 'shared-slot-declaration-conflict'
-          : 'available-declaration-paired-with-marked-adapter',
-        sharedSlotMessage(
-          slotKeys,
-          slotIsShared,
-          composition,
-          portName,
-          `instanceCapabilities declares "${featureKey}" available, but the wired adapter at port "${portName}" carries a provenance marker (${adapterIsUnavailable ? 'unavailable' : 'demo-stub'}). Wire a real production adapter or change the declaration.`,
-        ),
-      );
+      if (declared === 'available' && (adapterIsUnavailable || adapterIsDemoStub)) {
+        throw new CompositionIncoherenceError(
+          featureKey,
+          slotIsShared
+            ? 'shared-slot-declaration-conflict'
+            : 'available-declaration-paired-with-marked-adapter',
+          sharedSlotMessage(
+            slotKeys,
+            slotIsShared,
+            composition,
+            portName,
+            `instanceCapabilities declares "${featureKey}" available, but the wired adapter at port "${portName}" carries a provenance marker (${adapterIsUnavailable ? 'unavailable' : 'demo-stub'}). Wire a real production adapter or change the declaration.`,
+          ),
+        );
+      }
     }
   }
 }

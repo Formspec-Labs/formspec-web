@@ -11,7 +11,13 @@
     "offlineSubmit": "demo-stub",
     "payment": "unavailable",
     "embed": "unavailable",
-    "screener": "unavailable"
+    "screener": "unavailable",
+    "trustedReviewer": "unavailable",
+    "bringYourOwnAssistant": "unavailable",
+    "safeAddress": "unavailable",
+    "duressAware": "unavailable",
+    "multiParty": "unavailable",
+    "recordLifecycle": "unavailable"
   },
   "org": {
     "features": {

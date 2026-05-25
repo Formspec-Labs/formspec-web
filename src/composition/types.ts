@@ -8,6 +8,7 @@ import type {
   NotificationDelivery,
   OfflineSubmitQueue,
   PaymentRailAdapter,
+  PreallocatedFeaturePort,
   RespondentHistorySource,
   RespondentPlaceSource,
   ScreenerDocumentSource,
@@ -101,6 +102,16 @@ export interface Composition {
    * deployment.
    */
   screenerDocumentSource: ScreenerDocumentSource;
+  /**
+   * 2026-05-25 namespace preallocation: real interfaces land with their
+   * feature builds. These sentinel-backed slots exist so ADR-0011
+   * FEATURE_PORT_MAP can reserve the names without allowing a production
+   * composition to declare the capabilities available by accident.
+   */
+  reviewerSession: PreallocatedFeaturePort;
+  reviewThreadStore: PreallocatedFeaturePort;
+  safeAddressDirectory: PreallocatedFeaturePort;
+  lifecycleActionClient: PreallocatedFeaturePort;
   /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */
   instanceCapabilities: InstanceCapabilities;
   /** ADR-0011 §Org runtime policy — supplied by the composition root. */

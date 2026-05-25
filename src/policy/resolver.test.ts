@@ -24,6 +24,12 @@ const allAvailable: InstanceCapabilities = {
   embed: 'available',
   // FW-0046 slice 1: declare screener so resolver validation passes.
   screener: 'available',
+  trustedReviewer: 'available',
+  bringYourOwnAssistant: 'unavailable',
+  safeAddress: 'available',
+  duressAware: 'unavailable',
+  multiParty: 'unavailable',
+  recordLifecycle: 'available',
 };
 
 const allowAllOrg: OrgRuntimePolicy = {
@@ -37,6 +43,12 @@ const allowAllOrg: OrgRuntimePolicy = {
     payment: 'allowed',
     embed: 'allowed',
     screener: 'allowed',
+    trustedReviewer: 'allowed',
+    bringYourOwnAssistant: 'allowed',
+    safeAddress: 'allowed',
+    duressAware: 'allowed',
+    multiParty: 'allowed',
+    recordLifecycle: 'allowed',
   },
 };
 

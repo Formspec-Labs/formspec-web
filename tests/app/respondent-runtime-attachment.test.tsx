@@ -21,6 +21,7 @@ import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-q
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
+import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import {
   freezeComposition,
@@ -83,6 +84,12 @@ function buildComposition({
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       }
     : {
         respondentPlace: 'unavailable',
@@ -94,6 +101,12 @@ function buildComposition({
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       };
 
   const orgRuntimePolicy: OrgRuntimePolicy = {
@@ -132,6 +145,7 @@ function buildComposition({
     paymentRailAdapter: unavailablePaymentRailAdapter(),
     embedTransport: unavailableEmbedTransport(),
     screenerDocumentSource: unavailableScreenerDocumentSource(),
+    ...unavailablePreallocatedFeaturePorts(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new AttachmentRequirementExtractor(),

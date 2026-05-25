@@ -78,6 +78,20 @@
  *     `stubScreenerDocumentSource` seeded with the bundled three-question
  *     fixture.
  *
+ * Pre-allocated before the 2026-05-25 parallel Wave A dispatch:
+ *   - trustedReviewer → FW-0113 build, backed by ReviewerSession +
+ *     ReviewThreadStore per FW-0042.
+ *   - bringYourOwnAssistant → FW-0062 future reservation; no code port yet
+ *     because FW-0051 defers the Assist Provider shape to build time.
+ *   - safeAddress → FW-0060 build, backed first by SafeAddressDirectory per
+ *     FW-0049.
+ *   - duressAware → FW-0059 future reservation; no code port yet because
+ *     FW-0048 defers the safety-routing shape to build time.
+ *   - multiParty → FW-0061 build, extending DraftStore / IdentityProvider /
+ *     SubmitTransport per FW-0050; no PartyAuthority port is pre-minted.
+ *   - recordLifecycle → FW-0038 build, backed by LifecycleActionClient per
+ *     FW-0034. This is the normative key name; not `correctableSubmission`.
+ *
  * Extension protocol: every future feature ADR adds its key here and to the
  * Composition's InstanceCapabilities declaration. No string-typed feature keys
  * outside this set — the resolver rejects unknown keys with
@@ -104,6 +118,12 @@ export const RUNTIME_FEATURE_KEYS = [
   'payment',
   'embed',
   'screener',
+  'trustedReviewer',
+  'bringYourOwnAssistant',
+  'safeAddress',
+  'duressAware',
+  'multiParty',
+  'recordLifecycle',
 ] as const;
 
 export type RuntimeFeatureKey = (typeof RUNTIME_FEATURE_KEYS)[number];

@@ -32,6 +32,12 @@ const baseInstance = {
   // FW-0046: screener is the ninth closed-taxonomy extension; same
   // honest-unavailable posture for these fixtures.
   screener: 'unavailable',
+  trustedReviewer: 'unavailable',
+  bringYourOwnAssistant: 'unavailable',
+  safeAddress: 'unavailable',
+  duressAware: 'unavailable',
+  multiParty: 'unavailable',
+  recordLifecycle: 'unavailable',
 } as const;
 const emptyOrg = { features: {} } as const;
 
@@ -110,6 +116,12 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       },
       org: emptyOrg,
       form: { features: { status: 'required' } },
@@ -165,6 +177,12 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
           payment: 'unavailable',
           embed: 'unavailable',
           screener: 'unavailable',
+          trustedReviewer: 'unavailable',
+          bringYourOwnAssistant: 'unavailable',
+          safeAddress: 'unavailable',
+          duressAware: 'unavailable',
+          multiParty: 'unavailable',
+          recordLifecycle: 'unavailable',
         },
         org: emptyOrg,
         form: { features: {} },

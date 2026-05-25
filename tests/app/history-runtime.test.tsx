@@ -461,6 +461,12 @@ function productionCompositionWithIdentity(
       payment: 'unavailable',
       embed: 'unavailable',
       screener: 'unavailable',
+      trustedReviewer: 'unavailable',
+      bringYourOwnAssistant: 'unavailable',
+      safeAddress: 'unavailable',
+      duressAware: 'unavailable',
+      multiParty: 'unavailable',
+      recordLifecycle: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {

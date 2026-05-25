@@ -30,6 +30,7 @@ import { unavailableAttachmentStore } from '../../src/adapters/unavailable/attac
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
+import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
@@ -103,6 +104,12 @@ function buildPaymentComposition(args: {
     // pre-flight screener path; declare 'unavailable' for resolver
     // input validity.
     screener: 'unavailable',
+    trustedReviewer: 'unavailable',
+    bringYourOwnAssistant: 'unavailable',
+    safeAddress: 'unavailable',
+    duressAware: 'unavailable',
+    multiParty: 'unavailable',
+    recordLifecycle: 'unavailable',
   };
   const orgRuntimePolicy: OrgRuntimePolicy = {
     features: {
@@ -141,6 +148,7 @@ function buildPaymentComposition(args: {
     // FW-0046: declare the screener slot so the closed-taxonomy contract
     // is satisfied. The runtime never reads it on the in-form payment path.
     screenerDocumentSource: unavailableScreenerDocumentSource(),
+    ...unavailablePreallocatedFeaturePorts(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
@@ -308,6 +316,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
       embedTransport: unavailableEmbedTransport(),
       // FW-0046 sibling-row coordination: closed-taxonomy slot.
       screenerDocumentSource: unavailableScreenerDocumentSource(),
+      ...unavailablePreallocatedFeaturePorts(),
       instanceCapabilities: {
         respondentPlace: 'unavailable',
         status: 'unavailable',
@@ -318,6 +327,12 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
         payment: 'unavailable',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       } as InstanceCapabilities,
       orgRuntimePolicy: {
         features: {
@@ -409,6 +424,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
       paymentRailAdapter: stubPaymentRailAdapter({ railLabel: 'Card' }),
       embedTransport: unavailableEmbedTransport(),
       screenerDocumentSource: unavailableScreenerDocumentSource(),
+      ...unavailablePreallocatedFeaturePorts(),
       instanceCapabilities: {
         respondentPlace: 'demo-stub',
         status: 'demo-stub',
@@ -419,6 +435,12 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
         payment: 'demo-stub',
         embed: 'unavailable',
         screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
       } as InstanceCapabilities,
       orgRuntimePolicy: {
         features: {
