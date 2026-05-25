@@ -642,6 +642,11 @@ describe('RespondentRuntime identity sign-in', () => {
     await waitForText('Sign in to continue');
     await clickButton('Sign in with Example IdP');
     await waitForText('Current signer: Spouse A');
+    const subjectADraftKey = {
+      formUrl: definition.url,
+      formVersion: definition.version,
+      subjectRef: 'subject-a',
+    };
     await clickSubmit();
     await waitForText('Spouse B can review their part and sign next.');
     expect(composition.submitTransport.submit).not.toHaveBeenCalled();
@@ -654,10 +659,10 @@ describe('RespondentRuntime identity sign-in', () => {
       await tick();
     });
     expect(composition.submitTransport.submit).not.toHaveBeenCalled();
-    await expect(composition.draftStore.load(multiPartyDraftKey({
-      formUrl: definition.url,
-      formVersion: definition.version,
-    }, 'spouse-b'))).resolves.toBeUndefined();
+    await expect(composition.draftStore.load(multiPartyDraftKey(
+      subjectADraftKey,
+      'spouse-b',
+    ))).resolves.toBeUndefined();
 
     await act(async () => {
       root?.unmount();
@@ -671,10 +676,10 @@ describe('RespondentRuntime identity sign-in', () => {
     await clickSubmit();
     await waitForText('Each party must sign with a distinct authenticated identity.');
     expect(composition.submitTransport.submit).not.toHaveBeenCalled();
-    await expect(composition.draftStore.load(multiPartyDraftKey({
-      formUrl: definition.url,
-      formVersion: definition.version,
-    }, 'spouse-b'))).resolves.toBeUndefined();
+    await expect(composition.draftStore.load(multiPartyDraftKey(
+      subjectADraftKey,
+      'spouse-b',
+    ))).resolves.toBeUndefined();
 
     await act(async () => {
       identityProvider.switchTo('subject-b');
