@@ -103,15 +103,19 @@ that they are NOT carried at the port surface.
 | FW-0048 per-party duress sidecar (`partyRef` on `submission.duress-signaled`) | `Signature.duressOpaque` rides on `commit(partyRef, signature)`; opaque blob is the right shape per §7.1 | `Signature.duressOpaque` rides on the `Signed` action; same opacity guarantee |
 | FW-0048 per-party invisibility (status reads, ceremony) | natively — `snapshot()` partitions by party; the consumer scopes results | natively — `read().perParty` is keyed by `partyRef`; consumer scopes results |
 | FW-0049 per-party safe-* mask (each party's view differs) | per-party `visibleFields` set on `PartyDeclaration`; `amend` rejects non-visible fields | per-party `visibleFields` on `PartyDeclaration`; `applyPartyAction({kind:'Drafted'})` rejects non-visible fields |
-| FW-0050 §7.2 per-party rules (party-scoped tasks, deadlines) | aligns with `prepare(party, window)` bounded-window primitive | does NOT compose — Shape B has no per-party deadline primitive; would need a sibling timer port |
+| FW-0050 §3.3 + §5.1 per-party deadline policy (coEqual tier; §4.2 routes asymmetric tier to WOS) | aligns with `prepare(party, window)` bounded-window primitive at the coEqual-tier live-session-abandonment scope; FW-0061's asymmetric build composes the port's window with WOS for flow-level deadlines | does NOT compose — Shape B has no per-party live-session timeout primitive; would need a sibling timer port even for coEqual-tier intake-only |
 | Disagreement-as-state (§6) preserves both attested values | port-orthogonal — both shapes record per-party signatures separately | port-orthogonal — `read().perParty` exposes per-party log |
 
 Shape A composes with all five. Shape B does not compose with FW-0050
-§7.2's per-party deadlines without an external timer mechanism. Per
-§8.6 criterion 3, "shape adjustments to FW-0048 + FW-0049 + FW-0050
+§3.3 + §5.1's per-party deadline policy (which FW-0050 §4.2 routes to WOS
+for the asymmetric tier) without an external timer mechanism. Per §8.6
+criterion 3, "shape adjustments to FW-0048 + FW-0049 + FW-0050
 primitives" — Shape B does not require adjustments to those rows'
 *primitives*, but it forces the consumer to layer per-party deadline
-tracking outside the commitment port. Shape A absorbs that work.
+tracking outside the commitment port even for the coEqual-tier intake-only
+flow the spike is scoped to. Shape A absorbs that work at the coEqual-tier
+live-session-abandonment scope; flow-level asymmetric-tier deadlines still
+compose with WOS per FW-0050 §4.2.
 
 ### 2.5 Caveat on criteria — reason + user value over authority
 
@@ -138,14 +142,36 @@ observations worth naming:
 
 **Winner: Shape A — 2PC explicit states.**
 
-Decision per §8.6:
+Decision per §8.6 (with primary criteria leading; port-call sum demoted to
+tie-detector per the §8.6 reshape):
 
-1. **Port-method-call sum** — Shape A wins 38 vs 40 (small margin; see §2.5(1) on noise).
-2. **Edge-case gap count** — Shape A 1 vs Shape B 2 (Shape A's gap is additive; Shape B's are at the wrong tier).
-3. **Composition fit** — Shape A composes with FW-0050 §7.2's per-party deadlines through `PreparationWindow` + `tickClock`; Shape B does not, and would force the consumer to layer a sibling timer port.
+1. **Consumer-LOC sum** (primary signal) — Shape A 107 vs Shape B 165, a
+   **35% margin**. This is the load-bearing measurement; consumer LOC
+   directly indicates how much of the multi-party coordination work the
+   port pushes into the implementation versus dumping on the consumer. The
+   per-call work-weight difference between Shape A's `prepare`/`commit`/
+   `abort`/`amend` and Shape B's umbrella `applyPartyAction` is real, and
+   LOC is the per-call-weight-honest measure.
+2. **Edge-case gap count** (primary signal) — Shape A 1 vs Shape B 2.
+   Shape A's gap is additive (post-sign retraction; solvable by allowing
+   `Aborted` as a transition from `Committed` — straightforward FSM
+   widening). Shape B's gaps are at the wrong tier (preparation-window
+   semantics and abort-reason taxonomy that the §8.1(a) commitment names as
+   port-level).
+3. **Composition fit** (primary signal; tiebreaker per §8.6) — Shape A
+   composes with FW-0050 §3.3 + §5.1's per-party deadline policy (which
+   FW-0050 §4.2 routes to WOS for the asymmetric tier) through
+   `PreparationWindow` + `tickClock` at the coEqual-tier live-session-
+   abandonment scope; Shape B does not, and would force the consumer to
+   layer a sibling timer port.
+4. **Port-method-call sum** (tie-detector) — Shape A wins 38 vs 40, a ~5%
+   margin. Per §8.6 small margins on call count are noise — see §2.5(1) on
+   per-call work-weight; the LOC measure above is the honest signal of the
+   same underlying property and Shape A's 35% margin there is decisive.
 
-All three criteria favor Shape A. Per §8.6 the tiebreaker (criterion 3,
-composition fit) is the load-bearing one, and Shape A wins it cleanly.
+All three primary criteria favor Shape A; the tie-detector aligns. Per §8.6
+the tiebreaker (criterion 3, composition fit) is the load-bearing one, and
+Shape A wins it cleanly.
 
 No third shape emerged during the spike. §8.7's escape hatch does not fire.
 

@@ -107,6 +107,8 @@ The `multiParty` instance-capability row from [web ADR-0011 Feature Ownership Ta
 
 ### 3.2 Port shape — proposal: no new port, conditional
 
+**RESOLVED 2026-05-25.** A new port DID ship under this section's conditional clause — the FW-0115 Spike-and-Observe pass per [ADR-0155 §8](../../../thoughts/adr/0155-multi-party-intake.md) returned the 2PC explicit-state `MultiPartyCommit` port now locked at [`src/ports/multi-party-commit.ts`](../../src/ports/multi-party-commit.ts) per [ADR-0155 §8.10](../../../thoughts/adr/0155-multi-party-intake.md). `DraftStore` / `IdentityProvider` / `SubmitTransport` still extend per §3.2 for substrate concerns (per-party draft scope, per-party identity claims, merged-Response submit envelope); the FSM around per-party prepare / commit / abort moved into the new `MultiPartyCommit` port — that work is no longer encapsulated in the three existing ports as the original §3.2 proposal claimed. The conditional clause below is satisfied; the build (FW-0061) consumes the locked port.
+
 Per [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md) the discipline is "don't speculate on port shapes before consumer code" and "port what's adopter-shaped; encapsulate the rest." Applying that discipline to multi-party:
 
 **Proposal: extend three existing ports rather than add a new `MultiPartyOrchestrator` port.**
@@ -340,8 +342,8 @@ These are real, called out so FW-0061 has a known surface to address (or so a fo
 | Q3: Definition-time role declaration + runtime party binding | PROPOSAL | owner review |
 | Q4: intake-only for `coEqual`; WOS-required for asymmetric | PROPOSAL | owner review |
 | `multiParty` capability tier axis (§3.1) | PROPOSAL | owner review + ADR-0011 evolution |
-| No new `MultiPartyOrchestrator` port (§3.2) | PROPOSAL | owner review |
-| Extend `DraftStore` + `IdentityProvider` + `SubmitTransport` (§3.2) | PROPOSAL | owner review |
+| No new `MultiPartyOrchestrator` port (§3.2) | RESOLVED 2026-05-25 — superseded by FW-0115 spike: locked `MultiPartyCommit` 2PC explicit-state port shipped at `src/ports/multi-party-commit.ts` per ADR-0155 §8.10 (substrate concerns still extend the three existing ports; the commitment-protocol FSM moved into the new port) | n/a |
+| Extend `DraftStore` + `IdentityProvider` + `SubmitTransport` (§3.2) | RESOLVED 2026-05-25 — substrate concerns still extend per §3.2; FSM moved into new `MultiPartyCommit` port (above) | n/a |
 | XS-1 boundary at `intake-handoff` (§6.2) | PROPOSAL to stack-root | stack-root architecture review |
 | EXT-3 extends to carry `partyRole` (§6.3) | PROPOSAL to formspec | formspec spec-expert review |
 | EXT-28 for Definition `parties` block (§6.4) | PROPOSAL to formspec | formspec spec-expert review |

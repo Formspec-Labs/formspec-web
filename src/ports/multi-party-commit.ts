@@ -7,8 +7,19 @@
  * eventual-consistency alternative; see the verdict at
  * `../../thoughts/spikes/2026-05-25-multi-party-commit-spike-observation.md`
  * §3. The load-bearing asymmetry: this port's `PreparationWindow` + `tickClock`
- * compose natively with FW-0050 §7.2's per-party deadlines, while the
+ * compose natively with FW-0050 §3.3 + §5.1's per-party deadline policy
+ * (which FW-0050 §4.2 routes to WOS for the asymmetric tier), while the
  * losing shape forced consumers to layer a sibling timer port.
+ *
+ * SCOPE — `PreparationWindow` tier-overreach guard. `PreparationWindow` +
+ * `tickClock` are a **coEqual-tier intake-only live-session-abandonment
+ * primitive per ADR-0155 §8.1(a)**. They are NOT the FW-0050 §3.3
+ * `deadlinePolicy` resolver block, and they are NOT the FW-0050 §4.2
+ * WOS-owned asymmetric-tier per-party-deadline contract — §4.2 explicitly
+ * routes asymmetric-tier per-party deadlines to WOS. The FW-0061 asymmetric-
+ * tier build composes the port's window (covering per-prepare session
+ * timeout only) with WOS for the flow-level deadline; this port does not
+ * own flow-level deadline semantics.
  *
  * Per-party state is the explicit triple `Prepared | Committed | Aborted`,
  * lifted from a `Drafting` baseline. A coordinator (the adapter) drives
@@ -17,6 +28,13 @@
  * CASCADES — any other party whose visible-field set intersects the amended
  * fields drops from `Prepared` / `Committed` back to `Aborted('amendedAway')`
  * and must re-`prepare`.
+ *
+ * KNOWN GAP — post-sign retraction (ADR-0155 §8.1(d)) is not expressible at
+ * this port today: `abort()` disallows transition from `Committed`. Closing
+ * the gap is deferred to a FW-0061-era FSM widening (allow `Aborted` as a
+ * valid transition from `Committed`); until that widening lands the port
+ * DISALLOWS abort-from-Committed and post-sign retraction must compose
+ * through ADR-0066 §D-6 lifecycle acts at the artifact-contract layer.
  *
  * Primary consumer: FW-0061 (multi-party submission build). FW-0061 uses
  * the preallocated `multiParty` RuntimeFeatureKey at position 14 of
