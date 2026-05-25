@@ -58,6 +58,27 @@ export const NOT_SHARED_ORG_FORBIDDEN_COPY = 'This sender does not offer pre-fli
 export const NO_DOC_PARAM_COPY = 'No screener was requested.';
 export const NOT_FOUND_COPY = 'We could not find that pre-flight check.';
 export const ADAPTER_ERROR_COPY = 'We could not load the pre-flight check. Try again later.';
+/**
+ * Surfaced in the routed-determination view (NOT the load surface) — the
+ * user is looking AT the answers + reasoning they're about to lose. The
+ * deferred-capability blurb covers the broader "save/share/history not
+ * shipped" framing; this line names the immediate page-refresh
+ * consequence at the moment of risk. PLANNING.md FW-0046 (e) tracks the
+ * underlying gap; FW-0111 lifts it.
+ */
+export const ROUTED_REFRESH_LOSS_COPY =
+  'Reloading this page will lose your answers and start over.';
+/**
+ * Soft-error copy rendered ABOVE the upstream "Continue to the form" CTA
+ * when the re-evaluation pass for the reasoning panel throws (M1
+ * remediation). Both calls go through the same `wasmEvaluateScreenerDocument`
+ * so an upstream success → re-eval failure is rare; when it happens, the
+ * J-047 trust load ("show me my reasoning") is partially served by
+ * naming the failure honestly rather than silently delivering a
+ * degraded UX.
+ */
+export const RECOMPUTE_FAILED_COPY =
+  "We couldn't generate a summary of why this form was chosen. The form below is still the right one based on your answers.";
 
 const engineReady = initFormspecEngine();
 
@@ -73,6 +94,15 @@ type ViewState =
       document: ScreenerDocumentInput;
       determination: DeterminationRecord | null;
       routedTo: { target: string; label?: string; external: boolean } | null;
+      /**
+       * Set when `wasmEvaluateScreenerDocument` throws on the re-eval
+       * pass that captures the full `DeterminationRecord` for the
+       * reasoning panel (M1 remediation). Asymmetric silent degradation
+       * — upstream routing succeeded so we have a `routedTo` but no
+       * `determination`. Render the soft-error copy above the upstream
+       * CTA to keep J-047's "show me my reasoning" trust load honest.
+       */
+      recomputeFailed: boolean;
     };
 
 export function ScreenerRuntime({ composition, config: _config, route }: ScreenerRuntimeProps) {
@@ -133,6 +163,7 @@ export function ScreenerRuntime({ composition, config: _config, route }: Screene
           document,
           determination: null,
           routedTo: null,
+          recomputeFailed: false,
         });
       } catch (error) {
         if (cancelled) return;
@@ -208,6 +239,7 @@ interface ReadyView {
   document: ScreenerDocumentInput;
   determination: DeterminationRecord | null;
   routedTo: { target: string; label?: string; external: boolean } | null;
+  recomputeFailed: boolean;
 }
 
 function ReadyScreener({
@@ -217,7 +249,7 @@ function ReadyScreener({
   view: ReadyView;
   onUpdate: (next: ReadyView) => void;
 }) {
-  const { document, determination, routedTo } = view;
+  const { document, determination, routedTo, recomputeFailed } = view;
 
   if (determination && routedTo) {
     return (
@@ -231,6 +263,29 @@ function ReadyScreener({
             document,
             determination: null,
             routedTo: null,
+            recomputeFailed: false,
+          })
+        }
+      />
+    );
+  }
+
+  // M1 — asymmetric silent degradation guard. If `routedTo` is populated
+  // but `determination` is null, the re-eval pass threw while the
+  // upstream's initial eval (same WASM call) succeeded. Render an honest
+  // soft-error above the upstream CTA rather than dropping the user back
+  // into the question list with the answers they just submitted.
+  if (recomputeFailed && routedTo) {
+    return (
+      <RecomputeFailedDetermination
+        routedTo={routedTo}
+        onRestart={() =>
+          onUpdate({
+            kind: 'ready',
+            document,
+            determination: null,
+            routedTo: null,
+            recomputeFailed: false,
           })
         }
       />
@@ -254,11 +309,18 @@ function ReadyScreener({
           // the upstream hook discards everything except the matched
           // route. The "these questions, these answers, this reasoning"
           // panel below is J-047's load-bearing trust signal.
+          //
+          // Asymmetric degraded mode: if this re-eval throws while the
+          // upstream's identical call succeeded (rare — same WASM
+          // function), surface a soft-error rather than silently
+          // collapsing back to the question list (M1 remediation).
           let recomputed: DeterminationRecord | null = null;
+          let recomputeFailed = false;
           try {
             recomputed = wasmEvaluateScreenerDocument(document, answers);
           } catch (error) {
             console.error('ScreenerRuntime: wasmEvaluateScreenerDocument failed', error);
+            recomputeFailed = true;
           }
           onUpdate({
             kind: 'ready',
@@ -269,6 +331,7 @@ function ReadyScreener({
               label: route.label,
               external: routeType === 'external',
             },
+            recomputeFailed,
           });
         }}
       />
@@ -370,6 +433,61 @@ function ReasonedDetermination({
         </button>
       </div>
 
+      {/* H1 — refresh-loss disclosure surfaced in the routed view so the
+          user sees it AT the determination they're about to lose. The
+          generic deferred-capability blurb below covers the broader
+          save/share/history gap; this line is page-refresh-specific. */}
+      <p className="screener-surface__refresh-loss" data-testid="screener-refresh-loss">
+        {ROUTED_REFRESH_LOSS_COPY}
+      </p>
+      <p className="screener-surface__deferred">{DEFERRED_CAPABILITY_COPY}</p>
+    </section>
+  );
+}
+
+function RecomputeFailedDetermination({
+  routedTo,
+  onRestart,
+}: {
+  routedTo: { target: string; label?: string; external: boolean };
+  onRestart: () => void;
+}) {
+  const continueHref = formRouteFromTarget(routedTo.target, routedTo.external);
+  return (
+    <section
+      className="screener-surface screener-surface--routed"
+      aria-labelledby="screener-title"
+    >
+      <h1 id="screener-title">Here is the form for you</h1>
+
+      <div className="screener-determination">
+        <h2 className="screener-determination__name">
+          {routedTo.label ?? formNameFromTarget(routedTo.target)}
+        </h2>
+        <p
+          className="screener-determination__recompute-failed"
+          data-testid="screener-recompute-failed"
+        >
+          {RECOMPUTE_FAILED_COPY}
+        </p>
+      </div>
+
+      <div className="screener-determination__actions">
+        <a className="screener-cta" href={continueHref} data-testid="screener-cta">
+          Continue to the form
+        </a>
+        <button
+          type="button"
+          className="screener-restart"
+          onClick={onRestart}
+        >
+          Answer again
+        </button>
+      </div>
+
+      <p className="screener-surface__refresh-loss" data-testid="screener-refresh-loss">
+        {ROUTED_REFRESH_LOSS_COPY}
+      </p>
       <p className="screener-surface__deferred">{DEFERRED_CAPABILITY_COPY}</p>
     </section>
   );
@@ -449,6 +567,8 @@ function displayInputValue(
   if (item.dataType === 'money' && typeof value === 'object' && value !== null) {
     const money = value as { amount?: number; currency?: string };
     if (typeof money.amount === 'number') {
+      // USD fallback for demo only; production catalog adapters declare
+      // currency per-money-item (FW-0109).
       const currency = money.currency ?? item.currency ?? 'USD';
       try {
         return new Intl.NumberFormat(undefined, {

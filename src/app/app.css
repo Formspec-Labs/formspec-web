@@ -643,6 +643,16 @@ select {
   opacity: 0.75;
 }
 
+.screener-surface__refresh-loss {
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  opacity: 0.85;
+}
+
+.screener-determination__recompute-failed {
+  margin: 0.5rem 0 0;
+}
+
 .screener-determination {
   border: 1px solid currentColor;
   border-radius: 0.5rem;
