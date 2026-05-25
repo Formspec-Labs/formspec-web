@@ -1,0 +1,41 @@
+{
+  "name": "offline-submit-demo-stub-satisfies-optional",
+  "description": "FW-0044 slice 1: demo mode + form optional offlineSubmit + instance demo-stub -> enabled",
+  "mode": "demo",
+  "instance": {
+    "respondentPlace": "demo-stub",
+    "status": "demo-stub",
+    "documentPresentation": "unavailable",
+    "fileUpload": "demo-stub",
+    "crossIssuerHistory": "demo-stub",
+    "offlineSubmit": "demo-stub"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
+      "fileUpload": "allowed",
+      "crossIssuerHistory": "allowed",
+      "offlineSubmit": "allowed"
+    }
+  },
+  "form": {
+    "features": {
+      "offlineSubmit": "optional"
+    }
+  },
+  "expect": {
+    "kind": "profile",
+    "enabled": [
+      "offlineSubmit"
+    ],
+    "disabled": {
+      "respondentPlace": "not-requested",
+      "status": "not-requested",
+      "documentPresentation": "not-requested",
+      "fileUpload": "not-requested",
+      "crossIssuerHistory": "not-requested"
+    }
+  }
+}

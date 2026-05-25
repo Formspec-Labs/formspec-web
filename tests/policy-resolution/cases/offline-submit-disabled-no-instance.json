@@ -1,0 +1,40 @@
+{
+  "name": "offline-submit-disabled-no-instance",
+  "description": "FW-0044 slice 1: production + form optional offlineSubmit + instance unavailable -> optional-no-instance",
+  "mode": "production",
+  "instance": {
+    "respondentPlace": "unavailable",
+    "status": "unavailable",
+    "documentPresentation": "unavailable",
+    "fileUpload": "unavailable",
+    "crossIssuerHistory": "unavailable",
+    "offlineSubmit": "unavailable"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
+      "fileUpload": "allowed",
+      "crossIssuerHistory": "allowed",
+      "offlineSubmit": "allowed"
+    }
+  },
+  "form": {
+    "features": {
+      "offlineSubmit": "optional"
+    }
+  },
+  "expect": {
+    "kind": "profile",
+    "enabled": [],
+    "disabled": {
+      "respondentPlace": "not-requested",
+      "status": "not-requested",
+      "documentPresentation": "not-requested",
+      "fileUpload": "not-requested",
+      "crossIssuerHistory": "not-requested",
+      "offlineSubmit": "optional-no-instance"
+    }
+  }
+}

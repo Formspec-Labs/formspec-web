@@ -1,0 +1,40 @@
+{
+  "name": "offline-submit-disabled-org-forbidden",
+  "description": "FW-0044 slice 1: demo + form optional offlineSubmit + org forbidden -> org-forbidden",
+  "mode": "demo",
+  "instance": {
+    "respondentPlace": "demo-stub",
+    "status": "demo-stub",
+    "documentPresentation": "unavailable",
+    "fileUpload": "demo-stub",
+    "crossIssuerHistory": "demo-stub",
+    "offlineSubmit": "demo-stub"
+  },
+  "org": {
+    "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
+      "fileUpload": "allowed",
+      "crossIssuerHistory": "allowed",
+      "offlineSubmit": "forbidden"
+    }
+  },
+  "form": {
+    "features": {
+      "offlineSubmit": "optional"
+    }
+  },
+  "expect": {
+    "kind": "profile",
+    "enabled": [],
+    "disabled": {
+      "respondentPlace": "not-requested",
+      "status": "not-requested",
+      "documentPresentation": "not-requested",
+      "fileUpload": "not-requested",
+      "crossIssuerHistory": "not-requested",
+      "offlineSubmit": "org-forbidden"
+    }
+  }
+}

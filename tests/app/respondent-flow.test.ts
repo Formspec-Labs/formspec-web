@@ -1,7 +1,7 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createFormEngine } from '@formspec-org/engine';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
-import { sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
+import { sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
 import {
   assertIdentityPolicySatisfied,
   buildIntakeHandoff,
@@ -11,9 +11,13 @@ import {
   selectBootIdentityOption,
   signInOptionsForIdentityPolicy,
   subjectRefInvalidatedByIdentityChange,
+  submitOrQueue,
 } from '../../src/app/respondent-flow.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import type { IdentityClaim } from '../../src/ports/identity-provider.ts';
+import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
+import { stubSubmitTransport } from '../../src/adapters/stub/submit-transport.ts';
+import type { ResolvedRuntimeProfile } from '../../src/policy/index.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 
 beforeAll(async () => {
@@ -186,3 +190,92 @@ function claim(subjectRef: string): IdentityClaim {
     assuranceLevel: 'L1',
   };
 }
+
+function profile(enabled: ReadonlyArray<string> = []): ResolvedRuntimeProfile {
+  return {
+    mode: 'demo',
+    enabled: new Set(enabled as ReadonlyArray<'offlineSubmit'>),
+    disabled: new Map(),
+    limits: {},
+  } as ResolvedRuntimeProfile;
+}
+
+describe('submitOrQueue (FW-0044) — offline-aware submit routing', () => {
+  it('routes to the transport when online (even if offlineSubmit enabled)', async () => {
+    const transport = stubSubmitTransport();
+    const queue = stubOfflineSubmitQueue({ transport });
+    const transportSpy = vi.spyOn(transport, 'submit');
+    const enqueueSpy = vi.spyOn(queue, 'enqueue');
+    const outcome = await submitOrQueue({
+      navigatorOnLine: true,
+      runtimeProfile: profile(['offlineSubmit']),
+      submitTransport: transport,
+      offlineSubmitQueue: queue,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+    expect(outcome.kind).toBe('submitted');
+    expect(transportSpy).toHaveBeenCalledTimes(1);
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
+  it('routes to the queue when offline AND offlineSubmit enabled', async () => {
+    const transport = stubSubmitTransport();
+    const queue = stubOfflineSubmitQueue({ transport });
+    const transportSpy = vi.spyOn(transport, 'submit');
+    const enqueueSpy = vi.spyOn(queue, 'enqueue');
+    const key = generateIdempotencyKey();
+    const outcome = await submitOrQueue({
+      navigatorOnLine: false,
+      runtimeProfile: profile(['offlineSubmit']),
+      submitTransport: transport,
+      offlineSubmitQueue: queue,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: key,
+    });
+    expect(outcome.kind).toBe('queued');
+    if (outcome.kind === 'queued') {
+      expect(outcome.queuedSubmit.idempotencyKey).toBe(key);
+    }
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+    expect(transportSpy).not.toHaveBeenCalled();
+  });
+
+  it('routes to the transport when offline but offlineSubmit disabled (falls through to existing error path)', async () => {
+    const transport = stubSubmitTransport();
+    const queue = stubOfflineSubmitQueue({ transport });
+    const transportSpy = vi.spyOn(transport, 'submit');
+    const enqueueSpy = vi.spyOn(queue, 'enqueue');
+    const outcome = await submitOrQueue({
+      navigatorOnLine: false,
+      runtimeProfile: profile([]),
+      submitTransport: transport,
+      offlineSubmitQueue: queue,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+    expect(outcome.kind).toBe('submitted');
+    expect(transportSpy).toHaveBeenCalledTimes(1);
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
+  it('preserves the original idempotency key through the queue at replay', async () => {
+    const transport = stubSubmitTransport();
+    const queue = stubOfflineSubmitQueue({ transport });
+    const transportSpy = vi.spyOn(transport, 'submit');
+    const key = generateIdempotencyKey();
+    await submitOrQueue({
+      navigatorOnLine: false,
+      runtimeProfile: profile(['offlineSubmit']),
+      submitTransport: transport,
+      offlineSubmitQueue: queue,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: key,
+    });
+    const outcomes = await queue.replay();
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0].kind).toBe('sent');
+    expect(outcomes[0].idempotencyKey).toBe(key);
+    expect(transportSpy).toHaveBeenCalledWith(sampleIntakeHandoff, key);
+  });
+});

@@ -8,6 +8,15 @@ import type { IFormEngine } from '@formspec-org/engine';
 import type { IdentityPolicyConfig } from '../config/types.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { IdentityClaim, IdpOption } from '../ports/identity-provider.ts';
+import type {
+  OfflineSubmitQueue,
+  QueuedSubmit,
+} from '../ports/offline-submit-queue.ts';
+import type {
+  SubmitConfirmation,
+  SubmitTransport,
+} from '../ports/submit-transport.ts';
+import type { ResolvedRuntimeProfile } from '../policy/index.ts';
 import type { IdempotencyKey } from '../shared/idempotency-key.ts';
 
 export function hydrateEngineFromResponse(engine: IFormEngine, response?: FormResponse): void {
@@ -164,4 +173,51 @@ function fallbackHash(bytes: Uint8Array): string {
 
 export function buildConfirmationTrackingUri(caseUrn: string): string {
   return `/status?case=${encodeURIComponent(caseUrn)}`;
+}
+
+/**
+ * FW-0044 in-form submit-or-queue decision (pure helper).
+ *
+ * Routes submission through the offline queue when the device is offline
+ * AND the resolved runtime profile enables `offlineSubmit`; otherwise
+ * runs the synchronous transport. The synchronous path may still throw
+ * (network failure inline) — the caller surfaces that as the existing
+ * 'error' state. The queued path returns a `QueuedSubmit` and the caller
+ * surfaces the new 'queued' state.
+ *
+ * `navigatorOnLine` is the caller's snapshot of `navigator.onLine` — kept
+ * as a boolean parameter (not read inside the helper) so tests don't need
+ * to monkey-patch the global. `RespondentRuntime` reads
+ * `typeof navigator !== 'undefined' && navigator.onLine` and passes the
+ * boolean here.
+ */
+export type SubmitOrQueueOutcome =
+  | { readonly kind: 'submitted'; readonly confirmation: SubmitConfirmation }
+  | { readonly kind: 'queued'; readonly queuedSubmit: QueuedSubmit };
+
+export interface SubmitOrQueueInput {
+  readonly navigatorOnLine: boolean;
+  readonly runtimeProfile: ResolvedRuntimeProfile;
+  readonly submitTransport: SubmitTransport;
+  readonly offlineSubmitQueue: OfflineSubmitQueue;
+  readonly handoff: IntakeHandoff;
+  readonly idempotencyKey: string;
+}
+
+export async function submitOrQueue(
+  input: SubmitOrQueueInput,
+): Promise<SubmitOrQueueOutcome> {
+  const offlineEnabled = input.runtimeProfile.enabled.has('offlineSubmit');
+  if (!input.navigatorOnLine && offlineEnabled) {
+    const queuedSubmit = await input.offlineSubmitQueue.enqueue(
+      input.handoff,
+      input.idempotencyKey,
+    );
+    return { kind: 'queued', queuedSubmit };
+  }
+  const confirmation = await input.submitTransport.submit(
+    input.handoff,
+    input.idempotencyKey,
+  );
+  return { kind: 'submitted', confirmation };
 }

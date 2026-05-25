@@ -305,6 +305,15 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/offline-submit-queue/conformance.test.ts',
+    suiteText(
+      'OfflineSubmitQueue',
+      [['stub OfflineSubmitQueue conformance', 'stubOfflineSubmitQueue']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -328,6 +337,10 @@ function writeAdapterFiles(root, options) {
       'export function stubRespondentHistorySource() {}',
     ],
     [
+      'src/adapters/stub/offline-submit-queue.ts',
+      'export function stubOfflineSubmitQueue() {}',
+    ],
+    [
       'src/adapters/unavailable/respondent-place-source.ts',
       'export function unavailableRespondentPlaceSource() {}',
     ],
@@ -339,6 +352,10 @@ function writeAdapterFiles(root, options) {
     [
       'src/adapters/unavailable/respondent-history-source.ts',
       'export function unavailableRespondentHistorySource() {}',
+    ],
+    [
+      'src/adapters/unavailable/offline-submit-queue.ts',
+      'export function unavailableOfflineSubmitQueue() {}',
     ],
     [
       'src/adapters/http/definition-source.ts',
@@ -377,12 +394,14 @@ function defaultComposition() {
     'import { unavailableStatusReader } from "../adapters/unavailable/status-reader.ts";',
     'import { unavailableAttachmentStore } from "../adapters/unavailable/attachment-store.ts";',
     'import { unavailableRespondentHistorySource } from "../adapters/unavailable/respondent-history-source.ts";',
+    'import { unavailableOfflineSubmitQueue } from "../adapters/unavailable/offline-submit-queue.ts";',
     'export function createDefaultComposition() {',
     '  return {',
     '    respondentPlaceSource: unavailableRespondentPlaceSource(),',
     '    statusReader: unavailableStatusReader(),',
     '    attachmentStore: unavailableAttachmentStore(),',
     '    respondentHistorySource: unavailableRespondentHistorySource(),',
+    '    offlineSubmitQueue: unavailableOfflineSubmitQueue(),',
     '  };',
     '}',
   ].join('\n');
@@ -401,6 +420,7 @@ function publicIndex() {
     '  defineAttachmentStoreConformance,',
     '  defineFormRuntimePolicyExtractorConformance,',
     '  defineRespondentHistorySourceConformance,',
+    '  defineOfflineSubmitQueueConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }

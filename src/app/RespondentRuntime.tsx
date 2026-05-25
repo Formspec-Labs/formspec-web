@@ -70,6 +70,7 @@ import {
   selectBootIdentityOption,
   signInOptionsForIdentityPolicy,
   subjectRefInvalidatedByIdentityChange,
+  submitOrQueue,
 } from './respondent-flow.ts';
 
 interface RespondentRuntimeProps {
@@ -107,6 +108,11 @@ type SubmitState =
   | { status: 'submitting' }
   | { status: 'invalid'; message: string }
   | { status: 'error'; error: unknown }
+  // FW-0044: 'queued' is the offline-routing outcome. The submission was
+  // saved locally for replay when the device reconnects; the runtime
+  // listens for the window 'online' event and calls
+  // `offlineSubmitQueue.replay()` to drain.
+  | { status: 'queued'; idempotencyKey: string }
   | { status: 'confirmed'; confirmation: SubmitConfirmation };
 
 type RespondentPlaceState =
@@ -286,6 +292,47 @@ export function RespondentRuntime({
     // production network amplification per code-review HIGH-1.
   }, [composition, placeSubjectRef, isReady, runtimeProfile]);
 
+  // FW-0044: when the submission is queued, drain on the next `online`
+  // event. The queue's `replay()` reuses the original idempotency key
+  // (port contract), so the server's same-key contract suppresses any
+  // duplicates if the user manually retries. Hook lives BEFORE conditional
+  // returns to satisfy React's rules-of-hooks; effect body itself early-
+  // returns when not in the 'queued' state.
+  useEffect(() => {
+    if (submitState.status !== 'queued') return undefined;
+    if (typeof window === 'undefined') return undefined;
+    const queuedKey = submitState.idempotencyKey;
+    let cancelled = false;
+    const onlineListener = (): void => {
+      void (async () => {
+        try {
+          const outcomes = await composition.offlineSubmitQueue.replay();
+          if (cancelled) return;
+          const sent = outcomes.find(
+            (entry) => entry.kind === 'sent' && entry.idempotencyKey === queuedKey,
+          );
+          if (sent && sent.kind === 'sent') {
+            setSubmitState({ status: 'confirmed', confirmation: sent.confirmation });
+            return;
+          }
+          const failed = outcomes.find(
+            (entry) => entry.kind === 'failed' && entry.idempotencyKey === queuedKey,
+          );
+          if (failed && failed.kind === 'failed') {
+            setSubmitState({ status: 'error', error: failed.error });
+          }
+        } catch (error) {
+          if (!cancelled) setSubmitState({ status: 'error', error });
+        }
+      })();
+    };
+    window.addEventListener('online', onlineListener);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', onlineListener);
+    };
+  }, [submitState, composition.offlineSubmitQueue]);
+
   const handleSignIn = async (option: IdpOption): Promise<void> => {
     setRespondentState((current) =>
       current.status === 'auth-required'
@@ -404,12 +451,30 @@ export function RespondentRuntime({
         claim: respondentState.claim,
         idempotencyKey,
       });
-      const confirmation = await composition.submitTransport.submit(handoff, idempotencyKey);
-      setSubmitState({ status: 'confirmed', confirmation });
+      // FW-0044: route through the offline queue when the device is offline
+      // AND the resolved profile enables `offlineSubmit`. Online + disabled
+      // both fall through to the existing synchronous transport path.
+      const outcome = await submitOrQueue({
+        navigatorOnLine: readNavigatorOnLine(),
+        runtimeProfile: respondentState.runtimeProfile,
+        submitTransport: composition.submitTransport,
+        offlineSubmitQueue: composition.offlineSubmitQueue,
+        handoff,
+        idempotencyKey,
+      });
+      if (outcome.kind === 'submitted') {
+        setSubmitState({ status: 'confirmed', confirmation: outcome.confirmation });
+      } else {
+        setSubmitState({
+          status: 'queued',
+          idempotencyKey: outcome.queuedSubmit.idempotencyKey,
+        });
+      }
     } catch (error) {
       setSubmitState({ status: 'error', error });
     }
   };
+
 
   return (
     <AppErrorBoundary>
@@ -881,7 +946,35 @@ function SubmitNotice({ state }: { state: SubmitState }) {
   if (state.status === 'error') {
     return <FriendlyError error={state.error} title="We could not submit this form." />;
   }
+  if (state.status === 'queued') {
+    return <QueuedForLaterPanel />;
+  }
   return null;
+}
+
+/** FW-0044 fixture-pinned copy for the "saved for later" panel. */
+export const QUEUED_FOR_LATER_TITLE = 'Saved for later';
+export const QUEUED_FOR_LATER_BODY = "We'll send it when you reconnect.";
+export const OFFLINE_DEFERRED_CAPABILITY_COPY =
+  'Offline submit support is experimental. Production deployments do not currently keep your draft across browser restarts or across other devices.';
+
+function QueuedForLaterPanel() {
+  return (
+    <section className="submit-notice submit-notice--queued" role="status" aria-live="polite">
+      <h2>{QUEUED_FOR_LATER_TITLE}</h2>
+      <p>{QUEUED_FOR_LATER_BODY}</p>
+      <p className="submit-notice__detail">{OFFLINE_DEFERRED_CAPABILITY_COPY}</p>
+    </section>
+  );
+}
+
+function readNavigatorOnLine(): boolean {
+  // FW-0044: `navigator.onLine` is the slice-1 detection. Documented
+  // imperfection: modern browsers cache stale online status, so the
+  // synchronous-submit path's inline fetch failure is still the safety
+  // net. FW-0081 service worker addresses the discrepancy more cleanly.
+  if (typeof navigator === 'undefined') return true;
+  return navigator.onLine;
 }
 
 export function ConfirmationPanel({ confirmation }: { confirmation: SubmitConfirmation }) {
