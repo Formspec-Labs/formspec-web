@@ -308,7 +308,7 @@ Single filer per submission for slice 1. Multi-party composition extends additiv
 8. Filer-with-distinct-IdP-from-signer.
 9. Negative: `filerNotSigner: forbidden` form-policy + `metadata.filer` present (verifier surfaces form-policy violation).
 10. Negative: `metadata.filer.filerId == AuthoredSignature.signerId` (filer-equals-signer; structural-coherence warning; runtime SHOULD elide the carrier).
-**Cross-stack:** **NO new XS-N cross-stack ADR required.** Trellis is byte-neutral (carrier rides as response metadata through the standard chain). WOS has no filer-actor extension proposed (per FW-0037 §1.2 non-goal). PKAF is distinct scope (`AILineage` is assertion-side; filer-side has no PKAF analog). Smallest cross-stack footprint of any post-MVP design row to date.
+**Cross-stack:** **NO new XS-N cross-stack ADR required FOR SLICE 1.** Trellis is byte-neutral (carrier rides as response metadata through the standard chain). WOS has no `human-filer` actor extension in slice 1 (per FW-0037 §1.2 non-goal + §6.4 slice-1 honesty disclaimer per code-review F2 — per-filer-actor WOS governance for CPA-board / HIPAA-PHI / court-paralegal deployments is a future WOS-side row + sibling XS-N). PKAF is distinct scope (`AILineage` is assertion-side; filer-side has no PKAF analog). **Smallest slice-1 cross-stack footprint** of any post-MVP design row to date — slice-1-honest, not architecture-final.
 **Fixture status:** none. Land with the 10-scenario fixture matrix above in `formspec/tests/fixtures/response/metadata-filer/`.
 **Status:** not yet filed. Proposed 2026-05-24 by [FW-0037 design](2026-05-24-fw-0037-filer-not-signer-design.md).
 

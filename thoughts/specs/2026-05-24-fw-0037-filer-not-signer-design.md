@@ -5,11 +5,11 @@
 **Row:** [FW-0037 in `PLANNING.md:505`](../../PLANNING.md) (design).
 **Journey:** [J-012 in `JOURNEYS.md:343`](../../JOURNEYS.md) — the **human-capacity slice** ("filer ≠ signer ≠ subject"; non-AI variants — paralegal-for-pro-se-client, clinic-staff-for-patient, family-helper-for-elder, tax-preparer-for-taxpayer). AI variant is [FW-0058](2026-05-24-fw-0058-ai-agent-filer-chain-design.md).
 **Anti-patterns:** [AP-014 (coercion) in `JOURNEYS.md:131`](../../JOURNEYS.md), [AP-023 (verified ≠ true) in `JOURNEYS.md:185`](../../JOURNEYS.md).
-**Feature key:** `reviewerPreparer` — already enumerated in [web ADR-0011 Feature Ownership Table line 150](../adr/0011-runtime-feature-resolution-and-policy-gates.md); FW-0037 fills in the resolved-profile sub-block for the **preparer** side (FW-0042 fills in the **reviewer** side; the key is shared).
+**Feature key:** `preparerFiling` — proposed as a split from the original `reviewerPreparer` umbrella enumerated at [web ADR-0011 Feature Ownership Table line 150](../adr/0011-runtime-feature-resolution-and-policy-gates.md). Per code-review HIGH F6, the umbrella row decomposes into two sibling keys: `preparerFiling` (FW-0037) + `trustedReviewer` (FW-0042 future). One key per feature preserves the existing ADR-0011 flat-key precedent and avoids pre-committing FW-0042's architecture before its design starts (see §4.1).
 **Source brief:** [`thoughts/sketches/2026-05-24-fw-0037-filer-not-signer-research-brief.md`](../sketches/2026-05-24-fw-0037-filer-not-signer-research-brief.md). Upstream-primitive inventory, threat scenarios, FW interactions, and external prior art live there; this doc decides over them.
 **Substrate sources (load-bearing):**
 - [EXT-3 in `thoughts/specs/2026-05-22-upstream-extension-queue.md:46`](2026-05-22-upstream-extension-queue.md) — `AuthoredSignature.capacity` enum (signer-side; covers POA / guardian / executor / etc.). FW-0037 sits ABOVE this — the respondent's capacity stays `self`; the filer is a sibling carrier.
-- [web ADR-0011 line 150](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — `reviewerPreparer` capability key (shared with FW-0042).
+- [web ADR-0011 line 150](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — `reviewerPreparer` umbrella key (proposed to split into `preparerFiling` + `trustedReviewer` per code-review F6; see §4.1).
 - [web ADR-0007](../adr/0007-identity-provider-port.md) — IdentityProvider port (filer-identity binding rides the same port as signer-identity).
 - [FW-0058 design 2026-05-24](2026-05-24-fw-0058-ai-agent-filer-chain-design.md) — AI-capacity sibling; vocabulary distinction is load-bearing (see §6.6).
 
@@ -28,9 +28,9 @@ Decide the formspec-web shape for accepting submissions where a **human filer** 
 - The form-policy can FORBID filer-not-signer on the high-coercion-risk template set per FW-0048 §6.4.
 - The verifier renders "filed by [filer-name] · signed by [signer-name]" as ambient capacity-discipline copy per AP-023.
 
-**The substrate already mostly exists**: EXT-3 covers the signer-side `capacity` (FW-0037 doesn't touch it — respondent capacity stays `self`); web ADR-0011 enumerates `reviewerPreparer`; the IdentityProvider port (web ADR-0007) carries the filer's identity binding without extension. The new substrate is small: a `filerRef` carrier on the submission audit trail and a `SignerHandoff` port shape.
+**The substrate already mostly exists**: EXT-3 covers the signer-side `capacity` (FW-0037 doesn't touch it — respondent capacity stays `self`); web ADR-0011 enumerates `reviewerPreparer` (proposed to split into `preparerFiling` + `trustedReviewer` per code-review F6 — see §4.1); the IdentityProvider port (web ADR-0007) carries the filer's identity binding without extension. The new substrate is small: a `filerRef` carrier on the submission audit trail and a `SignerHandoff` port shape.
 
-FW-0037 deliverables: framing decisions (Q1–Q4); the `reviewerPreparer` resolved-profile sub-block (`preparerFlow` sub-shape); the `filerRef` carrier shape on the submission; the runtime UX contract for filer-session + handoff + signer-ceremony; the SignerHandoff port shape and its adopter contracts; the verifier rendering contract; the failure semantics; the composition seams with FW-0042 / FW-0048 / FW-0049 / FW-0050 / FW-0034 / FW-0030 / FW-0051 / FW-0058; the cross-stack dependency chain (lightest of any post-MVP design row to date: no new XS-N ADR required; one EXT for `filerRef` carrier).
+FW-0037 deliverables: framing decisions (Q1–Q4); the `preparerFiling` capability key + resolved-profile shape (flat, per split-keys F6 — §4.1); the `filerRef` carrier shape on the submission; the runtime UX contract for filer-session + handoff + signer-ceremony; the SignerHandoff port shape and its adopter contracts; the verifier rendering contract; the failure semantics; the composition seams with FW-0042 / FW-0048 / FW-0049 / FW-0050 / FW-0034 / FW-0030 / FW-0051 / FW-0058; the cross-stack dependency chain (smallest slice-1 footprint of any post-MVP design row to date per code-review F2 — see §6.4 honesty disclaimer; one EXT for `filerRef` carrier; small ADR-0011 amendment splitting the `reviewerPreparer` umbrella row).
 
 This is a **design row**. The deliverable is a doc plus follow-on EXT and spec items, not code. The build row is a future follow-on (not yet filed; expected to materialize when EXT for `filerRef` ratifies and the first adopter deployment needs a preparer flow).
 
@@ -43,7 +43,7 @@ This is a **design row**. The deliverable is a doc plus follow-on EXT and spec i
 - **Solving coerced-signing in real-time.** FW-0048 owns the duress affordance substrate; FW-0037 composes with it (§6.2). FW-0037 itself cannot detect coercion; the respondent is the only party who knows.
 - **WOS substrate for filer-actor governance.** WOS has no `human-filer` actor extension today and FW-0037 does not propose one. If a deployment needs per-filer-actor governance (e.g., per-paralegal capability scoping under CPA Board audit rules), that's a future WOS-side row.
 - **AI-agent filer case.** That's FW-0058. Vocabulary firewall is load-bearing — see §6.6.
-- **Replacing FW-0042 (reviewer-only).** FW-0042 is read+comment; FW-0037 is read+author+handoff. The two compose under the shared `reviewerPreparer` capability key but are architecturally distinct sub-flows. See §6.1.
+- **Replacing FW-0042 (reviewer-only).** FW-0042 is read+comment; FW-0037 is read+author+handoff. The two are architecturally distinct features — split into sibling capability keys `preparerFiling` (FW-0037) and `trustedReviewer` (FW-0042 future) per code-review F6, not a shared umbrella key. See §4.1 + §8.1.
 - **POA / guardian / executor / licensed-professional signing cases.** Those are already EXT-3 `capacity: poa | guardian | executor | licensed-professional` — the SIGNER signs in that capacity; there is no separate "filer." FW-0037 is the third leg where the respondent has capacity to sign and a separate human filled the form for them.
 - **Specifying the per-act audit-trail event taxonomy.** The submission-level `filerRef` carrier is the load-bearing primitive; ledger event types (e.g., `filer.session-opened` / `filer.handoff-completed`) are deferred to build per Q2.
 
@@ -229,20 +229,36 @@ interface SignerHandoff {
 
 ## 4. Capability key and port shape
 
-### 4.1 Capability key under web ADR-0011 — sub-block on existing `reviewerPreparer`
+### 4.1 Capability key under web ADR-0011 — split keys `preparerFiling` + `trustedReviewer` (code-review F6)
 
-**PROPOSAL.** No new capability key. `reviewerPreparer` is already enumerated at [ADR-0011 Feature Ownership Table line 150](../adr/0011-runtime-feature-resolution-and-policy-gates.md). FW-0037 fills in the `preparerFlow` sub-block of the resolved-profile shape for `reviewerPreparer`; FW-0042 fills in the `reviewerFlow` sub-block.
+**PROPOSAL (revised per code-review HIGH F6).** Split the umbrella `reviewerPreparer` row at ADR-0011 line 150 into two append-only sibling keys, one per feature:
 
-| Layer | What ADR-0011 names for `reviewerPreparer` (FW-0037 sub-block) |
+- **`preparerFiling`** — owned by FW-0037; covers human filer fills + handoff to human respondent who signs.
+- **`trustedReviewer`** — owned by FW-0042 (future design); covers reviewer who reads + comments but does NOT author or sign.
+
+**Why split (the precedent that the original shared-key sub-block decomposition broke).** Every other `RUNTIME_FEATURE_KEYS` entry is one key per feature (`payment`, `embed`, `safeAddress`, `multiParty`, `fileUpload`, etc.). The shared-key sub-block shape (`reviewerPreparer.preparerFlow.posture` + `reviewerPreparer.reviewerFlow.posture`) is NEW shape — no other entry uses a sub-block decomposition. **The append-only key tuple is the precedent**; a shared key with named sub-blocks pre-commits FW-0042's architecture before its design has started. Splitting now preserves the one-key-per-feature discipline and leaves FW-0042 full design freedom — FW-0042 may decide whether `trustedReviewer` is a flat three-tier posture or a richer shape, without inheriting FW-0037's sub-block convention.
+
+**ADR-0011 amendment proposal text (small):**
+
+> Replace ADR-0011 Feature Ownership Table line 150 entry `reviewerPreparer` with two sibling rows:
+>
+> | Capability | Evidence |
+> |---|---|
+> | `preparerFiling` | Filer-session UI + `SignerHandoff` adapter + filer-identity binding + `metadata.filer` carrier + per-section review affordance in the reference renderer (FW-0037 scope). |
+> | `trustedReviewer` | Reviewer-session sharing + comment substrate + reviewer-identity binding (FW-0042 scope). |
+>
+> The umbrella label "Reviewer/preparer sharing, role, and permission model" decomposes into the two sibling capabilities. **No shared sub-block convention is introduced** — each key carries its own resolved-runtime-profile entry per the existing flat ADR-0011 pattern. FW-0042 is free to design its `trustedReviewer` shape without inheriting any FW-0037-imposed sub-block ordering.
+
+**Append-only key ordering.** Per [`src/policy/feature-keys.ts`](../../src/policy/feature-keys.ts), `RUNTIME_FEATURE_KEYS` is append-only. **FW-0037 adds one new key — `preparerFiling`** — when the tuple at `feature-keys.ts:68-76` is extended at build time. **FW-0042's `trustedReviewer` lands independently** when FW-0042's design ratifies; the two keys do not share build-time coordination beyond the ADR-0011 amendment text above. The original ADR-0011 line 150 `reviewerPreparer` umbrella is **deprecated by this proposal**; no production code consumes it yet (the SHIPPED tuple is what `feature-keys.ts:68-76` exposes today, and `reviewerPreparer` is not in it).
+
+| Layer | What ADR-0011 will name for `preparerFiling` (FW-0037 only) |
 |---|---|
 | Instance capability | Adapter-backed: (a) `SignerHandoff` adapter binding (per §3.3); (b) IdentityProvider adapter for filer-session authentication (same port as signer per web ADR-0007); (c) audit-trail render adapter for the "filed by" + "signed by" capacity-discipline copy (§5). Instance declares which handoff adapters are wired + which IdPs support filer-session entry. |
 | Org policy | (a) Allowed filer roles (subset of seed enumeration + deployment extensions per Q2); (b) Allowed handoff methods per template class; (c) Filer-assurance-floor configuration per template class; (d) Org-level forbidden-list for filer-not-signer (org may forbid the entire flow regardless of form-policy). |
 | Form policy | Three-tier per §3.1: `forbidden` (form REJECTS filer-not-signer), `allowed` (default opt-in), `required` (form REQUIRES filer-not-signer). High-coercion templates per FW-0048 §6.4 default to `forbidden` per §6.2 composition. Per-field `respondentOnly: true` per §3.4. Per-form `allowedHandoffMethods: string[]` per §3.3. Per-form `filerAssuranceFloor?: AssuranceLevel` per Q5 §3.4 (optional; defaults to signer's assurance floor). |
-| Resolved runtime profile | `reviewerPreparer.preparerFlow.posture` + `allowedRoles[]` + `allowedHandoffMethods[]` + `filerAssuranceFloor` + `respondentOnlyFieldPointers[]` + (when posture != "forbidden") `signerHandoffBindingRef`. Form-load throws `UnsupportedRequiredFeatureError` per ADR-0011 if the form requires `filerNotSigner` but the instance lacks a `SignerHandoff` adapter; throws `FeaturePolicyConflictError` if the form FORBIDS and the org REQUIRES. |
+| Resolved runtime profile | `preparerFiling.posture` + `allowedRoles[]` + `allowedHandoffMethods[]` + `filerAssuranceFloor` + `respondentOnlyFieldPointers[]` + (when posture != "forbidden") `signerHandoffBindingRef`. Flat, no sub-block. Form-load throws `UnsupportedRequiredFeatureError` per ADR-0011 if the form requires `preparerFiling` but the instance lacks a `SignerHandoff` adapter; throws `FeaturePolicyConflictError` if the form FORBIDS and the org REQUIRES. |
 
-**Append-only key ordering.** Per [`src/policy/feature-keys.ts`](../../src/policy/feature-keys.ts), `RUNTIME_FEATURE_KEYS` is append-only. **FW-0037 adds no new key — `reviewerPreparer` is shared with FW-0042 and pre-enumerated in ADR-0011 line 150.** When the `reviewerPreparer` key is added to the tuple at build time (it's not in the current tuple shown at `feature-keys.ts:68-76`; that tuple is the SHIPPED set, not the enumerated set), both FW-0037 and FW-0042 land their sub-blocks simultaneously. No coordination cost between the two rows beyond shared-key naming.
-
-**Locale-conditional set.** `reviewerPreparer` is **NOT** locale-conditional — the per-form policy doesn't change with locale. No `LOCALE_CONDITIONAL_FEATURE_KEYS` membership.
+**Locale-conditional set.** `preparerFiling` is **NOT** locale-conditional — the per-form policy doesn't change with locale. No `LOCALE_CONDITIONAL_FEATURE_KEYS` membership. (`trustedReviewer` membership is FW-0042's call.)
 
 ### 4.2 Port shape — adopter contracts now; reference adapters at build
 
@@ -262,21 +278,22 @@ Per [web ADR-0009 §"Not in the constitutional inventory" (b)](../adr/0009-hexag
 
 ### 4.3 Resolution contract addition
 
-The `ResolvedRuntimeProfile` consumed by the React shell per [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) gains a `reviewerPreparer.preparerFlow` block:
+The `ResolvedRuntimeProfile` consumed by the React shell per [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) gains a flat `preparerFiling` block (per code-review F6 split-keys — no sub-block; FW-0042's `trustedReviewer` lands as an independent sibling key):
 
 ```text
-reviewerPreparer?: {
-  preparerFlow?: {
-    posture: "forbidden" | "allowed" | "required"
-    allowedRoles: ReadonlySet<string>              // org-policy filter on filer roles
-    allowedHandoffMethods: ReadonlySet<string>     // org × form intersection
-    filerAssuranceFloor?: AssuranceLevel           // per-form; defaults to signer's
-    respondentOnlyFieldPointers: ReadonlyArray<string>  // RFC 6901 pointers; per-form
-    signerHandoffBindingRef?: string               // URN of the wired SignerHandoff adapter (REQUIRED when posture != "forbidden")
-  }
-  // FW-0042 (reviewer-only) lands here as `reviewerFlow?: {...}`; the two sub-blocks are independent.
+preparerFiling?: {
+  posture: "forbidden" | "allowed" | "required"
+  allowedRoles: ReadonlySet<string>              // org-policy filter on filer roles
+  allowedHandoffMethods: ReadonlySet<string>     // org × form intersection
+  filerAssuranceFloor?: AssuranceLevel           // per-form; defaults to signer's
+  respondentOnlyFieldPointers: ReadonlyArray<string>  // RFC 6901 pointers; per-form
+  signerHandoffBindingRef?: string               // URN of the wired SignerHandoff adapter (REQUIRED when posture != "forbidden")
 }
+// FW-0042 (reviewer-only) lands as a sibling KEY `trustedReviewer?: {...}` — not a sub-block of preparerFiling.
+// One key per feature; FW-0042 owns its own resolved-profile shape independent of FW-0037.
 ```
+
+**Invariant (per code-review LOW F9 → `preparerFiling` validation gap).** Resolved `allowedRoles` MUST be the intersection of form-policy `allowedRoles`, org-policy `allowedRoles`, and instance-capability `allowedRoles` (a deployment-extensible set). The resolver computes this intersection at form-load; runtime asserts the result is non-empty before activating the filer flow (an empty intersection is a `FeaturePolicyConflictError` per §7.1 — no filer role is allowed across all three layers, so the `posture: "allowed" | "required"` flow has nothing it can offer). The intersection invariant also applies to `allowedHandoffMethods` symmetrically.
 
 The block is the resolver's read-only output. The shell consults `posture` at form-load (renders the opt-in entry-point unless `forbidden`); `allowedRoles` (constrains the role-picker UX); `allowedHandoffMethods` (constrains the handoff method offered at filer-session end); `filerAssuranceFloor` (drives the filer-session IdP assurance gate); `respondentOnlyFieldPointers` (drives the per-field masking in filer-session); `signerHandoffBindingRef` (the substrate the form-load surface trusts for handoff orchestration).
 
@@ -304,13 +321,14 @@ FW-0037 design (this doc)
     ↓
 new EXT-N (formspec) — metadata.filer carrier on Response schema
     ↓
-ADR-0011 amendment (small) — clarify reviewerPreparer key has two sub-flows (preparerFlow + reviewerFlow);
-                              FW-0037 owns preparerFlow, FW-0042 owns reviewerFlow
+ADR-0011 amendment (small) — split reviewerPreparer umbrella into sibling keys
+                              preparerFiling (FW-0037) + trustedReviewer (FW-0042 future)
+                              per code-review F6 (one-key-per-feature precedent preserved)
     ↓
 FW-0037 build (formspec-web) — when an adopter deployment needs the flow
 ```
 
-**This is the lightest cross-stack chain of any post-MVP design row to date.** No new XS-N cross-stack ADR (the substrate is byte-neutral for Trellis; WOS has no filer-actor extension needed; PKAF is distinct scope). Lighter than XS-5 / XS-6 (which were primarily confirmation ADRs); FW-0037 needs no confirmation ADR because the substrate ownership is unambiguous: Formspec owns `metadata.filer` (new); ADR-0011 owns the `reviewerPreparer.preparerFlow` resolved-profile sub-block (small clarification).
+**This is the lightest slice-1 cross-stack chain of any post-MVP design row to date (per code-review F2 — slice-1 honesty, not architecture-final; see §6.4 disclaimer for the WOS-side future).** No new XS-N cross-stack ADR for slice 1 (the substrate is byte-neutral for Trellis; WOS has no `human-filer` actor extension in slice 1 — see §6.4; PKAF is distinct scope). Lighter than XS-5 / XS-6 (which were primarily confirmation ADRs); FW-0037 slice 1 needs no confirmation ADR because the slice-1 substrate ownership is unambiguous: Formspec owns `metadata.filer` (new); ADR-0011 owns the `preparerFiling` capability key (small amendment splitting the `reviewerPreparer` umbrella per code-review F6 — see §4.1).
 
 ### 6.2 EXT-N (new) — `metadata.filer` carrier on Response schema
 
@@ -349,7 +367,7 @@ FW-0037 is structurally a Formspec-only design — Trellis is byte-neutral (`met
 **Standalone ratifiable today (no upstream dependency):**
 
 - The Q1–Q4 framing decisions, scoped to formspec-web's consumer perspective.
-- The `reviewerPreparer.preparerFlow` resolved-profile sub-block shape per §4.3.
+- The `preparerFiling` capability key + resolved-profile shape (flat) per §4.3 — split from the `reviewerPreparer` umbrella per code-review F6.
 - The `SignerHandoff` port shape per §3.3.
 - The verifier rendering contract per §5.
 - The runtime invariants binding form-load failure semantics to ADR-0011 typed errors (§7.1).
@@ -359,8 +377,8 @@ FW-0037 is structurally a Formspec-only design — Trellis is byte-neutral (`met
 **Waits on upstream:**
 
 - EXT-N ratification for the `metadata.filer` carrier shape.
-- ADR-0011 amendment naming the `reviewerPreparer.preparerFlow` + `reviewerPreparer.reviewerFlow` sub-block convention. Small edit; expected to land with this design's owner-ratification.
-- Eventual coordination with FW-0042 design row (the reviewer-side sub-block on the same `reviewerPreparer` key); FW-0042 is currently `open` status, awaiting design work.
+- ADR-0011 amendment splitting the `reviewerPreparer` umbrella row at line 150 into sibling keys `preparerFiling` (FW-0037 scope) + `trustedReviewer` (FW-0042 future scope), per code-review F6 — see §4.1 for the exact amendment proposal text. Small edit; expected to land with this design's owner-ratification.
+- FW-0042 is no longer coupled at the capability-key shape (independent sibling key `trustedReviewer` per F6); FW-0042 is currently `open` status, awaiting its own design work which can proceed in parallel.
 
 ## 7. Failure semantics
 
@@ -405,18 +423,20 @@ FW-0037 is structurally a Formspec-only design — Trellis is byte-neutral (`met
 
 ## 8. Hard binding to other FW rows
 
-### 8.1 FW-0042 — Share-draft-with-trusted-reviewer (shared `reviewerPreparer` key; distinct flow)
+### 8.1 FW-0042 — Share-draft-with-trusted-reviewer (split sibling key `trustedReviewer` per code-review F6)
 
 FW-0042 is the **reviewer-only** sibling. The reviewer can READ + COMMENT but cannot AUTHOR or SIGN. FW-0037 is the **preparer / filer** flow — the filer can READ + AUTHOR + HANDOFF, but cannot SIGN.
 
-**Shared capability key, distinct sub-blocks.** Both rows compose under `reviewerPreparer`:
+**Split capability keys (revised per code-review HIGH F6).** Per §4.1, the original ADR-0011 `reviewerPreparer` umbrella row at line 150 decomposes into two **sibling keys**, one per feature — NOT a shared key with named sub-blocks:
 
-- `reviewerPreparer.preparerFlow.posture` (FW-0037) — `forbidden | allowed | required`.
-- `reviewerPreparer.reviewerFlow.posture` (FW-0042) — owned by FW-0042 design (currently `open`).
+- **`preparerFiling`** (FW-0037) — three-tier `posture: forbidden | allowed | required` per §3.1; resolved-profile shape per §4.3.
+- **`trustedReviewer`** (FW-0042 future design) — shape owned entirely by FW-0042; not pre-committed by this row.
 
-**Composition:** the same submission MAY have BOTH a filer (paralegal fills) AND a reviewer (supervising attorney reviews) before the respondent signs. The two roles are independent; the resolved-profile sub-blocks compose without interference.
+**Why split (not shared sub-blocks).** Every other `RUNTIME_FEATURE_KEYS` entry is one key per feature. A shared key with named sub-blocks (`reviewerPreparer.preparerFlow` + `reviewerPreparer.reviewerFlow`) would be NEW shape with no precedent — and it would pre-commit FW-0042's architecture (specifically the sub-block convention and the sibling-naming) before FW-0042's design starts. The split preserves the one-key-per-feature discipline; FW-0042 gets full design freedom.
 
-**Cross-row touch.** FW-0042 row body updated to note the shared-key convention. FW-0042's future design will own the `reviewerFlow` sub-block + the reviewer-side audit-trail carrier (`metadata.reviewers[]` proposed analogously); FW-0037 does NOT pre-empt FW-0042's design.
+**Composition:** the same submission MAY have BOTH a filer (paralegal fills) AND a reviewer (supervising attorney reviews) before the respondent signs. The two roles are independent at the FEATURE layer — `preparerFiling` and `trustedReviewer` are independent resolved-profile keys; resolution is independent; the two carriers (`metadata.filer` + `metadata.reviewers[]` if FW-0042 proposes one) coexist without interference.
+
+**Cross-row touch.** FW-0042 row body updated to drop the shared-key framing — `trustedReviewer` is FW-0042's own sibling capability key, NOT a sub-block of FW-0037's key. FW-0042's future design owns the `trustedReviewer` shape + reviewer-side carrier; FW-0037 does NOT pre-empt FW-0042's design at the capability-key layer or any sub-block convention.
 
 ### 8.2 FW-0048 / FW-0059 — Coercion-aware signing (load-bearing composition for AP-014)
 
@@ -480,13 +500,23 @@ The filer's identity binding rides the same IdentityProvider port per [web ADR-0
 | Who signs the form | A human respondent (the signer; capacity `self`) | The AI agent (non-human capacity: `ai-agent`) | The human respondent (same as filler; capacity `self`) |
 | Capacity on AuthoredSignature | `self` (unchanged from non-filer flow) | `ai-agent` + `agentChain` block (EXT-3) | `self` (no AI on the signature) |
 | Submission carrier | `metadata.filer` (FW-0037 — this design) | `agentChain` on `AuthoredSignature` (FW-0058) | `metadata.provenance[path].attestedBy: respondent, sourceRef: assistant-suggested` (EXT-2) |
-| Form policy key | `reviewerPreparer.preparerFlow.posture` | `aiAgentFiler` | `bringYourOwnAssistant` |
+| Form policy key | `preparerFiling.posture` (split from `reviewerPreparer` umbrella per code-review F6 — see §4.1) | `aiAgentFiler` | `bringYourOwnAssistant` |
 | Substrate | New `metadata.filer` carrier (EXT-N); no signer-side change | WOS `ActorKind::Agent` + `AgentInvoker` port + `capabilityInvocation` provenance + EXT-3 `agentChain` | Existing Assist Provider spec; per-field EXT-2 provenance |
 | Trust model | Filer is a named party with separate identity; signer attests | AI is registered actor in WOS workflow; deontic constraints from WOS AI Integration apply | Assistant is untrusted by form; respondent attests per-field |
 | Threat focus | AP-014 coercion (filer steers signer) | Prompt-injection (compromised AI) + capacity-spoofing (forged human credentials) | Per-act respondent rejects suggestion |
 | GDPR Article 22 | Not applicable — human signer is the decision-maker | Implicit via `agentChain` presence on receipt | Not applicable — human respondent decides per-field |
 
-**The three rows can compose.** A human filer (FW-0037) may use a BYO AI assistant (FW-0051) during their fill session — the filer is the assistant's "user." Per §1.2 non-goal, deferred for slice 1; vocabulary stays clean. FW-0058 + FW-0037 do NOT compose (an AI agent IS the signer in FW-0058; there is no human-filer + AI-signer shape because the AI is the signer not the helper).
+**Compositions of the above (code-review F1 — three-leg table reads as exhaustive on its own; the fourth shape sits at the composition layer).**
+
+| Composition | Realistic scenario | Where it lives |
+|---|---|---|
+| FW-0037 ⊕ FW-0051 | CPA-as-filer uses AI tax-prep software that proposes values, CPA confirms per-act, then hands off to taxpayer-as-signer who reviews and signs. | Filer's session activates FW-0051 BYO-assistant (the FILER is the assistant's per-act confirmation user, per §8.8); signer's session capacity stays `self`; EXT-2 per-field provenance records assistant-suggested values; `metadata.filer` records the human CPA. **The "fourth shape" the three-leg table reads as missing — it is a composition of two legs, not a separate leg.** |
+| FW-0037 ⊕ FW-0058 | (structurally absent by construction) | The filer in FW-0037 is human-by-definition; an AI-agent filer is the FW-0058 case (capacity `ai-agent`). There is no composition where the filer is BOTH human and AI in the same session, because each leg's "who fills" axis is mutually exclusive with the other's. The FW-0058 + FW-0037 row in §8.7's table reflects this correctly — **the rows do NOT compose at the filler axis**, even though they each compose separately with FW-0051. |
+| FW-0058 ⊕ FW-0051 | AI agent (FW-0058) consults an external assistant (FW-0051) during its own fill, then signs as `ai-agent`. | Per FW-0058 §7.7 — deferred for slice 1 (FW-0051 §7.6). Vocabulary holds (the AGENT is the assistant's per-act confirmation user in this composition). |
+
+**Why the table needs the composition sub-table:** the three legs are mutually-exclusive *at the filler axis* (human filer / AI filer / no separate filer); the *assistant axis* is orthogonal — FW-0051 composes with either filler axis. The original three-row table without this sub-table is honest about the three legs but reads as exhaustive of the FW-0037/FW-0051/FW-0058 universe, which is wrong: the universe is `(filler axis) × (assistant axis)` and the canonical CPA-with-AI-tax-software case is FW-0037 ⊕ FW-0051, not any single leg.
+
+**FW-0058 + FW-0037 do NOT compose at the filler axis** (an AI agent IS the signer in FW-0058; there is no human-filer + AI-signer shape because the AI is the signer not the helper). **All three rows DO compose pairwise with FW-0051** at the assistant axis. Per §1.2 non-goals, the cross-leg compositions are deferred for slice 1; vocabulary stays clean.
 
 **Cross-row touch.** FW-0058 design's §7.7 already names the AI vs human distinction; FW-0037 design's §6.7 reciprocates with the three-way framing table. **PLANNING.md cross-link bilaterally updated.**
 
@@ -521,7 +551,7 @@ Honest list of what FW-0037 design does NOT resolve:
 | Q2: submission-level `metadata.filer` carrier; single filer per submission | PROPOSAL | owner review + EXT-N filing |
 | Q3: `SignerHandoff` port shape with three canonical reference adapters (deferred to build) | PROPOSAL | owner review + future build row |
 | Q4: default-all-fillable + per-field `respondentOnly` opt-out; safe-* auto-marks | PROPOSAL | owner review + FW-0049 design author |
-| `reviewerPreparer.preparerFlow` sub-block under ADR-0011 (key already enumerated; small clarification needed) | PROPOSAL | owner review + ADR-0011 amendment |
+| `preparerFiling` capability key under ADR-0011 (split from `reviewerPreparer` umbrella per code-review F6 — one key per feature; amendment proposal text per §4.1) | PROPOSAL | owner review + ADR-0011 amendment |
 | `metadata.filer` schema shape per §3.2 — new EXT-N to formspec | PROPOSAL to formspec | formspec spec-expert review + EXT-N ratification |
 | Verifier rendering contract: ambient "filed by · signed by" capacity-discipline copy per AP-023 | PROPOSAL | owner review |
 | Form-load failure semantics: typed errors per ADR-0011 | PROPOSAL | owner review |
@@ -535,22 +565,22 @@ Honest list of what FW-0037 design does NOT resolve:
 | Multi-party composition per FW-0050 §7.1 (per-party filer; `metadata.filers[]` extension when both keys enabled) | PROPOSAL | owner review + FW-0050 design author |
 | Correction composition per FW-0034 (`correctableFilerPosture` form-policy field; filer-assisted correction rides `metadata.filer` per event) | PROPOSAL | owner review + FW-0034 design author |
 | FW-0030 composition (filer-identity rides web ADR-0007 + SC-4 + EXT-8a substrate identically) | PROPOSAL | owner review |
-| FW-0042 composition (shared `reviewerPreparer` key; distinct `preparerFlow` + `reviewerFlow` sub-blocks) | PROPOSAL | owner review + FW-0042 future design author |
+| FW-0042 composition (SPLIT sibling keys per code-review F6: `preparerFiling` (FW-0037) + `trustedReviewer` (FW-0042 future); no shared sub-block convention; FW-0042 architecturally independent) | PROPOSAL | owner review + FW-0042 future design author |
 | FW-0058 vocabulary distinction reciprocated (FW-0037 = human filer + human signer; FW-0058 = AI filer + AI signer) | PROPOSAL | owner review + FW-0058 design author |
 | FW-0051 composition note (filer-uses-assistant; vocabulary holds; deferred for slice 1) | PROPOSAL | owner review + FW-0051 design author |
 | AP-014 / AP-023 bindings codified | PROPOSAL | owner review |
 
-**Row status change:** FW-0037 moves from `open` to `in design`. FW-0037 stays in design until this proposal is owner-ratified, ADR-0011 amends to clarify the `reviewerPreparer.preparerFlow` sub-block, and EXT-N ratifies with the `metadata.filer` shape.
+**Row status change:** FW-0037 moves from `open` to `in design`. FW-0037 stays in design until this proposal is owner-ratified, ADR-0011 amends to split the `reviewerPreparer` umbrella into sibling keys `preparerFiling` + `trustedReviewer` per §4.1 (code-review F6), and EXT-36 ratifies with the `metadata.filer` shape.
 
 ## 11. Related decisions
 
 - [web ADR-0004](../adr/0004-cross-repo-placement-consume-not-invent.md) — consume not invent (governs every upstream-dependency call in this doc)
-- [web ADR-0005](../adr/0005-mvp-scope-defer-cryptographic-substrate.md) — MVP scope (`reviewerPreparer` is post-MVP; this design stages for post-MVP)
+- [web ADR-0005](../adr/0005-mvp-scope-defer-cryptographic-substrate.md) — MVP scope (`preparerFiling` / `trustedReviewer` are post-MVP; this design stages for post-MVP)
 - [web ADR-0007](../adr/0007-identity-provider-port.md) — identity provider port (filer-identity rides the same port)
 - [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md) — hexagonal architecture (port-shape discipline; §4.2 defers most port shapes to build per §(b); SignerHandoff is the load-bearing exception that lands here)
-- [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — runtime feature resolution (`reviewerPreparer` key enumerated; sub-block clarification needed)
+- [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — runtime feature resolution (`reviewerPreparer` umbrella enumerated; split into `preparerFiling` + `trustedReviewer` sibling keys per code-review F6 — amendment proposal text at §4.1)
 - [EXT-3 — `thoughts/specs/2026-05-22-upstream-extension-queue.md:46`](2026-05-22-upstream-extension-queue.md) — signer-side `capacity` enum (FW-0037 doesn't touch — respondent stays `self`)
-- [FW-0042 — `PLANNING.md:546`](../../PLANNING.md) — reviewer-only sibling sharing `reviewerPreparer` key
+- [FW-0042 — `PLANNING.md`](../../PLANNING.md) — reviewer-only sibling under split sibling key `trustedReviewer` per code-review F6 (no longer sharing umbrella `reviewerPreparer`)
 - [FW-0048 design 2026-05-23](2026-05-23-fw-0048-coercion-aware-signing-design.md) — coercion-aware signing (composition seam at §6.2; canonical AP-014 vector)
 - [FW-0049 design 2026-05-23](2026-05-23-fw-0049-safe-address-handling-design.md) — safe-address handling (composition seam at §6.3; safe-* auto-marks respondent-only)
 - [FW-0050 design 2026-05-23 §7.1](2026-05-23-fw-0050-multi-party-submission-design.md) — multi-party (composition seam at §6.4; per-party filer)
