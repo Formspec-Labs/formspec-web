@@ -780,7 +780,7 @@ async function createReadyState(
     runtimeContext: { locale: activeLocale },
   });
   const localeDocuments = await composition.definitionSource.getLocaleDocuments?.(
-    definition.url,
+    composition.initialDefinitionUrl,
     definition.version,
   );
   for (const localeDocument of localeDocuments ?? []) {

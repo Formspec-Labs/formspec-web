@@ -24,6 +24,10 @@ export interface DefinitionSource {
    * return the Locale Documents carried beside the Definition. Legacy
    * definition-only sources omit this method and the runtime falls back to
    * inline Definition strings.
+   *
+   * Callers pass the same source URL used for `getDefinition`, not the
+   * returned canonical `definition.url`, so adapters that resolve server
+   * form ids keep locale sidecars attached to the original runtime payload.
    */
   getLocaleDocuments?(url: string, version?: string): Promise<LocaleDocument[]>;
 }

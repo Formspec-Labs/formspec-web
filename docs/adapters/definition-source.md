@@ -8,6 +8,18 @@ It calls `GET /runtime/forms/{form_id}` on `formspec-server` and extracts the
 (`/runtime/forms/{form_id}`) or falls back to the final URL path segment until
 EXT-20 defines a canonical URL-to-form-id resolver.
 
+`getLocaleDocuments(url, version)` resolves `url` through the same form-id
+path. Respondent runtime calls it with the original
+`Composition.initialDefinitionUrl`, not the returned canonical `definition.url`,
+so an issuer may publish a canonical definition URL that differs from the
+server runtime form id without causing locale sidecars to be fetched from a
+different runtime form.
+
+The adapter extracts concrete Locale Documents from `locales`,
+`locale_documents`, and `localeDocuments` members of the same runtime payload.
+String-only `locale_refs` entries are treated as references and ignored by the
+web runtime.
+
 Run:
 
 ```bash

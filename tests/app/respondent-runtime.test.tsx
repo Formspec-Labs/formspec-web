@@ -14,6 +14,7 @@ import { demoSampleForm } from '../../src/demo/index.ts';
 import type { IdentityClaim, IdentityProvider, IdpOption } from '../../src/ports/identity-provider.ts';
 import type {
   ApplicantStatusResource,
+  FormDefinition,
   LocaleDocument,
   RespondentPlaceSnapshot,
   RespondentSubmissionRecord,
@@ -101,6 +102,45 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(composition.definitionSource.getLocaleDocuments).toHaveBeenCalledWith(
       demoSampleForm.url,
       demoSampleForm.version,
+    );
+  });
+
+  it('loads Locale Documents from the original runtime definition URL', async () => {
+    const identityProvider = new TestIdentityProvider();
+    const runtimeDefinitionUrl =
+      'https://formspec-server.example.test/runtime/forms/demo-benefits-intake-live';
+    const canonicalDefinition: FormDefinition = {
+      ...demoSampleForm,
+      url: 'https://benefits.example.gov/forms/demo-benefits-intake',
+      version: '2026.05.25',
+    };
+    const serverLocaleDocument: LocaleDocument = {
+      $formspecLocale: '1.0',
+      url: 'https://formspec-server.example.test/runtime/locales/demo-benefits-intake-live/es',
+      version: '1.0.0',
+      locale: 'es',
+      targetDefinition: { url: canonicalDefinition.url },
+      strings: {
+        '$form.title': 'Solicitud desde el servidor',
+      },
+    };
+    const composition = testComposition(identityProvider, {
+      definition: canonicalDefinition,
+      initialDefinitionUrl: runtimeDefinitionUrl,
+      localeDocuments: [serverLocaleDocument],
+    });
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Demo Benefits Intake');
+    await clickButton('Spanish');
+    await waitForText('Solicitud desde el servidor');
+
+    expect(composition.definitionSource.getDefinition).toHaveBeenCalledWith(runtimeDefinitionUrl);
+    expect(composition.definitionSource.getLocaleDocuments).toHaveBeenCalledWith(
+      runtimeDefinitionUrl,
+      canonicalDefinition.version,
     );
   });
 
@@ -337,16 +377,19 @@ function testComposition(
   identityProvider: IdentityProvider,
   options: {
     applicantStatus?: ApplicantStatusResource;
+    definition?: FormDefinition;
+    initialDefinitionUrl?: string;
     localeDocuments?: readonly LocaleDocument[];
     respondentPlace?: RespondentPlaceSnapshot;
   } = {},
   _config?: FormspecWebConfig,
 ): Composition {
+  const definition = options.definition ?? demoSampleForm;
   return {
     mode: 'production',
-    initialDefinitionUrl: demoSampleForm.url,
+    initialDefinitionUrl: options.initialDefinitionUrl ?? definition.url,
     definitionSource: {
-      getDefinition: vi.fn(async () => demoSampleForm),
+      getDefinition: vi.fn(async () => definition),
       getLocaleDocuments: vi.fn(async () => [...(options.localeDocuments ?? [])]),
     },
     draftStore: {
