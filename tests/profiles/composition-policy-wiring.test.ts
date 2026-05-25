@@ -16,7 +16,7 @@ describe('Composition declares runtime-feature policy seams', () => {
     expect(c.orgRuntimePolicy.features.status).toBe('allowed');
   });
 
-  it('stub composition opts the demo form into both seeded features as optional', () => {
+  it('stub composition opts the demo form into seeded and trusted-reviewer features as optional', () => {
     const c = createStubComposition();
     const policy = c.formRuntimePolicyExtractor.extract({
       ...sampleFormDefinition,
@@ -25,6 +25,11 @@ describe('Composition declares runtime-feature policy seams', () => {
     expect(policy.features).toEqual({
       respondentPlace: 'optional',
       status: 'optional',
+      trustedReviewer: 'optional',
+    });
+    expect(policy.limits?.trustedReviewer).toMatchObject({
+      posture: 'suggest-allowed',
+      respondentOnlyFieldPointers: ['/data/ssn', '/data/protectedAddress'],
     });
   });
 

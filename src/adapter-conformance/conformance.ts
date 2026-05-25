@@ -38,6 +38,16 @@ import type {
   ScreenerDocumentSource,
 } from '../ports/screener-document-source.ts';
 import { ScreenerDocumentNotFoundError } from '../ports/screener-document-source.ts';
+import type {
+  ReviewerSession,
+  ReviewerScope,
+} from '../ports/reviewer-session.ts';
+import { respondentSessionToken } from '../ports/reviewer-session.ts';
+import type {
+  ReviewThread,
+  ReviewThreadPolicySnapshot,
+  ReviewThreadStore,
+} from '../ports/review-thread-store.ts';
 import { isScreenerDocumentInput } from '../shared/screener-document.ts';
 import type { IntakeHandoff, SubmitConfirmation } from '../ports/submit-transport.ts';
 import {
@@ -1183,6 +1193,16 @@ export interface ScreenerDocumentSourceConformanceSubject {
   registerScreener(document: ScreenerDocumentInput): void | Promise<void>;
 }
 
+export interface ReviewerSessionConformanceSubject {
+  adapter: ReviewerSession;
+  ensureThread(threadId: string, policySnapshot: ReviewThreadPolicySnapshot): void | Promise<void>;
+}
+
+export interface ReviewThreadStoreConformanceSubject {
+  adapter: ReviewThreadStore;
+  reviewerSession: ReviewerSession;
+}
+
 /**
  * Conformance harness for `EmbedTransport` (FW-0040, web ADR-0011 §embed).
  * Encodes the iframe-context + transport invariants the port comment names —
@@ -1314,4 +1334,200 @@ export function defineScreenerDocumentSourceConformance(
       await expect(Promise.resolve().then(() => subject.registerScreener(invalid))).rejects.toThrow();
     });
   });
+}
+
+export const sampleReviewThreadPolicySnapshot: ReviewThreadPolicySnapshot = {
+  posture: 'suggest-allowed',
+  respondentOnlyFieldPointers: ['/data/protectedAddress'],
+  reviewerSessionBindingRef: 'urn:formspec-web:adapter:reviewer-session:conformance',
+  reviewThreadStoreBindingRef: 'urn:formspec-web:adapter:review-thread-store:conformance',
+};
+
+export function defineReviewerSessionConformance(
+  name: string,
+  setup: () => ReviewerSessionConformanceSubject,
+): void {
+  describe(name, () => {
+    it('mints, lists, and redeems a capability URL for an existing thread', async () => {
+      const subject = setup();
+      const threadId = 'review-thread:conformance:session';
+      await subject.ensureThread(threadId, sampleReviewThreadPolicySnapshot);
+      const minted = await subject.adapter.mintShare({
+        threadId,
+        requestedScope: 'view+comment',
+        audienceHint: 'Pat reviewer',
+        respondentSessionToken: respondentSessionToken('conformance'),
+      });
+      expect(minted.shareId.length).toBeGreaterThan(0);
+      expect(minted.capabilityUrl).toContain(minted.shareId);
+
+      const shares = await subject.adapter.listShares({
+        threadId,
+        respondentSessionToken: respondentSessionToken('conformance'),
+      });
+      expect(shares.map((share) => share.shareId)).toContain(minted.shareId);
+
+      const redeemed = await subject.adapter.redeem({ capabilityUrl: minted.capabilityUrl });
+      expect(redeemed.shareId).toBe(minted.shareId);
+      expect(redeemed.threadId).toBe(threadId);
+      expect(redeemed.grantedScope).toBe<ReviewerScope>('view+comment');
+      expect(redeemed.threadPolicySnapshot.posture).toBe('suggest-allowed');
+      expect(redeemed.sessionToken.length).toBeGreaterThan(0);
+    });
+
+    it('revokes a share and rejects later redemption', async () => {
+      const subject = setup();
+      const threadId = 'review-thread:conformance:revocation';
+      await subject.ensureThread(threadId, sampleReviewThreadPolicySnapshot);
+      const minted = await subject.adapter.mintShare({
+        threadId,
+        requestedScope: 'view+comment',
+        respondentSessionToken: respondentSessionToken('conformance'),
+      });
+      await subject.adapter.revoke({
+        shareId: minted.shareId,
+        reason: 'respondent revoked',
+        respondentSessionToken: respondentSessionToken('conformance'),
+      });
+
+      const shares = await subject.adapter.listShares({
+        threadId,
+        respondentSessionToken: respondentSessionToken('conformance'),
+      });
+      expect(shares.find((share) => share.shareId === minted.shareId)?.revokedAt)
+        .toBeDefined();
+      await expect(subject.adapter.redeem({ capabilityUrl: minted.capabilityUrl }))
+        .rejects.toThrow();
+    });
+
+    it('rejects invalid capability URLs', async () => {
+      const subject = setup();
+      await expect(subject.adapter.redeem({ capabilityUrl: 'https://review.example.test/r/nope' }))
+        .rejects.toThrow();
+    });
+  });
+}
+
+export function defineReviewThreadStoreConformance(
+  name: string,
+  setup: () => ReviewThreadStoreConformanceSubject,
+): void {
+  describe(name, () => {
+    it('ensures and reads a schema-shaped review thread sidecar', async () => {
+      const subject = setup();
+      const threadId = 'review-thread:conformance:store';
+      const thread = await subject.adapter.ensureThread({
+        threadId,
+        draftRef: { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version },
+        policySnapshot: sampleReviewThreadPolicySnapshot,
+      });
+      expect(isReviewThread(thread)).toBe(true);
+      const found = await subject.adapter.read({ threadId });
+      expect(found.threadId).toBe(threadId);
+      expect(found.policySnapshot.posture).toBe('suggest-allowed');
+    });
+
+    it('accepts reviewer comments and suggestions under a reviewer session token', async () => {
+      const subject = setup();
+      const { threadId, sessionToken, shareId } = await createRedeemedReviewShare(subject);
+      const comment = await subject.adapter.appendEvent({
+        threadId,
+        sessionToken,
+        author: { kind: 'reviewer', shareId, displayName: 'Pat reviewer' },
+        payload: {
+          type: 'comment-added',
+          anchor: { fieldPointer: '/data/fullName' },
+          body: 'Check spelling.',
+        },
+      });
+      expect(comment.payload.type).toBe('comment-added');
+
+      const suggestion = await subject.adapter.appendEvent({
+        threadId,
+        sessionToken,
+        author: { kind: 'reviewer', shareId, displayName: 'Pat reviewer' },
+        payload: {
+          type: 'suggestion-added',
+          anchor: { fieldPointer: '/data/fullName' },
+          proposedValue: 'Grace Hopper',
+        },
+      });
+      expect(suggestion.payload.type).toBe('suggestion-added');
+    });
+
+    it('rejects respondent-only actions from reviewer capability tokens', async () => {
+      const subject = setup();
+      const { threadId, sessionToken, shareId } = await createRedeemedReviewShare(subject);
+      await expect(subject.adapter.appendEvent({
+        threadId,
+        sessionToken,
+        author: { kind: 'reviewer', shareId, displayName: 'Pat reviewer' },
+        payload: { type: 'share-revoked', shareId },
+      })).rejects.toThrow();
+    });
+
+    it('rejects suggestions on respondent-only field pointers', async () => {
+      const subject = setup();
+      const { threadId, sessionToken, shareId } = await createRedeemedReviewShare(subject);
+      await expect(subject.adapter.appendEvent({
+        threadId,
+        sessionToken,
+        author: { kind: 'reviewer', shareId, displayName: 'Pat reviewer' },
+        payload: {
+          type: 'suggestion-added',
+          anchor: { fieldPointer: '/data/protectedAddress' },
+          proposedValue: 'Hidden address',
+        },
+      })).rejects.toThrow();
+    });
+
+    it('pins a thread for receipt with a respondent token', async () => {
+      const subject = setup();
+      const threadId = 'review-thread:conformance:pin';
+      await subject.adapter.ensureThread({
+        threadId,
+        draftRef: { formUrl: sampleFormDefinition.url },
+        policySnapshot: sampleReviewThreadPolicySnapshot,
+      });
+      const pinned = await subject.adapter.pinForReceipt({
+        threadId,
+        sessionToken: respondentSessionToken('conformance'),
+      });
+      expect(pinned.threadHash).toMatch(/^sha256:/);
+      expect(pinned.bindingArtifactRef).toContain(threadId);
+    });
+  });
+}
+
+async function createRedeemedReviewShare(subject: ReviewThreadStoreConformanceSubject) {
+  const threadId = `review-thread:conformance:${Math.random().toString(16).slice(2)}`;
+  await subject.adapter.ensureThread({
+    threadId,
+    draftRef: { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version },
+    policySnapshot: sampleReviewThreadPolicySnapshot,
+  });
+  const minted = await subject.reviewerSession.mintShare({
+    threadId,
+    requestedScope: 'view+comment+suggest',
+    respondentSessionToken: respondentSessionToken('conformance'),
+  });
+  const redeemed = await subject.reviewerSession.redeem({ capabilityUrl: minted.capabilityUrl });
+  return {
+    threadId,
+    shareId: redeemed.shareId,
+    sessionToken: redeemed.sessionToken,
+  };
+}
+
+function isReviewThread(value: unknown): value is ReviewThread {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<ReviewThread>;
+  return candidate.$formspecReviewThread === '1.0'
+    && typeof candidate.threadId === 'string'
+    && typeof candidate.draftRef === 'object'
+    && candidate.draftRef !== null
+    && typeof candidate.policySnapshot === 'object'
+    && candidate.policySnapshot !== null
+    && Array.isArray(candidate.shares)
+    && Array.isArray(candidate.events);
 }

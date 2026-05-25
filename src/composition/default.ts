@@ -10,6 +10,7 @@ import {
   EmbeddableExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
+  TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
@@ -20,6 +21,8 @@ import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transpo
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailablePreallocatedFeaturePort } from '../adapters/unavailable/preallocated-feature-port.ts';
+import { unavailableReviewerSession } from '../adapters/unavailable/reviewer-session.ts';
+import { unavailableReviewThreadStore } from '../adapters/unavailable/review-thread-store.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
@@ -89,8 +92,8 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     paymentRailAdapter: unavailablePaymentRailAdapter(),
     embedTransport: unavailableEmbedTransport(),
     screenerDocumentSource: unavailableScreenerDocumentSource(),
-    reviewerSession: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewerSession'),
-    reviewThreadStore: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewThreadStore'),
+    reviewerSession: unavailableReviewerSession(),
+    reviewThreadStore: unavailableReviewThreadStore(),
     safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
     lifecycleActionClient: unavailablePreallocatedFeaturePort(
       'recordLifecycle',
@@ -199,6 +202,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       new OfflineSubmitRequirementExtractor(),
       new PaymentRequirementExtractor(),
       new EmbeddableExtractor(),
+      new TrustedReviewerPolicyExtractor(),
     ]),
   };
   return freezeComposition(composition);

@@ -33,3 +33,13 @@ export {
   createHttpSubmitTransport,
   type HttpSubmitTransportConfig,
 } from './submit-transport.ts';
+export {
+  HttpReviewerSession,
+  createHttpReviewerSession,
+  type HttpReviewerSessionConfig,
+} from './reviewer-session.ts';
+export {
+  HttpReviewThreadStore,
+  createHttpReviewThreadStore,
+  type HttpReviewThreadStoreConfig,
+} from './review-thread-store.ts';

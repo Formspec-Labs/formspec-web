@@ -21,6 +21,8 @@ const portSuites = new Map([
   ['PaymentRailAdapter', 'tests/adapter-conformance/payment-rail-adapter/conformance.test.ts'],
   ['EmbedTransport', 'tests/adapter-conformance/embed-transport/conformance.test.ts'],
   ['ScreenerDocumentSource', 'tests/adapter-conformance/screener-document-source/conformance.test.ts'],
+  ['ReviewerSession', 'tests/adapter-conformance/reviewer-session/conformance.test.ts'],
+  ['ReviewThreadStore', 'tests/adapter-conformance/review-thread-store/conformance.test.ts'],
 ]);
 const stubPortsByPath = new Map([
   ['src/adapters/stub/definition-source.ts', 'DefinitionSource'],
@@ -37,6 +39,8 @@ const stubPortsByPath = new Map([
   ['src/adapters/stub/payment-rail-adapter.ts', 'PaymentRailAdapter'],
   ['src/adapters/stub/embed-transport.ts', 'EmbedTransport'],
   ['src/adapters/stub/screener-document-source.ts', 'ScreenerDocumentSource'],
+  ['src/adapters/stub/reviewer-session.ts', 'ReviewerSession'],
+  ['src/adapters/stub/review-thread-store.ts', 'ReviewThreadStore'],
 ]);
 const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/respondent-place-source.ts', 'unavailableRespondentPlaceSource'],
@@ -47,6 +51,8 @@ const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/payment-rail-adapter.ts', 'unavailablePaymentRailAdapter'],
   ['src/adapters/unavailable/embed-transport.ts', 'unavailableEmbedTransport'],
   ['src/adapters/unavailable/screener-document-source.ts', 'unavailableScreenerDocumentSource'],
+  ['src/adapters/unavailable/reviewer-session.ts', 'unavailableReviewerSession'],
+  ['src/adapters/unavailable/review-thread-store.ts', 'unavailableReviewThreadStore'],
 ]);
 const requiredHarnessExports = [
   'defineDefinitionSourceConformance',
@@ -63,6 +69,8 @@ const requiredHarnessExports = [
   'definePaymentRailAdapterConformance',
   'defineEmbedTransportConformance',
   'defineScreenerDocumentSourceConformance',
+  'defineReviewerSessionConformance',
+  'defineReviewThreadStoreConformance',
 ];
 const requiredReadmePhrases = [
   'formspec-web/adapter-conformance',

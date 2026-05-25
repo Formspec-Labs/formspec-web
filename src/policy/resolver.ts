@@ -57,7 +57,7 @@ export function resolveRuntimeFeatures(
     });
     if (decision.kind === 'enabled') {
       enabled.add(key);
-      const limit = input.org.limits?.[key];
+      const limit = mergeFeatureLimits(input.org.limits?.[key], input.form.limits?.[key]);
       if (limit !== undefined) {
         limits[key] = limit;
       }
@@ -215,6 +215,8 @@ function validateInput(input: ResolveRuntimeFeaturesInput): void {
     }
   }
   validateEmbedLimits(input.org.limits?.embed);
+  validateTrustedReviewerLimits(input.org.limits?.trustedReviewer, 'org');
+  validateTrustedReviewerLimits(input.form.limits?.trustedReviewer, 'form');
 }
 
 /**
@@ -261,6 +263,104 @@ function validateEmbedLimits(value: unknown): void {
       );
     }
   }
+}
+
+function mergeFeatureLimits(orgLimit: unknown, formLimit: unknown): unknown {
+  if (orgLimit === undefined) return formLimit;
+  if (formLimit === undefined) return orgLimit;
+  if (isPlainObject(orgLimit) && isPlainObject(formLimit)) {
+    return Object.freeze({ ...orgLimit, ...formLimit });
+  }
+  return formLimit;
+}
+
+function validateTrustedReviewerLimits(value: unknown, layer: 'org' | 'form'): void {
+  if (value === undefined) return;
+  if (!isPlainObject(value)) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.trustedReviewer must be an object',
+    );
+  }
+  const candidate = value as {
+    posture?: unknown;
+    allowedRoles?: unknown;
+    reviewerAssuranceFloor?: unknown;
+    maxActiveSharesPerDraft?: unknown;
+    defaultShareExpiresAtRule?: unknown;
+    respondentOnlyFieldPointers?: unknown;
+  };
+  if (
+    candidate.posture !== undefined &&
+    candidate.posture !== 'forbidden' &&
+    candidate.posture !== 'comment-allowed' &&
+    candidate.posture !== 'suggest-allowed'
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.trustedReviewer.posture must be forbidden | comment-allowed | suggest-allowed',
+    );
+  }
+  if (
+    candidate.allowedRoles !== undefined &&
+    (!Array.isArray(candidate.allowedRoles) ||
+      !candidate.allowedRoles.every((entry) => typeof entry === 'string' && entry.length > 0))
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.trustedReviewer.allowedRoles must be an array of non-empty strings',
+    );
+  }
+  if (
+    candidate.reviewerAssuranceFloor !== undefined &&
+    candidate.reviewerAssuranceFloor !== 'L1' &&
+    candidate.reviewerAssuranceFloor !== 'L2' &&
+    candidate.reviewerAssuranceFloor !== 'L3' &&
+    candidate.reviewerAssuranceFloor !== 'L4'
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.trustedReviewer.reviewerAssuranceFloor must be L1 | L2 | L3 | L4',
+    );
+  }
+  const maxActiveSharesPerDraft = candidate.maxActiveSharesPerDraft;
+  if (
+    maxActiveSharesPerDraft !== undefined &&
+    (typeof maxActiveSharesPerDraft !== 'number' ||
+      !Number.isInteger(maxActiveSharesPerDraft) ||
+      maxActiveSharesPerDraft < 1)
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.trustedReviewer.maxActiveSharesPerDraft must be a positive integer',
+    );
+  }
+  if (
+    candidate.defaultShareExpiresAtRule !== undefined &&
+    (typeof candidate.defaultShareExpiresAtRule !== 'string' ||
+      candidate.defaultShareExpiresAtRule.length === 0)
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.trustedReviewer.defaultShareExpiresAtRule must be a non-empty string',
+    );
+  }
+  if (
+    candidate.respondentOnlyFieldPointers !== undefined &&
+    (!Array.isArray(candidate.respondentOnlyFieldPointers) ||
+      !candidate.respondentOnlyFieldPointers.every((entry) => (
+        typeof entry === 'string' && entry.startsWith('/')
+      )))
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.trustedReviewer.respondentOnlyFieldPointers must be an array of JSON pointers',
+    );
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function freezeSet<T>(set: Set<T>): ReadonlySet<T> {

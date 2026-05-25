@@ -4,6 +4,7 @@ import {
   EmbeddableExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
+  TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
@@ -14,6 +15,7 @@ import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts';
 import { stubPaymentRailAdapter } from '../adapters/stub/payment-rail-adapter.ts';
+import { createStubTrustedReviewerAdapters } from '../adapters/stub/review-thread-store.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
@@ -57,6 +59,9 @@ export function createStubComposition(): Composition {
   definitionSource.registerLocaleDocuments(demoSampleForm.url, demoLocaleDocuments);
 
   const submitTransport = stubSubmitTransport();
+  const trustedReviewerAdapters = createStubTrustedReviewerAdapters({
+    baseUrl: 'https://demo.formspec.test',
+  });
   const composition: Composition = {
     mode: 'demo',
     initialDefinitionUrl: demoSampleFormUrl,
@@ -94,8 +99,8 @@ export function createStubComposition(): Composition {
     // posture so the /screener route renders the upstream
     // <FormspecScreener> end-to-end in `npm run dev`.
     screenerDocumentSource: stubScreenerDocumentSource(demoScreenerCatalog()),
-    reviewerSession: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewerSession'),
-    reviewThreadStore: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewThreadStore'),
+    reviewerSession: trustedReviewerAdapters.reviewerSession,
+    reviewThreadStore: trustedReviewerAdapters.reviewThreadStore,
     safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
     lifecycleActionClient: unavailablePreallocatedFeaturePort(
       'recordLifecycle',
@@ -152,10 +157,10 @@ export function createStubComposition(): Composition {
       // end-to-end. Production declares 'unavailable' until adopters
       // wire a real catalog adapter.
       screener: 'demo-stub',
-      // 2026-05-25 namespace preallocation. No demo substrate exists for
-      // these rows yet; keep them unavailable until their build rows land
-      // concrete adapters / deferred port contracts.
-      trustedReviewer: 'unavailable',
+      // FW-0113 slice 1: in-memory reviewer-session + review-thread stubs
+      // satisfy the demo posture. Production remains unavailable until an
+      // adopter wires durable capability URL + SC-6 storage adapters.
+      trustedReviewer: 'demo-stub',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'unavailable',
       duressAware: 'unavailable',
@@ -201,6 +206,7 @@ export function createStubComposition(): Composition {
       new OfflineSubmitRequirementExtractor(),
       new PaymentRequirementExtractor(),
       new EmbeddableExtractor(),
+      new TrustedReviewerPolicyExtractor(),
     ]),
   };
   return freezeComposition(composition);

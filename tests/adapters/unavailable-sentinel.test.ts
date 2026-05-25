@@ -3,6 +3,8 @@ import { unavailableAttachmentStore } from '../../src/adapters/unavailable/attac
 import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-transport.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
+import { unavailableReviewerSession } from '../../src/adapters/unavailable/reviewer-session.ts';
+import { unavailableReviewThreadStore } from '../../src/adapters/unavailable/review-thread-store.ts';
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
@@ -71,6 +73,20 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
     expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('screener');
   });
 
+  it('unavailableReviewerSession is marked with featureKey "trustedReviewer"', () => {
+    const adapter = unavailableReviewerSession();
+    expect(isUnavailableAdapter(adapter)).toBe(true);
+    if (!isUnavailableAdapter(adapter)) throw new Error('unreachable');
+    expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('trustedReviewer');
+  });
+
+  it('unavailableReviewThreadStore is marked with featureKey "trustedReviewer"', () => {
+    const adapter = unavailableReviewThreadStore();
+    expect(isUnavailableAdapter(adapter)).toBe(true);
+    if (!isUnavailableAdapter(adapter)) throw new Error('unreachable');
+    expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('trustedReviewer');
+  });
+
   it('marked adapters still throw on call (sentinel does not change runtime behavior)', async () => {
     await expect(unavailableRespondentPlaceSource().readPlace({} as never)).rejects.toThrow();
     await expect(
@@ -96,6 +112,12 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
     ).toThrow();
     await expect(
       unavailableScreenerDocumentSource().readScreener({ url: 'urn:any' }),
+    ).rejects.toThrow();
+    await expect(
+      unavailableReviewerSession().listShares({ threadId: 'thread:any' }),
+    ).rejects.toThrow();
+    await expect(
+      unavailableReviewThreadStore().read({ threadId: 'thread:any' }),
     ).rejects.toThrow();
   });
 });

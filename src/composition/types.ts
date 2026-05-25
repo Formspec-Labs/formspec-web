@@ -9,6 +9,8 @@ import type {
   OfflineSubmitQueue,
   PaymentRailAdapter,
   PreallocatedFeaturePort,
+  ReviewerSession,
+  ReviewThreadStore,
   RespondentHistorySource,
   RespondentPlaceSource,
   ScreenerDocumentSource,
@@ -103,13 +105,18 @@ export interface Composition {
    */
   screenerDocumentSource: ScreenerDocumentSource;
   /**
+   * FW-0113: trusted reviewer requires both ports. ReviewerSession owns
+   * capability-URL mint/redeem/revoke. ReviewThreadStore owns the SC-6
+   * sidecar event log. Do not collapse the pair into one adapter slot.
+   */
+  reviewerSession: ReviewerSession;
+  reviewThreadStore: ReviewThreadStore;
+  /**
    * 2026-05-25 namespace preallocation: real interfaces land with their
    * feature builds. These sentinel-backed slots exist so ADR-0011
    * FEATURE_PORT_MAP can reserve the names without allowing a production
    * composition to declare the capabilities available by accident.
    */
-  reviewerSession: PreallocatedFeaturePort;
-  reviewThreadStore: PreallocatedFeaturePort;
   safeAddressDirectory: PreallocatedFeaturePort;
   lifecycleActionClient: PreallocatedFeaturePort;
   /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */

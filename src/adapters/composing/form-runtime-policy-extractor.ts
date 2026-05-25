@@ -21,6 +21,7 @@ import {
   extractEmbeddableOptIn,
   extractOfflineSubmitOptIn,
   extractPaymentRequirement,
+  extractTrustedReviewerPolicy,
 } from '../../policy/extract-form-policy.ts';
 import type { FormRuntimePolicy } from '../../policy/policy-shapes.ts';
 import type { FormRuntimePolicyExtractor } from '../../ports/form-runtime-policy-extractor.ts';
@@ -60,15 +61,23 @@ export class EmbeddableExtractor implements FormRuntimePolicyExtractor {
   }
 }
 
+export class TrustedReviewerPolicyExtractor implements FormRuntimePolicyExtractor {
+  extract(definition: FormDefinition): FormRuntimePolicy {
+    return extractTrustedReviewerPolicy(definition) ?? { features: {} };
+  }
+}
+
 export class CompositeFormRuntimePolicyExtractor implements FormRuntimePolicyExtractor {
   constructor(private readonly extractors: readonly FormRuntimePolicyExtractor[]) {}
 
   extract(definition: FormDefinition): FormRuntimePolicy {
     const features: FormRuntimePolicy['features'] = {};
+    const limits: NonNullable<FormRuntimePolicy['limits']> = {};
     for (const extractor of this.extractors) {
       const policy = extractor.extract(definition);
       Object.assign(features, policy.features);
+      Object.assign(limits, policy.limits);
     }
-    return { features };
+    return Object.keys(limits).length > 0 ? { features, limits } : { features };
   }
 }

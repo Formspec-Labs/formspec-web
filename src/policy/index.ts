@@ -7,6 +7,7 @@ export {
   type RuntimeFeatureKey,
 } from './feature-keys.ts';
 export {
+  getTrustedReviewerRuntimeConfig,
   getEmbedLimits,
   isCapabilityAvailability,
   isFormFeaturePolicyMode,
@@ -21,6 +22,7 @@ export {
   type OrgFeaturePolicyMode,
   type OrgRuntimePolicy,
   type ResolvedRuntimeProfile,
+  type TrustedReviewerRuntimeConfig,
 } from './policy-shapes.ts';
 export {
   EmbedOriginNotAllowedError,

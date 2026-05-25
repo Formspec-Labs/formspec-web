@@ -94,4 +94,28 @@ export type {
   ScreenerDocumentInput,
 } from './screener-document-source.ts';
 export { ScreenerDocumentNotFoundError } from './screener-document-source.ts';
+export type {
+  ReviewerSession,
+  ReviewerSessionRedeemResult,
+  ReviewerShare,
+  ReviewerScope,
+  CapabilityToken,
+  RespondentSessionToken,
+} from './reviewer-session.ts';
+export {
+  ReviewerSessionError,
+  respondentSessionToken,
+  isRespondentSessionToken,
+} from './reviewer-session.ts';
+export type {
+  ReviewThreadStore,
+  ReviewThread,
+  ReviewThreadAuthor,
+  ReviewThreadDraftRef,
+  ReviewThreadEvent,
+  ReviewThreadEventPayload,
+  ReviewThreadPolicySnapshot,
+  TrustedReviewerPosture,
+} from './review-thread-store.ts';
+export { ReviewThreadStoreError } from './review-thread-store.ts';
 export type { PreallocatedFeaturePort } from './preallocated-feature-port.ts';

@@ -30,3 +30,6 @@ Directory skeleton (one per current port):
 - `offline-submit-queue/`
 - `payment-rail-adapter/`
 - `embed-transport/`
+- `screener-document-source/`
+- `reviewer-session/`
+- `review-thread-store/`

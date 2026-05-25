@@ -7,6 +7,10 @@
  * Composition root.
  */
 import type { RuntimeFeatureKey } from './feature-keys.ts';
+import type {
+  ReviewThreadPolicySnapshot,
+  TrustedReviewerPosture,
+} from '../ports/review-thread-store.ts';
 
 /**
  * Closed-set decision: an instance capability is exactly one of three states.
@@ -62,6 +66,10 @@ export interface OrgRuntimePolicy {
   readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
 }
 
+export interface TrustedReviewerRuntimeConfig extends ReviewThreadPolicySnapshot {
+  readonly posture: TrustedReviewerPosture;
+}
+
 /**
  * FW-0040 slice 1: shape of `OrgRuntimePolicy.limits.embed`. The runtime
  * iframe-context gate matches the host page's origin against
@@ -101,6 +109,12 @@ export function isFormFeaturePolicyMode(value: string): value is FormFeaturePoli
 
 export interface FormRuntimePolicy {
   readonly features: Readonly<Partial<Record<RuntimeFeatureKey, FormFeaturePolicyMode>>>;
+  /**
+   * Optional per-feature configuration extracted from the definition. FW-0113
+   * uses `limits.trustedReviewer` for the FW-0042 three-tier posture and
+   * respondent-only field pointers while SC-6 remains PROPOSAL-status.
+   */
+  readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
 }
 
 /**
@@ -143,4 +157,20 @@ export interface ResolvedRuntimeProfile {
   readonly enabled: ReadonlySet<RuntimeFeatureKey>;
   readonly disabled: ReadonlyMap<RuntimeFeatureKey, DisabledReason>;
   readonly limits: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
+}
+
+export function getTrustedReviewerRuntimeConfig(
+  profile: ResolvedRuntimeProfile,
+): TrustedReviewerRuntimeConfig | undefined {
+  if (!profile.enabled.has('trustedReviewer')) return undefined;
+  const value = profile.limits.trustedReviewer;
+  if (value === undefined) {
+    return {
+      posture: 'comment-allowed',
+      respondentOnlyFieldPointers: [],
+      reviewerSessionBindingRef: 'composition:reviewerSession',
+      reviewThreadStoreBindingRef: 'composition:reviewThreadStore',
+    };
+  }
+  return value as TrustedReviewerRuntimeConfig;
 }

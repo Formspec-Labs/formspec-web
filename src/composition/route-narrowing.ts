@@ -53,6 +53,8 @@ import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transpo
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailablePreallocatedFeaturePort } from '../adapters/unavailable/preallocated-feature-port.ts';
+import { unavailableReviewerSession } from '../adapters/unavailable/reviewer-session.ts';
+import { unavailableReviewThreadStore } from '../adapters/unavailable/review-thread-store.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
@@ -257,8 +259,8 @@ function buildProductionNarrowedComposition({
     // + render the disabled-cause copy honestly. Adopter forks branch on
     // `route.consumes.has('screener')` to wire their real adapter.
     screenerDocumentSource: unavailableScreenerDocumentSource(),
-    reviewerSession: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewerSession'),
-    reviewThreadStore: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewThreadStore'),
+    reviewerSession: unavailableReviewerSession(),
+    reviewThreadStore: unavailableReviewThreadStore(),
     safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
     lifecycleActionClient: unavailablePreallocatedFeaturePort(
       'recordLifecycle',
@@ -310,8 +312,8 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     screenerDocumentSource: route.consumes.has('screener')
       ? stubScreenerDocumentSource(demoScreenerCatalog())
       : unavailableScreenerDocumentSource(),
-    reviewerSession: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewerSession'),
-    reviewThreadStore: unavailablePreallocatedFeaturePort('trustedReviewer', 'ReviewThreadStore'),
+    reviewerSession: unavailableReviewerSession(),
+    reviewThreadStore: unavailableReviewThreadStore(),
     safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
     lifecycleActionClient: unavailablePreallocatedFeaturePort(
       'recordLifecycle',

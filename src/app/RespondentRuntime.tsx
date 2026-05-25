@@ -33,6 +33,8 @@ import {
 } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
+import type { ReviewerShare } from '../ports/reviewer-session.ts';
+import { respondentSessionToken } from '../ports/reviewer-session.ts';
 import type {
   AssuranceLevel,
   IdentityClaim,
@@ -97,6 +99,12 @@ import {
   publicTerminalVerifierCode,
   sendPublicTerminalReceiptSms,
 } from './public-terminal-hygiene.ts';
+import {
+  reviewerDraftRefForDraft,
+  reviewerScopeForPosture,
+  reviewerThreadIdForDraft,
+  trustedReviewerPolicySnapshot,
+} from './trusted-reviewer.ts';
 
 interface RespondentRuntimeProps {
   composition: Composition;
@@ -648,11 +656,15 @@ export function RespondentRuntime({
             <RespondentSurface
               activeLocale={respondentState.activeLocale}
               brandName={config.brand.name}
+              claim={respondentState.claim}
+              composition={composition}
               definition={respondentState.definition}
+              draftKey={respondentState.draftKey}
               draftLoaded={respondentState.draftLoaded}
               mode={composition.mode}
               respondentPlaceState={respondentPlaceState}
               resolvedIssuer={respondentState.resolvedIssuer}
+              runtimeProfile={respondentState.runtimeProfile}
               submitState={submitState}
               terminalClearState={terminalClearState}
               notificationDelivery={composition.notificationDelivery}
@@ -839,11 +851,15 @@ async function readSubmissionStatuses(
 function RespondentSurface({
   activeLocale,
   brandName,
+  claim,
+  composition,
   definition,
+  draftKey,
   draftLoaded,
   mode,
   respondentPlaceState,
   resolvedIssuer,
+  runtimeProfile,
   submitState,
   terminalClearState,
   notificationDelivery,
@@ -852,11 +868,15 @@ function RespondentSurface({
 }: {
   activeLocale: string;
   brandName: string;
+  claim: IdentityClaim | null;
+  composition: Composition;
   definition: FormDefinition;
+  draftKey: DraftKey;
   draftLoaded: boolean;
   mode: 'demo' | 'production';
   respondentPlaceState: RespondentPlaceState;
   resolvedIssuer: ResolvedIssuer;
+  runtimeProfile: ResolvedRuntimeProfile;
   submitState: SubmitState;
   terminalClearState: TerminalClearState;
   notificationDelivery?: NotificationDelivery;
@@ -905,6 +925,12 @@ function RespondentSurface({
 
       <SubmitNotice state={submitState} />
       <RespondentPlacePanel state={respondentPlaceState} />
+      <TrustedReviewerPanel
+        claim={claim}
+        composition={composition}
+        draftKey={draftKey}
+        runtimeProfile={runtimeProfile}
+      />
 
       {submitState.status === 'confirmed' ? (
         <ConfirmationPanel
@@ -925,6 +951,220 @@ function RespondentSurface({
         </div>
       )}
     </>
+  );
+}
+
+type TrustedReviewerState =
+  | { status: 'disabled' }
+  | { status: 'loading' }
+  | { status: 'ready'; shares: readonly ReviewerShare[]; latestUrl?: string }
+  | { status: 'error'; error: unknown };
+
+function TrustedReviewerPanel({
+  claim,
+  composition,
+  draftKey,
+  runtimeProfile,
+}: {
+  claim: IdentityClaim | null;
+  composition: Composition;
+  draftKey: DraftKey;
+  runtimeProfile: ResolvedRuntimeProfile;
+}) {
+  const audienceId = useId();
+  const [audienceHint, setAudienceHint] = useState('');
+  const [state, setState] = useState<TrustedReviewerState>({ status: 'disabled' });
+  const policySnapshot = useMemo(
+    () => trustedReviewerPolicySnapshot(runtimeProfile),
+    [runtimeProfile],
+  );
+  const threadId = reviewerThreadIdForDraft(draftKey);
+  const respondentToken = respondentSessionToken(
+    `${claim?.subjectRef ?? draftKey.subjectRef ?? 'anonymous'}:${threadId}`,
+  );
+
+  useEffect(() => {
+    if (!policySnapshot) {
+      setState({ status: 'disabled' });
+      return undefined;
+    }
+    let cancelled = false;
+    setState({ status: 'loading' });
+    void composition.reviewerSession.listShares({
+      threadId,
+      respondentSessionToken: respondentToken,
+    }).then((shares) => {
+      if (!cancelled) setState({ status: 'ready', shares });
+    }).catch((error: unknown) => {
+      if (!cancelled) setState({ status: 'error', error });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [composition.reviewerSession, policySnapshot, respondentToken, threadId]);
+
+  if (!policySnapshot || state.status === 'disabled') {
+    return null;
+  }
+
+  const reloadShares = async (latestUrl?: string): Promise<void> => {
+    const shares = await composition.reviewerSession.listShares({
+      threadId,
+      respondentSessionToken: respondentToken,
+    });
+    setState({ status: 'ready', shares, latestUrl });
+  };
+
+  const mintShare = async (): Promise<void> => {
+    setState((current) => (
+      current.status === 'ready' ? { status: 'loading' } : current
+    ));
+    try {
+      await composition.reviewThreadStore.ensureThread({
+        threadId,
+        draftRef: reviewerDraftRefForDraft(draftKey),
+        policySnapshot,
+      });
+      const activeShares = state.status === 'ready'
+        ? state.shares.filter((share) => !share.revokedAt)
+        : [];
+      if (
+        policySnapshot.maxActiveSharesPerDraft &&
+        activeShares.length >= policySnapshot.maxActiveSharesPerDraft
+      ) {
+        throw new Error('No more active reviewer links can be created for this draft.');
+      }
+      const minted = await composition.reviewerSession.mintShare({
+        threadId,
+        requestedScope: reviewerScopeForPosture(policySnapshot.posture),
+        audienceHint: audienceHint.trim() || undefined,
+        respondentSessionToken: respondentToken,
+      });
+      await composition.reviewThreadStore.appendEvent({
+        threadId,
+        sessionToken: respondentToken,
+        author: {
+          kind: 'respondent',
+          subjectRef: claim?.subjectRef ?? draftKey.subjectRef,
+        },
+        payload: {
+          type: 'share-minted',
+          shareId: minted.shareId,
+          audienceHint: audienceHint.trim() || undefined,
+        },
+      });
+      setAudienceHint('');
+      await reloadShares(minted.capabilityUrl);
+    } catch (error) {
+      setState({ status: 'error', error });
+    }
+  };
+
+  const revokeShare = async (share: ReviewerShare): Promise<void> => {
+    try {
+      await composition.reviewerSession.revoke({
+        shareId: share.shareId,
+        reason: 'respondent revoked',
+        respondentSessionToken: respondentToken,
+      });
+      await composition.reviewThreadStore.appendEvent({
+        threadId,
+        sessionToken: respondentToken,
+        author: {
+          kind: 'respondent',
+          subjectRef: claim?.subjectRef ?? draftKey.subjectRef,
+        },
+        payload: {
+          type: 'share-revoked',
+          shareId: share.shareId,
+          reason: 'respondent revoked',
+        },
+      });
+      await reloadShares();
+    } catch (error) {
+      setState({ status: 'error', error });
+    }
+  };
+
+  return (
+    <section className="trusted-reviewer" aria-labelledby="trusted-reviewer-title">
+      <div className="trusted-reviewer__header">
+        <div>
+          <p className="respondent-header__kicker">Trusted reviewer</p>
+          <h2 id="trusted-reviewer-title">Share this draft</h2>
+        </div>
+        <span className="place-pill">{policySnapshot.posture}</span>
+      </div>
+      <div className="trusted-reviewer__controls">
+        <label htmlFor={audienceId}>Reviewer label</label>
+        <input
+          id={audienceId}
+          value={audienceHint}
+          onChange={(event) => setAudienceHint(event.currentTarget.value)}
+        />
+        <button
+          type="button"
+          disabled={state.status === 'loading'}
+          onClick={() => {
+            void mintShare();
+          }}
+        >
+          Create reviewer link
+        </button>
+      </div>
+      {state.status === 'loading' ? (
+        <div className="submit-notice" role="status">
+          Loading reviewer links
+        </div>
+      ) : state.status === 'error' ? (
+        <div className="submit-notice submit-notice--error" role="alert">
+          {problemDetail(state.error).message}
+        </div>
+      ) : (
+        <ReviewerShareList shares={state.shares} onRevoke={revokeShare} />
+      )}
+      {state.status === 'ready' && state.latestUrl ? (
+        <input
+          className="trusted-reviewer__link"
+          value={state.latestUrl}
+          readOnly
+          aria-label="Reviewer link"
+          onFocus={(event) => event.currentTarget.select()}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function ReviewerShareList({
+  onRevoke,
+  shares,
+}: {
+  onRevoke: (share: ReviewerShare) => Promise<void>;
+  shares: readonly ReviewerShare[];
+}) {
+  if (shares.length === 0) {
+    return <p className="place-list__empty">No active reviewer links</p>;
+  }
+  return (
+    <ul className="trusted-reviewer__shares">
+      {shares.map((share) => (
+        <li key={share.shareId}>
+          <span>{share.audienceHint || 'Reviewer'}</span>
+          <small>{share.revokedAt ? 'revoked' : share.grantedScope}</small>
+          {!share.revokedAt ? (
+            <button
+              type="button"
+              onClick={() => {
+                void onRevoke(share);
+              }}
+            >
+              Revoke
+            </button>
+          ) : null}
+        </li>
+      ))}
+    </ul>
   );
 }
 

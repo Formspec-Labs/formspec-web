@@ -9,7 +9,11 @@
  */
 import type { FormDefinition, FormItem } from '@formspec-org/types';
 import type { Money } from '../ports/payment-rail-adapter.ts';
-import type { FormFeaturePolicyMode } from './policy-shapes.ts';
+import type {
+  FormFeaturePolicyMode,
+  FormRuntimePolicy,
+  TrustedReviewerRuntimeConfig,
+} from './policy-shapes.ts';
 
 /**
  * Returns `'required'` when the definition contains any field with
@@ -121,4 +125,102 @@ export function extractPaymentAmount(
     amountMinorUnits: candidate.amountMinorUnits,
     currency: candidate.currency,
   };
+}
+
+/**
+ * FW-0113 trusted-reviewer form-policy walker. Reads
+ * `extensions['x-formspec-trusted-reviewer']` while SC-6 is still
+ * PROPOSAL-status:
+ *
+ * - `true` means comment-allowed optional reviewer sharing.
+ * - `{ posture: "comment-allowed" | "suggest-allowed" }` enables the
+ *   optional feature and carries the flat FW-0042 resolved-profile block.
+ * - `{ posture: "forbidden" }` declares a form-level forbid.
+ */
+export function extractTrustedReviewerPolicy(
+  definition: FormDefinition,
+): FormRuntimePolicy | undefined {
+  const raw = definition.extensions?.['x-formspec-trusted-reviewer'];
+  if (raw === undefined || raw === false) return undefined;
+  if (raw === true) {
+    return {
+      features: { trustedReviewer: 'optional' },
+      limits: {
+        trustedReviewer: defaultTrustedReviewerConfig('comment-allowed'),
+      },
+    };
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const candidate = raw as {
+    posture?: unknown;
+    allowedRoles?: unknown;
+    reviewerAssuranceFloor?: unknown;
+    maxActiveSharesPerDraft?: unknown;
+    defaultShareExpiresAtRule?: unknown;
+    respondentOnlyFieldPointers?: unknown;
+  };
+  const posture = trustedReviewerPosture(candidate.posture);
+  if (!posture) return undefined;
+  const config: TrustedReviewerRuntimeConfig = {
+    ...defaultTrustedReviewerConfig(posture),
+    allowedRoles: stringArray(candidate.allowedRoles),
+    reviewerAssuranceFloor: reviewerAssuranceFloor(candidate.reviewerAssuranceFloor),
+    maxActiveSharesPerDraft: positiveInteger(candidate.maxActiveSharesPerDraft),
+    defaultShareExpiresAtRule: nonEmptyString(candidate.defaultShareExpiresAtRule),
+    respondentOnlyFieldPointers: stringArray(candidate.respondentOnlyFieldPointers) ?? [],
+  };
+  return {
+    features: {
+      trustedReviewer: posture === 'forbidden' ? 'forbidden' : 'optional',
+    },
+    limits: { trustedReviewer: config },
+  };
+}
+
+function defaultTrustedReviewerConfig(
+  posture: TrustedReviewerRuntimeConfig['posture'],
+): TrustedReviewerRuntimeConfig {
+  return {
+    posture,
+    respondentOnlyFieldPointers: [],
+    reviewerSessionBindingRef: 'composition:reviewerSession',
+    reviewThreadStoreBindingRef: 'composition:reviewThreadStore',
+  };
+}
+
+function trustedReviewerPosture(value: unknown): TrustedReviewerRuntimeConfig['posture'] | undefined {
+  if (
+    value === 'forbidden' ||
+    value === 'comment-allowed' ||
+    value === 'suggest-allowed'
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function reviewerAssuranceFloor(
+  value: unknown,
+): TrustedReviewerRuntimeConfig['reviewerAssuranceFloor'] | undefined {
+  if (value === 'L1' || value === 'L2' || value === 'L3' || value === 'L4') {
+    return value;
+  }
+  return undefined;
+}
+
+function stringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((entry): entry is string => (
+    typeof entry === 'string' && entry.length > 0
+  ));
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }

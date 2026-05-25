@@ -6,6 +6,7 @@ import {
   EmptyFormRuntimePolicyExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
+  TrustedReviewerPolicyExtractor,
 } from '../../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import {
   DemoFormPolicyExtractor,
@@ -107,5 +108,23 @@ defineFormRuntimePolicyExtractorConformance(
   () => ({
     adapter: new EmbeddableExtractor(),
     definition: embeddableDefinition,
+  }),
+);
+
+const trustedReviewerDefinition: FormDefinition = {
+  ...sampleFormDefinition,
+  extensions: {
+    'x-formspec-trusted-reviewer': {
+      posture: 'suggest-allowed',
+      respondentOnlyFieldPointers: ['/data/protectedAddress'],
+    },
+  },
+};
+
+defineFormRuntimePolicyExtractorConformance(
+  'TrustedReviewerPolicyExtractor conformance (trusted-reviewer definition)',
+  () => ({
+    adapter: new TrustedReviewerPolicyExtractor(),
+    definition: trustedReviewerDefinition,
   }),
 );
