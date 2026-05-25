@@ -1289,6 +1289,11 @@ function RuntimePolicyErrorPage({ error }: { error: RuntimePolicyError }) {
  * it; InvalidRuntimePolicyError has no featureKey and falls through to the
  * generic copy. The previous `(error as { featureKey?: string })` cast bled
  * a structural untyped read into the typed-error surface.
+ *
+ * Branch ordering: instanceof early-return for EmbedOriginNotAllowedError
+ * (the error class IS the discriminator — no featureKey lookup needed)
+ * then featureKey switch for the three featureKey-bearing subclasses.
+ * Typed-error-map refactor (Record<RuntimeFeatureKey, copy fn>) is FW-0107.
  */
 function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
   if (error instanceof EmbedOriginNotAllowedError) {

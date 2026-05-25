@@ -1187,3 +1187,14 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Journey:** [J-018](JOURNEYS.md#j-018--im-filling-this-out-on-a-site-i-came-to-for-something-else)
 - **Done:** The bundled `sample-form.json` declares `extensions['x-formspec-embeddable']: true` AND `npm run dev` users can see a worked host-page demo mounting the iframe. Today's slice-1 stub returns "not embedded" because the bundled demo loads top-level; declaring embeddable on the demo form without a host-page demo to show the affordance is dishonest.
 - **Blocked on:** FW-0053 (Custom Element wrapper) + FW-0102 (production postMessage adapter). Until those land, the demo form stays silent on embed.
+
+### FW-0108 — Typed-error-map refactor for `runtimePolicyErrorCopy`
+
+- **Phase:** Post-MVP (cleanup)
+- **Status:** open
+- **Persona:** Maintainer (typed-error surface honesty)
+- **Journey:** N/A (cleanup row; no respondent-visible change)
+- **Done:** [`src/app/RespondentRuntime.tsx`](src/app/RespondentRuntime.tsx)'s `runtimePolicyErrorCopy(error: RuntimePolicyError): string` switches from the current ordered `instanceof` early-return + `featureKey` cascade to a typed map keyed by `RuntimeFeatureKey` with per-key copy functions. The `EmbedOriginNotAllowedError` early-return (the error class IS the discriminator — no `featureKey` lookup needed) and the three `featureKey`-bearing subclasses (`UnsupportedRequiredFeatureError` / `FeaturePolicyConflictError` / `OrgPolicyUnsatisfiedError`) collapse into a single `Record<RuntimeFeatureKey, (error: RuntimePolicyError) => string>` lookup driven by the closed `RUNTIME_FEATURE_KEYS` taxonomy. Each new feature ADR adds one entry; the generic fallback stays for `InvalidRuntimePolicyError` (no `featureKey`).
+- **Origin (reviewer NEW MED N1 on FW-0040):** the branch ordering inside `runtimePolicyErrorCopy` is a "deferrable cleanup" — adding the `EmbedOriginNotAllowedError` early-return preserved the existing pattern but the inverse map would scale better as `RUNTIME_FEATURE_KEYS` grows. Comment at the function head flags this row.
+- **Blocked on:** none. Land whenever the closed-taxonomy growth makes the cascade unwieldy (4+ feature-key copy rows). Today's three rows (`fileUpload` / `payment` / + embed via the early-return) sit at the limit where the cascade is still readable.
+- **Anti-patterns:** None.
