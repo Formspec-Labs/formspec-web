@@ -17,6 +17,7 @@ const portSuites = new Map([
   ['AttachmentStore', 'tests/adapter-conformance/attachment-store/conformance.test.ts'],
   ['FormRuntimePolicyExtractor', 'tests/adapter-conformance/form-runtime-policy-extractor/conformance.test.ts'],
   ['RespondentHistorySource', 'tests/adapter-conformance/respondent-history-source/conformance.test.ts'],
+  ['OfflineSubmitQueue', 'tests/adapter-conformance/offline-submit-queue/conformance.test.ts'],
 ]);
 const stubPortsByPath = new Map([
   ['src/adapters/stub/definition-source.ts', 'DefinitionSource'],
@@ -29,12 +30,14 @@ const stubPortsByPath = new Map([
   ['src/adapters/stub/attachment-store.ts', 'AttachmentStore'],
   ['src/adapters/stub/form-runtime-policy-extractor.ts', 'FormRuntimePolicyExtractor'],
   ['src/adapters/stub/respondent-history-source.ts', 'RespondentHistorySource'],
+  ['src/adapters/stub/offline-submit-queue.ts', 'OfflineSubmitQueue'],
 ]);
 const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/respondent-place-source.ts', 'unavailableRespondentPlaceSource'],
   ['src/adapters/unavailable/status-reader.ts', 'unavailableStatusReader'],
   ['src/adapters/unavailable/attachment-store.ts', 'unavailableAttachmentStore'],
   ['src/adapters/unavailable/respondent-history-source.ts', 'unavailableRespondentHistorySource'],
+  ['src/adapters/unavailable/offline-submit-queue.ts', 'unavailableOfflineSubmitQueue'],
 ]);
 const requiredHarnessExports = [
   'defineDefinitionSourceConformance',
@@ -47,6 +50,7 @@ const requiredHarnessExports = [
   'defineAttachmentStoreConformance',
   'defineFormRuntimePolicyExtractorConformance',
   'defineRespondentHistorySourceConformance',
+  'defineOfflineSubmitQueueConformance',
 ];
 const requiredReadmePhrases = [
   'formspec-web/adapter-conformance',
