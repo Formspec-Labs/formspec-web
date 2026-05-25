@@ -171,6 +171,52 @@ describe('CompositeIdentityProvider', () => {
     expect(received[received.length - 1]).toBeNull();
   });
 
+  it('emits same-subject assurance upgrades from wrapped providers', async () => {
+    const option = {
+      kind: 'oidc',
+      issuer: 'https://idp-step-up.example.test',
+      displayName: 'Step-up IdP',
+      minAssurance: 'L2',
+    } satisfies Extract<IdpOption, { kind: 'oidc' }>;
+    const provider = sameSubjectStepUpProvider(option);
+    const composite = new CompositeIdentityProvider([provider]);
+
+    const received: Array<IdentityClaim | null> = [];
+    const unsubscribe = composite.subscribe((claim) => received.push(claim));
+
+    const [lowOption] = await composite.discover('L2');
+    const lowClaim = await composite.authenticate(lowOption);
+    const [highOption] = await composite.discover('L3');
+    const highClaim = await composite.authenticate(highOption);
+    unsubscribe();
+
+    expect(lowClaim.subjectRef).toBe(highClaim.subjectRef);
+    expect(received).toEqual([null, lowClaim, highClaim]);
+  });
+
+  it('emits same-subject NIST assurance evidence refreshes', async () => {
+    const option = {
+      kind: 'oidc',
+      issuer: 'https://idp-nist-refresh.example.test',
+      displayName: 'NIST refresh IdP',
+      minAssurance: 'L3',
+    } satisfies Extract<IdpOption, { kind: 'oidc' }>;
+    const provider = sameSubjectNistRefreshProvider(option);
+    const composite = new CompositeIdentityProvider([provider]);
+
+    const received: Array<IdentityClaim | null> = [];
+    const unsubscribe = composite.subscribe((claim) => received.push(claim));
+
+    const [discoveredOption] = await composite.discover('L3');
+    const firstClaim = await composite.authenticate(discoveredOption);
+    const refreshedClaim = await composite.authenticate(discoveredOption);
+    unsubscribe();
+
+    expect(firstClaim.subjectRef).toBe(refreshedClaim.subjectRef);
+    expect(firstClaim.assuranceLevel).toBe(refreshedClaim.assuranceLevel);
+    expect(received).toEqual([null, firstClaim, refreshedClaim]);
+  });
+
   it('does not enumerate IdPs the deployment did not configure (no oversharing)', async () => {
     const composite = new CompositeIdentityProvider([new AnonymousAdapter()]);
 
@@ -280,6 +326,78 @@ function stubProvider({
         } satisfies IdentityClaim);
       for (const listener of listeners) listener(next);
       return next;
+    }),
+    revoke: vi.fn(async () => {
+      for (const listener of listeners) listener(null);
+    }),
+    subscribe(listener) {
+      listeners.add(listener);
+      listener(null);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+function sameSubjectNistRefreshProvider(
+  option: Extract<IdpOption, { kind: 'oidc' }>,
+): IdentityProvider {
+  const listeners = new Set<(claim: IdentityClaim | null) => void>();
+  let authenticateCount = 0;
+  return {
+    discover: vi.fn(async () => [option]),
+    authenticate: vi.fn(async () => {
+      authenticateCount += 1;
+      const claim: IdentityClaim = {
+        provider: 'https://idp-nist-refresh.example.test',
+        adapter: 'stub-nist-refresh@0',
+        subjectRef: 'oidc:same-nist-subject',
+        credentialType: 'oidc-token',
+        subjectBinding: 'respondent',
+        assuranceLevel: 'L3',
+        privacyTier: 'pseudonymous',
+        nistAssurance: {
+          ial: 'IAL2',
+          aal: 'AAL3',
+          fal: authenticateCount === 1 ? 'FAL1' : 'FAL2',
+        },
+      };
+      for (const listener of listeners) listener(claim);
+      return claim;
+    }),
+    revoke: vi.fn(async () => {
+      for (const listener of listeners) listener(null);
+    }),
+    subscribe(listener) {
+      listeners.add(listener);
+      listener(null);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+function sameSubjectStepUpProvider(
+  option: Extract<IdpOption, { kind: 'oidc' }>,
+): IdentityProvider {
+  const listeners = new Set<(claim: IdentityClaim | null) => void>();
+  return {
+    discover: vi.fn(async (floor) => {
+      const minAssurance = floor ?? option.minAssurance;
+      return [{ ...option, minAssurance }];
+    }),
+    authenticate: vi.fn(async (requestedOption: IdpOption) => {
+      const assuranceLevel = requestedOption.minAssurance;
+      const claim: IdentityClaim = {
+        provider: 'https://idp-step-up.example.test',
+        adapter: 'stub-step-up@0',
+        subjectRef: 'oidc:same-step-up-subject',
+        credentialType: 'oidc-token',
+        subjectBinding: 'respondent',
+        assuranceLevel,
+        privacyTier: 'pseudonymous',
+        nistAssurance: { aal: `AAL${assuranceRank(assuranceLevel)}` },
+      };
+      for (const listener of listeners) listener(claim);
+      return claim;
     }),
     revoke: vi.fn(async () => {
       for (const listener of listeners) listener(null);

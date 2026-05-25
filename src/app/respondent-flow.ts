@@ -120,6 +120,7 @@ export function formAssuranceFloorForDefinition(
 
   const ial = optionalAssuranceLevel(assurance, 'ial');
   const aal = optionalAssuranceLevel(assurance, 'aal');
+  optionalString(assurance, 'jurisdiction');
   if (!ial) return aal;
   if (!aal) return ial;
   return assuranceRank(ial) >= assuranceRank(aal) ? ial : aal;
@@ -191,6 +192,16 @@ function optionalAssuranceLevel(
   if (value === undefined) return undefined;
   if (isAssuranceLevel(value)) return value;
   throw new Error(`metadata.assurance.${key} must be one of L1, L2, L3, L4`);
+}
+
+function optionalString(
+  source: Record<string, unknown>,
+  key: 'jurisdiction',
+): string | undefined {
+  const value = source[key];
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') return value;
+  throw new Error(`metadata.assurance.${key} must be a string`);
 }
 
 function isAssuranceLevel(value: unknown): value is AssuranceLevel {

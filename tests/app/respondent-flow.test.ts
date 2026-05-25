@@ -281,6 +281,17 @@ describe('respondent flow helpers', () => {
     );
   });
 
+  it('FW-0028 slice 2: treats jurisdiction as metadata but validates the string shape', () => {
+    const definition = {
+      ...demoSampleForm,
+      metadata: { assurance: { aal: 'L2', jurisdiction: 123 } },
+    } as FormDefinition;
+
+    expect(() => formAssuranceFloorForDefinition(definition)).toThrow(
+      /metadata\.assurance\.jurisdiction/,
+    );
+  });
+
   it('recognizes the narrow identity redirect-started signal', () => {
     const redirectStarted = new Error('redirect started');
     redirectStarted.name = 'IdentityInteractionStartedError';

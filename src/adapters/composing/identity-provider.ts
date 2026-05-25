@@ -113,7 +113,9 @@ export class CompositeIdentityProvider implements IdentityProvider {
     // equal consecutive emissions so the conformance contract —
     // `[null, claim, null]` for a single authenticate→revoke cycle —
     // holds for the composite. claimEquivalent is provider+adapter+subject
-    // emission dedup, NOT same-subject-across-providers dedup (arch L-3).
+    // plus assurance evidence emission dedup, NOT same-subject-across-
+    // providers dedup (arch L-3). A same-subject L2→L3 step-up is a real
+    // session change and must reach RespondentRuntime.
     let lastEmitted: IdentityClaim | null | undefined = undefined; // sentinel
     const dedupedListener = (claim: IdentityClaim | null): void => {
       if (claimEquivalent(lastEmitted, claim)) return;
@@ -157,7 +159,21 @@ function claimEquivalent(
 ): boolean {
   if (a === undefined) return false;
   if (a === null || b === null) return a === b;
-  return a.subjectRef === b.subjectRef && a.provider === b.provider && a.adapter === b.adapter;
+  return (
+    a.subjectRef === b.subjectRef &&
+    a.provider === b.provider &&
+    a.adapter === b.adapter &&
+    a.assuranceLevel === b.assuranceLevel &&
+    nistAssuranceEquivalent(a.nistAssurance, b.nistAssurance)
+  );
+}
+
+function nistAssuranceEquivalent(
+  a: IdentityClaim['nistAssurance'],
+  b: IdentityClaim['nistAssurance'],
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.ial === b.ial && a.aal === b.aal && a.fal === b.fal;
 }
 
 // Identity-key derived from the user-facing IdP shape (kind + the
