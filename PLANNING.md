@@ -751,6 +751,18 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 
 ## Closed
 
+### FW-0115 — Multi-party commitment-protocol Spike-and-Observe build
+
+- **Phase:** Pre-MVP (cross-stack contract resolution per [ADR-0155 §8](../thoughts/adr/0155-multi-party-intake.md))
+- **Status:** closed
+- **Persona:** Architect / Implementer
+- **Journey:** Backs [J-041](JOURNEYS.md#j-041--multi-party-forms-many-respondents-one-submission-load-bearing-for-joint-legal-tax-immigration-custody-and-financial-work) by resolving the commitment-protocol port shape per [ADR-0155 §8](../thoughts/adr/0155-multi-party-intake.md).
+- **Done:** Two small-version implementations of the candidate port shapes per [ADR-0155 §8.3](../thoughts/adr/0155-multi-party-intake.md) (Shape A — 2PC explicit states; Shape B — eventual-consistency with explicit GC contract) landed at `src/composition/spike/multi-party-commit-A/` and `src/composition/spike/multi-party-commit-B/`, each shipping the four conformance fixtures from §8.4 (F1 happy-path, F2 abandonment, F3 post-prepare amendment, F4 mid-flow party-addition) against real `DraftStore` + `IdentityProvider` + `SubmitTransport` adapters per ADR-0155 §5. Observation report at [`thoughts/spikes/2026-05-25-multi-party-commit-spike-observation.md`](thoughts/spikes/2026-05-25-multi-party-commit-spike-observation.md) records the §8.5 measurements per fixture per shape. Winning shape (Shape A) landed as the locked `MultiPartyCommit` port at `src/ports/multi-party-commit.ts` per ADR-0155 §5 + §8; losing shape (Shape B) deleted per §8.7. ADR-0155 §8.10 records the verdict.
+- **Progress (2026-05-25, spike complete + verdict locked):** Both candidate shapes implemented with F1..F4 conformance suites against the real ports (commits `5f83440`, `e6c4db6`). §8.5 measurement runner emitted raw port-call counts + consumer-LOC table. Observation report records the §8.6 verdict: Shape A wins all three decision criteria; load-bearing asymmetry is composition with FW-0050 §7.2's per-party deadlines through `PreparationWindow` + `tickClock` (commit `5ba1b77`). Locked port shipped at `src/ports/multi-party-commit.ts` with Shape A's in-memory adapter + F1..F4 conformance suite retained as the working reference until FW-0061 ships the production adapter; Shape B implementation, test, and §8.5 one-shot measurement runner deleted per §8.7 (commit `a2f340f`). Parent-repo [ADR-0155 §8.10](../thoughts/adr/0155-multi-party-intake.md) records the verdict (parent commit `dc46582`). `npm run typecheck` + `npm run test:unit -- multi-party-commit` (875 tests) + `npm run check:testing-plan` green after the close-out.
+- **Follow-on:** [FW-0061](#fw-0061--multi-party-submission-build) consumes the locked `MultiPartyCommit` port through the preallocated `multiParty` `RuntimeFeatureKey` at position 14. No new key is minted by this verdict.
+- **Closed:** spike output IS the slice-1 ship — locked port + reference adapter + F1..F4 conformance suite + observation report + ADR-0155 §8.10 verdict. Four commits: `5f83440` (Shape A spike), `e6c4db6` (Shape B spike), `5ba1b77` (observation report + verdict), `a2f340f` (locked port + Shape B deletion). Parent: `dc46582` (ADR-0155 §8.10).
+- **Anti-patterns:** none. The spike's "one shape survives" discipline is enforced by ADR-0155 §8.7; no AP-* catalog entry covers two-coexisting-port-shapes debt.
+
 ### FW-0065 — Runtime feature resolver scaffold + policy gates
 
 - **Phase:** Post-MVP
@@ -1297,12 +1309,4 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Blocked on:** trigger condition — either a real coercion incident exploiting the renderer-class-only panic-revoke, OR an adopter request to harden the affordance into a substrate guarantee, OR an adopter request for signed-by-reviewer attestation in a high-trust deployment. Until the trigger fires, FW-0042's substrate-class AP-014 defense rests on §2.3.4 layers (a)+(b)+(c)+(d); the renderer-class panic-revoke carries layer (e) within the formspec-web reference renderer only.
 - **Anti-patterns:** AP-014 (substrate-promotion of the panic-revoke).
 
-### FW-0115 — Multi-party commitment-protocol Spike-and-Observe build
-
-- **Phase:** Pre-MVP (cross-stack contract resolution per [ADR-0155 §8](../thoughts/adr/0155-multi-party-intake.md))
-- **Status:** open (blocked on ADR-0155 §8 spike-protocol ratification)
-- **Persona:** Architect / Implementer
-- **Journey:** Backs [J-041](JOURNEYS.md#j-041--multi-party-forms-many-respondents-one-submission-load-bearing-for-joint-legal-tax-immigration-custody-and-financial-work) by resolving the commitment-protocol port shape per [ADR-0155 §8](../thoughts/adr/0155-multi-party-intake.md).
-- **Done:** Two small-version implementations of the candidate port shapes per [ADR-0155 §8.3](../thoughts/adr/0155-multi-party-intake.md) (Shape A — 2PC explicit states; Shape B — eventual-consistency with explicit GC contract) land at `src/composition/spike/multi-party-commit-A/` and `src/composition/spike/multi-party-commit-B/`. Each ships the four conformance fixtures from §8.4 (F1 happy-path, F2 abandonment, F3 post-prepare amendment, F4 mid-flow party-addition) against real `DraftStore` + `IdentityProvider` + `SubmitTransport` adapters per ADR-0155 §5. Observation report at `thoughts/spikes/2026-XX-XX-multi-party-commit-spike-observation.md` records the §8.5 measurements (port-method-call count, consumer LoC, edge-case gap count, FW-0048 + FW-0049 + FW-0050 composition fit) per fixture per shape. Winning shape lands as the new commitment-protocol port at `src/ports/multi-party-commit.ts` per ADR-0155 §5 + §8; losing implementation deleted in the same commit per §8.7. ADR-0155 §8 updated with the locked decision (or with the §8.7 third-shape escape if both candidates lose).
-- **Blocked on:** [ADR-0155 §8](../thoughts/adr/0155-multi-party-intake.md) ratification (this ADR carries the spike protocol; this row implements the spike). Prior-Art Pass output in §8.2 informs but does not block.
-- **Anti-patterns:** none. The spike's "one shape survives" discipline is enforced by ADR-0155 §8.7; no AP-* catalog entry covers two-coexisting-port-shapes debt.
+### FW-0115 — *(closed; see [## Closed](#closed) — locked `MultiPartyCommit` port shipped at `src/ports/multi-party-commit.ts`, Shape A in-memory adapter + F1..F4 conformance suite retained as the working reference, ADR-0155 §8.10 records the verdict)*
