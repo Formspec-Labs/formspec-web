@@ -28,6 +28,7 @@ import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/of
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
 import { HISTORY_ROUTE_NARROWING } from '../../src/app/history-route.ts';
+import { SCREENER_ROUTE_NARROWING } from '../../src/app/screener-route.ts';
 
 // Build a minimal production-mode CompositionLike directly. `createDefaultComposition()`
 // short-circuits to the demo composition when no formspecServerUrl is configured, which
@@ -80,6 +81,7 @@ const NARROWED_DESCRIPTORS: ReadonlyArray<readonly [string, RouteNarrowing]> = [
   ['OBLIGATIONS_ROUTE_NARROWING (FW-0055)', OBLIGATIONS_ROUTE_NARROWING],
   ['DOCUMENTS_ROUTE_NARROWING (FW-0056)', DOCUMENTS_ROUTE_NARROWING],
   ['HISTORY_ROUTE_NARROWING (FW-0057)', HISTORY_ROUTE_NARROWING],
+  ['SCREENER_ROUTE_NARROWING (FW-0046)', SCREENER_ROUTE_NARROWING],
 ];
 const NARROWED_MODES: readonly RouteNarrowingMode[] = ['default', 'stub'];
 

@@ -91,6 +91,21 @@ describe('App route selection (FW-0039 slice 1)', () => {
       ).not.toBeNull();
     });
   });
+
+  it('routes /screener?doc=URN to the screener runtime (FW-0046 slice 1)', async () => {
+    setHref('http://localhost/screener?doc=urn:demo:formspec-web:screener:benefits-or-grant');
+    const composition = createStubComposition();
+    render(
+      <CompositionProvider value={composition}>
+        <App config={departmentAppProfile} />
+      </CompositionProvider>,
+    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('heading', { name: /Which form is right for you\?/i, level: 1 }),
+      ).not.toBeNull();
+    });
+  });
 });
 
 function setHref(href: string): void {

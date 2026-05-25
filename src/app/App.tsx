@@ -7,6 +7,7 @@ import { parseStatusRoute, type StatusRouteParams } from './status-route.ts';
 import { parseObligationsRoute, type ObligationsRouteParams } from './obligations-route.ts';
 import { parseDocumentsRoute, type DocumentsRouteParams } from './documents-route.ts';
 import { parseHistoryRoute, type HistoryRouteParams } from './history-route.ts';
+import { parseScreenerRoute, type ScreenerRouteParams } from './screener-route.ts';
 
 interface AppProps {
   config: FormspecWebConfig;
@@ -41,6 +42,12 @@ interface HistoryRuntimeProps {
   route: HistoryRouteParams;
 }
 
+interface ScreenerRuntimeProps {
+  composition: Composition;
+  config: FormspecWebConfig;
+  route: ScreenerRouteParams;
+}
+
 type RuntimeState =
   | { status: 'loading' }
   | {
@@ -72,6 +79,12 @@ type RuntimeState =
       Runtime: ComponentType<HistoryRuntimeProps>;
       params: HistoryRouteParams;
     }
+  | {
+      status: 'ready';
+      route: 'screener';
+      Runtime: ComponentType<ScreenerRuntimeProps>;
+      params: ScreenerRouteParams;
+    }
   | { status: 'error'; error: unknown };
 
 export function App({ config }: AppProps) {
@@ -93,6 +106,10 @@ export function App({ config }: AppProps) {
       statusParams || obligationsParams || documentsParams
         ? null
         : parseHistoryRoute(window.location.href);
+    const screenerParams =
+      statusParams || obligationsParams || documentsParams || historyParams
+        ? null
+        : parseScreenerRoute(window.location.href);
     const loader = statusParams
       ? import('./StatusRuntime.tsx').then((module) => ({
           status: 'ready' as const,
@@ -121,11 +138,18 @@ export function App({ config }: AppProps) {
                 Runtime: module.HistoryRuntime,
                 params: historyParams,
               }))
-            : import('./RespondentRuntime.tsx').then((module) => ({
-                status: 'ready' as const,
-                route: 'form' as const,
-                Runtime: module.RespondentRuntime,
-              }));
+            : screenerParams
+              ? import('./ScreenerRuntime.tsx').then((module) => ({
+                  status: 'ready' as const,
+                  route: 'screener' as const,
+                  Runtime: module.ScreenerRuntime,
+                  params: screenerParams,
+                }))
+              : import('./RespondentRuntime.tsx').then((module) => ({
+                  status: 'ready' as const,
+                  route: 'form' as const,
+                  Runtime: module.RespondentRuntime,
+                }));
     void loader
       .then((next) => {
         if (!cancelled) {
@@ -161,6 +185,8 @@ export function App({ config }: AppProps) {
           ) : runtimeState.status === 'ready' && runtimeState.route === 'documents' ? (
             <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
           ) : runtimeState.status === 'ready' && runtimeState.route === 'history' ? (
+            <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
+          ) : runtimeState.status === 'ready' && runtimeState.route === 'screener' ? (
             <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
           ) : (
             <>
