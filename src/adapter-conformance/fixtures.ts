@@ -6,6 +6,7 @@ import type {
   ApplicantStatusResource,
   EmbedMessage,
   HistorySnapshot,
+  LifecycleActionSnapshot,
   Money,
   RespondentPlaceSnapshot,
 } from '../ports/index.ts';
@@ -73,6 +74,48 @@ export const sampleApplicantStatusResource: ApplicantStatusResource = {
   event: 'applicant-task-submitted',
   occurredAt: '2026-05-23T00:00:00.000Z',
   summary: 'The applicant projection is sourced from the WOS applicant API.',
+};
+
+export const sampleLifecycleActionSnapshot: LifecycleActionSnapshot = {
+  caseUrn: 'urn:wos:case_conformance_0001',
+  updatedAt: '2026-05-24T12:00:00.000Z',
+  actions: [
+    { action: 'correct', enabled: true, window: { state: 'open' }, requiresReason: true },
+    {
+      action: 'withdraw',
+      enabled: true,
+      window: { state: 'closes-at', closesAt: '2026-06-24T23:59:59.000Z' },
+      requiresReason: true,
+    },
+    { action: 'dispute', enabled: true, signerOnly: true, requiresReason: true },
+  ],
+  events: [
+    {
+      kind: 'original-submission',
+      eventId: 'evt-original-conformance',
+      occurredAt: '2026-05-23T00:00:00.000Z',
+      verified: true,
+      title: 'Original signed submission',
+      actorLabel: 'Respondent',
+    },
+    {
+      kind: 'correction',
+      eventId: 'evt-correction-conformance',
+      occurredAt: '2026-05-24T12:00:00.000Z',
+      verified: true,
+      actorLabel: 'Respondent',
+      recordedAs: 'correction',
+      changedFields: [
+        {
+          path: '/householdSize',
+          label: 'Household size',
+          originalValue: { text: '1' },
+          correctedValue: { text: '3' },
+        },
+      ],
+      reason: { text: 'I typed the wrong household size.' },
+    },
+  ],
 };
 
 export const sampleRespondentPlaceSnapshot: RespondentPlaceSnapshot = {

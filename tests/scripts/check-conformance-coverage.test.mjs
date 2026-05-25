@@ -359,6 +359,15 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/lifecycle-action-client/conformance.test.ts',
+    suiteText(
+      'LifecycleActionClient',
+      [['stub LifecycleActionClient conformance', 'stubLifecycleActionClient']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -406,6 +415,10 @@ function writeAdapterFiles(root, options) {
       'export function stubReviewThreadStore() {}',
     ],
     [
+      'src/adapters/stub/lifecycle-action-client.ts',
+      'export function stubLifecycleActionClient() {}',
+    ],
+    [
       'src/adapters/unavailable/respondent-place-source.ts',
       'export function unavailableRespondentPlaceSource() {}',
     ],
@@ -441,6 +454,10 @@ function writeAdapterFiles(root, options) {
     [
       'src/adapters/unavailable/review-thread-store.ts',
       'export function unavailableReviewThreadStore() {}',
+    ],
+    [
+      'src/adapters/unavailable/lifecycle-action-client.ts',
+      'export function unavailableLifecycleActionClient() {}',
     ],
     [
       'src/adapters/http/definition-source.ts',
@@ -485,6 +502,7 @@ function defaultComposition() {
     'import { unavailableScreenerDocumentSource } from "../adapters/unavailable/screener-document-source.ts";',
     'import { unavailableReviewerSession } from "../adapters/unavailable/reviewer-session.ts";',
     'import { unavailableReviewThreadStore } from "../adapters/unavailable/review-thread-store.ts";',
+    'import { unavailableLifecycleActionClient } from "../adapters/unavailable/lifecycle-action-client.ts";',
     'export function createDefaultComposition() {',
     '  return {',
     '    respondentPlaceSource: unavailableRespondentPlaceSource(),',
@@ -497,6 +515,7 @@ function defaultComposition() {
     '    screenerDocumentSource: unavailableScreenerDocumentSource(),',
     '    reviewerSession: unavailableReviewerSession(),',
     '    reviewThreadStore: unavailableReviewThreadStore(),',
+    '    lifecycleActionClient: unavailableLifecycleActionClient(),',
     '  };',
     '}',
   ].join('\n');
@@ -521,6 +540,7 @@ function publicIndex() {
     '  defineScreenerDocumentSourceConformance,',
     '  defineReviewerSessionConformance,',
     '  defineReviewThreadStoreConformance,',
+    '  defineLifecycleActionClientConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }

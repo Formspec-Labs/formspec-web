@@ -81,8 +81,8 @@ export const FEATURE_PORT_MAP = {
   // SubmitTransport semantics instead. The empty binding keeps the key
   // unavailable-only until FW-0061 materializes a concrete capability proof.
   multiParty: [],
-  // FW-0038 preallocation. FW-0034 names the capability `recordLifecycle`;
-  // the build owns the LifecycleActionClient transport shape.
+  // FW-0038. FW-0034 names the capability `recordLifecycle`; the build owns
+  // the LifecycleActionClient transport shape.
   recordLifecycle: 'lifecycleActionClient',
 } as const satisfies Readonly<Record<RuntimeFeatureKey, FeaturePortBinding>>;
 

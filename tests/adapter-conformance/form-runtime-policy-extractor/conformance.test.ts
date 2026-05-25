@@ -6,6 +6,7 @@ import {
   EmptyFormRuntimePolicyExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
+  RecordLifecycleExtractor,
   TrustedReviewerPolicyExtractor,
 } from '../../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import {
@@ -126,5 +127,22 @@ defineFormRuntimePolicyExtractorConformance(
   () => ({
     adapter: new TrustedReviewerPolicyExtractor(),
     definition: trustedReviewerDefinition,
+  }),
+);
+
+const recordLifecycleDefinition: FormDefinition = {
+  ...sampleFormDefinition,
+  extensions: {
+    'x-formspec-record-lifecycle': {
+      correctable: { enabled: true, correctableFieldSet: ['/householdSize'] },
+    },
+  },
+};
+
+defineFormRuntimePolicyExtractorConformance(
+  'RecordLifecycleExtractor conformance (record-lifecycle definition)',
+  () => ({
+    adapter: new RecordLifecycleExtractor(),
+    definition: recordLifecycleDefinition,
   }),
 );

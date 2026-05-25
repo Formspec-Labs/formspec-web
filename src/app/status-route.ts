@@ -10,15 +10,16 @@ const WOS_URN_PREFIX = 'urn:wos:';
 /**
  * Route-narrowing descriptor for `/status` (FW-0070, FW-0080).
  *
- * Status surface reads `statusReader` only — no respondent-place reads, no
- * identity binding (URN is the bearer per FW-0039). Form-shaped ports
+ * Status surface reads `statusReader` plus FW-0038 lifecycle actions when
+ * available — no respondent-place reads, no identity binding (URN is the
+ * bearer per FW-0039). Form-shaped ports
  * (definition / draft / submit) unconditionally noop on every narrowed
  * route. See FW-0070 design §"Decision 3".
  */
 export const STATUS_ROUTE_NARROWING: RouteNarrowing = {
   routeCite: '/status',
   initialDefinitionUrlSentinel: 'about:not-constructed#fw-0068',
-  consumes: new Set(['status']),
+  consumes: new Set(['status', 'recordLifecycle']),
   identityBound: false,
 };
 

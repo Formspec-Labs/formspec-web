@@ -46,10 +46,12 @@ import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-sou
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import {
   demoApplicantCaseDetail,
+  demoLifecycleActionSnapshot,
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
+import { unavailableLifecycleActionClient } from '../adapters/unavailable/lifecycle-action-client.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailablePreallocatedFeaturePort } from '../adapters/unavailable/preallocated-feature-port.ts';
@@ -61,6 +63,7 @@ import { unavailableScreenerDocumentSource } from '../adapters/unavailable/scree
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
+import { stubLifecycleActionClient } from '../adapters/stub/lifecycle-action-client.ts';
 import { demoHistorySnapshot } from '../demo/respondent-history.ts';
 import { demoScreenerCatalog } from '../demo/screener.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
@@ -262,10 +265,7 @@ function buildProductionNarrowedComposition({
     reviewerSession: unavailableReviewerSession(),
     reviewThreadStore: unavailableReviewThreadStore(),
     safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
-    lifecycleActionClient: unavailablePreallocatedFeaturePort(
-      'recordLifecycle',
-      'LifecycleActionClient',
-    ),
+    lifecycleActionClient: unavailableLifecycleActionClient(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -315,10 +315,9 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     reviewerSession: unavailableReviewerSession(),
     reviewThreadStore: unavailableReviewThreadStore(),
     safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
-    lifecycleActionClient: unavailablePreallocatedFeaturePort(
-      'recordLifecycle',
-      'LifecycleActionClient',
-    ),
+    lifecycleActionClient: route.consumes.has('recordLifecycle')
+      ? stubLifecycleActionClient({ initialSnapshots: [demoLifecycleActionSnapshot()] })
+      : unavailableLifecycleActionClient(),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -358,7 +357,7 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       safeAddress: 'unavailable',
       duressAware: 'unavailable',
       multiParty: 'unavailable',
-      recordLifecycle: 'unavailable',
+      recordLifecycle: route.consumes.has('recordLifecycle') ? 'demo-stub' : 'unavailable',
     },
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),

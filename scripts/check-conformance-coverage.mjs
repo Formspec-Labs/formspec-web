@@ -23,6 +23,7 @@ const portSuites = new Map([
   ['ScreenerDocumentSource', 'tests/adapter-conformance/screener-document-source/conformance.test.ts'],
   ['ReviewerSession', 'tests/adapter-conformance/reviewer-session/conformance.test.ts'],
   ['ReviewThreadStore', 'tests/adapter-conformance/review-thread-store/conformance.test.ts'],
+  ['LifecycleActionClient', 'tests/adapter-conformance/lifecycle-action-client/conformance.test.ts'],
 ]);
 const stubPortsByPath = new Map([
   ['src/adapters/stub/definition-source.ts', 'DefinitionSource'],
@@ -41,6 +42,7 @@ const stubPortsByPath = new Map([
   ['src/adapters/stub/screener-document-source.ts', 'ScreenerDocumentSource'],
   ['src/adapters/stub/reviewer-session.ts', 'ReviewerSession'],
   ['src/adapters/stub/review-thread-store.ts', 'ReviewThreadStore'],
+  ['src/adapters/stub/lifecycle-action-client.ts', 'LifecycleActionClient'],
 ]);
 const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/respondent-place-source.ts', 'unavailableRespondentPlaceSource'],
@@ -53,6 +55,7 @@ const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/screener-document-source.ts', 'unavailableScreenerDocumentSource'],
   ['src/adapters/unavailable/reviewer-session.ts', 'unavailableReviewerSession'],
   ['src/adapters/unavailable/review-thread-store.ts', 'unavailableReviewThreadStore'],
+  ['src/adapters/unavailable/lifecycle-action-client.ts', 'unavailableLifecycleActionClient'],
 ]);
 const requiredHarnessExports = [
   'defineDefinitionSourceConformance',
@@ -71,6 +74,7 @@ const requiredHarnessExports = [
   'defineScreenerDocumentSourceConformance',
   'defineReviewerSessionConformance',
   'defineReviewThreadStoreConformance',
+  'defineLifecycleActionClientConformance',
 ];
 const requiredReadmePhrases = [
   'formspec-web/adapter-conformance',

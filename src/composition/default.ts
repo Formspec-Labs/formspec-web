@@ -10,6 +10,7 @@ import {
   EmbeddableExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
+  RecordLifecycleExtractor,
   TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
@@ -18,6 +19,7 @@ import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
+import { unavailableLifecycleActionClient } from '../adapters/unavailable/lifecycle-action-client.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailablePreallocatedFeaturePort } from '../adapters/unavailable/preallocated-feature-port.ts';
@@ -95,10 +97,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     reviewerSession: unavailableReviewerSession(),
     reviewThreadStore: unavailableReviewThreadStore(),
     safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
-    lifecycleActionClient: unavailablePreallocatedFeaturePort(
-      'recordLifecycle',
-      'LifecycleActionClient',
-    ),
+    lifecycleActionClient: unavailableLifecycleActionClient(),
     // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —
@@ -159,7 +158,8 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       screener: 'unavailable',
       // 2026-05-25 namespace preallocation: these post-MVP capabilities stay
       // unavailable in the OSS production composition until their build rows
-      // replace the sentinel slots / deferred port bindings.
+      // replace the sentinel slots / deferred port bindings. FW-0038 has a
+      // real port now, but no production reference adapter ships yet.
       trustedReviewer: 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'unavailable',
@@ -203,6 +203,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       new PaymentRequirementExtractor(),
       new EmbeddableExtractor(),
       new TrustedReviewerPolicyExtractor(),
+      new RecordLifecycleExtractor(),
     ]),
   };
   return freezeComposition(composition);

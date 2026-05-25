@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import type { Composition } from '../composition/types.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import type {
@@ -8,6 +8,14 @@ import type {
   ApplicantStatusResource,
   ApplicantStatusTimelineEntry,
   ApplicantTaskSummary,
+  LifecycleActionAvailability,
+  LifecycleActionClient,
+  LifecycleActionKind,
+  LifecycleActionReceipt,
+  LifecycleActionSnapshot,
+  LifecycleChangedField,
+  LifecycleProtectedText,
+  LifecycleTimelineEvent,
 } from '../ports/index.ts';
 import {
   InvalidRuntimePolicyError,
@@ -17,8 +25,10 @@ import {
   type ResolvedRuntimeProfile,
   type RuntimePolicyError,
 } from '../policy/index.ts';
+import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { formatDate, formatDuration, labelFromToken } from './format.ts';
 import type { StatusRouteParams } from './status-route.ts';
+import './lifecycle-actions.css';
 
 interface StatusRuntimeProps {
   composition: Composition;
@@ -30,8 +40,14 @@ type StatusViewState =
   | { kind: 'loading' }
   | { kind: 'disabled'; cause: DisabledCause | undefined }
   | { kind: 'policy-error'; error: RuntimePolicyError }
-  | { kind: 'ready'; detail: ApplicantCaseDetail }
-  | { kind: 'ready-reduced'; resource: ApplicantStatusResource }
+  | { kind: 'ready'; detail: ApplicantCaseDetail; lifecycle: LifecycleViewState }
+  | { kind: 'ready-reduced'; resource: ApplicantStatusResource; lifecycle: LifecycleViewState }
+  | { kind: 'not-found' }
+  | { kind: 'adapter-error' };
+
+type LifecycleViewState =
+  | { kind: 'disabled'; cause: DisabledCause | undefined }
+  | { kind: 'available'; snapshot: LifecycleActionSnapshot }
   | { kind: 'not-found' }
   | { kind: 'adapter-error' };
 
@@ -57,12 +73,12 @@ export function StatusRuntime({ composition, route }: StatusRuntimeProps) {
         instance: composition.instanceCapabilities,
         org: composition.orgRuntimePolicy,
         // The /status route IS the user's opt-in to view status — synthesize
-        // form: { status: 'optional' } so the resolver evaluates the
-        // instance×org pair against an actual request. Stays OPTIONAL — never
-        // 'required' (arch-review F-4) — so an unavailable instance falls off
-        // as optional-no-instance rather than raising a typed error. The
-        // disabled-cause branches drive the 'Status not shared' copy.
-        form: { features: { status: 'optional' } },
+        // form: { status: 'optional', recordLifecycle: 'optional' } so the
+        // resolver evaluates the instance×org pair against actual route
+        // requests. Both stay OPTIONAL — never 'required' — so an unavailable
+        // instance falls off as optional-no-instance rather than raising a
+        // typed error on a non-form surface.
+        form: { features: { status: 'optional', recordLifecycle: 'optional' } },
       });
     } catch (error) {
       if (isRuntimePolicyError(error)) {
@@ -87,23 +103,41 @@ export function StatusRuntime({ composition, route }: StatusRuntimeProps) {
       };
     }
 
-    void composition.statusReader
-      .readStatus({ resourceRef: route.caseUrn })
-      .then((resource) => {
+    const lifecycleEnabled = profile.enabled.has('recordLifecycle');
+    const lifecycleDisabledCause = profile.disabled.get('recordLifecycle')?.cause;
+
+    void Promise.allSettled([
+      composition.statusReader.readStatus({ resourceRef: route.caseUrn }),
+      lifecycleEnabled
+        ? composition.lifecycleActionClient.readLifecycle({ caseUrn: route.caseUrn })
+        : Promise.resolve(undefined),
+    ])
+      .then(([statusResult, lifecycleResult]) => {
         if (cancelled) return;
+        if (statusResult.status === 'rejected') {
+          console.error('StatusRuntime: readStatus failed', statusResult.reason);
+          setView({ kind: 'adapter-error' });
+          return;
+        }
+        const resource = statusResult.value;
         if (!resource) {
           setView({ kind: 'not-found' });
           return;
         }
+        const lifecycle = lifecycleStateFromResult({
+          enabled: lifecycleEnabled,
+          disabledCause: lifecycleDisabledCause,
+          result: lifecycleResult,
+        });
         if (isApplicantCaseDetail(resource)) {
-          setView({ kind: 'ready', detail: resource });
+          setView({ kind: 'ready', detail: resource, lifecycle });
           return;
         }
-        setView({ kind: 'ready-reduced', resource });
+        setView({ kind: 'ready-reduced', resource, lifecycle });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        console.error('StatusRuntime: readStatus failed', error);
+        console.error('StatusRuntime: status load failed', error);
         setView({ kind: 'adapter-error' });
       });
 
@@ -151,10 +185,46 @@ export function StatusRuntime({ composition, route }: StatusRuntimeProps) {
   }
 
   if (view.kind === 'ready-reduced') {
-    return <ReducedStatus resource={view.resource} />;
+    return (
+      <ReducedStatus
+        resource={view.resource}
+        lifecycle={view.lifecycle}
+        lifecycleActionClient={composition.lifecycleActionClient}
+        caseUrn={route.caseUrn}
+      />
+    );
   }
 
-  return <ReadyStatus detail={view.detail} />;
+  return (
+    <ReadyStatus
+      detail={view.detail}
+      lifecycle={view.lifecycle}
+      lifecycleActionClient={composition.lifecycleActionClient}
+      caseUrn={route.caseUrn}
+    />
+  );
+}
+
+function lifecycleStateFromResult({
+  enabled,
+  disabledCause,
+  result,
+}: {
+  enabled: boolean;
+  disabledCause: DisabledCause | undefined;
+  result: PromiseSettledResult<LifecycleActionSnapshot | undefined>;
+}): LifecycleViewState {
+  if (!enabled) {
+    return { kind: 'disabled', cause: disabledCause };
+  }
+  if (result.status === 'rejected') {
+    console.error('StatusRuntime: readLifecycle failed', result.reason);
+    return { kind: 'adapter-error' };
+  }
+  if (!result.value) {
+    return { kind: 'not-found' };
+  }
+  return { kind: 'available', snapshot: result.value };
 }
 
 function StatusNotShared({ cause }: { cause: DisabledCause | undefined }) {
@@ -185,18 +255,43 @@ function PolicyErrorPage({ error }: { error: RuntimePolicyError }) {
   );
 }
 
-function ReducedStatus({ resource }: { resource: ApplicantStatusResource }) {
+function ReducedStatus({
+  resource,
+  lifecycle,
+  lifecycleActionClient,
+  caseUrn,
+}: {
+  resource: ApplicantStatusResource;
+  lifecycle: LifecycleViewState;
+  lifecycleActionClient: LifecycleActionClient;
+  caseUrn: string;
+}) {
   const headline = headlineFromResource(resource);
   return (
     <section className="status-surface" aria-labelledby="status-title">
       <h1 id="status-title">Your application status</h1>
       <p>{headline}</p>
       <p className="status-timing__no-aggregate">{NO_AGGREGATE_COPY}</p>
+      <LifecycleActionsPanel
+        state={lifecycle}
+        client={lifecycleActionClient}
+        caseUrn={caseUrn}
+      />
     </section>
   );
 }
 
-function ReadyStatus({ detail }: { detail: ApplicantCaseDetail }) {
+function ReadyStatus({
+  detail,
+  lifecycle,
+  lifecycleActionClient,
+  caseUrn,
+}: {
+  detail: ApplicantCaseDetail;
+  lifecycle: LifecycleViewState;
+  lifecycleActionClient: LifecycleActionClient;
+  caseUrn: string;
+}) {
   const currentStage = currentStageFromTimeline(detail.statusTimeline);
   const lifecycleBadge = lifecycleBadgeFromTimeline(detail.statusTimeline);
   return (
@@ -213,8 +308,427 @@ function ReadyStatus({ detail }: { detail: ApplicantCaseDetail }) {
       {detail.openTasks.length > 0 ? <NextTasks tasks={detail.openTasks} /> : null}
 
       {detail.aiInvolvement ? <AiDisclosure involvement={detail.aiInvolvement} /> : null}
+
+      <LifecycleActionsPanel
+        state={lifecycle}
+        client={lifecycleActionClient}
+        caseUrn={caseUrn}
+      />
     </section>
   );
+}
+
+type LifecycleSubmitState =
+  | { status: 'idle' }
+  | { status: 'submitting'; action: LifecycleActionKind }
+  | { status: 'submitted'; action: LifecycleActionKind; message: string }
+  | { status: 'error'; message: string };
+
+function LifecycleActionsPanel({
+  state,
+  client,
+  caseUrn,
+}: {
+  state: LifecycleViewState;
+  client: LifecycleActionClient;
+  caseUrn: string;
+}) {
+  const [lifecycle, setLifecycle] = useState<LifecycleViewState>(state);
+  const [activeAction, setActiveAction] = useState<LifecycleActionKind | null>(null);
+  const [submitState, setSubmitState] = useState<LifecycleSubmitState>({ status: 'idle' });
+
+  useEffect(() => {
+    setLifecycle(state);
+    setActiveAction(null);
+    setSubmitState({ status: 'idle' });
+  }, [state]);
+
+  if (lifecycle.kind === 'disabled') {
+    return <LifecycleUnavailable cause={lifecycle.cause} />;
+  }
+  if (lifecycle.kind === 'adapter-error') {
+    return (
+      <section className="status-lifecycle-actions" aria-labelledby="status-lifecycle-title">
+        <h2 id="status-lifecycle-title">What you can do</h2>
+        <p>Lifecycle actions could not be loaded. Try again later.</p>
+      </section>
+    );
+  }
+  if (lifecycle.kind === 'not-found') {
+    return (
+      <section className="status-lifecycle-actions" aria-labelledby="status-lifecycle-title">
+        <h2 id="status-lifecycle-title">What you can do</h2>
+        <p>Lifecycle actions are not available for this record.</p>
+      </section>
+    );
+  }
+
+  const actionByKind = new Map(
+    lifecycle.snapshot.actions.map((action) => [action.action, action]),
+  );
+
+  const submit = async (
+    action: LifecycleActionKind,
+    run: () => Promise<LifecycleActionReceipt>,
+  ): Promise<void> => {
+    setSubmitState({ status: 'submitting', action });
+    try {
+      const receipt = await run();
+      setLifecycle({ kind: 'available', snapshot: receipt.snapshot });
+      setActiveAction(null);
+      setSubmitState({
+        status: 'submitted',
+        action,
+        message: messageForLifecycleReceipt(receipt.event),
+      });
+    } catch (error) {
+      setSubmitState({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Lifecycle action failed.',
+      });
+    }
+  };
+
+  return (
+    <section className="status-lifecycle-actions" aria-labelledby="status-lifecycle-title">
+      <h2 id="status-lifecycle-title">What you can do</h2>
+      <div className="status-lifecycle-actions__buttons" role="group" aria-label="Record actions">
+        <LifecycleActionButton
+          action={actionByKind.get('correct')}
+          label="Correct a fact"
+          onClick={() => setActiveAction(activeAction === 'correct' ? null : 'correct')}
+        />
+        <LifecycleActionButton
+          action={actionByKind.get('withdraw')}
+          label="Withdraw this submission"
+          onClick={() => setActiveAction(activeAction === 'withdraw' ? null : 'withdraw')}
+        />
+        <LifecycleActionButton
+          action={actionByKind.get('dispute')}
+          label="Add a dispute note"
+          onClick={() => setActiveAction(activeAction === 'dispute' ? null : 'dispute')}
+        />
+      </div>
+
+      {activeAction === 'correct' ? (
+        <CorrectionActionForm
+          disabled={submitState.status === 'submitting'}
+          onSubmit={(fields, reason) => {
+            void submit('correct', () =>
+              client.submitCorrection(
+                { caseUrn, changedFields: fields, reason },
+                generateIdempotencyKey(),
+              ),
+            );
+          }}
+        />
+      ) : null}
+      {activeAction === 'withdraw' ? (
+        <WithdrawActionForm
+          disabled={submitState.status === 'submitting'}
+          onSubmit={(reason, rescissionRequested) => {
+            void submit('withdraw', () =>
+              client.submitWithdrawal(
+                { caseUrn, reason, rescissionRequested },
+                generateIdempotencyKey(),
+              ),
+            );
+          }}
+        />
+      ) : null}
+      {activeAction === 'dispute' ? (
+        <DisputeActionForm
+          disabled={submitState.status === 'submitting'}
+          onSubmit={(statement) => {
+            void submit('dispute', () =>
+              client.submitDispute(
+                { caseUrn, statement, disputedEventId: lifecycle.snapshot.events[0]?.eventId },
+                generateIdempotencyKey(),
+              ),
+            );
+          }}
+        />
+      ) : null}
+
+      {submitState.status === 'submitted' ? (
+        <p className="status-lifecycle-actions__status" role="status">
+          {submitState.message}
+        </p>
+      ) : null}
+      {submitState.status === 'error' ? (
+        <p className="status-lifecycle-actions__error" role="alert">
+          {submitState.message}
+        </p>
+      ) : null}
+
+      <LifecycleTimeline events={lifecycle.snapshot.events} />
+    </section>
+  );
+}
+
+function LifecycleUnavailable({ cause }: { cause: DisabledCause | undefined }) {
+  const copy =
+    cause === 'org-forbidden' || cause === 'form-forbidden'
+      ? 'This sender does not allow correction, withdrawal, or dispute here.'
+      : 'Correction, withdrawal, and dispute are not available on this site.';
+  return (
+    <section className="status-lifecycle-actions" aria-labelledby="status-lifecycle-title">
+      <h2 id="status-lifecycle-title">What you can do</h2>
+      <p>{copy}</p>
+    </section>
+  );
+}
+
+function LifecycleActionButton({
+  action,
+  label,
+  onClick,
+}: {
+  action: LifecycleActionAvailability | undefined;
+  label: string;
+  onClick: () => void;
+}) {
+  const disabled = !action?.enabled || action.window?.state === 'closed';
+  return (
+    <button type="button" disabled={disabled} onClick={onClick}>
+      {label}
+    </button>
+  );
+}
+
+function CorrectionActionForm({
+  disabled,
+  onSubmit,
+}: {
+  disabled: boolean;
+  onSubmit: (fields: readonly LifecycleChangedField[], reason: string) => void;
+}) {
+  const [fieldList, setFieldList] = useState('');
+  const [reason, setReason] = useState('');
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const fields = parseChangedFields(fieldList);
+    if (fields.length === 0) return;
+    onSubmit(fields, reason);
+  };
+  return (
+    <form className="status-lifecycle-actions__form" onSubmit={handleSubmit}>
+      <label>
+        Fields to correct
+        <input
+          value={fieldList}
+          required
+          placeholder="Household size, mailing address"
+          onChange={(event) => setFieldList(event.currentTarget.value)}
+        />
+      </label>
+      <label>
+        Reason
+        <textarea
+          value={reason}
+          required
+          onChange={(event) => setReason(event.currentTarget.value)}
+        />
+      </label>
+      <button type="submit" disabled={disabled}>
+        Submit correction
+      </button>
+    </form>
+  );
+}
+
+function WithdrawActionForm({
+  disabled,
+  onSubmit,
+}: {
+  disabled: boolean;
+  onSubmit: (reason: string, rescissionRequested: boolean) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [rescissionRequested, setRescissionRequested] = useState(false);
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    onSubmit(reason, rescissionRequested);
+  };
+  return (
+    <form className="status-lifecycle-actions__form" onSubmit={handleSubmit}>
+      <label>
+        Reason
+        <textarea
+          value={reason}
+          required
+          onChange={(event) => setReason(event.currentTarget.value)}
+        />
+      </label>
+      <label className="status-lifecycle-actions__check">
+        <input
+          type="checkbox"
+          checked={rescissionRequested}
+          onChange={(event) => setRescissionRequested(event.currentTarget.checked)}
+        />
+        Request review of a decision already issued
+      </label>
+      <button type="submit" disabled={disabled}>
+        Withdraw this submission
+      </button>
+    </form>
+  );
+}
+
+function DisputeActionForm({
+  disabled,
+  onSubmit,
+}: {
+  disabled: boolean;
+  onSubmit: (statement: string) => void;
+}) {
+  const [statement, setStatement] = useState('');
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    onSubmit(statement);
+  };
+  return (
+    <form className="status-lifecycle-actions__form" onSubmit={handleSubmit}>
+      <label>
+        Dispute statement
+        <textarea
+          value={statement}
+          required
+          onChange={(event) => setStatement(event.currentTarget.value)}
+        />
+      </label>
+      <button type="submit" disabled={disabled}>
+        Add dispute note
+      </button>
+    </form>
+  );
+}
+
+function LifecycleTimeline({ events }: { events: readonly LifecycleTimelineEvent[] }) {
+  if (events.length === 0) return null;
+  return (
+    <section className="status-lifecycle-timeline" aria-labelledby="status-lifecycle-chain-title">
+      <h3 id="status-lifecycle-chain-title">Receipt chain</h3>
+      <ol>
+        {events.map((event) => (
+          <li key={event.eventId}>
+            <strong>{lifecycleEventTitle(event)}</strong>
+            <span>{formatDate(event.occurredAt)}</span>
+            <span>{event.verified ? 'verified' : 'verification pending'}</span>
+            <LifecycleEventDetails event={event} />
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function LifecycleEventDetails({ event }: { event: LifecycleTimelineEvent }) {
+  switch (event.kind) {
+    case 'original-submission':
+      return <p>{event.title}</p>;
+    case 'correction':
+      return (
+        <>
+          {event.changedFields.length > 0 ? (
+            <p>Fields: {event.changedFields.map((field) => field.label).join(', ')}</p>
+          ) : null}
+          {event.reason ? <p>Reason: {renderProtectedText(event.reason, 'reason withheld')}</p> : null}
+          {event.changedFields.map((field) => (
+            <FieldValueLine key={field.path} field={field} />
+          ))}
+        </>
+      );
+    case 'withdrawal':
+      return (
+        <>
+          {event.reason ? <p>Reason: {renderProtectedText(event.reason, 'reason withheld')}</p> : null}
+          {event.requiresIssuerAcceptance ? (
+            <p>Your request has been sent for agency review.</p>
+          ) : null}
+        </>
+      );
+    case 'dispute':
+      return event.statement ? (
+        <p>Statement: {renderProtectedText(event.statement, 'statement withheld')}</p>
+      ) : null;
+    case 'consent-revocation':
+      return event.reason ? (
+        <p>Reason: {renderProtectedText(event.reason, 'reason withheld')}</p>
+      ) : null;
+  }
+}
+
+function FieldValueLine({ field }: { field: LifecycleChangedField }) {
+  if (!field.originalValue && !field.correctedValue) return null;
+  return (
+    <p>
+      {field.label}:{' '}
+      {field.originalValue ? renderProtectedText(field.originalValue, 'value withheld') : 'not shown'}{' '}
+      to {field.correctedValue ? renderProtectedText(field.correctedValue, 'value withheld') : 'not shown'}
+    </p>
+  );
+}
+
+function lifecycleEventTitle(event: LifecycleTimelineEvent): string {
+  switch (event.kind) {
+    case 'original-submission':
+      return 'Original submission';
+    case 'correction':
+      return event.recordedAs === 'amendment' ? 'Amendment opened' : 'Correction recorded';
+    case 'withdrawal':
+      return event.rescissionRequested ? 'Withdrawal review requested' : 'Submission withdrawn';
+    case 'dispute':
+      return 'Dispute note added';
+    case 'consent-revocation':
+      return 'Consent revoked';
+  }
+}
+
+function messageForLifecycleReceipt(event: LifecycleTimelineEvent): string {
+  switch (event.kind) {
+    case 'correction':
+      return event.recordedAs === 'amendment'
+        ? 'Amendment opened on the receipt chain.'
+        : 'Correction recorded on the receipt chain.';
+    case 'withdrawal':
+      return event.requiresIssuerAcceptance
+        ? 'Withdrawal request sent for agency review.'
+        : 'Submission withdrawn on the receipt chain.';
+    case 'dispute':
+      return 'Dispute note added to the receipt chain.';
+    case 'consent-revocation':
+      return 'Consent revocation recorded on the receipt chain.';
+    case 'original-submission':
+      return 'Lifecycle event recorded.';
+  }
+}
+
+function renderProtectedText(value: LifecycleProtectedText, withheldCopy: string): string {
+  return value.accessClass?.startsWith('safe-') ? withheldCopy : value.text;
+}
+
+function parseChangedFields(value: string): readonly LifecycleChangedField[] {
+  return value
+    .split(',')
+    .map((label) => label.trim())
+    .filter((label) => label.length > 0)
+    .map((label) => ({
+      label,
+      path: fieldPathFromLabel(label),
+    }));
+}
+
+function fieldPathFromLabel(label: string): string {
+  if (label.startsWith('/')) return label;
+  const words = label
+    .trim()
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  if (words.length === 0) return '/field';
+  const [first, ...rest] = words;
+  return `/${first}${rest.map((word) => word[0].toUpperCase() + word.slice(1)).join('')}`;
 }
 
 /**

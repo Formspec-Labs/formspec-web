@@ -6,6 +6,7 @@ import {
   extractOfflineSubmitOptIn,
   extractPaymentAmount,
   extractPaymentRequirement,
+  extractRecordLifecycleOptIn,
 } from './extract-form-policy.ts';
 
 const baseDefinition = {
@@ -297,5 +298,60 @@ describe("extractEmbeddableOptIn", () => {
       extensions: { "x-formspec-embeddable": 1 as unknown as boolean },
     };
     expect(extractEmbeddableOptIn(numericValue)).toBeUndefined();
+  });
+});
+
+describe('extractRecordLifecycleOptIn', () => {
+  const lifecycleBase: FormDefinition = {
+    ...baseDefinition,
+    items: [],
+  };
+
+  it('returns undefined when no record lifecycle proposal block is present', () => {
+    expect(extractRecordLifecycleOptIn(lifecycleBase)).toBeUndefined();
+  });
+
+  it('returns optional when the extension proposal enables an action', () => {
+    const definition: FormDefinition = {
+      ...lifecycleBase,
+      extensions: {
+        'x-formspec-record-lifecycle': {
+          correctable: { enabled: true, correctableFieldSet: ['/householdSize'] },
+        },
+      },
+    };
+    expect(extractRecordLifecycleOptIn(definition)).toBe('optional');
+  });
+
+  it('returns optional when the EXT-35 governance proposal enables an action', () => {
+    const definition = {
+      ...lifecycleBase,
+      governance: {
+        recordLifecycle: {
+          withdrawable: { enabled: true },
+        },
+      },
+    } as FormDefinition;
+    expect(extractRecordLifecycleOptIn(definition)).toBe('optional');
+  });
+
+  it('ignores disabled and malformed proposal blocks', () => {
+    const disabled: FormDefinition = {
+      ...lifecycleBase,
+      extensions: {
+        'x-formspec-record-lifecycle': {
+          correctable: { enabled: false },
+          withdrawable: { enabled: false },
+          disputable: { enabled: false },
+        },
+      },
+    };
+    expect(extractRecordLifecycleOptIn(disabled)).toBeUndefined();
+
+    const malformed: FormDefinition = {
+      ...lifecycleBase,
+      extensions: { 'x-formspec-record-lifecycle': 'yes' },
+    };
+    expect(extractRecordLifecycleOptIn(malformed)).toBeUndefined();
   });
 });

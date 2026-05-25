@@ -118,4 +118,20 @@ export type {
   TrustedReviewerPosture,
 } from './review-thread-store.ts';
 export { ReviewThreadStoreError } from './review-thread-store.ts';
+export type {
+  LifecycleActionClient,
+  LifecycleActionSnapshot,
+  LifecycleActionAvailability,
+  LifecycleActionWindow,
+  LifecycleActionKind,
+  LifecycleTimelineEvent,
+  LifecycleEventKind,
+  LifecycleProtectedText,
+  LifecycleChangedField,
+  LifecycleActionRequest,
+  LifecycleCorrectionRequest,
+  LifecycleWithdrawalRequest,
+  LifecycleDisputeRequest,
+  LifecycleActionReceipt,
+} from './lifecycle-action-client.ts';
 export type { PreallocatedFeaturePort } from './preallocated-feature-port.ts';

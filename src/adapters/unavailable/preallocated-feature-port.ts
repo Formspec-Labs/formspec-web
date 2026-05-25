@@ -3,6 +3,7 @@ import type { RuntimeFeatureKey } from '../../policy/feature-keys.ts';
 import type { PreallocatedFeaturePort } from '../../ports/preallocated-feature-port.ts';
 import { unavailableReviewerSession } from './reviewer-session.ts';
 import { unavailableReviewThreadStore } from './review-thread-store.ts';
+import { unavailableLifecycleActionClient } from './lifecycle-action-client.ts';
 
 export function unavailablePreallocatedFeaturePort(
   featureKey: RuntimeFeatureKey,
@@ -21,9 +22,8 @@ export function unavailablePreallocatedFeaturePorts() {
     reviewerSession: unavailableReviewerSession(),
     reviewThreadStore: unavailableReviewThreadStore(),
     safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
-    lifecycleActionClient: unavailablePreallocatedFeaturePort(
-      'recordLifecycle',
-      'LifecycleActionClient',
-    ),
+    // Kept here as a test/composition convenience: recordLifecycle now has a
+    // real port, so this entry delegates to the real unavailable sentinel.
+    lifecycleActionClient: unavailableLifecycleActionClient(),
   };
 }

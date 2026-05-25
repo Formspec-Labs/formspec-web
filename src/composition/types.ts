@@ -5,6 +5,7 @@ import type {
   EmbedTransport,
   FormRuntimePolicyExtractor,
   IdentityProvider,
+  LifecycleActionClient,
   NotificationDelivery,
   OfflineSubmitQueue,
   PaymentRailAdapter,
@@ -118,7 +119,13 @@ export interface Composition {
    * composition to declare the capabilities available by accident.
    */
   safeAddressDirectory: PreallocatedFeaturePort;
-  lifecycleActionClient: PreallocatedFeaturePort;
+  /**
+   * FW-0038: signed-record lifecycle actions on the status surface. The port
+   * owns correction/amendment routing, withdrawal requests, dispute notes,
+   * and EXT-5 lifecycle-event snapshots. UI keeps user vocabulary distinct
+   * from upstream event names.
+   */
+  lifecycleActionClient: LifecycleActionClient;
   /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */
   instanceCapabilities: InstanceCapabilities;
   /** ADR-0011 §Org runtime policy — supplied by the composition root. */

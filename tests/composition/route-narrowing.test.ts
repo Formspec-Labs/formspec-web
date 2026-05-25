@@ -184,6 +184,23 @@ describe('createRouteNarrowedComposition — per-mode wiring posture (FW-0070)',
       ).resolves.toBeDefined();
     }
   });
+
+  it('status route consumes the lifecycle action client in stub mode only on /status', async () => {
+    const status = createRouteNarrowedComposition({ mode: 'stub', route: STATUS_ROUTE_NARROWING });
+    expect(status.instanceCapabilities.recordLifecycle).toBe('demo-stub');
+    await expect(
+      status.lifecycleActionClient.readLifecycle({ caseUrn: 'urn:wos:case_demo_0001' }),
+    ).resolves.toBeDefined();
+
+    const obligations = createRouteNarrowedComposition({
+      mode: 'stub',
+      route: OBLIGATIONS_ROUTE_NARROWING,
+    });
+    expect(obligations.instanceCapabilities.recordLifecycle).toBe('unavailable');
+    await expect(
+      obligations.lifecycleActionClient.readLifecycle({ caseUrn: 'urn:wos:case_demo_0001' }),
+    ).rejects.toThrow();
+  });
 });
 
 describe('createRouteNarrowedComposition — crossIssuerHistory consumption (FW-0057, FW-0080)', () => {
@@ -226,8 +243,11 @@ describe('RouteNarrowing.consumes — closed-taxonomy Set shape (FW-0080)', () =
     }
   });
 
-  it('STATUS_ROUTE_NARROWING consumes exactly {status}', () => {
-    expect(Array.from(STATUS_ROUTE_NARROWING.consumes).sort()).toEqual(['status']);
+  it('STATUS_ROUTE_NARROWING consumes exactly {recordLifecycle,status}', () => {
+    expect(Array.from(STATUS_ROUTE_NARROWING.consumes).sort()).toEqual([
+      'recordLifecycle',
+      'status',
+    ]);
   });
 
   it('OBLIGATIONS_ROUTE_NARROWING consumes exactly {respondentPlace}', () => {

@@ -100,6 +100,44 @@ export function extractEmbeddableOptIn(
 }
 
 /**
+ * FW-0038 form-policy walker. EXT-35 is still PROPOSAL, so this accepts the
+ * two proposal carriers seen in current design notes:
+ *
+ * - `definition.extensions['x-formspec-record-lifecycle']`
+ * - `definition.governance.recordLifecycle`
+ *
+ * Returns `'optional'` when any of the three user actions is explicitly
+ * enabled. Status-route surfaces synthesize the same optional request at the
+ * route boundary because they do not load a Definition.
+ */
+export function extractRecordLifecycleOptIn(
+  definition: FormDefinition,
+): FormFeaturePolicyMode | undefined {
+  const extensionValue = definition.extensions?.['x-formspec-record-lifecycle'];
+  const governanceValue = (definition as { governance?: { recordLifecycle?: unknown } })
+    .governance?.recordLifecycle;
+  return recordLifecycleBlockEnablesAnyAction(extensionValue) ||
+    recordLifecycleBlockEnablesAnyAction(governanceValue)
+    ? 'optional'
+    : undefined;
+}
+
+function recordLifecycleBlockEnablesAnyAction(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value !== 'object' || value === null) return false;
+  const block = value as {
+    correctable?: { enabled?: unknown };
+    withdrawable?: { enabled?: unknown };
+    disputable?: { enabled?: unknown };
+  };
+  return (
+    block.correctable?.enabled === true ||
+    block.withdrawable?.enabled === true ||
+    block.disputable?.enabled === true
+  );
+}
+
+/**
  * FW-0027 amount walker. Returns the well-formed `Money` value when the
  * definition declares `extensions['x-formspec-payment-amount']` with an
  * integer `amountMinorUnits` and a non-empty `currency`; returns `undefined`

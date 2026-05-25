@@ -2,6 +2,7 @@ import type {
   ApplicantCaseDetail,
   ApplicantStatusProjection,
   ApplicantStatusResource,
+  LifecycleActionSnapshot,
   RespondentPlaceSnapshot,
 } from '../ports/index.ts';
 import { WOS_APPLICANT_SCHEMA_ID } from '../ports/index.ts';
@@ -66,6 +67,33 @@ export function demoApplicantCaseDetail(): ApplicantCaseDetail {
       narrativeRecordCount: 1,
       humanReviewedAllAgentDecisions: true,
     },
+  };
+}
+
+export function demoLifecycleActionSnapshot(): LifecycleActionSnapshot {
+  return {
+    caseUrn: 'urn:wos:case_demo_0001',
+    updatedAt: '2026-05-23T15:30:00.000Z',
+    actions: [
+      { action: 'correct', enabled: true, window: { state: 'open' }, requiresReason: true },
+      {
+        action: 'withdraw',
+        enabled: true,
+        window: { state: 'closes-at', closesAt: '2026-06-24T23:59:59.000Z' },
+        requiresReason: true,
+      },
+      { action: 'dispute', enabled: true, signerOnly: true, requiresReason: true },
+    ],
+    events: [
+      {
+        kind: 'original-submission',
+        eventId: 'evt-demo-original',
+        occurredAt: '2026-05-23T12:00:00.000Z',
+        verified: true,
+        title: 'Original signed submission',
+        actorLabel: 'Respondent',
+      },
+    ],
   };
 }
 

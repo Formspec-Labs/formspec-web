@@ -4,6 +4,7 @@ import {
   EmbeddableExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
+  RecordLifecycleExtractor,
   TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
@@ -12,6 +13,7 @@ import { stubDraftStore } from '../adapters/stub/draft-store.ts';
 import { stubEmbedTransport } from '../adapters/stub/embed-transport.ts';
 import { stubFormRuntimePolicyExtractor } from '../adapters/stub/form-runtime-policy-extractor.ts';
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
+import { stubLifecycleActionClient } from '../adapters/stub/lifecycle-action-client.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts';
 import { stubPaymentRailAdapter } from '../adapters/stub/payment-rail-adapter.ts';
@@ -26,6 +28,7 @@ import { demoSampleForm, demoSampleFormUrl } from '../demo/index.ts';
 import { demoLocaleDocuments } from '../demo/locales.ts';
 import {
   demoApplicantCaseDetail,
+  demoLifecycleActionSnapshot,
   demoRespondentPlaceSnapshot,
 } from '../demo/respondent-place.ts';
 import { demoHistorySnapshot } from '../demo/respondent-history.ts';
@@ -102,10 +105,9 @@ export function createStubComposition(): Composition {
     reviewerSession: trustedReviewerAdapters.reviewerSession,
     reviewThreadStore: trustedReviewerAdapters.reviewThreadStore,
     safeAddressDirectory: unavailablePreallocatedFeaturePort('safeAddress', 'SafeAddressDirectory'),
-    lifecycleActionClient: unavailablePreallocatedFeaturePort(
-      'recordLifecycle',
-      'LifecycleActionClient',
-    ),
+    lifecycleActionClient: stubLifecycleActionClient({
+      initialSnapshots: [demoLifecycleActionSnapshot()],
+    }),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -165,7 +167,7 @@ export function createStubComposition(): Composition {
       safeAddress: 'unavailable',
       duressAware: 'unavailable',
       multiParty: 'unavailable',
-      recordLifecycle: 'unavailable',
+      recordLifecycle: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -207,6 +209,7 @@ export function createStubComposition(): Composition {
       new PaymentRequirementExtractor(),
       new EmbeddableExtractor(),
       new TrustedReviewerPolicyExtractor(),
+      new RecordLifecycleExtractor(),
     ]),
   };
   return freezeComposition(composition);

@@ -16,6 +16,10 @@ import type {
   ApplicantStatusResource,
   StatusReader,
 } from '../ports/status-reader.ts';
+import type {
+  LifecycleActionClient,
+  LifecycleActionSnapshot,
+} from '../ports/lifecycle-action-client.ts';
 import type { SubmitTransport } from '../ports/submit-transport.ts';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { FormRuntimePolicyExtractor } from '../ports/form-runtime-policy-extractor.ts';
@@ -79,6 +83,7 @@ import {
   sampleIntakeHandoff,
   sampleApplicantStatusResource,
   sampleApplicantStatusProjection,
+  sampleLifecycleActionSnapshot,
   sampleNotificationMessage,
   samplePaymentAmount,
   samplePaymentMethodToken,
@@ -111,6 +116,11 @@ export interface NotificationDeliveryConformanceSubject {
 export interface StatusReaderConformanceSubject {
   adapter: StatusReader;
   registerStatus(key: string, resource: ApplicantStatusResource): void | Promise<void>;
+}
+
+export interface LifecycleActionClientConformanceSubject {
+  adapter: LifecycleActionClient;
+  registerLifecycle(snapshot: LifecycleActionSnapshot): void | Promise<void>;
 }
 
 export interface RespondentPlaceSourceConformanceSubject {
@@ -456,6 +466,108 @@ export function defineStatusReaderConformance(
       } as unknown as ApplicantStatusResource;
       await expect(Promise.resolve().then(() => subject.registerStatus('bad-hybrid', invalid)))
         .rejects.toThrow();
+    });
+  });
+}
+
+export function defineLifecycleActionClientConformance(
+  name: string,
+  setup: () => LifecycleActionClientConformanceSubject,
+): void {
+  describe(name, () => {
+    it('round-trips a lifecycle action snapshot', async () => {
+      const subject = setup();
+      await subject.registerLifecycle(sampleLifecycleActionSnapshot);
+      const found = await subject.adapter.readLifecycle({
+        caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+      });
+      expect(roundTripJson(found)).toEqual(sampleLifecycleActionSnapshot);
+    });
+
+    it('returns undefined for unknown lifecycle requests', async () => {
+      const subject = setup();
+      await expect(
+        subject.adapter.readLifecycle({ caseUrn: 'urn:wos:case_missing_lifecycle' }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('submitCorrection is idempotent on a UUIDv7 key and appends one event', async () => {
+      const subject = setup();
+      await subject.registerLifecycle(sampleLifecycleActionSnapshot);
+      const key = generateIdempotencyKey();
+      const first = await subject.adapter.submitCorrection(
+        {
+          caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+          changedFields: [
+            {
+              path: '/householdSize',
+              label: 'Household size',
+              originalValue: { text: '1' },
+              correctedValue: { text: '3' },
+            },
+          ],
+          reason: 'The household size was typed incorrectly.',
+        },
+        key,
+      );
+      const second = await subject.adapter.submitCorrection(
+        {
+          caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+          changedFields: [
+            {
+              path: '/householdSize',
+              label: 'Household size',
+              originalValue: { text: '1' },
+              correctedValue: { text: '3' },
+            },
+          ],
+          reason: 'The household size was typed incorrectly.',
+        },
+        key,
+      );
+      expect(second).toEqual(first);
+      expect(first.event.kind).toBe('correction');
+      expect(first.snapshot.events).toHaveLength(sampleLifecycleActionSnapshot.events.length + 1);
+    });
+
+    it('submitWithdrawal appends a withdrawal event', async () => {
+      const subject = setup();
+      await subject.registerLifecycle(sampleLifecycleActionSnapshot);
+      const receipt = await subject.adapter.submitWithdrawal(
+        {
+          caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+          reason: 'I no longer want to proceed.',
+        },
+        generateIdempotencyKey(),
+      );
+      expect(receipt.action).toBe('withdraw');
+      expect(receipt.event.kind).toBe('withdrawal');
+    });
+
+    it('submitDispute appends a dispute event', async () => {
+      const subject = setup();
+      await subject.registerLifecycle(sampleLifecycleActionSnapshot);
+      const receipt = await subject.adapter.submitDispute(
+        {
+          caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+          disputedEventId: sampleLifecycleActionSnapshot.events[0]?.eventId,
+          statement: 'I dispute this signed record.',
+        },
+        generateIdempotencyKey(),
+      );
+      expect(receipt.action).toBe('dispute');
+      expect(receipt.event.kind).toBe('dispute');
+    });
+
+    it('rejects non-UUIDv7 idempotency keys on lifecycle submissions', async () => {
+      const subject = setup();
+      await subject.registerLifecycle(sampleLifecycleActionSnapshot);
+      await expect(
+        subject.adapter.submitWithdrawal(
+          { caseUrn: sampleLifecycleActionSnapshot.caseUrn, reason: 'Changed intent.' },
+          'not-a-uuid-v7',
+        ),
+      ).rejects.toThrow();
     });
   });
 }

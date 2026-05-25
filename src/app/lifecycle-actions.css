@@ -1,0 +1,106 @@
+.status-lifecycle-actions {
+  display: grid;
+  gap: 0.85rem;
+  border-top: 1px solid var(--formspec-color-border, #c9d3cd);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.status-lifecycle-actions h2,
+.status-lifecycle-actions h3,
+.status-lifecycle-actions p {
+  margin: 0;
+}
+
+.status-lifecycle-actions__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.status-lifecycle-actions button {
+  min-height: 44px;
+  border: 1px solid var(--formspec-color-primary, #155e56);
+  border-radius: 8px;
+  padding: 0.62rem 0.9rem;
+  background: var(--formspec-color-primary, #155e56);
+  color: var(--formspec-color-primary-foreground, #fff);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.status-lifecycle-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.status-lifecycle-actions__form {
+  display: grid;
+  gap: 0.7rem;
+  max-width: 44rem;
+}
+
+.status-lifecycle-actions__form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--formspec-color-foreground, #1f2933);
+  font-weight: 700;
+}
+
+.status-lifecycle-actions__form input,
+.status-lifecycle-actions__form textarea {
+  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border-radius: 8px;
+  padding: 0.62rem 0.75rem;
+  background: #fff;
+  color: var(--formspec-color-foreground, #1f2933);
+  font: inherit;
+  font-weight: 400;
+}
+
+.status-lifecycle-actions__form textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.status-lifecycle-actions__check {
+  align-items: center;
+  grid-template-columns: auto 1fr;
+}
+
+.status-lifecycle-actions__check input {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+.status-lifecycle-actions__status {
+  color: var(--formspec-color-primary, #155e56);
+  font-weight: 700;
+}
+
+.status-lifecycle-actions__error {
+  color: #7f1d1d;
+  font-weight: 700;
+}
+
+.status-lifecycle-timeline {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.status-lifecycle-timeline ol {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
+.status-lifecycle-timeline li {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.status-lifecycle-timeline span {
+  color: var(--formspec-color-muted-foreground, #5b6770);
+  font-size: 0.92rem;
+}

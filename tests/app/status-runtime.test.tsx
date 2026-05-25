@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
   StatusRuntime,
   NO_AGGREGATE_COPY,
@@ -13,7 +13,9 @@ import type { Composition } from '../../src/composition/types.ts';
 import type {
   ApplicantCaseDetail,
   ApplicantStatusResource,
+  LifecycleActionSnapshot,
 } from '../../src/ports/index.ts';
+import { unavailableLifecycleActionClient } from '../../src/adapters/unavailable/lifecycle-action-client.ts';
 
 const DEMO_URN = 'urn:wos:case_demo_0001';
 
@@ -139,6 +141,50 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       });
       expect(screen.getByText(/Provide additional address proof/)).toBeDefined();
     });
+
+    it('renders FW-0038 lifecycle actions on signed status records', async () => {
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('heading', { name: /What you can do/i })).not.toBeNull();
+      });
+      expect(screen.getByRole('button', { name: 'Correct a fact' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Withdraw this submission' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Add a dispute note' })).toBeDefined();
+      expect(screen.getByText(/Receipt chain/i)).toBeDefined();
+      expect(screen.getByText(/Original submission/i)).toBeDefined();
+    });
+
+    it('submits a correction and renders the correction-chain result without raw event vocabulary', async () => {
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Correct a fact' })).not.toBeNull();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Correct a fact' }));
+      fireEvent.change(screen.getByLabelText(/Fields to correct/i), {
+        target: { value: 'Household size' },
+      });
+      fireEvent.change(screen.getByLabelText(/^Reason$/i), {
+        target: { value: 'I typed the wrong household size.' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Submit correction' }));
+      await waitFor(() => {
+        expect(screen.queryByText(/Correction recorded on the receipt chain/i)).not.toBeNull();
+      });
+      expect(screen.queryByText(/response\.correction-recorded/i)).toBeNull();
+      expect(screen.queryByText(/correctionTargetEventHash/i)).toBeNull();
+    });
   });
 
   describe('not-found path', () => {
@@ -207,6 +253,26 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       expect(
         screen.getByText(/This site does not provide application status\./i),
       ).toBeDefined();
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('renders lifecycle-unavailable copy without calling the lifecycle adapter when recordLifecycle is unavailable', async () => {
+      const composition = createStubComposition();
+      (composition.instanceCapabilities as Record<string, unknown>).recordLifecycle = 'unavailable';
+      composition.lifecycleActionClient = unavailableLifecycleActionClient();
+      const spy = vi.spyOn(composition.lifecycleActionClient, 'readLifecycle');
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(
+          screen.queryByText(/Correction, withdrawal, and dispute are not available on this site/i),
+        ).not.toBeNull();
+      });
       expect(spy).not.toHaveBeenCalled();
     });
   });
@@ -468,6 +534,105 @@ describe('StatusRuntime lifecycle badge (independent arch-review N-2)', () => {
     const cells = within(strip).getAllByRole('listitem');
     const current = cells.find((cell) => cell.getAttribute('aria-current') === 'step');
     expect(current?.textContent).toBe('In review');
+  });
+});
+
+describe('StatusRuntime lifecycle timeline rendering (FW-0038)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('renders correction, withdrawal, dispute, and consent-revocation events behind the vocabulary firewall', async () => {
+    const composition = createStubComposition();
+    const lifecycle: LifecycleActionSnapshot = {
+      caseUrn: DEMO_URN,
+      actions: [
+        { action: 'correct', enabled: true },
+        { action: 'withdraw', enabled: true },
+        { action: 'dispute', enabled: true, signerOnly: true },
+      ],
+      events: [
+        {
+          kind: 'original-submission',
+          eventId: 'evt-original',
+          occurredAt: '2026-05-23T12:00:00.000Z',
+          verified: true,
+          title: 'Original signed submission',
+        },
+        {
+          kind: 'correction',
+          eventId: 'evt-correction',
+          occurredAt: '2026-05-24T12:00:00.000Z',
+          verified: true,
+          recordedAs: 'correction',
+          changedFields: [
+            {
+              path: '/safeAddress',
+              label: 'Protected address',
+              originalValue: { text: '123 Private St', accessClass: 'safe-address' },
+              correctedValue: { text: '456 Private St', accessClass: 'safe-address' },
+            },
+          ],
+          reason: { text: 'Protected address reason', accessClass: 'safe-address' },
+        },
+        {
+          kind: 'withdrawal',
+          eventId: 'evt-withdrawal',
+          occurredAt: '2026-05-25T12:00:00.000Z',
+          verified: true,
+          rescissionRequested: true,
+          requiresIssuerAcceptance: true,
+        },
+        {
+          kind: 'dispute',
+          eventId: 'evt-dispute',
+          occurredAt: '2026-05-25T13:00:00.000Z',
+          verified: true,
+          statement: { text: 'I dispute this signed record.' },
+        },
+        {
+          kind: 'consent-revocation',
+          eventId: 'evt-consent',
+          occurredAt: '2026-05-25T14:00:00.000Z',
+          verified: true,
+          reason: { text: 'I revoke revocable consent.' },
+        },
+      ],
+    };
+    composition.lifecycleActionClient = {
+      readLifecycle: vi.fn(async () => lifecycle),
+      submitCorrection: vi.fn() as never,
+      submitWithdrawal: vi.fn() as never,
+      submitDispute: vi.fn() as never,
+    };
+
+    render(
+      <StatusRuntime
+        composition={composition}
+        config={departmentAppProfile}
+        route={{ caseUrn: DEMO_URN }}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.queryByText(/Correction recorded/i)).not.toBeNull();
+    });
+    expect(screen.getByText(/reason withheld/i)).toBeDefined();
+    expect(screen.getByText(/value withheld/i)).toBeDefined();
+    expect(screen.getByText(/Withdrawal review requested/i)).toBeDefined();
+    expect(screen.getByText(/Dispute note added/i)).toBeDefined();
+    expect(screen.getByText(/Consent revoked/i)).toBeDefined();
+    for (const forbidden of [
+      /response\.correction-recorded/i,
+      /priorEventHash/i,
+      /correctionTargetEventHash/i,
+      /supersedes-chain-id/i,
+      /applicant-withdrawn/i,
+      /prev_hash/i,
+      /canonical_event_hash/i,
+    ]) {
+      expect(screen.queryByText(forbidden)).toBeNull();
+    }
   });
 });
 

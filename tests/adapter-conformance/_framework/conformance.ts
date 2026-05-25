@@ -6,6 +6,7 @@ export {
   defineEmbedTransportConformance,
   defineFormRuntimePolicyExtractorConformance,
   defineIdentityProviderConformance,
+  defineLifecycleActionClientConformance,
   defineNotificationDeliveryConformance,
   defineOfflineSubmitQueueConformance,
   definePaymentRailAdapterConformance,
