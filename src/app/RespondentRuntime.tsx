@@ -61,6 +61,7 @@ import {
   FeaturePolicyConflictError,
   InvalidRuntimePolicyError,
   OrgPolicyUnsatisfiedError,
+  PaymentRequiresOnlineError,
   UnsupportedRequiredFeatureError,
   anyEnabledFeatureIsLocaleConditional,
   isRuntimePolicyError,
@@ -506,21 +507,13 @@ export function RespondentRuntime({
       });
 
       const paymentEnabled = respondentState.runtimeProfile.enabled.has('payment');
-      const offlineEnabled = respondentState.runtimeProfile.enabled.has('offlineSubmit');
 
       if (paymentEnabled) {
-        // FW-0027 §"Risks": offline + payment is hard-rejected at the
-        // runtime layer for slice 1 (the authorization expires before the
-        // user reconnects; FW-0101 lifts the restriction post-substrate).
-        if (offlineEnabled && !readNavigatorOnLine()) {
-          setSubmitState({
-            status: 'error',
-            error: new Error(
-              'This form requires payment and cannot be saved for later. Please reconnect and try again.',
-            ),
-          });
-          return;
-        }
+        // Offline + payment is hard-rejected at form load by
+        // createReadyState (PaymentRequiresOnlineError). By the time we
+        // reach submit, the form has already loaded online; no submit-time
+        // re-check needed. FW-0101 lifts the restriction post-substrate.
+
         // Show "Authorizing payment…" panel while authorize runs. The
         // helper resolves to a discriminated outcome that drives the rest
         // of the state machine.
@@ -702,6 +695,21 @@ async function createReadyState(
     orgRuntimePolicy: composition.orgRuntimePolicy,
     embedTransport: composition.embedTransport,
   });
+  // FW-0027 M-1: offline + payment is hard-rejected at form load (was at
+  // submit). The prior placement let the user fill the entire fee-bearing
+  // form offline and learn at Submit time that it could not go through.
+  // With this hoist, the user sees the unavailable banner BEFORE filling.
+  // The check only fires when both `payment` AND `offlineSubmit` are
+  // enabled — the only combo that lets the form load without an active
+  // connection. FW-0101 lifts the restriction once a held-authorization
+  // replay substrate exists.
+  if (
+    runtimeProfile.enabled.has('payment') &&
+    runtimeProfile.enabled.has('offlineSubmit') &&
+    !readNavigatorOnLine()
+  ) {
+    throw new PaymentRequiresOnlineError();
+  }
   const draftKey: DraftKey = {
     formUrl: definition.url,
     formVersion: definition.version,
@@ -1290,15 +1298,19 @@ function RuntimePolicyErrorPage({ error }: { error: RuntimePolicyError }) {
  * generic copy. The previous `(error as { featureKey?: string })` cast bled
  * a structural untyped read into the typed-error surface.
  *
- * Branch ordering: instanceof early-return for class-discriminated
- * errors (EmbedOriginNotAllowedError — the error class IS the
- * discriminator; no featureKey lookup needed) precedes the featureKey
- * cascade for the three featureKey-bearing subclasses. Typed-error-map
- * refactor (Record<RuntimeFeatureKey, copy fn>) is FW-0108.
+ * Branch ordering: instanceof early-returns for the class-discriminated
+ * errors (EmbedOriginNotAllowedError, PaymentRequiresOnlineError — the
+ * error class IS the discriminator; no featureKey lookup needed) come
+ * before the featureKey cascade for the three featureKey-bearing
+ * subclasses. Typed-error-map refactor (Record<RuntimeFeatureKey, copy
+ * fn>) is FW-0108.
  */
 function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
   if (error instanceof EmbedOriginNotAllowedError) {
     return 'This form is not set up to be shown on this site.';
+  }
+  if (error instanceof PaymentRequiresOnlineError) {
+    return PAYMENT_REQUIRES_ONLINE_COPY;
   }
   if (
     error instanceof UnsupportedRequiredFeatureError ||
@@ -1314,6 +1326,14 @@ function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
   }
   return 'This form requires a capability this site does not currently support. Try again later, or contact the sender for help.';
 }
+
+/**
+ * FW-0027 M-1 fixture-pinned copy for the offline-at-load + payment-required
+ * banner. Slice-1 hard-reject; FW-0101 lifts the restriction once a
+ * substrate exists for held-authorization replay.
+ */
+export const PAYMENT_REQUIRES_ONLINE_COPY =
+  'This form requires payment and cannot be saved for later — you must be online to fill it. (Offline payment support is on the roadmap.)';
 
 function FriendlyError({
   error,

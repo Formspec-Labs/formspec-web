@@ -13,7 +13,8 @@ export type RuntimePolicyErrorCode =
   | 'FeaturePolicyConflict'
   | 'OrgPolicyUnsatisfied'
   | 'InvalidRuntimePolicy'
-  | 'EmbedOriginNotAllowed';
+  | 'EmbedOriginNotAllowed'
+  | 'PaymentRequiresOnline';
 
 export abstract class RuntimePolicyError extends Error {
   abstract readonly code: RuntimePolicyErrorCode;
@@ -83,6 +84,25 @@ export class EmbedOriginNotAllowedError extends RuntimePolicyError {
   readonly featureKey = 'embed' as const;
   constructor(reason: string) {
     super(`Embed origin not allowed: ${reason}`);
+  }
+}
+
+/**
+ * FW-0027 M-1 slice 1: thrown by the form-load boundary when a payment-
+ * required form loads on a device that is currently offline (AND offline
+ * submit is enabled — the only combo that lets the user start filling
+ * without an active connection). Hoisted from the prior submit-time check
+ * so the user sees the unavailable banner at load instead of after filling
+ * the entire form. The featureKey is always `'payment'`. FW-0101 lifts the
+ * restriction once a substrate exists for held-authorization replay.
+ */
+export class PaymentRequiresOnlineError extends RuntimePolicyError {
+  readonly code = 'PaymentRequiresOnline' as const;
+  readonly featureKey = 'payment' as const;
+  constructor() {
+    super(
+      'This form requires payment and cannot be saved for later — you must be online to fill it.',
+    );
   }
 }
 

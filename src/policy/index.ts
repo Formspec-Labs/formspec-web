@@ -27,6 +27,7 @@ export {
   FeaturePolicyConflictError,
   InvalidRuntimePolicyError,
   OrgPolicyUnsatisfiedError,
+  PaymentRequiresOnlineError,
   RuntimePolicyError,
   UnsupportedRequiredFeatureError,
   isRuntimePolicyError,

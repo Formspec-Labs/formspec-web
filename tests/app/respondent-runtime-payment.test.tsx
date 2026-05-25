@@ -6,6 +6,7 @@ import {
   PAYMENT_AUTHORIZING_TITLE,
   PAYMENT_CAPTURE_FAILED_TITLE,
   PAYMENT_RECEIVED_TITLE,
+  PAYMENT_REQUIRES_ONLINE_COPY,
   PAYMENT_VOIDED_AFTER_SUBMIT_FAILURE_TITLE,
   RespondentRuntime,
 } from '../../src/app/RespondentRuntime.tsx';
@@ -18,6 +19,7 @@ import { stubNotificationDelivery } from '../../src/adapters/stub/notification-d
 import { stubRespondentPlaceSource } from '../../src/adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../../src/adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../../src/adapters/stub/submit-transport.ts';
+import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
 import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-history-source.ts';
 import {
   stubPaymentRailAdapter,
@@ -37,6 +39,7 @@ import {
 } from '../../src/policy/index.ts';
 import {
   CompositeFormRuntimePolicyExtractor,
+  OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
 } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import type { Composition } from '../../src/composition/types.ts';
@@ -346,6 +349,80 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
     expect(text).not.toContain('uuidv7');
     expect(text).not.toContain('iso-4217');
     expect(text).not.toContain('payment-rail');
+  });
+
+  it('FW-0027 M-1: hard-rejects at form load with the unavailable banner when payment-required form loads offline AND offlineSubmit is enabled', async () => {
+    // The prior submit-time check let the user fill the entire fee-bearing
+    // form offline and learn at Submit time that it could not go through.
+    // The hoist puts the gate at form load — the user sees the banner
+    // BEFORE filling.
+    Object.defineProperty(globalThis.navigator, 'onLine', {
+      value: false,
+      configurable: true,
+      writable: true,
+    });
+    const definitionSource = stubDefinitionSource();
+    // Form opts into BOTH offline-submit AND payment-required so the M-1
+    // hard-reject condition (`payment.enabled && offlineSubmit.enabled &&
+    // !navigator.onLine`) actually fires.
+    const definition: FormDefinition = {
+      ...paymentRequiredFormDefinition(),
+      extensions: {
+        ...paymentRequiredFormDefinition().extensions,
+        'x-formspec-offline-submit': true,
+      },
+    } as FormDefinition;
+    definitionSource.registerDefinition(definition.url, definition, definition.version);
+    definitionSource.registerDefinition(definition.url, definition);
+    const submitTransport = stubSubmitTransport();
+    const composition = freezeComposition({
+      mode: 'demo' as const,
+      initialDefinitionUrl: definition.url,
+      definitionSource,
+      draftStore: stubDraftStore(),
+      submitTransport,
+      identityProvider: stubIdentityProvider(),
+      notificationDelivery: stubNotificationDelivery(),
+      respondentPlaceSource: stubRespondentPlaceSource(),
+      statusReader: stubStatusReader(),
+      attachmentStore: stubAttachmentStore(),
+      respondentHistorySource: stubRespondentHistorySource(),
+      offlineSubmitQueue: stubOfflineSubmitQueue({ transport: submitTransport }),
+      paymentRailAdapter: stubPaymentRailAdapter({ railLabel: 'Card' }),
+      embedTransport: unavailableEmbedTransport(),
+      instanceCapabilities: {
+        respondentPlace: 'demo-stub',
+        status: 'demo-stub',
+        documentPresentation: 'unavailable',
+        fileUpload: 'demo-stub',
+        crossIssuerHistory: 'demo-stub',
+        offlineSubmit: 'demo-stub',
+        payment: 'demo-stub',
+        embed: 'unavailable',
+      } as InstanceCapabilities,
+      orgRuntimePolicy: {
+        features: {
+          respondentPlace: 'allowed',
+          status: 'allowed',
+          documentPresentation: 'allowed',
+          fileUpload: 'allowed',
+          crossIssuerHistory: 'allowed',
+          offlineSubmit: 'allowed',
+          payment: 'allowed',
+          embed: 'allowed',
+        },
+      } satisfies OrgRuntimePolicy,
+      formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
+        new PaymentRequirementExtractor(),
+        new OfflineSubmitRequirementExtractor(),
+      ]),
+    });
+
+    await renderRuntime(composition);
+    await waitFor(() => (container?.textContent ?? '').includes('cannot be loaded'));
+    expect(container?.textContent).toContain(PAYMENT_REQUIRES_ONLINE_COPY);
+    // Typed code lands in the support reference; telemetry-friendly.
+    expect(container?.textContent).toContain('PaymentRequiresOnline');
   });
 
   it('shows the authorizing-payment intermediate state while the rail call is in flight', async () => {
