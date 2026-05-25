@@ -33,7 +33,7 @@ Decide the formspec-web shape for letting a respondent share a live draft with a
 - The form-policy can **forbid** sharing for templates where reviewer involvement is itself a coercion or confidentiality vector (high-coercion templates per FW-0048 §6.4 default `trustedReviewer: forbidden`; safe-* templates default to a tighter posture, §6.4).
 - The verifier renders ambient "reviewed by N · signed by [signer]" capacity-discipline copy per AP-023 **only when the respondent chooses to attach reviewer attestations to the receipt** — the default is no reviewer-trace on the receipt (§5).
 
-**The substrate does NOT mostly exist** (unlike FW-0037, which sat on EXT-3 capacity + ADR-0007 IdP + a tiny new EXT-36 metadata.filer carrier). Three substrate pieces are needed: (a) a sidecar spec + schema for the review thread (SC-6); (b) one runtime-feature-key addition (`trustedReviewer` per the FW-0037 §4.1 split); (c) a small Response-envelope hook (EXT-37) carrying the optional reviewer-attestation pointer when the respondent OPTS-IN to including reviewer trace on the signed receipt.
+**The substrate does NOT mostly exist** (unlike FW-0037, which sat on EXT-3 capacity + ADR-0007 IdP + a tiny new EXT-36 metadata.filer carrier owned by [FW-0037 §3.2](2026-05-24-fw-0037-filer-not-signer-design.md)). Three substrate pieces are needed: (a) a sidecar spec + schema for the review thread (SC-6); (b) one runtime-feature-key addition (`trustedReviewer` per the FW-0037 §4.1 split); (c) a small Response-envelope hook (EXT-37; owned by this row, FW-0042) carrying the optional reviewer-attestation pointer when the respondent OPTS-IN to including reviewer trace on the signed receipt.
 
 FW-0042 deliverables: framing decisions (Q1–Q4); the `trustedReviewer` capability key + resolved-profile shape (flat, per FW-0037 §4.1 split discipline); the `ReviewerSession` port shape and `ReviewThreadStore` port shape (the two load-bearing ports per ADR-0009 §(b) exception); the SC-6 review-thread sidecar shape; the EXT-37 opt-in receipt-hook shape; the runtime UX contract for the respondent's share-with-reviewer affordance + reviewer-session UI + suggestion accept/reject flow; the verifier rendering contract; the failure semantics; the composition seams with FW-0037 / FW-0048 / FW-0049 / FW-0050 / FW-0051 / FW-0058 / FW-0034.
 
@@ -67,7 +67,7 @@ The threat model is the load-bearing input. Stated explicitly so the design's su
 - The **form** does NOT trust the reviewer to authorize anything that affects the signed Response. The reviewer's comments + suggestions ride the SC-6 sidecar; suggestion-acceptance is a respondent-only act that produces a normal respondent-authored value mutation.
 - The **respondent** is the only party who can attest to their answers being accurate. Per AP-023, the receipt attests to reviewer-presence (only when the respondent opts in via EXT-37) + reviewer-comment material (verifiable bytes-as-attached, NOT verifiable truth) — never to whether the reviewer's advice was correct.
 
-**What the reviewer SEES (when the form-policy declares `trustedReviewer: read-only | comment-allowed | suggest-allowed`):** the Formspec Definition (the form's structure); the per-field help context (References + Ontology sidecars); the per-field values typed in the respondent's session (subject to the safe-* + per-field masking rules below); the existing SC-6 review thread (previous reviewers' comments + the respondent's responses). **The reviewer DOES NOT see** safe-* class fields' plaintext when the form-policy declares them `respondentOnly: true` for the reviewer (Q4 default for safe-* — same discipline as filer-side per FW-0049 §3.3 + FW-0037 §6.3); cryptographic material (signing keys, HPKE recipients); the issuer's deployment-internal config (`safetyTeamRecipients[]` per EXT-30); other-party drafts in multi-party flows (per FW-0050 §7.1 per-party-scoping discipline — reviewer-share is per-party in multi-party flows, §6.4).
+**What the reviewer SEES (when the form-policy declares `trustedReviewer: comment-allowed | suggest-allowed`):** the Formspec Definition (the form's structure); the per-field help context (References + Ontology sidecars); the per-field values typed in the respondent's session (subject to the safe-* + per-field masking rules below); the existing SC-6 review thread (previous reviewers' comments + the respondent's responses). **The reviewer DOES NOT see** safe-* class fields' plaintext when the form-policy declares them `respondentOnly: true` for the reviewer (Q4 default for safe-* — same discipline as filer-side per FW-0049 §3.3 + FW-0037 §6.3); cryptographic material (signing keys, HPKE recipients); the issuer's deployment-internal config (`safetyTeamRecipients[]` per EXT-30, owned by [FW-0048 §6.4](2026-05-23-fw-0048-coercion-aware-signing-design.md)); other-party drafts in multi-party flows (per FW-0050 §7.1 per-party-scoping discipline — reviewer-share is per-party in multi-party flows, §6.4).
 
 **What the reviewer DOES NOT see:** the signer's signing-ceremony session state (the signer authenticates separately; reviewer-capability URLs do not route to signer surfaces); the duress affordance (per FW-0048 §3, signer-ceremony-only); the respondent's IdP-bound credential material; any field the form-policy marks `respondentOnly: true` for reviewers (composition-rule with safe-* class auto-marks per §6.3).
 
@@ -115,24 +115,25 @@ Named explicitly so the design isn't read as covering them:
 
 Each decision: the answer first, then the rationale, then the alternative considered and why rejected. All four are PROPOSALS pending owner review.
 
-### 3.1 Q1 — Form-policy shape: four-tier `forbidden | read-only | comment-allowed | suggest-allowed`
+### 3.1 Q1 — Form-policy shape: three-tier `forbidden | comment-allowed | suggest-allowed`
 
-**PROPOSAL.** Form-policy carries a **four-tier** shape — one more tier than the FW-0037 / FW-0058 / FW-0049 / FW-0050 three-tier `forbidden | allowed | required`:
+**PROPOSAL.** Form-policy carries a **three-tier** shape, matching the sibling-row split discipline (FW-0037 / FW-0049 / FW-0050 / FW-0058) on the substrate-class refusal point + the agency-preserving omission of `required`:
 
 | Tier | Semantics |
 |---|---|
 | `forbidden` | Form REJECTS reviewer-share. Share-affordance is structurally absent from the respondent UI; capability-URL minting endpoints refuse. Default for high-coercion / rights-impacting templates (FW-0048 §6.4: financial POA, immigration sponsorship, advance directive, marriage/divorce, custody, benefits-redirect). Form-load with a reviewer-capability URL on a `forbidden` form triggers typed `FeaturePolicyConflictError` and routes the visitor to a plain-language unavailable page. |
-| `read-only` | Reviewers can view the draft + leave **comments**; suggestions are NOT permitted. The SC-6 sidecar carries comment records only; no `suggestion` records may be authored. Reviewer UI omits the suggest affordance. Use case: forms where any wording change should be hand-typed by the respondent to preserve voice / authorship attribution. |
-| `comment-allowed` | DEFAULT for most forms when the form opts into reviewer-share. Reviewers can view + comment. Suggestions are still NOT permitted. Distinct from `read-only` in vocabulary only — both permit comments — but the four-tier symmetry matters for the suggest-tier above it. **In slice 1, `read-only` and `comment-allowed` behave identically.** Reserved as distinct so future revisions can differentiate (e.g., `read-only` = no commentary at all; `comment-allowed` = comments OK). The four-tier split future-proofs without committing to the differentiation now. |
+| `comment-allowed` | DEFAULT for most forms when the form opts into reviewer-share. Reviewers can view + leave **comments**; suggestions are NOT permitted. The SC-6 sidecar carries comment records only; no `suggestion` records may be authored. Reviewer UI omits the suggest affordance. Use case: forms where any wording change should be hand-typed by the respondent to preserve voice / authorship attribution. |
 | `suggest-allowed` | Reviewers can view + comment + author **suggestion records** (proposed field-value changes the respondent reviews and apply/declines). The SC-6 sidecar carries comment + suggestion records. Reviewer UI surfaces a "suggest a change to this field" affordance per field. **Suggestion records are NEVER auto-applied; the respondent's apply act is the only path from suggestion → response value.** Use case: most professional-reviewer scenarios (lawyer, CPA, advocate) where the reviewer's value-add includes proposed wording. |
 
-**Why four tiers when the siblings are three.** The reviewer flow has a meaningful gradient that the sibling features lack: `comment` and `suggest` are operationally distinct (suggestion records carry a candidate VALUE — the comment record does not — and require a respondent-apply step). Compressing them into one `allowed` tier would force the SC-6 schema to be permissive everywhere and rely on per-field policy for differentiation; the four-tier shape encodes the difference at the form-policy layer. **The `forbidden` tier matches the sibling pattern exactly (no drift on the substrate-class refusal point).**
+**Why three tiers (collapsed from a prior four-tier proposal).** The earlier four-tier shape carried `read-only` AND `comment-allowed` as distinct, with the honest admission that the two behave identically in slice 1. Per the slice-1-honesty discipline (FW-0037 §6.4 precedent), the speculative `read-only` tier was dropped — the suggest gradient is real (suggestion records carry a candidate VALUE and require a respondent-apply step; comments do not), so the form-policy distinction `comment-allowed` vs `suggest-allowed` earns its place; a parallel `read-only` vs `comment-allowed` distinction did not. Three tiers preserves sibling symmetry on `forbidden`, encodes the real operational gradient, and avoids reserving vocabulary for a differentiation that may never land. **The `forbidden` tier matches the sibling pattern exactly (no drift on the substrate-class refusal point).**
 
 **Why NOT a `required` tier.** Reviewer-share is structurally an *opt-in*; a form that REQUIRED reviewer-share would refuse to load unless the respondent shared with at least one reviewer first, which inverts the agency model (the respondent is in control of who sees their draft, not the form). Forbidding `required` is a substrate-class guarantee that the respondent's autonomy to NOT share is preserved.
 
-**Alternative rejected: three-tier `forbidden | allowed | required` (sibling symmetry).** Considered for vocabulary consistency with FW-0037 / FW-0058 / FW-0049 / FW-0050. Rejected for the two reasons above: comment vs suggest is operationally distinct (suggestion carries a value); `required` inverts agency. The minor vocabulary asymmetry is the smaller cost than substrate-class compression.
+**Alternative rejected: two-tier `forbidden | allowed` (full sibling symmetry).** Considered for maximum vocabulary consistency with FW-0037 / FW-0058 / FW-0049 / FW-0050. Rejected: comment vs suggest is operationally distinct (suggestion carries a value; suggestion requires a respondent-apply step; suggestion has structural per-field refusals on safe-* per §3.4). Compressing them into one `allowed` tier would force the SC-6 schema to be permissive everywhere and rely on per-field policy for differentiation. The minor `comment-allowed` / `suggest-allowed` asymmetry with the siblings is the smaller cost than substrate-class compression.
 
-**Alternative rejected: per-reviewer-role granular gating (`allowedRoles: { lawyer: "suggest", family: "comment", advocate: "read-only" }`).** Considered for finer control. Rejected: same logic as FW-0037 §3.1 — per-role gating is an *org-policy* concern (org-policy enforces what roles the platform recognizes), not a *form-policy* concern (form-policy gates the FLOW shape). The four-tier above is the form-policy axis; the org-policy layer adds `allowedRoles[]` orthogonally (§4.3).
+**Alternative rejected: four-tier `forbidden | read-only | comment-allowed | suggest-allowed` (prior proposal).** Rejected per slice-1-honesty: `read-only` and `comment-allowed` behaved identically in slice 1; reserving a tier whose differentiation is purely future-revision is the kind of speculative shape this design discipline rejects. If a future revision genuinely needs the `read-only` (no-commentary) vs `comment-allowed` (commentary-OK) split, that's an additive tier-insertion at the time of the real need, with the real semantics named.
+
+**Alternative rejected: per-reviewer-role granular gating (`allowedRoles: { lawyer: "suggest", family: "comment", advocate: "read-only" }`).** Considered for finer control. Rejected: same logic as FW-0037 §3.1 — per-role gating is an *org-policy* concern (org-policy enforces what roles the platform recognizes), not a *form-policy* concern (form-policy gates the FLOW shape). The three-tier above is the form-policy axis; the org-policy layer adds `allowedRoles[]` orthogonally (§4.3).
 
 ### 3.2 Q2 — Comment carrier: separate sidecar (SC-6), NOT part of signed Response
 
@@ -156,7 +157,7 @@ ReviewThread {
   definitionVersion: string           // pinned form-definition version at thread creation
   createdAt: string                   // RFC 3339
   policySnapshot: {                   // copied from resolved-runtime-profile.trustedReviewer at creation
-    posture: "read-only" | "comment-allowed" | "suggest-allowed"
+    posture: "comment-allowed" | "suggest-allowed"
     respondentOnlyFieldPointers: ReadonlyArray<string>  // safe-* + per-field auto-marks, pinned at creation
   }
   shares: Array<ReviewerShare>        // capability URLs ever minted for this thread; revocation tracked on each entry
@@ -214,6 +215,8 @@ FieldAnchor {
 
 **Optional hash-chain for verifier-grade threads.** The `hashChain` block mirrors the respondent-ledger §6.3 `priorEventHash` / `eventHash` pattern. Renderer-class affordance for slice 1 (the reference renderer SHOULD emit the chain when EXT-37 receipt-attestation opts in); substrate-grade enforcement is a future revision.
 
+**Slice-1 honesty: posture-drift mid-thread is out of scope.** If the form-policy `trustedReviewer` posture changes (e.g., `suggest-allowed` → `comment-allowed`, or either tier → `forbidden`) after thread creation, the respondent MUST explicitly revoke + remint the capability URL to apply the new posture. The thread-pinned `policySnapshot` (captured at thread creation per the SC-6 shape above) carries until revoke; existing shares continue under the pinned posture; new shares require a fresh mint that captures the current resolved policy. A live-resolver path that walks every active share on a policy change is deferred (slice 2 if an adopter needs it; the operational footprint of every form-policy edit triggering N share-state mutations is itself a substrate concern).
+
 **Alternative rejected: embed reviewer comments inside the signed Response.** Considered as a "single artifact" simplification. Rejected for substrate-honesty reason (1) above — the signed bytes would include reviewer-authored material; the cryptographic claim "the respondent signed this" weakens. **Hard-rejected.**
 
 **Alternative rejected: piggyback on Respondent Ledger event taxonomy (`reviewer.commented` / `reviewer.suggested` events per EXT-5).** Considered for substrate reuse. Rejected: the ledger's actor enum (§6.4) does NOT include `reviewer`; adding it is an additive extension; BUT the ledger's event-record shape (one event = one ChangeSetEntry / one ValidationSnapshot / one IdentityAttestation) doesn't model threads — it models a flat sequence. A thread's anchor + reply + accept-decline relationships need cross-event references the ledger schema doesn't carry. The ledger can host CERTAIN reviewer-related events (`reviewer.invited`, `reviewer.access-revoked`) per §7.2 below — but the comment body + thread structure needs its own carrier. SC-6 owns the thread; the ledger optionally records share-lifecycle events for cross-event audit.
@@ -245,6 +248,8 @@ key bound per-tenant, rotated per deployment policy)
 
 **Capability URL revocation.** The respondent's session has a "revoke this share" affordance per `ReviewerShare`; revocation appends a `share-revoked` event to the SC-6 thread + sets `revokedAt` on the share entry; subsequent capability-URL redemptions fail with `CapabilityRevokedError`. Revocation MAY be propagated via revocation-list pull on each capability-URL access (slice 1) OR via pub-sub for active reviewer sessions (deferred).
 
+**Slice-1 honesty: revocation consistency model.** Revocation is **eventually consistent** with a TTL-bounded staleness window (default ≤ 60s; adopter-configurable). The reviewer's open browser tab may continue to render thread state until the cache TTL elapses; the next capability-URL hit (cache-miss, refresh, navigate, mint-comment) consults the revocation list and fails. Strong-consistency revocation (each redeem hits the revocation backend with no cache) is deferred to slice 2 if an adopter needs it (e.g., a survivor-services deployment where 60s of residual visibility is itself harmful). The adopter can shrink the TTL toward zero at the cost of revocation-backend load; the substrate carries the configuration knob.
+
 **Alternative rejected: reviewer must create an account.** Rejected explicitly — directly violates J-014 "without that reviewer making an account."
 
 **Alternative rejected: reviewer authenticates via the respondent's IdP (delegated grant).** Considered for cleaner identity continuity. Rejected: this puts the respondent's IdP in the loop on a third party who is structurally NOT the respondent, conflating identity boundaries and creating a tenant-onboarding step. The capability-URL pattern preserves the no-account property; Tier 2 self-IdP for the reviewer is the higher-assurance path for those who want it.
@@ -271,7 +276,7 @@ key bound per-tenant, rotated per deployment policy)
 | Has open suggestions | Renders with a suggestion indicator + inline preview of proposed value; "accept" applies the suggestion (produces a respondent-authored mutation on the response + appends `suggestion-accepted` event); "decline" appends `suggestion-declined` event with optional reason; "edit and accept" applies an edited variant (produces respondent-authored mutation + appends `suggestion-accepted` with `appliedValue` differing from `proposedValue`). |
 | Has stale comments | Comment indicator carries a stale-marker badge ("This comment was made when this field had a different value"); expanding shows the prior-value hash for context. |
 
-**Suggestion-apply is structurally respondent-only.** The `suggestion-accepted` event MUST have `author.kind == "respondent"`; the SC-6 schema's conditional rule enforces this. The reviewer's session has no UI path to apply their own suggestion. **No "auto-apply suggestion after N minutes," no "auto-apply if reviewer is Tier-2-credentialed lawyer" — both invert the agency model.**
+**Suggestion-apply is structurally respondent-only.** The `suggestion-accepted` event MUST have `author.kind == "respondent"`; enforcement is two-layered. **Schema layer:** the SC-6 schema's conditional rule rejects `suggestion-accepted` / `suggestion-declined` / `share-minted` / `share-revoked` events whose `author.kind != "respondent"`. **Adapter layer:** the `ReviewThreadStore.appendEvent` port signature (§4.2) carries a `sessionToken: CapabilityToken | RespondentSessionToken` argument, and the adapter MUST cross-check the token's resolved role against `author.kind` before append — a reviewer-bound `CapabilityToken` cannot append a respondent-authored event regardless of what the caller-supplied `author` block claims. The reviewer's session has no UI path to apply their own suggestion AND no port path either. **No "auto-apply suggestion after N minutes," no "auto-apply if reviewer is Tier-2-credentialed lawyer" — both invert the agency model.**
 
 **Stale-marker semantics.** A comment's `FieldAnchor.valueHashAtAnchor` is compared against the current value's hash at read-time; mismatch sets the stale-marker. Stale comments are NOT auto-archived (the reviewer may still have made a valuable observation; the respondent decides if it's still relevant); the marker is informational.
 
@@ -283,7 +288,7 @@ key bound per-tenant, rotated per deployment policy)
 
 ### 4.1 Capability key under web ADR-0011 — sibling key `trustedReviewer` (per FW-0037 §4.1 split)
 
-**PROPOSAL.** Add `trustedReviewer` to the append-only `RUNTIME_FEATURE_KEYS` tuple per [`src/policy/feature-keys.ts`](../../src/policy/feature-keys.ts) (the SHIPPED tuple at lines 81–90). This is the sibling key of `preparerFiling` per FW-0037 §4.1 — one key per feature, flat ADR-0011 precedent preserved, NO shared sub-block.
+**PROPOSAL.** Add `trustedReviewer` to the append-only `RUNTIME_FEATURE_KEYS` tuple per [`src/policy/feature-keys.ts`](../../src/policy/feature-keys.ts). This is the sibling key of `preparerFiling` per FW-0037 §4.1 — one key per feature, flat ADR-0011 precedent preserved, NO shared sub-block.
 
 **ADR-0011 amendment proposal text (small; consolidates with the FW-0037 amendment that splits the umbrella row):**
 
@@ -293,18 +298,18 @@ key bound per-tenant, rotated per deployment policy)
 > |---|---|
 > | `trustedReviewer` | `ReviewerSession` adapter + `ReviewThreadStore` adapter + reviewer-identity binding (optional Tier 2) + SC-6 review-thread sidecar artifacts + capability-URL minting + revocation list per share + respondent-only suggestion-apply enforcement (FW-0042 scope). |
 
-**Append-only key ordering.** Per [`src/policy/feature-keys.ts:81-90`](../../src/policy/feature-keys.ts), `RUNTIME_FEATURE_KEYS` is append-only. **FW-0042 adds one new key — `trustedReviewer`** — when the tuple is extended at build time. Coordination with FW-0037 (which adds `preparerFiling`): per FW-0037 §4.1, the two are independent; the order of landing doesn't matter; whichever ratifies first appends; the other follows. **The amendment text above SHOULD ride with whichever design ratifies second** to keep the table-replacement edit a single PR (the first-to-land design carries half the table; the second carries the consolidating edit).
+**Append-only key ordering.** Per [`src/policy/feature-keys.ts`](../../src/policy/feature-keys.ts), `RUNTIME_FEATURE_KEYS` is append-only. **FW-0042 adds one new key — `trustedReviewer`** — when the tuple is extended at build time. Coordination with FW-0037 (which adds `preparerFiling`): per FW-0037 §4.1, the two are independent; the order of landing doesn't matter; whichever ratifies first appends; the other follows. **The amendment text above SHOULD ride with whichever design ratifies second** to keep the table-replacement edit a single PR (the first-to-land design carries half the table; the second carries the consolidating edit).
 
 | Layer | What ADR-0011 will name for `trustedReviewer` (FW-0042 only) |
 |---|---|
 | Instance capability | Adapter-backed: (a) `ReviewerSession` adapter for capability-URL minting + redemption + revocation; (b) `ReviewThreadStore` adapter for the SC-6 sidecar persistence + retrieval; (c) optional `IdentityProvider` adapter for Tier 2 reviewer-identity binding (reuses web ADR-0007 port); (d) verifier-render adapter for the optional EXT-37 receipt hook. Instance declares which Tier-2 IdPs are wired + retention policy for the SC-6 store. |
 | Org policy | (a) Allowed reviewer-identity tiers (org may forbid Tier-2 entirely OR require Tier-2 for `suggest-allowed`); (b) Capability-URL maximum lifetime; (c) Maximum active shares per draft (rate-limit); (d) Allowed reviewer-comment-storage retention period; (e) Org-level forbidden-list (org may forbid `trustedReviewer` entirely regardless of form-policy — e.g., a high-security tenant). |
-| Form policy | Four-tier per §3.1: `forbidden` / `read-only` / `comment-allowed` / `suggest-allowed`. High-coercion templates per FW-0048 §6.4 default to `forbidden` per §6.4 composition. Per-field `respondentOnly: true` for reviewers per §3.4. Per-form `reviewerAssuranceFloor?: AssuranceLevel` per §3.3. Per-form `maxActiveSharesPerDraft?: number` per Q3. Per-form `defaultShareExpiresAtRule?` (e.g., "72h", "form-submit", "never"). |
+| Form policy | Three-tier per §3.1: `forbidden` / `comment-allowed` / `suggest-allowed`. High-coercion templates per FW-0048 §6.4 default to `forbidden` per §6.4 composition. Per-field `respondentOnly: true` for reviewers per §3.4. Per-form `reviewerAssuranceFloor?: AssuranceLevel` per §3.3. Per-form `maxActiveSharesPerDraft?: number` per Q3. Per-form `defaultShareExpiresAtRule?` (e.g., "72h", "form-submit", "never"). |
 | Resolved runtime profile | `trustedReviewer.posture` + `allowedRoles[]` (when org-policy enumerates) + `reviewerAssuranceFloor` + `maxActiveSharesPerDraft` + `defaultShareExpiresAtRule` + `respondentOnlyFieldPointers[]` + (when posture != "forbidden") `reviewerSessionBindingRef` + `reviewThreadStoreBindingRef`. Flat, no sub-block. Form-load throws `UnsupportedRequiredFeatureError` per ADR-0011 only if a `required`-grade composition existed — since FW-0042 forbids `required` per §3.1, this branch is unreachable for `trustedReviewer` standalone but the typed-error machinery is preserved for composition orthogonality. Form-load throws `FeaturePolicyConflictError` when the form forbids and the org requires (the org-forbids-form-permits case is reachable). |
 
 **Locale-conditional set.** `trustedReviewer` is **NOT** locale-conditional — the per-form policy doesn't change with locale. No `LOCALE_CONDITIONAL_FEATURE_KEYS` membership.
 
-**Invariant (mirrors FW-0037 §4.3 LOW F9).** When org-policy enumerates `allowedRoles[]`, resolved `allowedRoles` MUST be the intersection of form-policy `allowedRoles` (when declared) and org-policy `allowedRoles`. Empty intersection is a `FeaturePolicyConflictError` at form-load — no reviewer role is allowed across both layers, so the `posture: read-only | comment-allowed | suggest-allowed` flow has nothing it can offer.
+**Invariant (mirrors FW-0037 §4.3 LOW F9).** When org-policy enumerates `allowedRoles[]`, resolved `allowedRoles` MUST be the intersection of form-policy `allowedRoles` (when declared) and org-policy `allowedRoles`. Empty intersection is a `FeaturePolicyConflictError` at form-load — no reviewer role is allowed across both layers, so the `posture: comment-allowed | suggest-allowed` flow has nothing it can offer.
 
 ### 4.2 Port shapes — `ReviewerSession` + `ReviewThreadStore` land here; reference adapters at build
 
@@ -357,11 +362,22 @@ interface ReviewThreadStore {
   read(args: {threadId: string}): Promise<ReviewThread>;
 
   // Append an event. Author + payload are caller-supplied; substrate enforces:
-  //   - suggestion-accepted / suggestion-declined MUST have author.kind == "respondent"
-  //   - share-minted / share-revoked MUST have author.kind == "respondent"
-  //   - posture-bound (suggestion records refused when policySnapshot.posture is read-only / comment-allowed)
+  //   - sessionToken cross-check: the adapter MUST resolve the supplied token's role
+  //     (CapabilityToken → reviewer + shareId; RespondentSessionToken → respondent) and
+  //     refuse when args.author.kind disagrees with the resolved role. This closes the
+  //     "any caller asserting author.kind == 'respondent' is trusted" gap by making the
+  //     author claim adapter-verified against the redeemed session.
+  //   - suggestion-accepted / suggestion-declined MUST resolve to a respondent session
+  //     (token role == respondent AND author.kind == "respondent")
+  //   - share-minted / share-revoked MUST resolve to a respondent session
+  //   - posture-bound (suggestion records refused when policySnapshot.posture is comment-allowed)
   //   - field-anchor masking (suggestion refused on respondentOnly fields per §3.4)
-  appendEvent(args: {threadId: string; author: ReviewThreadEvent["author"]; payload: ReviewThreadEvent["payload"]}): Promise<ReviewThreadEvent>;
+  appendEvent(args: {
+    threadId: string;
+    sessionToken: CapabilityToken | RespondentSessionToken;
+    author: ReviewThreadEvent["author"];
+    payload: ReviewThreadEvent["payload"];
+  }): Promise<ReviewThreadEvent>;
 
   // Bind an EXT-37 receipt-hook pointer at signing time (respondent-only).
   pinForReceipt(args: {threadId: string}): Promise<{threadHash: string; bindingArtifactRef: string}>;
@@ -376,7 +392,7 @@ The `ResolvedRuntimeProfile` consumed by the React shell per [web ADR-0011](../a
 
 ```text
 trustedReviewer?: {
-  posture: "forbidden" | "read-only" | "comment-allowed" | "suggest-allowed"
+  posture: "forbidden" | "comment-allowed" | "suggest-allowed"
   allowedRoles?: ReadonlySet<string>             // intersection of org-policy and form-policy when both declared
   reviewerAssuranceFloor?: AssuranceLevel        // per-form; from §3.3
   maxActiveSharesPerDraft?: number               // per-form OR org cap
@@ -447,9 +463,11 @@ Mirrors FW-0037 §6.3 verbatim with reviewer-substituted-for-filer. Safe-* class
 
 ### 6.4 FW-0050 / FW-0061 — Multi-party composition (per-party reviewer share)
 
+**Closes FW-0050 §8(8): two separate sharing primitives, not one** — SC-6 reviewer-thread and `parties[]` co-party state are architecturally independent. Per [FW-0050 §8(8)](2026-05-23-fw-0050-multi-party-submission-design.md), the reviewer-vs-party single-sidecar question was deferred to this row. The resolution: the reviewer is READ + COMMENT (+ SUGGEST when allowed) on the respondent's behalf and never holds party identity; a co-party is a distinct first-class party that reads + edits its own scope + signs its own scope. Different capabilities, different trust boundaries, different carriers — SC-6 sidecar (off the signed Response) for the reviewer; `parties[]` per FW-0050 / EXT-28 (on the Definition + per-party signatures) for the co-party. A single sidecar would conflate two trust boundaries; the two compose orthogonally instead (§6.4 composition rule below).
+
 In a multi-party flow, each party MAY share their portion of the draft with their own reviewer(s). Reviewers are scoped per-party; Party A's reviewer doesn't see Party B's fields (composition with FW-0050 §7.1 per-party visibility).
 
-**Composition rule.** Slice 1 supports per-party reviewer-share. When the form declares `multiParty` AND `trustedReviewer: read-only | comment-allowed | suggest-allowed`, the `ReviewerSession.mintShare()` operation requires a `partyRef` argument naming which party's portion the share grants access to; the resolved scope is the intersection of (capability-URL bound scope) ∩ (FW-0050 per-party visibility set).
+**Composition rule.** Slice 1 supports per-party reviewer-share. When the form declares `multiParty` AND `trustedReviewer: comment-allowed | suggest-allowed`, the `ReviewerSession.mintShare()` operation requires a `partyRef` argument naming which party's portion the share grants access to; the resolved scope is the intersection of (capability-URL bound scope) ∩ (FW-0050 per-party visibility set).
 
 **Per-party SC-6 thread.** Slice 1 has one thread per (draft, party); multi-party flows produce N parallel threads. The signed-Response opt-in EXT-37 hook, when used, references the per-party thread set bound to the respondent's party. Cross-party reviewer-visibility (a reviewer who can see both parties' threads simultaneously) is NOT in slice-1 scope — explicit per-party share is the rule.
 
@@ -569,6 +587,7 @@ FW-0042 is structurally a Formspec-only design — Trellis is byte-neutral (the 
 - The Q1–Q4 framing decisions, scoped to formspec-web's consumer perspective.
 - The `trustedReviewer` capability key + resolved-profile shape (flat) per §4.3 — sibling key to `preparerFiling` per FW-0037 §4.1.
 - The `ReviewerSession` + `ReviewThreadStore` port shapes per §4.2.
+- **The SC-6 review-thread sidecar SHAPE per §3.2** — the substrate proposal (ReviewThread / ReviewerShare / ReviewThreadEvent / FieldAnchor shapes; append-only event log; optional hash-chain). The SHAPE is decided here; the upstream AUTHORING of `formspec/specs/review-thread/review-thread-spec.md` + `formspec/schemas/review-thread.schema.json` is a separate (formspec-side) ratification — see "Waits on upstream" below.
 - The verifier rendering contract per §5.
 - The runtime invariants binding form-load failure semantics to ADR-0011 typed errors (§8.1).
 - The composition rules with FW-0037 (§6.1), FW-0048 (§6.2), FW-0049 (§6.3), FW-0050 (§6.4), FW-0034 (§6.5), FW-0030 (§6.6 informational), FW-0058 / FW-0051 (§6.7 vocabulary firewall), web ADR-0010 (§6.8).
@@ -576,7 +595,7 @@ FW-0042 is structurally a Formspec-only design — Trellis is byte-neutral (the 
 - The Option A vs Option B architectural call per §7.
 
 **Waits on upstream:**
-- SC-6 sidecar spec + schema ratification (the largest dependency; bounded but not trivial).
+- SC-6 sidecar spec + schema **authoring** in `formspec/` (the largest dependency; bounded but not trivial). The shape is decided here per the bullet above; the formspec-side spec text and JSON Schema land via the formspec spec-expert review path.
 - EXT-37 ratification for the receipt-hook shape.
 - EXT-5 minor additions for `reviewer.invited` + `reviewer.access-revoked` (these are optional even at consumption time).
 - ADR-0011 amendment splitting the `reviewerPreparer` umbrella per FW-0037 §4.1 — already in flight from FW-0037; FW-0042 piggybacks.
@@ -602,6 +621,7 @@ FW-0042 is structurally a Formspec-only design — Trellis is byte-neutral (the 
 | Reviewer redeems a capability URL whose HMAC fails verification | Typed `CapabilityInvalidError`; reviewer surface shows plain-language "This share link is not valid"; share is recorded as `invalid-redemption-attempt` for audit (no SC-6 thread modification). |
 | Reviewer redeems a capability URL that has been revoked | Typed `CapabilityRevokedError`; reviewer surface shows plain-language "The respondent revoked this share". |
 | Reviewer redeems a capability URL whose `expiresAt` is past | Typed `CapabilityExpiredError`; reviewer surface shows plain-language "This share link expired"; the respondent SHOULD see a notification in their UI that a reviewer attempted access on an expired share. |
+| Reviewer redeems a capability URL on a form whose `reviewerAssuranceFloor` requires Tier-2 IdP binding, and the reviewer's session is Tier-1 (free-text self-name) only | Typed `humanReviewerUnauthorized` (symmetric to FW-0058's `humanRequiredButAgent` per [web ADR-0011 §"Tier-1-when-Tier-2-required"](../adr/0011-runtime-feature-resolution-and-policy-gates.md)); reviewer surface shows plain-language "This form requires reviewers to sign in with a verified identity"; the redeem operation MAY offer a Tier-2 upgrade path (route through the standard `IdentityProvider` port) before failing terminally. |
 | Reviewer attempts to write into a `respondentOnly: true` field via suggestion (suggested value for a safe-* field) | Substrate refusal: `ReviewThreadStore.appendEvent` returns `SuggestionForbiddenOnRespondentOnlyFieldError`. Renderer-class: the suggest affordance is structurally absent from masked fields per §3.4; defensive substrate-class rejection is the second layer. |
 | Reviewer attempts to use a tool the substrate forbids (e.g., calls a hypothetical `applySuggestion` directly) | Substrate refusal: no such tool exists; the reviewer's session has no path to mutate the response. **Structural prevention.** |
 | Reviewer's IdP session expires mid-session (Tier-2 only) | Standard IdentityProvider port session-recovery; reviewer re-authenticates; thread state preserved per existing draft mechanisms; uncompleted draft-comments preserved client-side until re-auth completes. |
@@ -633,7 +653,7 @@ Honest list of what FW-0042 design does NOT resolve. Per the FW-0037 §9 precede
 5. **Capability URL refresh / rotation.** A long-running share whose URL the respondent wants to rotate without revoking access (e.g., the email it was sent to was compromised). Deferred — slice 1 is revoke + re-mint as a fresh share.
 6. **Reviewer-side notification / inbox.** A reviewer who'd like to be notified when the respondent applies a suggestion they made. Deferred to a future row + adopter-side notification adapter (rides existing `NotificationDelivery` port; not a substrate change).
 7. **Reviewer-side "I'm done reviewing" attestation.** A signed-by-reviewer "I reviewed this draft on this date" attestation rideable on the EXT-37 receipt hook. Slice 1 records reviewer events; the higher-assurance reviewer-attestation primitive is **reserved as FW-0110 (substrate-honesty follow-on; see below)**.
-8. **`humanReviewerUnauthorized` symmetric typed error.** Analogous to FW-0058 §9's `humanSubmitterUnauthorized` — for the case where a form-policy requires Tier-2 reviewer-identity and a Tier-1 reviewer attempts. Filed as part of slice 1 (§8.2 `CapabilityInvalidError` covers the path); the typed-error name is FW-0042's own.
+8. **`humanReviewerUnauthorized` symmetric typed error — DEFINED.** Analogous to FW-0058's `humanRequiredButAgent` per [web ADR-0011 §"Tier-1-when-Tier-2-required"](../adr/0011-runtime-feature-resolution-and-policy-gates.md). Defined in §8.2 above for the case where a form-policy requires Tier-2 reviewer-identity (`reviewerAssuranceFloor`) and a Tier-1 (free-text) reviewer attempts redemption. The error is FW-0042's own; the renderer-class copy is plain-language; the optional Tier-2 upgrade path routes through the standard `IdentityProvider` port before failing terminally.
 9. **Substrate-class auto-revoke timer / safe-template-detection auto-revoke (panic-revoke at substrate layer).** Per §2.3.4(e): the renderer-class panic-revoke is in scope; substrate-class promotion is filed as **future row FW-0110** (substrate honesty follow-on; mirrors FW-0107 for FW-0037). Blocked on real coercion incident OR adopter request — same trigger precedent as FW-0107.
 
 ### 9.1 Future-row reservations (next free integers above [FW-0108 in `PLANNING.md:1203`](../../PLANNING.md))
@@ -658,7 +678,7 @@ The FW-0109 build row's fixture matrix MUST cover (the SC-6 spec authors a subse
 4. **Tier-1 (free-text) vs Tier-2 (IdP-bound) reviewer-identity mix.** One reviewer Tier-1 self-named; another Tier-2 IdP-bound. Verifier renders the assurance distinction per §5.
 5. **Capability URL revocation mid-session.** Reviewer is mid-session when respondent revokes; reviewer's next action fails with `CapabilityRevokedError`; reviewer surface shows plain-language copy; thread records `share-revoked` event.
 6. **Capability URL expiration.** URL minted with `expiresAt`; access after expiration fails with `CapabilityExpiredError`.
-7. **Reviewer attempts forbidden action (substrate refusal cases).** Reviewer attempts to apply own suggestion → `ReviewThreadStore` refuses (no path); reviewer attempts to suggest a value for a safe-* field → `SuggestionForbiddenOnRespondentOnlyFieldError`; reviewer attempts to redeem a URL with mutated scope claim → `CapabilityInvalidError`.
+7. **Reviewer attempts forbidden action (substrate refusal cases).** Reviewer attempts to apply own suggestion → `ReviewThreadStore` refuses (no path; adapter-layer sessionToken cross-check per §3.4 + §4.2); reviewer attempts to suggest a value for a safe-* field → `SuggestionForbiddenOnRespondentOnlyFieldError`; reviewer attempts to redeem a URL with mutated scope claim → `CapabilityInvalidError`; Tier-1 reviewer attempts to redeem on a form whose `reviewerAssuranceFloor` requires Tier-2 → `humanReviewerUnauthorized`.
 8. **Form-policy forbidden.** Form declares `trustedReviewer: forbidden`; respondent UI omits share-affordance entirely; reviewer-capability-URL redemption attempts fail with `FeaturePolicyConflictError`.
 9. **Safe-* composition.** Form has a `safe-address` class field per FW-0049; reviewer's session renders the field masked; reviewer can comment but cannot suggest.
 10. **Multi-party composition.** Form has two parties per FW-0050; each respondent shares their party's draft with their own reviewer; per-party scope holds (reviewer A doesn't see party B's draft).
@@ -672,7 +692,7 @@ The FW-0109 build row's fixture matrix MUST cover (the SC-6 spec authors a subse
 
 | Decision | Status | Owner of any pushback |
 |---|---|---|
-| Q1: four-tier `forbidden \| read-only \| comment-allowed \| suggest-allowed` form-policy (no `required` tier) | PROPOSAL | owner review |
+| Q1: three-tier `forbidden \| comment-allowed \| suggest-allowed` form-policy (no `required` tier; `read-only` collapsed per slice-1-honesty) | PROPOSAL | owner review |
 | Q2: separate SC-6 review-thread sidecar; signed Response byte-identical to no-reviewer case | PROPOSAL | owner review + SC-6 spec authoring |
 | Q3: capability URL with HMAC-bound scope; Tier-1 (free-text) default + Tier-2 (IdP-bound) optional | PROPOSAL | owner review |
 | Q4: comments on all fields by default; suggestions forbidden on safe-* + `respondentOnly: true` fields | PROPOSAL | owner review |
@@ -683,7 +703,7 @@ The FW-0109 build row's fixture matrix MUST cover (the SC-6 spec authors a subse
 | EXT-5 ledger event additions: `reviewer.invited` + `reviewer.access-revoked` (optional; tiny additions to existing list) | PROPOSAL to formspec | formspec spec-expert review + EXT-5 PR |
 | Verifier rendering contract: default reviewer-trace-silent; opt-in capacity-discipline copy per AP-023 | PROPOSAL | owner review |
 | Form-load failure semantics: typed errors per ADR-0011 | PROPOSAL | owner review |
-| Reviewer-session failure semantics: `CapabilityInvalidError`, `CapabilityRevokedError`, `CapabilityExpiredError`, `SuggestionForbiddenOnRespondentOnlyFieldError` | PROPOSAL | owner review |
+| Reviewer-session failure semantics: `CapabilityInvalidError`, `CapabilityRevokedError`, `CapabilityExpiredError`, `humanReviewerUnauthorized`, `SuggestionForbiddenOnRespondentOnlyFieldError` | PROPOSAL | owner review |
 | Respondent-session failure semantics (with active reviewers): `StaleSuggestionError`; deletion-includes-thread per FW-0043 composition | PROPOSAL | owner review + FW-0043 design author |
 | Verification-time failures: `ThreadArtifactUnresolvable`, `ThreadHashMismatch`, `TemporalCoherenceViolation` (on thread) | PROPOSAL | owner review |
 | Adopter contracts over ReviewerSession + ReviewThreadStore + optional Tier-2 IdP + verifier render adapter + respondent share-and-revoke UI + reviewer UI structurally omits submit/sign | PROPOSAL | owner review |
