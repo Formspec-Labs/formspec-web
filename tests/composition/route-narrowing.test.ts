@@ -111,6 +111,8 @@ describe('createRouteNarrowedComposition — descriptor contracts (FW-0070)', ()
         documentPresentation: 'allowed',
         fileUpload: 'allowed',
         crossIssuerHistory: 'allowed',
+        offlineSubmit: 'allowed',
+        payment: 'allowed',
       });
     });
 
@@ -240,10 +242,11 @@ describe('RouteNarrowing.consumes — closed-taxonomy Set shape (FW-0080)', () =
     expect(Array.from(HISTORY_ROUTE_NARROWING.consumes).sort()).toEqual(['crossIssuerHistory']);
   });
 
-  it('no descriptor consumes fileUpload or offlineSubmit today (no narrowed-route consumer)', () => {
+  it('no descriptor consumes fileUpload / offlineSubmit / payment today (no narrowed-route consumer)', () => {
     for (const route of ALL_DESCRIPTORS) {
       expect(route.consumes.has('fileUpload')).toBe(false);
       expect(route.consumes.has('offlineSubmit')).toBe(false);
+      expect(route.consumes.has('payment')).toBe(false);
     }
   });
 });

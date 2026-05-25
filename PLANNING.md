@@ -29,7 +29,7 @@ This is a prioritization overlay, not a replacement for the `FW-*` rows. Treat a
 | 8 | Offline-capable fill with deferred submit | FW-0044 (slice 1 live) | Lets respondents finish despite unreliable connectivity and prevents duplicate submits. | Requires browser queue, idempotent submit transport, and form offline-safety declaration. |
 | 9 | Identity continuity and stronger auth/signing paths | FW-0020, FW-0028, FW-0030, FW-0031 | Avoids repeated identity proofing and supports assurance-dependent forms. | Requires identity/session adapters, assurance floors, and org IdP policy. |
 | 10 | File upload as a primary act | FW-0033 | Supports evidence-heavy forms where the upload is part of the submission, not decoration. | Requires object storage, attachment binding, file limits, and redaction/capture policy. |
-| 11 | Payments with atomic submit | FW-0027 | Makes fee-bearing submissions safe: pay and submit succeed or fail as one transaction. | Requires payment rail, merchant/org policy, and form fee declaration. |
+| 11 | Payments with atomic submit | FW-0027 (slice 1 live) | Makes fee-bearing submissions safe: pay and submit succeed or fail as one transaction. | Requires payment rail, merchant/org policy, and form fee declaration. |
 | 12 | Embed and third-party host widget | FW-0040, FW-0053 | Lets trusted hosts collect forms without sending users to an unfamiliar domain. | Requires embed transport, allowed origins, CSP policy, and form embeddability. |
 | 13 | Multi-party submission | FW-0050, FW-0061 | Supports joint legal, tax, immigration, custody, and financial workflows. | Requires party/session orchestration, per-party visibility, and party model policy. |
 | 14 | Safe-address handling | FW-0049, FW-0060 | Protects survivors and protected parties without breaking verification. | Requires privacy/redaction substrate, jurisdiction policy, and protected-field declarations. |
@@ -403,15 +403,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Blocked on:** queue EXT-5 (`response.declined` ledger event with `clauseReferences[]` + `reason`).
 - **Anti-patterns:** AP-004.
 
-### FW-0027 — Multi-rail payment with atomic submit
-
-- **Phase:** Post-MVP
-- **Status:** open
-- **Persona:** Respondent
-- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use)
-- **Done:** Payment offers ACH, card, prepaid, cash-via-retail-partner, and in-person — not card-only. The submit and the payment land or fail together; the user is never charged-but-unsubmitted or submitted-but-unpaid. The receipt names which rail was used.
-- **Blocked on:** no upstream block — adopter-side `PaymentRail` port per web ADR-0004 (W3C Payment Request API + Stripe / Plaid / PayNearMe reference adapters). Post-MVP for scope.
-- **Anti-patterns:** AP-013, AP-017.
+### FW-0027 — *(closed as live (slice 1); see [## Closed](#closed); production rail adapters Stripe FW-0089 / W3C Payment Request FW-0090 / Square FW-0091 / PayNearMe FW-0092 / in-person POS FW-0093; multi-rail composition FW-0094; refunds FW-0095; cross-currency FW-0096; FEL-evaluated dynamic amount FW-0097; saved-method picker FW-0098; split-tender FW-0099; demo-form payment opt-in FW-0100 (gated on FW-0089 + FW-0094); offline+payment composition FW-0101 (currently hard-rejected))*
 
 ### FW-0028 — Multi-IdP sign-in with no oversharing
 
@@ -1004,3 +996,136 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Design:** [`thoughts/specs/2026-05-24-fw-0044-offline-capable-fill-design.md`](thoughts/specs/2026-05-24-fw-0044-offline-capable-fill-design.md).
 - **Release gaps named:** (a) Production IndexedDB queue adapter with at-rest encryption — filed as FW-0082 (blocked on EXT-18 HPKE TS wrapper). (b) Service-worker installation + lifecycle UX (install / update / skipWaiting / notification) — filed as FW-0081. (c) Background Sync API integration for tab-closed flush — filed as FW-0083 (depends on FW-0081 + FW-0082). (d) Multi-tab queue coordination via BroadcastChannel / Web Locks — filed as FW-0084. (e) Cross-device queue migration via wallet substrate — filed as FW-0085 (depends on FW-0078 + XS-2). (f) Definition-drift detection on offline replay — filed as FW-0086 (needs a server-side discriminator EXT row). (g) Demo form `x-formspec-offline-submit: true` declaration — filed as FW-0087 (gated on FW-0082). (h) `consumes*` boolean-ladder consolidation on `RouteNarrowing` — FW-0080 trigger fires here; row promoted to imminent. (i) Slice-1 `navigator.onLine` imperfection (modern browsers cache stale online status) — the synchronous-submit path's inline fetch failure remains the safety net; FW-0081 service worker addresses it more cleanly.
 - **Note:** Closes web ADR-0011 §Failure Semantics for the SECOND IN-FORM (non-route) consumer of the runtime-feature gate (after FW-0033 `fileUpload`) and introduces the SIXTH extension of the closed `RuntimeFeatureKey` taxonomy — `offlineSubmit`. The substrate-honesty gap (forms that promise offline silently failing at submit when the network drops) is closed for adopters who wire a real queue; adopters who don't get the existing inline error path with no behavioral surprise. **The sixth-key extension explicitly fires FW-0080's consolidation trigger** ("pull forward when a sixth `RuntimeFeatureKey` lands or when a fourth `consumes*` flag is about to be added — whichever fires first"); FW-0044 deliberately did NOT add a fourth `consumes*` flag (every narrowed route uniformly noop on the queue) so the sixth-key condition fires standalone. FW-0080 promoted to `imminent (trigger fired by FW-0044)` in this PLANNING.md. Anti-patterns AP-001 (silent data loss; closed for adopters who wire production-grade FW-0082 substrate), AP-013 (storing plaintext at rest; explicitly named in FW-0082's row to be addressed by the IndexedDB adapter via EXT-18 HPKE), AP-015 (duplicate submission on retry; closed at the queue contract by the load-bearing replay-preserves-original-key invariant) remain partially addressed — the slice-1 in-memory stub disappears on tab close, so AP-001 reopens for production until FW-0082 lands.
+
+### FW-0027 — Multi-rail payment with atomic submit (slice 1) — PaymentRailAdapter port + in-form authorize→submit→capture-or-void orchestration + UX
+
+- **Phase:** Post-MVP
+- **Status:** live (slice 1; production rail adapters Stripe FW-0089 / W3C Payment Request FW-0090 / Square FW-0091 / PayNearMe FW-0092 / in-person POS FW-0093; multi-rail composition FW-0094; refunds FW-0095; cross-currency FW-0096; FEL-evaluated dynamic amount FW-0097; saved-method picker FW-0098; split-tender FW-0099; demo-form payment opt-in FW-0100 (gated on FW-0089 + FW-0094); offline+payment composition FW-0101 (currently hard-rejected at the runtime layer))
+- **Persona:** Respondent
+- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use)
+- **What slice 1 landed:** New `PaymentRailAdapter` port at `src/ports/payment-rail-adapter.ts` with three operations: `authorize(amount, methodToken, key) → Promise<Authorization>`, `capture(authorization, key) → Promise<CaptureReceipt>`, `voidAuthorization(authorization, key) → Promise<void>`. Three new value/record types: `Money` (integer `amountMinorUnits` + ISO-4217 `currency`), `Authorization` (`kind`-discriminated; carries `id`, `amount`, `railLabel`), `CaptureReceipt` (carries `authorizationId`, `amount`, `settledTransactionId`, `railLabel`). In-memory `stubPaymentRailAdapter({ railLabel? })` (DEMO_STUB_ADAPTER-marked; authorization-state Map keyed by adapter-minted id; idempotency via per-call-family key maps; exposes test-only `_internalAuthorizationStates()` + `failNextAuthorize` / `failNextCapture` / `failNextVoid` failure-injection knobs; rejects fractional / negative `amountMinorUnits` and empty currency at the port boundary). `unavailablePaymentRailAdapter()` sentinel (UNAVAILABLE_ADAPTER-marked; throws on every method with an adopter-facing message). Conformance suite under `tests/adapter-conformance/payment-rail-adapter/` covering UUIDv7 rejection on all 3 methods, authorize idempotency, capture idempotency, capture-against-unknown-throws, double-capture-throws, void-after-capture-throws, capture-after-void-throws, Money integer + non-negative + non-empty-currency enforcement — 16 invariants total. New `payment` runtime-feature key appended to the closed `RUNTIME_FEATURE_KEYS` taxonomy — **seventh extension after `offlineSubmit`** (FW-0044). 1:1 mapping in `FEATURE_PORT_MAP` to a new `paymentRailAdapter` Composition slot — no transitional slot-sharing (multi-rail composition lives at the adapter level via the future `CompositePaymentRailAdapter` analogous to FW-0028's `CompositeIdentityProvider`). New `extractPaymentRequirement(definition)` walker in `src/policy/extract-form-policy.ts` reads `definition.extensions['x-formspec-payment-required'] === true`; returns `'required'` (NOT `'optional'` — see design §"Decision: required, not optional"; matches FW-0033's attachment shape because payment is a hard blocker, not a graceful enhancement). Companion `extractPaymentAmount(definition)` walker returns well-formed `Money` from `definition.extensions['x-formspec-payment-amount']`; rejects fractional, negative, or missing-currency shapes by returning `undefined`. New `PaymentRequirementExtractor` reference adapter in `src/adapters/composing/form-runtime-policy-extractor.ts` wraps the walker; composed into the stub + default compositions' `CompositeFormRuntimePolicyExtractor` array. Composition wiring extended: production declares `payment: 'unavailable'` + wires `unavailablePaymentRailAdapter()`; demo declares `payment: 'demo-stub'` + wires `stubPaymentRailAdapter()`; narrowed-route factories (`createRouteNarrowedComposition`) declare `'unavailable'` uniformly + wire the sentinel. New `submitWithPayment` pure helper in `src/app/respondent-flow.ts` orchestrates authorize → submit → capture-or-void around the existing `SubmitTransport.submit`; returns a discriminated outcome over six branches (`submitted-no-payment` / `submitted-with-payment` / `authorize-failed` / `submit-failed-payment-voided` / `void-failed-after-submit-failure` / `capture-failed`). Each rail call uses a fresh UUIDv7 idempotency key (port requires UUIDv7); optional caller-supplied overrides (`authorizeKey` / `captureKey` / `voidKey`) exist for adopters who want server-side reconciliation keys. `RespondentRuntime.SubmitState` extended with five new states: `'authorizing-payment'` (carries `amount`), `'capturing-payment'` (carries `authorization`), `'voiding-payment'` (carries `authorization`), `'payment-voided-after-submit-failure'` (carries `error`), `'capture-failed'` (carries `confirmation` + `error`). `ConfirmationPanel` gains a `PaymentReceivedSubCard` showing `formatMoney(captureReceipt.amount)` + the `railLabel` + the `settledTransactionId`. `SubmitNotice` renders fixture-pinned copy for each new state: `PAYMENT_AUTHORIZING_TITLE` ("Authorizing payment…") + `PAYMENT_AUTHORIZING_BODY` ("You haven't been charged yet."), `PAYMENT_CAPTURING_TITLE` ("Capturing payment…"), `PAYMENT_VOIDING_TITLE` ("Releasing the payment…") + body ("Your form did not go through; we are releasing the hold on your funds."), `PAYMENT_VOIDED_AFTER_SUBMIT_FAILURE_TITLE` ("Your form did not submit, and the payment was not charged.") + body ("No money has moved. Please try submitting again."), `PAYMENT_CAPTURE_FAILED_TITLE` ("Your form was submitted, but we had a problem with the payment.") + reference-number copy, `PAYMENT_RECEIVED_TITLE` ("Payment received") + `PAYMENT_DEFERRED_CAPABILITY_COPY` ("If you see a pending charge on your account, it will be released automatically within a few days."). `runtimePolicyErrorCopy` extended with the `payment` row so the form-load boundary renders "This form requires payment, but this site is not set up to accept payments." instead of the generic fallback. Offline + payment composition is hard-rejected at the runtime layer for slice 1 (the authorization expires before a queued submit could replay; FW-0101 lifts the restriction post-substrate); the user sees "This form requires payment and cannot be saved for later. Please reconnect and try again."
+- **Done (slice 1):** `tests/adapter-conformance/payment-rail-adapter/conformance.test.ts` (16 cases via the shared `definePaymentRailAdapterConformance` suite); `tests/adapters/payment-rail-adapter-stub.test.ts` (8 cases including marker presence + rail-label echo + state transitions + failure-injection knobs + void-on-unknown-is-no-op); `tests/adapters/payment-rail-adapter-unavailable.test.ts` (5 cases including marker + all 3 methods throwing + custom message); `tests/adapters/unavailable-sentinel.test.ts` + `tests/adapters/demo-stub-marker.test.ts` extended with the new adapter; `src/policy/extract-form-policy.test.ts` (12 new cases for payment + amount walkers: requirement absent / true / false / non-boolean + amount absent / well-formed / fractional / negative / empty-currency / missing-fields); `src/policy/feature-keys.test.ts` extended (append-only assertion includes `payment`; sentinel `'fictional'` assertion replaces the old `'payment'` not-known assertion); `src/policy/freeze-composition.test.ts` extended with the new slot; `tests/policy-resolution/cases/payment-{required-unavailable-throws,demo-stub-satisfies-required,disabled-no-instance}.json` (3 new resolver cases); 24 pre-existing resolver cases backfilled with the new `payment` key in `instance` + `org.features` + `expect.disabled` per the append-only key contract. `tests/app/respondent-flow.test.ts` (8 new cases pinning the submitWithPayment decision matrix: no-payment / happy / submit-fails-voids / authorize-fails / capture-fails / void-fails-after-submit-failure / caller-supplied keys / fresh-UUIDv7 keys / no-amount-throws). `tests/app/respondent-runtime-payment.test.tsx` (6 cases via the full RespondentRuntime mount: happy path with capture receipt + $45.00 + "Card"; submit-fails-voids surfaces user-protection copy; capture-failed surfaces reference number; form-load failure renders plain-language unavailable copy; vocabulary firewall — DOM does not leak authorize / void / rail / methodToken / paymentRailAdapter / minor units / ISO-4217; authorizing-payment intermediate state shows "$45.00 pending. You haven't been charged yet."). `tests/app/respondent-runtime-attachment.test.tsx` + `tests/app/respondent-runtime-offline.test.tsx` + `tests/app/respondent-runtime.test.tsx` + `tests/app/{documents,history,obligations}-runtime.test.tsx` extended with the new slot. `tests/profiles/composition-coherence.test.ts` extended with the new slot across every sharedSlot case; `tests/composition/route-narrowing.test.ts` extended with the `'payment'` membership invariant and the org-features payment-allowed assertion. `scripts/check-conformance-coverage.mjs` extended (port suite + stub + sentinel registrations + harness export). `tests/scripts/check-conformance-coverage.test.mjs` fixture builder extended with the new port suite + adapter + sentinel + harness export. `docs/ports/payment-rail-adapter.md` (new) + `docs/policy/runtime-feature-resolution.md` (added the `payment` feature-key entry + new "Worked example: the in-form atomic pay-and-submit (FW-0027 slice 1)" section) updated. `tests/adapter-conformance/README.md` extended. ADR-0011 Related Decisions cross-reference appended. `npm run typecheck` + `npm run lint` clean. Full vitest unit suite green (643 passes / 70 files); conformance suite green (142 passes / 12 files).
+- **User-visible behavior change:** a respondent filling a fee-bearing form (form declares `x-formspec-payment-required: true` with `x-formspec-payment-amount: { amountMinorUnits, currency }`) on a deployment that wires a rail can now submit + pay atomically — they see "Authorizing payment… ($45.00 pending. You haven't been charged yet.)" → "Sending form" → "Submission received" with a "Payment received" sub-card showing the formatted amount + rail name + payment ID. If the submit fails after authorize, they see "Your form did not submit, and the payment was not charged. No money has moved. Please try submitting again." — the rail's hold has been released. Fee-bearing forms on instances with no rail fail-load with "This form requires payment, but this site is not set up to accept payments." instead of letting the respondent reach a broken submit.
+- **Consumes ports:** `PaymentRailAdapter` (new — port + adapter + conformance + composition slot all in this slice), `SubmitTransport` (existing, no port change — the runtime composes around it).
+- **Plan:** [`thoughts/plans/2026-05-24-fw-0027-multi-rail-payment.md`](thoughts/plans/2026-05-24-fw-0027-multi-rail-payment.md).
+- **Design:** [`thoughts/specs/2026-05-24-fw-0027-multi-rail-payment-design.md`](thoughts/specs/2026-05-24-fw-0027-multi-rail-payment-design.md).
+- **Release gaps named:** (a) Stripe reference adapter (card + ACH + Apple Pay / Google Pay via Stripe Elements + Payment Request API) — FW-0089. (b) W3C Payment Request API reference adapter (generic-card, browser-native) — FW-0090. (c) Square reference adapter — FW-0091. (d) PayNearMe cash-via-retail-partner reference adapter — FW-0092. (e) In-person POS handoff reference adapter — FW-0093. (f) Multi-rail composition (`CompositePaymentRailAdapter` analogous to FW-0028 `CompositeIdentityProvider`) + per-submit picker UX — FW-0094. (g) Refund lifecycle (`refund(captureReceipt, amount?, key)`) + receipt updates — FW-0095. (h) Cross-currency / locale-aware money display — FW-0096. (i) FEL-evaluated dynamic payment amount (amount expressions over response field values) — FW-0097. (j) Saved-method picker + wallet integration (Apple Pay / Google Pay / Stripe Link) — FW-0098. (k) Split-tender / partial-payment — FW-0099. (l) Demo form `x-formspec-payment-required: true` declaration — FW-0100 (gated on FW-0089 + FW-0094). (m) Offline + payment composition lift — FW-0101 (currently hard-rejected at the runtime layer; the authorization expires before a queued submit could replay). (n) Slice-1 imperfections documented in `docs/ports/payment-rail-adapter.md` §"Slice-1 imperfections": network failure between authorize and submit can orphan a hold (rail's hold-expiration is the safety net); submit→capture path has an analogous gap; adopter-side server reconciliation is the right long-term shape.
+- **Note:** Closes web ADR-0011 §Failure Semantics for the THIRD IN-FORM (non-route) consumer of the runtime-feature gate (after FW-0033 `fileUpload` and FW-0044 `offlineSubmit`) and introduces the SEVENTH extension of the closed `RuntimeFeatureKey` taxonomy — `payment`. The atomicity discipline (user's account sees ONLY a successful charge OR no charge — never an orphan charge with a failed submission, never a successful submission with no charge) is honored at the user-observable level by composing authorize / submit / capture-or-void at the runtime layer, not by collapsing two adopter concerns into one port. Multi-rail composition is deliberately deferred to FW-0094 — slice 1 wires one adapter per composition so the substrate honesty is verifiable end-to-end before the rail-picker UX adds composition complexity. Anti-patterns AP-013 (silent failure of fee-bearing forms on instances with no rail; closed via the `'required'` form-policy declaration + plain-language form-load error copy), AP-017 (charged-but-unsubmitted / submitted-but-unpaid; closed at the orchestration layer by the void-on-submit-failure path).
+
+### FW-0089 — Stripe reference adapter for PaymentRailAdapter (card + ACH + Apple Pay / Google Pay)
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (production payment rail for fee-bearing forms)
+- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use) — production adapter that satisfies the row's "ACH, card, prepaid" frame for the most common adopter shape.
+- **Done:** A `StripePaymentRailAdapter` lives under `src/adapters/payment/stripe.ts` and implements `PaymentRailAdapter` against Stripe's Payment Intents API. Card + ACH (Stripe ACH Debit) + Apple Pay / Google Pay via Stripe Elements + the W3C Payment Request API. Authorize maps to `paymentIntents.create({ capture_method: 'manual' })`; capture maps to `paymentIntents.capture`; void maps to `paymentIntents.cancel`. Idempotency keys passed through to Stripe verbatim. Webhook handler (server-side, separate row) reconciles async settlement / chargeback events. Conformance suite (the existing one) passes against the live adapter when wired with a Stripe test key. Adopter doc updated with Stripe-specific wiring snippet.
+- **Blocked on:** Nothing upstream — pure adopter-side adapter work. Filed by FW-0027 closeout.
+
+### FW-0090 — W3C Payment Request API reference adapter (browser-native, generic-card)
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (browser-native payment rail without a payment-processor SDK)
+- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use) — the browser-native path for adopters who do not want to depend on a specific PSP SDK.
+- **Done:** A `PaymentRequestApiAdapter` lives under `src/adapters/payment/payment-request-api.ts` and implements `PaymentRailAdapter` against the W3C Payment Request API (`new PaymentRequest(...)`). Surfaces the browser's native picker UI on `authorize`; the resulting `PaymentMethodData` is the method token. Capture / void go through the adopter's own settlement service (the W3C API does not directly model authorize-then-capture, so this adapter wraps a thin settlement service the adopter provides). Conformance suite passes against the live adapter with a fake settlement service.
+- **Blocked on:** Nothing upstream — pure adopter-side adapter work. Filed by FW-0027 closeout.
+
+### FW-0091 — Square reference adapter for PaymentRailAdapter
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (Square-based merchant)
+- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use)
+- **Done:** A `SquarePaymentRailAdapter` lives under `src/adapters/payment/square.ts` and implements `PaymentRailAdapter` against Square's Payments API. Authorize maps to Square's `CreatePayment({ autocomplete: false })`; capture maps to `CompletePayment`; void maps to `CancelPayment`. Conformance suite passes against a Square sandbox.
+- **Blocked on:** Nothing upstream — pure adopter-side adapter work. Filed by FW-0027 closeout.
+
+### FW-0092 — PayNearMe cash-via-retail-partner reference adapter for PaymentRailAdapter
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (cash-payment-acceptance for unbanked / under-banked respondents)
+- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use) — the row's "cash-via-retail-partner" frame; load-bearing for equitable access.
+- **Done:** A `PayNearMePaymentRailAdapter` lives under `src/adapters/payment/paynearme.ts` and implements `PaymentRailAdapter` against PayNearMe's API. The respondent receives a payment slip with a barcode they take to a 7-Eleven / Walmart / CVS / Family Dollar; the rail confirms via webhook when the cash is received. The authorize phase issues the slip; capture confirms receipt; void cancels the slip. The asynchronous nature (cash receipt may be days later) means the submit may need to wait or queue — composition with FW-0094's offline+payment lift may be required.
+- **Blocked on:** May depend on FW-0101 (offline+payment composition) for the cash-receipt-later path. Filed by FW-0027 closeout.
+
+### FW-0093 — In-person POS handoff reference adapter for PaymentRailAdapter
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (counter-service deployment where the respondent pays at a window)
+- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use) — the row's "in-person" frame.
+- **Done:** An `InPersonPosPaymentRailAdapter` lives under `src/adapters/payment/in-person-pos.ts` and implements `PaymentRailAdapter` against an in-person POS workflow. Authorize generates a pay-at-counter token + reference number; capture confirms the operator processed the payment via the POS. The flow is asynchronous (operator confirmation is a separate event); the adapter integrates with the adopter's POS via webhooks or a polling endpoint.
+- **Blocked on:** May depend on FW-0101. Filed by FW-0027 closeout.
+
+### FW-0094 — Multi-rail composition: CompositePaymentRailAdapter + per-submit rail picker UX
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent (chooses a rail per submit)
+- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use) — the row's "the way I actually pay … and through any channel I actually use" frame; lets respondents pick ACH vs card vs PayNearMe vs in-person per session.
+- **Done:** A `CompositePaymentRailAdapter` lives under `src/adapters/composing/payment-rail-adapter.ts` and wraps an ordered `PaymentRailAdapter[]` behind the single `Composition.paymentRailAdapter` slot (mirrors FW-0028's `CompositeIdentityProvider`). The form's available methods come from `definition.extensions['x-formspec-payment-methods']` (array of `{ key: 'card' | 'ach' | 'paynearme' | 'in-person', label }` entries); the respondent picks at submit time. The chosen `methodToken` carries a rail-key prefix (`'stripe:card:pm_...'` / `'paynearme:slip:...'`) that the composite routes on. Picker UI lives in `RespondentRuntime` and renders inline when payment is enabled AND multiple methods are available. Composition wires `CompositePaymentRailAdapter` over the underlying per-rail adapters (FW-0089 / FW-0090 / FW-0091 / FW-0092 / FW-0093).
+- **Blocked on:** At least one of FW-0089 / FW-0090 / FW-0091 / FW-0092 / FW-0093 must exist (otherwise there's nothing to compose). Filed by FW-0027 closeout.
+
+### FW-0095 — Refund lifecycle for PaymentRailAdapter
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Issuer (refund-button at the application-management surface) + Respondent (sees the refund-receipt in the receipt portal)
+- **Journey:** Cross-references issuer-side workflows for refunds + the receipt-portal display path (FW-0054).
+- **Done:** `PaymentRailAdapter` gains a fourth method `refund(captureReceipt, amount?, idempotencyKey) → Promise<Refund>` that operates on a CAPTURED authorization. Different lifecycle than authorize / capture / void (the money has moved; this returns it). New `Refund` type carries `kind`, `id`, `captureReceiptId`, `amount` (full or partial), `settledRefundTransactionId`. Conformance suite gains refund cases. Reference adapters (FW-0089 / FW-0091) implement against the rail's refund API. The receipt-portal renders refunds as a sub-card on the original confirmation.
+- **Blocked on:** Nothing upstream. Filed by FW-0027 closeout.
+
+### FW-0096 — Cross-currency support + locale-aware money display
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (multi-locale deployments)
+- **Journey:** Cross-references locale-aware UI (currently locale-conditional feature key support is empty — FW-0096 would be the first feature to add `'payment'` to `LOCALE_CONDITIONAL_FEATURE_KEYS` if currency choice depends on locale).
+- **Done:** The runtime supports forms whose currency varies per locale + the resolver recomputes when locale changes if `payment` becomes locale-conditional. `Money.currency` is fully ISO-4217-respecting. The "Payment received" sub-card formats according to the user's locale (currently uses `Intl.NumberFormat(undefined, ...)`; this row pins behavior under locale switching).
+- **Blocked on:** Nothing upstream. Filed by FW-0027 closeout.
+
+### FW-0097 — FEL-evaluated dynamic payment amount
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent (fee depends on response data: base + per-dependent / income-tiered / etc.)
+- **Journey:** Cross-references FEL grammar evolution (the amount expression compiles to a FEL computation over response field values).
+- **Done:** `definition.extensions['x-formspec-payment-amount']` accepts a FEL expression (in addition to the literal Money shape). The runtime evaluates the expression against the live response at submit time. The expression is evaluated AFTER all validation passes so the amount cannot depend on invalid input. The conformance suite gains an expression case.
+- **Blocked on:** Upstream FEL grammar may need an amount-typed expression form. Filed by FW-0027 closeout.
+
+### FW-0098 — Saved-method picker + wallet integration (Apple Pay / Google Pay / Stripe Link)
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent (one-tap pay with a saved method)
+- **Journey:** Cross-references identity continuity (FW-0020) for the saved-method-per-identity binding.
+- **Done:** The picker UI surfaces saved methods (from the respondent's wallet / identity provider) AND fresh-card / fresh-method options. Apple Pay / Google Pay / Stripe Link are first-class picker entries when supported by the underlying rail.
+- **Blocked on:** Depends on FW-0089 (Stripe Link), FW-0094 (multi-rail composition), and identity-bound wallet substrate. Filed by FW-0027 closeout.
+
+### FW-0099 — Split-tender / partial-payment
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Respondent (pays part on card + part in cash, etc.)
+- **Journey:** Edge-case payment flow.
+- **Done:** The runtime supports multiple authorizations per submit, capturing each on submit-success. The composition rules + UX for split-tender are designed and shipped.
+- **Blocked on:** Likely depends on FW-0094. Filed by FW-0027 closeout.
+
+### FW-0100 — Demo form: declare `x-formspec-payment-required: true` once a method-picker UX ships
+
+- **Phase:** Post-MVP
+- **Status:** open (blocked on FW-0089 + FW-0094)
+- **Persona:** Maintainer (demo surface honesty)
+- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use) (demo surface)
+- **Done:** The bundled `sample-form.json` declares `extensions['x-formspec-payment-required']: true` AND `npm run dev` users see the payment affordance end-to-end. Today's slice-1 stub authorizes / captures without a real rail picker UX; declaring payment on the demo form would leak a confusing "Authorizing payment…" panel into the OSS reference's "free demo" surface.
+- **Blocked on:** FW-0089 (Stripe reference adapter, or any production rail) + FW-0094 (multi-rail picker UX). Until those land, the demo form stays silent on payment.
+
+### FW-0101 — Offline + payment composition (lift the runtime hard-reject)
+
+- **Phase:** Post-MVP
+- **Status:** open (currently hard-rejected at the runtime layer)
+- **Persona:** Respondent (fills a fee-bearing form offline)
+- **Journey:** [J-029](JOURNEYS.md#j-029--let-me-pay-the-way-i-actually-pay--and-through-any-channel-i-actually-use) + [J-045](JOURNEYS.md#j-045--i-have-no-signal--let-me-finish-the-form-anyway-and-let-it-submit-itself-when-im-back-online)
+- **Gap (from FW-0027):** A payment-required form on an instance with `offlineSubmit` enabled cannot be queued — the authorization expires before the user reconnects (typical rail hold expiration is 7 days for card networks, faster for others; offline-queued submits may sit indefinitely). The slice-1 runtime hard-rejects this composition: "This form requires payment and cannot be saved for later. Please reconnect and try again."
+- **Done:** A substrate exists for held-authorization-replay — the queue stores the authorization handle alongside the queued submit; on replay, the runtime re-authorizes (or revives) the hold AFTER the network returns. Requires deep rail-side coordination (most rails don't support reviving expired authorizations); may require a different shape entirely (e.g., generate a pay-on-success token that the user fills offline + completes payment on reconnect).
+- **Blocked on:** Substantive rail-side work. Filed by FW-0027 closeout as the explicit lift-the-restriction row.

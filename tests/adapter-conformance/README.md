@@ -28,3 +28,4 @@ Directory skeleton (one per current port):
 - `form-runtime-policy-extractor/`
 - `respondent-history-source/`
 - `offline-submit-queue/`
+- `payment-rail-adapter/`

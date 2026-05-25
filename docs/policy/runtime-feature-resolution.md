@@ -45,6 +45,19 @@ The closed taxonomy lives in `src/policy/feature-keys.ts`. Today's keys:
   in-memory queue paired with the stub transport. The sixth-key landing
   fired FW-0080, which consolidated the `consumes*` boolean ladder on
   `RouteNarrowing` into a single `consumes: ReadonlySet<RuntimeFeatureKey>`.
+- `payment` — payment-rail substrate (FW-0027 slice 1 extension;
+  **seventh key** in the closed taxonomy; gated against the new
+  `PaymentRailAdapter` port, 1:1 mapping). IN-FORM consumer — no
+  standalone route; the runtime composes authorize → submit →
+  capture-or-void around the existing submit path when the resolved
+  profile enables the feature. Form-policy extractor walks
+  `definition.extensions['x-formspec-payment-required']` and declares
+  `'required'` (matching FW-0033's attachment shape; payment is a hard
+  blocker, not a graceful enhancement). Production declares
+  `'unavailable'` (no OSS reference rail adapter ships — adopters fork to
+  wire Stripe / Square / W3C Payment Request / PayNearMe / in-person POS
+  per their merchant relationships); demo declares `'demo-stub'` with an
+  in-memory authorization-state map.
 
 Future feature ADRs extend the taxonomy; the resolver rejects unknown keys
 with `InvalidRuntimePolicyError` so drift is caught at boot.
@@ -492,3 +505,91 @@ honest cost of the `'demo-stub'` posture; the bundled `sample-form.json`
 does NOT declare `x-formspec-offline-submit: true` today to avoid leaking
 that imperfection into the "what `npm run dev` shows" surface (FW-0087
 flips the demo declaration once FW-0082 ships).
+
+## Worked example: the in-form atomic pay-and-submit (FW-0027 slice 1)
+
+`payment` is the seventh feature key and the second IN-FORM key whose
+runtime branch wraps multiple substrate calls around the existing
+`SubmitTransport.submit`. The composition's `formRuntimePolicyExtractor`
+(specifically the `PaymentRequirementExtractor` reference adapter at
+`src/adapters/composing/form-runtime-policy-extractor.ts`) walks the
+loaded `FormDefinition` for `extensions['x-formspec-payment-required']
+=== true`. When present, the form's policy declares
+`payment: 'required'`.
+
+The required declaration is load-bearing: a fee-bearing form on an
+instance with no rail cannot be honestly submitted. The resolver throws
+`UnsupportedRequiredFeatureError` at the form-load boundary; the React
+shell renders the plain-language "This form requires payment, but this
+site is not set up to accept payments." copy (fixture-pinned in
+`RespondentRuntime.tsx` `runtimePolicyErrorCopy`). The respondent never
+reaches the submit button on a broken payment path.
+
+At submit time, `RespondentRuntime`'s `submitWithPayment` helper
+orchestrates the atomic boundary:
+
+1. `PaymentRailAdapter.authorize(amount, methodToken, key)` — HOLD funds.
+2. `SubmitTransport.submit(handoff, key)` — form intake as today.
+3a. On submit success: `PaymentRailAdapter.capture(authorization, key)` —
+    CHARGE the held funds.
+3b. On submit failure: `PaymentRailAdapter.voidAuthorization(authorization,
+    key)` — RELEASE the hold; surface the load-bearing
+    "Your form did not submit, and the payment was not charged" copy so
+    the respondent knows no money moved.
+
+The user's account sees ONLY a successful charge OR no charge — never
+an orphan charge with a failed submission, never a successful submission
+with no charge. The "atomic" promise is honored at the user-observable
+level (not the database-transaction sense; see
+`docs/ports/payment-rail-adapter.md` §"Slice-1 imperfections" for the
+network-failure edge cases the rail's hold-expiration mechanism backs
+up).
+
+The amount comes from `definition.extensions['x-formspec-payment-amount']`
+(typed as `{ amountMinorUnits: number, currency: string }`). Slice 1
+ships fixed-amount forms; FEL-evaluated dynamic amounts that depend on
+response field values are FW-0097. The runtime formats the amount via
+`Intl.NumberFormat` for the "Authorizing payment…" panel ("$45.00
+pending. You haven't been charged yet.") and the "Payment received"
+sub-card on the confirmation panel.
+
+Idempotency-key discipline: each rail call gets a fresh UUIDv7 (the
+rail port requires UUIDv7-shaped keys per queue EXT-14). Optional
+caller-supplied overrides (`authorizeKey` / `captureKey` / `voidKey`
+on `submitWithPayment`) exist for adopters who want to derive
+deterministic keys for server-side reconciliation. The React shell's
+submit-state machine early-returns on `'submitting'` /
+`'authorizing-payment'` / `'capturing-payment'` / `'voiding-payment'`
+so authorize/capture/void each run at most once per orchestration.
+
+The respondent-facing UI renders state-by-state:
+`'authorizing-payment'` → `'capturing-payment'` → `'confirmed'`
+(happy path), OR `'authorizing-payment'` → `'voiding-payment'` →
+`'payment-voided-after-submit-failure'` (submit failed, charge
+released). Forbidden in the rendered DOM: `authorize`, `capture`,
+`void`, `rail`, `idempotency`, `PaymentRailAdapter`, `Authorization`,
+`CaptureReceipt`, `methodToken`, `Money`, `minor units`, `ISO-4217`,
+`payment-rail`, `paymentRailAdapter`.
+
+The narrowed-route compositions (`/status`, `/obligations`,
+`/documents`, `/history`) declare `payment: 'unavailable'` and wire
+`unavailablePaymentRailAdapter()` because no narrowed surface submits a
+form. Uniform across descriptors — no descriptor adds `'payment'` to
+its `consumes` set today.
+
+**Offline + payment composition is hard-rejected in slice 1.** A
+payment-required form on an instance with `offlineSubmit` enabled
+cannot be queued (the authorization expires before the user reconnects);
+the runtime surfaces the error "This form requires payment and cannot
+be saved for later. Please reconnect and try again." FW-0101 lifts the
+restriction once a substrate exists for held-authorization-replay.
+
+Production posture: `'unavailable'` (no OSS reference rail adapter
+ships; adopters fork to wire Stripe FW-0089 / W3C Payment Request
+FW-0090 / Square FW-0091 / PayNearMe FW-0092 / in-person POS FW-0093).
+Demo posture: `'demo-stub'` with an in-memory authorization-state map
+keyed by adapter-minted id. The bundled `sample-form.json` does NOT
+declare `x-formspec-payment-required: true` today (FW-0100 flips the
+demo once a method-picker UX ships, gated on FW-0089 + FW-0094);
+adopters who want the affordance live can compose their own demo form
+with the extensions.

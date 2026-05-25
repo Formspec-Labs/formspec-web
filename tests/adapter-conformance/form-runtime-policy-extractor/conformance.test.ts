@@ -4,6 +4,7 @@ import {
   CompositeFormRuntimePolicyExtractor,
   EmptyFormRuntimePolicyExtractor,
   OfflineSubmitRequirementExtractor,
+  PaymentRequirementExtractor,
 } from '../../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import {
   DemoFormPolicyExtractor,
@@ -76,5 +77,21 @@ defineFormRuntimePolicyExtractorConformance(
   () => ({
     adapter: new OfflineSubmitRequirementExtractor(),
     definition: offlineOptInDefinition,
+  }),
+);
+
+const paymentRequiredDefinition: FormDefinition = {
+  ...sampleFormDefinition,
+  extensions: {
+    'x-formspec-payment-required': true,
+    'x-formspec-payment-amount': { amountMinorUnits: 1500, currency: 'USD' },
+  },
+};
+
+defineFormRuntimePolicyExtractorConformance(
+  'PaymentRequirementExtractor conformance (payment-required definition)',
+  () => ({
+    adapter: new PaymentRequirementExtractor(),
+    definition: paymentRequiredDefinition,
   }),
 );
