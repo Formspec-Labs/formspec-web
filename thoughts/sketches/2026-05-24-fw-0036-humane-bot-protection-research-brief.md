@@ -176,7 +176,7 @@ Final design §5 carries the threat-model-grade rendering. Sketch list:
 
 ## 7. Cross-Stack Dependencies (preview)
 
-Smallest cross-stack footprint of any post-MVP design row to date:
+Among the smallest cross-stack footprints of any post-MVP design row to date (FW-0028 slice 1 was literally zero upstream work; FW-0036 closes one EXT-5 payload deferral on top of that):
 
 - **Formspec:** ratify EXT-5 `bot-protection-cleared` event payload shape (§1.2). One spec edit, one fixture matrix.
 - **WOS:** nothing. No new substrate; humanity-attestation is not a WOS concern.

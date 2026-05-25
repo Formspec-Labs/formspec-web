@@ -102,7 +102,7 @@ Each decision: the answer first, then the rationale, then the alternative consid
 
 | Tier | Semantics |
 |---|---|
-| `forbidden` | Form REJECTS humanity attestation. Submissions never run the gate; the resolver synthesizes a placeholder verdict for receipt-event purposes only. Default for authenticated-only forms (the IdP did the work; double-gating wastes the user's time and exposes more attesters to user data than necessary). |
+| `forbidden` | Form REJECTS humanity attestation. Submissions never run the gate; the resolver synthesizes a placeholder verdict for receipt-event purposes only. Default for authenticated-only forms (the IdP did the work; double-gating wastes the user's time and exposes more attesters to user data than necessary). **`forbidden` is unconditional — the runtime does NOT consult the active IdP's humanity-proofing pipeline at form-load.** Adopters with mixed IdP fleets (some IdPs proof for personhood, some don't) who want IdP-conditional gating SHOULD use `allowed` + rely on the §7.1 skip-when-identity-proofed runtime hint (which DOES consult IdP humanity floor). |
 | `allowed` | Form accepts humanity attestation per the deployment's resolved profile. The gate runs the wired attester ladder; the verdict accompanies the submission. Default for most public forms. |
 | `required` | Form REQUIRES a positive verdict (`"human"` or `"agent-registered"`) before submit. Submissions without a positive verdict fail-load (no attester wired → `UnsupportedRequiredFeatureError`) or fail-submit (gate verdict `"denied"` → `BotProtectionDeniedError`). Use case: high-spam-risk public surfaces (mass-redemption coupons, sign-up storms, post-incident DDoS hardening). |
 
@@ -193,7 +193,7 @@ type AttestationVerdict = {
 | **Tier 1 — device-attested** | W3C WebAuthn user-present (or user-verified) assertion via existing passkey. Rides FW-0031 substrate when present. | Nothing if browser silently surfaces; an OS-native passkey prompt if not (one-tap). | Highest. No vendor sees user data. |
 | **Tier 2 — private-token** | IETF Privacy Pass (RFC 9576) — Apple PAT, hCaptcha Privacy Pass, third-party issuers. Token redeemed at issuer's endpoint with cryptographic unlinkability. | Nothing. Browser-native redemption. | Very high. Token issuer and verifier are cryptographically unlinkable. |
 | **Tier 3 — invisible-challenge** | Cloudflare Turnstile non-interactive, FriendlyCaptcha proof-of-work, mCaptcha. Browser-side check; emits a token; server-side verifies. | Nothing 99% of the time; a brief "verifying" spinner if the vendor escalates to managed challenge. | Vendor-dependent. Adopter chooses per privacy posture; Turnstile is Privacy-Pass-aligned, reCAPTCHA Enterprise is more invasive. |
-| **Tier 4 — human-confirmation** | A single accessible interaction: tap-to-confirm, press-and-hold (NOT puzzle CAPTCHA — no traffic lights, no piece-dragging, no audio puzzles). Per AP-019 this is fallback, not default. | A button or affordance saying "I'm a person — tap to continue." Honestly disclosed: "we couldn't verify automatically — quick check." | Per-vendor; minimal data transmitted. |
+| **Tier 4 — human-confirmation** | A single accessible interaction: tap-to-confirm or press-and-hold (NOT puzzle CAPTCHA — no traffic lights, no piece-dragging, no audio puzzles). Per AP-019 this is fallback, not default. **MUST clause:** when an adopter wires a press-and-hold variant, the adapter MUST ALSO provide a non-held alternative (simple tap or Enter-key activation) — per WCAG 2.1 SC 2.5.1 (Pointer Gestures, Level A) and SC 2.5.4 (Motion Actuation, Level A), held-gesture-only affordances trap users with motor-control impairments. The adapter's `disclose()` MUST advertise the alternative path. | A button or affordance saying "I'm a person — tap to continue." Honestly disclosed: "we couldn't verify automatically — quick check." | Per-vendor; minimal data transmitted. |
 | **Tier 5 — escape-to-support** | The "I can't do this — contact support" affordance. Never trap the user. | A link + a support reference id: "still stuck? contact us at <support@adopter>; reference <id>." | Out-of-band; adopter's responsibility. |
 
 **Justification.** Per AP-019 and J-033, puzzle CAPTCHAs are the failure mode. The ladder runs invisible-first (Tier 1–3); falls to accessible-but-visible (Tier 4) ONLY when invisible attesters cannot decide; ALWAYS exposes Tier 5 escape when the form policy is `required` (per §3.5). **Tier 4 is NOT a puzzle** — it is a single-gesture confirmation, AAA-WCAG-accessible, screen-reader-friendly, language-neutral. The design REFUSES to specify a puzzle adapter; if an adopter wires a third-party puzzle attester (e.g., reCAPTCHA v2 piece-drag), they have opted out of the design's accessibility floor.
@@ -279,8 +279,8 @@ export interface AttesterDisclosure {
     crossSiteLinkable: boolean;                 // Privacy Pass / WebAuthn = false; reCAPTCHA Enterprise = true
   };
   accessibilityPosture: {
-    requiresUserInteraction: boolean;           // Tier 1 = sometimes; Tier 2–3 = no; Tier 4–5 = yes
-    minimumWcagLevel: 'A' | 'AA' | 'AAA';       // Tier 4 SHOULD be AAA
+    requiresUserInteraction: 'never' | 'sometimes' | 'always'; // Tier 1 passkey = sometimes (silent-rearm vs prompt depends on OS state); Tier 2–3 = never; Tier 4–5 = always
+    minimumWcagLevel: 'A' | 'AA' | 'AAA';       // Tier 4 SHOULD be AAA; press-and-hold variants MUST provide a non-held alternative (WCAG 2.5.1 Pointer Gestures Level A)
   };
 }
 
