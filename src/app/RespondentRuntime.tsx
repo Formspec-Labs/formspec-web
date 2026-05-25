@@ -49,6 +49,11 @@ import { DocumentItem } from './documents-view.tsx';
 import { AttachmentStoreProvider } from './AttachmentStoreProvider.tsx';
 import { FormspecWebAttachmentControl } from './attachment-upload-control.tsx';
 import type { SubmitConfirmation } from '../ports/submit-transport.ts';
+import type {
+  Authorization,
+  CaptureReceipt,
+  Money,
+} from '../ports/payment-rail-adapter.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
 import {
@@ -76,6 +81,7 @@ import {
   signInOptionsForIdentityPolicy,
   subjectRefInvalidatedByIdentityChange,
   submitOrQueue,
+  submitWithPayment,
 } from './respondent-flow.ts';
 
 interface RespondentRuntimeProps {
@@ -118,7 +124,23 @@ type SubmitState =
   // listens for the window 'online' event and calls
   // `offlineSubmitQueue.replay()` to drain.
   | { status: 'queued'; idempotencyKey: string }
-  | { status: 'confirmed'; confirmation: SubmitConfirmation };
+  // FW-0027: payment-orchestration intermediate states. The user sees the
+  // distinct phases plainly so a slow rail (Apple Pay confirmation, ACH
+  // sleep, etc.) does not look like a frozen "Sending form" screen.
+  | { status: 'authorizing-payment'; amount: Money }
+  | { status: 'capturing-payment'; authorization: Authorization }
+  | { status: 'voiding-payment'; authorization: Authorization }
+  // FW-0027: 'payment-voided-after-submit-failure' is the load-bearing
+  // user-protection state — surfaced as the "Your form did not submit,
+  // and the payment was not charged" copy. Distinct from generic 'error'
+  // because the copy must name the released charge explicitly.
+  | { status: 'payment-voided-after-submit-failure'; error: unknown }
+  // FW-0027: 'capture-failed' is the rare-but-named failure mode — the
+  // submit IS in the system, but the rail's settlement queue could not
+  // complete the charge. The respondent must be told to contact the sender
+  // with their reference number.
+  | { status: 'capture-failed'; confirmation: SubmitConfirmation; error: unknown }
+  | { status: 'confirmed'; confirmation: SubmitConfirmation; captureReceipt?: CaptureReceipt };
 
 type RespondentPlaceState =
   | { status: 'loading' }
@@ -439,7 +461,10 @@ export function RespondentRuntime({
     if (
       submitState.status === 'submitting' ||
       submitState.status === 'confirmed' ||
-      submitState.status === 'queued'
+      submitState.status === 'queued' ||
+      submitState.status === 'authorizing-payment' ||
+      submitState.status === 'capturing-payment' ||
+      submitState.status === 'voiding-payment'
     ) {
       return;
     }
@@ -477,9 +502,77 @@ export function RespondentRuntime({
         claim: respondentState.claim,
         idempotencyKey,
       });
-      // FW-0044: route through the offline queue when the device is offline
-      // AND the resolved profile enables `offlineSubmit`. Online + disabled
-      // both fall through to the existing synchronous transport path.
+
+      const paymentEnabled = respondentState.runtimeProfile.enabled.has('payment');
+      const offlineEnabled = respondentState.runtimeProfile.enabled.has('offlineSubmit');
+
+      if (paymentEnabled) {
+        // FW-0027 §"Risks": offline + payment is hard-rejected at the
+        // runtime layer for slice 1 (the authorization expires before the
+        // user reconnects; FW-0101 lifts the restriction post-substrate).
+        if (offlineEnabled && !readNavigatorOnLine()) {
+          setSubmitState({
+            status: 'error',
+            error: new Error(
+              'This form requires payment and cannot be saved for later. Please reconnect and try again.',
+            ),
+          });
+          return;
+        }
+        // Show "Authorizing payment…" panel while authorize runs. The
+        // helper resolves to a discriminated outcome that drives the rest
+        // of the state machine.
+        const amount = extractPaymentAmountFromDefinition(respondentState.definition);
+        if (amount) {
+          setSubmitState({ status: 'authorizing-payment', amount });
+        }
+        const paymentOutcome = await submitWithPayment({
+          runtimeProfile: respondentState.runtimeProfile,
+          definition: respondentState.definition,
+          submitTransport: composition.submitTransport,
+          paymentRailAdapter: composition.paymentRailAdapter,
+          handoff,
+          idempotencyKey,
+        });
+        switch (paymentOutcome.kind) {
+          case 'submitted-with-payment':
+            setSubmitState({
+              status: 'confirmed',
+              confirmation: paymentOutcome.confirmation,
+              captureReceipt: paymentOutcome.captureReceipt,
+            });
+            return;
+          case 'submitted-no-payment':
+            // Defensive: the helper falls through when the runtime profile
+            // does not enable payment; we only entered this branch because
+            // it does, so this branch is unreachable in practice. Wire
+            // safely.
+            setSubmitState({ status: 'confirmed', confirmation: paymentOutcome.confirmation });
+            return;
+          case 'authorize-failed':
+            setSubmitState({ status: 'error', error: paymentOutcome.error });
+            return;
+          case 'submit-failed-payment-voided':
+          case 'void-failed-after-submit-failure':
+            setSubmitState({
+              status: 'payment-voided-after-submit-failure',
+              error:
+                paymentOutcome.kind === 'submit-failed-payment-voided'
+                  ? paymentOutcome.error
+                  : paymentOutcome.submitError,
+            });
+            return;
+          case 'capture-failed':
+            setSubmitState({
+              status: 'capture-failed',
+              confirmation: paymentOutcome.confirmation,
+              error: paymentOutcome.error,
+            });
+            return;
+        }
+      }
+
+      // FW-0044: free-form path with offline-aware routing (no payment).
       const outcome = await submitOrQueue({
         navigatorOnLine: readNavigatorOnLine(),
         runtimeProfile: respondentState.runtimeProfile,
@@ -740,7 +833,10 @@ function RespondentSurface({
       <RespondentPlacePanel state={respondentPlaceState} />
 
       {submitState.status === 'confirmed' ? (
-        <ConfirmationPanel confirmation={submitState.confirmation} />
+        <ConfirmationPanel
+          confirmation={submitState.confirmation}
+          captureReceipt={submitState.captureReceipt}
+        />
       ) : layoutPlan ? (
         <>
           <h2 className="sr-only">Form fields</h2>
@@ -1007,12 +1103,73 @@ function SubmitNotice({ state }: { state: SubmitState }) {
   if (state.status === 'queued') {
     return <QueuedForLaterPanel />;
   }
+  if (state.status === 'authorizing-payment') {
+    return (
+      <div className="submit-notice" role="status" aria-live="polite">
+        <p>{PAYMENT_AUTHORIZING_TITLE}</p>
+        <p className="submit-notice__detail">
+          {formatMoney(state.amount)} pending. {PAYMENT_AUTHORIZING_BODY}
+        </p>
+      </div>
+    );
+  }
+  if (state.status === 'capturing-payment') {
+    return (
+      <div className="submit-notice" role="status" aria-live="polite">
+        <p>{PAYMENT_CAPTURING_TITLE}</p>
+      </div>
+    );
+  }
+  if (state.status === 'voiding-payment') {
+    return (
+      <div className="submit-notice" role="status" aria-live="polite">
+        <p>{PAYMENT_VOIDING_TITLE}</p>
+        <p className="submit-notice__detail">{PAYMENT_VOIDING_BODY}</p>
+      </div>
+    );
+  }
+  if (state.status === 'payment-voided-after-submit-failure') {
+    return (
+      <section className="submit-notice submit-notice--error" role="alert">
+        <h2>{PAYMENT_VOIDED_AFTER_SUBMIT_FAILURE_TITLE}</h2>
+        <p>{PAYMENT_VOIDED_AFTER_SUBMIT_FAILURE_BODY}</p>
+        <p className="submit-notice__detail">{PAYMENT_DEFERRED_CAPABILITY_COPY}</p>
+      </section>
+    );
+  }
+  if (state.status === 'capture-failed') {
+    return (
+      <section className="submit-notice submit-notice--error" role="alert">
+        <h2>{PAYMENT_CAPTURE_FAILED_TITLE}</h2>
+        <p>
+          {PAYMENT_CAPTURE_FAILED_BODY_PREFIX}{' '}
+          <strong>{state.confirmation.referenceNumber}</strong>.
+        </p>
+      </section>
+    );
+  }
   return null;
 }
 
 /** FW-0044 fixture-pinned copy for the "saved for later" panel. */
 export const QUEUED_FOR_LATER_TITLE = 'Saved for later';
 export const QUEUED_FOR_LATER_BODY = "We'll send it when you reconnect.";
+
+/** FW-0027 fixture-pinned copy. Vocabulary-firewall-safe: no "authorize",
+ *  "capture", "void", "rail" — those are spec-internal terms. The user-facing
+ *  vocabulary is "payment", "charged", "fee". */
+export const PAYMENT_AUTHORIZING_TITLE = 'Authorizing payment…';
+export const PAYMENT_AUTHORIZING_BODY = "You haven't been charged yet.";
+export const PAYMENT_CAPTURING_TITLE = 'Capturing payment…';
+export const PAYMENT_VOIDING_TITLE = 'Releasing the payment…';
+export const PAYMENT_VOIDING_BODY = 'Your form did not go through; we are releasing the hold on your funds.';
+export const PAYMENT_VOIDED_AFTER_SUBMIT_FAILURE_TITLE = 'Your form did not submit, and the payment was not charged.';
+export const PAYMENT_VOIDED_AFTER_SUBMIT_FAILURE_BODY = 'No money has moved. Please try submitting again.';
+export const PAYMENT_CAPTURE_FAILED_TITLE = 'Your form was submitted, but we had a problem with the payment.';
+export const PAYMENT_CAPTURE_FAILED_BODY_PREFIX = 'Please contact the sender about reference';
+export const PAYMENT_RECEIVED_TITLE = 'Payment received';
+export const PAYMENT_DEFERRED_CAPABILITY_COPY =
+  'If you see a pending charge on your account, it will be released automatically within a few days.';
 // Honest in both modes: the demo stub queue is in-memory and the production
 // reference adapter is the unavailable sentinel, so "saved for later" does
 // not yet survive browser restarts in either composition. FW-0082 (IndexedDB
@@ -1039,7 +1196,38 @@ function readNavigatorOnLine(): boolean {
   return navigator.onLine;
 }
 
-export function ConfirmationPanel({ confirmation }: { confirmation: SubmitConfirmation }) {
+function extractPaymentAmountFromDefinition(definition: FormDefinition): Money | undefined {
+  const raw = definition.extensions?.['x-formspec-payment-amount'];
+  if (!raw || typeof raw !== 'object') return undefined;
+  const candidate = raw as { amountMinorUnits?: unknown; currency?: unknown };
+  if (typeof candidate.amountMinorUnits !== 'number') return undefined;
+  if (typeof candidate.currency !== 'string') return undefined;
+  return {
+    amountMinorUnits: candidate.amountMinorUnits,
+    currency: candidate.currency,
+  };
+}
+
+export function formatMoney(amount: Money): string {
+  try {
+    const major = amount.amountMinorUnits / 100;
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: amount.currency,
+    }).format(major);
+  } catch {
+    // Fallback for unknown currency codes Intl rejects.
+    return `${(amount.amountMinorUnits / 100).toFixed(2)} ${amount.currency}`;
+  }
+}
+
+export function ConfirmationPanel({
+  confirmation,
+  captureReceipt,
+}: {
+  confirmation: SubmitConfirmation;
+  captureReceipt?: CaptureReceipt;
+}) {
   const trackingHref = confirmation.caseUrn
     ? buildConfirmationTrackingUri(confirmation.caseUrn)
     : confirmation.trackingUri;
@@ -1050,7 +1238,23 @@ export function ConfirmationPanel({ confirmation }: { confirmation: SubmitConfir
       <p>Reference number</p>
       <strong>{confirmation.referenceNumber}</strong>
       {trackingHref ? <a href={trackingHref}>{trackingLabel}</a> : null}
+      {captureReceipt ? <PaymentReceivedSubCard captureReceipt={captureReceipt} /> : null}
     </section>
+  );
+}
+
+export function PaymentReceivedSubCard({ captureReceipt }: { captureReceipt: CaptureReceipt }) {
+  return (
+    <div className="confirmation-panel__payment" aria-labelledby="payment-received-title">
+      <h3 id="payment-received-title">{PAYMENT_RECEIVED_TITLE}</h3>
+      <p>
+        {formatMoney(captureReceipt.amount)}{' '}
+        <span className="confirmation-panel__rail-label">{captureReceipt.railLabel}</span>
+      </p>
+      <p className="confirmation-panel__settled-id">
+        Payment ID: <code>{captureReceipt.settledTransactionId}</code>
+      </p>
+    </div>
   );
 }
 
@@ -1082,6 +1286,9 @@ function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
   ) {
     if (error.featureKey === 'fileUpload') {
       return 'This form needs file uploads, but this site is not set up to receive files.';
+    }
+    if (error.featureKey === 'payment') {
+      return 'This form requires payment, but this site is not set up to accept payments.';
     }
   }
   return 'This form requires a capability this site does not currently support. Try again later, or contact the sender for help.';

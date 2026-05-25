@@ -12,11 +12,15 @@ import {
   signInOptionsForIdentityPolicy,
   subjectRefInvalidatedByIdentityChange,
   submitOrQueue,
+  submitWithPayment,
 } from '../../src/app/respondent-flow.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
+import type { FormDefinition } from '@formspec-org/types';
 import type { IdentityClaim } from '../../src/ports/identity-provider.ts';
 import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
+import { stubPaymentRailAdapter } from '../../src/adapters/stub/payment-rail-adapter.ts';
 import { stubSubmitTransport } from '../../src/adapters/stub/submit-transport.ts';
+import type { RuntimeFeatureKey } from '../../src/policy/feature-keys.ts';
 import type { ResolvedRuntimeProfile } from '../../src/policy/index.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 
@@ -309,10 +313,24 @@ function claim(subjectRef: string): IdentityClaim {
 function profile(enabled: ReadonlyArray<string> = []): ResolvedRuntimeProfile {
   return {
     mode: 'demo',
-    enabled: new Set(enabled as ReadonlyArray<'offlineSubmit'>),
+    enabled: new Set(enabled as ReadonlyArray<RuntimeFeatureKey>),
     disabled: new Map(),
     limits: {},
   } as ResolvedRuntimeProfile;
+}
+
+function paymentRequiredDefinition(): FormDefinition {
+  return {
+    $formspec: '1.0',
+    url: 'https://test.example/forms/payment',
+    version: '1.0.0',
+    title: 'Payment-required form',
+    items: [],
+    extensions: {
+      'x-formspec-payment-required': true,
+      'x-formspec-payment-amount': { amountMinorUnits: 2500, currency: 'USD' },
+    },
+  };
 }
 
 describe('submitOrQueue (FW-0044) — offline-aware submit routing', () => {
@@ -392,5 +410,181 @@ describe('submitOrQueue (FW-0044) — offline-aware submit routing', () => {
     expect(outcomes[0].kind).toBe('sent');
     expect(outcomes[0].idempotencyKey).toBe(key);
     expect(transportSpy).toHaveBeenCalledWith(sampleIntakeHandoff, key);
+  });
+});
+
+describe('submitWithPayment (FW-0027) — authorize → submit → capture-or-void orchestration', () => {
+  it('takes the no-payment path when the resolved profile does not enable payment', async () => {
+    const transport = stubSubmitTransport();
+    const rail = stubPaymentRailAdapter();
+    const authorizeSpy = vi.spyOn(rail, 'authorize');
+    const outcome = await submitWithPayment({
+      runtimeProfile: profile([]),
+      definition: demoSampleForm,
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+    expect(outcome.kind).toBe('submitted-no-payment');
+    expect(authorizeSpy).not.toHaveBeenCalled();
+  });
+
+  it('authorizes, submits, and captures when payment is enabled (happy path)', async () => {
+    const transport = stubSubmitTransport();
+    const rail = stubPaymentRailAdapter();
+    const outcome = await submitWithPayment({
+      runtimeProfile: profile(['payment']),
+      definition: paymentRequiredDefinition(),
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+    expect(outcome.kind).toBe('submitted-with-payment');
+    if (outcome.kind === 'submitted-with-payment') {
+      expect(outcome.captureReceipt.amount).toEqual({
+        amountMinorUnits: 2500,
+        currency: 'USD',
+      });
+    }
+    // Authorization state is captured.
+    const states = rail._internalAuthorizationStates();
+    expect([...states.values()][0]?.status).toBe('captured');
+  });
+
+  it('voids the authorization when submit fails (submit-fails-payment-voided)', async () => {
+    const transport = stubSubmitTransport();
+    vi.spyOn(transport, 'submit').mockRejectedValueOnce(new Error('intake unreachable'));
+    const rail = stubPaymentRailAdapter();
+    const outcome = await submitWithPayment({
+      runtimeProfile: profile(['payment']),
+      definition: paymentRequiredDefinition(),
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+    expect(outcome.kind).toBe('submit-failed-payment-voided');
+    const states = rail._internalAuthorizationStates();
+    expect([...states.values()][0]?.status).toBe('voided');
+  });
+
+  it('returns authorize-failed when the rail throws on authorize (submit never runs)', async () => {
+    const transport = stubSubmitTransport();
+    const submitSpy = vi.spyOn(transport, 'submit');
+    const rail = stubPaymentRailAdapter();
+    rail.failNextAuthorize(new Error('card declined'));
+    const outcome = await submitWithPayment({
+      runtimeProfile: profile(['payment']),
+      definition: paymentRequiredDefinition(),
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+    expect(outcome.kind).toBe('authorize-failed');
+    expect(submitSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns capture-failed when submit lands but capture throws', async () => {
+    const transport = stubSubmitTransport();
+    const rail = stubPaymentRailAdapter();
+    rail.failNextCapture(new Error('settlement queue down'));
+    const outcome = await submitWithPayment({
+      runtimeProfile: profile(['payment']),
+      definition: paymentRequiredDefinition(),
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+    expect(outcome.kind).toBe('capture-failed');
+    if (outcome.kind === 'capture-failed') {
+      // The submit IS in the system; the hold is still authorized (not voided).
+      expect(outcome.authorization.amount.amountMinorUnits).toBe(2500);
+    }
+    const states = rail._internalAuthorizationStates();
+    expect([...states.values()][0]?.status).toBe('authorized');
+  });
+
+  it('returns void-failed-after-submit-failure when both submit and void throw', async () => {
+    const transport = stubSubmitTransport();
+    vi.spyOn(transport, 'submit').mockRejectedValueOnce(new Error('intake unreachable'));
+    const rail = stubPaymentRailAdapter();
+    rail.failNextVoid(new Error('void service down'));
+    const outcome = await submitWithPayment({
+      runtimeProfile: profile(['payment']),
+      definition: paymentRequiredDefinition(),
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+    expect(outcome.kind).toBe('void-failed-after-submit-failure');
+  });
+
+  it('uses caller-supplied authorize / capture / void keys when provided (adopter reconciliation hook)', async () => {
+    const transport = stubSubmitTransport();
+    const rail = stubPaymentRailAdapter();
+    const authorizeSpy = vi.spyOn(rail, 'authorize');
+    const captureSpy = vi.spyOn(rail, 'capture');
+    const authorizeKey = generateIdempotencyKey();
+    const captureKey = generateIdempotencyKey();
+    await submitWithPayment({
+      runtimeProfile: profile(['payment']),
+      definition: paymentRequiredDefinition(),
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+      authorizeKey,
+      captureKey,
+    });
+    expect(authorizeSpy).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(String),
+      authorizeKey,
+    );
+    expect(captureSpy).toHaveBeenCalledWith(expect.any(Object), captureKey);
+  });
+
+  it('uses fresh UUIDv7 keys when no override is supplied (port idempotency-key requirement)', async () => {
+    const transport = stubSubmitTransport();
+    const rail = stubPaymentRailAdapter();
+    const authorizeSpy = vi.spyOn(rail, 'authorize');
+    const captureSpy = vi.spyOn(rail, 'capture');
+    await submitWithPayment({
+      runtimeProfile: profile(['payment']),
+      definition: paymentRequiredDefinition(),
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey: generateIdempotencyKey(),
+    });
+    expect(authorizeSpy).toHaveBeenCalledTimes(1);
+    expect(captureSpy).toHaveBeenCalledTimes(1);
+    // The 3rd arg (idempotencyKey) on authorize must be UUIDv7-shaped.
+    const authKey = authorizeSpy.mock.calls[0][2] as string;
+    expect(authKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}/);
+  });
+
+  it('throws when payment is enabled but the form has no amount declared', async () => {
+    const transport = stubSubmitTransport();
+    const rail = stubPaymentRailAdapter();
+    const noAmountDefinition: FormDefinition = {
+      ...paymentRequiredDefinition(),
+      extensions: { 'x-formspec-payment-required': true },
+    };
+    await expect(
+      submitWithPayment({
+        runtimeProfile: profile(['payment']),
+        definition: noAmountDefinition,
+        submitTransport: transport,
+        paymentRailAdapter: rail,
+        handoff: sampleIntakeHandoff,
+        idempotencyKey: generateIdempotencyKey(),
+      }),
+    ).rejects.toThrow(/payment-amount/);
   });
 });

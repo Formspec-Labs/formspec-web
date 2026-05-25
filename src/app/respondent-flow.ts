@@ -13,11 +13,17 @@ import type {
   QueuedSubmit,
 } from '../ports/offline-submit-queue.ts';
 import type {
+  Authorization,
+  CaptureReceipt,
+  PaymentRailAdapter,
+} from '../ports/payment-rail-adapter.ts';
+import type {
   SubmitConfirmation,
   SubmitTransport,
 } from '../ports/submit-transport.ts';
+import { extractPaymentAmount } from '../policy/extract-form-policy.ts';
 import type { ResolvedRuntimeProfile } from '../policy/index.ts';
-import type { IdempotencyKey } from '../shared/idempotency-key.ts';
+import { generateIdempotencyKey, type IdempotencyKey } from '../shared/idempotency-key.ts';
 
 export function hydrateEngineFromResponse(engine: IFormEngine, response?: FormResponse): void {
   if (!response) {
@@ -239,4 +245,169 @@ export async function submitOrQueue(
     input.idempotencyKey,
   );
   return { kind: 'submitted', confirmation };
+}
+
+/**
+ * FW-0027 authorize-then-submit-then-capture-or-void orchestration.
+ *
+ * Honors the row's "pay and submit succeed or fail as one transaction"
+ * promise: the user's account sees ONLY a successful charge OR no charge —
+ * never an orphan charge with a failed submission, never a successful
+ * submission with no charge.
+ *
+ * Lifecycle:
+ *   1. authorize(amount, methodToken, ${key}:authorize) — HOLD funds.
+ *   2. submitTransport.submit(handoff, key) — form intake as today.
+ *   3a. on submit success: capture(authorization, ${key}:capture) — CHARGE.
+ *   3b. on submit failure: voidAuthorization(authorization, ${key}:void) —
+ *       RELEASE the hold; surface 'submit-failed-payment-voided' so the
+ *       respondent UI carries the load-bearing "your form did not submit,
+ *       and the payment was not charged" copy.
+ *
+ * Idempotency-key discipline: each rail call gets a fresh UUIDv7 (the rail
+ * port requires UUIDv7-shaped keys; queue EXT-14 convention). Optional
+ * caller-supplied overrides (`authorizeKey` / `captureKey` / `voidKey`)
+ * exist for adopters who want to derive a deterministic family from a
+ * caller-side identity (e.g., for server-side reconciliation). The runtime
+ * itself does not retry the orchestration — the React shell's submit-state
+ * machine early-returns on in-flight transitions so authorize/capture/void
+ * each run at most once per orchestration; same-key adapter contracts back
+ * up that discipline for the reconciliation-driven case.
+ *
+ * Outcomes:
+ *   - 'submitted-no-payment'        — free form path; identical to today.
+ *   - 'submitted-with-payment'      — happy path; authorize → submit → capture.
+ *   - 'submit-failed-payment-voided' — submit threw after authorize; void
+ *      released the hold; respondent sees user-protection copy.
+ *   - 'authorize-failed'            — payment path could not even start; the
+ *      submit never ran; surface the rail's plain-language error.
+ *   - 'capture-failed'              — submit landed but capture threw; the
+ *      form IS in the system; the user is told to contact the sender. The
+ *      hold may linger until the rail's expiration. This is the rare
+ *      failure mode the design names explicitly — see design §Risks.
+ *   - 'void-failed-after-submit-failure' — both submit AND void threw; the
+ *      hold remains until rail expiration. Surface a user-protection copy
+ *      that names the pending charge will release itself.
+ */
+export type SubmitWithPaymentOutcome =
+  | { readonly kind: 'submitted-no-payment'; readonly confirmation: SubmitConfirmation }
+  | {
+      readonly kind: 'submitted-with-payment';
+      readonly confirmation: SubmitConfirmation;
+      readonly captureReceipt: CaptureReceipt;
+    }
+  | { readonly kind: 'authorize-failed'; readonly error: unknown }
+  | {
+      readonly kind: 'submit-failed-payment-voided';
+      readonly authorization: Authorization;
+      readonly error: unknown;
+    }
+  | {
+      readonly kind: 'void-failed-after-submit-failure';
+      readonly authorization: Authorization;
+      readonly submitError: unknown;
+      readonly voidError: unknown;
+    }
+  | {
+      readonly kind: 'capture-failed';
+      readonly confirmation: SubmitConfirmation;
+      readonly authorization: Authorization;
+      readonly error: unknown;
+    };
+
+export interface SubmitWithPaymentInput {
+  readonly runtimeProfile: ResolvedRuntimeProfile;
+  readonly definition: FormDefinition;
+  readonly submitTransport: SubmitTransport;
+  readonly paymentRailAdapter: PaymentRailAdapter;
+  readonly handoff: IntakeHandoff;
+  readonly idempotencyKey: string;
+  /**
+   * Method token sourced from the form extension or — in production — from
+   * a rail-specific picker UX. Slice 1 reads `definition.extensions
+   * ['x-formspec-payment-method-token']` if present; the helper falls back
+   * to a literal `'demo-method-stub'` so synthetic-definition tests have a
+   * predictable input.
+   */
+  readonly methodToken?: string;
+  /**
+   * Optional caller-supplied rail-call keys. Adopters who want to derive a
+   * deterministic key family from a caller-side identity (e.g., for server-
+   * side reconciliation) override these. The runtime defaults to fresh
+   * UUIDv7 keys per call.
+   */
+  readonly authorizeKey?: string;
+  readonly captureKey?: string;
+  readonly voidKey?: string;
+}
+
+export const PAYMENT_FALLBACK_METHOD_TOKEN = 'demo-method-stub';
+
+export async function submitWithPayment(
+  input: SubmitWithPaymentInput,
+): Promise<SubmitWithPaymentOutcome> {
+  const paymentEnabled = input.runtimeProfile.enabled.has('payment');
+  if (!paymentEnabled) {
+    const confirmation = await input.submitTransport.submit(
+      input.handoff,
+      input.idempotencyKey,
+    );
+    return { kind: 'submitted-no-payment', confirmation };
+  }
+
+  const amount = extractPaymentAmount(input.definition);
+  if (!amount) {
+    // Payment is enabled but the form did not declare an amount. The
+    // resolver gates on the requirement extractor (boolean), not the
+    // amount, so a payment-required form with no amount lands here. Treat
+    // as a configuration error — refuse to authorize $0 silently.
+    throw new Error(
+      'Payment is enabled for this form but extensions["x-formspec-payment-amount"] is missing or malformed.',
+    );
+  }
+
+  const methodToken = readMethodToken(input);
+  const authorizeKey = input.authorizeKey ?? generateIdempotencyKey();
+  const captureKey = input.captureKey ?? generateIdempotencyKey();
+  const voidKey = input.voidKey ?? generateIdempotencyKey();
+
+  let authorization: Authorization;
+  try {
+    authorization = await input.paymentRailAdapter.authorize(amount, methodToken, authorizeKey);
+  } catch (error) {
+    return { kind: 'authorize-failed', error };
+  }
+
+  let confirmation: SubmitConfirmation;
+  try {
+    confirmation = await input.submitTransport.submit(input.handoff, input.idempotencyKey);
+  } catch (submitError) {
+    try {
+      await input.paymentRailAdapter.voidAuthorization(authorization, voidKey);
+    } catch (voidError) {
+      return {
+        kind: 'void-failed-after-submit-failure',
+        authorization,
+        submitError,
+        voidError,
+      };
+    }
+    return { kind: 'submit-failed-payment-voided', authorization, error: submitError };
+  }
+
+  try {
+    const captureReceipt = await input.paymentRailAdapter.capture(authorization, captureKey);
+    return { kind: 'submitted-with-payment', confirmation, captureReceipt };
+  } catch (error) {
+    return { kind: 'capture-failed', confirmation, authorization, error };
+  }
+}
+
+function readMethodToken(input: SubmitWithPaymentInput): string {
+  if (input.methodToken && input.methodToken.length > 0) return input.methodToken;
+  const fromDefinition = input.definition.extensions?.['x-formspec-payment-method-token'];
+  if (typeof fromDefinition === 'string' && fromDefinition.length > 0) {
+    return fromDefinition;
+  }
+  return PAYMENT_FALLBACK_METHOD_TOKEN;
 }
