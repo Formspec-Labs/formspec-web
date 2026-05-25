@@ -65,6 +65,44 @@ Malformed entries in the allow-list (non-strings, empty strings,
 strings with a path) throw `InvalidRuntimePolicyError` at the
 composition / boot boundary.
 
+## Defense-in-depth
+
+The substrate gate is form-policy admission control, not a perimeter
+defense. Forms that do not declare `x-formspec-embeddable: true` mount
+in any iframe at any origin with no runtime challenge — the runtime
+short-circuits when the resolved profile does not enable `embed`. The
+production composition default further wires `embed: 'unavailable'`,
+so the OSS reference deployment is fully no-op on the gate until an
+adopter forks the composition with `embed: 'available'` and a
+production transport adapter.
+
+This is deliberate. A defense-in-depth gate that fires for
+non-embeddable forms would fail-close legitimate non-embed forms
+loaded by adopters in iframes for testing OR loaded by host pages
+that don't intend to embed.
+
+**Host-side headers are the perimeter defense.** Adopters who want
+unconditional iframe-mount refusal MUST set them at the form-hosting
+server. Two layers:
+
+| Layer | Owner | What it stops |
+|---|---|---|
+| `X-Frame-Options: DENY` or CSP `frame-ancestors 'none'` | Form-hosting server (adopter / hosting provider) | Browser refuses to render the form inside any iframe before any runtime code executes. |
+| `EmbeddableExtractor` + `limits.embed.allowedOrigins` | Form-policy + org-policy + this port | Per-form admission: only embeddable forms loaded inside an allow-listed host origin pass the gate; the React shell renders the fail-closed copy when admission is denied. |
+
+Adopters who do want iframe embedding scope the host-side headers per
+their allow-list (`frame-ancestors https://clinic.example.org
+https://nonprofit.example.org`). The runtime gate then catches the
+per-form opt-in + the org-allowed-origin match independently. Both
+layers MUST agree before a host page can iframe a form — the host
+headers gate the browser-level mount; the runtime gate fires after
+mount, before the form renders.
+
+The user-visible "this form is not set up to be shown on this site"
+copy is the form-opt-in narrative — it is not a hard guarantee
+against framing. Host-side `X-Frame-Options` / CSP `frame-ancestors`
+is the hard guarantee.
+
 ## Form-policy opt-in (`x-formspec-embeddable`)
 
 A form opts into being embeddable via
