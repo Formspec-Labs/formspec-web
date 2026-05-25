@@ -7,6 +7,7 @@ export {
   defineIdentityProviderConformance,
   defineNotificationDeliveryConformance,
   defineOfflineSubmitQueueConformance,
+  definePaymentRailAdapterConformance,
   defineRespondentHistorySourceConformance,
   defineRespondentPlaceSourceConformance,
   defineStatusReaderConformance,

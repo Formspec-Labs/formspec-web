@@ -6,6 +6,7 @@ import type {
   IdentityProvider,
   NotificationDelivery,
   OfflineSubmitQueue,
+  PaymentRailAdapter,
   RespondentHistorySource,
   RespondentPlaceSource,
   StatusReader,
@@ -63,6 +64,17 @@ export interface Composition {
    * with the stub transport via FW-0064-style construction injection.
    */
   offlineSubmitQueue: OfflineSubmitQueue;
+  /**
+   * FW-0027 slice 1: payment-rail seam (web ADR-0011 payment). The runtime
+   * orchestrates authorize → submit → capture-or-void around the existing
+   * submit path when the resolved profile enables `payment`; otherwise the
+   * synchronous `submitTransport` path runs unchanged. Production wires the
+   * unavailable sentinel today (no OSS reference rail adapter ships);
+   * adopters fork to wire Stripe / Square / W3C Payment Request /
+   * PayNearMe / in-person POS per their merchant relationships. Multi-rail
+   * composition (CompositePaymentRailAdapter) is FW-0094.
+   */
+  paymentRailAdapter: PaymentRailAdapter;
   /** ADR-0011 §Instance capabilities — declared alongside the wired adapters. */
   instanceCapabilities: InstanceCapabilities;
   /** ADR-0011 §Org runtime policy — supplied by the composition root. */

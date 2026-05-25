@@ -23,6 +23,11 @@ import type {
   OfflineSubmitQueue,
   QueuedSubmit,
 } from '../ports/offline-submit-queue.ts';
+import type {
+  Authorization,
+  Money,
+  PaymentRailAdapter,
+} from '../ports/payment-rail-adapter.ts';
 import type { IntakeHandoff, SubmitConfirmation } from '../ports/submit-transport.ts';
 import {
   isFormFeaturePolicyMode,
@@ -52,6 +57,8 @@ import {
   sampleApplicantStatusResource,
   sampleApplicantStatusProjection,
   sampleNotificationMessage,
+  samplePaymentAmount,
+  samplePaymentMethodToken,
   sampleRespondentPlaceSnapshot,
 } from './fixtures.ts';
 
@@ -943,6 +950,197 @@ export function defineOfflineSubmitQueueConformance(
       expect(queued.enqueuedAt).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
       );
+    });
+  });
+}
+
+export interface PaymentRailAdapterConformanceSubject {
+  adapter: PaymentRailAdapter;
+}
+
+/**
+ * Conformance harness for `PaymentRailAdapter` (FW-0027, web ADR-0011
+ * §payment). Encodes the authorize / capture / void lifecycle invariants
+ * the port comment names — idempotency families, atomicity boundary
+ * conditions (double-capture / void-after-capture / capture-after-void),
+ * unknown-authorization rejection, UUIDv7 enforcement, Money integer
+ * + non-empty currency enforcement.
+ */
+export function definePaymentRailAdapterConformance(
+  name: string,
+  setup: () => PaymentRailAdapterConformanceSubject,
+): void {
+  describe(name, () => {
+    it('authorize rejects non-UUIDv7 idempotency keys', async () => {
+      const subject = setup();
+      await expect(
+        subject.adapter.authorize(samplePaymentAmount, samplePaymentMethodToken, 'not-a-uuid-v7'),
+      ).rejects.toThrow();
+    });
+
+    it('capture rejects non-UUIDv7 idempotency keys', async () => {
+      const subject = setup();
+      const auth = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      );
+      await expect(subject.adapter.capture(auth, 'not-a-uuid-v7')).rejects.toThrow();
+    });
+
+    it('voidAuthorization rejects non-UUIDv7 idempotency keys', async () => {
+      const subject = setup();
+      const auth = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      );
+      await expect(subject.adapter.voidAuthorization(auth, 'not-a-uuid-v7')).rejects.toThrow();
+    });
+
+    it('authorize is idempotent for the same UUIDv7 idempotency key', async () => {
+      const subject = setup();
+      const key = generateIdempotencyKey();
+      const first = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        key,
+      );
+      const second = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        key,
+      );
+      expect(second).toEqual(first);
+    });
+
+    it('authorize returns the discriminator + supplied amount + a non-empty rail label', async () => {
+      const subject = setup();
+      const auth = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      );
+      expect(auth.kind).toBe('payment-authorization');
+      expect(auth.amount).toEqual(samplePaymentAmount);
+      expect(auth.id.length).toBeGreaterThan(0);
+      expect(auth.railLabel.length).toBeGreaterThan(0);
+    });
+
+    it('capture settles a prior authorization into a CaptureReceipt', async () => {
+      const subject = setup();
+      const auth = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      );
+      const receipt = await subject.adapter.capture(auth, generateIdempotencyKey());
+      expect(receipt.kind).toBe('payment-capture-receipt');
+      expect(receipt.authorizationId).toBe(auth.id);
+      expect(receipt.amount).toEqual(auth.amount);
+      expect(receipt.railLabel).toBe(auth.railLabel);
+      expect(receipt.settledTransactionId.length).toBeGreaterThan(0);
+    });
+
+    it('capture is idempotent for the same UUIDv7 idempotency key', async () => {
+      const subject = setup();
+      const auth = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      );
+      const captureKey = generateIdempotencyKey();
+      const first = await subject.adapter.capture(auth, captureKey);
+      const second = await subject.adapter.capture(auth, captureKey);
+      expect(second).toEqual(first);
+    });
+
+    it('capture against an unknown authorization throws', async () => {
+      const subject = setup();
+      const fakeAuth: Authorization = {
+        kind: 'payment-authorization',
+        id: 'unknown-authorization-id',
+        amount: samplePaymentAmount,
+        railLabel: 'Unknown',
+      };
+      await expect(
+        subject.adapter.capture(fakeAuth, generateIdempotencyKey()),
+      ).rejects.toThrow();
+    });
+
+    it('double-capture with two different keys throws', async () => {
+      const subject = setup();
+      const auth = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      );
+      await subject.adapter.capture(auth, generateIdempotencyKey());
+      await expect(
+        subject.adapter.capture(auth, generateIdempotencyKey()),
+      ).rejects.toThrow();
+    });
+
+    it('voidAuthorization releases a not-yet-captured authorization without throwing', async () => {
+      const subject = setup();
+      const auth = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      );
+      await expect(
+        subject.adapter.voidAuthorization(auth, generateIdempotencyKey()),
+      ).resolves.toBeUndefined();
+    });
+
+    it('voidAuthorization against an already-captured authorization throws', async () => {
+      const subject = setup();
+      const auth = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      );
+      await subject.adapter.capture(auth, generateIdempotencyKey());
+      await expect(
+        subject.adapter.voidAuthorization(auth, generateIdempotencyKey()),
+      ).rejects.toThrow();
+    });
+
+    it('capture against a previously-voided authorization throws', async () => {
+      const subject = setup();
+      const auth = await subject.adapter.authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      );
+      await subject.adapter.voidAuthorization(auth, generateIdempotencyKey());
+      await expect(
+        subject.adapter.capture(auth, generateIdempotencyKey()),
+      ).rejects.toThrow();
+    });
+
+    it('authorize rejects Money with fractional amountMinorUnits', async () => {
+      const subject = setup();
+      const fractional: Money = { amountMinorUnits: 12.5, currency: 'USD' };
+      await expect(
+        subject.adapter.authorize(fractional, samplePaymentMethodToken, generateIdempotencyKey()),
+      ).rejects.toThrow();
+    });
+
+    it('authorize rejects Money with negative amountMinorUnits', async () => {
+      const subject = setup();
+      const negative: Money = { amountMinorUnits: -100, currency: 'USD' };
+      await expect(
+        subject.adapter.authorize(negative, samplePaymentMethodToken, generateIdempotencyKey()),
+      ).rejects.toThrow();
+    });
+
+    it('authorize rejects Money with an empty currency', async () => {
+      const subject = setup();
+      const empty: Money = { amountMinorUnits: 100, currency: '' };
+      await expect(
+        subject.adapter.authorize(empty, samplePaymentMethodToken, generateIdempotencyKey()),
+      ).rejects.toThrow();
     });
   });
 }

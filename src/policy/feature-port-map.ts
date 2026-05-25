@@ -37,6 +37,13 @@ export const FEATURE_PORT_MAP = {
   // the slice-1 stub is in-memory only and the reference deployment declares
   // 'unavailable'.
   offlineSubmit: 'offlineSubmitQueue',
+  // FW-0027 slice 1: 1:1 mapping. The PaymentRailAdapter port + the payment
+  // feature key ship together — no transitional slot-sharing. Multi-rail
+  // composition (CompositePaymentRailAdapter analogous to FW-0028's
+  // CompositeIdentityProvider) is a future row (FW-0094); slice 1 wires one
+  // adapter per composition. Reference adapters (Stripe / Square / W3C
+  // Payment Request / PayNearMe / in-person POS) are adopter-side rows.
+  payment: 'paymentRailAdapter',
 } as const satisfies Readonly<Record<RuntimeFeatureKey, string>>;
 
 export type CompositionPortName = (typeof FEATURE_PORT_MAP)[RuntimeFeatureKey];

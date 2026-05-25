@@ -3,6 +3,8 @@ import type { FormDefinition } from '@formspec-org/types';
 import {
   extractAttachmentRequirement,
   extractOfflineSubmitOptIn,
+  extractPaymentAmount,
+  extractPaymentRequirement,
 } from './extract-form-policy.ts';
 
 const baseDefinition = {
@@ -143,5 +145,116 @@ describe('extractOfflineSubmitOptIn', () => {
       extensions: { 'x-formspec-offline-submit': 'true' as unknown as boolean },
     };
     expect(extractOfflineSubmitOptIn(definition)).toBeUndefined();
+  });
+});
+
+describe('extractPaymentRequirement', () => {
+  const paymentBase: FormDefinition = {
+    ...baseDefinition,
+    items: [],
+  };
+
+  it('returns undefined when the payment extension is absent', () => {
+    expect(extractPaymentRequirement(paymentBase)).toBeUndefined();
+  });
+
+  it('returns "required" when extensions["x-formspec-payment-required"] is true', () => {
+    const definition: FormDefinition = {
+      ...paymentBase,
+      extensions: { 'x-formspec-payment-required': true },
+    };
+    expect(extractPaymentRequirement(definition)).toBe('required');
+  });
+
+  it('returns undefined when extensions["x-formspec-payment-required"] is false', () => {
+    const definition: FormDefinition = {
+      ...paymentBase,
+      extensions: { 'x-formspec-payment-required': false },
+    };
+    expect(extractPaymentRequirement(definition)).toBeUndefined();
+  });
+
+  it('returns undefined for non-boolean values (strict equality)', () => {
+    const stringValue: FormDefinition = {
+      ...paymentBase,
+      extensions: { 'x-formspec-payment-required': 'yes' as unknown as boolean },
+    };
+    expect(extractPaymentRequirement(stringValue)).toBeUndefined();
+    const numericValue: FormDefinition = {
+      ...paymentBase,
+      extensions: { 'x-formspec-payment-required': 1 as unknown as boolean },
+    };
+    expect(extractPaymentRequirement(numericValue)).toBeUndefined();
+  });
+});
+
+describe('extractPaymentAmount', () => {
+  const paymentBase: FormDefinition = {
+    ...baseDefinition,
+    items: [],
+  };
+
+  it('returns undefined when the amount extension is absent', () => {
+    expect(extractPaymentAmount(paymentBase)).toBeUndefined();
+  });
+
+  it('returns well-formed Money when the extension is well-shaped', () => {
+    const definition: FormDefinition = {
+      ...paymentBase,
+      extensions: {
+        'x-formspec-payment-amount': { amountMinorUnits: 1500, currency: 'USD' },
+      },
+    };
+    expect(extractPaymentAmount(definition)).toEqual({
+      amountMinorUnits: 1500,
+      currency: 'USD',
+    });
+  });
+
+  it('returns undefined for fractional minor units', () => {
+    const definition: FormDefinition = {
+      ...paymentBase,
+      extensions: {
+        'x-formspec-payment-amount': { amountMinorUnits: 12.5, currency: 'USD' },
+      },
+    };
+    expect(extractPaymentAmount(definition)).toBeUndefined();
+  });
+
+  it('returns undefined for negative amount', () => {
+    const definition: FormDefinition = {
+      ...paymentBase,
+      extensions: {
+        'x-formspec-payment-amount': { amountMinorUnits: -100, currency: 'USD' },
+      },
+    };
+    expect(extractPaymentAmount(definition)).toBeUndefined();
+  });
+
+  it('returns undefined for empty currency', () => {
+    const definition: FormDefinition = {
+      ...paymentBase,
+      extensions: {
+        'x-formspec-payment-amount': { amountMinorUnits: 100, currency: '' },
+      },
+    };
+    expect(extractPaymentAmount(definition)).toBeUndefined();
+  });
+
+  it('returns undefined for missing fields', () => {
+    const noCurrency: FormDefinition = {
+      ...paymentBase,
+      extensions: {
+        'x-formspec-payment-amount': { amountMinorUnits: 100 } as unknown as Record<string, unknown>,
+      },
+    };
+    expect(extractPaymentAmount(noCurrency)).toBeUndefined();
+    const noAmount: FormDefinition = {
+      ...paymentBase,
+      extensions: {
+        'x-formspec-payment-amount': { currency: 'USD' } as unknown as Record<string, unknown>,
+      },
+    };
+    expect(extractPaymentAmount(noAmount)).toBeUndefined();
   });
 });

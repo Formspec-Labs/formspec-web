@@ -314,6 +314,15 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/payment-rail-adapter/conformance.test.ts',
+    suiteText(
+      'PaymentRailAdapter',
+      [['stub PaymentRailAdapter conformance', 'stubPaymentRailAdapter']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -341,6 +350,10 @@ function writeAdapterFiles(root, options) {
       'export function stubOfflineSubmitQueue() {}',
     ],
     [
+      'src/adapters/stub/payment-rail-adapter.ts',
+      'export function stubPaymentRailAdapter() {}',
+    ],
+    [
       'src/adapters/unavailable/respondent-place-source.ts',
       'export function unavailableRespondentPlaceSource() {}',
     ],
@@ -356,6 +369,10 @@ function writeAdapterFiles(root, options) {
     [
       'src/adapters/unavailable/offline-submit-queue.ts',
       'export function unavailableOfflineSubmitQueue() {}',
+    ],
+    [
+      'src/adapters/unavailable/payment-rail-adapter.ts',
+      'export function unavailablePaymentRailAdapter() {}',
     ],
     [
       'src/adapters/http/definition-source.ts',
@@ -395,6 +412,7 @@ function defaultComposition() {
     'import { unavailableAttachmentStore } from "../adapters/unavailable/attachment-store.ts";',
     'import { unavailableRespondentHistorySource } from "../adapters/unavailable/respondent-history-source.ts";',
     'import { unavailableOfflineSubmitQueue } from "../adapters/unavailable/offline-submit-queue.ts";',
+    'import { unavailablePaymentRailAdapter } from "../adapters/unavailable/payment-rail-adapter.ts";',
     'export function createDefaultComposition() {',
     '  return {',
     '    respondentPlaceSource: unavailableRespondentPlaceSource(),',
@@ -402,6 +420,7 @@ function defaultComposition() {
     '    attachmentStore: unavailableAttachmentStore(),',
     '    respondentHistorySource: unavailableRespondentHistorySource(),',
     '    offlineSubmitQueue: unavailableOfflineSubmitQueue(),',
+    '    paymentRailAdapter: unavailablePaymentRailAdapter(),',
     '  };',
     '}',
   ].join('\n');
@@ -421,6 +440,7 @@ function publicIndex() {
     '  defineFormRuntimePolicyExtractorConformance,',
     '  defineRespondentHistorySourceConformance,',
     '  defineOfflineSubmitQueueConformance,',
+    '  definePaymentRailAdapterConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }

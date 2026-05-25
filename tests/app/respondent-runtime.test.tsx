@@ -355,6 +355,15 @@ function testComposition(
       replay: vi.fn(async () => []),
       pending: vi.fn(async () => []),
     },
+    paymentRailAdapter: {
+      authorize: vi.fn(async () => {
+        throw new Error('authorize not used in this test');
+      }),
+      capture: vi.fn(async () => {
+        throw new Error('capture not used in this test');
+      }),
+      voidAuthorization: vi.fn(async () => undefined),
+    },
     // ADR-0011: production-mode composition with both seeded capabilities
     // available and the form opting both in. Without the form opt-in the
     // resolver would mark both `not-requested` (org=allowed + form=silent)
@@ -377,6 +386,10 @@ function testComposition(
       // offline path; the form does not declare it, so 'unavailable' is
       // honest and the resolver records 'not-requested'.
       offlineSubmit: 'unavailable',
+      // FW-0027: closed-taxonomy key — this test does not exercise the
+      // payment path; the form does not declare it, so 'unavailable' is
+      // honest and the resolver records 'not-requested'.
+      payment: 'unavailable',
     },
     orgRuntimePolicy: {
       features: {
@@ -386,6 +399,7 @@ function testComposition(
         fileUpload: 'allowed',
         crossIssuerHistory: 'allowed',
         offlineSubmit: 'allowed',
+        payment: 'allowed',
       },
     },
     formRuntimePolicyExtractor: {

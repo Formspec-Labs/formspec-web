@@ -8,6 +8,7 @@ import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
   OfflineSubmitRequirementExtractor,
+  PaymentRequirementExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
@@ -15,6 +16,7 @@ import { OidcAdapter } from '../adapters/identity/oidc.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
+import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
@@ -80,6 +82,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     attachmentStore: unavailableAttachmentStore(),
     respondentHistorySource: unavailableRespondentHistorySource(),
     offlineSubmitQueue: unavailableOfflineSubmitQueue(),
+    paymentRailAdapter: unavailablePaymentRailAdapter(),
     // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —
@@ -115,6 +118,14 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       // not reachable until an adapter is wired. FW-0082 carries the
       // production IndexedDB reference adapter.
       offlineSubmit: 'unavailable',
+      // FW-0027 slice 1: the OSS reference composition does not ship a
+      // production payment rail. Adopters fork to wire Stripe / Square /
+      // W3C Payment Request / PayNearMe / in-person POS per their merchant
+      // relationships. Forms that declare `x-formspec-payment-required: true`
+      // fail-load with UnsupportedRequiredFeatureError + the plain-language
+      // "This form requires payment, but this site is not set up to accept
+      // payments." copy until an adapter is wired.
+      payment: 'unavailable',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -124,16 +135,18 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
         fileUpload: 'allowed',
         crossIssuerHistory: 'allowed',
         offlineSubmit: 'allowed',
+        payment: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
-    // FW-0066: composite extractor wraps the FW-0033 attachment-field walker
-    // AND the FW-0044 offline-extension walker as
-    // FormRuntimePolicyExtractor port instances. Production deployments
-    // compose additional extractors here as future feature ADRs land
-    // definition-introspective walkers.
+    // FW-0066: composite extractor wraps the FW-0033 attachment-field walker,
+    // the FW-0044 offline-extension walker, and the FW-0027 payment-extension
+    // walker as FormRuntimePolicyExtractor port instances. Production
+    // deployments compose additional extractors here as future feature ADRs
+    // land definition-introspective walkers.
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
       new AttachmentRequirementExtractor(),
       new OfflineSubmitRequirementExtractor(),
+      new PaymentRequirementExtractor(),
     ]),
   };
   return freezeComposition(composition);

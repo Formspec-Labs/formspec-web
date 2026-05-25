@@ -23,6 +23,9 @@ const baseInstance = {
   // FW-0044: offlineSubmit is the sixth closed-taxonomy extension; same
   // honest-unavailable posture.
   offlineSubmit: 'unavailable',
+  // FW-0027: payment is the seventh closed-taxonomy extension; same
+  // honest-unavailable posture for these fixtures.
+  payment: 'unavailable',
 } as const;
 const emptyOrg = { features: {} } as const;
 
@@ -98,6 +101,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       },
       org: emptyOrg,
       form: { features: { status: 'required' } },
@@ -132,7 +136,9 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
         mode: 'production',
         instance: baseInstance,
         org: emptyOrg,
-        form: { features: { payment: 'required' } as never },
+        // FW-0027 closed `payment` as the seventh real key; use a fictional
+        // key here so the unknown-key path remains exercised.
+        form: { features: { fictional: 'required' } as never },
       }),
     ).toThrow(InvalidRuntimePolicyError);
   });
@@ -148,6 +154,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
           fileUpload: 'unavailable',
           crossIssuerHistory: 'unavailable',
           offlineSubmit: 'unavailable',
+          payment: 'unavailable',
         },
         org: emptyOrg,
         form: { features: {} },

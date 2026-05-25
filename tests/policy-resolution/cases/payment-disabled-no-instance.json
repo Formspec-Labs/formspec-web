@@ -1,9 +1,9 @@
 {
-  "name": "default-on-instance-unavailable",
-  "description": "org default-on; instance unavailable; form silent -> disabled with default-on-no-instance",
+  "name": "payment-disabled-no-instance",
+  "description": "FW-0027 slice 1: form silent on payment + instance unavailable -> not-requested (no error; no fee-bearing form was loaded)",
   "mode": "production",
   "instance": {
-    "respondentPlace": "unavailable",
+    "respondentPlace": "available",
     "status": "available",
     "documentPresentation": "unavailable",
     "fileUpload": "unavailable",
@@ -13,7 +13,9 @@
   },
   "org": {
     "features": {
-      "respondentPlace": "default-on",
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
       "fileUpload": "allowed",
       "crossIssuerHistory": "allowed",
       "offlineSubmit": "allowed",
@@ -21,14 +23,18 @@
     }
   },
   "form": {
-    "features": {}
+    "features": {
+      "status": "optional"
+    }
   },
   "expect": {
     "kind": "profile",
-    "enabled": [],
+    "enabled": [
+      "status"
+    ],
     "disabled": {
-      "respondentPlace": "default-on-no-instance",
-      "status": "not-requested",
+      "respondentPlace": "not-requested",
+      "documentPresentation": "not-requested",
       "fileUpload": "not-requested",
       "crossIssuerHistory": "not-requested",
       "offlineSubmit": "not-requested",

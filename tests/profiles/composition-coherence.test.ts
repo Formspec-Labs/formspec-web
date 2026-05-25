@@ -24,6 +24,7 @@ import { unavailableRespondentHistorySource } from '../../src/adapters/unavailab
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
+import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import { HISTORY_ROUTE_NARROWING } from '../../src/app/history-route.ts';
 
 // Build a minimal production-mode CompositionLike directly. `createDefaultComposition()`
@@ -49,12 +50,16 @@ function productionCompositionLike(overrides: Partial<CompositionLike> = {}): Co
       // FW-0044: closed-taxonomy key paired with the unavailable
       // offlineSubmitQueue sentinel.
       offlineSubmit: 'unavailable',
+      // FW-0027: closed-taxonomy key paired with the unavailable
+      // paymentRailAdapter sentinel.
+      payment: 'unavailable',
     },
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
     attachmentStore: unavailableAttachmentStore(),
     respondentHistorySource: unavailableRespondentHistorySource(),
     offlineSubmitQueue: unavailableOfflineSubmitQueue(),
+    paymentRailAdapter: unavailablePaymentRailAdapter(),
     ...overrides,
   };
 }
@@ -133,6 +138,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       },
       statusReader: stubStatusReader(),
     });
@@ -149,6 +155,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       },
     });
     expect(() => assertCompositionCoherence(composition)).toThrow(/status/);
@@ -192,6 +199,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
       attachmentStore: unavailableAttachmentStore(),
       respondentHistorySource: unavailableRespondentHistorySource(),
       offlineSubmitQueue: unavailableOfflineSubmitQueue(),
+      paymentRailAdapter: unavailablePaymentRailAdapter(),
       ...overrides,
     };
   }
@@ -206,6 +214,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -222,6 +231,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       },
       respondentPlaceSource: unavailableRespondentPlaceSource(),
     });
@@ -238,6 +248,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -255,6 +266,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       },
       respondentPlaceSource: realPlaceAdapter as never,
     });
@@ -271,6 +283,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });
@@ -289,6 +302,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       },
       respondentPlaceSource: stubRespondentPlaceSource(),
     });

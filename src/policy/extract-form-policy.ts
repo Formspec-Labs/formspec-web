@@ -8,6 +8,7 @@
  * compose it inline.
  */
 import type { FormDefinition, FormItem } from '@formspec-org/types';
+import type { Money } from '../ports/payment-rail-adapter.ts';
 import type { FormFeaturePolicyMode } from './policy-shapes.ts';
 
 /**
@@ -55,4 +56,51 @@ export function extractOfflineSubmitOptIn(
 ): FormFeaturePolicyMode | undefined {
   const value = definition.extensions?.['x-formspec-offline-submit'];
   return value === true ? 'optional' : undefined;
+}
+
+/**
+ * FW-0027 form-policy walker. Returns `'required'` when the definition
+ * declares `extensions['x-formspec-payment-required']: true`; returns
+ * `undefined` otherwise. Any non-boolean / non-`true` value declines.
+ *
+ * `'required'` not `'optional'` — see design §"Decision: required, not
+ * optional": a fee-bearing form on an instance with no payment rail cannot
+ * be honestly submitted; declaring `'required'` fails the form at load with
+ * `UnsupportedRequiredFeatureError` and the plain-language unavailable copy,
+ * rather than letting the respondent reach the submit button on a broken
+ * payment path.
+ */
+export function extractPaymentRequirement(
+  definition: FormDefinition,
+): FormFeaturePolicyMode | undefined {
+  const value = definition.extensions?.['x-formspec-payment-required'];
+  return value === true ? 'required' : undefined;
+}
+
+/**
+ * FW-0027 amount walker. Returns the well-formed `Money` value when the
+ * definition declares `extensions['x-formspec-payment-amount']` with an
+ * integer `amountMinorUnits` and a non-empty `currency`; returns `undefined`
+ * otherwise. The runtime reads this at submit time to drive
+ * `PaymentRailAdapter.authorize(amount, ...)`.
+ *
+ * Slice 1 ships a literal fixed amount per form. FEL-evaluated dynamic
+ * amounts that depend on response field values are FW-0097.
+ */
+export function extractPaymentAmount(
+  definition: FormDefinition,
+): Money | undefined {
+  const raw = definition.extensions?.['x-formspec-payment-amount'];
+  if (!raw || typeof raw !== 'object') return undefined;
+  const candidate = raw as { amountMinorUnits?: unknown; currency?: unknown };
+  if (typeof candidate.amountMinorUnits !== 'number') return undefined;
+  if (!Number.isInteger(candidate.amountMinorUnits)) return undefined;
+  if (candidate.amountMinorUnits < 0) return undefined;
+  if (typeof candidate.currency !== 'string' || candidate.currency.length === 0) {
+    return undefined;
+  }
+  return {
+    amountMinorUnits: candidate.amountMinorUnits,
+    currency: candidate.currency,
+  };
 }

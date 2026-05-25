@@ -39,6 +39,16 @@
  *     the `consumes*` boolean ladder on `RouteNarrowing` into a
  *     `consumes: ReadonlySet<RuntimeFeatureKey>` field.
  *
+ * Extended at FW-0027 slice 1 (multi-rail payment with atomic submit):
+ *   - payment → gated against the new PaymentRailAdapter port (1:1
+ *     mapping). IN-FORM consumer (no standalone route) — the runtime
+ *     orchestrates authorize → submit → capture-or-void around the
+ *     existing submit path when the resolved profile enables the feature.
+ *     Form-policy extractor reads `definition.extensions['x-formspec-payment-required']
+ *     === true` and declares `'required'` (matching the FW-0033 attachment
+ *     shape; payment is a hard blocker, not a graceful enhancement). SEVENTH
+ *     key in the closed taxonomy.
+ *
  * Extension protocol: every future feature ADR adds its key here and to the
  * Composition's InstanceCapabilities declaration. No string-typed feature keys
  * outside this set — the resolver rejects unknown keys with
@@ -62,6 +72,7 @@ export const RUNTIME_FEATURE_KEYS = [
   'fileUpload',
   'crossIssuerHistory',
   'offlineSubmit',
+  'payment',
 ] as const;
 
 export type RuntimeFeatureKey = (typeof RUNTIME_FEATURE_KEYS)[number];

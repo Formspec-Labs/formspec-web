@@ -7,6 +7,7 @@ export {
   defineIdentityProviderConformance,
   defineNotificationDeliveryConformance,
   defineOfflineSubmitQueueConformance,
+  definePaymentRailAdapterConformance,
   defineRespondentHistorySourceConformance,
   defineRespondentPlaceSourceConformance,
   defineStatusReaderConformance,
@@ -18,6 +19,7 @@ export {
   type IdentityProviderConformanceSubject,
   type NotificationDeliveryConformanceSubject,
   type OfflineSubmitQueueConformanceSubject,
+  type PaymentRailAdapterConformanceSubject,
   type RecordingSubmitTransport,
   type RecordingSubmitTransportCall,
   type RespondentHistorySourceConformanceSubject,
@@ -50,5 +52,7 @@ export {
   sampleApplicantStatusResource,
   sampleApplicantStatusProjection,
   sampleNotificationMessage,
+  samplePaymentAmount,
+  samplePaymentMethodToken,
   sampleRespondentPlaceSnapshot,
 } from './fixtures.ts';

@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { freezeComposition, CompositionIncoherenceError } from './composition-coherence.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
+import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts';
+import { stubPaymentRailAdapter } from '../adapters/stub/payment-rail-adapter.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
@@ -26,12 +28,14 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         fileUpload: 'demo-stub',
         crossIssuerHistory: 'demo-stub',
         offlineSubmit: 'demo-stub',
+        payment: 'demo-stub',
       } as const,
       respondentPlaceSource: stubRespondentPlaceSource(),
       statusReader: stubStatusReader(),
       attachmentStore: stubAttachmentStore(),
       respondentHistorySource: stubRespondentHistorySource(),
       offlineSubmitQueue: stubOfflineSubmitQueue({ transport: stubSubmitTransport() }),
+      paymentRailAdapter: stubPaymentRailAdapter(),
     };
     expect(freezeComposition(composition)).toBe(composition);
   });
@@ -46,12 +50,14 @@ describe('freezeComposition — boot-time funnel for composition-coherence', () 
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       } as const,
       respondentPlaceSource: unavailableRespondentPlaceSource(),
       statusReader: stubStatusReader(),
       attachmentStore: unavailableAttachmentStore(),
       respondentHistorySource: unavailableRespondentHistorySource(),
       offlineSubmitQueue: unavailableOfflineSubmitQueue(),
+      paymentRailAdapter: unavailablePaymentRailAdapter(),
     };
     expect(() => freezeComposition(composition)).toThrow(CompositionIncoherenceError);
   });

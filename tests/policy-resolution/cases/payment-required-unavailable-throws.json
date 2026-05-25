@@ -1,10 +1,10 @@
 {
-  "name": "demo-stub-fails-production",
-  "description": "production mode + demo-stub instance + form required -> UnsupportedRequiredFeature",
+  "name": "payment-required-unavailable-throws",
+  "description": "FW-0027 slice 1: form requires payment + instance unavailable -> UnsupportedRequiredFeature",
   "mode": "production",
   "instance": {
-    "respondentPlace": "available",
-    "status": "demo-stub",
+    "respondentPlace": "unavailable",
+    "status": "unavailable",
     "documentPresentation": "unavailable",
     "fileUpload": "unavailable",
     "crossIssuerHistory": "unavailable",
@@ -13,6 +13,10 @@
   },
   "org": {
     "features": {
+      "respondentPlace": "allowed",
+      "status": "allowed",
+      "documentPresentation": "allowed",
+      "fileUpload": "allowed",
       "crossIssuerHistory": "allowed",
       "offlineSubmit": "allowed",
       "payment": "allowed"
@@ -20,7 +24,7 @@
   },
   "form": {
     "features": {
-      "status": "required"
+      "payment": "required"
     }
   },
   "expect": {

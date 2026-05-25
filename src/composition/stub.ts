@@ -2,6 +2,7 @@ import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
   OfflineSubmitRequirementExtractor,
+  PaymentRequirementExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { stubAttachmentStore } from '../adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
@@ -10,6 +11,7 @@ import { stubFormRuntimePolicyExtractor } from '../adapters/stub/form-runtime-po
 import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
 import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
 import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts';
+import { stubPaymentRailAdapter } from '../adapters/stub/payment-rail-adapter.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
@@ -62,6 +64,12 @@ export function createStubComposition(): Composition {
     // queued submissions on page reload — that is the 'demo-stub' posture's
     // honest cost; the production IndexedDB adapter (FW-0082) is filed.
     offlineSubmitQueue: stubOfflineSubmitQueue({ transport: submitTransport }),
+    // FW-0027 slice 1: in-memory payment-rail adapter. Authorizes / captures /
+    // voids against an in-process Map; no real money moves. The bundled demo
+    // form does NOT declare `x-formspec-payment-required: true` (FW-0100
+    // gates the demo flip on a method-picker UX); the stub is exercised
+    // through synthetic-definition tests + the conformance suite.
+    paymentRailAdapter: stubPaymentRailAdapter(),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -92,6 +100,13 @@ export function createStubComposition(): Composition {
       // the conformance suite. Production declares 'unavailable' until the
       // IndexedDB adapter (FW-0082) ships a reload-surviving substrate.
       offlineSubmit: 'demo-stub',
+      // FW-0027 slice 1: in-memory payment-rail adapter satisfies the demo
+      // posture. The bundled demo form does NOT declare
+      // `x-formspec-payment-required: true` today (FW-0100 flips the demo
+      // once a method-picker UX ships, gated on FW-0089 + FW-0094); the
+      // stub is exercised through synthetic-definition tests + the
+      // conformance suite + the runtime test matrix.
+      payment: 'demo-stub',
     } satisfies InstanceCapabilities,
     orgRuntimePolicy: {
       features: {
@@ -101,20 +116,23 @@ export function createStubComposition(): Composition {
         fileUpload: 'allowed',
         crossIssuerHistory: 'allowed',
         offlineSubmit: 'allowed',
+        payment: 'allowed',
       },
     } satisfies OrgRuntimePolicy,
     // FW-0066: CompositeFormRuntimePolicyExtractor composes the demo-form
     // URL-keyed seeded-pair opt-in (DemoFormPolicyExtractor) with the
-    // attachment-field walker (AttachmentRequirementExtractor) and the
-    // FW-0044 offline-extension walker (OfflineSubmitRequirementExtractor)
+    // attachment-field walker (AttachmentRequirementExtractor), the
+    // FW-0044 offline-extension walker (OfflineSubmitRequirementExtractor),
+    // and the FW-0027 payment-extension walker (PaymentRequirementExtractor)
     // into one FormRuntimePolicyExtractor port instance. Order matters:
     // later extractors override earlier ones on a key collision, but the
-    // three extractors here target disjoint keys (respondentPlace / status
-    // vs fileUpload vs offlineSubmit) so the order is informational.
+    // four extractors here target disjoint keys (respondentPlace / status
+    // vs fileUpload vs offlineSubmit vs payment) so the order is informational.
     formRuntimePolicyExtractor: new CompositeFormRuntimePolicyExtractor([
       stubFormRuntimePolicyExtractor(),
       new AttachmentRequirementExtractor(),
       new OfflineSubmitRequirementExtractor(),
+      new PaymentRequirementExtractor(),
     ]),
   };
   return freezeComposition(composition);

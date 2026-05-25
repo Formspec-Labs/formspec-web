@@ -8,12 +8,12 @@ import {
 } from './feature-keys.ts';
 
 describe('RUNTIME_FEATURE_KEYS', () => {
-  it('extends the seeded pair with documentPresentation + fileUpload + crossIssuerHistory + offlineSubmit (append-only)', () => {
+  it('extends the seeded pair with documentPresentation + fileUpload + crossIssuerHistory + offlineSubmit + payment (append-only)', () => {
     // Append-only: FW-0056 adds documentPresentation at the tail; FW-0033
     // adds fileUpload after it; FW-0057 adds crossIssuerHistory after that;
-    // FW-0044 adds offlineSubmit (sixth key) after that. Re-sorting
-    // alphabetically would silently change the resolver-loop iteration
-    // order; new feature ADRs append.
+    // FW-0044 adds offlineSubmit (sixth key); FW-0027 adds payment (seventh
+    // key) after that. Re-sorting alphabetically would silently change the
+    // resolver-loop iteration order; new feature ADRs append.
     expect([...RUNTIME_FEATURE_KEYS]).toEqual([
       'respondentPlace',
       'status',
@@ -21,6 +21,7 @@ describe('RUNTIME_FEATURE_KEYS', () => {
       'fileUpload',
       'crossIssuerHistory',
       'offlineSubmit',
+      'payment',
     ]);
   });
 
@@ -31,7 +32,8 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isRuntimeFeatureKey('fileUpload')).toBe(true);
     expect(isRuntimeFeatureKey('crossIssuerHistory')).toBe(true);
     expect(isRuntimeFeatureKey('offlineSubmit')).toBe(true);
-    expect(isRuntimeFeatureKey('payment')).toBe(false);
+    expect(isRuntimeFeatureKey('payment')).toBe(true);
+    expect(isRuntimeFeatureKey('fictional')).toBe(false);
   });
 
   it('type RuntimeFeatureKey is the union of the seeded keys', () => {
@@ -47,5 +49,6 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isLocaleConditionalFeatureKey('fileUpload')).toBe(false);
     expect(isLocaleConditionalFeatureKey('crossIssuerHistory')).toBe(false);
     expect(isLocaleConditionalFeatureKey('offlineSubmit')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('payment')).toBe(false);
   });
 });

@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { unavailableAttachmentStore } from '../../src/adapters/unavailable/attachment-store.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
+import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
+import {
+  samplePaymentAmount,
+  samplePaymentMethodToken,
+} from '../../src/adapter-conformance/fixtures.ts';
+import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { isUnavailableAdapter, UNAVAILABLE_ADAPTER } from '../../src/policy/sentinel.ts';
 
 describe('unavailable adapters carry the policy sentinel marker', () => {
@@ -42,6 +48,13 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
     expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('offlineSubmit');
   });
 
+  it('unavailablePaymentRailAdapter is marked with featureKey "payment"', () => {
+    const adapter = unavailablePaymentRailAdapter();
+    expect(isUnavailableAdapter(adapter)).toBe(true);
+    if (!isUnavailableAdapter(adapter)) throw new Error('unreachable');
+    expect(adapter[UNAVAILABLE_ADAPTER].featureKey).toBe('payment');
+  });
+
   it('marked adapters still throw on call (sentinel does not change runtime behavior)', async () => {
     await expect(unavailableRespondentPlaceSource().readPlace({} as never)).rejects.toThrow();
     await expect(
@@ -52,5 +65,12 @@ describe('unavailable adapters carry the policy sentinel marker', () => {
     ).rejects.toThrow();
     await expect(unavailableRespondentHistorySource().readHistory({})).rejects.toThrow();
     await expect(unavailableOfflineSubmitQueue().replay()).rejects.toThrow();
+    await expect(
+      unavailablePaymentRailAdapter().authorize(
+        samplePaymentAmount,
+        samplePaymentMethodToken,
+        generateIdempotencyKey(),
+      ),
+    ).rejects.toThrow();
   });
 });

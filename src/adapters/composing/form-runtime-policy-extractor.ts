@@ -19,6 +19,7 @@
 import {
   extractAttachmentRequirement,
   extractOfflineSubmitOptIn,
+  extractPaymentRequirement,
 } from '../../policy/extract-form-policy.ts';
 import type { FormRuntimePolicy } from '../../policy/policy-shapes.ts';
 import type { FormRuntimePolicyExtractor } from '../../ports/form-runtime-policy-extractor.ts';
@@ -41,6 +42,13 @@ export class OfflineSubmitRequirementExtractor implements FormRuntimePolicyExtra
   extract(definition: FormDefinition): FormRuntimePolicy {
     const offlineSubmit = extractOfflineSubmitOptIn(definition);
     return offlineSubmit ? { features: { offlineSubmit } } : { features: {} };
+  }
+}
+
+export class PaymentRequirementExtractor implements FormRuntimePolicyExtractor {
+  extract(definition: FormDefinition): FormRuntimePolicy {
+    const payment = extractPaymentRequirement(definition);
+    return payment ? { features: { payment } } : { features: {} };
   }
 }
 

@@ -76,3 +76,9 @@ export type {
   QueuedSubmit,
   ReplayOutcome,
 } from './offline-submit-queue.ts';
+export type {
+  PaymentRailAdapter,
+  Money,
+  Authorization,
+  CaptureReceipt,
+} from './payment-rail-adapter.ts';

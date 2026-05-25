@@ -19,6 +19,7 @@ import { unavailableStatusReader } from '../../src/adapters/unavailable/status-r
 import { stubRespondentHistorySource } from '../../src/adapters/stub/respondent-history-source.ts';
 import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
 import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/offline-submit-queue.ts';
+import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import {
   freezeComposition,
   type InstanceCapabilities,
@@ -77,6 +78,7 @@ function buildComposition({
         fileUpload: 'demo-stub',
         crossIssuerHistory: 'demo-stub',
         offlineSubmit: 'demo-stub',
+        payment: 'unavailable',
       }
     : {
         respondentPlace: 'unavailable',
@@ -85,6 +87,7 @@ function buildComposition({
         fileUpload: 'unavailable',
         crossIssuerHistory: 'unavailable',
         offlineSubmit: 'unavailable',
+        payment: 'unavailable',
       };
 
   const orgRuntimePolicy: OrgRuntimePolicy = {
@@ -95,6 +98,7 @@ function buildComposition({
       fileUpload: 'allowed',
       crossIssuerHistory: 'allowed',
       offlineSubmit: 'allowed',
+      payment: 'allowed',
     },
   };
 
@@ -117,6 +121,7 @@ function buildComposition({
     offlineSubmitQueue: isDemo
       ? stubOfflineSubmitQueue({ transport: submitTransport })
       : unavailableOfflineSubmitQueue(),
+    paymentRailAdapter: unavailablePaymentRailAdapter(),
     instanceCapabilities,
     orgRuntimePolicy,
     formRuntimePolicyExtractor: new AttachmentRequirementExtractor(),

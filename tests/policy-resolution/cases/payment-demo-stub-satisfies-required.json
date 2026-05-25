@@ -1,15 +1,15 @@
 {
-  "name": "cross-issuer-history-disabled-no-instance",
-  "description": "FW-0057 slice 1: crossIssuerHistory optional + instance unavailable -> disabled with optional-no-instance",
-  "mode": "production",
+  "name": "payment-demo-stub-satisfies-required",
+  "description": "FW-0027 slice 1: demo mode + form required payment + instance demo-stub -> enabled",
+  "mode": "demo",
   "instance": {
-    "respondentPlace": "available",
-    "status": "available",
+    "respondentPlace": "demo-stub",
+    "status": "demo-stub",
     "documentPresentation": "unavailable",
-    "fileUpload": "unavailable",
-    "crossIssuerHistory": "unavailable",
-    "offlineSubmit": "unavailable",
-    "payment": "unavailable"
+    "fileUpload": "demo-stub",
+    "crossIssuerHistory": "demo-stub",
+    "offlineSubmit": "demo-stub",
+    "payment": "demo-stub"
   },
   "org": {
     "features": {
@@ -24,20 +24,21 @@
   },
   "form": {
     "features": {
-      "crossIssuerHistory": "optional"
+      "payment": "required"
     }
   },
   "expect": {
     "kind": "profile",
-    "enabled": [],
+    "enabled": [
+      "payment"
+    ],
     "disabled": {
-      "crossIssuerHistory": "optional-no-instance",
       "respondentPlace": "not-requested",
       "status": "not-requested",
       "documentPresentation": "not-requested",
       "fileUpload": "not-requested",
-      "offlineSubmit": "not-requested",
-      "payment": "not-requested"
+      "crossIssuerHistory": "not-requested",
+      "offlineSubmit": "not-requested"
     }
   }
 }

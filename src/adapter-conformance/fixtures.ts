@@ -4,6 +4,7 @@ import type {
   ApplicantStatusProjection,
   ApplicantStatusResource,
   HistorySnapshot,
+  Money,
   RespondentPlaceSnapshot,
 } from '../ports/index.ts';
 import { WOS_APPLICANT_SCHEMA_ID } from '../ports/index.ts';
@@ -161,6 +162,18 @@ export const sampleAttachmentMetadata = {
   filename: 'lease-agreement.pdf',
   mimeType: 'application/pdf',
 } as const;
+
+// FW-0027: payment-rail conformance fixtures. Money amounts use the
+// minor-units integer convention (cents for USD) to avoid floating-point
+// drift; the methodToken is the opaque slice-1 placeholder real adapters
+// replace with rail-vended ephemeral tokens (Stripe `pm_*`, Square nonce,
+// W3C Payment Request API id, etc.).
+export const samplePaymentAmount: Money = {
+  amountMinorUnits: 1250,
+  currency: 'USD',
+};
+
+export const samplePaymentMethodToken = 'demo-method-stub';
 
 // FW-0057: cross-issuer history conformance fixture — three entries across
 // two issuers spanning all three closed kinds. Issuer names are display

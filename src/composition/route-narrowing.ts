@@ -50,6 +50,7 @@ import {
 } from '../demo/respondent-place.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
+import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
@@ -179,6 +180,9 @@ function buildProductionNarrowedComposition({
     // FW-0044 slice 1: narrowed routes do not submit forms; no queue
     // affordance is reachable. Uniform unavailable across all descriptors.
     offlineSubmit: 'unavailable',
+    // FW-0027 slice 1: narrowed routes do not submit forms; no payment
+    // affordance is reachable. Uniform unavailable across all descriptors.
+    payment: 'unavailable',
   };
   const notificationDelivery = stubNotificationDelivery();
   // MED-4: identity is only wired when the gated respondent-place capability
@@ -214,6 +218,11 @@ function buildProductionNarrowedComposition({
     // `'offlineSubmit'` to the descriptor's `consumes` set and branch
     // here per FW-0080's closed-taxonomy shape.
     offlineSubmitQueue: unavailableOfflineSubmitQueue(),
+    // FW-0027 slice 1: narrowed routes do not submit forms; no payment
+    // affordance is reachable. Uniform unavailable across all descriptors;
+    // a future route needing payment would add `'payment'` to its
+    // `consumes` set and branch here.
+    paymentRailAdapter: unavailablePaymentRailAdapter(),
     instanceCapabilities,
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -247,6 +256,9 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     // is reachable. Uniform unavailable across all descriptors regardless of
     // mode (the sentinel pairs with the 'unavailable' declaration).
     offlineSubmitQueue: unavailableOfflineSubmitQueue(),
+    // FW-0027 slice 1: no narrowed route renders a form; no payment
+    // affordance is reachable. Uniform unavailable regardless of mode.
+    paymentRailAdapter: unavailablePaymentRailAdapter(),
     instanceCapabilities: {
       respondentPlace: 'demo-stub',
       status: 'demo-stub',
@@ -270,6 +282,9 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // FW-0044 slice 1: narrowed routes do not submit forms; uniform
       // unavailable to match the wired sentinel.
       offlineSubmit: 'unavailable',
+      // FW-0027 slice 1: narrowed routes do not submit forms; uniform
+      // unavailable to match the wired sentinel.
+      payment: 'unavailable',
     },
     orgRuntimePolicy: defaultOrgRuntimePolicy(),
     formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
@@ -286,6 +301,7 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       fileUpload: 'allowed',
       crossIssuerHistory: 'allowed',
       offlineSubmit: 'allowed',
+      payment: 'allowed',
     },
   };
 }

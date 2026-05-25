@@ -18,6 +18,8 @@ const allAvailable: InstanceCapabilities = {
   crossIssuerHistory: 'available',
   // FW-0044 slice 1: declare offlineSubmit so resolver validation passes.
   offlineSubmit: 'available',
+  // FW-0027 slice 1: declare payment so resolver validation passes.
+  payment: 'available',
 };
 
 const allowAllOrg: OrgRuntimePolicy = {
@@ -28,6 +30,7 @@ const allowAllOrg: OrgRuntimePolicy = {
     fileUpload: 'allowed',
     crossIssuerHistory: 'allowed',
     offlineSubmit: 'allowed',
+    payment: 'allowed',
   },
 };
 
