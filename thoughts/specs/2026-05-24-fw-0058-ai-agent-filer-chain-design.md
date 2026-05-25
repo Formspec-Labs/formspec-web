@@ -425,26 +425,35 @@ The verifier attests to **capacity** (the agent was acting under the named autho
 
 **Cross-row touch.** AP-023 is doc-only; no other-row update needed. FW-0058 design names AP-023 satisfaction inline.
 
-### 7.7 FW-0051 — BYO-assistant (vocabulary clash; load-bearing distinction reciprocated)
+### 7.7 FW-0037 / FW-0051 / FW-0058 three-way framing (vocabulary firewall; load-bearing distinctions reciprocated)
 
-**FW-0058 is AI-as-respondent; FW-0051 is AI-as-helper-for-respondent.** The two rows are easy to confuse but architecturally distinct. The vocabulary table mirrors FW-0051 §7.6 with inverted framing:
+**FW-0058 is AI-as-respondent; FW-0051 is AI-as-helper-for-respondent; FW-0037 is human-filer-for-respondent.** The three rows span the J-012 universe and are easy to confuse pairwise. Per FW-0037 design §6.7 / §8.7 (delivered 2026-05-24), the three-way framing table — updated here per **code-review HIGH F7 (FW-0058 §7.7 reciprocation gap)** to add the FW-0037 column that was missing from this design doc (PLANNING-only cross-link is not enough):
 
-| Axis | FW-0058 (AI-agent filer) | FW-0051 (BYO-assistant) |
-|---|---|---|
-| Who fills the form | The AI agent (non-human capacity) | A human respondent |
-| Substrate | WOS `actorExtension` adds `ActorKind::Agent`; `AgentInvoker` port per WOS ADR-0064; receipt has `agentChain` via EXT-3 + `capacity: "ai-agent"`; workflow provenance per `capabilityInvocation` | No actor-extension change; no signature shape change; the AI runs in the respondent's tools |
-| Trust model | Agent is registered actor in workflow; deontic constraints from WOS AI Integration Spec apply; agent is OUTSIDE the trust boundary | Assistant is untrusted by form; runs in respondent's browser/tools; per-act consent from respondent |
-| Capacity on AuthoredSignature | `capacity: "ai-agent"` + `agentChain` block (EXT-3) | None — respondent is the signer; capacity is `self` |
-| Provenance surface | Workflow provenance record per `capabilityInvocation` per WOS ai-integration.md §3.3.1 | Field-level provenance per EXT-2 (`attestedBy: respondent, sourceRef: assistant-suggested`) |
-| Form policy key | `aiAgentFiler` (this design) | `bringYourOwnAssistant` (per FW-0051 design) |
-| Failure mode | WOS fallback chain (terminating in human review per WOS §5.3 (4)) | Per-act respondent rejects the suggestion; nothing applies |
-| GDPR Article 22 | Implicit via `agentChain` presence on the receipt (§3.4) | Not applicable — the human respondent is making the decision; per-field AI-assistance lineage is incidental |
+| Axis | FW-0037 (human filer) | FW-0058 (AI-agent filer) | FW-0051 (BYO-assistant) |
+|---|---|---|---|
+| Who fills the form | A human filer (different person from the signer) | The AI agent (non-human capacity) | A human respondent (the signer themselves), assisted by AI |
+| Who signs the form | A human respondent (the signer; capacity `self`) | The AI agent (non-human capacity: `ai-agent`) | The human respondent (same as filler; capacity `self`) |
+| `actorKind` (WOS) | `self` for the signer; the filer is a sibling carrier on submission audit trail, not a WOS-visible actor in slice 1 | `agent` (`ActorKind::Agent` per WOS ADR-0064) | `self` (no AI on signature; assistant adds per-field provenance only) |
+| Substrate | New `metadata.filer` carrier on Response envelope (EXT-36); no signer-side change; respondent's `AuthoredSignature.capacity` stays `self` | WOS `actorExtension` adds `ActorKind::Agent`; `AgentInvoker` port per WOS ADR-0064; receipt has `agentChain` via EXT-3 + `capacity: "ai-agent"`; workflow provenance per `capabilityInvocation` | No actor-extension change; no signature shape change; the AI runs in the respondent's tools |
+| Trust model | Filer is a named party with separate identity binding; signer attests; signer is the trust anchor for the legal act | Agent is registered actor in workflow; deontic constraints from WOS AI Integration Spec apply; agent is OUTSIDE the trust boundary | Assistant is untrusted by form; runs in respondent's browser/tools; per-act consent from respondent |
+| Capacity on AuthoredSignature | `self` (unchanged from non-filer flow) | `capacity: "ai-agent"` + `agentChain` block (EXT-3) | None — respondent is the signer; capacity is `self` |
+| Provenance surface | Submission-level `metadata.filer` carrier names the filer; per-field `metadata.provenance` may also record the filer per EXT-2 | Workflow provenance record per `capabilityInvocation` per WOS ai-integration.md §3.3.1 | Field-level provenance per EXT-2 (`attestedBy: respondent, sourceRef: assistant-suggested`) |
+| Form policy key | `preparerFiling` (FW-0037; split from `reviewerPreparer` umbrella per FW-0037 design §4.1 + code-review F6) | `aiAgentFiler` (this design) | `bringYourOwnAssistant` (per FW-0051 design) |
+| Failure mode | Form-load `FeaturePolicyConflictError` if `filerNotSigner: forbidden` set against template / org policy; signer-ceremony `HandoffTargetMismatchError` if redeemed token doesn't match signer identity | WOS fallback chain (terminating in human review per WOS §5.3 (4)) | Per-act respondent rejects the suggestion; nothing applies |
+| Threat focus | AP-014 coercion (filer steers signer; "helpful preparer" textbook vector) | Prompt-injection (compromised AI) + capacity-spoofing (forged human credentials) | Per-act respondent rejects suggestion; no class-level threat |
+| GDPR Article 22 | Not applicable — human signer is the decision-maker | Implicit via `agentChain` presence on the receipt (§3.4) | Not applicable — the human respondent is making the decision; per-field AI-assistance lineage is incidental |
 
-**The two rows compose.** A form filled by an AI agent (FW-0058) may consult an external assistant (FW-0051) during its own fill. The composition would be FW-0058 wrapping FW-0051 — the AI agent acts as the respondent-role-equivalent and the BYO-assistant runs in the agent's tools. **Out of scope for slice 1; flag for future, per FW-0051 §7.6 deferral.**
+**Pairwise composition rules.**
+
+- **FW-0058 + FW-0051 compose** (AI agent uses BYO assistant during its own fill, then signs as `ai-agent`). FW-0058 wraps FW-0051; the AI agent acts as the respondent-role-equivalent and the BYO-assistant runs in the agent's tools. **Out of scope for slice 1; flag for future, per FW-0051 §7.6 deferral.**
+- **FW-0037 + FW-0051 compose** (CPA-as-filer uses AI tax-prep software that proposes values, CPA confirms per-act, then hands off to taxpayer-as-signer). The FILER is the assistant's per-act confirmation user. **Out of scope for slice 1, per FW-0037 §1.2 non-goals + FW-0051 §7.6.** Canonical scenario named in FW-0037 §8.7 Compositions sub-table (delivered 2026-05-24 via code-review F1).
+- **FW-0037 + FW-0058 do NOT compose at the filler axis** (an AI agent IS the signer in FW-0058; there is no "human filer + AI signer" or "AI filer + human signer" shape, only the three legs FW-0037 / FW-0058 / FW-0051). Per FW-0037 §8.7 Compositions sub-table.
 
 **The AI-fills-plus-human-signs case is FW-0051 + EXT-2, NOT FW-0058.** When the AI fills the form but the human reviews + signs, the signer is the human (`capacity: "self"`); the AI's contribution is per-field provenance (`attestedBy: "ai-agent", sourceRef: "vendor-ai-tool"` via EXT-2). This is the canonical FW-0051 case (Stage 2 mutation per FW-0051 §3.4 — assistant proposes, respondent confirms). **FW-0058 is the case where the AI IS the signer, not when it merely helps.**
 
-**Cross-row touch.** FW-0051 design's §7.6 already names the FW-0058 distinction; FW-0058 design's §7.7 reciprocates with the inverted framing table. **PLANNING.md cross-link bilaterally updated.**
+**The human-filer-plus-human-signer case is FW-0037, NOT FW-0058 and NOT FW-0051.** When a human paralegal / clinic-staff / family-helper / preparer fills the form and a separate human respondent reviews + signs, the substrate is FW-0037 — `metadata.filer` carrier names the human filer; the signer's capacity stays `self`. **FW-0058 does not cover this case.**
+
+**Cross-row touch.** FW-0051 design's §7.6 names the FW-0058 distinction; FW-0037 design's §6.7 / §8.7 reciprocates with the three-way framing table + Compositions sub-table; this design's §7.7 now reciprocates the third leg per code-review HIGH F7 (closing the bilateral-update gap where PLANNING.md was touched but the DESIGN doc was not). **PLANNING.md cross-link bilaterally updated; DESIGN DOC cross-links now bilaterally updated.**
 
 ## 8. Open questions / deferrals
 
