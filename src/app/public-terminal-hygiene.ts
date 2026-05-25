@@ -1,6 +1,14 @@
+import type { DraftKey, DraftStore } from '../ports/draft-store.ts';
 import type { NotificationDelivery } from '../ports/notification-delivery.ts';
 import type { SubmitConfirmation } from '../ports/submit-transport.ts';
+import type { ResolvedMultiPartyPolicy } from '../policy/index.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
+import {
+  multiPartyDraftKey,
+  multiPartyProgressDraftKey,
+  requiredMultiPartySlots,
+  type MultiPartyPersistedState,
+} from './respondent-flow.ts';
 
 export const PUBLIC_TERMINAL_SMS_SENT_COPY = 'Receipt sent by SMS.';
 export const PUBLIC_TERMINAL_SMS_INVALID_COPY = 'Enter a phone number that can receive SMS.';
@@ -13,6 +21,14 @@ export interface SendPublicTerminalReceiptSmsInput {
   readonly confirmation: SubmitConfirmation;
   readonly phone: string;
   readonly idempotencyKey?: string;
+}
+
+export interface ClearPublicTerminalDraftStateInput {
+  readonly draftStore: DraftStore;
+  readonly draftKey: DraftKey;
+  readonly multiPartyPolicy?: ResolvedMultiPartyPolicy;
+  readonly multiPartyState?: MultiPartyPersistedState | null;
+  readonly subjectRef?: string;
 }
 
 export async function sendPublicTerminalReceiptSms({
@@ -53,9 +69,7 @@ export function publicTerminalVerifierCode(confirmation: SubmitConfirmation): st
 export function publicTerminalTrackingUrl(
   confirmation: SubmitConfirmation,
 ): string | undefined {
-  const href = confirmation.caseUrn
-    ? `/status?case=${encodeURIComponent(confirmation.caseUrn)}`
-    : confirmation.trackingUri;
+  const href = confirmation.trackingUri;
   if (!href) return undefined;
   try {
     return new URL(href, globalThis.location?.origin ?? 'https://formspec.local').toString();
@@ -71,4 +85,53 @@ export function normalizeSmsDestination(input: string): string {
     throw new Error(PUBLIC_TERMINAL_SMS_INVALID_COPY);
   }
   return trimmed.startsWith('+') ? `+${digits}` : digits;
+}
+
+export function publicTerminalDraftKeysToClear({
+  draftKey,
+  multiPartyPolicy,
+}: Omit<ClearPublicTerminalDraftStateInput, 'draftStore' | 'subjectRef'>): DraftKey[] {
+  const keys = [draftKey];
+  if (multiPartyPolicy) {
+    keys.push(multiPartyProgressDraftKey(draftKey));
+    for (const slot of requiredMultiPartySlots(multiPartyPolicy)) {
+      keys.push(multiPartyDraftKey(draftKey, slot.partyRef));
+    }
+  }
+  return dedupeDraftKeys(keys);
+}
+
+export async function clearPublicTerminalDraftState({
+  draftStore,
+  draftKey,
+  multiPartyPolicy,
+  multiPartyState,
+  subjectRef,
+}: ClearPublicTerminalDraftStateInput): Promise<void> {
+  const keys = publicTerminalDraftKeysToClear({
+    draftKey,
+    multiPartyPolicy,
+    multiPartyState,
+  });
+  await Promise.all(keys.map((key) => draftStore.delete(key)));
+  if (subjectRef) {
+    await draftStore.invalidateSubject(subjectRef);
+  }
+}
+
+function dedupeDraftKeys(keys: readonly DraftKey[]): DraftKey[] {
+  const seen = new Set<string>();
+  const result: DraftKey[] = [];
+  for (const key of keys) {
+    const fingerprint = [
+      key.subjectRef ?? '',
+      key.partyRef ?? '',
+      key.formUrl,
+      key.formVersion ?? '',
+    ].join('\u0000');
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    result.push(key);
+  }
+  return result;
 }

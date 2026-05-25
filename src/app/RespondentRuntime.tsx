@@ -112,6 +112,7 @@ import {
   PUBLIC_TERMINAL_SMS_INVALID_COPY,
   PUBLIC_TERMINAL_SMS_SENT_COPY,
   canSendPublicTerminalReceiptSms,
+  clearPublicTerminalDraftState,
   publicTerminalTrackingUrl,
   publicTerminalVerifierCode,
   sendPublicTerminalReceiptSms,
@@ -751,7 +752,13 @@ export function RespondentRuntime({
     terminalClearRequestedRef.current = true;
     setTerminalClearState({ status: 'clearing' });
     try {
-      await composition.draftStore.delete(respondentState.draftKey);
+      await clearPublicTerminalDraftState({
+        draftStore: composition.draftStore,
+        draftKey: respondentState.draftKey,
+        multiPartyPolicy: respondentState.runtimeProfile.multiParty,
+        multiPartyState,
+        subjectRef: respondentState.claim?.subjectRef,
+      });
       if (respondentState.claim) {
         await composition.identityProvider.revoke(respondentState.claim);
       }

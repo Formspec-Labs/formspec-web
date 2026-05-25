@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -11,7 +12,9 @@ import {
   PUBLIC_TERMINAL_CLEARED_TITLE,
   PUBLIC_TERMINAL_SMS_INVALID_COPY,
   PUBLIC_TERMINAL_SMS_SENT_COPY,
+  publicTerminalDraftKeysToClear,
 } from '../../src/app/public-terminal-hygiene.ts';
+import type { ResolvedMultiPartyPolicy } from '../../src/policy/index.ts';
 import { stubAttachmentStore } from '../../src/adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../../src/adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../../src/adapters/stub/draft-store.ts';
@@ -46,9 +49,10 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
     const print = vi.fn();
     Object.defineProperty(window, 'print', { value: print, configurable: true });
 
-    render(<ConfirmationPanel confirmation={confirmation} />);
+    const { container } = render(<ConfirmationPanel confirmation={confirmation} />);
 
     expect(screen.getByText('000123')).not.toBeNull();
+    expect(container.querySelector('.public-terminal-actions__print-url')?.textContent).toBe('');
     fireEvent.click(screen.getByRole('button', { name: 'Print confirmation' }));
     expect(print).toHaveBeenCalledOnce();
   });
@@ -77,7 +81,9 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
     });
     expect(notifications.sent[0]?.message.body).toContain('Reference TEST-000123');
     expect(notifications.sent[0]?.message.body).toContain('Verifier code 000123');
-    expect(notifications.sent[0]?.message.body).toContain('urn%3Awos%3Acase_test_000123');
+    expect(notifications.sent[0]?.message.body).not.toContain('urn:');
+    expect(notifications.sent[0]?.message.body).not.toContain('urn%3A');
+    expect(notifications.sent[0]?.message.body).not.toContain('wos');
   });
 
   it('validates the SMS destination before calling the delivery port', async () => {
@@ -114,6 +120,58 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
     expect(screen.queryByText(PUBLIC_TERMINAL_SMS_SENT_COPY)).toBeNull();
     expect(screen.getByText('Print this confirmation, then clear this computer before leaving.')).not.toBeNull();
   });
+
+  it('hides trusted-reviewer controls from the print confirmation', () => {
+    const css = readFileSync('src/app/app.css', 'utf8');
+    const printStart = css.indexOf('@media print');
+    const printEnd = css.indexOf('/* FW-0046', printStart);
+    const printBlock = css.slice(printStart, printEnd);
+
+    expect(printBlock).toContain('.trusted-reviewer');
+    expect(printBlock).toContain('.confirmation-panel > a');
+  });
+
+  it('includes multi-party slices and progress state in terminal draft cleanup', () => {
+    const baseKey = {
+      formUrl: 'https://formspec.example.test/forms/joint-terminal',
+      formVersion: '1.0.0',
+      subjectRef: 'subject-a',
+    };
+    const policy: ResolvedMultiPartyPolicy = {
+      tier: 'coEqual',
+      invitationChannel: 'magic-link',
+      parties: [
+        {
+          roleId: 'adult',
+          label: 'Adult',
+          role: 'coEqual',
+          cardinality: { min: 2, max: 2 },
+          visibilityScope: 'shared',
+        },
+        {
+          roleId: 'sponsor',
+          label: 'Sponsor',
+          role: 'coEqual',
+          cardinality: { min: 1, max: 1 },
+          visibilityScope: 'shared',
+        },
+      ],
+    };
+
+    const keys = publicTerminalDraftKeysToClear({ draftKey: baseKey, multiPartyPolicy: policy });
+
+    expect(keys).toEqual(expect.arrayContaining([
+      baseKey,
+      expect.objectContaining({ subjectRef: 'subject-a', partyRef: 'adult:1' }),
+      expect.objectContaining({ subjectRef: 'subject-a', partyRef: 'adult:2' }),
+      expect.objectContaining({ subjectRef: 'subject-a', partyRef: 'sponsor' }),
+      expect.objectContaining({
+        subjectRef: expect.stringMatching(/^formspec:multi-party:/),
+        partyRef: '__formspec-multi-party-progress',
+      }),
+    ]));
+    expect(keys).toHaveLength(5);
+  });
 });
 
 describe('RespondentRuntime public-terminal cleanup (FW-0041)', () => {
@@ -133,6 +191,7 @@ describe('RespondentRuntime public-terminal cleanup (FW-0041)', () => {
   it('deletes the local draft, revokes the identity session, and hides the receipt', async () => {
     const composition = publicTerminalComposition();
     const deleteDraft = vi.spyOn(composition.draftStore, 'delete');
+    const invalidateSubject = vi.spyOn(composition.draftStore, 'invalidateSubject');
     const revoke = vi.spyOn(composition.identityProvider, 'revoke');
 
     await renderRuntime(composition);
@@ -149,6 +208,7 @@ describe('RespondentRuntime public-terminal cleanup (FW-0041)', () => {
       formUrl: PUBLIC_TERMINAL_FORM.url,
       formVersion: PUBLIC_TERMINAL_FORM.version,
     }));
+    expect(invalidateSubject).toHaveBeenCalledOnce();
     expect(revoke).toHaveBeenCalledOnce();
     expect(text()).not.toContain('Submission received');
   });

@@ -783,7 +783,9 @@ select {
 @media print {
   .respondent-toolbar,
   .respondent-place,
+  .trusted-reviewer,
   .submit-notice,
+  .confirmation-panel > a,
   .public-terminal-actions h3,
   .public-terminal-actions > p:not(.public-terminal-actions__print-url),
   .public-terminal-actions__row,
