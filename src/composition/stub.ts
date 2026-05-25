@@ -21,6 +21,7 @@ import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../adapters/stub/submit-transport.ts';
 import { unavailablePreallocatedFeaturePort } from '../adapters/unavailable/preallocated-feature-port.ts';
 import { demoSampleForm, demoSampleFormUrl } from '../demo/index.ts';
+import { demoLocaleDocuments } from '../demo/locales.ts';
 import {
   demoApplicantCaseDetail,
   demoRespondentPlaceSnapshot,
@@ -48,6 +49,12 @@ export function createStubComposition(): Composition {
   const definitionSource = stubDefinitionSource();
   definitionSource.registerDefinition(demoSampleForm.url, demoSampleForm, demoSampleForm.version);
   definitionSource.registerDefinition(demoSampleForm.url, demoSampleForm);
+  definitionSource.registerLocaleDocuments(
+    demoSampleForm.url,
+    demoLocaleDocuments,
+    demoSampleForm.version,
+  );
+  definitionSource.registerLocaleDocuments(demoSampleForm.url, demoLocaleDocuments);
 
   const submitTransport = stubSubmitTransport();
   const composition: Composition = {

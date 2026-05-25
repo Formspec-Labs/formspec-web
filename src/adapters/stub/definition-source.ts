@@ -1,4 +1,8 @@
-import type { DefinitionSource, FormDefinition } from '../../ports/definition-source.ts';
+import type {
+  DefinitionSource,
+  FormDefinition,
+  LocaleDocument,
+} from '../../ports/definition-source.ts';
 
 /**
  * Stub DefinitionSource for tests + scaffold smoke test.
@@ -6,13 +10,18 @@ import type { DefinitionSource, FormDefinition } from '../../ports/definition-so
  */
 export function stubDefinitionSource(): DefinitionSource & {
   registerDefinition(url: string, definition: FormDefinition, version?: string): void;
+  registerLocaleDocuments(url: string, documents: readonly LocaleDocument[], version?: string): void;
 } {
   const registry = new Map<string, FormDefinition>();
+  const localeRegistry = new Map<string, LocaleDocument[]>();
   const key = (url: string, version?: string): string => `${url}@${version ?? 'latest'}`;
 
   return {
     registerDefinition(url, definition, version) {
       registry.set(key(url, version), definition);
+    },
+    registerLocaleDocuments(url, documents, version) {
+      localeRegistry.set(key(url, version), [...documents]);
     },
     async getDefinition(url, version) {
       const found = registry.get(key(url, version));
@@ -20,6 +29,9 @@ export function stubDefinitionSource(): DefinitionSource & {
         throw new Error(`stub DefinitionSource: not registered: ${key(url, version)}`);
       }
       return found;
+    },
+    async getLocaleDocuments(url, version) {
+      return [...(localeRegistry.get(key(url, version)) ?? [])];
     },
   };
 }

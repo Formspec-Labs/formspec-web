@@ -355,8 +355,9 @@ budget now passes against the Docker/nginx deployment target after the static
 first-paint shell and gzip/cache-header work: latest local Docker/nginx evidence
 in `docs/ux/responsive.md` scored 94 with FCP about 1.3 s. Refresh that
 measurement before a release tag. Production Locale Document loading is
-demo-proven only until the reference server serves concrete Locale Documents
-instead of only `locale_refs`. HTTP draft hydration is same-session only until
+web-adapter-proven for concrete runtime-payload documents; refresh the live
+server payload before a release tag to confirm it emits concrete documents
+rather than only `locale_refs`. HTTP draft hydration is same-session only until
 EXT-26 adds a server-backed draft state read/resume surface.
 
 ---

@@ -70,6 +70,7 @@ const requiredMilestones = new Map([
     [
       'tests/app/respondent-flow.test.ts',
       'tests/app/respondent-runtime.test.tsx',
+      'tests/adapters/http/definition-source.test.ts',
       'tests/e2e/placeholder-a11y.spec.ts',
       'npm run check:bundle-budget',
       'npm run test:deployment',
@@ -120,7 +121,12 @@ const requiredBoundaries = new Map([
   ],
   [
     'Production Locale Documents from server',
-    ['Demo-proven only until server emits concrete Locale Documents', 'docs/ux/i18n.md', 'docs/testing-plan.md'],
+    [
+      'Web adapter-proven; refresh live server payload before release tag',
+      'docs/ux/i18n.md',
+      'docs/testing-plan.md',
+      'tests/adapters/http/definition-source.test.ts',
+    ],
   ],
   [
     'Full OIDC server validation',

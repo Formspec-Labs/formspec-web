@@ -67,7 +67,7 @@ const requiredManualGates = new Map([
     'Production Locale Documents from server',
     {
       evidence: 'docs/ux/i18n.md',
-      status: 'Demo-proven only until server emits concrete Locale Documents',
+      status: 'Web adapter-proven; refresh live server payload before release tag',
     },
   ],
   [
@@ -163,6 +163,7 @@ const requiredCoverageRows = new Map([
     [
       'tests/app/respondent-flow.test.ts',
       'tests/app/respondent-runtime.test.tsx',
+      'tests/adapters/http/definition-source.test.ts',
       'tests/e2e/placeholder-a11y.spec.ts',
       'scripts/check-bundle-budget.mjs',
       'scripts/check-deployment-headers.mjs',

@@ -5,9 +5,9 @@
  * `formspec/schemas/definition.schema.json`.
  */
 
-import type { FormDefinition } from '@formspec-org/types';
+import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
 
-export type { FormDefinition } from '@formspec-org/types';
+export type { FormDefinition, LocaleDocument } from '@formspec-org/types';
 
 export interface DefinitionSource {
   /**
@@ -18,4 +18,12 @@ export interface DefinitionSource {
    * Other compositions wire static-bundle / CMS / GraphQL adapters.
    */
   getDefinition(url: string, version?: string): Promise<FormDefinition>;
+
+  /**
+   * Optional FW-0019 sidecar hook. Sources that fetch a runtime payload MAY
+   * return the Locale Documents carried beside the Definition. Legacy
+   * definition-only sources omit this method and the runtime falls back to
+   * inline Definition strings.
+   */
+  getLocaleDocuments?(url: string, version?: string): Promise<LocaleDocument[]>;
 }

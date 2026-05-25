@@ -64,9 +64,10 @@ port conformance, browser accessibility smoke, bundle budget, deployment
 headers, and compose quickstart plus multi-deployment smoke.
 
 Do not treat this as full production release sign-off yet. Manual VoiceOver and
-NVDA sweeps are pending, production Locale Documents still depend on the
-reference server, full OIDC server validation is blocked by EXT-23, and
-server-backed draft resume/update semantics are blocked by EXT-26 and EXT-27.
+NVDA sweeps are pending, production Locale Documents need a live server-payload
+refresh before the release tag, full OIDC server validation is blocked by
+EXT-23, and server-backed draft resume/update semantics are blocked by EXT-26
+and EXT-27.
 
 Container smoke:
 

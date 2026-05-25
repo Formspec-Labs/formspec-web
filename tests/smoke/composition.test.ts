@@ -41,8 +41,13 @@ describe('composition root smoke', () => {
   it('createDemoComposition wires stubs and registers the sample form fixture', async () => {
     const c = createDemoComposition();
     const definition = await c.definitionSource.getDefinition(demoSampleForm.url, demoSampleForm.version);
+    const localeDocuments = await c.definitionSource.getLocaleDocuments?.(
+      demoSampleForm.url,
+      demoSampleForm.version,
+    );
     expect(c.mode).toBe('demo');
     expect(definition.title).toBe('Demo Benefits Intake');
+    expect(localeDocuments?.map((document) => document.locale)).toEqual(['en', 'es']);
   });
 
   it('createDefaultComposition falls back to demo mode without server env', () => {

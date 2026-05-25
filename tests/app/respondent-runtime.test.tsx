@@ -14,6 +14,7 @@ import { demoSampleForm } from '../../src/demo/index.ts';
 import type { IdentityClaim, IdentityProvider, IdpOption } from '../../src/ports/identity-provider.ts';
 import type {
   ApplicantStatusResource,
+  LocaleDocument,
   RespondentPlaceSnapshot,
   RespondentSubmissionRecord,
 } from '../../src/ports/index.ts';
@@ -72,6 +73,35 @@ describe('RespondentRuntime identity sign-in', () => {
     await waitForText('OIDC unavailable');
 
     expect(text()).toContain('Sign in to continue');
+  });
+
+  it('loads server-supplied Locale Documents through the definition source', async () => {
+    const identityProvider = new TestIdentityProvider();
+    const serverLocaleDocument: LocaleDocument = {
+      $formspecLocale: '1.0',
+      url: 'https://formspec-server.example.test/runtime/locales/demo-intake/es',
+      version: '1.0.0',
+      locale: 'es',
+      targetDefinition: { url: demoSampleForm.url },
+      strings: {
+        '$form.title': 'Solicitud desde el servidor',
+      },
+    };
+    const composition = testComposition(identityProvider, {
+      localeDocuments: [serverLocaleDocument],
+    });
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Demo Benefits Intake');
+    await clickButton('Spanish');
+    await waitForText('Solicitud desde el servidor');
+
+    expect(composition.definitionSource.getLocaleDocuments).toHaveBeenCalledWith(
+      demoSampleForm.url,
+      demoSampleForm.version,
+    );
   });
 
   it('renders respondent-place history, saved files, and status feedback', async () => {
@@ -307,6 +337,7 @@ function testComposition(
   identityProvider: IdentityProvider,
   options: {
     applicantStatus?: ApplicantStatusResource;
+    localeDocuments?: readonly LocaleDocument[];
     respondentPlace?: RespondentPlaceSnapshot;
   } = {},
   _config?: FormspecWebConfig,
@@ -316,6 +347,7 @@ function testComposition(
     initialDefinitionUrl: demoSampleForm.url,
     definitionSource: {
       getDefinition: vi.fn(async () => demoSampleForm),
+      getLocaleDocuments: vi.fn(async () => [...(options.localeDocuments ?? [])]),
     },
     draftStore: {
       load: vi.fn(async () => undefined),

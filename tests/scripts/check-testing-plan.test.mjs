@@ -506,6 +506,7 @@ function coverageMatrixRows(options = {}) {
       [
         'tests/app/respondent-flow.test.ts',
         'tests/app/respondent-runtime.test.tsx',
+        'tests/adapters/http/definition-source.test.ts',
         'tests/e2e/placeholder-a11y.spec.ts',
         'scripts/check-bundle-budget.mjs',
         'scripts/check-deployment-headers.mjs',
@@ -612,7 +613,7 @@ function manualReleaseRows(options = {}) {
     [
       'Production Locale Documents from server',
       'docs/ux/i18n.md',
-      'Demo-proven only until server emits concrete Locale Documents.',
+      'Web adapter-proven; refresh live server payload before release tag.',
     ],
     ['Full OIDC server validation', 'docs/identity/integration.md', 'Blocked by EXT-23.'],
     [

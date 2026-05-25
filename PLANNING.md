@@ -149,12 +149,12 @@ MVP rows in build-dependency order: gating decisions first (framework, license, 
 ### FW-0019 — Multilingual form: respondent's language with the legally controlling text marked
 
 - **Phase:** MVP
-- **Status:** live (demo Locale sidecars; server Locale Documents pending)
+- **Status:** live (demo + server payload Locale Documents)
 - **Persona:** Respondent
 - **Journey:** [J-010](JOURNEYS.md#j-010--translate-this-form-into-my-language-without-bending-the-legal-meaning)
 - **Done:** The respondent reads the form in their language, sees the legally controlling text marked plainly, and writes narrative fields in their own words. Names in multiple scripts are first-class.
 - **Anti-patterns:** —
-- **Note:** The respondent runtime loads bundled demo Locale Documents and exposes the English/Spanish toggle. Production server payloads currently expose `locale_refs` only; concrete server-served Locale Documents remain a release gap documented in `docs/ux/i18n.md`. Certified-translator attribution on narrative translations is post-MVP (see queue EXT-2 for the Response per-value provenance dependency).
+- **Note:** The respondent runtime loads Locale Documents through the composition's DefinitionSource: the demo source seeds the bundled English/Spanish sidecars, and the HTTP source extracts concrete server-supplied Locale Documents from runtime payload `locales` / `locale_documents` / `localeDocuments` fields. Legacy `locale_refs` string arrays remain refs only and do not synthesize translations. Certified-translator attribution on narrative translations is post-MVP (see queue EXT-2 for the Response per-value provenance dependency).
 
 ### FW-0063 — `IdentityProvider` port + conformance suite + ≥1 reference adapter
 
@@ -535,10 +535,12 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 ### FW-0041 — Public-terminal hygiene
 
 - **Phase:** Post-MVP
-- **Status:** open
+- **Status:** live (slice 1) 2026-05-25
 - **Persona:** Respondent
 - **Journey:** [J-019](JOURNEYS.md#j-019--im-on-a-public-library-terminal-with-twenty-minutes-and-no-email)
 - **Done:** A user on a library or shelter terminal can finish a form, receive a receipt by SMS or print a confirmation with a short verifier code, and sign out leaving no autofill memory and no session for the next user to inherit.
+- **Delivered:** Confirmation panel now shows a short verifier code, prints cleanly, can send the receipt by SMS through the existing transport-only `NotificationDelivery` port, and exposes a "Clear this computer" action that deletes the local draft, revokes the active identity session, and replaces the receipt with a cleared-browser state. The slice keeps the 2026-05-25 preallocated runtime-feature keys unchanged; no `publicTerminalHygiene` key was added because this build consumes the existing MVP `NotificationDelivery` and identity/draft ports rather than introducing a new adapter-backed instance capability.
+- **Named release gaps:** The OSS reference deployment still wires the stub `NotificationDelivery`; adopters who need real SMS wire Twilio, SES/SNS, a server notification proxy, or another transport behind the same port. Full browser-autofill suppression remains best-effort: the SMS field disables autocomplete and the clear action removes the app's draft/session state, but browsers may still offer profile-level autofill outside the web app's control.
 - **Blocked on:** no upstream block — pure UI hygiene + `NotificationDelivery` port for SMS. Post-MVP for scope.
 - **Anti-patterns:** AP-001, AP-006, AP-017.
 

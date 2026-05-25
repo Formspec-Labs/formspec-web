@@ -28,7 +28,6 @@ import type {
 import type { FormspecWebConfig, IdentityPolicyConfig } from '../config/types.ts';
 import {
   defaultLocaleForDefinition,
-  demoLocaleDocuments,
   localeOptionsForDefinition,
 } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
@@ -715,10 +714,12 @@ async function createReadyState(
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
   });
-  for (const localeDocument of demoLocaleDocuments) {
-    if (localeDocument.targetDefinition.url === definition.url) {
-      engine.loadLocale(localeDocument);
-    }
+  const localeDocuments = await composition.definitionSource.getLocaleDocuments?.(
+    definition.url,
+    definition.version,
+  );
+  for (const localeDocument of localeDocuments ?? []) {
+    engine.loadLocale(localeDocument);
   }
   engine.setLocale(activeLocale);
   hydrateEngineFromResponse(engine, draft);
