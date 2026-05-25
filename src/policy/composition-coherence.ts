@@ -28,12 +28,15 @@ import type { InstanceCapabilities } from './policy-shapes.ts';
  * FEATURE_PORT_MAP for each key. Concrete `Composition` (composition/types.ts)
  * satisfies this shape; tests can pass in synthetic CompositionLike literals.
  */
+type MultiPartyCorePortName = 'draftStore' | 'identityProvider' | 'submitTransport';
+type RequiredCompositionPortName = Exclude<CompositionPortName, MultiPartyCorePortName>;
+
 export type CompositionLike = {
   readonly mode: 'demo' | 'production';
   readonly instanceCapabilities: InstanceCapabilities;
 } & {
-  readonly [P in CompositionPortName]: unknown;
-};
+  readonly [P in RequiredCompositionPortName]: unknown;
+} & Partial<Record<MultiPartyCorePortName, unknown>>;
 
 export type CompositionIncoherenceKind =
   | 'sentinel-without-unavailable-declaration'
@@ -93,6 +96,13 @@ export function assertCompositionCoherence(composition: CompositionLike): void {
   for (const featureKey of RUNTIME_FEATURE_KEYS) {
     const declared = composition.instanceCapabilities[featureKey];
     const portNames = featurePortNames(featureKey);
+    if (featureKey === 'multiParty' && declared === 'unavailable') {
+      // FW-0061 extends the always-present single-party MVP ports. Declaring
+      // multiParty unavailable means the shell short-circuits the multi-party
+      // flow; it does not mean draftStore/identityProvider/submitTransport
+      // should be unavailable for ordinary forms.
+      continue;
+    }
     if (portNames.length === 0) {
       if (declared !== 'unavailable') {
         throw new CompositionIncoherenceError(
@@ -105,6 +115,13 @@ export function assertCompositionCoherence(composition: CompositionLike): void {
     }
     for (const portName of portNames) {
       const adapter = composition[portName];
+      if (adapter === undefined) {
+        throw new CompositionIncoherenceError(
+          featureKey,
+          'feature-without-port-binding',
+          `instanceCapabilities declares "${featureKey}" ${declared}, but the backing port "${portName}" is not wired.`,
+        );
+      }
       const adapterIsUnavailable = isUnavailableAdapter(adapter);
       const adapterIsDemoStub = isDemoStubAdapter(adapter);
       const slotKeys = portToKeys.get(portName) ?? [featureKey];

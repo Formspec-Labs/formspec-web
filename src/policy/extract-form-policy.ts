@@ -12,6 +12,8 @@ import type { Money } from '../ports/payment-rail-adapter.ts';
 import type {
   FormFeaturePolicyMode,
   FormRuntimePolicy,
+  MultiPartyRuntimeConfig,
+  MultiPartyRolePolicy,
   RecordLifecycleCorrectablePolicy,
   RecordLifecycleDisputablePolicy,
   RecordLifecyclePolicy,
@@ -139,6 +141,137 @@ export function extractRecordLifecyclePolicy(
     parseRecordLifecycleBlock(governanceValue) ??
     parseRecordLifecycleBlock(extensionValue)
   );
+}
+
+/**
+ * FW-0061 form-policy walker. XS-1/EXT-28 are still PROPOSAL-status, so the
+ * runtime accepts the three carriers present in current design notes:
+ *
+ * - `definition.extensions['x-formspec-multi-party']`
+ * - `definition.governance.multiParty`
+ * - `definition.parties`
+ *
+ * The accepted object is the resolved-profile block from FW-0050 §3.3. Any
+ * malformed object declines here and is rejected later by resolver validation
+ * only when the feature is actually enabled.
+ */
+export function extractMultiPartyPolicy(
+  definition: FormDefinition,
+): FormRuntimePolicy | undefined {
+  const raw =
+    definition.extensions?.['x-formspec-multi-party'] ??
+    (definition as { governance?: { multiParty?: unknown } }).governance?.multiParty ??
+    (definition as { parties?: unknown }).parties;
+  const policy = parseMultiPartyBlock(raw);
+  if (!policy) return undefined;
+  return {
+    features: { multiParty: 'required' },
+    limits: { multiParty: policy },
+  };
+}
+
+function parseMultiPartyBlock(value: unknown): MultiPartyRuntimeConfig | undefined {
+  if (value === true || value === false || value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const block = value as Record<string, unknown>;
+  const tier = block.tier === 'coEqual' || block.tier === 'asymmetric'
+    ? block.tier
+    : undefined;
+  const parties = Array.isArray(block.parties)
+    ? block.parties.map(parseMultiPartyRole).filter((party): party is MultiPartyRolePolicy => (
+        party !== undefined
+      ))
+    : [];
+  if (!tier || parties.length < 2 || parties.length !== (block.parties as unknown[] | undefined)?.length) {
+    return undefined;
+  }
+  const invitationChannel =
+    block.invitationChannel === 'magic-link' ||
+    block.invitationChannel === 'wos-task' ||
+    block.invitationChannel === 'out-of-band'
+      ? block.invitationChannel
+      : 'out-of-band';
+  const deadlinePolicy = parseMultiPartyDeadlinePolicy(block.deadlinePolicy);
+  return {
+    tier,
+    parties,
+    invitationChannel,
+    deadlinePolicy,
+  };
+}
+
+function parseMultiPartyRole(value: unknown): MultiPartyRolePolicy | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const block = value as Record<string, unknown>;
+  const roleId = nonEmptyString(block.roleId);
+  const role =
+    block.role === 'coEqual' ||
+    block.role === 'asymmetricPrimary' ||
+    block.role === 'asymmetricSecondary' ||
+    block.role === 'guardianFor'
+      ? block.role
+      : undefined;
+  const cardinality = parseMultiPartyCardinality(block.cardinality);
+  if (!roleId || !role || !cardinality) return undefined;
+  const visibilityScope =
+    block.visibilityScope === 'scoped' || block.visibilityScope === 'shared'
+      ? block.visibilityScope
+      : 'shared';
+  return {
+    roleId,
+    label: nonEmptyString(block.label),
+    role,
+    cardinality,
+    assuranceFloor: parseAssuranceFloor(block.assuranceFloor),
+    visibilityScope,
+    visibleTo: stringArray(block.visibleTo),
+    editableBy: stringArray(block.editableBy),
+    signedBy: stringArray(block.signedBy),
+    safeAddressAudience: stringArray(block.safeAddressAudience),
+  };
+}
+
+function parseMultiPartyCardinality(
+  value: unknown,
+): MultiPartyRolePolicy['cardinality'] | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { min: 1, max: 1 };
+  }
+  const block = value as Record<string, unknown>;
+  const min = positiveInteger(block.min) ?? 1;
+  const max = block.max === 'unbounded'
+    ? 'unbounded'
+    : positiveInteger(block.max) ?? min;
+  return { min, max };
+}
+
+function parseAssuranceFloor(value: unknown): MultiPartyRolePolicy['assuranceFloor'] | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const block = value as Record<string, unknown>;
+  const floor = {
+    ial: nonEmptyString(block.ial),
+    aal: nonEmptyString(block.aal),
+    fal: nonEmptyString(block.fal),
+  };
+  return floor.ial || floor.aal || floor.fal ? floor : undefined;
+}
+
+function parseMultiPartyDeadlinePolicy(
+  value: unknown,
+): MultiPartyRuntimeConfig['deadlinePolicy'] | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const block = value as Record<string, unknown>;
+  const expirationAction =
+    block.expirationAction === 'convert-to-partial'
+      ? 'convert-to-partial'
+      : block.expirationAction === 'void-submission'
+        ? 'void-submission'
+        : undefined;
+  if (!expirationAction) return undefined;
+  return {
+    expirationAction,
+    perPartyDeadline: nonEmptyString(block.perPartyDeadline),
+  };
 }
 
 function recordLifecycleBlockEnablesAnyAction(value: unknown): boolean {

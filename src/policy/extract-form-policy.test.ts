@@ -3,6 +3,7 @@ import type { FormDefinition } from '@formspec-org/types';
 import {
   extractAttachmentRequirement,
   extractEmbeddableOptIn,
+  extractMultiPartyPolicy,
   extractOfflineSubmitOptIn,
   extractPaymentAmount,
   extractPaymentRequirement,
@@ -188,6 +189,65 @@ describe('extractPaymentRequirement', () => {
       extensions: { 'x-formspec-payment-required': 1 as unknown as boolean },
     };
     expect(extractPaymentRequirement(numericValue)).toBeUndefined();
+  });
+});
+
+describe('extractMultiPartyPolicy', () => {
+  it('returns required multiParty policy from the provisional extension carrier', () => {
+    const definition: FormDefinition = {
+      ...baseDefinition,
+      items: [],
+      extensions: {
+        'x-formspec-multi-party': {
+          tier: 'coEqual',
+          invitationChannel: 'magic-link',
+          parties: [
+            {
+              roleId: 'spouse-a',
+              label: 'Spouse A',
+              role: 'coEqual',
+              cardinality: { min: 1, max: 1 },
+              visibilityScope: 'shared',
+            },
+            {
+              roleId: 'spouse-b',
+              label: 'Spouse B',
+              role: 'coEqual',
+              cardinality: { min: 1, max: 1 },
+              visibilityScope: 'shared',
+            },
+          ],
+        },
+      },
+    };
+
+    expect(extractMultiPartyPolicy(definition)).toMatchObject({
+      features: { multiParty: 'required' },
+      limits: {
+        multiParty: {
+          tier: 'coEqual',
+          invitationChannel: 'magic-link',
+          parties: [
+            { roleId: 'spouse-a', role: 'coEqual' },
+            { roleId: 'spouse-b', role: 'coEqual' },
+          ],
+        },
+      },
+    });
+  });
+
+  it('declines malformed multiParty carriers before resolver validation', () => {
+    const definition: FormDefinition = {
+      ...baseDefinition,
+      items: [],
+      extensions: {
+        'x-formspec-multi-party': {
+          tier: 'coEqual',
+          parties: [{ roleId: 'only-one', role: 'coEqual' }],
+        },
+      },
+    };
+    expect(extractMultiPartyPolicy(definition)).toBeUndefined();
   });
 });
 

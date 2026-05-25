@@ -116,6 +116,7 @@ export class HttpDraftStore implements DraftStore {
         anonymous_session_token: anonymousSessionToken,
         anonymous_subject_ref: anonymousSubjectRef(key),
         respondent_subject_ref: anonymousSessionToken ? undefined : respondentSubject,
+        party_ref: key.partyRef,
         draft_state: response.data,
       },
     );

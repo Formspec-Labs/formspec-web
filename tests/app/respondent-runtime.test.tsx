@@ -10,6 +10,7 @@ import { cleanup as rtlCleanup } from '@testing-library/react';
 import type { Composition } from '../../src/composition/types.ts';
 import { departmentAppProfile, publicPortalProfile } from '../../src/profiles/profiles.ts';
 import type { FormspecWebConfig } from '../../src/config/types.ts';
+import type { FormRuntimePolicy } from '../../src/policy/index.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import type { IdentityClaim, IdentityProvider, IdpOption } from '../../src/ports/identity-provider.ts';
 import type {
@@ -326,6 +327,43 @@ describe('RespondentRuntime identity sign-in', () => {
     }));
   });
 
+  it('fails at form load when multiParty is required but the instance is unavailable', async () => {
+    const identityProvider = new TestIdentityProvider();
+    const composition = testComposition(identityProvider, {
+      formPolicy: {
+        features: { multiParty: 'required' },
+        limits: {
+          multiParty: {
+            tier: 'coEqual',
+            invitationChannel: 'magic-link',
+            parties: [
+              {
+                roleId: 'spouse-a',
+                role: 'coEqual',
+                cardinality: { min: 1, max: 1 },
+                visibilityScope: 'shared',
+              },
+              {
+                roleId: 'spouse-b',
+                role: 'coEqual',
+                cardinality: { min: 1, max: 1 },
+                visibilityScope: 'shared',
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('This form cannot be loaded.');
+
+    expect(text()).toContain('This form requires multiple signers');
+    expect(composition.submitTransport.submit).not.toHaveBeenCalled();
+  });
+
   async function renderRuntime(
     composition: Composition,
     config: FormspecWebConfig = departmentAppProfile,
@@ -431,6 +469,7 @@ function testComposition(
     initialDefinitionUrl?: string;
     localeDocuments?: readonly LocaleDocument[];
     respondentPlace?: RespondentPlaceSnapshot;
+    formPolicy?: FormRuntimePolicy;
   } = {},
   _config?: FormspecWebConfig,
 ): Composition {
@@ -555,7 +594,7 @@ function testComposition(
       },
     },
     formRuntimePolicyExtractor: {
-      extract: () => ({
+      extract: () => options.formPolicy ?? ({
         features: { respondentPlace: 'optional', status: 'optional' },
       }),
     },

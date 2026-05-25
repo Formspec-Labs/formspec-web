@@ -31,6 +31,7 @@ import {
   EmbedOriginNotAllowedError,
   getEmbedLimits,
   type OrgRuntimePolicy,
+  type ResolvedMultiPartyPolicy,
   type ResolvedRuntimeProfile,
 } from '../policy/index.ts';
 import {
@@ -219,6 +220,7 @@ export async function buildIntakeHandoff({
   draftKey,
   claim,
   idempotencyKey,
+  multiParty,
 }: {
   definition: FormDefinition;
   response: FormResponse;
@@ -226,10 +228,26 @@ export async function buildIntakeHandoff({
   draftKey: DraftKey;
   claim: IdentityClaim | null;
   idempotencyKey: IdempotencyKey;
+  multiParty?: MultiPartyHandoffContext;
 }): Promise<IntakeHandoff> {
   const responseId = response.id ?? idempotencyKey;
   const validationId = validationReport ? `validation:${responseId}` : 'validation:none';
   const actorRef = claim?.subjectRef;
+
+  const extensions: NonNullable<IntakeHandoff['extensions']> = {
+    'x-formspec-response': response,
+    'x-formspec-response-data': response.data,
+    'x-formspec-validation-report': validationReport,
+  };
+  if (multiParty) {
+    extensions['x-formspec-active-party-ref'] = multiParty.activePartyRef;
+    extensions['x-formspec-multi-party'] = {
+      tier: multiParty.policy.tier,
+      invitationChannel: multiParty.policy.invitationChannel,
+      parties: multiParty.policy.parties,
+      partySignatures: multiParty.progress.signatures,
+    };
+  }
 
   return {
     $formspecIntakeHandoff: '1.0',
@@ -247,12 +265,131 @@ export async function buildIntakeHandoff({
     subjectRef: actorRef,
     ledgerHeadRef: `ledger:${responseId}:head`,
     occurredAt: new Date().toISOString(),
-    extensions: {
-      'x-formspec-response': response,
-      'x-formspec-response-data': response.data,
-      'x-formspec-validation-report': validationReport,
-    },
+    extensions,
   };
+}
+
+export interface MultiPartyPartySlot {
+  readonly partyRef: string;
+  readonly roleId: string;
+  readonly label: string;
+}
+
+export interface MultiPartySignatureRecord {
+  readonly partyRef: string;
+  readonly roleId: string;
+  readonly subjectRef: string;
+  readonly responseRef: string;
+  readonly responseHash: string;
+  readonly signedAt: string;
+}
+
+export interface MultiPartySignerProgress {
+  readonly activePartyRef: string;
+  readonly signatures: readonly MultiPartySignatureRecord[];
+}
+
+export interface MultiPartyHandoffContext {
+  readonly policy: ResolvedMultiPartyPolicy;
+  readonly progress: MultiPartySignerProgress;
+  readonly activePartyRef: string;
+}
+
+export function requiredMultiPartySlots(
+  policy: ResolvedMultiPartyPolicy,
+): readonly MultiPartyPartySlot[] {
+  return policy.parties.flatMap((party) => {
+    const count = party.cardinality.min;
+    return Array.from({ length: count }, (_, index): MultiPartyPartySlot => {
+      const partyRef = count === 1 ? party.roleId : `${party.roleId}:${index + 1}`;
+      return {
+        partyRef,
+        roleId: party.roleId,
+        label: party.label ?? labelFromPartyRef(partyRef),
+      };
+    });
+  });
+}
+
+export function createMultiPartySignerProgress(
+  policy: ResolvedMultiPartyPolicy,
+): MultiPartySignerProgress {
+  const first = requiredMultiPartySlots(policy)[0];
+  if (!first) {
+    throw new Error('multiParty requires at least one required party slot');
+  }
+  return { activePartyRef: first.partyRef, signatures: [] };
+}
+
+export async function recordMultiPartySigner({
+  claim,
+  idempotencyKey,
+  policy,
+  progress,
+  response,
+}: {
+  claim: IdentityClaim | null;
+  idempotencyKey: IdempotencyKey;
+  policy: ResolvedMultiPartyPolicy;
+  progress: MultiPartySignerProgress;
+  response: FormResponse;
+}): Promise<MultiPartySignerProgress> {
+  if (!claim) {
+    throw new Error('Multi-party forms require each signer to authenticate before signing.');
+  }
+  if (progress.signatures.some((signature) => signature.partyRef === progress.activePartyRef)) {
+    throw new Error(`Party "${progress.activePartyRef}" has already signed.`);
+  }
+  if (
+    progress.signatures.some((signature) => (
+      signature.subjectRef === claim.subjectRef &&
+      signature.partyRef !== progress.activePartyRef
+    ))
+  ) {
+    throw new Error('Each party must sign with a distinct authenticated identity.');
+  }
+  const activeSlot = requiredMultiPartySlots(policy).find(
+    (slot) => slot.partyRef === progress.activePartyRef,
+  );
+  if (!activeSlot) {
+    throw new Error(`Unknown active party "${progress.activePartyRef}".`);
+  }
+  const nextSignatures: MultiPartySignatureRecord[] = [
+    ...progress.signatures,
+    {
+      partyRef: activeSlot.partyRef,
+      roleId: activeSlot.roleId,
+      subjectRef: claim.subjectRef,
+      responseRef: `response:${response.id ?? idempotencyKey}`,
+      responseHash: await responseHash(response),
+      signedAt: new Date().toISOString(),
+    },
+  ];
+  const nextSlot = requiredMultiPartySlots(policy).find(
+    (slot) => !nextSignatures.some((signature) => signature.partyRef === slot.partyRef),
+  );
+  return {
+    activePartyRef: nextSlot?.partyRef ?? activeSlot.partyRef,
+    signatures: nextSignatures,
+  };
+}
+
+export function multiPartyComplete(
+  policy: ResolvedMultiPartyPolicy,
+  progress: MultiPartySignerProgress,
+): boolean {
+  const signed = new Set(progress.signatures.map((signature) => signature.partyRef));
+  return requiredMultiPartySlots(policy).every((slot) => signed.has(slot.partyRef));
+}
+
+export function multiPartyDraftKey(base: DraftKey, partyRef: string | undefined): DraftKey {
+  return partyRef ? { ...base, partyRef } : base;
+}
+
+function labelFromPartyRef(partyRef: string): string {
+  return partyRef
+    .replace(/[-_:]+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export async function responseHash(response: FormResponse): Promise<string> {

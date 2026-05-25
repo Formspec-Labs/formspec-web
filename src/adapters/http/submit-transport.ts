@@ -68,6 +68,7 @@ export class HttpSubmitTransport implements SubmitTransport {
         response_id: this.responseIdResolver?.(handoff),
         response_data: this.responseDataResolver?.(handoff) ?? responseDataFromHandoff(handoff),
         subject_ref: handoff.subjectRef ?? null,
+        party_ref: partyRefFromHandoff(handoff) ?? null,
         anonymous_session_token: await this.resolveAnonymousSessionToken(handoff),
         signing_requested: this.resolveSigningRequested(handoff),
       },
@@ -111,6 +112,11 @@ function responseDataFromHandoff(handoff: IntakeHandoff): Record<string, unknown
     return response.data;
   }
   return {};
+}
+
+function partyRefFromHandoff(handoff: IntakeHandoff): string | undefined {
+  const candidate = handoff.extensions?.['x-formspec-active-party-ref'];
+  return typeof candidate === 'string' && candidate.length > 0 ? candidate : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

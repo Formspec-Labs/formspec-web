@@ -80,17 +80,23 @@ import {
   assertIdentityPolicySatisfied,
   buildConfirmationTrackingUri,
   buildIntakeHandoff,
+  createMultiPartySignerProgress,
   formAssuranceFloorForDefinition,
   hydrateEngineFromResponse,
   identityClaimMeetsAssurance,
   identitySubjectChanged,
   isIdentityInteractionStarted,
+  multiPartyComplete,
+  multiPartyDraftKey,
+  recordMultiPartySigner,
+  requiredMultiPartySlots,
   selectBootIdentityOption,
   signInOptionsForIdentityPolicy,
   subjectRefInvalidatedByIdentityChange,
   submitOrQueue,
   submitWithPayment,
   verifyEmbedOriginAllowed,
+  type MultiPartySignerProgress,
 } from './respondent-flow.ts';
 import {
   PUBLIC_TERMINAL_CLEARED_BODY,
@@ -164,6 +170,12 @@ type SubmitState =
   // and the payment was not charged" copy. Distinct from generic 'error'
   // because the copy must name the released charge explicitly.
   | { status: 'payment-voided-after-submit-failure'; error: unknown }
+  | {
+      status: 'awaiting-next-party';
+      nextPartyLabel: string;
+      signedCount: number;
+      totalCount: number;
+    }
   // FW-0027: 'capture-failed' is the rare-but-named failure mode — the
   // submit IS in the system, but the rail's settlement queue could not
   // complete the charge. The respondent must be told to contact the sender
@@ -206,6 +218,7 @@ export function RespondentRuntime({
   const [terminalClearState, setTerminalClearState] = useState<TerminalClearState>({
     status: 'idle',
   });
+  const [multiPartyProgress, setMultiPartyProgress] = useState<MultiPartySignerProgress | null>(null);
   const terminalClearRequestedRef = useRef(false);
   // applyReadyState is constructed inside the bootstrap useEffect (it closes
   // over the cancel/sequence state). Expose it via ref so locale-recompute
@@ -226,6 +239,7 @@ export function RespondentRuntime({
     setRespondentState({ status: 'loading' });
     setSubmitState({ status: 'idle' });
     setTerminalClearState({ status: 'idle' });
+    setMultiPartyProgress(null);
 
     const applyReadyState = async (
       claim: IdentityClaim | null,
@@ -538,7 +552,15 @@ export function RespondentRuntime({
     setSubmitState({ status: 'submitting' });
     try {
       await respondentState.engine.getResolvedIssuer();
-      await composition.draftStore.save(respondentState.draftKey, result.response);
+      const multiPartyPolicy = respondentState.runtimeProfile.multiParty;
+      const currentMultiPartyProgress = multiPartyPolicy
+        ? multiPartyProgress ?? createMultiPartySignerProgress(multiPartyPolicy)
+        : null;
+      const activeDraftKey = multiPartyDraftKey(
+        respondentState.draftKey,
+        currentMultiPartyProgress?.activePartyRef,
+      );
+      await composition.draftStore.save(activeDraftKey, result.response);
 
       if (result.validationReport && !result.validationReport.valid) {
         setSubmitState({
@@ -559,14 +581,45 @@ export function RespondentRuntime({
           ? { id: respondentState.claim.subjectRef, type: 'respondent' }
           : undefined,
       });
-      await composition.draftStore.save(respondentState.draftKey, completedResponse);
+      await composition.draftStore.save(activeDraftKey, completedResponse);
+      let completedMultiPartyProgress: MultiPartySignerProgress | null = null;
+      if (multiPartyPolicy && currentMultiPartyProgress) {
+        completedMultiPartyProgress = await recordMultiPartySigner({
+          claim: respondentState.claim,
+          idempotencyKey,
+          policy: multiPartyPolicy,
+          progress: currentMultiPartyProgress,
+          response: completedResponse,
+        });
+        setMultiPartyProgress(completedMultiPartyProgress);
+        if (!multiPartyComplete(multiPartyPolicy, completedMultiPartyProgress)) {
+          const slots = requiredMultiPartySlots(multiPartyPolicy);
+          const nextSlot = slots.find(
+            (slot) => slot.partyRef === completedMultiPartyProgress?.activePartyRef,
+          );
+          setSubmitState({
+            status: 'awaiting-next-party',
+            nextPartyLabel: nextSlot?.label ?? 'the next signer',
+            signedCount: completedMultiPartyProgress.signatures.length,
+            totalCount: slots.length,
+          });
+          return;
+        }
+      }
       const handoff = await buildIntakeHandoff({
         definition: respondentState.definition,
         response: completedResponse,
         validationReport: result.validationReport,
-        draftKey: respondentState.draftKey,
+        draftKey: activeDraftKey,
         claim: respondentState.claim,
         idempotencyKey,
+        multiParty: multiPartyPolicy && completedMultiPartyProgress
+          ? {
+              policy: multiPartyPolicy,
+              progress: completedMultiPartyProgress,
+              activePartyRef: completedMultiPartyProgress.activePartyRef,
+            }
+          : undefined,
       });
 
       const paymentEnabled = respondentState.runtimeProfile.enabled.has('payment');
@@ -688,6 +741,7 @@ export function RespondentRuntime({
               respondentPlaceState={respondentPlaceState}
               resolvedIssuer={respondentState.resolvedIssuer}
               runtimeProfile={respondentState.runtimeProfile}
+              multiPartyProgress={multiPartyProgress}
               submitState={submitState}
               terminalClearState={terminalClearState}
               notificationDelivery={composition.notificationDelivery}
@@ -915,6 +969,7 @@ function RespondentSurface({
   respondentPlaceState,
   resolvedIssuer,
   runtimeProfile,
+  multiPartyProgress,
   submitState,
   terminalClearState,
   notificationDelivery,
@@ -932,6 +987,7 @@ function RespondentSurface({
   respondentPlaceState: RespondentPlaceState;
   resolvedIssuer: ResolvedIssuer;
   runtimeProfile: ResolvedRuntimeProfile;
+  multiPartyProgress: MultiPartySignerProgress | null;
   submitState: SubmitState;
   terminalClearState: TerminalClearState;
   notificationDelivery?: NotificationDelivery;
@@ -985,6 +1041,10 @@ function RespondentSurface({
         composition={composition}
         definition={definition}
         draftKey={draftKey}
+        runtimeProfile={runtimeProfile}
+      />
+      <MultiPartyPanel
+        progress={multiPartyProgress}
         runtimeProfile={runtimeProfile}
       />
 
@@ -1266,6 +1326,43 @@ function ReviewerShareList({
   );
 }
 
+function MultiPartyPanel({
+  progress,
+  runtimeProfile,
+}: {
+  progress: MultiPartySignerProgress | null;
+  runtimeProfile: ResolvedRuntimeProfile;
+}) {
+  const policy = runtimeProfile.multiParty;
+  if (!policy) return null;
+  const slots = requiredMultiPartySlots(policy);
+  const activeRef = progress?.activePartyRef ?? slots[0]?.partyRef;
+  const signedRefs = new Set(progress?.signatures.map((signature) => signature.partyRef) ?? []);
+  const activeSlot = slots.find((slot) => slot.partyRef === activeRef);
+  return (
+    <section className="respondent-place" aria-labelledby="multi-party-title">
+      <div className="respondent-place__header">
+        <div>
+          <p className="respondent-header__kicker">Joint submission</p>
+          <h2 id="multi-party-title">Signer progress</h2>
+        </div>
+        <p className="respondent-place__trust">{policy.tier}</p>
+      </div>
+      <p>
+        Current signer: <strong>{activeSlot?.label ?? 'Signer'}</strong>
+      </p>
+      <ul className="trusted-reviewer__shares">
+        {slots.map((slot) => (
+          <li key={slot.partyRef}>
+            <span>{slot.label}</span>
+            <small>{signedRefs.has(slot.partyRef) ? 'signed' : 'waiting'}</small>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function RespondentPlacePanel({ state }: { state: RespondentPlaceState }) {
   if (state.status === 'disabled') {
     // Hidden per ADR-0011 §Failure Semantics — the respondent never had
@@ -1526,6 +1623,19 @@ function SubmitNotice({ state }: { state: SubmitState }) {
   }
   if (state.status === 'queued') {
     return <QueuedForLaterPanel />;
+  }
+  if (state.status === 'awaiting-next-party') {
+    return (
+      <section className="submit-notice" role="status" aria-live="polite">
+        <h2>Saved for the next signer</h2>
+        <p>
+          {state.nextPartyLabel} can review their part and sign next.
+        </p>
+        <p className="submit-notice__detail">
+          {state.signedCount} of {state.totalCount} signers have signed. The form will be sent after every required signer signs.
+        </p>
+      </section>
+    );
   }
   if (state.status === 'authorizing-payment') {
     return (
@@ -1832,6 +1942,9 @@ function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
     }
     if (error.featureKey === 'payment') {
       return 'This form requires payment, but this site is not set up to accept payments.';
+    }
+    if (error.featureKey === 'multiParty') {
+      return 'This form requires multiple signers, but this site is not set up for joint submissions.';
     }
   }
   return 'This form requires a capability this site does not currently support. Try again later, or contact the sender for help.';

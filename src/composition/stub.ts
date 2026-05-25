@@ -2,6 +2,7 @@ import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
   EmbeddableExtractor,
+  MultiPartyPolicyExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
   RecordLifecycleExtractor,
@@ -228,6 +229,7 @@ export function createStubComposition(): Composition {
       new PaymentRequirementExtractor(),
       new EmbeddableExtractor(),
       new TrustedReviewerPolicyExtractor(),
+      new MultiPartyPolicyExtractor(),
       new RecordLifecycleExtractor(),
     ]),
   };

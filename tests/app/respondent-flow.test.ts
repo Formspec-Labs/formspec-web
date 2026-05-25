@@ -5,11 +5,16 @@ import { sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-confo
 import {
   assertIdentityPolicySatisfied,
   buildIntakeHandoff,
+  createMultiPartySignerProgress,
   formAssuranceFloorForDefinition,
   hydrateEngineFromData,
   identityClaimMeetsAssurance,
   identitySubjectChanged,
   isIdentityInteractionStarted,
+  multiPartyComplete,
+  multiPartyDraftKey,
+  recordMultiPartySigner,
+  requiredMultiPartySlots,
   selectBootIdentityOption,
   signInOptionsForIdentityPolicy,
   subjectRefInvalidatedByIdentityChange,
@@ -24,6 +29,7 @@ import { stubPaymentRailAdapter } from '../../src/adapters/stub/payment-rail-ada
 import { stubSubmitTransport } from '../../src/adapters/stub/submit-transport.ts';
 import type { RuntimeFeatureKey } from '../../src/policy/feature-keys.ts';
 import type { ResolvedRuntimeProfile } from '../../src/policy/index.ts';
+import type { ResolvedMultiPartyPolicy } from '../../src/policy/index.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 
 beforeAll(async () => {
@@ -90,6 +96,105 @@ describe('respondent flow helpers', () => {
     // smell does not silently come back.
     expect(handoff.extensions).not.toHaveProperty('x-formspec-draft-key');
     expect(handoff.responseHash).toMatch(/^sha256:[a-f0-9]+$/);
+  });
+
+  it('builds a multi-party handoff with party-scoped signer records', async () => {
+    const idempotencyKeyA = generateIdempotencyKey();
+    const idempotencyKeyB = generateIdempotencyKey();
+    const policy = multiPartyPolicy();
+    const started = createMultiPartySignerProgress(policy);
+    const afterA = await recordMultiPartySigner({
+      claim: claim('subject-a'),
+      idempotencyKey: idempotencyKeyA,
+      policy,
+      progress: started,
+      response: { ...sampleFormResponse, id: idempotencyKeyA },
+    });
+    expect(multiPartyComplete(policy, afterA)).toBe(false);
+    expect(afterA.activePartyRef).toBe('spouse-b');
+
+    const afterB = await recordMultiPartySigner({
+      claim: claim('subject-b'),
+      idempotencyKey: idempotencyKeyB,
+      policy,
+      progress: afterA,
+      response: { ...sampleFormResponse, id: idempotencyKeyB },
+    });
+    expect(multiPartyComplete(policy, afterB)).toBe(true);
+
+    const handoff = await buildIntakeHandoff({
+      definition: demoSampleForm,
+      response: { ...sampleFormResponse, id: idempotencyKeyB },
+      validationReport: null,
+      draftKey: multiPartyDraftKey(
+        { formUrl: demoSampleForm.url, formVersion: demoSampleForm.version, subjectRef: 'subject-b' },
+        afterB.activePartyRef,
+      ),
+      claim: claim('subject-b'),
+      idempotencyKey: idempotencyKeyB,
+      multiParty: {
+        policy,
+        progress: afterB,
+        activePartyRef: afterB.activePartyRef,
+      },
+    });
+
+    expect(handoff.extensions).toMatchObject({
+      'x-formspec-active-party-ref': 'spouse-b',
+      'x-formspec-multi-party': {
+        tier: 'coEqual',
+        partySignatures: [
+          { partyRef: 'spouse-a', subjectRef: 'subject-a' },
+          { partyRef: 'spouse-b', subjectRef: 'subject-b' },
+        ],
+      },
+    });
+  });
+
+  it('enforces distinct authenticated identities per required party', async () => {
+    const policy = multiPartyPolicy();
+    const afterA = await recordMultiPartySigner({
+      claim: claim('same-subject'),
+      idempotencyKey: generateIdempotencyKey(),
+      policy,
+      progress: createMultiPartySignerProgress(policy),
+      response: sampleFormResponse,
+    });
+    await expect(
+      recordMultiPartySigner({
+        claim: claim('same-subject'),
+        idempotencyKey: generateIdempotencyKey(),
+        policy,
+        progress: afterA,
+        response: sampleFormResponse,
+      }),
+    ).rejects.toThrow(/distinct authenticated identity/);
+  });
+
+  it('expands required party slots from Definition role cardinality minimums', () => {
+    const policy: ResolvedMultiPartyPolicy = {
+      ...multiPartyPolicy(),
+      parties: [
+        {
+          roleId: 'adult',
+          role: 'coEqual',
+          cardinality: { min: 2, max: 'unbounded' },
+          visibilityScope: 'shared',
+        },
+        {
+          roleId: 'sponsor',
+          label: 'Sponsor',
+          role: 'asymmetricPrimary',
+          cardinality: { min: 1, max: 1 },
+          visibilityScope: 'scoped',
+        },
+      ],
+    };
+    expect(requiredMultiPartySlots(policy)).toEqual([
+      { partyRef: 'adult:1', roleId: 'adult', label: 'Adult 1' },
+      { partyRef: 'adult:2', roleId: 'adult', label: 'Adult 2' },
+      { partyRef: 'sponsor', roleId: 'sponsor', label: 'Sponsor' },
+    ]);
   });
 
   it('selects no boot identity when no anonymous option is on offer', () => {
@@ -368,6 +473,29 @@ function productionProfile(enabled: ReadonlyArray<string> = []): ResolvedRuntime
     disabled: new Map(),
     limits: {},
   } as ResolvedRuntimeProfile;
+}
+
+function multiPartyPolicy(): ResolvedMultiPartyPolicy {
+  return {
+    tier: 'coEqual',
+    invitationChannel: 'magic-link',
+    parties: [
+      {
+        roleId: 'spouse-a',
+        label: 'Spouse A',
+        role: 'coEqual',
+        cardinality: { min: 1, max: 1 },
+        visibilityScope: 'shared',
+      },
+      {
+        roleId: 'spouse-b',
+        label: 'Spouse B',
+        role: 'coEqual',
+        cardinality: { min: 1, max: 1 },
+        visibilityScope: 'shared',
+      },
+    ],
+  };
 }
 
 function paymentRequiredDefinition(): FormDefinition {

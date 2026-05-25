@@ -90,6 +90,11 @@ export function draftKeyFromHandoff(handoff: IntakeHandoff): DraftKey {
     formUrl: handoff.definitionRef.url,
     formVersion: handoff.definitionRef.version,
     subjectRef: handoff.subjectRef ?? undefined,
+    partyRef: partyRefFromHandoff(handoff),
   };
 }
 
+function partyRefFromHandoff(handoff: IntakeHandoff): string | undefined {
+  const candidate = handoff.extensions?.['x-formspec-active-party-ref'];
+  return typeof candidate === 'string' && candidate.length > 0 ? candidate : undefined;
+}

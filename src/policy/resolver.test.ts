@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { resolveRuntimeFeatures } from './resolver.ts';
-import { getTrustedReviewerRuntimeConfig } from './policy-shapes.ts';
+import {
+  getMultiPartyRuntimeConfig,
+  getTrustedReviewerRuntimeConfig,
+} from './policy-shapes.ts';
 import type {
   FormRuntimePolicy,
   InstanceCapabilities,
@@ -29,7 +32,7 @@ const allAvailable: InstanceCapabilities = {
   bringYourOwnAssistant: 'unavailable',
   safeAddress: 'available',
   duressAware: 'unavailable',
-  multiParty: 'unavailable',
+  multiParty: 'available',
   recordLifecycle: 'available',
 };
 
@@ -165,6 +168,87 @@ describe('resolveRuntimeFeatures — limits.trustedReviewer validation (FW-0113)
         },
       }),
     ).toThrowError(/respondentOnlyFieldPointers/);
+  });
+});
+
+describe('resolveRuntimeFeatures — multiParty policy (FW-0061)', () => {
+  const multiParty = {
+    tier: 'coEqual',
+    invitationChannel: 'magic-link',
+    parties: [
+      {
+        roleId: 'spouse-a',
+        label: 'Spouse A',
+        role: 'coEqual',
+        cardinality: { min: 1, max: 1 },
+        visibilityScope: 'shared',
+      },
+      {
+        roleId: 'spouse-b',
+        label: 'Spouse B',
+        role: 'coEqual',
+        cardinality: { min: 1, max: 1 },
+        visibilityScope: 'shared',
+      },
+    ],
+  } as const;
+
+  it('enables multiParty and exposes the resolved signer policy', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: allAvailable,
+      org: { features: { multiParty: 'allowed' } },
+      form: {
+        features: { multiParty: 'required' },
+        limits: { multiParty },
+      },
+    });
+    expect(profile.enabled.has('multiParty')).toBe(true);
+    expect(getMultiPartyRuntimeConfig(profile)).toMatchObject({
+      tier: 'coEqual',
+      invitationChannel: 'magic-link',
+      parties: [
+        { roleId: 'spouse-a', role: 'coEqual' },
+        { roleId: 'spouse-b', role: 'coEqual' },
+      ],
+    });
+  });
+
+  it('rejects an enabled multiParty feature without a signer policy block', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: { features: { multiParty: 'allowed' } },
+        form: { features: { multiParty: 'required' } },
+      }),
+    ).toThrowError(/limits.multiParty/);
+  });
+
+  it('fails closed for safe-address x party-policy empty intersections', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: { features: { multiParty: 'allowed' } },
+        form: {
+          features: { multiParty: 'required' },
+          limits: {
+            multiParty: {
+              ...multiParty,
+              parties: [
+                {
+                  ...multiParty.parties[0],
+                  visibleTo: ['parent-a'],
+                  safeAddressAudience: ['issuer-verification'],
+                },
+                multiParty.parties[1],
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/empty safe-address x party-policy audience intersection/);
   });
 });
 

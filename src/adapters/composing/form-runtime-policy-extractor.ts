@@ -19,6 +19,7 @@
 import {
   extractAttachmentRequirement,
   extractEmbeddableOptIn,
+  extractMultiPartyPolicy,
   extractOfflineSubmitOptIn,
   extractPaymentRequirement,
   extractRecordLifecycleOptIn,
@@ -76,6 +77,12 @@ export class RecordLifecycleExtractor implements FormRuntimePolicyExtractor {
     return recordLifecycle
       ? { features: { recordLifecycle }, recordLifecycle: policy }
       : { features: {} };
+  }
+}
+
+export class MultiPartyPolicyExtractor implements FormRuntimePolicyExtractor {
+  extract(definition: FormDefinition): FormRuntimePolicy {
+    return extractMultiPartyPolicy(definition) ?? { features: {} };
   }
 }
 

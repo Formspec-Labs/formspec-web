@@ -48,5 +48,6 @@ function serializeKey(key: DraftKey): string {
     formUrl: key.formUrl,
     formVersion: key.formVersion ?? null,
     subjectRef: key.subjectRef ?? null,
+    partyRef: key.partyRef ?? null,
   });
 }

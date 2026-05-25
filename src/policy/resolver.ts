@@ -26,6 +26,7 @@ import {
   type FormFeaturePolicyMode,
   type FormRuntimePolicy,
   type InstanceCapabilities,
+  type MultiPartyRuntimeConfig,
   type OrgFeaturePolicyMode,
   type OrgRuntimePolicy,
   type RecordLifecycleCorrectablePolicy,
@@ -79,6 +80,9 @@ export function resolveRuntimeFeatures(
   const recordLifecycle = enabled.has('recordLifecycle')
     ? resolveRecordLifecyclePolicy(input.org.recordLifecycle, input.form.recordLifecycle)
     : undefined;
+  const multiParty = enabled.has('multiParty')
+    ? resolveMultiPartyPolicy(limits.multiParty)
+    : undefined;
 
   return Object.freeze({
     mode: input.mode,
@@ -86,6 +90,7 @@ export function resolveRuntimeFeatures(
     disabled: freezeMap(disabled),
     limits: Object.freeze(limits),
     recordLifecycle,
+    multiParty,
   });
 }
 
@@ -232,6 +237,8 @@ function validateInput(input: ResolveRuntimeFeaturesInput): void {
   validateEmbedLimits(input.org.limits?.embed);
   validateTrustedReviewerLimits(input.org.limits?.trustedReviewer, 'org');
   validateTrustedReviewerLimits(input.form.limits?.trustedReviewer, 'form');
+  validateMultiPartyLimits(input.org.limits?.multiParty, 'org');
+  validateMultiPartyLimits(input.form.limits?.multiParty, 'form');
   validateRecordLifecyclePolicy('org', input.org.recordLifecycle);
   validateRecordLifecyclePolicy('form', input.form.recordLifecycle);
 }
@@ -374,6 +381,186 @@ function validateTrustedReviewerLimits(value: unknown, layer: 'org' | 'form'): v
       'limits.trustedReviewer.respondentOnlyFieldPointers must be an array of JSON pointers',
     );
   }
+}
+
+function validateMultiPartyLimits(value: unknown, layer: 'org' | 'form'): void {
+  if (value === undefined) return;
+  if (!isPlainObject(value)) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.multiParty must be an object',
+    );
+  }
+  const candidate = value as unknown as MultiPartyRuntimeConfig;
+  if (candidate.tier !== 'coEqual' && candidate.tier !== 'asymmetric') {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.multiParty.tier must be coEqual | asymmetric',
+    );
+  }
+  if (!Array.isArray(candidate.parties) || candidate.parties.length < 2) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.multiParty.parties must declare at least two party role slots',
+    );
+  }
+  const roleIds = new Set<string>();
+  for (const partyValue of candidate.parties) {
+    const party = partyValue as unknown as MultiPartyRuntimeConfig['parties'][number];
+    if (!isPlainObject(party)) {
+      throw new InvalidRuntimePolicyError(
+        layer,
+        'limits.multiParty.parties entries must be objects',
+      );
+    }
+    if (typeof party.roleId !== 'string' || party.roleId.length === 0) {
+      throw new InvalidRuntimePolicyError(
+        layer,
+        'limits.multiParty.parties[].roleId must be a non-empty string',
+      );
+    }
+    if (roleIds.has(party.roleId)) {
+      throw new InvalidRuntimePolicyError(
+        layer,
+        `limits.multiParty.parties roleId "${party.roleId}" is duplicated`,
+      );
+    }
+    roleIds.add(party.roleId);
+    if (
+      party.role !== 'coEqual' &&
+      party.role !== 'asymmetricPrimary' &&
+      party.role !== 'asymmetricSecondary' &&
+      party.role !== 'guardianFor'
+    ) {
+      throw new InvalidRuntimePolicyError(
+        layer,
+        'limits.multiParty.parties[].role must be coEqual | asymmetricPrimary | asymmetricSecondary | guardianFor',
+      );
+    }
+    if (party.visibilityScope !== 'shared' && party.visibilityScope !== 'scoped') {
+      throw new InvalidRuntimePolicyError(
+        layer,
+        'limits.multiParty.parties[].visibilityScope must be shared | scoped',
+      );
+    }
+    validateMultiPartyCardinality(layer, party.cardinality as MultiPartyRuntimeConfig['parties'][number]['cardinality']);
+    validateOptionalStringArray(layer, 'visibleTo', party.visibleTo as readonly string[] | undefined);
+    validateOptionalStringArray(layer, 'editableBy', party.editableBy as readonly string[] | undefined);
+    validateOptionalStringArray(layer, 'signedBy', party.signedBy as readonly string[] | undefined);
+    validateOptionalStringArray(layer, 'safeAddressAudience', party.safeAddressAudience as readonly string[] | undefined);
+    if (party.safeAddressAudience && party.visibleTo) {
+      const visibleSet = new Set(party.visibleTo);
+      const intersection = party.safeAddressAudience.filter((entry) => visibleSet.has(entry));
+      if (intersection.length === 0) {
+        throw new InvalidRuntimePolicyError(
+          layer,
+          `limits.multiParty.parties roleId "${party.roleId}" has an empty safe-address x party-policy audience intersection`,
+        );
+      }
+    }
+  }
+  if (
+    candidate.invitationChannel !== undefined &&
+    candidate.invitationChannel !== 'magic-link' &&
+    candidate.invitationChannel !== 'wos-task' &&
+    candidate.invitationChannel !== 'out-of-band'
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.multiParty.invitationChannel must be magic-link | wos-task | out-of-band',
+    );
+  }
+  const deadlinePolicy = candidate.deadlinePolicy;
+  if (deadlinePolicy !== undefined) {
+    if (!isPlainObject(deadlinePolicy)) {
+      throw new InvalidRuntimePolicyError(
+        layer,
+        'limits.multiParty.deadlinePolicy must be an object',
+      );
+    }
+    if (
+      deadlinePolicy.expirationAction !== 'void-submission' &&
+      deadlinePolicy.expirationAction !== 'convert-to-partial'
+    ) {
+      throw new InvalidRuntimePolicyError(
+        layer,
+        'limits.multiParty.deadlinePolicy.expirationAction must be void-submission | convert-to-partial',
+      );
+    }
+    if (
+      deadlinePolicy.perPartyDeadline !== undefined &&
+      (typeof deadlinePolicy.perPartyDeadline !== 'string' ||
+        deadlinePolicy.perPartyDeadline.length === 0)
+    ) {
+      throw new InvalidRuntimePolicyError(
+        layer,
+        'limits.multiParty.deadlinePolicy.perPartyDeadline must be a non-empty string',
+      );
+    }
+  }
+}
+
+function validateMultiPartyCardinality(
+  layer: 'org' | 'form',
+  value: MultiPartyRuntimeConfig['parties'][number]['cardinality'],
+): void {
+  if (!isPlainObject(value)) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.multiParty.parties[].cardinality must be an object',
+    );
+  }
+  if (!Number.isInteger(value.min) || value.min < 1) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.multiParty.parties[].cardinality.min must be a positive integer',
+    );
+  }
+  if (
+    value.max !== 'unbounded' &&
+    (!Number.isInteger(value.max) || value.max < value.min)
+  ) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      'limits.multiParty.parties[].cardinality.max must be unbounded or an integer >= min',
+    );
+  }
+}
+
+function validateOptionalStringArray(
+  layer: 'org' | 'form',
+  property: string,
+  value: readonly string[] | undefined,
+): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
+    throw new InvalidRuntimePolicyError(
+      layer,
+      `limits.multiParty.parties[].${property} must be an array of non-empty strings`,
+    );
+  }
+}
+
+function resolveMultiPartyPolicy(value: unknown): MultiPartyRuntimeConfig {
+  validateMultiPartyLimits(value, 'form');
+  const policy = value as MultiPartyRuntimeConfig | undefined;
+  if (!policy) {
+    throw new InvalidRuntimePolicyError(
+      'form',
+      'multiParty is enabled but limits.multiParty is not declared',
+    );
+  }
+  return Object.freeze({
+    ...policy,
+    invitationChannel: policy.invitationChannel ?? 'out-of-band',
+    parties: Object.freeze(policy.parties.map((party) => Object.freeze({
+      ...party,
+      cardinality: Object.freeze({ ...party.cardinality }),
+    }))),
+    deadlinePolicy: policy.deadlinePolicy
+      ? Object.freeze({ ...policy.deadlinePolicy })
+      : undefined,
+  });
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

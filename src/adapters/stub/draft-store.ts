@@ -7,7 +7,7 @@ import type { DraftKey, DraftStore, FormResponse } from '../../ports/draft-store
 export function stubDraftStore(): DraftStore {
   const store = new Map<string, FormResponse>();
   const keyStr = (key: DraftKey): string =>
-    `${key.subjectRef ?? '<anon>'}|${key.formUrl}|${key.formVersion ?? 'latest'}`;
+    `${key.subjectRef ?? '<anon>'}|${key.partyRef ?? '<single>'}|${key.formUrl}|${key.formVersion ?? 'latest'}`;
 
   return {
     async load(key) {
@@ -19,9 +19,12 @@ export function stubDraftStore(): DraftStore {
     async list(subjectRef) {
       const result: DraftKey[] = [];
       for (const k of store.keys()) {
-        const [subject, formUrl, formVersion] = k.split('|');
+        const [subject, partyRef, formUrl, formVersion] = k.split('|');
         if (subject === subjectRef && formUrl !== undefined) {
           const entry: DraftKey = { formUrl, subjectRef };
+          if (partyRef && partyRef !== '<single>') {
+            entry.partyRef = partyRef;
+          }
           if (formVersion && formVersion !== 'latest') {
             entry.formVersion = formVersion;
           }

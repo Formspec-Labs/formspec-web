@@ -18,6 +18,12 @@ export interface DraftKey {
   formUrl: string;
   formVersion?: string;
   subjectRef?: string;
+  /**
+   * FW-0061: optional party-scoped draft slice. Single-party flows leave this
+   * unset; multi-party flows bind saves/loads to the active Definition role
+   * slot without adding a new DraftStore method.
+   */
+  partyRef?: string;
 }
 
 export interface DraftStore {

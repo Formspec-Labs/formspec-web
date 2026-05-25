@@ -170,6 +170,60 @@ export interface RecordLifecyclePolicy {
   readonly disputable?: RecordLifecycleDisputablePolicy;
 }
 
+export type MultiPartyTier = 'coEqual' | 'asymmetric';
+export type MultiPartyRoleClass =
+  | 'coEqual'
+  | 'asymmetricPrimary'
+  | 'asymmetricSecondary'
+  | 'guardianFor';
+export type MultiPartyInvitationChannel = 'magic-link' | 'wos-task' | 'out-of-band';
+export type MultiPartyExpirationAction = 'void-submission' | 'convert-to-partial';
+
+export interface MultiPartyCardinality {
+  readonly min: number;
+  readonly max: number | 'unbounded';
+}
+
+export interface MultiPartyAssuranceFloor {
+  readonly ial?: string;
+  readonly aal?: string;
+  readonly fal?: string;
+}
+
+export type MultiPartyVisibilityScope = 'shared' | 'scoped';
+
+export interface MultiPartyRolePolicy {
+  readonly roleId: string;
+  readonly label?: string;
+  readonly role: MultiPartyRoleClass;
+  readonly cardinality: MultiPartyCardinality;
+  readonly assuranceFloor?: MultiPartyAssuranceFloor;
+  readonly visibilityScope: MultiPartyVisibilityScope;
+  readonly visibleTo?: readonly string[];
+  readonly editableBy?: readonly string[];
+  readonly signedBy?: readonly string[];
+  /**
+   * FW-0049 x FW-0050 composition check. When declared, the runtime intersects
+   * the party-visible set with this safe-* audience set and fails closed when
+   * the intersection is empty.
+   */
+  readonly safeAddressAudience?: readonly string[];
+}
+
+export interface MultiPartyDeadlinePolicy {
+  readonly perPartyDeadline?: string;
+  readonly expirationAction: MultiPartyExpirationAction;
+}
+
+export interface MultiPartyRuntimeConfig {
+  readonly tier: MultiPartyTier;
+  readonly parties: readonly MultiPartyRolePolicy[];
+  readonly invitationChannel: MultiPartyInvitationChannel;
+  readonly deadlinePolicy?: MultiPartyDeadlinePolicy;
+}
+
+export type ResolvedMultiPartyPolicy = MultiPartyRuntimeConfig;
+
 export type ResolvedRecordLifecycleWindow =
   | { readonly state: 'open' }
   | { readonly state: 'closes-at'; readonly closesAt: string }
@@ -248,6 +302,13 @@ export interface ResolvedRuntimeProfile {
   readonly disabled: ReadonlyMap<RuntimeFeatureKey, DisabledReason>;
   readonly limits: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
   readonly recordLifecycle?: ResolvedRecordLifecyclePolicy;
+  readonly multiParty?: ResolvedMultiPartyPolicy;
+}
+
+export function getMultiPartyRuntimeConfig(
+  profile: ResolvedRuntimeProfile,
+): ResolvedMultiPartyPolicy | undefined {
+  return profile.enabled.has('multiParty') ? profile.multiParty : undefined;
 }
 
 export function getTrustedReviewerRuntimeConfig(

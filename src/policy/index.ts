@@ -8,6 +8,7 @@ export {
 } from './feature-keys.ts';
 export {
   getTrustedReviewerRuntimeConfig,
+  getMultiPartyRuntimeConfig,
   getEmbedLimits,
   isCapabilityAvailability,
   isFormFeaturePolicyMode,
@@ -19,6 +20,16 @@ export {
   type FormFeaturePolicyMode,
   type FormRuntimePolicy,
   type InstanceCapabilities,
+  type MultiPartyAssuranceFloor,
+  type MultiPartyCardinality,
+  type MultiPartyDeadlinePolicy,
+  type MultiPartyExpirationAction,
+  type MultiPartyInvitationChannel,
+  type MultiPartyRoleClass,
+  type MultiPartyRolePolicy,
+  type MultiPartyRuntimeConfig,
+  type MultiPartyTier,
+  type MultiPartyVisibilityScope,
   type OrgFeaturePolicyMode,
   type OrgRuntimePolicy,
   type RecordLifecycleCorrectablePolicy,
@@ -33,6 +44,7 @@ export {
   type ResolvedRecordLifecycleWindow,
   type ResolvedRecordLifecycleWithdrawablePolicy,
   type ResolvedRuntimeProfile,
+  type ResolvedMultiPartyPolicy,
   type TrustedReviewerRuntimeConfig,
 } from './policy-shapes.ts';
 export {

@@ -8,6 +8,7 @@ import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
   EmbeddableExtractor,
+  MultiPartyPolicyExtractor,
   OfflineSubmitRequirementExtractor,
   PaymentRequirementExtractor,
   RecordLifecycleExtractor,
@@ -203,6 +204,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       new PaymentRequirementExtractor(),
       new EmbeddableExtractor(),
       new TrustedReviewerPolicyExtractor(),
+      new MultiPartyPolicyExtractor(),
       new RecordLifecycleExtractor(),
     ]),
   };

@@ -76,11 +76,12 @@ export const FEATURE_PORT_MAP = {
   // port shape until the issuer-webhook and WOS-task adapters are reduced
   // together, so this key is unavailable-only until that build lands.
   duressAware: [],
-  // FW-0061 preallocation. FW-0050 rejects a new PartyAuthority port for the
-  // current design and extends existing DraftStore / IdentityProvider /
-  // SubmitTransport semantics instead. The empty binding keeps the key
-  // unavailable-only until FW-0061 materializes a concrete capability proof.
-  multiParty: [],
+  // FW-0061 materialized proof. No PartyAuthority port is minted: the
+  // capability is backed by the existing always-present DraftStore,
+  // IdentityProvider, and SubmitTransport seams. `unavailable` compositions
+  // may still keep those MVP ports live for single-party forms; the coherence
+  // assertion special-cases that extension posture.
+  multiParty: ['draftStore', 'identityProvider', 'submitTransport'],
   // FW-0038. FW-0034 names the capability `recordLifecycle`; the build owns
   // the LifecycleActionClient transport shape.
   recordLifecycle: 'lifecycleActionClient',
