@@ -80,7 +80,13 @@ export const sampleLifecycleActionSnapshot: LifecycleActionSnapshot = {
   caseUrn: 'urn:wos:case_conformance_0001',
   updatedAt: '2026-05-24T12:00:00.000Z',
   actions: [
-    { action: 'correct', enabled: true, window: { state: 'open' }, requiresReason: true },
+    {
+      action: 'correct',
+      enabled: true,
+      window: { state: 'open' },
+      correctableFieldSet: ['/householdSize'],
+      requiresReason: true,
+    },
     {
       action: 'withdraw',
       enabled: true,

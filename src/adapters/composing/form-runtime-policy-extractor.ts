@@ -22,6 +22,7 @@ import {
   extractOfflineSubmitOptIn,
   extractPaymentRequirement,
   extractRecordLifecycleOptIn,
+  extractRecordLifecyclePolicy,
   extractTrustedReviewerPolicy,
 } from '../../policy/extract-form-policy.ts';
 import type { FormRuntimePolicy } from '../../policy/policy-shapes.ts';
@@ -71,7 +72,10 @@ export class TrustedReviewerPolicyExtractor implements FormRuntimePolicyExtracto
 export class RecordLifecycleExtractor implements FormRuntimePolicyExtractor {
   extract(definition: FormDefinition): FormRuntimePolicy {
     const recordLifecycle = extractRecordLifecycleOptIn(definition);
-    return recordLifecycle ? { features: { recordLifecycle } } : { features: {} };
+    const policy = extractRecordLifecyclePolicy(definition);
+    return recordLifecycle
+      ? { features: { recordLifecycle }, recordLifecycle: policy }
+      : { features: {} };
   }
 }
 
@@ -81,11 +85,20 @@ export class CompositeFormRuntimePolicyExtractor implements FormRuntimePolicyExt
   extract(definition: FormDefinition): FormRuntimePolicy {
     const features: FormRuntimePolicy['features'] = {};
     const limits: NonNullable<FormRuntimePolicy['limits']> = {};
+    const recordLifecycle: NonNullable<FormRuntimePolicy['recordLifecycle']> = {};
     for (const extractor of this.extractors) {
       const policy = extractor.extract(definition);
       Object.assign(features, policy.features);
       Object.assign(limits, policy.limits);
+      Object.assign(recordLifecycle, policy.recordLifecycle);
     }
-    return Object.keys(limits).length > 0 ? { features, limits } : { features };
+    const output: { features: FormRuntimePolicy['features']; limits?: FormRuntimePolicy['limits']; recordLifecycle?: FormRuntimePolicy['recordLifecycle'] } = { features };
+    if (Object.keys(limits).length > 0) {
+      output.limits = limits;
+    }
+    if (Object.keys(recordLifecycle).length > 0) {
+      output.recordLifecycle = recordLifecycle;
+    }
+    return output;
   }
 }

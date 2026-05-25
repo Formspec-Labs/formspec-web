@@ -31,6 +31,97 @@ describe('stubLifecycleActionClient', () => {
     expect(receipt.event.recordedAs).toBe('amendment');
   });
 
+  it('routes correct to correction only for declared fields before decision', async () => {
+    const adapter = stubLifecycleActionClient({
+      correctableFieldSet: ['/householdSize'],
+      now: () => new Date('2026-05-25T12:00:00.000Z'),
+    });
+    adapter.registerLifecycle(sampleLifecycleActionSnapshot);
+    const receipt = await adapter.submitCorrection(
+      {
+        caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+        changedFields: [
+          {
+            path: '/householdSize',
+            label: 'Household size',
+            originalValue: { text: '1' },
+            correctedValue: { text: '3' },
+          },
+        ],
+        caseDecisionReached: false,
+        reason: 'I typed the wrong household size.',
+      },
+      generateIdempotencyKey(),
+    );
+    expect(receipt.event.kind).toBe('correction');
+    if (receipt.event.kind !== 'correction') throw new Error('unreachable');
+    expect(receipt.event.recordedAs).toBe('correction');
+  });
+
+  it('routes correct to amendment after a decision has been reached', async () => {
+    const adapter = stubLifecycleActionClient({
+      correctableFieldSet: ['/householdSize'],
+      now: () => new Date('2026-05-25T12:00:00.000Z'),
+    });
+    adapter.registerLifecycle(sampleLifecycleActionSnapshot);
+    const receipt = await adapter.submitCorrection(
+      {
+        caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+        changedFields: [{ path: '/householdSize', label: 'Household size' }],
+        caseDecisionReached: true,
+        reason: 'The decision has already been issued.',
+      },
+      generateIdempotencyKey(),
+    );
+    expect(receipt.event.kind).toBe('correction');
+    if (receipt.event.kind !== 'correction') throw new Error('unreachable');
+    expect(receipt.event.recordedAs).toBe('amendment');
+  });
+
+  it('routes correct to amendment when the request introduces a new field', async () => {
+    const adapter = stubLifecycleActionClient({
+      correctableFieldSet: ['/householdSize'],
+      now: () => new Date('2026-05-25T12:00:00.000Z'),
+    });
+    adapter.registerLifecycle(sampleLifecycleActionSnapshot);
+    const receipt = await adapter.submitCorrection(
+      {
+        caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+        changedFields: [
+          {
+            path: '/householdSize',
+            label: 'Household size',
+            correctedValue: { text: '3' },
+          },
+        ],
+        reason: 'I am adding the omitted value.',
+      },
+      generateIdempotencyKey(),
+    );
+    expect(receipt.event.kind).toBe('correction');
+    if (receipt.event.kind !== 'correction') throw new Error('unreachable');
+    expect(receipt.event.recordedAs).toBe('amendment');
+  });
+
+  it('rejects correction when no correctable field set is declared', async () => {
+    const adapter = stubLifecycleActionClient();
+    adapter.registerLifecycle({
+      ...sampleLifecycleActionSnapshot,
+      actions: [{ action: 'correct', enabled: true, requiresReason: true }],
+    });
+    await expect(
+      adapter.submitCorrection(
+        {
+          caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+          changedFields: [{ path: '/householdSize', label: 'Household size' }],
+          correctableFieldSet: [],
+          reason: 'No field set exists.',
+        },
+        generateIdempotencyKey(),
+      ),
+    ).rejects.toThrow(/field set/i);
+  });
+
   it('keeps submitted events on the lifecycle snapshot', async () => {
     const adapter = stubLifecycleActionClient({
       now: () => new Date('2026-05-25T12:00:00.000Z'),

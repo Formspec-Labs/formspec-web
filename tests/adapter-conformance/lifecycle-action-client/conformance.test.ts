@@ -5,7 +5,7 @@ import { stubLifecycleActionClient } from '../../../src/adapters/stub/lifecycle-
 import { defineLifecycleActionClientConformance } from '../_framework/conformance.ts';
 
 defineLifecycleActionClientConformance('stub LifecycleActionClient conformance', () => {
-  const adapter = stubLifecycleActionClient();
+  const adapter = stubLifecycleActionClient({ signerRefs: ['signer:conformance'] });
   return {
     adapter,
     registerLifecycle: (snapshot) => adapter.registerLifecycle(snapshot),

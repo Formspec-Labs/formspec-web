@@ -12,6 +12,11 @@ import type { Money } from '../ports/payment-rail-adapter.ts';
 import type {
   FormFeaturePolicyMode,
   FormRuntimePolicy,
+  RecordLifecycleCorrectablePolicy,
+  RecordLifecycleDisputablePolicy,
+  RecordLifecyclePolicy,
+  RecordLifecycleWindowPolicy,
+  RecordLifecycleWithdrawablePolicy,
   TrustedReviewerRuntimeConfig,
 } from './policy-shapes.ts';
 
@@ -116,25 +121,128 @@ export function extractRecordLifecycleOptIn(
   const extensionValue = definition.extensions?.['x-formspec-record-lifecycle'];
   const governanceValue = (definition as { governance?: { recordLifecycle?: unknown } })
     .governance?.recordLifecycle;
-  return recordLifecycleBlockEnablesAnyAction(extensionValue) ||
-    recordLifecycleBlockEnablesAnyAction(governanceValue)
+  const policy = extractRecordLifecyclePolicy(definition);
+  return extensionValue === true ||
+    governanceValue === true ||
+    recordLifecycleBlockEnablesAnyAction(policy)
     ? 'optional'
     : undefined;
 }
 
+export function extractRecordLifecyclePolicy(
+  definition: FormDefinition,
+): RecordLifecyclePolicy | undefined {
+  const extensionValue = definition.extensions?.['x-formspec-record-lifecycle'];
+  const governanceValue = (definition as { governance?: { recordLifecycle?: unknown } })
+    .governance?.recordLifecycle;
+  return (
+    parseRecordLifecycleBlock(governanceValue) ??
+    parseRecordLifecycleBlock(extensionValue)
+  );
+}
+
 function recordLifecycleBlockEnablesAnyAction(value: unknown): boolean {
-  if (value === true) return true;
   if (typeof value !== 'object' || value === null) return false;
-  const block = value as {
-    correctable?: { enabled?: unknown };
-    withdrawable?: { enabled?: unknown };
-    disputable?: { enabled?: unknown };
-  };
+  const block = value as RecordLifecyclePolicy;
   return (
     block.correctable?.enabled === true ||
     block.withdrawable?.enabled === true ||
     block.disputable?.enabled === true
   );
+}
+
+function parseRecordLifecycleBlock(value: unknown): RecordLifecyclePolicy | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const block = value as Record<string, unknown>;
+  const policy: RecordLifecyclePolicy = {
+    correctable: parseCorrectablePolicy(block.correctable),
+    withdrawable: parseWithdrawablePolicy(block.withdrawable),
+    disputable: parseDisputablePolicy(block.disputable),
+  };
+  return recordLifecycleBlockEnablesAnyAction(policy) ? policy : undefined;
+}
+
+function parseCorrectablePolicy(value: unknown): RecordLifecycleCorrectablePolicy | undefined {
+  const block = parseActionBlock(value);
+  if (!block) return undefined;
+  return {
+    enabled: block.enabled,
+    correctableFieldSet: parseStringArray(block.correctableFieldSet),
+    window: parseRecordLifecycleWindow(block.window),
+    requiresEvidence: parseBoolean(block.requiresEvidence),
+    requiresReason: parseBoolean(block.requiresReason),
+  };
+}
+
+function parseWithdrawablePolicy(value: unknown): RecordLifecycleWithdrawablePolicy | undefined {
+  const block = parseActionBlock(value);
+  if (!block) return undefined;
+  const partyScope = block.partyScope;
+  const preDeterminationKernelMode = block.preDeterminationKernelMode;
+  const postDeterminationIntent = block.postDeterminationIntent;
+  return {
+    enabled: block.enabled,
+    window: parseRecordLifecycleWindow(block.window),
+    requiresReason: parseBoolean(block.requiresReason),
+    preDeterminationKernelMode:
+      preDeterminationKernelMode === 'applicant-withdrawn' ? preDeterminationKernelMode : undefined,
+    postDeterminationIntent:
+      postDeterminationIntent === 'rescission-requested' ? postDeterminationIntent : undefined,
+    requiresIssuerAcceptance: parseBoolean(block.requiresIssuerAcceptance),
+    partyScope:
+      partyScope === 'any-party' || partyScope === 'all-parties-must-agree'
+        ? partyScope
+        : undefined,
+  };
+}
+
+function parseDisputablePolicy(value: unknown): RecordLifecycleDisputablePolicy | undefined {
+  const block = parseActionBlock(value);
+  if (!block) return undefined;
+  return {
+    enabled: block.enabled,
+    window: parseRecordLifecycleWindow(block.window),
+    requiresEvidence: parseBoolean(block.requiresEvidence),
+    requiresReason: parseBoolean(block.requiresReason),
+    signerOnly: parseBoolean(block.signerOnly),
+  };
+}
+
+function parseActionBlock(value: unknown): (Record<string, unknown> & { enabled: boolean }) | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const block = value as Record<string, unknown>;
+  if (typeof block.enabled !== 'boolean') return undefined;
+  return block as Record<string, unknown> & { enabled: boolean };
+}
+
+function parseRecordLifecycleWindow(value: unknown): RecordLifecycleWindowPolicy | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const block = value as Record<string, unknown>;
+  if (block.state === 'open') return { state: 'open' };
+  if (block.state === 'closes-at' && typeof block.closesAt === 'string') {
+    return { state: 'closes-at', closesAt: block.closesAt };
+  }
+  if (block.state === 'closed') {
+    return typeof block.closedAt === 'string'
+      ? { state: 'closed', closedAt: block.closedAt }
+      : { state: 'closed' };
+  }
+  if (typeof block.closesAt === 'string') {
+    return { closesAt: block.closesAt };
+  }
+  return undefined;
+}
+
+function parseBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function parseStringArray(value: unknown): readonly string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : undefined;
 }
 
 /**

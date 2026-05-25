@@ -168,6 +168,79 @@ describe('resolveRuntimeFeatures — limits.trustedReviewer validation (FW-0113)
   });
 });
 
+describe('resolveRuntimeFeatures — recordLifecycle policy (FW-0038)', () => {
+  it('resolves recordLifecycle per-act policy when recordLifecycle is enabled', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: allAvailable,
+      org: {
+        ...allowAllOrg,
+        recordLifecycle: {
+          correctable: {
+            enabled: true,
+            correctableFieldSet: ['/householdSize'],
+            window: { state: 'open' },
+            requiresReason: true,
+            requiresEvidence: false,
+          },
+          withdrawable: {
+            enabled: true,
+            window: { state: 'closes-at', closesAt: '2026-06-24T23:59:59.000Z' },
+            requiresReason: true,
+            preDeterminationKernelMode: 'applicant-withdrawn',
+            partyScope: 'any-party',
+          },
+          disputable: {
+            enabled: true,
+            signerOnly: true,
+            requiresReason: true,
+          },
+        },
+      },
+      form: { features: { recordLifecycle: 'optional' } },
+    });
+    expect(profile.recordLifecycle?.correctable?.correctableFieldSet).toEqual([
+      '/householdSize',
+    ]);
+    expect(profile.recordLifecycle?.correctable?.requiresEvidence).toBe(false);
+    expect(profile.recordLifecycle?.withdrawable?.partyScope).toBe('any-party');
+    expect(profile.recordLifecycle?.disputable?.signerOnly).toBe(true);
+  });
+
+  it('does not expose recordLifecycle policy when the feature is disabled', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: { ...allAvailable, recordLifecycle: 'unavailable' },
+      org: {
+        ...allowAllOrg,
+        recordLifecycle: {
+          correctable: {
+            enabled: true,
+            correctableFieldSet: ['/householdSize'],
+          },
+        },
+      },
+      form: { features: { recordLifecycle: 'optional' } },
+    });
+    expect(profile.enabled.has('recordLifecycle')).toBe(false);
+    expect(profile.recordLifecycle).toBeUndefined();
+  });
+
+  it('rejects enabled correctable policy without a declared field set', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: allowAllOrg,
+        form: {
+          features: { recordLifecycle: 'optional' },
+          recordLifecycle: { correctable: { enabled: true } },
+        },
+      }),
+    ).toThrowError(/correctableFieldSet/);
+  });
+});
+
 
 describe("resolveRuntimeFeatures — limits.embed validation (FW-0040)", () => {
   it("accepts a well-formed allowed-origin list", () => {

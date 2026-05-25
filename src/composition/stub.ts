@@ -187,6 +187,27 @@ export function createStubComposition(): Composition {
         multiParty: 'allowed',
         recordLifecycle: 'allowed',
       },
+      recordLifecycle: {
+        correctable: {
+          enabled: true,
+          correctableFieldSet: ['/fullName', '/householdSize', '/address/street'],
+          window: { state: 'open' },
+          requiresReason: true,
+          requiresEvidence: false,
+        },
+        withdrawable: {
+          enabled: true,
+          window: { state: 'closes-at', closesAt: '2026-06-24T23:59:59.000Z' },
+          requiresReason: true,
+          preDeterminationKernelMode: 'applicant-withdrawn',
+          partyScope: 'any-party',
+        },
+        disputable: {
+          enabled: true,
+          signerOnly: true,
+          requiresReason: true,
+        },
+      },
       // FW-0040 slice 1: fail-closed default — the bundled demo never
       // mounts in an iframe so no allow-list entry is needed; adopters
       // override per their host integration. The literal '*' opts into

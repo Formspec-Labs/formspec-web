@@ -13,6 +13,8 @@ import type { Composition } from '../../src/composition/types.ts';
 import type {
   ApplicantCaseDetail,
   ApplicantStatusResource,
+  LifecycleActionClient,
+  LifecycleActionReceipt,
   LifecycleActionSnapshot,
 } from '../../src/ports/index.ts';
 import { unavailableLifecycleActionClient } from '../../src/adapters/unavailable/lifecycle-action-client.ts';
@@ -277,6 +279,233 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
   });
 
+  describe('recordLifecycle per-act policy guards (FW-0038 remediation)', () => {
+    it('disables an action when the resolved policy window is closed', async () => {
+      const composition = createStubComposition();
+      composition.orgRuntimePolicy = {
+        ...composition.orgRuntimePolicy,
+        recordLifecycle: {
+          correctable: {
+            enabled: true,
+            correctableFieldSet: ['/householdSize'],
+            window: { state: 'closed', closedAt: '2026-06-01T00:00:00.000Z' },
+            requiresReason: true,
+          },
+        },
+      };
+      composition.lifecycleActionClient = lifecycleClientFor({
+        actions: [{ action: 'correct', enabled: true }],
+      });
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Correct a fact' })).not.toBeNull();
+      });
+      expect((screen.getByRole('button', { name: 'Correct a fact' }) as HTMLButtonElement).disabled)
+        .toBe(true);
+      expect(screen.getByText(/Correction window closed/i)).toBeDefined();
+    });
+
+    it('requires evidence from resolved correctable policy before submitting', async () => {
+      const composition = createStubComposition();
+      composition.orgRuntimePolicy = {
+        ...composition.orgRuntimePolicy,
+        recordLifecycle: {
+          correctable: {
+            enabled: true,
+            correctableFieldSet: ['/householdSize'],
+            requiresReason: true,
+            requiresEvidence: true,
+          },
+        },
+      };
+      const submitCorrection = vi.fn(
+        async (
+          request: Parameters<LifecycleActionClient['submitCorrection']>[0],
+        ): Promise<LifecycleActionReceipt> => ({
+        action: 'correct',
+        event: {
+          kind: 'correction',
+          eventId: 'evt-correction-test',
+          occurredAt: '2026-05-25T12:00:00.000Z',
+          verified: true,
+          recordedAs: 'correction',
+          changedFields: request.changedFields,
+        },
+        snapshot: lifecycleSnapshot({
+          actions: [{ action: 'correct', enabled: true }],
+        }),
+      }));
+      composition.lifecycleActionClient = lifecycleClientFor({
+        actions: [{ action: 'correct', enabled: true }],
+        submitCorrection,
+      });
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Correct a fact' })).not.toBeNull();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Correct a fact' }));
+      fireEvent.change(screen.getByLabelText(/Fields to correct/i), {
+        target: { value: 'Household size' },
+      });
+      fireEvent.change(screen.getByLabelText(/^Reason$/i), {
+        target: { value: 'Typed incorrectly.' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Submit correction' }));
+      expect(await screen.findByText(/Evidence is required for this correction/i)).toBeDefined();
+      expect(submitCorrection).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText(/Evidence reference/i), {
+        target: { value: 'upload:household-statement' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Submit correction' }));
+      await waitFor(() => {
+        expect(submitCorrection).toHaveBeenCalled();
+      });
+      expect(submitCorrection.mock.calls[0]?.[0]).toMatchObject({
+        correctableFieldSet: ['/householdSize'],
+        evidenceRefs: ['upload:household-statement'],
+      });
+    });
+
+    it('allows withdrawal without a reason when resolved policy does not require one', async () => {
+      const composition = createStubComposition();
+      composition.orgRuntimePolicy = {
+        ...composition.orgRuntimePolicy,
+        recordLifecycle: {
+          withdrawable: {
+            enabled: true,
+            requiresReason: false,
+            preDeterminationKernelMode: 'applicant-withdrawn',
+            partyScope: 'any-party',
+          },
+        },
+      };
+      const submitWithdrawal = vi.fn(
+        async (
+          _request: Parameters<LifecycleActionClient['submitWithdrawal']>[0],
+        ): Promise<LifecycleActionReceipt> => ({
+        action: 'withdraw',
+        event: {
+          kind: 'withdrawal',
+          eventId: 'evt-withdraw-test',
+          occurredAt: '2026-05-25T12:00:00.000Z',
+          verified: true,
+        },
+        snapshot: lifecycleSnapshot({
+          actions: [{ action: 'withdraw', enabled: true }],
+        }),
+      }));
+      composition.lifecycleActionClient = lifecycleClientFor({
+        actions: [{ action: 'withdraw', enabled: true }],
+        submitWithdrawal,
+      });
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Withdraw this submission' })).not.toBeNull();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Withdraw this submission' }));
+      fireEvent.click(screen.getAllByRole('button', { name: 'Withdraw this submission' }).at(-1)!);
+      await waitFor(() => {
+        expect(submitWithdrawal).toHaveBeenCalled();
+      });
+      expect(submitWithdrawal.mock.calls[0]?.[0]).toMatchObject({
+        reason: undefined,
+        partyScope: 'any-party',
+      });
+    });
+
+    it('disables all-party withdrawal because approval orchestration is deferred', async () => {
+      const composition = createStubComposition();
+      composition.orgRuntimePolicy = {
+        ...composition.orgRuntimePolicy,
+        recordLifecycle: {
+          withdrawable: {
+            enabled: true,
+            requiresReason: true,
+            preDeterminationKernelMode: 'applicant-withdrawn',
+            partyScope: 'all-parties-must-agree',
+          },
+        },
+      };
+      composition.lifecycleActionClient = lifecycleClientFor({
+        actions: [{ action: 'withdraw', enabled: true }],
+      });
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Withdraw this submission' })).not.toBeNull();
+      });
+      expect(
+        (screen.getByRole('button', { name: 'Withdraw this submission' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      expect(
+        screen.getByText(/All-party withdrawal approval is not available in this slice/i),
+      ).toBeDefined();
+    });
+
+    it('honors signer-only dispute availability from resolved policy and actor-scoped snapshot', async () => {
+      const composition = createStubComposition();
+      composition.orgRuntimePolicy = {
+        ...composition.orgRuntimePolicy,
+        recordLifecycle: {
+          disputable: {
+            enabled: true,
+            signerOnly: true,
+            requiresReason: true,
+          },
+        },
+      };
+      composition.lifecycleActionClient = lifecycleClientFor({
+        actions: [
+          {
+            action: 'dispute',
+            enabled: false,
+            signerOnly: true,
+            disabledReason: 'Only signers can add a dispute note to this record.',
+          },
+        ],
+      });
+      render(
+        <StatusRuntime
+          composition={composition}
+          config={departmentAppProfile}
+          route={{ caseUrn: DEMO_URN }}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Add a dispute note' })).not.toBeNull();
+      });
+      expect(
+        (screen.getByRole('button', { name: 'Add a dispute note' }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      expect(screen.getByText(/Only signers can add a dispute note/i)).toBeDefined();
+    });
+  });
+
   describe('identity discipline (arch-review F-9)', () => {
     it('NEVER calls identityProvider.authenticate() or .discover()', async () => {
       const composition = createStubComposition();
@@ -332,6 +561,46 @@ function patchStatusReader(
 ): void {
   composition.statusReader = {
     readStatus: vi.fn(async (req) => (req.resourceRef === urn ? resource : undefined)),
+  };
+}
+
+function lifecycleSnapshot({
+  actions,
+}: {
+  actions: LifecycleActionSnapshot['actions'];
+}): LifecycleActionSnapshot {
+  return {
+    caseUrn: DEMO_URN,
+    actions,
+    events: [
+      {
+        kind: 'original-submission',
+        eventId: 'evt-original-test',
+        occurredAt: '2026-05-23T12:00:00.000Z',
+        verified: true,
+        title: 'Original signed submission',
+      },
+    ],
+  };
+}
+
+function lifecycleClientFor({
+  actions,
+  submitCorrection = vi.fn(),
+  submitWithdrawal = vi.fn(),
+  submitDispute = vi.fn(),
+}: {
+  actions: LifecycleActionSnapshot['actions'];
+  submitCorrection?: LifecycleActionClient['submitCorrection'];
+  submitWithdrawal?: LifecycleActionClient['submitWithdrawal'];
+  submitDispute?: LifecycleActionClient['submitDispute'];
+}): LifecycleActionClient {
+  const snapshot = lifecycleSnapshot({ actions });
+  return {
+    readLifecycle: vi.fn(async () => snapshot),
+    submitCorrection,
+    submitWithdrawal,
+    submitDispute,
   };
 }
 

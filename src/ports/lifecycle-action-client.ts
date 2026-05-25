@@ -25,6 +25,7 @@ export interface LifecycleActionAvailability {
   readonly enabled: boolean;
   readonly window?: LifecycleActionWindow;
   readonly disabledReason?: string;
+  readonly correctableFieldSet?: readonly string[];
   readonly requiresReason?: boolean;
   readonly requiresEvidence?: boolean;
   readonly signerOnly?: boolean;
@@ -117,6 +118,8 @@ export interface LifecycleActionRequest {
 
 export interface LifecycleCorrectionRequest extends LifecycleActionRequest {
   readonly changedFields: readonly LifecycleChangedField[];
+  readonly correctableFieldSet?: readonly string[];
+  readonly caseDecisionReached?: boolean;
   readonly reason?: string;
   readonly evidenceRefs?: readonly string[];
 }
@@ -124,6 +127,8 @@ export interface LifecycleCorrectionRequest extends LifecycleActionRequest {
 export interface LifecycleWithdrawalRequest extends LifecycleActionRequest {
   readonly reason?: string;
   readonly rescissionRequested?: boolean;
+  readonly partyScope?: 'any-party' | 'all-parties-must-agree';
+  readonly allPartiesApproved?: boolean;
 }
 
 export interface LifecycleDisputeRequest extends LifecycleActionRequest {

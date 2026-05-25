@@ -28,6 +28,16 @@ import {
   type InstanceCapabilities,
   type OrgFeaturePolicyMode,
   type OrgRuntimePolicy,
+  type RecordLifecycleCorrectablePolicy,
+  type RecordLifecycleDisputablePolicy,
+  type RecordLifecyclePolicy,
+  type RecordLifecycleWindowPolicy,
+  type RecordLifecycleWithdrawablePolicy,
+  type ResolvedRecordLifecycleCorrectablePolicy,
+  type ResolvedRecordLifecycleDisputablePolicy,
+  type ResolvedRecordLifecyclePolicy,
+  type ResolvedRecordLifecycleWindow,
+  type ResolvedRecordLifecycleWithdrawablePolicy,
   type ResolvedRuntimeProfile,
 } from './policy-shapes.ts';
 
@@ -66,11 +76,16 @@ export function resolveRuntimeFeatures(
     }
   }
 
+  const recordLifecycle = enabled.has('recordLifecycle')
+    ? resolveRecordLifecyclePolicy(input.org.recordLifecycle, input.form.recordLifecycle)
+    : undefined;
+
   return Object.freeze({
     mode: input.mode,
     enabled: freezeSet(enabled),
     disabled: freezeMap(disabled),
     limits: Object.freeze(limits),
+    recordLifecycle,
   });
 }
 
@@ -217,6 +232,8 @@ function validateInput(input: ResolveRuntimeFeaturesInput): void {
   validateEmbedLimits(input.org.limits?.embed);
   validateTrustedReviewerLimits(input.org.limits?.trustedReviewer, 'org');
   validateTrustedReviewerLimits(input.form.limits?.trustedReviewer, 'form');
+  validateRecordLifecyclePolicy('org', input.org.recordLifecycle);
+  validateRecordLifecyclePolicy('form', input.form.recordLifecycle);
 }
 
 /**
@@ -361,6 +378,280 @@ function validateTrustedReviewerLimits(value: unknown, layer: 'org' | 'form'): v
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function validateRecordLifecyclePolicy(
+  source: 'org' | 'form',
+  value: RecordLifecyclePolicy | undefined,
+): void {
+  if (value === undefined) return;
+  validateRecordLifecycleAction(source, 'correctable', value.correctable);
+  validateRecordLifecycleAction(source, 'withdrawable', value.withdrawable);
+  validateRecordLifecycleAction(source, 'disputable', value.disputable);
+}
+
+function validateRecordLifecycleAction(
+  source: 'org' | 'form',
+  action: keyof RecordLifecyclePolicy,
+  value:
+    | RecordLifecycleCorrectablePolicy
+    | RecordLifecycleWithdrawablePolicy
+    | RecordLifecycleDisputablePolicy
+    | undefined,
+): void {
+  if (value === undefined) return;
+  if (typeof value.enabled !== 'boolean') {
+    throw new InvalidRuntimePolicyError(
+      source,
+      `recordLifecycle.${action}.enabled must be a boolean`,
+    );
+  }
+  validateRecordLifecycleWindow(source, action, value.window);
+
+  if (action === 'correctable') {
+    const correctable = value as RecordLifecycleCorrectablePolicy;
+    if (correctable.enabled) {
+      if (!Array.isArray(correctable.correctableFieldSet)) {
+        throw new InvalidRuntimePolicyError(
+          source,
+          'recordLifecycle.correctable.correctableFieldSet must be declared when correctable is enabled',
+        );
+      }
+      if (correctable.correctableFieldSet.length === 0) {
+        throw new InvalidRuntimePolicyError(
+          source,
+          'recordLifecycle.correctable.correctableFieldSet must not be empty',
+        );
+      }
+    }
+    if (correctable.correctableFieldSet !== undefined) {
+      validateFieldSet(source, correctable.correctableFieldSet);
+    }
+    validateOptionalBoolean(source, action, 'requiresEvidence', correctable.requiresEvidence);
+    validateOptionalBoolean(source, action, 'requiresReason', correctable.requiresReason);
+  }
+
+  if (action === 'withdrawable') {
+    const withdrawable = value as RecordLifecycleWithdrawablePolicy;
+    validateOptionalBoolean(source, action, 'requiresReason', withdrawable.requiresReason);
+    validateOptionalBoolean(
+      source,
+      action,
+      'requiresIssuerAcceptance',
+      withdrawable.requiresIssuerAcceptance,
+    );
+    if (
+      withdrawable.preDeterminationKernelMode !== undefined &&
+      withdrawable.preDeterminationKernelMode !== 'applicant-withdrawn'
+    ) {
+      throw new InvalidRuntimePolicyError(
+        source,
+        'recordLifecycle.withdrawable.preDeterminationKernelMode must be "applicant-withdrawn"',
+      );
+    }
+    if (
+      withdrawable.postDeterminationIntent !== undefined &&
+      withdrawable.postDeterminationIntent !== 'rescission-requested'
+    ) {
+      throw new InvalidRuntimePolicyError(
+        source,
+        'recordLifecycle.withdrawable.postDeterminationIntent must be "rescission-requested"',
+      );
+    }
+    if (
+      withdrawable.postDeterminationIntent === 'rescission-requested' &&
+      withdrawable.requiresIssuerAcceptance !== true
+    ) {
+      throw new InvalidRuntimePolicyError(
+        source,
+        'recordLifecycle.withdrawable.requiresIssuerAcceptance must be true when postDeterminationIntent is configured',
+      );
+    }
+    if (
+      withdrawable.partyScope !== undefined &&
+      withdrawable.partyScope !== 'any-party' &&
+      withdrawable.partyScope !== 'all-parties-must-agree'
+    ) {
+      throw new InvalidRuntimePolicyError(
+        source,
+        'recordLifecycle.withdrawable.partyScope must be any-party | all-parties-must-agree',
+      );
+    }
+  }
+
+  if (action === 'disputable') {
+    const disputable = value as RecordLifecycleDisputablePolicy;
+    validateOptionalBoolean(source, action, 'requiresEvidence', disputable.requiresEvidence);
+    validateOptionalBoolean(source, action, 'requiresReason', disputable.requiresReason);
+    validateOptionalBoolean(source, action, 'signerOnly', disputable.signerOnly);
+  }
+}
+
+function validateRecordLifecycleWindow(
+  source: 'org' | 'form',
+  action: keyof RecordLifecyclePolicy,
+  value: RecordLifecycleWindowPolicy | undefined,
+): void {
+  if (value === undefined) return;
+  if (typeof value !== 'object' || value === null) {
+    throw new InvalidRuntimePolicyError(
+      source,
+      `recordLifecycle.${action}.window must be an object`,
+    );
+  }
+  if ('state' in value) {
+    if (
+      value.state !== 'open' &&
+      value.state !== 'closes-at' &&
+      value.state !== 'closed'
+    ) {
+      throw new InvalidRuntimePolicyError(
+        source,
+        `recordLifecycle.${action}.window.state must be open | closes-at | closed`,
+      );
+    }
+    if (value.state === 'closes-at' && typeof value.closesAt !== 'string') {
+      throw new InvalidRuntimePolicyError(
+        source,
+        `recordLifecycle.${action}.window.closesAt must be a string`,
+      );
+    }
+    if (
+      value.state === 'closed' &&
+      value.closedAt !== undefined &&
+      typeof value.closedAt !== 'string'
+    ) {
+      throw new InvalidRuntimePolicyError(
+        source,
+        `recordLifecycle.${action}.window.closedAt must be a string`,
+      );
+    }
+    return;
+  }
+  if (!('closesAt' in value) || typeof value.closesAt !== 'string') {
+    throw new InvalidRuntimePolicyError(
+      source,
+      `recordLifecycle.${action}.window.closesAt must be a string`,
+    );
+  }
+}
+
+function validateFieldSet(source: 'org' | 'form', fieldSet: readonly string[]): void {
+  for (const path of fieldSet) {
+    if (typeof path !== 'string' || !path.startsWith('/')) {
+      throw new InvalidRuntimePolicyError(
+        source,
+        'recordLifecycle.correctable.correctableFieldSet entries must be RFC 6901-style JSON pointer strings',
+      );
+    }
+  }
+}
+
+function validateOptionalBoolean(
+  source: 'org' | 'form',
+  action: keyof RecordLifecyclePolicy,
+  property: string,
+  value: boolean | undefined,
+): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw new InvalidRuntimePolicyError(
+      source,
+      `recordLifecycle.${action}.${property} must be a boolean`,
+    );
+  }
+}
+
+function resolveRecordLifecyclePolicy(
+  orgPolicy: RecordLifecyclePolicy | undefined,
+  formPolicy: RecordLifecyclePolicy | undefined,
+): ResolvedRecordLifecyclePolicy | undefined {
+  const merged = mergeRecordLifecyclePolicy(orgPolicy, formPolicy);
+  if (!merged) return undefined;
+  const resolved: {
+    -readonly [K in keyof ResolvedRecordLifecyclePolicy]?: ResolvedRecordLifecyclePolicy[K];
+  } = {};
+
+  if (merged.correctable) {
+    resolved.correctable = freezeRecordLifecycleAction({
+      enabled: merged.correctable.enabled,
+      correctableFieldSet: merged.correctable.correctableFieldSet
+        ? Object.freeze([...merged.correctable.correctableFieldSet])
+        : undefined,
+      window: normalizeRecordLifecycleWindow(merged.correctable.window),
+      requiresEvidence: merged.correctable.requiresEvidence ?? false,
+      requiresReason: merged.correctable.requiresReason ?? true,
+    }) as ResolvedRecordLifecycleCorrectablePolicy;
+  }
+
+  if (merged.withdrawable) {
+    resolved.withdrawable = freezeRecordLifecycleAction({
+      enabled: merged.withdrawable.enabled,
+      window: normalizeRecordLifecycleWindow(merged.withdrawable.window),
+      requiresReason: merged.withdrawable.requiresReason ?? true,
+      preDeterminationKernelMode:
+        merged.withdrawable.preDeterminationKernelMode ?? 'applicant-withdrawn',
+      postDeterminationIntent: merged.withdrawable.postDeterminationIntent,
+      requiresIssuerAcceptance: merged.withdrawable.requiresIssuerAcceptance ?? false,
+      partyScope: merged.withdrawable.partyScope ?? 'any-party',
+    }) as ResolvedRecordLifecycleWithdrawablePolicy;
+  }
+
+  if (merged.disputable) {
+    resolved.disputable = freezeRecordLifecycleAction({
+      enabled: merged.disputable.enabled,
+      window: normalizeRecordLifecycleWindow(merged.disputable.window),
+      requiresEvidence: merged.disputable.requiresEvidence ?? false,
+      requiresReason: merged.disputable.requiresReason ?? true,
+      signerOnly: merged.disputable.signerOnly ?? true,
+    }) as ResolvedRecordLifecycleDisputablePolicy;
+  }
+
+  return Object.freeze(resolved) as ResolvedRecordLifecyclePolicy;
+}
+
+function mergeRecordLifecyclePolicy(
+  orgPolicy: RecordLifecyclePolicy | undefined,
+  formPolicy: RecordLifecyclePolicy | undefined,
+): RecordLifecyclePolicy | undefined {
+  if (!orgPolicy && !formPolicy) return undefined;
+  return {
+    correctable: mergeActionPolicy(orgPolicy?.correctable, formPolicy?.correctable),
+    withdrawable: mergeActionPolicy(orgPolicy?.withdrawable, formPolicy?.withdrawable),
+    disputable: mergeActionPolicy(orgPolicy?.disputable, formPolicy?.disputable),
+  };
+}
+
+function mergeActionPolicy<T extends object>(
+  orgAction: T | undefined,
+  formAction: T | undefined,
+): T | undefined {
+  if (!orgAction && !formAction) return undefined;
+  return { ...orgAction, ...formAction } as T;
+}
+
+function normalizeRecordLifecycleWindow(
+  value: RecordLifecycleWindowPolicy | undefined,
+): ResolvedRecordLifecycleWindow | undefined {
+  if (value === undefined) return undefined;
+  if ('state' in value) {
+    if (value.state === 'open') return Object.freeze({ state: 'open' });
+    if (value.state === 'closed') {
+      return Object.freeze(
+        value.closedAt === undefined
+          ? { state: 'closed' }
+          : { state: 'closed', closedAt: value.closedAt },
+      );
+    }
+    return Object.freeze({ state: 'closes-at', closesAt: value.closesAt });
+  }
+  if (value.closesAt === 'never') {
+    return Object.freeze({ state: 'open' });
+  }
+  return Object.freeze({ state: 'closes-at', closesAt: value.closesAt });
+}
+
+function freezeRecordLifecycleAction<T extends object>(value: T): Readonly<T> {
+  return Object.freeze(value);
 }
 
 function freezeSet<T>(set: Set<T>): ReadonlySet<T> {

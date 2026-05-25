@@ -53,6 +53,14 @@ export function isOrgFeaturePolicyMode(value: string): value is OrgFeaturePolicy
 export interface OrgRuntimePolicy {
   readonly features: Readonly<Partial<Record<RuntimeFeatureKey, OrgFeaturePolicyMode>>>;
   /**
+   * FW-0038 / FW-0034 per-act signed-record lifecycle policy. This is a
+   * sibling of the primitive feature-mode map: `features.recordLifecycle`
+   * decides whether the capability participates in resolution; this block
+   * carries the act-level policy the runtime shell needs after the key is
+   * enabled.
+   */
+  readonly recordLifecycle?: RecordLifecyclePolicy;
+  /**
    * Opaque per-feature limits. ADR-0011 §Org runtime policy enumerates
    * examples (allowed origins, retention windows, payment methods). Each
    * feature ADR defines the limit shape for its key.
@@ -115,6 +123,88 @@ export interface FormRuntimePolicy {
    * respondent-only field pointers while SC-6 remains PROPOSAL-status.
    */
   readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
+  /**
+   * FW-0038 / EXT-35 proposal carrier extracted from
+   * `governance.recordLifecycle` or `x-formspec-record-lifecycle`.
+   */
+  readonly recordLifecycle?: RecordLifecyclePolicy;
+}
+
+export type RecordLifecyclePartyScope = 'any-party' | 'all-parties-must-agree';
+
+export type RecordLifecycleWindowPolicy =
+  | { readonly state: 'open' }
+  | { readonly state: 'closes-at'; readonly closesAt: string }
+  | { readonly state: 'closed'; readonly closedAt?: string }
+  | { readonly closesAt: string };
+
+export interface RecordLifecycleCorrectablePolicy {
+  readonly enabled: boolean;
+  readonly correctableFieldSet?: readonly string[];
+  readonly window?: RecordLifecycleWindowPolicy;
+  readonly requiresEvidence?: boolean;
+  readonly requiresReason?: boolean;
+}
+
+export interface RecordLifecycleWithdrawablePolicy {
+  readonly enabled: boolean;
+  readonly window?: RecordLifecycleWindowPolicy;
+  readonly requiresReason?: boolean;
+  readonly preDeterminationKernelMode?: 'applicant-withdrawn';
+  readonly postDeterminationIntent?: 'rescission-requested';
+  readonly requiresIssuerAcceptance?: boolean;
+  readonly partyScope?: RecordLifecyclePartyScope;
+}
+
+export interface RecordLifecycleDisputablePolicy {
+  readonly enabled: boolean;
+  readonly window?: RecordLifecycleWindowPolicy;
+  readonly requiresEvidence?: boolean;
+  readonly requiresReason?: boolean;
+  readonly signerOnly?: boolean;
+}
+
+export interface RecordLifecyclePolicy {
+  readonly correctable?: RecordLifecycleCorrectablePolicy;
+  readonly withdrawable?: RecordLifecycleWithdrawablePolicy;
+  readonly disputable?: RecordLifecycleDisputablePolicy;
+}
+
+export type ResolvedRecordLifecycleWindow =
+  | { readonly state: 'open' }
+  | { readonly state: 'closes-at'; readonly closesAt: string }
+  | { readonly state: 'closed'; readonly closedAt?: string };
+
+export interface ResolvedRecordLifecycleCorrectablePolicy {
+  readonly enabled: boolean;
+  readonly correctableFieldSet?: readonly string[];
+  readonly window?: ResolvedRecordLifecycleWindow;
+  readonly requiresEvidence: boolean;
+  readonly requiresReason: boolean;
+}
+
+export interface ResolvedRecordLifecycleWithdrawablePolicy {
+  readonly enabled: boolean;
+  readonly window?: ResolvedRecordLifecycleWindow;
+  readonly requiresReason: boolean;
+  readonly preDeterminationKernelMode: 'applicant-withdrawn';
+  readonly postDeterminationIntent?: 'rescission-requested';
+  readonly requiresIssuerAcceptance: boolean;
+  readonly partyScope: RecordLifecyclePartyScope;
+}
+
+export interface ResolvedRecordLifecycleDisputablePolicy {
+  readonly enabled: boolean;
+  readonly window?: ResolvedRecordLifecycleWindow;
+  readonly requiresEvidence: boolean;
+  readonly requiresReason: boolean;
+  readonly signerOnly: boolean;
+}
+
+export interface ResolvedRecordLifecyclePolicy {
+  readonly correctable?: ResolvedRecordLifecycleCorrectablePolicy;
+  readonly withdrawable?: ResolvedRecordLifecycleWithdrawablePolicy;
+  readonly disputable?: ResolvedRecordLifecycleDisputablePolicy;
 }
 
 /**
@@ -157,6 +247,7 @@ export interface ResolvedRuntimeProfile {
   readonly enabled: ReadonlySet<RuntimeFeatureKey>;
   readonly disabled: ReadonlyMap<RuntimeFeatureKey, DisabledReason>;
   readonly limits: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
+  readonly recordLifecycle?: ResolvedRecordLifecyclePolicy;
 }
 
 export function getTrustedReviewerRuntimeConfig(

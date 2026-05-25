@@ -550,6 +550,7 @@ export function defineLifecycleActionClientConformance(
       const receipt = await subject.adapter.submitDispute(
         {
           caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+          actorRef: 'signer:conformance',
           disputedEventId: sampleLifecycleActionSnapshot.events[0]?.eventId,
           statement: 'I dispute this signed record.',
         },
@@ -568,6 +569,142 @@ export function defineLifecycleActionClientConformance(
           'not-a-uuid-v7',
         ),
       ).rejects.toThrow();
+    });
+
+    it('rejects disabled lifecycle actions', async () => {
+      const subject = setup();
+      await subject.registerLifecycle({
+        ...sampleLifecycleActionSnapshot,
+        actions: [
+          {
+            action: 'correct',
+            enabled: false,
+            disabledReason: 'Corrections are disabled for this record.',
+          },
+        ],
+      });
+      await expect(
+        subject.adapter.submitCorrection(
+          {
+            caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+            changedFields: [{ path: '/householdSize', label: 'Household size' }],
+            reason: 'Typed incorrectly.',
+          },
+          generateIdempotencyKey(),
+        ),
+      ).rejects.toThrow();
+    });
+
+    it('rejects lifecycle actions after their window closes', async () => {
+      const subject = setup();
+      await subject.registerLifecycle({
+        ...sampleLifecycleActionSnapshot,
+        actions: [
+          {
+            action: 'correct',
+            enabled: true,
+            correctableFieldSet: ['/householdSize'],
+            window: { state: 'closed', closedAt: '2026-05-24T00:00:00.000Z' },
+          },
+        ],
+      });
+      await expect(
+        subject.adapter.submitCorrection(
+          {
+            caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+            changedFields: [{ path: '/householdSize', label: 'Household size' }],
+            reason: 'Typed incorrectly.',
+          },
+          generateIdempotencyKey(),
+        ),
+      ).rejects.toThrow();
+    });
+
+    it('enforces evidence requirements declared on the lifecycle action', async () => {
+      const subject = setup();
+      await subject.registerLifecycle({
+        ...sampleLifecycleActionSnapshot,
+        actions: [
+          {
+            action: 'correct',
+            enabled: true,
+            correctableFieldSet: ['/householdSize'],
+            requiresReason: true,
+            requiresEvidence: true,
+          },
+        ],
+      });
+      await expect(
+        subject.adapter.submitCorrection(
+          {
+            caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+            changedFields: [{ path: '/householdSize', label: 'Household size' }],
+            reason: 'Typed incorrectly.',
+          },
+          generateIdempotencyKey(),
+        ),
+      ).rejects.toThrow();
+      await expect(
+        subject.adapter.submitCorrection(
+          {
+            caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+            changedFields: [{ path: '/householdSize', label: 'Household size' }],
+            reason: 'Typed incorrectly.',
+            evidenceRefs: ['upload:household-statement'],
+          },
+          generateIdempotencyKey(),
+        ),
+      ).resolves.toMatchObject({ action: 'correct' });
+    });
+
+    it('enforces signer-only dispute scope', async () => {
+      const subject = setup();
+      await subject.registerLifecycle(sampleLifecycleActionSnapshot);
+      await expect(
+        subject.adapter.submitDispute(
+          {
+            caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+            actorRef: 'not-the-signer',
+            disputedEventId: sampleLifecycleActionSnapshot.events[0]?.eventId,
+            statement: 'I dispute this signed record.',
+          },
+          generateIdempotencyKey(),
+        ),
+      ).rejects.toThrow();
+    });
+
+    it('enforces all-party withdrawal scope when declared', async () => {
+      const subject = setup();
+      await subject.registerLifecycle({
+        ...sampleLifecycleActionSnapshot,
+        actions: [
+          {
+            action: 'withdraw',
+            enabled: true,
+            requiresReason: true,
+            partyScope: 'all-parties-must-agree',
+          },
+        ],
+      });
+      await expect(
+        subject.adapter.submitWithdrawal(
+          {
+            caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+            reason: 'Changed intent.',
+          },
+          generateIdempotencyKey(),
+        ),
+      ).rejects.toThrow();
+      await expect(
+        subject.adapter.submitWithdrawal(
+          {
+            caseUrn: sampleLifecycleActionSnapshot.caseUrn,
+            reason: 'Changed intent.',
+            allPartiesApproved: true,
+          },
+          generateIdempotencyKey(),
+        ),
+      ).resolves.toMatchObject({ action: 'withdraw' });
     });
   });
 }

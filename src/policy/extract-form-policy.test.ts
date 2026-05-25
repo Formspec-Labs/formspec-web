@@ -7,6 +7,7 @@ import {
   extractPaymentAmount,
   extractPaymentRequirement,
   extractRecordLifecycleOptIn,
+  extractRecordLifecyclePolicy,
 } from './extract-form-policy.ts';
 
 const baseDefinition = {
@@ -321,6 +322,9 @@ describe('extractRecordLifecycleOptIn', () => {
       },
     };
     expect(extractRecordLifecycleOptIn(definition)).toBe('optional');
+    expect(extractRecordLifecyclePolicy(definition)?.correctable?.correctableFieldSet).toEqual([
+      '/householdSize',
+    ]);
   });
 
   it('returns optional when the EXT-35 governance proposal enables an action', () => {
@@ -333,6 +337,43 @@ describe('extractRecordLifecycleOptIn', () => {
       },
     } as FormDefinition;
     expect(extractRecordLifecycleOptIn(definition)).toBe('optional');
+    expect(extractRecordLifecyclePolicy(definition)?.withdrawable?.enabled).toBe(true);
+  });
+
+  it('extracts per-act lifecycle policy controls from the governance proposal', () => {
+    const definition = {
+      ...lifecycleBase,
+      governance: {
+        recordLifecycle: {
+          correctable: {
+            enabled: true,
+            correctableFieldSet: ['/householdSize'],
+            window: { state: 'closed', closedAt: '2026-06-01T00:00:00.000Z' },
+            requiresEvidence: true,
+            requiresReason: false,
+          },
+          withdrawable: {
+            enabled: true,
+            requiresReason: false,
+            partyScope: 'all-parties-must-agree',
+          },
+          disputable: {
+            enabled: true,
+            signerOnly: true,
+            requiresReason: true,
+          },
+        },
+      },
+    } as FormDefinition;
+    const policy = extractRecordLifecyclePolicy(definition);
+    expect(policy?.correctable?.window).toEqual({
+      state: 'closed',
+      closedAt: '2026-06-01T00:00:00.000Z',
+    });
+    expect(policy?.correctable?.requiresEvidence).toBe(true);
+    expect(policy?.correctable?.requiresReason).toBe(false);
+    expect(policy?.withdrawable?.partyScope).toBe('all-parties-must-agree');
+    expect(policy?.disputable?.signerOnly).toBe(true);
   });
 
   it('ignores disabled and malformed proposal blocks', () => {

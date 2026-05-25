@@ -15,6 +15,7 @@ import type {
 export interface StubLifecycleActionClientOptions {
   readonly initialSnapshots?: Iterable<LifecycleActionSnapshot>;
   readonly correctableFieldSet?: readonly string[];
+  readonly signerRefs?: readonly string[];
   readonly now?: () => Date;
 }
 
@@ -23,11 +24,18 @@ export interface StubLifecycleActionClient extends LifecycleActionClient {
   _internalSnapshot(caseUrn: string): LifecycleActionSnapshot | undefined;
 }
 
+const DEFAULT_CORRECTABLE_FIELD_SET = [
+  '/fullName',
+  '/householdSize',
+  '/address/street',
+] as const;
+
 const DEFAULT_ACTIONS: readonly LifecycleActionAvailability[] = [
   {
     action: 'correct',
     enabled: true,
     window: { state: 'open' },
+    correctableFieldSet: DEFAULT_CORRECTABLE_FIELD_SET,
     requiresReason: true,
   },
   {
@@ -44,18 +52,13 @@ const DEFAULT_ACTIONS: readonly LifecycleActionAvailability[] = [
   },
 ];
 
-const DEFAULT_CORRECTABLE_FIELD_SET = [
-  '/fullName',
-  '/householdSize',
-  '/address/street',
-] as const;
-
 export function stubLifecycleActionClient(
   options: StubLifecycleActionClientOptions = {},
 ): StubLifecycleActionClient {
   const snapshots = new Map<string, LifecycleActionSnapshot>();
   const receiptsByKey = new Map<string, LifecycleActionReceipt>();
   const correctableFieldSet = new Set(options.correctableFieldSet ?? DEFAULT_CORRECTABLE_FIELD_SET);
+  const signerRefs = new Set(options.signerRefs ?? []);
   const now = options.now ?? (() => new Date());
   let nextEvent = 0;
 
@@ -76,8 +79,22 @@ export function stubLifecycleActionClient(
       assertUuidV7IdempotencyKey(idempotencyKey);
       const existing = receiptsByKey.get(idempotencyKey);
       if (existing) return cloneJson(existing);
-      assertActionEnabled(snapshotFor(request.caseUrn), 'correct');
+      const snapshot = snapshotFor(request.caseUrn);
+      const action = assertActionEnabled(snapshot, 'correct');
       assertChangedFields(request.changedFields);
+      assertReasonIfRequired(action, request.reason, 'Correction reason is required');
+      assertEvidenceIfRequired(action, request.evidenceRefs);
+      const declaredFieldSet = request.correctableFieldSet ?? action.correctableFieldSet ?? [
+        ...correctableFieldSet,
+      ];
+      if (declaredFieldSet.length === 0) {
+        throw new Error('Correction field set is not declared for this record');
+      }
+      const declaredPaths = new Set(declaredFieldSet);
+      const isNarrowCorrection =
+        request.changedFields.every((field) => declaredPaths.has(field.path)) &&
+        request.caseDecisionReached !== true &&
+        !introducesNewField(request.changedFields);
       const event: CorrectionLifecycleEvent = {
         kind: 'correction',
         eventId: nextEventId('correction'),
@@ -85,9 +102,7 @@ export function stubLifecycleActionClient(
         verified: true,
         actorLabel: 'Respondent',
         partyRef: request.partyRef,
-        recordedAs: request.changedFields.every((field) => correctableFieldSet.has(field.path))
-          ? 'correction'
-          : 'amendment',
+        recordedAs: isNarrowCorrection ? 'correction' : 'amendment',
         changedFields: cloneJson(request.changedFields),
         reason: request.reason ? { text: request.reason } : undefined,
         evidenceRefs: request.evidenceRefs ? [...request.evidenceRefs] : undefined,
@@ -99,7 +114,9 @@ export function stubLifecycleActionClient(
       assertUuidV7IdempotencyKey(idempotencyKey);
       const existing = receiptsByKey.get(idempotencyKey);
       if (existing) return cloneJson(existing);
-      assertActionEnabled(snapshotFor(request.caseUrn), 'withdraw');
+      const action = assertActionEnabled(snapshotFor(request.caseUrn), 'withdraw');
+      assertReasonIfRequired(action, request.reason, 'Withdrawal reason is required');
+      assertPartyScope(action, request);
       const event: WithdrawalLifecycleEvent = {
         kind: 'withdrawal',
         eventId: nextEventId('withdrawal'),
@@ -118,7 +135,8 @@ export function stubLifecycleActionClient(
       assertUuidV7IdempotencyKey(idempotencyKey);
       const existing = receiptsByKey.get(idempotencyKey);
       if (existing) return cloneJson(existing);
-      assertActionEnabled(snapshotFor(request.caseUrn), 'dispute');
+      const action = assertActionEnabled(snapshotFor(request.caseUrn), 'dispute');
+      assertSignerScope(action, request.actorRef, signerRefs);
       if (request.statement.trim().length === 0) {
         throw new Error('Dispute statement is required');
       }
@@ -213,11 +231,61 @@ function assertChangedFields(fields: readonly LifecycleChangedField[]): void {
 function assertActionEnabled(
   snapshot: LifecycleActionSnapshot,
   action: LifecycleActionReceipt['action'],
-): void {
+): LifecycleActionAvailability {
   const found = snapshot.actions.find((candidate) => candidate.action === action);
   if (!found?.enabled) {
     throw new Error(`${action} is not available for this record`);
   }
+  if (found.window?.state === 'closed') {
+    throw new Error(`${action} window is closed for this record`);
+  }
+  return found;
+}
+
+function assertReasonIfRequired(
+  action: LifecycleActionAvailability,
+  reason: string | undefined,
+  message: string,
+): void {
+  if (action.requiresReason === true && (!reason || reason.trim().length === 0)) {
+    throw new Error(message);
+  }
+}
+
+function assertEvidenceIfRequired(
+  action: LifecycleActionAvailability,
+  evidenceRefs: readonly string[] | undefined,
+): void {
+  if (action.requiresEvidence === true && (!evidenceRefs || evidenceRefs.length === 0)) {
+    throw new Error('Evidence is required for this lifecycle action');
+  }
+}
+
+function assertSignerScope(
+  action: LifecycleActionAvailability,
+  actorRef: string | undefined,
+  signerRefs: ReadonlySet<string>,
+): void {
+  if (action.signerOnly !== true || signerRefs.size === 0) return;
+  if (!actorRef || !signerRefs.has(actorRef)) {
+    throw new Error('Only signers can add a dispute note to this record');
+  }
+}
+
+function assertPartyScope(
+  action: LifecycleActionAvailability,
+  request: { readonly partyScope?: 'any-party' | 'all-parties-must-agree'; readonly allPartiesApproved?: boolean },
+): void {
+  const scope = request.partyScope ?? action.partyScope;
+  if (scope === 'all-parties-must-agree' && request.allPartiesApproved !== true) {
+    throw new Error('All parties must approve withdrawal before it can be submitted');
+  }
+}
+
+function introducesNewField(fields: readonly LifecycleChangedField[]): boolean {
+  return fields.some(
+    (field) => field.originalValue === undefined && field.correctedValue !== undefined,
+  );
 }
 
 function cloneJson<T>(value: T): T {

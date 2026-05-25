@@ -384,6 +384,27 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       multiParty: 'allowed',
       recordLifecycle: 'allowed',
     },
+    recordLifecycle: {
+      correctable: {
+        enabled: true,
+        correctableFieldSet: ['/fullName', '/householdSize', '/address/street'],
+        window: { state: 'open' },
+        requiresReason: true,
+        requiresEvidence: false,
+      },
+      withdrawable: {
+        enabled: true,
+        window: { state: 'closes-at', closesAt: '2026-06-24T23:59:59.000Z' },
+        requiresReason: true,
+        preDeterminationKernelMode: 'applicant-withdrawn',
+        partyScope: 'any-party',
+      },
+      disputable: {
+        enabled: true,
+        signerOnly: true,
+        requiresReason: true,
+      },
+    },
     // FW-0040 slice 1: narrowed routes don't mount in host iframes, so
     // the allow-list is irrelevant — fail-closed default mirrors the
     // full-app composition shape.
