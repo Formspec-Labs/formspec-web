@@ -47,11 +47,33 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 
 **Owning repo:** formspec (+ binding to PKAF for authority chains)
 **File:** `formspec/schemas/response.schema.json`
-**Closes:** J-012 (filer-not-signer); foundation for J-041 (multi-party).
+**Closes:** J-012 (filer-not-signer; including the AI-agent slice per FW-0058); foundation for J-041 (multi-party).
 **FW rows blocked:** FW-0037, FW-0058, FW-0050/FW-0061 (extended scope below)
-**Shape:** extend `AuthoredSignature` with `capacity` block (enum: `self | poa | guardian | executor | parent | licensed-professional | corporate-officer | ai-agent`), `principalRef` (urn party id, reuse `intake-handoff.schema.json:180` `urn:party:` convention), `authorityArtifact` (URI + hash + type). AI-agent variant gets a separate `agentChain` block — defer per FW-0058 split. **Multi-party extension:** add `partyRole` field bound to `definition.schema.json.parties[*].roleId` (closed enum `coEqual | asymmetricPrimary | asymmetricSecondary | guardianFor` per FW-0050 §2.1). Land EXT-3 + multi-party `partyRole` together — same `AuthoredSignature` extension surface; two passes is two breaks for one schema.
-**Fixture status:** none. Land with capacity + authority-artifact + partyRole fixture matrix.
-**Status:** not yet filed. Multi-party `partyRole` extension proposed by [FW-0050 design 2026-05-23 §6.3](2026-05-23-fw-0050-multi-party-submission-design.md).
+**Shape:** extend `AuthoredSignature` with `capacity` block (enum: `self | poa | guardian | executor | parent | licensed-professional | corporate-officer | ai-agent`), `principalRef` (urn party id, reuse `intake-handoff.schema.json:180` `urn:party:` convention), `authorityArtifact` (URI + hash + type). **Multi-party extension:** add `partyRole` field bound to `definition.schema.json.parties[*].roleId` (closed enum `coEqual | asymmetricPrimary | asymmetricSecondary | guardianFor` per FW-0050 §2.1). Land EXT-3 + multi-party `partyRole` + AI-agent `agentChain` together — same `AuthoredSignature` extension surface; three passes is three breaks for one schema.
+**`agentChain` shape — closed 2026-05-24 by [FW-0058 design §3.2](2026-05-24-fw-0058-ai-agent-filer-chain-design.md).** Flat ordered `AgentChainEntry[]` array on `AuthoredSignature`; index-0 = signer (the acting agent); terminal entry's `delegatedBy` resolves to the accountable human/entity (NOT to another agent). Walked end-to-start renders the four-party chain (J-012 promise). Conditional schema rule: when `capacity == "ai-agent"`, `agentChain` is REQUIRED + non-empty + terminates at a non-agent `delegatedBy`. Each `AgentChainEntry` shape:
+
+```text
+AgentChainEntry {
+  agentId: string                 // URN naming the agent (e.g., "urn:wos:agent:procurement-bot-v3")
+  agentClass: "automated" | "semi-autonomous" | "human-in-loop"  // mirrors WOS autonomy taxonomy
+  modelIdentifier?: string        // REQUIRED when agentClass != "human-in-loop" AND agent is generative (per WOS §3.1)
+  modelVersion?: string           // REQUIRED when modelIdentifier present
+  delegatedBy: string             // URN; terminal entry's value MUST resolve to a human/entity
+  delegatedAt: string             // RFC 3339
+  delegationScope: string         // FEL expression OR free-text describing delegation bounds
+  delegationArtifact?: {          // optional cryptographic delegation token / corporate resolution / POA artifact
+    uri: string
+    hash: string                  // SHA-256 hex
+    type: string                  // taxonomy: "poa" | "corporate-resolution" | "machine-operator-token" | "verifiable-credential" | "other"
+  }
+  capabilityInvocationRef?: string // ref to WOS `capabilityInvocation` provenance record per ai-integration.md §3.3.1
+  confidenceRef?: string          // ref to WOS `ConfidenceReport` for this fill
+}
+```
+
+**Fixture status:** none. Land with capacity + authority-artifact + partyRole + `agentChain` fixture matrix. **FW-0058 §6.2 fixture set (10 scenarios) is the canonical agentChain fixture matrix:** single-agent direct delegation; two-hop delegation; three-hop with sub-agent; broken chain (negative); ungrounded chain — terminal `delegatedBy` resolves to another agent (negative); invalid `delegationArtifact` hash (negative); multi-party agent (per FW-0050 composition); safe-* composition (per FW-0049 — agent fills without seeing plaintext); `capacity: "ai-agent"` + WOS deontic-constraint pass (positive); `capacity: "ai-agent"` + WOS deontic-constraint fail (negative).
+**Cross-stack:** the agent-side path also lands as part of XS-6 ratification (see below).
+**Status:** not yet filed. Multi-party `partyRole` extension proposed by [FW-0050 design 2026-05-23 §6.3](2026-05-23-fw-0050-multi-party-submission-design.md); AI-agent `agentChain` shape proposed by [FW-0058 design 2026-05-24 §3.2](2026-05-24-fw-0058-ai-agent-filer-chain-design.md) — closes the prior deferral.
 
 ### EXT-4: Engine API extensions for relevance + derivation introspection
 
@@ -358,6 +380,26 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 **Subsystem-count honesty.** Each subsystem already specifies its share of the substrate; XS-5 confirms the three-act mapping is coherent and that no new primitive is required. Lighter cross-stack work than XS-4 (FW-0049) because the substrate is mature; the ADR is primarily a confirmation + naming exercise rather than a new substrate commitment.
 **Fixture status:** none. Cross-stack ADR needed in `formspec-stack/thoughts/adr/`. Per FW-0034 §5 the fixture matrix lives in FW-0038 build (three-act scenarios + the multi-party + safe-* composition variants).
 **Status:** proposed 2026-05-24 by [FW-0034 design](2026-05-24-fw-0034-honest-correction-path-design.md); pending stack-root ratification + EXT-5 ratification + EXT-35 ratification.
+
+### XS-6: AI-agent filer chain composition (cross-stack)
+
+**Spans:** formspec (`AuthoredSignature.capacity == "ai-agent"` + `agentChain` per EXT-3 closure) + work-spec (already specified — `ActorKind::Agent` per ADR-0064 + `AgentInvoker` port + `capabilityInvocation` provenance per ai-integration.md §3.3.1 + deontic constraints per §4 + autonomy caps per §5 + agent disclosure per §12 + Kernel §10.5 `agentSubmitterUnauthorized` submission gate) + trellis (Phase 1 byte-neutral — no envelope change; the agent's `AuthoredSignature` rides the standard Formspec Signed Response Payload through the standard chain)
+**Closes:** J-012 (filer-not-signer; the AI-agent slice) — confirms the substrate-mapping is coherent and that no new Trellis primitive is required.
+**FW rows blocked:** FW-0058 (design — design dependency closed by this ADR's ratification), future FW build row.
+**Recommended boundary:** at the `intake-handoff` plus the receipt-render surface. Formspec owns the `AuthoredSignature.capacity` + `agentChain` shape; WOS owns the governance-layer agent declaration + deontic enforcement + autonomy cap + disclosure; Trellis owns the chain integrity (unchanged byte-neutral envelope). Verifier rendering walks the `agentChain` from the persisted receipt; WOS audit trail is the optional bridge for case-investigation use.
+**Shape:** per [FW-0058 design §6.3](2026-05-24-fw-0058-ai-agent-filer-chain-design.md):
+1. **Capacity mapping.** Formspec `AuthoredSignature.capacity == "ai-agent"` maps onto WOS `actors[].type == "agent"` + `agents[].id` join (per WOS ADR-0064). Agent identity binding (per SC-4 + EXT-8a) is the third leg.
+2. **Provenance bridge.** `AgentChainEntry.capabilityInvocationRef` resolves to a WOS `capabilityInvocation` provenance record per ai-integration.md §3.3.1. The bridge is OPTIONAL — the chain is authoritative for capacity rendering without it; the bridge enables "see WOS audit trail" in the verifier.
+3. **Trellis discipline.** No new Trellis primitive. The agent's `AuthoredSignature` rides the standard Formspec Signed Response Payload through the standard chain. Per Trellis Phase 1 byte-neutral discipline, the verifier doesn't distinguish agent-signed from human-signed at the substrate level — only at the receipt-render level where the `capacity` declaration drives the chain rendering.
+4. **Verifier discipline.** Verifier walks `agentChain` end-to-start; renders four-party chain ("filed by [agent] acting under [operator] under [accountable human/entity] within [scope]"); surfaces `WosProvenanceUnavailable` informational when the WOS substrate isn't reachable (post-receipt, archival case). Chain-integrity failures (`MissingAgentChain` / `BrokenAgentChain` / `UngroundedAgentChain` / `InvalidDelegationArtifact`) per FW-0058 §5.3 are unverifiable-capacity, NOT forged-receipt per AP-023.
+5. **WOS submission gate.** WOS Kernel §10.5's `agentSubmitterUnauthorized` typed error covers the form-side rejection path; symmetric `humanSubmitterUnauthorized` for the inverse case (form requires agent + human submits) is a small WOS-side addition proposed by FW-0058 §9.
+6. **Multi-party composition.** Per [FW-0050 §7.1](2026-05-23-fw-0050-multi-party-submission-design.md): per-party scoping per `partyRole` on `AuthoredSignature` applies to agent capacity identically. An agent filing as one party in a multi-party flow carries BOTH `capacity: "ai-agent"` + `agentChain` AND `partyRole`.
+7. **Safe-* composition.** Per [FW-0049 §3.3](2026-05-23-fw-0049-safe-address-handling-design.md): safe-* class fields render masked to the agent's introspection identically. The agent submits without seeing the plaintext; the receipt carries the safe-* class declaration unchanged.
+8. **PKAF downstream.** When a downstream Rulespec assertion cites a value from an agent-filed form, the assertion's `rkaf:AILineage` per [PKAF rkaf-core §5.3](../../../PKAF/spec/rkaf-core.md) carries the AI-involvement; the filer-side `agentChain` is upstream of assertion authoring (distinct scope per FW-0058 §1.4). **Vocabulary tokens are ILLUSTRATIVE pending Rulespec alignment row.**
+
+**Subsystem-count honesty.** WOS already specifies its share of the substrate (the heaviest specification); Formspec ratifies the deferred `agentChain` shape via EXT-3 closure; Trellis is byte-neutral. **XS-6 is primarily a confirmation + naming exercise rather than a new substrate commitment.** Lighter cross-stack work than XS-3 (FW-0048) or XS-4 (FW-0049) because the substrate is mature; comparable to XS-5 (FW-0034) in scope.
+**Fixture status:** none. Cross-stack ADR needed in `formspec-stack/thoughts/adr/`. Fixture matrix lives in FW-0058 §6.2 (10 scenarios) and rides EXT-3 closure.
+**Status:** proposed 2026-05-24 by [FW-0058 design](2026-05-24-fw-0058-ai-agent-filer-chain-design.md); pending stack-root ratification + EXT-3 ratification + SC-4 + EXT-8a + WOS reference adapter availability (`wos-agent-stub` ships; production `wos-agent-{anthropic,claude-sdk,mcp,a2a,http}` are skeletons per WOS ADR-0064).
 
 ### XS-2: Respondent-side multi-tenant token bag
 
