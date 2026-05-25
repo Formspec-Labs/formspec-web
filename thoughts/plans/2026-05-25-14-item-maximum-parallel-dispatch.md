@@ -75,7 +75,7 @@ All in isolated worktrees; explicit-paths commits; no push; no parent-pointer bu
 | W1.1 | **ADR-amendments-batch** | web ADR-0011 amendment to enumerate `trustedReviewer` (rides FW-0037 amendment per split-keys discipline; small) + EXT-5 payload ratification for `bot-protection-cleared` (per FW-0036 §4.4) | formspec-web + formspec |
 | W1.2 | **XS-ADR-1** | XS-1 cross-stack ADR (multi-party intake spanning formspec + WOS + trellis per FW-0050 design §7) | formspec-stack root |
 | W1.3 | **XS-ADR-3** | XS-3 cross-stack ADR (coercion-aware signing per FW-0048 §6.5) | formspec-stack root |
-| W1.4 | **XS-ADR-4-5** | XS-4 (safe-address per FW-0049 §6) + XS-5 (correction-path per FW-0034 §6.4) — both touch formspec + WOS + trellis | formspec-stack root |
+| W1.4 | **XS-ADR-4-5** | XS-4 (safe-address per FW-0049 §6) + XS-5 (correction-path per FW-0034 §6.4) — landed as ADR-0066 §D-6 amendment per "no synonyms at the center"; original ADR-0158 stub-superseded. Both still touch formspec + WOS + trellis. | formspec-stack root |
 | W1.5 | **SC-1-2-5-batch** | SC-1 (Notification Template) + SC-2 (Deletion Receipt) + SC-5 (WYSIWYS Ceremony) sidecar specs — all small, all formspec-side | formspec |
 | W1.6 | **SC-4** | SC-4 (Identity Binding Profile with WebAuthn binding) — load-bearing for FW-0031; standalone agent because it's substantive | formspec |
 | W1.7 | **SC-6** | SC-6 (Review Thread Sidecar per FW-0042 §3.2) — load-bearing for FW-0113; standalone | formspec |
@@ -459,7 +459,7 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W1.1 / ADR-0011 + EXT-5 bot-protection | `formspec-web` `a85ed7a`; `formspec` `92295d48`; review-loop closure recorded above | cycle-closed for the recorded ADR/spec slice; `preparerFiling` remains unavailable-only until FW-0037 build |
 | W1.2 / XS-1 multi-party intake ADR | stack root `b8c0814`, `83f33d1`; ADR 0155 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR slice; owner ratification and downstream schema/WOS/Trellis work remain open |
 | W1.3 / XS-3 coercion-aware signing ADR | stack root `61cd59b`, `86f2f4a`; `formspec-web` `93cea73`; ADR 0156 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR / queue-alignment slice; owner ratification and downstream EXT/WOS/Trellis work remain open |
-| W1.4 / XS-4 safe-address + XS-5 record-lifecycle ADRs | stack root `1800448`, `c001309`, `522f858`, `e7a4d01`; ADRs 0157/0158 remain proposed; review-loop closure recorded above | cycle-closed for the recorded ADR slice; owner ratification and downstream EXT/WOS/Trellis work remain open |
+| W1.4 / XS-4 safe-address + XS-5 record-lifecycle ADRs | stack root `1800448`, `c001309`, `522f858`, `e7a4d01`; XS-5 subsequently merged into ADR-0066 §D-6 and ADR-0158 stub-superseded (see §9 deviation `2026-05-25 — XS-5 ADR-0158 → ADR-0066 §D-6 absorption`); ADR 0157 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR slice; owner ratification and downstream EXT/WOS/Trellis work remain open |
 | W1.5 / SC-1, SC-2, SC-5 sidecars | `formspec` `0533fb9f`, `1dcce96d`, `f11f82be`, `e95a8a21`; review-loop closure recorded above | cycle-closed for the recorded sidecar hardening slice |
 | W1.6 / SC-4 identity binding profile | `formspec` `be21eb2b`, `5d34f058`, `e95a8a21`; review-loop closure recorded above | cycle-closed for the recorded identity-binding hardening slice |
 | W1.7 / SC-6 review-thread sidecar | `formspec` `7c162c8a`, `e95a8a21`; review-loop closure recorded above | cycle-closed for the recorded review-thread sidecar slice |
@@ -474,3 +474,18 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W2.4 / FW-0061 multi-party build | `formspec-web` `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for XS-1/upstream ratification |
 
 Closeout consequence: W1.1-W1.12 and W2.1-W2.4 are checked off as cycle-closed in this plan for the recorded slices. Owner ratification, downstream upstream-extension implementation, and explicitly deferred product gates remain outside this dispatch closeout where the row text names them.
+
+### 2026-05-25 — XS-5 ADR-0158 → ADR-0066 §D-6 absorption (merge + decomposition)
+
+Post-review pass on the W1.4 XS-5 record-lifecycle ADR identified two coordinated corrections under DEVELOPMENT-PHILOSOPHY.md.
+
+**Decision C.2 (merge).** ADR-0158 was creating parallel authority alongside ADR-0066 — the ratified locus for the closed five-mode lifecycle taxonomy. Per "No synonyms at the center", the respondent-facing projection now lives as **ADR-0066 §D-6 "Respondent-facing projection"**; ADR-0158 was re-opened on a ratified ADR specifically to prevent future architectural debt. ADR-0158 stub-superseded (frontmatter `status: superseded`, `superseded-by: thoughts/adr/0066-stack-amendment-and-supersession.md (§D-6)`); the file is retained (not deleted) so this row's citation and other in-tree references continue to resolve.
+
+**Decision 3 (decomposition).** The original ADR-0158 3-act vocabulary (`correct` / `withdraw` / `dispute`) bundled three orthogonal axes into one enum. Per "Names are architecture" + the Prior-Art Pass, §D-6 decomposes each respondent-facing event along three independent axes — **authorship** (`respondent | issuer | third-party-authorized`), **truth-claim relation to original** (`supersedes | retracts | contests-without-replacing`), **effect on downstream processing** (`re-trigger-workflow | terminate-instance | annotate-only`) — converging with RFC 5322 message-disposition, W3C PROV-O (`wasRevisionOf` / `wasInvalidatedBy` / `alternateOf`), GDPR Art. 16 (rectification), and HIPAA §164.526 amendment rules. The decomposition exposes a **fourth respondent-facing affordance** (`rectification`, the issuer-authored × supersedes × re-trigger-workflow cell) that the 3-act framing had silently forced through `correct`, mis-stating authorship under GDPR-Art.-16 audit. `dispute` remains a new additive primitive that does NOT and MUST NOT appear as a sixth `amendmentTaxonomy` literal (K-A-010 invariant preserved).
+
+W1.4 row in §2 updated to cite ADR-0066 §D-6 as the XS-5 landing site. The §6.4 dispatch script and §7 honest projection are unchanged — the XS-5 work product still landed; only the authority locus shifted.
+
+Verification:
+
+- `git diff --check -- thoughts/adr/0066-stack-amendment-and-supersession.md thoughts/adr/0158-record-lifecycle-three-act-mapping.md` (in `../formspec-stack`)
+- `git diff --check -- formspec-web/thoughts/plans/2026-05-25-14-item-maximum-parallel-dispatch.md`
