@@ -51,7 +51,16 @@ export function hydrateEngineFromData(engine: IFormEngine, data: Record<string, 
   }
 }
 
-export function selectBootIdentityOption(options: readonly IdpOption[]): IdpOption | undefined {
+export function selectBootIdentityOption(
+  options: readonly IdpOption[],
+  pickerWillRender = false,
+): IdpOption | undefined {
+  // FW-0028: when the picker is about to render (deployment offers a real
+  // choice AND the policy displays it), do NOT auto-select anonymous — the
+  // user picks. When the picker is suppressed (demo mode, oidc-required
+  // mode with no OIDC options, or only one option), auto-select anonymous
+  // if present so demo / zero-config flows are unchanged.
+  if (pickerWillRender) return undefined;
   return options.find((option) => option.kind === 'anonymous');
 }
 
@@ -64,10 +73,16 @@ export function signInOptionsForIdentityPolicy({
   identityMode: IdentityPolicyConfig['mode'];
   runtimeMode: 'demo' | 'production';
 }): IdpOption[] {
-  if (runtimeMode !== 'production' || identityMode !== 'oidc-required') {
-    return [];
+  if (runtimeMode !== 'production') return [];
+  if (identityMode === 'oidc-required') {
+    return options.filter((option) => option.kind === 'oidc');
   }
-  return options.filter((option) => option.kind === 'oidc');
+  // FW-0028: anonymous-allowed deployments show the picker when there is a
+  // real choice — anonymous boot auto-selects when no other path exists, so
+  // a single-option deployment never reaches the picker. With two or more
+  // options the user picks (anonymous renders as "Continue without an
+  // account" in `AuthRequiredSurface`).
+  return options.length > 1 ? [...options] : [];
 }
 
 export function subjectRefInvalidatedByIdentityChange(

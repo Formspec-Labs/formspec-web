@@ -25,7 +25,7 @@ import type {
   FormDefinition,
   ValidationReport,
 } from '@formspec-org/types';
-import type { FormspecWebConfig } from '../config/types.ts';
+import type { FormspecWebConfig, IdentityPolicyConfig } from '../config/types.ts';
 import {
   defaultLocaleForDefinition,
   demoLocaleDocuments,
@@ -33,7 +33,12 @@ import {
 } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
-import type { IdentityClaim, IdentityProvider, IdpOption } from '../ports/identity-provider.ts';
+import type {
+  AssuranceLevel,
+  IdentityClaim,
+  IdentityProvider,
+  IdpOption,
+} from '../ports/identity-provider.ts';
 import type {
   ApplicantStatusResource,
   RespondentPlaceSnapshot,
@@ -190,7 +195,10 @@ export function RespondentRuntime({
     applyReadyStateRef.current = applyReadyState;
 
     void (async () => {
-      const boot = await bootIdentity(composition.identityProvider);
+      const boot = await bootIdentity(composition.identityProvider, 'L1', {
+        identityMode: config.identity.mode,
+        runtimeMode: composition.mode,
+      });
       if (cancelled) {
         return;
       }
@@ -521,9 +529,26 @@ export function RespondentRuntime({
 
 async function bootIdentity(
   identityProvider: IdentityProvider,
+  // FW-0028: explicit assurance floor lands the discover() call shape EXT-8
+  // will supply the form-side requirement to. Slice 1 passes `'L1'` — the
+  // picker filters out nothing today; slice 2 reads the form policy after
+  // the form loads and re-discovers with the form's declared floor (the
+  // re-discover-after-load flow ships with the FW-0020 step-up surface).
+  formAssuranceFloor: AssuranceLevel = 'L1',
+  // FW-0028: when the picker policy is going to render >0 options, suppress
+  // the boot-time auto-select of anonymous so the user actually sees the
+  // picker. Without this gate, anonymous-allowed deployments with mixed
+  // options would silently boot anonymous and never reach the picker.
+  pickerPolicy?: {
+    identityMode: IdentityPolicyConfig['mode'];
+    runtimeMode: 'demo' | 'production';
+  },
 ): Promise<{ claim: IdentityClaim | null; options: IdpOption[] }> {
-  const options = await identityProvider.discover();
-  const option = selectBootIdentityOption(options);
+  const options = await identityProvider.discover(formAssuranceFloor);
+  const pickerWillRender = pickerPolicy
+    ? signInOptionsForIdentityPolicy({ options, ...pickerPolicy }).length > 0
+    : false;
+  const option = selectBootIdentityOption(options, pickerWillRender);
   return {
     options,
     claim: option ? await identityProvider.authenticate(option) : null,
@@ -892,10 +917,14 @@ function AuthRequiredSurface({
   onSignIn: (option: IdpOption) => void;
 }) {
   const detail = error ? problemDetail(error) : undefined;
+  // FW-0028: heading switches to picker copy when the deployment offers a
+  // real choice. Single-option deployments keep the focused "Sign in to
+  // continue" call-to-action.
+  const heading = options.length > 1 ? 'Choose how to sign in' : 'Sign in to continue';
   return (
     <section className="auth-required" aria-labelledby="auth-required-title">
       <p className="respondent-header__kicker">Sign in required</p>
-      <h1 id="auth-required-title">Sign in to continue</h1>
+      <h1 id="auth-required-title">{heading}</h1>
       <p>This form requires a verified sign-in before it can be loaded.</p>
       <div className="auth-required__actions">
         {options.map((option) => (
@@ -905,7 +934,7 @@ function AuthRequiredSurface({
             type="button"
             onClick={() => onSignIn(option)}
           >
-            {authenticating ? 'Opening sign-in' : `Sign in with ${idpOptionLabel(option)}`}
+            {authenticating ? 'Opening sign-in' : idpOptionButtonLabel(option)}
           </button>
         ))}
       </div>
@@ -928,6 +957,16 @@ function idpOptionKey(option: IdpOption): string {
   return option.kind;
 }
 
+function idpOptionButtonLabel(option: IdpOption): string {
+  // FW-0028: anonymous gets its own copy — the picker's "no-account" path is
+  // a sign-in alternative, not a "sign in with anonymous" action. Vocabulary
+  // firewall: user-visible chrome never says "anonymous".
+  if (option.kind === 'anonymous') {
+    return 'Continue without an account';
+  }
+  return `Sign in with ${idpOptionLabel(option)}`;
+}
+
 function idpOptionLabel(option: IdpOption): string {
   if (option.kind === 'oidc') {
     return option.displayName;
@@ -935,7 +974,8 @@ function idpOptionLabel(option: IdpOption): string {
   if (option.kind === 'magic-link') {
     return option.channel === 'sms' ? 'SMS link' : 'email link';
   }
-  return 'anonymous access';
+  // Unreachable for 'anonymous' — `idpOptionButtonLabel` handles that branch.
+  return 'an account';
 }
 
 function SubmitNotice({ state }: { state: SubmitState }) {

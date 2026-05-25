@@ -146,6 +146,30 @@ async function renderRuntime(composition: Composition): Promise<void> {
   });
 }
 
+/**
+ * FW-0028: the multi-IdP picker now renders when the stub IdentityProvider
+ * surfaces both anonymous and OIDC options under the `oidc-required`
+ * `departmentAppProfile`. Click the OIDC sign-in button so the form-load
+ * path runs — the original auto-anonymous-boot behavior is gone.
+ */
+async function signInWithStubOidc(): Promise<void> {
+  // FW-0028: oidc-required mode shows the OIDC option (heading "Sign in to
+  // continue" when single option, "Choose how to sign in" when multiple).
+  // The auto-anonymous-boot fallback is gone; click the OIDC button so the
+  // form-load path runs.
+  await waitForText('Stub high assurance identity');
+  const button = Array.from(container?.querySelectorAll('button') ?? []).find((candidate) =>
+    candidate.textContent?.includes('Stub high assurance identity'),
+  );
+  if (!button) {
+    throw new Error('Sign-in button for stub OIDC not found');
+  }
+  await act(async () => {
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 async function waitForText(text: string, timeoutMs = 4000): Promise<void> {
   const start = Date.now();
   while (!(container?.textContent ?? '').includes(text)) {
@@ -221,6 +245,7 @@ describe('RespondentRuntime attachment integration (FW-0033)', () => {
   it('fails the form at load with the fileUpload-specific copy when the required capability is unavailable', async () => {
     const { composition } = buildComposition({ mode: 'unavailable-attachment' });
     await renderRuntime(composition);
+    await signInWithStubOidc();
     await waitForText('This form cannot be loaded.');
     expect(container?.textContent ?? '').toContain('This form needs file uploads, but this site is not set up to receive files.');
     expect(container?.textContent ?? '').toContain('UnsupportedRequiredFeature');

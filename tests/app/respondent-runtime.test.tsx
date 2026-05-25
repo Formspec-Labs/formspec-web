@@ -8,7 +8,8 @@ import {
 } from './obligations-view.test.tsx';
 import { cleanup as rtlCleanup } from '@testing-library/react';
 import type { Composition } from '../../src/composition/types.ts';
-import { departmentAppProfile } from '../../src/profiles/profiles.ts';
+import { departmentAppProfile, publicPortalProfile } from '../../src/profiles/profiles.ts';
+import type { FormspecWebConfig } from '../../src/config/types.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import type { IdentityClaim, IdentityProvider, IdpOption } from '../../src/ports/identity-provider.ts';
 import type {
@@ -129,6 +130,54 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(li.outerHTML).toBe(isolatedHtml);
   });
 
+  it('FW-0028: renders the multi-IdP picker with "Choose how to sign in" heading and "Continue without an account"', async () => {
+    const identityProvider = new TestIdentityProvider({
+      options: [
+        {
+          kind: 'oidc',
+          issuer: 'https://idp-a.example.test',
+          displayName: 'Login.gov',
+          minAssurance: 'L2',
+        },
+        {
+          kind: 'oidc',
+          issuer: 'https://idp-b.example.test',
+          displayName: 'ID.me',
+          minAssurance: 'L3',
+        },
+        { kind: 'anonymous', minAssurance: 'L1' },
+      ],
+    });
+    const composition = testComposition(identityProvider, {}, publicPortalProfile);
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Choose how to sign in');
+
+    const rendered = text();
+    expect(rendered).toContain('Sign in with Login.gov');
+    expect(rendered).toContain('Sign in with ID.me');
+    expect(rendered).toContain('Continue without an account');
+    // Vocabulary firewall — internal taxonomy must not appear in user-visible
+    // chrome.
+    expect(rendered).not.toMatch(/\bOIDC\b/);
+    expect(rendered).not.toMatch(/\bACR\b/);
+    expect(rendered).not.toMatch(/\bIdentityProvider\b/);
+    expect(rendered).not.toMatch(/\banonymous access\b/);
+    // No-oversharing: composite renders only the configured options — three
+    // buttons, nothing more.
+    const buttons = Array.from(container?.querySelectorAll('button') ?? []);
+    expect(buttons).toHaveLength(3);
+  });
+
+  it('FW-0028: keeps "Sign in to continue" heading when a single OIDC option is on offer', async () => {
+    const identityProvider = new TestIdentityProvider();
+    const composition = testComposition(identityProvider);
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    expect(text()).not.toContain('Choose how to sign in');
+  });
+
   it('requests submission status by submission id when a projection has no resource ref', async () => {
     const identityProvider = new TestIdentityProvider();
     const composition = testComposition(identityProvider, {
@@ -162,12 +211,15 @@ describe('RespondentRuntime identity sign-in', () => {
     }));
   });
 
-  async function renderRuntime(composition: Composition): Promise<void> {
+  async function renderRuntime(
+    composition: Composition,
+    config: FormspecWebConfig = departmentAppProfile,
+  ): Promise<void> {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
     await act(async () => {
-      root?.render(<RespondentRuntime composition={composition} config={departmentAppProfile} />);
+      root?.render(<RespondentRuntime composition={composition} config={config} />);
     });
   }
 
@@ -215,21 +267,25 @@ class TestIdentityProvider implements IdentityProvider {
   private readonly listeners = new Set<(claim: IdentityClaim | null) => void>();
   private current: IdentityClaim | null = null;
 
-  constructor(private readonly options: { error?: unknown } = {}) {}
+  constructor(
+    private readonly init: { error?: unknown; options?: readonly IdpOption[] } = {},
+  ) {}
 
   private get error(): unknown {
-    return this.options.error;
+    return this.init.error;
   }
 
   async discover(): Promise<IdpOption[]> {
-    return [
-      {
-        kind: 'oidc',
-        issuer: 'https://idp.example.test',
-        displayName: 'Example IdP',
-        minAssurance: 'L2',
-      },
-    ];
+    return this.init.options
+      ? [...this.init.options]
+      : [
+          {
+            kind: 'oidc',
+            issuer: 'https://idp.example.test',
+            displayName: 'Example IdP',
+            minAssurance: 'L2',
+          },
+        ];
   }
 
   async revoke(_claim: IdentityClaim): Promise<void> {
@@ -252,6 +308,7 @@ function testComposition(
     applicantStatus?: ApplicantStatusResource;
     respondentPlace?: RespondentPlaceSnapshot;
   } = {},
+  _config?: FormspecWebConfig,
 ): Composition {
   return {
     mode: 'production',

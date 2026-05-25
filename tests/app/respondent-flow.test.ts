@@ -86,22 +86,40 @@ describe('respondent flow helpers', () => {
     expect(handoff.responseHash).toMatch(/^sha256:[a-f0-9]+$/);
   });
 
-  it('only auto-selects anonymous identity at boot', () => {
+  it('auto-selects anonymous identity at boot when the picker will not render', () => {
     expect(
       selectBootIdentityOption([
         { kind: 'oidc', issuer: 'https://idp.example.test', displayName: 'IdP', minAssurance: 'L3' },
         { kind: 'magic-link', channel: 'email', minAssurance: 'L2' },
       ]),
     ).toBeUndefined();
+    // No picker → boot auto-selects anonymous (e.g., demo mode, or
+    // oidc-required where the policy filters anonymous out of the picker
+    // anyway).
     expect(
       selectBootIdentityOption([
         { kind: 'oidc', issuer: 'https://idp.example.test', displayName: 'IdP', minAssurance: 'L3' },
         { kind: 'anonymous', minAssurance: 'L1' },
       ]),
     ).toMatchObject({ kind: 'anonymous' });
+    // FW-0028: when the picker is about to render, suppress the auto-select
+    // so the user actually sees the choice.
+    expect(
+      selectBootIdentityOption(
+        [
+          { kind: 'oidc', issuer: 'https://idp.example.test', displayName: 'IdP', minAssurance: 'L3' },
+          { kind: 'anonymous', minAssurance: 'L1' },
+        ],
+        true,
+      ),
+    ).toBeUndefined();
+    // Single anonymous option — auto-select stays.
+    expect(
+      selectBootIdentityOption([{ kind: 'anonymous', minAssurance: 'L1' }]),
+    ).toMatchObject({ kind: 'anonymous' });
   });
 
-  it('offers explicit sign-in options only for production OIDC-required profiles', () => {
+  it('offers OIDC-only options for production OIDC-required profiles (anonymous filtered out)', () => {
     const options = [
       { kind: 'oidc', issuer: 'https://idp.example.test', displayName: 'IdP', minAssurance: 'L3' },
       { kind: 'magic-link', channel: 'email', minAssurance: 'L2' },
@@ -122,11 +140,57 @@ describe('respondent flow helpers', () => {
         runtimeMode: 'demo',
       }),
     ).toEqual([]);
+  });
+
+  it('FW-0028: shows the full picker in anonymous-allowed production when more than one option exists', () => {
+    const oidcA = {
+      kind: 'oidc',
+      issuer: 'https://idp-a.example.test',
+      displayName: 'IdP A',
+      minAssurance: 'L3',
+    } as const;
+    const oidcB = {
+      kind: 'oidc',
+      issuer: 'https://idp-b.example.test',
+      displayName: 'IdP B',
+      minAssurance: 'L2',
+    } as const;
+    const anon = { kind: 'anonymous', minAssurance: 'L1' } as const;
+
+    // Single anonymous option — no picker, boot auto-selects.
     expect(
       signInOptionsForIdentityPolicy({
-        options,
+        options: [anon],
         identityMode: 'anonymous-allowed',
         runtimeMode: 'production',
+      }),
+    ).toEqual([]);
+
+    // Anonymous + OIDC — picker shows both so the user can opt into the
+    // higher-assurance path.
+    expect(
+      signInOptionsForIdentityPolicy({
+        options: [oidcA, anon],
+        identityMode: 'anonymous-allowed',
+        runtimeMode: 'production',
+      }),
+    ).toEqual([oidcA, anon]);
+
+    // Multiple OIDC + anonymous — every option in the discovered order.
+    expect(
+      signInOptionsForIdentityPolicy({
+        options: [oidcA, oidcB, anon],
+        identityMode: 'anonymous-allowed',
+        runtimeMode: 'production',
+      }),
+    ).toEqual([oidcA, oidcB, anon]);
+
+    // Demo mode never shows the picker; the runtime stays on the demo path.
+    expect(
+      signInOptionsForIdentityPolicy({
+        options: [oidcA, anon],
+        identityMode: 'anonymous-allowed',
+        runtimeMode: 'demo',
       }),
     ).toEqual([]);
   });
