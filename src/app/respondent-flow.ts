@@ -32,7 +32,6 @@ import {
 import {
   assertUuidV7IdempotencyKey,
   deriveUuidV7FromString,
-  generateIdempotencyKey,
   type IdempotencyKey,
 } from '../shared/idempotency-key.ts';
 
@@ -416,6 +415,18 @@ export async function submitWithPayment(
   } catch (error) {
     return { kind: 'capture-failed', confirmation, authorization, error };
   }
+}
+
+async function resolveRailKey(
+  override: string | undefined,
+  base: string,
+  suffix: 'authorize' | 'capture' | 'void',
+): Promise<string> {
+  if (override !== undefined) {
+    assertUuidV7IdempotencyKey(override);
+    return override;
+  }
+  return deriveUuidV7FromString(base, suffix);
 }
 
 function readMethodToken(input: SubmitWithPaymentInput): string {

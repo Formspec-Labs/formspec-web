@@ -569,6 +569,51 @@ describe('submitWithPayment (FW-0027) — authorize → submit → capture-or-vo
     expect(authKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}/);
   });
 
+  it('FW-0027 H-1+H-2: a runtime retry with the same orchestration idempotencyKey reuses the derived authorize/capture key triple (rail-side idempotency suppresses dupes)', async () => {
+    // Root-domino fix: without deterministic derivation, a second call with
+    // the same `idempotencyKey` would mint fresh UUIDv7s for authorize /
+    // capture / void — the rail's same-key contract would no longer
+    // suppress the second hold (= double-charge in production).
+    const transport = stubSubmitTransport();
+    const rail = stubPaymentRailAdapter();
+    const authorizeSpy = vi.spyOn(rail, 'authorize');
+    const captureSpy = vi.spyOn(rail, 'capture');
+    const idempotencyKey = generateIdempotencyKey();
+
+    const first = await submitWithPayment({
+      runtimeProfile: profile(['payment']),
+      definition: paymentRequiredDefinition(),
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey,
+    });
+    const second = await submitWithPayment({
+      runtimeProfile: profile(['payment']),
+      definition: paymentRequiredDefinition(),
+      submitTransport: transport,
+      paymentRailAdapter: rail,
+      handoff: sampleIntakeHandoff,
+      idempotencyKey,
+    });
+
+    // Same authorize key, same capture key — both calls.
+    const authKey1 = authorizeSpy.mock.calls[0][2] as string;
+    const authKey2 = authorizeSpy.mock.calls[1][2] as string;
+    expect(authKey1).toBe(authKey2);
+    const capKey1 = captureSpy.mock.calls[0][1] as string;
+    const capKey2 = captureSpy.mock.calls[1][1] as string;
+    expect(capKey1).toBe(capKey2);
+    // Authorize and capture keys differ from each other.
+    expect(authKey1).not.toBe(capKey1);
+    // The rail produced exactly ONE Authorization (same-key contract).
+    const states = rail._internalAuthorizationStates();
+    expect(states.size).toBe(1);
+    // Both outcomes are happy-path; only one charge moved.
+    expect(first.kind).toBe('submitted-with-payment');
+    expect(second.kind).toBe('submitted-with-payment');
+  });
+
   it('throws when payment is enabled but the form has no amount declared', async () => {
     const transport = stubSubmitTransport();
     const rail = stubPaymentRailAdapter();
