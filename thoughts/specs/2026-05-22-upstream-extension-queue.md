@@ -47,9 +47,9 @@ Entries are removed when the upstream work ships and formspec-web consumes it. S
 
 **Owning repo:** formspec (+ binding to PKAF for authority chains)
 **File:** `formspec/schemas/response.schema.json`
-**Closes:** J-012 (filer-not-signer; including the AI-agent slice per FW-0058); foundation for J-041 (multi-party).
-**FW rows blocked:** FW-0037, FW-0058, FW-0050/FW-0061 (extended scope below)
-**Shape:** extend `AuthoredSignature` with `capacity` block (enum: `self | poa | guardian | executor | parent | licensed-professional | corporate-officer | ai-agent`), `principalRef` (urn party id, reuse `intake-handoff.schema.json:180` `urn:party:` convention), `authorityArtifact` (URI + hash + type). **Multi-party extension:** add `partyRole` field bound to `definition.schema.json.parties[*].roleId` (closed enum `coEqual | asymmetricPrimary | asymmetricSecondary | guardianFor` per FW-0050 §2.1). Land EXT-3 + multi-party `partyRole` + AI-agent `agentChain` together — same `AuthoredSignature` extension surface; three passes is three breaks for one schema.
+**Closes:** J-012 (filer-not-signer — the SIGNER-CAPACITY slice: POA / guardian / executor / parent / licensed-professional / corporate-officer / ai-agent; **the human-filer-not-signer slice where respondent capacity stays `self` is EXT-36 `metadata.filer`, NOT this row**); foundation for J-041 (multi-party).
+**FW rows blocked:** FW-0058 (`ai-agent` capacity + `agentChain` per FW-0058 design §3.2), FW-0050/FW-0061 (`partyRole` per FW-0050 design §6.3). **FW-0037 (human filer-not-signer) is no longer blocked on EXT-3** — per [FW-0037 design §1.2 non-goals](2026-05-24-fw-0037-filer-not-signer-design.md), respondent capacity stays `self` and the filer rides on the new EXT-36 `metadata.filer` carrier. EXT-3 covers the SIGNER side (signer represents principal in some capacity); EXT-36 covers the FILER side (separate human authored, respondent signs).
+**Shape:** extend `AuthoredSignature` with `capacity` block (enum: `self | poa | guardian | executor | parent | licensed-professional | corporate-officer | ai-agent`), `principalRef` (urn party id, reuse `intake-handoff.schema.json:180` `urn:party:` convention), `authorityArtifact` (URI + hash + type). **Multi-party extension:** add `partyRole` field bound to `definition.schema.json.parties[*].roleId` (closed enum `coEqual | asymmetricPrimary | asymmetricSecondary | guardianFor` per FW-0050 §2.1). Land EXT-3 + multi-party `partyRole` + AI-agent `agentChain` together — same `AuthoredSignature` extension surface; three passes is three breaks for one schema. **EXT-36 (`metadata.filer` carrier) lands as a sibling on the Response envelope, NOT on `AuthoredSignature`** — the filer didn't sign; coupling filer-identity to a signature event would conflate with `principalRef`.
 **`agentChain` shape — closed 2026-05-24 by [FW-0058 design §3.2](2026-05-24-fw-0058-ai-agent-filer-chain-design.md).** Flat ordered `AgentChainEntry[]` array on `AuthoredSignature`; index-0 = signer (the acting agent); terminal entry's `delegatedBy` resolves to the accountable human/entity (NOT to another agent). Walked end-to-start renders the four-party chain (J-012 promise). Conditional schema rule: when `capacity == "ai-agent"`, `agentChain` is REQUIRED + non-empty + terminates at a non-agent `delegatedBy`. Each `AgentChainEntry` shape:
 
 ```text
@@ -272,6 +272,45 @@ AgentChainEntry {
 **Cross-stack:** none. Single-spec upstream tightening; no cross-stack ratification required.
 **Fixture status:** none. The upstream tightening lands with fixture cases for the new normative floors when (1) + (2) + (4) ratify.
 **Status:** candidates (1) + (2) + (4) RECOMMENDED; (3) OPTIONAL — proposed 2026-05-23 by FW-0051 design. Not blocking FW-0051 or FW-0062 build; land alongside (or shortly after) FW-0051 owner ratification.
+
+### EXT-36: `metadata.filer` carrier on Response (human filer-not-signer)
+
+**Owning repo:** formspec
+**File:** `formspec/schemas/response.schema.json`
+**Closes:** J-012 (filer ≠ signer ≠ subject; **the human-capacity slice** — paralegal-for-pro-se-client, clinic-staff-for-patient, family-helper-for-elder, tax-preparer-for-taxpayer). AI-capacity slice is EXT-3 `agentChain`; this row is the third leg where respondent has capacity `self` and a separate human filled.
+**FW rows blocked:** FW-0037 (design dependency), future FW-0037 build row.
+**Shape:** per [FW-0037 design 2026-05-24 §3.2](2026-05-24-fw-0037-filer-not-signer-design.md). Add optional `metadata.filer?: FilerRef` to the Response envelope as a sibling block to EXT-2's `metadata.provenance[path]` and `metadata.derivations[path]`. `FilerRef` is a new `$def`:
+
+```text
+FilerRef {
+  filerId: string                  // URN naming the filer's identity
+  filerName: string                // Display name
+  role: "family" | "preparer" | "professional" | "advocate" | "guardian-helper" | string  // Seed enum + deployment-extensible
+  relationshipToSigner?: string    // Free-text or controlled by deployment; informational
+  identityBinding: IdentityBinding // Same shape as AuthoredSignature.identityBinding per web ADR-0007
+  sessionStartedAt: string          // RFC 3339
+  sessionCompletedAt: string        // RFC 3339; > sessionStartedAt
+  fieldsAuthored: Array<string>     // RFC 6901 pointers
+  handoffMethod: "same-device-session-switch" | "distinct-device-short-link" | "distinct-device-qr" | "in-person-device-pass" | string  // Adopter-extensible
+}
+```
+
+Single filer per submission for slice 1. Multi-party composition extends additively to `metadata.filers: ReadonlyArray<FilerRef & {partyRef: string}>` when both `filerNotSigner` AND `multiParty` are enabled per [FW-0037 §6.4 + FW-0050 §7.1](2026-05-23-fw-0050-multi-party-submission-design.md). The base envelope (signer's `AuthoredSignature`) is **unchanged** — the respondent signs in capacity `self`. **Distinct from EXT-3 `capacity` enum + `agentChain`** which cover the SIGNER side (POA / guardian / etc.; or AI-agent). EXT-36 is the FILER side carrier where the signer's capacity stays `self`.
+
+**Fixture matrix:** the EXT-36 fixture set MUST include (per FW-0037 §6.2):
+1. Single-filer canonical case (paralegal + client; one filer per submission).
+2. Filer-session-with-no-fields-authored (filer navigated but typed nothing).
+3. Filer + safe-* composition (filer omits safe-* fields; signer fills at ceremony).
+4. Filer + per-field `respondentOnly` composition.
+5. Filer + multi-party composition (per-party filer; per FW-0050 §7.1).
+6. Filer + tight-temporal-ordering (family-helper; T2 - T1 < 60s).
+7. Filer-session-incomplete + signer-signs (no `sessionCompletedAt`; `metadata.filer` absent in submission).
+8. Filer-with-distinct-IdP-from-signer.
+9. Negative: `filerNotSigner: forbidden` form-policy + `metadata.filer` present (verifier surfaces form-policy violation).
+10. Negative: `metadata.filer.filerId == AuthoredSignature.signerId` (filer-equals-signer; structural-coherence warning; runtime SHOULD elide the carrier).
+**Cross-stack:** **NO new XS-N cross-stack ADR required.** Trellis is byte-neutral (carrier rides as response metadata through the standard chain). WOS has no filer-actor extension proposed (per FW-0037 §1.2 non-goal). PKAF is distinct scope (`AILineage` is assertion-side; filer-side has no PKAF analog). Smallest cross-stack footprint of any post-MVP design row to date.
+**Fixture status:** none. Land with the 10-scenario fixture matrix above in `formspec/tests/fixtures/response/metadata-filer/`.
+**Status:** not yet filed. Proposed 2026-05-24 by [FW-0037 design](2026-05-24-fw-0037-filer-not-signer-design.md).
 
 ### EXT-10: Receipt-domain prose update (drift fix)
 
