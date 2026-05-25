@@ -80,7 +80,9 @@ import {
   assertIdentityPolicySatisfied,
   buildConfirmationTrackingUri,
   buildIntakeHandoff,
+  formAssuranceFloorForDefinition,
   hydrateEngineFromResponse,
+  identityClaimMeetsAssurance,
   identitySubjectChanged,
   isIdentityInteractionStarted,
   selectBootIdentityOption,
@@ -121,6 +123,8 @@ type RespondentState =
       status: 'auth-required';
       options: IdpOption[];
       authenticating: boolean;
+      reason: 'initial-sign-in' | 'assurance-step-up';
+      assuranceFloor?: AssuranceLevel;
       error?: unknown;
     }
   | {
@@ -216,6 +220,7 @@ export function RespondentRuntime({
     let engine: IFormEngine | undefined;
     let unsubscribe: (() => void) | undefined;
     let activeClaim: IdentityClaim | null = null;
+    let pendingAssuranceFloor: AssuranceLevel | undefined;
     let reloadSequence = 0;
     terminalClearRequestedRef.current = false;
     setRespondentState({ status: 'loading' });
@@ -237,13 +242,22 @@ export function RespondentRuntime({
         const readyState = await createReadyState(composition, config, claim, options);
 
         if (cancelled || sequence !== reloadSequence) {
-          readyState.engine.dispose();
+          if (readyState.status === 'ready') {
+            readyState.engine.dispose();
+          }
           return;
         }
 
-        engine?.dispose();
-        engine = readyState.engine;
         activeClaim = claim;
+        if (readyState.status === 'ready') {
+          engine?.dispose();
+          engine = readyState.engine;
+          pendingAssuranceFloor = undefined;
+        } else {
+          engine?.dispose();
+          engine = undefined;
+          pendingAssuranceFloor = readyState.assuranceFloor;
+        }
         setRespondentState(readyState);
       } catch (error) {
         if (!cancelled && sequence === reloadSequence) {
@@ -276,6 +290,7 @@ export function RespondentRuntime({
           status: 'auth-required',
           options: signInOptions,
           authenticating: false,
+          reason: 'initial-sign-in',
         });
       }
       // Invariant: subscribe's `activeClaim` closure must reflect boot before
@@ -289,7 +304,11 @@ export function RespondentRuntime({
           return;
         }
         const invalidatedSubjectRef = subjectRefInvalidatedByIdentityChange(activeClaim, nextClaim);
-        if (!identitySubjectChanged(activeClaim, nextClaim)) {
+        const subjectChanged = identitySubjectChanged(activeClaim, nextClaim);
+        const assuranceStepUpSatisfied = pendingAssuranceFloor !== undefined &&
+          identityClaimMeetsAssurance(nextClaim, pendingAssuranceFloor) &&
+          !identityClaimMeetsAssurance(activeClaim, pendingAssuranceFloor);
+        if (!subjectChanged && !assuranceStepUpSatisfied) {
           activeClaim = nextClaim;
           setRespondentState((current) =>
             current.status === 'ready' ? { ...current, claim: nextClaim } : current,
@@ -442,6 +461,7 @@ export function RespondentRuntime({
               status: 'auth-required',
               options: [option],
               authenticating: false,
+              reason: 'initial-sign-in',
               error,
             },
       );
@@ -462,6 +482,7 @@ export function RespondentRuntime({
         authenticating={respondentState.authenticating}
         error={respondentState.error}
         options={respondentState.options}
+        reason={respondentState.reason}
         onSignIn={(option) => {
           void handleSignIn(option);
         }}
@@ -713,7 +734,7 @@ async function createReadyState(
   config: FormspecWebConfig,
   claim: IdentityClaim | null,
   options: { locale?: string } = {},
-): Promise<ReadyRespondentState> {
+): Promise<ReadyRespondentState | Extract<RespondentState, { status: 'auth-required' }>> {
   assertIdentityPolicySatisfied({
     claim,
     identityMode: config.identity.mode,
@@ -722,6 +743,15 @@ async function createReadyState(
   const definition = await composition.definitionSource.getDefinition(
     composition.initialDefinitionUrl,
   );
+  let formAssuranceFloor: AssuranceLevel | undefined;
+  try {
+    formAssuranceFloor = formAssuranceFloorForDefinition(definition);
+  } catch (cause) {
+    throw new InvalidRuntimePolicyError(
+      'form',
+      `metadata.assurance is invalid: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
   // ADR-0011 §Resolution: resolve once per (definition × identity × locale)
   // combination, before any side effects. Throws typed RuntimePolicyError
   // when the form/org/instance triple is incoherent; the catch in
@@ -770,6 +800,29 @@ async function createReadyState(
   ) {
     throw new PaymentRequiresOnlineError();
   }
+
+  if (!identityClaimMeetsAssurance(claim, formAssuranceFloor)) {
+    const discoveredOptions = await composition.identityProvider.discover(formAssuranceFloor);
+    const signInOptions = signInOptionsForIdentityPolicy({
+      options: discoveredOptions,
+      identityMode: config.identity.mode,
+      runtimeMode: composition.mode,
+    });
+    if (signInOptions.length === 0) {
+      throw new InvalidRuntimePolicyError(
+        'form',
+        `metadata.assurance requires ${formAssuranceFloor}, but no configured identity provider can satisfy it`,
+      );
+    }
+    return {
+      status: 'auth-required',
+      options: signInOptions,
+      authenticating: false,
+      reason: 'assurance-step-up',
+      assuranceFloor: formAssuranceFloor,
+    };
+  }
+
   const draftKey: DraftKey = {
     formUrl: definition.url,
     formVersion: definition.version,
@@ -1372,23 +1425,32 @@ function AuthRequiredSurface({
   authenticating,
   error,
   options,
+  reason,
   onSignIn,
 }: {
   authenticating: boolean;
   error?: unknown;
   options: IdpOption[];
+  reason: 'initial-sign-in' | 'assurance-step-up';
   onSignIn: (option: IdpOption) => void;
 }) {
   const detail = error ? problemDetail(error) : undefined;
   // FW-0028: heading switches to picker copy when the deployment offers a
   // real choice. Single-option deployments keep the focused "Sign in to
   // continue" call-to-action.
-  const heading = options.length > 1 ? 'Choose how to sign in' : 'Sign in to continue';
+  const heading = reason === 'assurance-step-up'
+    ? 'Use a stronger sign-in'
+    : options.length > 1
+      ? 'Choose how to sign in'
+      : 'Sign in to continue';
+  const body = reason === 'assurance-step-up'
+    ? 'This form needs a stronger sign-in before it can be loaded. Choose one of the listed options to continue.'
+    : 'This form requires a verified sign-in before it can be loaded.';
   return (
     <section className="auth-required" aria-labelledby="auth-required-title">
       <p className="respondent-header__kicker">Sign in required</p>
       <h1 id="auth-required-title">{heading}</h1>
-      <p>This form requires a verified sign-in before it can be loaded.</p>
+      <p>{body}</p>
       <div className="auth-required__actions">
         {options.map((option) => (
           <button

@@ -7,7 +7,11 @@ import type {
 import type { IFormEngine } from '@formspec-org/engine';
 import type { IdentityPolicyConfig } from '../config/types.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
-import type { IdentityClaim, IdpOption } from '../ports/identity-provider.ts';
+import type {
+  AssuranceLevel,
+  IdentityClaim,
+  IdpOption,
+} from '../ports/identity-provider.ts';
 import type {
   OfflineSubmitQueue,
   QueuedSubmit,
@@ -105,6 +109,31 @@ export function signInOptionsForIdentityPolicy({
   return [...options];
 }
 
+export function formAssuranceFloorForDefinition(
+  definition: FormDefinition,
+): AssuranceLevel | undefined {
+  const assurance = optionalObject(
+    optionalObject(definition, 'metadata'),
+    'assurance',
+  );
+  if (!assurance) return undefined;
+
+  const ial = optionalAssuranceLevel(assurance, 'ial');
+  const aal = optionalAssuranceLevel(assurance, 'aal');
+  if (!ial) return aal;
+  if (!aal) return ial;
+  return assuranceRank(ial) >= assuranceRank(aal) ? ial : aal;
+}
+
+export function identityClaimMeetsAssurance(
+  claim: IdentityClaim | null,
+  required: AssuranceLevel | undefined,
+): boolean {
+  return required === undefined || (
+    claim !== null && assuranceRank(claim.assuranceLevel) >= assuranceRank(required)
+  );
+}
+
 export function subjectRefInvalidatedByIdentityChange(
   previous: IdentityClaim | null,
   next: IdentityClaim | null,
@@ -139,6 +168,37 @@ export function assertIdentityPolicySatisfied({
 
 export function isIdentityInteractionStarted(error: unknown): boolean {
   return error instanceof Error && error.name === 'IdentityInteractionStartedError';
+}
+
+function optionalObject(
+  source: unknown,
+  key: string,
+): Record<string, unknown> | undefined {
+  if (!source || typeof source !== 'object') return undefined;
+  const value = (source as Record<string, unknown>)[key];
+  if (value === undefined) return undefined;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  throw new Error(`${key} must be an object`);
+}
+
+function optionalAssuranceLevel(
+  source: Record<string, unknown>,
+  key: 'ial' | 'aal',
+): AssuranceLevel | undefined {
+  const value = source[key];
+  if (value === undefined) return undefined;
+  if (isAssuranceLevel(value)) return value;
+  throw new Error(`metadata.assurance.${key} must be one of L1, L2, L3, L4`);
+}
+
+function isAssuranceLevel(value: unknown): value is AssuranceLevel {
+  return value === 'L1' || value === 'L2' || value === 'L3' || value === 'L4';
+}
+
+function assuranceRank(level: AssuranceLevel): number {
+  return Number(level.slice(1));
 }
 
 export async function buildIntakeHandoff({

@@ -5,7 +5,9 @@ import { sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-confo
 import {
   assertIdentityPolicySatisfied,
   buildIntakeHandoff,
+  formAssuranceFloorForDefinition,
   hydrateEngineFromData,
+  identityClaimMeetsAssurance,
   identitySubjectChanged,
   isIdentityInteractionStarted,
   selectBootIdentityOption,
@@ -250,6 +252,35 @@ describe('respondent flow helpers', () => {
     ).toEqual([]);
   });
 
+  it('FW-0028 slice 2: extracts the form assurance floor from the EXT-8 metadata shape', () => {
+    const definition = {
+      ...demoSampleForm,
+      metadata: {
+        assurance: {
+          ial: 'L2',
+          aal: 'L3',
+          jurisdiction: 'US',
+        },
+      },
+    } as FormDefinition;
+
+    expect(formAssuranceFloorForDefinition(definition)).toBe('L3');
+    expect(identityClaimMeetsAssurance(claim('subject-l2', 'L2'), 'L3')).toBe(false);
+    expect(identityClaimMeetsAssurance(claim('subject-l4', 'L4'), 'L3')).toBe(true);
+    expect(identityClaimMeetsAssurance(null, 'L1')).toBe(false);
+  });
+
+  it('FW-0028 slice 2: rejects invalid EXT-8 assurance values loudly', () => {
+    const definition = {
+      ...demoSampleForm,
+      metadata: { assurance: { aal: 'AAL2' } },
+    } as FormDefinition;
+
+    expect(() => formAssuranceFloorForDefinition(definition)).toThrow(
+      /metadata\.assurance\.aal/,
+    );
+  });
+
   it('recognizes the narrow identity redirect-started signal', () => {
     const redirectStarted = new Error('redirect started');
     redirectStarted.name = 'IdentityInteractionStartedError';
@@ -299,14 +330,14 @@ describe('respondent flow helpers', () => {
   });
 });
 
-function claim(subjectRef: string): IdentityClaim {
+function claim(subjectRef: string, assuranceLevel: IdentityClaim['assuranceLevel'] = 'L1'): IdentityClaim {
   return {
     provider: 'test',
     adapter: 'test',
     subjectRef,
     credentialType: 'other',
     subjectBinding: 'respondent',
-    assuranceLevel: 'L1',
+    assuranceLevel,
   };
 }
 
