@@ -16,24 +16,27 @@
  *     (mirroring FW-0064's HTTP adapter cohort discipline) so adopters compose
  *     queue + transport pairs deliberately, not via runtime decoration.
  *
- * Conformance contract (enforced by `defineOfflineSubmitQueueConformance`):
+ * Conformance contract — the executable shape lives in
+ * `defineOfflineSubmitQueueConformance` in `src/adapter-conformance/conformance.ts`;
+ * adopters MUST run that suite against their adapter. The contract families
+ * the suite covers (count tracks the suite, not this comment):
  *
- * 1. UUIDv7 idempotency keys — `enqueue` rejects non-UUIDv7 values (queue
- *    EXT-14 convention, mirrors `SubmitTransport.submit`).
- * 2. Enqueue idempotency — calling `enqueue(handoff, key)` twice with the same
- *    key returns the SAME `QueuedSubmit` and `pending()` length stays 1. The
- *    second handoff value is ignored (first-wins).
- * 3. Replay preserves the original idempotency key — the key passed to the
- *    injected `SubmitTransport.submit` MUST equal the key originally enqueued.
- *    This is the load-bearing duplicate-suppression invariant.
- * 4. FIFO replay order — `replay()` drains entries in enqueue order.
- * 5. Per-entry outcomes — `replay()` returns a `ReplayOutcome[]` of the same
- *    length as the pre-drain pending set; `'sent'` outcomes remove the entry,
- *    `'failed'` outcomes keep it pending for the next replay.
- * 6. Empty replay is a no-throw no-op — `replay()` on an empty queue resolves
- *    to `[]` without error.
- * 7. `pending()` accuracy — returns the currently-pending set, never includes
- *    sent entries, never includes entries that were rejected at enqueue.
+ * - UUIDv7 idempotency keys — `enqueue` rejects non-UUIDv7 values (queue
+ *   EXT-14 convention, mirrors `SubmitTransport.submit`).
+ * - Enqueue idempotency — calling `enqueue(handoff, key)` twice with the same
+ *   key returns the SAME `QueuedSubmit` and `pending()` length stays 1. The
+ *   second handoff value is ignored (first-wins).
+ * - Replay preserves the original idempotency key — the key passed to the
+ *   injected `SubmitTransport.submit` MUST equal the key originally enqueued.
+ *   This is the load-bearing duplicate-suppression invariant.
+ * - FIFO replay order — `replay()` drains entries in enqueue order.
+ * - Per-entry outcomes — `replay()` returns a `ReplayOutcome[]` of the same
+ *   length as the pre-drain pending set; `'sent'` outcomes remove the entry,
+ *   `'failed'` outcomes keep it pending for the next replay.
+ * - Empty replay is a no-throw no-op — `replay()` on an empty queue resolves
+ *   to `[]` without error.
+ * - `pending()` accuracy — returns the currently-pending set, never includes
+ *   sent entries, never includes entries that were rejected at enqueue.
  *
  * Slice-1 production posture: NO production reference adapter ships. The OSS
  * reference deployment wires `unavailableOfflineSubmitQueue()` + declares

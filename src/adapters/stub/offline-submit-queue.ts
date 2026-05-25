@@ -81,6 +81,10 @@ export function stubOfflineSubmitQueue(
           const confirmation = await transport.submit(entry.handoff, entry.idempotencyKey);
           outcomes.push({ kind: 'sent', idempotencyKey: key, confirmation });
           byKey.delete(key);
+          // Stub uses O(n) indexOf+splice for simplicity over a JS array.
+          // Production adapters (FW-0082 IndexedDB) should prefer
+          // Map-backed deletion + skip-on-replay semantics so a long
+          // pending tail does not turn replay into O(n^2).
           const index = order.indexOf(key);
           if (index >= 0) order.splice(index, 1);
         } catch (error) {
