@@ -19,6 +19,11 @@ import type {
 import type { SubmitTransport } from '../ports/submit-transport.ts';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { FormRuntimePolicyExtractor } from '../ports/form-runtime-policy-extractor.ts';
+import type {
+  OfflineSubmitQueue,
+  QueuedSubmit,
+} from '../ports/offline-submit-queue.ts';
+import type { SubmitConfirmation } from '../ports/submit-transport.ts';
 import {
   isFormFeaturePolicyMode,
   isRuntimeFeatureKey,
@@ -89,6 +94,80 @@ export interface AttachmentStoreConformanceSubject {
 export interface RespondentHistorySourceConformanceSubject {
   adapter: RespondentHistorySource;
   replaceSnapshot(snapshot: HistorySnapshot): void | Promise<void>;
+}
+
+export interface OfflineSubmitQueueConformanceSubject {
+  /**
+   * The queue under test. Conformance asserts that this queue, given the
+   * `recordingTransport` below at construction time, preserves idempotency
+   * keys across `enqueue` → `replay` and obeys the FIFO + per-entry-outcome
+   * contract.
+   */
+  adapter: OfflineSubmitQueue;
+  /**
+   * Returns the recording transport the suite uses to assert replay
+   * preserves the original idempotency key. The conformance call protocol:
+   * adapter authors construct the queue with a SubmitTransport that
+   * delegates to this recorder (the recorder's `submit` is the side that
+   * MUST receive the original idempotencyKey). The recorder ships pre-baked
+   * via `createRecordingSubmitTransport()`; see fixtures.
+   */
+  recordingTransport: RecordingSubmitTransport;
+}
+
+export interface RecordingSubmitTransportCall {
+  readonly idempotencyKey: string;
+  readonly handoff: IntakeHandoff;
+}
+
+export interface RecordingSubmitTransport {
+  readonly transport: SubmitTransport;
+  /** Mutable log of every `submit` invocation in call order. */
+  readonly calls: ReadonlyArray<RecordingSubmitTransportCall>;
+  /**
+   * Pin a failure for the next replay call matching `idempotencyKey`. The
+   * recorded transport throws this error for the next matching call and
+   * then resumes the default "accepted" behavior.
+   */
+  failNextFor(idempotencyKey: string, error: unknown): void;
+}
+
+/**
+ * Builds a recording SubmitTransport for use by the OfflineSubmitQueue
+ * conformance subject. Each `submit` invocation appends to `calls` and
+ * returns a synthetic `SubmitConfirmation` whose referenceNumber is
+ * `RECORD-<n>` for the nth call, so the suite can pin per-call success
+ * shape. Use `failNextFor(key, error)` to inject a failure path.
+ */
+export function createRecordingSubmitTransport(): RecordingSubmitTransport {
+  const calls: RecordingSubmitTransportCall[] = [];
+  const failures = new Map<string, unknown>();
+  let counter = 0;
+  const transport: SubmitTransport = {
+    async submit(handoff, idempotencyKey) {
+      calls.push({ idempotencyKey, handoff });
+      if (failures.has(idempotencyKey)) {
+        const error = failures.get(idempotencyKey);
+        failures.delete(idempotencyKey);
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+      counter += 1;
+      const confirmation: SubmitConfirmation = {
+        referenceNumber: `RECORD-${counter.toString().padStart(6, '0')}`,
+        status: 'accepted',
+      };
+      return confirmation;
+    },
+  };
+  return {
+    transport,
+    get calls() {
+      return calls;
+    },
+    failNextFor(idempotencyKey, error) {
+      failures.set(idempotencyKey, error);
+    },
+  };
 }
 
 export interface FormRuntimePolicyExtractorConformanceSubject {
@@ -734,6 +813,136 @@ export function defineFormRuntimePolicyExtractorConformance(
       ]);
       const policy = composed.extract(definition);
       expect(policy.features.fileUpload).toBe('optional');
+    });
+  });
+}
+
+/**
+ * Conformance harness for `OfflineSubmitQueue` (FW-0044, web ADR-0011
+ * §offlineSubmit). Encodes the seven testable conformance invariants the
+ * port comment names — UUIDv7 idempotency keys, enqueue idempotency, replay
+ * preserves the original key, FIFO replay order, per-entry outcomes,
+ * empty-replay no-op, `pending()` accuracy. Adapter authors register their
+ * queue with a `recordingTransport` (built via
+ * `createRecordingSubmitTransport()`) whose call log the suite asserts
+ * against — the recorder's `submit` is the side that MUST receive the
+ * original idempotencyKey at replay.
+ */
+export function defineOfflineSubmitQueueConformance(
+  name: string,
+  setup: () => OfflineSubmitQueueConformanceSubject,
+): void {
+  describe(name, () => {
+    it('enqueue rejects non-UUIDv7 idempotency keys', async () => {
+      const subject = setup();
+      await expect(
+        subject.adapter.enqueue(sampleIntakeHandoff, 'not-a-uuid-v7'),
+      ).rejects.toThrow();
+    });
+
+    it('enqueue is idempotent for the same UUIDv7 idempotency key', async () => {
+      const subject = setup();
+      const key = generateIdempotencyKey();
+      const first = await subject.adapter.enqueue(sampleIntakeHandoff, key);
+      const second = await subject.adapter.enqueue(sampleIntakeHandoff, key);
+      expect(second).toEqual(first);
+      const pending = await subject.adapter.pending();
+      expect(pending).toHaveLength(1);
+      expect(pending[0].idempotencyKey).toBe(key);
+    });
+
+    it('replay preserves the original idempotency key at the injected transport', async () => {
+      const subject = setup();
+      const key = generateIdempotencyKey();
+      await subject.adapter.enqueue(sampleIntakeHandoff, key);
+      const outcomes = await subject.adapter.replay();
+      expect(outcomes).toHaveLength(1);
+      expect(outcomes[0].kind).toBe('sent');
+      expect(outcomes[0].idempotencyKey).toBe(key);
+      expect(subject.recordingTransport.calls).toHaveLength(1);
+      expect(subject.recordingTransport.calls[0].idempotencyKey).toBe(key);
+    });
+
+    it('replay drains the pending set on successful outcomes', async () => {
+      const subject = setup();
+      const key = generateIdempotencyKey();
+      await subject.adapter.enqueue(sampleIntakeHandoff, key);
+      await subject.adapter.replay();
+      const pending = await subject.adapter.pending();
+      expect(pending).toEqual([]);
+    });
+
+    it('replay drains entries in FIFO order', async () => {
+      const subject = setup();
+      const keyA = generateIdempotencyKey();
+      const keyB = generateIdempotencyKey();
+      const keyC = generateIdempotencyKey();
+      await subject.adapter.enqueue(sampleIntakeHandoff, keyA);
+      await subject.adapter.enqueue(sampleIntakeHandoff, keyB);
+      await subject.adapter.enqueue(sampleIntakeHandoff, keyC);
+      const outcomes = await subject.adapter.replay();
+      expect(outcomes.map((outcome) => outcome.idempotencyKey)).toEqual([
+        keyA,
+        keyB,
+        keyC,
+      ]);
+      expect(
+        subject.recordingTransport.calls.map((call) => call.idempotencyKey),
+      ).toEqual([keyA, keyB, keyC]);
+    });
+
+    it('replay returns per-entry outcomes and keeps failed entries pending', async () => {
+      const subject = setup();
+      const keyA = generateIdempotencyKey();
+      const keyB = generateIdempotencyKey();
+      await subject.adapter.enqueue(sampleIntakeHandoff, keyA);
+      await subject.adapter.enqueue(sampleIntakeHandoff, keyB);
+      subject.recordingTransport.failNextFor(keyB, new Error('transport down'));
+      const outcomes = await subject.adapter.replay();
+      expect(outcomes).toHaveLength(2);
+      expect(outcomes[0].kind).toBe('sent');
+      expect(outcomes[0].idempotencyKey).toBe(keyA);
+      expect(outcomes[1].kind).toBe('failed');
+      expect(outcomes[1].idempotencyKey).toBe(keyB);
+      const pending = await subject.adapter.pending();
+      expect(pending).toHaveLength(1);
+      expect(pending[0].idempotencyKey).toBe(keyB);
+    });
+
+    it('empty replay is a no-throw no-op', async () => {
+      const subject = setup();
+      const outcomes = await subject.adapter.replay();
+      expect(outcomes).toEqual([]);
+      expect(subject.recordingTransport.calls).toEqual([]);
+    });
+
+    it('pending() returns the empty array when no entry is queued', async () => {
+      const subject = setup();
+      const pending = await subject.adapter.pending();
+      expect(pending).toEqual([]);
+    });
+
+    it('pending() reflects entries surviving a partial failed replay', async () => {
+      const subject = setup();
+      const key = generateIdempotencyKey();
+      await subject.adapter.enqueue(sampleIntakeHandoff, key);
+      subject.recordingTransport.failNextFor(key, new Error('boom'));
+      await subject.adapter.replay();
+      const stillPending = await subject.adapter.pending();
+      expect(stillPending).toHaveLength(1);
+      expect(stillPending[0].idempotencyKey).toBe(key);
+    });
+
+    it('QueuedSubmit carries an ISO-8601 enqueuedAt timestamp', async () => {
+      const subject = setup();
+      const key = generateIdempotencyKey();
+      const queued: QueuedSubmit = await subject.adapter.enqueue(
+        sampleIntakeHandoff,
+        key,
+      );
+      expect(queued.enqueuedAt).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
+      );
     });
   });
 }

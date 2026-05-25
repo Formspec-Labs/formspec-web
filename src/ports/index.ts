@@ -71,3 +71,8 @@ export type {
   HistoryIssuerRef,
   HistoryDefinitionRef,
 } from './respondent-history-source.ts';
+export type {
+  OfflineSubmitQueue,
+  QueuedSubmit,
+  ReplayOutcome,
+} from './offline-submit-queue.ts';
