@@ -45,6 +45,8 @@ export const demoScreener: ScreenerDocumentInput = {
       dataType: 'boolean',
       label: 'Do you currently have income from a job or benefits?',
     },
+    // upstream FormItem doesn't carry currency; type-widening pinned for
+    // the production catalog (FW-0109 / upstream EXT row).
     {
       key: 'amount_needed',
       type: 'field',
