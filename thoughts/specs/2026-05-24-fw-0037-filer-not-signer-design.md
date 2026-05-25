@@ -1,0 +1,554 @@
+# FW-0037 — Filer-not-signer (human filer; respondent signs): design proposal
+
+**Date:** 2026-05-24
+**Status:** PROPOSAL (not ratified). Owner pushback expected during review; framing decisions Q1–Q4 are open until accepted.
+**Row:** [FW-0037 in `PLANNING.md:505`](../../PLANNING.md) (design).
+**Journey:** [J-012 in `JOURNEYS.md:343`](../../JOURNEYS.md) — the **human-capacity slice** ("filer ≠ signer ≠ subject"; non-AI variants — paralegal-for-pro-se-client, clinic-staff-for-patient, family-helper-for-elder, tax-preparer-for-taxpayer). AI variant is [FW-0058](2026-05-24-fw-0058-ai-agent-filer-chain-design.md).
+**Anti-patterns:** [AP-014 (coercion) in `JOURNEYS.md:131`](../../JOURNEYS.md), [AP-023 (verified ≠ true) in `JOURNEYS.md:185`](../../JOURNEYS.md).
+**Feature key:** `reviewerPreparer` — already enumerated in [web ADR-0011 Feature Ownership Table line 150](../adr/0011-runtime-feature-resolution-and-policy-gates.md); FW-0037 fills in the resolved-profile sub-block for the **preparer** side (FW-0042 fills in the **reviewer** side; the key is shared).
+**Source brief:** [`thoughts/sketches/2026-05-24-fw-0037-filer-not-signer-research-brief.md`](../sketches/2026-05-24-fw-0037-filer-not-signer-research-brief.md). Upstream-primitive inventory, threat scenarios, FW interactions, and external prior art live there; this doc decides over them.
+**Substrate sources (load-bearing):**
+- [EXT-3 in `thoughts/specs/2026-05-22-upstream-extension-queue.md:46`](2026-05-22-upstream-extension-queue.md) — `AuthoredSignature.capacity` enum (signer-side; covers POA / guardian / executor / etc.). FW-0037 sits ABOVE this — the respondent's capacity stays `self`; the filer is a sibling carrier.
+- [web ADR-0011 line 150](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — `reviewerPreparer` capability key (shared with FW-0042).
+- [web ADR-0007](../adr/0007-identity-provider-port.md) — IdentityProvider port (filer-identity binding rides the same port as signer-identity).
+- [FW-0058 design 2026-05-24](2026-05-24-fw-0058-ai-agent-filer-chain-design.md) — AI-capacity sibling; vocabulary distinction is load-bearing (see §6.6).
+
+Per [web ADR-0004 consume-not-invent](../adr/0004-cross-repo-placement-consume-not-invent.md), formspec-web does not author legal-authority frameworks or per-jurisdiction filer-role taxonomies. FW-0037 is a **consumer-side composition** — names the formspec-web filer-not-signer posture, proposes the `filerRef` carrier on the submission audit trail, specifies the signature-ceremony handoff port shape, writes the threat model centered on the AP-014 coercion vector, distinguishes firmly from FW-0058 (AI) and FW-0042 (reviewer-only).
+
+## 1. Goal and non-goals
+
+### 1.1 Goal
+
+Decide the formspec-web shape for accepting submissions where a **human filer** (paralegal, preparer, clinic staff, family helper, advocate) fills the form on behalf of a **human respondent** who retains capacity to sign, such that:
+
+- The receipt unambiguously names the filer and the signer as distinct parties.
+- The signer's `AuthoredSignature.capacity` stays `self` (the respondent has capacity; no POA chain on the signature).
+- The runtime UX surfaces "I'm filling this for someone else" entry, captures filer identity, and routes the signing ceremony explicitly to the respondent.
+- The signature ceremony fires under the respondent's identity + authentication session, separately from the filer's session.
+- The form-policy can FORBID filer-not-signer on the high-coercion-risk template set per FW-0048 §6.4.
+- The verifier renders "filed by [filer-name] · signed by [signer-name]" as ambient capacity-discipline copy per AP-023.
+
+**The substrate already mostly exists**: EXT-3 covers the signer-side `capacity` (FW-0037 doesn't touch it — respondent capacity stays `self`); web ADR-0011 enumerates `reviewerPreparer`; the IdentityProvider port (web ADR-0007) carries the filer's identity binding without extension. The new substrate is small: a `filerRef` carrier on the submission audit trail and a `SignerHandoff` port shape.
+
+FW-0037 deliverables: framing decisions (Q1–Q4); the `reviewerPreparer` resolved-profile sub-block (`preparerFlow` sub-shape); the `filerRef` carrier shape on the submission; the runtime UX contract for filer-session + handoff + signer-ceremony; the SignerHandoff port shape and its adopter contracts; the verifier rendering contract; the failure semantics; the composition seams with FW-0042 / FW-0048 / FW-0049 / FW-0050 / FW-0034 / FW-0030 / FW-0051 / FW-0058; the cross-stack dependency chain (lightest of any post-MVP design row to date: no new XS-N ADR required; one EXT for `filerRef` carrier).
+
+This is a **design row**. The deliverable is a doc plus follow-on EXT and spec items, not code. The build row is a future follow-on (not yet filed; expected to materialize when EXT for `filerRef` ratifies and the first adopter deployment needs a preparer flow).
+
+### 1.2 Non-goals
+
+- **Implementation.** No code, no port-conformance fixtures, no React shell. A future build row owns the materialization.
+- **Inventing a parallel capacity model.** Per [web ADR-0004](../adr/0004-cross-repo-placement-consume-not-invent.md), EXT-3 IS the capacity model. The signer's capacity stays `self`; FW-0037 does NOT add a new capacity value. The filer is a sibling carrier, NOT a capacity.
+- **Authoring legal-authority frameworks.** Whether a paralegal can legally file a court document on behalf of a pro se client is a jurisdictional legal question. Per AP-023, FW-0037 captures filer-identity-claim, NOT legal authorization. Deployments bind legal-authority verification to their own substrate (paralegal-license check, family-member affidavit, etc.).
+- **Authoring per-jurisdiction filer-role taxonomies.** Whether "paralegal" or "advocate" or "navigator" is the right role name for a given deployment is per-deployment. FW-0037 declares a seed enumeration (`family | preparer | professional | advocate | guardian-helper`) and defers per-deployment extensions.
+- **Solving coerced-signing in real-time.** FW-0048 owns the duress affordance substrate; FW-0037 composes with it (§6.2). FW-0037 itself cannot detect coercion; the respondent is the only party who knows.
+- **WOS substrate for filer-actor governance.** WOS has no `human-filer` actor extension today and FW-0037 does not propose one. If a deployment needs per-filer-actor governance (e.g., per-paralegal capability scoping under CPA Board audit rules), that's a future WOS-side row.
+- **AI-agent filer case.** That's FW-0058. Vocabulary firewall is load-bearing — see §6.6.
+- **Replacing FW-0042 (reviewer-only).** FW-0042 is read+comment; FW-0037 is read+author+handoff. The two compose under the shared `reviewerPreparer` capability key but are architecturally distinct sub-flows. See §6.1.
+- **POA / guardian / executor / licensed-professional signing cases.** Those are already EXT-3 `capacity: poa | guardian | executor | licensed-professional` — the SIGNER signs in that capacity; there is no separate "filer." FW-0037 is the third leg where the respondent has capacity to sign and a separate human filled the form for them.
+- **Specifying the per-act audit-trail event taxonomy.** The submission-level `filerRef` carrier is the load-bearing primitive; ledger event types (e.g., `filer.session-opened` / `filer.handoff-completed`) are deferred to build per Q2.
+
+## 2. Threat model
+
+The threat model is the load-bearing input. Stated explicitly so the design's success criteria are unambiguous.
+
+### 2.1 Trust boundary
+
+**The signer (respondent) is the trust anchor for the legal act**; the filer is OUTSIDE the trust boundary for any attestation, BUT INSIDE the trust boundary for content-authoring within the scope the form-policy permits.
+
+- The **form** trusts the **signer's identity binding** (via the standard IdentityProvider port per web ADR-0007). The signer's `AuthoredSignature.identityBinding` is unchanged from non-filer flows.
+- The **form** trusts the **filer's identity binding** (same IdentityProvider port; distinct session) for the purpose of **attributing typed content**, NOT for the purpose of **attesting to anything**. The filer's identity rides the standard binding but is recorded on the submission's audit trail, never on the `AuthoredSignature`.
+- The **form** does NOT trust the filer to authorize the signing act. The signing ceremony MUST run under the signer's authenticated session; no path lets the filer's session produce a signature event.
+- The **respondent (signer)** is the only party who can attest to their answers being accurate. Per AP-023, the receipt attests to filer-identity (captured on submission) + signer-identity (captured on signature) + temporal ordering (filer finished before signer signed) — NOT to truth.
+
+**What the filer SEES (when the form-policy declares `filerNotSigner: allowed | required`):** the Formspec Definition (the form's structure); the per-field help context (References + Ontology sidecars); the per-field values typed in the filer's session; the per-field policy declarations (which fields the filer may fill vs. which are respondent-only per Q4). **The filer does NOT see** safe-* class fields' plaintext when the form-policy declares them `respondentOnly: true` (Q4 default for safe-*) — those fields render masked in the filer session and unmask only in the signer session.
+
+**What the filer DOES NOT see:** the signer's signing-ceremony session state (the signer authenticates separately); the duress affordance (per FW-0048, the duress UI is reachable only from the signer's ceremony); the issuer's deployment-internal config (`safetyTeamRecipients[]` per EXT-30, etc.).
+
+### 2.2 Attacker model
+
+- **Attacker identity.** (a) A predatory "helper" who fills the form with content the respondent didn't intend (financial-redirect scam targeting an elder). (b) A coercive filer (abusive partner, predatory caregiver) who fills the form and forces the respondent to sign. (c) An unauthorized filer who claims a role they don't hold (faking paralegal status). (d) An adversary who intercepts a handoff link (the filer's "ready for [signer] to review" magic link) and impersonates the signer.
+- **Attacker goal.** Cause the respondent to sign a submission they didn't author or wouldn't author if reviewed; impersonate the signer to produce a signed submission without the actual respondent's involvement; falsify filer-identity in the audit trail.
+- **What the attacker observes.** The Formspec Definition + sidecars are public; the filer's session state is visible to the filer; the handoff transport (short-link / QR / device-pass) is visible to whoever holds the device or receives the link.
+- **What the attacker cannot force.** (a) A signature without the signer's authenticated session — the signing ceremony MUST run under the signer's IdentityProvider session. (b) A bypass of the form-load gate when `filerNotSigner: forbidden` (the high-coercion template set per FW-0048 §6.4). (c) Bypass of the per-field respondent-only-fillable gate (filer can't type into a `respondentOnly: true` field). (d) Bypass of the per-section review acknowledgement at signer ceremony (each filer-pre-filled section requires the signer to acknowledge before the signing CTA enables per §3.3).
+- **What the attacker knows.** Kerckhoffs-style — the attacker has read this design, the FW-0048 design, and the form's Definition. **The defense rests on structural mechanisms** (form-policy forbidden-list for high-coercion templates; per-section review gate at signer ceremony; signer-session-only duress affordance; asymmetric assurance for high-coercion templates) **rather than on any single secret.**
+
+### 2.3 Four grounded scenarios
+
+Each scenario gives: the setup, what the FW-0037 mechanism must achieve, what this design's posture provides.
+
+**2.3.1 Paralegal fills small-claims complaint for competent pro se client (canonical scenario).** A legal-aid clinic paralegal helps a client file a small-claims complaint. The client signed an engagement letter authorizing fill-on-behalf; the client is present and reviews + signs at the end of the session.
+- **Required:** receipt names paralegal as filer (role: `professional`); names client as signer (capacity `self`); shows temporal ordering (filer T1 < signer T2). Court audit can determine "who typed this" vs "who attested this."
+- **Design posture:** §3 framing decisions; §3.1 form-policy `allowed`; §3.2 `filerRef` carrier (single filer per submission); §3.3 runtime UX "you are filing on behalf of [signer]" banner during filer session + "ready for [signer-name] to review" handoff CTA; §3.4 same-device session-switch is the canonical adapter for this scenario. **Canonical scenario; design optimizes for this.**
+
+**2.3.2 Clinic intake coordinator fills demographics + history; patient signs on iPad in waiting room.** A clinic's intake coordinator pre-fills the patient's chart before the appointment; the patient arrives, the iPad shows the pre-filled form, the patient reviews + signs.
+- **Required:** receipt names intake coordinator as filer (role: `professional` or deployment-specific `staff`); names patient as signer (capacity `self`); distinct-device handoff between admin-station session (filer) and waiting-room iPad session (signer).
+- **Design posture:** §3.4 distinct-device handoff via short-link / QR / device-pass; per-section review gate at signer ceremony (patient acknowledges each pre-filled section before signing CTA enables); asymmetric assurance allowed (filer at IAL1 / staff credential; patient at IAL2 / driver's-license-bound credential per form policy). **Canonical scenario for the device-handoff case.**
+
+**2.3.3 Adult daughter helps elderly competent mother with benefits-redetermination form.** Daughter sits with mother, fills the form while mother reviews each section verbally, mother signs at the end.
+- **Required:** receipt names daughter as filer (role: `family`); names mother as signer (capacity `self`); temporal ordering may be very tight (T2 - T1 = ~30s); asymmetric assurance allowed (daughter at email-bound IAL1; mother at IAL2).
+- **Design posture:** §3 framing decisions; §3.5 filer assurance floor is form-policy-declared, MAY be lower than signer; §3.3 same-device hand-the-device handoff is the canonical adapter. **Canonical scenario for the home-care family-helper case.**
+
+**2.3.4 Adversarial — "helpful preparer" coerces respondent into signing benefits-redirect form.** A predatory "helper" at a senior center fills a benefits-redirect form (redirecting Social Security to the helper's account), hands the device to the elder, says "just tap here." The elder doesn't read carefully and taps.
+- **Required:** structural defenses that hold against an adversarial filer at the signature step.
+- **Design posture.** **Layered defense.** (a) **Per-template forbidden-list per FW-0048 §6.4** — benefits-redirect, financial POA, advance directive, marriage/divorce, custody, immigration sponsorship default to `filerNotSigner: forbidden` (the signer MUST be the filer; no separate filer session). (b) **Per-section review gate at signer ceremony** — the signing ceremony surfaces each filer-pre-filled section as a discrete acknowledgement (each requires explicit acknowledge before signing CTA enables). The gate is non-skippable; the design forbids a "sign everything" shortcut. (c) **Duress affordance reachable from signer's ceremony per FW-0048 §3** — the dual-credential mechanism is available on the signer's ceremony surface, NOT the filer's. (d) **Asymmetric assurance for high-coercion templates** — when the template class is in FW-0048's high-coercion set, the form-policy SHOULD require IAL2+ for the signer regardless of the filer's assurance; substrate per FW-0030 + EXT-8. (e) **Form-policy `filerNotSigner: forbidden` enforcement** — the form-load gate refuses to enter filer-session-mode for forbidden templates; the only path is signer-as-respondent fills + signs themselves. **Composition rule (explicit, not merely enumerative): the AP-014 vector on FW-0037 is closed by layers (a)+(b)+(c) AND-composed; adversarial scenarios that bypass (a) (template not in high-coercion set + form-policy `allowed`) are caught by (b) (per-section review gate) and (c) (duress affordance available at signer-only ceremony surface).**
+
+### 2.4 Out-of-scope threat patterns
+
+Named explicitly so the design isn't read as covering them:
+
+- **Compromised filer-device.** Once an attacker controls the filer's device, the filer's session can be manipulated. Mitigation = the filer's own device hygiene (device-attested credentials, MDM for clinical contexts). FW-0037 doesn't author endpoint security.
+- **Compromised signer-device.** Same shape on the signer side — if the signer's device is compromised, the signing ceremony can be manipulated. Mitigation = signer-device hygiene + composition with FW-0036 (humane bot protection, device-attested credentials per Tier 1).
+- **Filer-identity-provider compromise.** If the IdP issues filer-class credentials to unauthorized parties, FW-0037 cannot detect. Substrate-layer concern; per ADR-0007 + SC-4 IdP discipline.
+- **Coerced-respondent-with-no-filer-present.** A respondent coerced by a non-filer (abusive partner standing nearby) signing a form they filled themselves is FW-0048's territory, not FW-0037's.
+- **Per-jurisdiction legal-authority verification.** Whether the filer is legally authorized to file on behalf of the signer (paralegal status, family-member affidavit, professional license) is deployment-bound per-jurisdiction. FW-0037 captures the role + identity; deployments verify authority.
+- **Cross-deployment filer-reputation.** A filer's behavior at deployment A doesn't bind their behavior at deployment B. Cross-deployment reputation is out of scope.
+
+## 3. Framing decisions (Q1–Q4)
+
+Each decision: the answer first, then the rationale, then the alternative considered and why rejected. All four are PROPOSALS pending owner review.
+
+### 3.1 Q1 — Form-policy shape: three-tier `forbidden | allowed | required`
+
+**PROPOSAL.** Form-policy carries the standard ADR-0011 three-tier shape:
+
+| Tier | Semantics |
+|---|---|
+| `forbidden` | Form REJECTS filer-not-signer. Signer MUST be the same identity as the form-fill author; no separate filer session is offered at entry. Default for high-coercion / rights-impacting templates (FW-0048 §6.4: financial POA, immigration sponsorship, advance directive, marriage/divorce, custody, benefits-redirect). Form-load with a filer-session URL triggers typed `FeaturePolicyConflictError`. |
+| `allowed` | Form accepts EITHER same-identity fills-and-signs OR filer-fills-then-signer-signs. Default for most forms; minimal disruption to existing flows. The entry-point UX surfaces an opt-in "I'm filling this for someone else" affordance; users who don't opt-in get the standard self-fill flow. |
+| `required` | Form REQUIRES filer-not-signer. Same-identity fills-and-signs is rejected. Rare; use cases include forms designed for paralegal-only filing with paper-signature handback, clinic-staff-only intake forms, or process-mandated separation-of-duties flows. Explicit. |
+
+**Justification.** Maps directly onto ADR-0011's existing form-policy enum and the existing typed-error rendering at form-load. Mirrors FW-0058 (`aiAgentFiler`), FW-0049 (`safeAddress`), FW-0050 (`multiParty`) three-tier shape directly. The form-policy tier composes with the runtime UX entry-point — `allowed` is the canonical case where users opt-in; `required` forces the filer-session entry; `forbidden` skips the affordance entirely.
+
+**Alternative rejected: two-tier `forbidden | allowed` (no `required`).** Considered because `required` is rare. Rejected: maintaining symmetry with FW-0058 / FW-0050 / FW-0049 outweighs minor force-fitting on the rare tier; the symmetric vocabulary keeps reasoning-about-multiple-features cognitively consistent. The rare `required` use cases exist.
+
+**Alternative rejected: per-role granular tier (e.g., `filerRoles: { family: "allowed", professional: "allowed", advocate: "forbidden" }`).** Considered for finer-grained per-role control. Rejected: per-role gating creates a sprawling form-policy shape; per-role acceptability is a deployment / org-policy concern, not a form-policy concern. **Form-policy gates the FLOW shape; org-policy gates the ROLE set (per ADR-0011 line 150 "allowed reviewer/preparer roles" is org-side).** Clean separation.
+
+### 3.2 Q2 — `filerRef` carrier shape: submission-level `metadata.filer`, single filer per submission
+
+**PROPOSAL.** Add `metadata.filer?` on the Formspec Response as a sibling block to EXT-2's `metadata.provenance[path]`. One filer per submission.
+
+```text
+metadata.filer?: {
+  filerId: string                  // URN naming the filer's identity (e.g., "urn:formspec:identity:user:abc123")
+  filerName: string                // Display name as shown in the verifier's "filed by" copy
+  role: "family" | "preparer" | "professional" | "advocate" | "guardian-helper" | string  // Seed enumeration + deployment-extensible (per Q1 §1.2 non-goal — role taxonomy is deployment-bound)
+  relationshipToSigner?: string    // Free-text or controlled by deployment; informational ("daughter", "engaged paralegal", "intake coordinator at [clinic]")
+  identityBinding: IdentityBinding // Same shape as AuthoredSignature.identityBinding (per web ADR-0007); the filer's authentication binding
+  sessionStartedAt: string          // RFC 3339; filer's session start
+  sessionCompletedAt: string        // RFC 3339; filer's hand-off to signer
+  fieldsAuthored: Array<string>     // RFC 6901 pointers; which fields the filer typed values into (empty if filer only navigated)
+  handoffMethod: "same-device-session-switch" | "distinct-device-short-link" | "distinct-device-qr" | "in-person-device-pass" | string  // Adopter-extensible per Q3
+}
+```
+
+**Substrate justification.** The `filerRef` carrier rides on the Response envelope as `metadata.filer` (parallel to EXT-2's `metadata.provenance[path]` and EXT-2's `metadata.derivations[path]`); the base Response envelope is **unchanged**. The signer's `AuthoredSignature` is **unchanged** — the respondent signs in capacity `self` as they would in a non-filer flow. The `metadata.filer` block is metadata the verifier reads to render the filer-vs-signer distinction.
+
+**Single filer per submission.** Slice 1 assumes one filer per submission. The canonical scenarios (paralegal-for-client, clinic-staff-for-patient, family-helper-for-elder) are single-filer; multi-hop filer chains (filer A starts, hands to filer B, who hands to signer) are rare and deferred to a future row OR a future ledger event extension. Per Q1 §1.2 non-goals.
+
+**`identityBinding` rides web ADR-0007.** No new substrate; the filer's identity is bound via the same `IdentityProvider` port as the signer's. The filer's IdP session is distinct from the signer's IdP session; both are captured.
+
+**`role` is the seed enumeration + deployment-extensible.** Per Q1 §1.2 non-goal, the role taxonomy is deployment-bound. The seed enumeration covers the canonical scenarios; deployments extend with their own role names (e.g., a court e-file portal might add `pro-se-coordinator`).
+
+**Alternative rejected: per-AuthoredSignature `filedBy?` sibling field.** Considered as a smaller change. Rejected: couples filer-identity to a signature event when the filer didn't sign; conflates with EXT-3 `principalRef` (the principal subject the signer represents); creates ambiguity when a signature has both `principalRef` (signer represents principal) AND `filedBy` (a third party typed it). Cleaner to keep the filer on the submission audit trail.
+
+**Alternative rejected: per-act ledger event types (e.g., `filer.session-opened`, `filer.handoff-completed`).** Considered for richer audit trails. Rejected for slice 1; per Q1 §1.2 non-goals, defer to build row when consumers materialize. The `metadata.filer` carrier covers the canonical receipt-rendering use case; per-act events are an enrichment.
+
+**Alternative rejected: `filerRef[]` array (multi-filer support).** Considered for the multi-hop case (filer A → filer B → signer). Rejected for slice 1: not in canonical scenarios; can extend to `filer: FilerEntry | FilerEntry[]` in a future revision (additive change). **Single filer is load-bearing for slice 1.**
+
+### 3.3 Q3 — Signature ceremony handoff: SignerHandoff port shape; reference adapters at build
+
+**PROPOSAL.** The handoff from filer-session to signer-ceremony is mediated by a `SignerHandoff` port. Adopters wire reference adapters per their flow. Per [web ADR-0009 §"Not in the constitutional inventory" (b)](../adr/0009-hexagonal-architecture-ports-and-adapters.md), the port shape lands here; reference adapters land with the build row.
+
+**Three canonical reference adapters** (declared as adopter contracts; built later):
+
+| Adapter | Use case | UX shape |
+|---|---|---|
+| `SameDeviceSessionSwitch` | Paralegal-and-client side-by-side; family-helper-and-elder at home. | Filer ends session via "ready for signer" CTA; sign-out flushes filer's session state; signer's IdP login screen appears; signer authenticates; the form re-opens in signer-review mode with pre-filled fields visible. |
+| `DistinctDeviceShortLink` | Clinic-staff fills at admin station; patient signs on waiting-room iPad. | Filer ends session; system emits a one-time signer-link sent via email/SMS to the signer's pre-declared address (or shows a QR for in-person device-handoff); signer opens on their device, authenticates, reviews + signs. Short-link is single-use, expires within form-policy-declared window. |
+| `InPersonDevicePass` | Tax-prep CPA hands tablet to client across the desk. | Filer ends session via "ready for signer" CTA; the device prompts for signer authentication INLINE (no new device); signer authenticates with their credential (passkey, ID-bound credential); the form re-opens in signer-review mode. Differs from `SameDeviceSessionSwitch` in that signer auth fires immediately, no log-out/log-in lag. |
+
+**Per-form handoff-method declaration.** Form-policy can constrain which handoff methods are acceptable. High-coercion templates (FW-0048 §6.4) when `filerNotSigner: allowed` SHOULD require `DistinctDeviceShortLink` (fresh-device, fresh-auth, time-gap for the signer to consider away from the filer's presence).
+
+**Port shape (adopter contract; sketch).**
+
+```text
+interface SignerHandoff {
+  // Adopter contract: produce a handoff token bound to the filer's completed session;
+  // the signer's session redeems the token to open the form in signer-review mode.
+  // Tokens are single-use, time-bound, and bound to the filer-session's submission audit trail.
+  initiate(args: {
+    filerSubmissionId: string         // Opaque submission id from the filer's session
+    signerDeclaredContact?: {kind: "email" | "sms" | "in-person"; value: string}
+    handoffMethod: string             // Adopter chooses; matches form-policy allowedHandoffMethods
+  }): Promise<{handoffToken: string; userVisibleArtifact?: {kind: "link" | "qr" | "session-switch"; artifact: string}}>;
+
+  // Adopter contract: redeem the handoff token; resolve the filer-session's submission and
+  // open the signer-ceremony surface with pre-filled fields visible and the per-section review gate active.
+  redeem(args: {handoffToken: string; signerIdentityClaim: IdentityClaim}): Promise<{
+    submissionId: string;
+    preFilledFields: ReadonlyArray<string>;  // RFC 6901 pointers from metadata.filer.fieldsAuthored
+  }>;
+}
+```
+
+**Why a port (not a built-in helper).** Per ADR-0009, every backend-shaped concern is a port. The handoff transport varies per deployment (short-link via deployment's own notification service; QR via the device's camera; session-switch via the IdP's logout-flow); a built-in helper would force one transport on every adopter. Reference adapters defer to build; the port shape lands here so adopter-contracts are explicit.
+
+**Per-section review gate (load-bearing for AP-014 mitigation per §2.3.4).** When the signer-ceremony opens via `SignerHandoff.redeem`, the rendering MUST surface each filer-pre-filled section (per Definition section grouping) as a discrete acknowledgement step. The signing CTA is disabled until all pre-filled sections are acknowledged. The acknowledgement is per-section ("I have read the demographics section"); NOT per-field (per-field would create fatigue). The acknowledgement is non-skippable; design forbids a "sign everything" shortcut.
+
+**Alternative rejected: single built-in handoff implementation in the formspec-web codebase.** Considered for simplicity. Rejected per ADR-0009: the handoff transport is a backend-shaped concern; built-in would prevent adopters from wiring their own notification rails. The port discipline holds.
+
+**Alternative rejected: handoff via the existing IdentityProvider session-restoration flow.** Considered for reusing existing identity primitives. Rejected: the handoff carries submission-state continuity (the signer must see the filer's pre-fills), not just identity continuity. Identity-session restoration is a sibling concern; the SignerHandoff port composes ABOVE the IdentityProvider port (the signer authenticates via the IdP; the SignerHandoff resolves the submission state).
+
+### 3.4 Q4 — Per-field filer-fillable taxonomy: default-all-fillable with respondent-only opt-out
+
+**PROPOSAL.** Filer can fill any field by default; form-policy declares per-field `respondentOnly: true` to gate. Safe-* class fields (per FW-0049) default to `respondentOnly: true` automatically (composition rule §6.3); no per-field declaration needed.
+
+**Substrate justification.** The canonical scenarios (paralegal-fills-demographics, clinic-staff-fills-history, family-helper-fills-most-fields) have most fields filer-fillable. Treating filer-fillable as default minimizes form-policy bloat — only the sensitive subset needs declaration. Safe-* default-respondent-only is automatic via §6.3 composition, eliminating duplicate declaration.
+
+**Field rendering in filer-session.**
+
+| Field type | In filer-session |
+|---|---|
+| Default (filer-fillable) | Fully renderable + writable. |
+| `respondentOnly: true` (form-policy declared) | Renders as masked label ("Signer to fill at signing"); not writable in filer-session; revealed + writable in signer-review mode after handoff. |
+| Safe-* class (FW-0049) | Same as `respondentOnly: true` (composition rule §6.3); the safe-* mask discipline survives the filer's read. |
+
+**Field rendering in signer-review mode.**
+
+| Field type | In signer-review mode |
+|---|---|
+| Filer-pre-filled | Renders with "Filed by [filer-name]" provenance badge; signer can edit; per-section review acknowledgement required (per Q3 §3.3). |
+| `respondentOnly: true` (unfilled by filer) | Renders empty + writable by signer; the signer fills these. |
+| Safe-* class (unfilled by filer per default-respondent-only) | Same as `respondentOnly: true` (composition rule §6.3); signer fills with plaintext access. |
+
+**Alternative rejected: default-respondent-only (filer can fill nothing without explicit form-policy grant).** Considered for maximum safety. Rejected: forces every form to declare per-field `filerFillable: true` for the bulk of its fields — administrative burden + drift risk + onboarding cost. Default-all-fillable matches canonical scenarios; respondent-only opt-out is the smaller surface.
+
+**Alternative rejected: per-section filer-fillable instead of per-field.** Considered to reduce form-policy size. Rejected: real forms have sensitive fields mixed with non-sensitive fields within the same section (e.g., a household demographics section may have non-sensitive name + age fields alongside a sensitive employer field protected via safe-employer). Per-field granularity is required; the safe-* composition handles the bulk of the sensitive set automatically.
+
+## 4. Capability key and port shape
+
+### 4.1 Capability key under web ADR-0011 — sub-block on existing `reviewerPreparer`
+
+**PROPOSAL.** No new capability key. `reviewerPreparer` is already enumerated at [ADR-0011 Feature Ownership Table line 150](../adr/0011-runtime-feature-resolution-and-policy-gates.md). FW-0037 fills in the `preparerFlow` sub-block of the resolved-profile shape for `reviewerPreparer`; FW-0042 fills in the `reviewerFlow` sub-block.
+
+| Layer | What ADR-0011 names for `reviewerPreparer` (FW-0037 sub-block) |
+|---|---|
+| Instance capability | Adapter-backed: (a) `SignerHandoff` adapter binding (per §3.3); (b) IdentityProvider adapter for filer-session authentication (same port as signer per web ADR-0007); (c) audit-trail render adapter for the "filed by" + "signed by" capacity-discipline copy (§5). Instance declares which handoff adapters are wired + which IdPs support filer-session entry. |
+| Org policy | (a) Allowed filer roles (subset of seed enumeration + deployment extensions per Q2); (b) Allowed handoff methods per template class; (c) Filer-assurance-floor configuration per template class; (d) Org-level forbidden-list for filer-not-signer (org may forbid the entire flow regardless of form-policy). |
+| Form policy | Three-tier per §3.1: `forbidden` (form REJECTS filer-not-signer), `allowed` (default opt-in), `required` (form REQUIRES filer-not-signer). High-coercion templates per FW-0048 §6.4 default to `forbidden` per §6.2 composition. Per-field `respondentOnly: true` per §3.4. Per-form `allowedHandoffMethods: string[]` per §3.3. Per-form `filerAssuranceFloor?: AssuranceLevel` per Q5 §3.4 (optional; defaults to signer's assurance floor). |
+| Resolved runtime profile | `reviewerPreparer.preparerFlow.posture` + `allowedRoles[]` + `allowedHandoffMethods[]` + `filerAssuranceFloor` + `respondentOnlyFieldPointers[]` + (when posture != "forbidden") `signerHandoffBindingRef`. Form-load throws `UnsupportedRequiredFeatureError` per ADR-0011 if the form requires `filerNotSigner` but the instance lacks a `SignerHandoff` adapter; throws `FeaturePolicyConflictError` if the form FORBIDS and the org REQUIRES. |
+
+**Append-only key ordering.** Per [`src/policy/feature-keys.ts`](../../src/policy/feature-keys.ts), `RUNTIME_FEATURE_KEYS` is append-only. **FW-0037 adds no new key — `reviewerPreparer` is shared with FW-0042 and pre-enumerated in ADR-0011 line 150.** When the `reviewerPreparer` key is added to the tuple at build time (it's not in the current tuple shown at `feature-keys.ts:68-76`; that tuple is the SHIPPED set, not the enumerated set), both FW-0037 and FW-0042 land their sub-blocks simultaneously. No coordination cost between the two rows beyond shared-key naming.
+
+**Locale-conditional set.** `reviewerPreparer` is **NOT** locale-conditional — the per-form policy doesn't change with locale. No `LOCALE_CONDITIONAL_FEATURE_KEYS` membership.
+
+### 4.2 Port shape — adopter contracts now; reference adapters at build
+
+Per [web ADR-0009 §"Not in the constitutional inventory" (b)](../adr/0009-hexagonal-architecture-ports-and-adapters.md): post-MVP ports await consumer code. FW-0037 is a design row; build row is a future follow-on. The honest application is to specify the **adopter contracts** here and let the port shapes land with the build, with one explicit exception: the `SignerHandoff` port shape (§3.3) IS the load-bearing decision and lands here (port shape, not reference adapter implementation).
+
+**Adopter contracts (what the build row must satisfy).**
+
+| Adopter axis | What it implies |
+|---|---|
+| `SignerHandoff` adapter binding | Per §3.3 — handoff token issuance + redemption; transport-extensible (same-device / short-link / QR / in-person). REQUIRED when posture != "forbidden". |
+| `IdentityProvider` adapter (filer-session) | Same port as signer's IdP per web ADR-0007. Filer-session authentication; the adapter may enforce different assurance-level requirements than signer-session per form-policy. REQUIRED when posture != "forbidden". |
+| Verifier "filed by" / "signed by" render adapter | The verifier-side adapter that reads `metadata.filer` + the signer's `AuthoredSignature` and renders the capacity-discipline copy per §5. Adopter-styled per their UI conventions; the render contract is the constant. |
+| Filer-session opt-in entry-point | The UI affordance that surfaces "I'm filling this for someone else" at form-load when posture == "allowed". Required for `allowed` (so users can opt-in); SHOULD redirect immediately to filer-session-mode for `required` (no choice); SHOULD be absent for `forbidden`. |
+| Per-section review gate at signer ceremony | Per §3.3 — non-skippable acknowledgement of each filer-pre-filled section before the signing CTA enables. Adopter-styled per UI conventions; the gate-existence + non-skippability are the constants. |
+
+**Why not invent more port surfaces here.** Per ADR-0009 §(b) the bar is consumer code, not predicted-need. The `SignerHandoff` port is the load-bearing decision because its adopter-shape varies and its absence is detectable at form-load (without it, the `required` posture cannot satisfy); other surfaces fall out at build time when the React shell is co-implemented.
+
+### 4.3 Resolution contract addition
+
+The `ResolvedRuntimeProfile` consumed by the React shell per [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) gains a `reviewerPreparer.preparerFlow` block:
+
+```text
+reviewerPreparer?: {
+  preparerFlow?: {
+    posture: "forbidden" | "allowed" | "required"
+    allowedRoles: ReadonlySet<string>              // org-policy filter on filer roles
+    allowedHandoffMethods: ReadonlySet<string>     // org × form intersection
+    filerAssuranceFloor?: AssuranceLevel           // per-form; defaults to signer's
+    respondentOnlyFieldPointers: ReadonlyArray<string>  // RFC 6901 pointers; per-form
+    signerHandoffBindingRef?: string               // URN of the wired SignerHandoff adapter (REQUIRED when posture != "forbidden")
+  }
+  // FW-0042 (reviewer-only) lands here as `reviewerFlow?: {...}`; the two sub-blocks are independent.
+}
+```
+
+The block is the resolver's read-only output. The shell consults `posture` at form-load (renders the opt-in entry-point unless `forbidden`); `allowedRoles` (constrains the role-picker UX); `allowedHandoffMethods` (constrains the handoff method offered at filer-session end); `filerAssuranceFloor` (drives the filer-session IdP assurance gate); `respondentOnlyFieldPointers` (drives the per-field masking in filer-session); `signerHandoffBindingRef` (the substrate the form-load surface trusts for handoff orchestration).
+
+**Sensitive-data discipline:** the resolved profile contains no filer identity material, no in-flight submission data, no field values. The profile is recomputable from the instance + org + form policy without consulting any filer action.
+
+## 5. Verifier rendering contract
+
+The verifier reads `metadata.filer` + the signer's `AuthoredSignature` and renders the filer-vs-signer distinction. Per AP-023, capacity, not truth.
+
+**Rendering rules:**
+
+1. **Ambient capacity-discipline copy.** Near the submission timestamp, render: `filed by [filer-name] · signed by [signer-name]`. When `metadata.filer` is absent, render `signed by [signer-name]` only (the standard self-fill case). The phrasing uses capacity vocabulary ("filed by", "signed by", "ready for review by") — NOT truth vocabulary ("certified", "approved by", "guaranteed").
+2. **Temporal-ordering display.** When `metadata.filer.sessionCompletedAt` and `AuthoredSignature.signedAt` are both present, render the ordering (e.g., "Filed 2026-05-23 09:14; signed 2026-05-23 14:32"). When the gap is very tight (under 60s), render normally (don't flag — tight ordering is the canonical family-helper / same-device case).
+3. **Per-field provenance.** Fields listed in `metadata.filer.fieldsAuthored` render with a "Filed by [filer-name]" badge (subtle, ambient, expandable on hover/focus). Fields not in the list render without a filer badge (signer typed those).
+4. **Handoff method.** OPTIONAL informational chip ("Handoff: distinct-device short link") visible in audit-detail view; hidden in default verifier view to avoid clutter. Adopter-styled.
+5. **Filer-identity-claim disclosure.** The filer's `identityBinding.authMethod` is renderable on demand (expandable); same convention as the signer's identity binding. Adopter rendering convention.
+6. **Per AP-023 vocabulary firewall.** The verifier MUST distinguish *integrity* (bytes unchanged), *attribution* (the filer was named in submission; the signer-key signed), *capacity* (the signer was acting in capacity `self`; the filer was acting as a named filer), and *truth* (the underlying facts). The verifier attests to the first three; never the fourth. The "filed by" copy is capacity-attribution; the "signed by" copy is capacity-attribution + integrity. **No verifier copy says "verified as correctly filed."**
+
+## 6. Cross-stack dependency chain
+
+### 6.1 The chain
+
+```
+FW-0037 design (this doc)
+    ↓
+new EXT-N (formspec) — metadata.filer carrier on Response schema
+    ↓
+ADR-0011 amendment (small) — clarify reviewerPreparer key has two sub-flows (preparerFlow + reviewerFlow);
+                              FW-0037 owns preparerFlow, FW-0042 owns reviewerFlow
+    ↓
+FW-0037 build (formspec-web) — when an adopter deployment needs the flow
+```
+
+**This is the lightest cross-stack chain of any post-MVP design row to date.** No new XS-N cross-stack ADR (the substrate is byte-neutral for Trellis; WOS has no filer-actor extension needed; PKAF is distinct scope). Lighter than XS-5 / XS-6 (which were primarily confirmation ADRs); FW-0037 needs no confirmation ADR because the substrate ownership is unambiguous: Formspec owns `metadata.filer` (new); ADR-0011 owns the `reviewerPreparer.preparerFlow` resolved-profile sub-block (small clarification).
+
+### 6.2 EXT-N (new) — `metadata.filer` carrier on Response schema
+
+**Proposed for upstream extension queue.** New EXT entry. The shape is per §3.2.
+
+**Schema land:** `formspec/schemas/response.schema.json` `Response` envelope gains an optional `metadata.filer?: FilerRef` block. `FilerRef` is a new `$def` per §3.2. Conditional: nothing; the carrier is optional always. Validation rules: `filerId` URN format; `sessionCompletedAt > sessionStartedAt`; `fieldsAuthored[*]` RFC 6901 format.
+
+**Fixture matrix:** the EXT-N fixture set MUST include:
+1. Single-filer canonical case (paralegal + client; one filer per submission).
+2. Filer-session-with-no-fields-authored (filer navigated but typed nothing; signer typed everything).
+3. Filer + safe-* composition (filer omits safe-* fields; signer fills safe-* at ceremony).
+4. Filer + per-field `respondentOnly` composition (filer omits respondent-only fields; signer fills them at ceremony).
+5. Filer + multi-party composition (per-party filer; one filer per party; per FW-0050 §7.1).
+6. Filer + tight-temporal-ordering (family-helper case; T2 - T1 < 60s; verifier renders normally, doesn't flag).
+7. Filer-session-incomplete + signer-signs (the filer started but didn't `sessionCompletedAt`; signer signed anyway via fall-through to same-as-self path — verifier renders `signed by [signer]` only; `metadata.filer` is absent).
+8. Filer-with-distinct-IdP-from-signer (filer authenticated via IdP A; signer via IdP B; both bindings captured).
+9. Negative: `filerNotSigner: forbidden` form-policy + `metadata.filer` present in submission (verifier surfaces a form-policy violation; the submission is structurally invalid).
+10. Negative: `metadata.filer.filerId == AuthoredSignature.signerId` (filer-equals-signer is a self-fill; `metadata.filer` should be absent; verifier surfaces a structural-coherence warning).
+
+### 6.3 No XS-N cross-stack ADR required
+
+FW-0037 is structurally a Formspec-only design — Trellis is byte-neutral (`metadata.filer` rides as response metadata through the standard chain unchanged); WOS has no filer-actor extension needed (the signer is the WOS-visible actor; the filer is invisible to WOS governance per §1.2 non-goal); PKAF is distinct scope (`AILineage` is assertion-side; filer-side has no PKAF analog).
+
+**Subsystem-count honesty.** Only Formspec ratifies anything beyond the current substrate (EXT-N for `metadata.filer`). ADR-0011 amendment is a small clarification (one paragraph naming the two sub-flows). **No new cross-stack ratification path.** Smallest cross-stack footprint of any post-MVP design row to date — even lighter than FW-0036 (which closed one EXT-5 payload; FW-0037 introduces one EXT-N carrier).
+
+### 6.4 What FW-0037 ratifies standalone
+
+**Standalone ratifiable today (no upstream dependency):**
+
+- The Q1–Q4 framing decisions, scoped to formspec-web's consumer perspective.
+- The `reviewerPreparer.preparerFlow` resolved-profile sub-block shape per §4.3.
+- The `SignerHandoff` port shape per §3.3.
+- The verifier rendering contract per §5.
+- The runtime invariants binding form-load failure semantics to ADR-0011 typed errors (§7.1).
+- The composition rules with FW-0042 (§6.1), FW-0048 (§6.2), FW-0049 (§6.3), FW-0050 (§6.4), FW-0034 (§6.5), FW-0030 (§6.6 informational), FW-0058 (§6.7 vocabulary firewall), FW-0051 (§6.8 composition note).
+- The adopter contracts per §4.2.
+
+**Waits on upstream:**
+
+- EXT-N ratification for the `metadata.filer` carrier shape.
+- ADR-0011 amendment naming the `reviewerPreparer.preparerFlow` + `reviewerPreparer.reviewerFlow` sub-block convention. Small edit; expected to land with this design's owner-ratification.
+- Eventual coordination with FW-0042 design row (the reviewer-side sub-block on the same `reviewerPreparer` key); FW-0042 is currently `open` status, awaiting design work.
+
+## 7. Failure semantics
+
+### 7.1 Form-load failures
+
+| Condition | Error per ADR-0011 |
+|---|---|
+| Form requires `filerNotSigner` (form-policy `required`) but instance lacks `SignerHandoff` adapter | `UnsupportedRequiredFeatureError` at form-load |
+| Form requires `filerNotSigner` but org policy forbids the feature for the form's template class | `FeaturePolicyConflictError` at form-load |
+| Form forbids `filerNotSigner` (form-policy `forbidden`) but org policy requires it for the template class | `FeaturePolicyConflictError` at form-load |
+| Form-policy declares `filerAssuranceFloor` higher than the instance's IdP can deliver | `InvalidRuntimePolicyError` at form-load |
+| Form-policy declares `allowedHandoffMethods` outside the instance's supported set | `InvalidRuntimePolicyError` at form-load |
+| Form-policy declares `respondentOnlyFieldPointers` referencing fields not in the form's Definition | `InvalidRuntimePolicyError` at form-load |
+
+**Silent downgrade is forbidden.** A form requiring `filerNotSigner` MUST fail-load on an instance without the substrate. Falling back to "self-fill only" silently would violate the form's required-capability contract.
+
+### 7.2 Filer-session failures
+
+| Condition | Behavior |
+|---|---|
+| Filer attempts to write into a `respondentOnly: true` field | Rendering disables input; per §3.4 the field is masked + non-writable in filer-session. No error event; structural prevention. |
+| Filer attempts to invoke `SignerHandoff.initiate` with a `handoffMethod` not in form-policy `allowedHandoffMethods[]` | Typed `InvalidHandoffMethodError`; the handoff CTA UI gates by available methods so this should not be user-reachable, but defensive at the API layer. |
+| Filer's IdP session expires mid-fill | Standard IdentityProvider port session-recovery; filer re-authenticates; submission state preserved per existing draft mechanisms. |
+| Filer's session ends without invoking `SignerHandoff.initiate` (e.g., closes the tab) | The partial fill is preserved as a draft per existing FW-0001 mechanisms; no `metadata.filer` is written to the submission until the signer signs (the filer's session state stays in the draft; the carrier materializes on submit). Signer can resume via standard draft-resume flow; if signer signs without invoking handoff, the submission goes through as self-fill with `metadata.filer` absent. |
+
+### 7.3 Signer-ceremony failures
+
+| Condition | Behavior |
+|---|---|
+| Signer attempts to invoke the signing CTA without acknowledging all filer-pre-filled sections | UI gates the CTA; per §3.3 the per-section review gate is non-skippable. No error event; structural prevention. |
+| Signer's authentication session has a lower assurance than the form's signer-assurance floor | Standard IdentityProvider port step-up flow per existing FW-0030 mechanisms; unrelated to FW-0037. |
+| Signer authenticates as a different identity than the filer's declared "ready for [signer-id]" target (handoff target mismatch) | Typed `HandoffTargetMismatchError`; the redeemed handoff token doesn't match the signer's authenticated identity. The session is rejected; the form-load surfaces the error and offers the signer to start a fresh self-fill submission OR contact the filer for a new handoff. |
+| Signer's submission carries `metadata.filer.filerId == signerId` (filer-equals-signer) | Typed `StructuralCoherenceWarning` (not Error); the submission is technically valid (the same person filled and signed), but `metadata.filer` should be absent in the self-fill case. The runtime SHOULD elide `metadata.filer` from the submitted Response on this condition (silently rewrite to `metadata.filer = undefined`) to avoid the structural-coherence warning at verify time. |
+
+### 7.4 Verification-time failures
+
+| Condition | Behavior |
+|---|---|
+| Submission carries `metadata.filer` but form-policy is `filerNotSigner: forbidden` | Verifier reports `FormPolicyViolation` — the submission was filed against the form-policy gate. The receipt is structurally invalid; the signature integrity may still hold but the submission MUST NOT be treated as honoring the form's policy. |
+| Submission carries `metadata.filer` but `metadata.filer.identityBinding` cannot be resolved | Verifier reports `FilerIdentityUnresolvable` (informational) — the filer was named but their identity-claim cannot be cryptographically resolved at verify time. The signer's signature is unaffected; the filer-attribution is unverifiable-capacity per AP-023 (capacity claim cannot be substantiated). |
+| Submission carries `metadata.filer.sessionCompletedAt > AuthoredSignature.signedAt` (filer "finished" AFTER signer signed) | Verifier reports `TemporalCoherenceViolation` — the filer-session timestamps are inconsistent with the signer's signing event. The receipt is structurally invalid. |
+
+## 8. Hard binding to other FW rows
+
+### 8.1 FW-0042 — Share-draft-with-trusted-reviewer (shared `reviewerPreparer` key; distinct flow)
+
+FW-0042 is the **reviewer-only** sibling. The reviewer can READ + COMMENT but cannot AUTHOR or SIGN. FW-0037 is the **preparer / filer** flow — the filer can READ + AUTHOR + HANDOFF, but cannot SIGN.
+
+**Shared capability key, distinct sub-blocks.** Both rows compose under `reviewerPreparer`:
+
+- `reviewerPreparer.preparerFlow.posture` (FW-0037) — `forbidden | allowed | required`.
+- `reviewerPreparer.reviewerFlow.posture` (FW-0042) — owned by FW-0042 design (currently `open`).
+
+**Composition:** the same submission MAY have BOTH a filer (paralegal fills) AND a reviewer (supervising attorney reviews) before the respondent signs. The two roles are independent; the resolved-profile sub-blocks compose without interference.
+
+**Cross-row touch.** FW-0042 row body updated to note the shared-key convention. FW-0042's future design will own the `reviewerFlow` sub-block + the reviewer-side audit-trail carrier (`metadata.reviewers[]` proposed analogously); FW-0037 does NOT pre-empt FW-0042's design.
+
+### 8.2 FW-0048 / FW-0059 — Coercion-aware signing (load-bearing composition for AP-014)
+
+FW-0037 is the canonical AP-014 coercion vector in the corpus (a "helpful preparer" is the textbook coercion shape). The composition is load-bearing.
+
+**Composition rules.**
+
+1. **High-coercion template default-forbidden.** Forms in FW-0048's high-coercion-risk template set ([FW-0048 §6.4](2026-05-23-fw-0048-coercion-aware-signing-design.md): financial POA, immigration sponsorship, advance directive, marriage/divorce, custody, benefits-redirect) default `filerNotSigner: forbidden`. The default may be overridden per-deployment, but the default holds.
+2. **Signer-only duress affordance.** When `filerNotSigner: allowed` AND `duressAware: required` are both declared, the duress affordance per FW-0048 §3 (dual-credential mechanism) is rendered ONLY in the signer-ceremony surface — NOT in the filer-session. The filer never sees the duress affordance; the signer can invoke it during their review.
+3. **Per-section review gate is the AP-014 structural mitigation.** Per §3.3, the signer ceremony's non-skippable per-section acknowledgement IS the AP-014 mitigation at the form layer. The duress affordance per FW-0048 is the AP-014 mitigation at the substrate layer; the two compose AND-style.
+4. **Asymmetric assurance.** For high-coercion templates, form-policy SHOULD require IAL2+ for the signer regardless of the filer's assurance level (a low-assurance filer cannot use FW-0037 to lower the bar for the signer).
+
+**Cross-row touch.** FW-0048 design's §7 (per-row composition) gets a sibling note for FW-0037 — the canonical AP-014 vector; default-forbidden for high-coercion templates; signer-only duress; per-section review gate is the structural mitigation. **Load-bearing touch.**
+
+### 8.3 FW-0049 / FW-0060 — Safe-address composition (per-field filer disclosure)
+
+Safe-* class fields default to respondent-only-fillable per §3.4 + §6.3 composition. The filer doesn't see the plaintext; the field renders masked in the filer-session and unmasks at signer-review.
+
+**Composition rule.** When `accessControl.class` starts with `safe-*` (per FW-0049 §3.1 taxonomy: `safe-address`, `safe-contact`, `safe-employer`), the field is treated as `respondentOnly: true` AUTOMATICALLY, regardless of form-policy `respondentOnlyFieldPointers[]`. The two mechanisms compose:
+
+- `respondentOnlyFieldPointers[]` is form-policy-declared per-field.
+- Safe-* class auto-marking is class-derived per FW-0049 mask discipline.
+- The union of the two is the filer-non-fillable set.
+
+**Cross-row touch.** FW-0049 design's §7 gets a sibling note for FW-0037 — safe-* mask survives filer's read; filer-fillable taxonomy auto-marks safe-* as respondent-only. **Load-bearing touch.**
+
+### 8.4 FW-0050 / FW-0061 — Multi-party composition (per-party filer)
+
+In a multi-party flow, each party MAY have its own filer (paralegal fills Party A's section; Party A signs; Party B may have a separate filer or may self-fill).
+
+**Composition rule.** Slice 1 supports per-party filer via `metadata.filer` being per-PARTY-scoped: when the form declares `multiParty` AND `filerNotSigner: allowed`, the carrier shape becomes `metadata.filers: ReadonlyArray<FilerRef & {partyRef: string}>` (each filer carries a `partyRef` binding it to one party). Single-party flows keep `metadata.filer?: FilerRef` (no array, no `partyRef`).
+
+**Per-party scope holds.** Per FW-0050 §7.1, per-party visibility applies — Party A's filer doesn't see Party B's fields. The filer-session opens scoped to one party; the handoff routes to the corresponding party's signer.
+
+**Cross-row touch.** FW-0050 design's §7 (other FW interactions) gets a sibling note for FW-0037 — per-party filer composition; `metadata.filers[]` shape extension for multi-party; the per-party-visibility primitive covers naturally. **Light touch; informational** — no FW-0050 substrate change required.
+
+### 8.5 FW-0034 / FW-0038 — Honest-correction (filer-driven correction)
+
+A respondent who signed a filer-filed form MAY later need a correction. Two cases:
+
+1. **Respondent-solo correction.** The original filer is not involved; respondent corrects + re-signs solo. `metadata.filer` is absent on the correction event.
+2. **Filer-assisted correction.** Same filer (or a new filer) helps; respondent re-signs. The correction event carries its own `metadata.filer` (new filer-session).
+
+**Per-form policy `correctableFilerPosture: same | same-or-new | respondent-only`** declares the rule. Defaults to `same-or-new` (most permissive); high-coercion templates default to `respondent-only` (the correction MUST be filed by the respondent themselves to prevent re-coercion).
+
+**Cross-row touch.** FW-0034 design's §7 (cross-row composition) gets a sibling note for FW-0037 — filer-assisted correction composition; per-form `correctableFilerPosture` declaration; per-event `metadata.filer` rides naturally. **Light touch.**
+
+### 8.6 FW-0030 — Federated identity (filer-identity binding)
+
+The filer's identity binding rides the same IdentityProvider port per [web ADR-0007](../adr/0007-identity-provider-port.md) as the signer's. No new substrate; SC-4 + EXT-8a generalize to filer identities identically.
+
+**Cross-row touch.** FW-0030 row body gets a sibling note for FW-0037 — filer-identity rides the same identity substrate; no new IdP integration required; per-form asymmetric assurance is form-policy-declared per §3.5. **Informational touch; no FW-0030 substrate change.**
+
+### 8.7 FW-0058 — AI-agent filer (vocabulary firewall; load-bearing distinction)
+
+**FW-0037 is HUMAN-filer / human-signer; FW-0058 is AI-filer / AI-signer (non-human capacity).** The two rows are easy to confuse but architecturally distinct. The vocabulary table mirrors FW-0058 §7.7 with the third-leg framing:
+
+| Axis | FW-0037 (human filer) | FW-0058 (AI-agent filer) | FW-0051 (BYO-assistant) |
+|---|---|---|---|
+| Who fills the form | A human filer (different person from signer) | An AI agent (non-human) | A human respondent (the signer themselves), assisted by AI |
+| Who signs the form | A human respondent (the signer; capacity `self`) | The AI agent (non-human capacity: `ai-agent`) | The human respondent (same as filler; capacity `self`) |
+| Capacity on AuthoredSignature | `self` (unchanged from non-filer flow) | `ai-agent` + `agentChain` block (EXT-3) | `self` (no AI on the signature) |
+| Submission carrier | `metadata.filer` (FW-0037 — this design) | `agentChain` on `AuthoredSignature` (FW-0058) | `metadata.provenance[path].attestedBy: respondent, sourceRef: assistant-suggested` (EXT-2) |
+| Form policy key | `reviewerPreparer.preparerFlow.posture` | `aiAgentFiler` | `bringYourOwnAssistant` |
+| Substrate | New `metadata.filer` carrier (EXT-N); no signer-side change | WOS `ActorKind::Agent` + `AgentInvoker` port + `capabilityInvocation` provenance + EXT-3 `agentChain` | Existing Assist Provider spec; per-field EXT-2 provenance |
+| Trust model | Filer is a named party with separate identity; signer attests | AI is registered actor in WOS workflow; deontic constraints from WOS AI Integration apply | Assistant is untrusted by form; respondent attests per-field |
+| Threat focus | AP-014 coercion (filer steers signer) | Prompt-injection (compromised AI) + capacity-spoofing (forged human credentials) | Per-act respondent rejects suggestion |
+| GDPR Article 22 | Not applicable — human signer is the decision-maker | Implicit via `agentChain` presence on receipt | Not applicable — human respondent decides per-field |
+
+**The three rows can compose.** A human filer (FW-0037) may use a BYO AI assistant (FW-0051) during their fill session — the filer is the assistant's "user." Per §1.2 non-goal, deferred for slice 1; vocabulary stays clean. FW-0058 + FW-0037 do NOT compose (an AI agent IS the signer in FW-0058; there is no human-filer + AI-signer shape because the AI is the signer not the helper).
+
+**Cross-row touch.** FW-0058 design's §7.7 already names the AI vs human distinction; FW-0037 design's §6.7 reciprocates with the three-way framing table. **PLANNING.md cross-link bilaterally updated.**
+
+### 8.8 FW-0051 — BYO-assistant (composition note)
+
+A human filer (FW-0037) may use a BYO AI assistant (FW-0051) during their fill session. The filer is the assistant's "user"; the assistant's per-field provenance (EXT-2) carries `attestedBy: respondent` where `respondent` here means the filer (the assistant's per-act confirmation user), not the signer.
+
+**This is subtle but coherent.** The EXT-2 `attestedBy: respondent` field names "the human who confirmed the assistant's suggestion" — in a self-fill flow that's the signer; in a filer-flow that's the filer (who is the per-act confirmation user even though they're not the signer). The composition deferred for slice 1 per §1.2 non-goals.
+
+**Cross-row touch (light).** FW-0051 design's §7 gets a sibling note for FW-0037 — composition deferred; vocabulary clean (filer is the assistant's per-act confirmation user; signer is the form's attestation user). **Light touch.**
+
+## 9. Open questions / deferrals
+
+Honest list of what FW-0037 design does NOT resolve:
+
+1. **Per-jurisdiction filer-role legal verification.** Whether a "paralegal" is recognized by a court, whether a "navigator" is recognized by a state Medicaid agency, etc. Per §1.2 non-goal — substrate-layer concern; deployments verify.
+2. **Multi-hop filer chains (filer A → filer B → signer).** Single-filer per submission only in slice 1. Future row or future EXT-N revision can extend.
+3. **Filer-session ledger event taxonomy.** Per Q2 — submission-level `metadata.filer` is load-bearing; per-act events (e.g., `filer.session-opened` / `filer.handoff-completed`) deferred to build row.
+4. **WOS filer-actor governance.** No `human-filer` actor extension proposed. Future WOS-side row if a deployment needs per-filer governance.
+5. **FW-0051 composition (filer uses BYO assistant).** Per §6.8 + §1.2 — deferred; the per-field provenance vocabulary holds when slice 2 picks it up.
+6. **Handoff target-mismatch UX.** Per §7.3 — `HandoffTargetMismatchError` typed error; UX for the recovery flow (signer offered to start fresh OR contact filer) deferred to build.
+7. **Reference adapter for the `SignerHandoff` port.** Port shape lands here; reference adapters land with build per §4.2.
+8. **Long-form filer audit trail UX.** Verifier rendering for filer-session audit trail (expandable detail view) deferred to build per §5 informational chip.
+9. **Cross-deployment filer-identity portability.** A filer registered with one deployment may or may not be recognized by another. Per §1.2 non-goal; substrate-layer concern.
+10. **Asymmetric assurance enforcement integration with FW-0030.** Per §3.5 + §6.6 — form-policy `filerAssuranceFloor` is declared; the IdP integration is FW-0030 substrate. Build-time coordination.
+
+## 10. Decision summary
+
+| Decision | Status | Owner of any pushback |
+|---|---|---|
+| Q1: three-tier `forbidden \| allowed \| required` form-policy | PROPOSAL | owner review |
+| Q2: submission-level `metadata.filer` carrier; single filer per submission | PROPOSAL | owner review + EXT-N filing |
+| Q3: `SignerHandoff` port shape with three canonical reference adapters (deferred to build) | PROPOSAL | owner review + future build row |
+| Q4: default-all-fillable + per-field `respondentOnly` opt-out; safe-* auto-marks | PROPOSAL | owner review + FW-0049 design author |
+| `reviewerPreparer.preparerFlow` sub-block under ADR-0011 (key already enumerated; small clarification needed) | PROPOSAL | owner review + ADR-0011 amendment |
+| `metadata.filer` schema shape per §3.2 — new EXT-N to formspec | PROPOSAL to formspec | formspec spec-expert review + EXT-N ratification |
+| Verifier rendering contract: ambient "filed by · signed by" capacity-discipline copy per AP-023 | PROPOSAL | owner review |
+| Form-load failure semantics: typed errors per ADR-0011 | PROPOSAL | owner review |
+| Filer-session failure semantics: `respondentOnly` masking + per-section review gate | PROPOSAL | owner review |
+| Signer-ceremony failure semantics: `HandoffTargetMismatchError`, `StructuralCoherenceWarning` (filer-equals-signer rewrite) | PROPOSAL | owner review |
+| Verification-time failures: `FormPolicyViolation` / `FilerIdentityUnresolvable` / `TemporalCoherenceViolation` | PROPOSAL | owner review |
+| Adopter contracts over SignerHandoff binding + IdP filer-session + verifier render + entry-point + per-section gate; port shape lands here for SignerHandoff per ADR-0009 §(b) exception | PROPOSAL | owner review |
+| No new XS-N cross-stack ADR required — Trellis byte-neutral; WOS unchanged; PKAF distinct scope | PROPOSAL | owner review (verify cross-stack reviewer agrees) |
+| Coercion composition per FW-0048 §6.4 (high-coercion default `forbidden`; signer-only duress; per-section review gate as structural mitigation) | PROPOSAL | owner review + FW-0048 design author |
+| Safe-address composition per FW-0049 §3.3 (safe-* auto-marks respondent-only-fillable) | PROPOSAL | owner review + FW-0049 design author |
+| Multi-party composition per FW-0050 §7.1 (per-party filer; `metadata.filers[]` extension when both keys enabled) | PROPOSAL | owner review + FW-0050 design author |
+| Correction composition per FW-0034 (`correctableFilerPosture` form-policy field; filer-assisted correction rides `metadata.filer` per event) | PROPOSAL | owner review + FW-0034 design author |
+| FW-0030 composition (filer-identity rides web ADR-0007 + SC-4 + EXT-8a substrate identically) | PROPOSAL | owner review |
+| FW-0042 composition (shared `reviewerPreparer` key; distinct `preparerFlow` + `reviewerFlow` sub-blocks) | PROPOSAL | owner review + FW-0042 future design author |
+| FW-0058 vocabulary distinction reciprocated (FW-0037 = human filer + human signer; FW-0058 = AI filer + AI signer) | PROPOSAL | owner review + FW-0058 design author |
+| FW-0051 composition note (filer-uses-assistant; vocabulary holds; deferred for slice 1) | PROPOSAL | owner review + FW-0051 design author |
+| AP-014 / AP-023 bindings codified | PROPOSAL | owner review |
+
+**Row status change:** FW-0037 moves from `open` to `in design`. FW-0037 stays in design until this proposal is owner-ratified, ADR-0011 amends to clarify the `reviewerPreparer.preparerFlow` sub-block, and EXT-N ratifies with the `metadata.filer` shape.
+
+## 11. Related decisions
+
+- [web ADR-0004](../adr/0004-cross-repo-placement-consume-not-invent.md) — consume not invent (governs every upstream-dependency call in this doc)
+- [web ADR-0005](../adr/0005-mvp-scope-defer-cryptographic-substrate.md) — MVP scope (`reviewerPreparer` is post-MVP; this design stages for post-MVP)
+- [web ADR-0007](../adr/0007-identity-provider-port.md) — identity provider port (filer-identity rides the same port)
+- [web ADR-0009](../adr/0009-hexagonal-architecture-ports-and-adapters.md) — hexagonal architecture (port-shape discipline; §4.2 defers most port shapes to build per §(b); SignerHandoff is the load-bearing exception that lands here)
+- [web ADR-0011](../adr/0011-runtime-feature-resolution-and-policy-gates.md) — runtime feature resolution (`reviewerPreparer` key enumerated; sub-block clarification needed)
+- [EXT-3 — `thoughts/specs/2026-05-22-upstream-extension-queue.md:46`](2026-05-22-upstream-extension-queue.md) — signer-side `capacity` enum (FW-0037 doesn't touch — respondent stays `self`)
+- [FW-0042 — `PLANNING.md:546`](../../PLANNING.md) — reviewer-only sibling sharing `reviewerPreparer` key
+- [FW-0048 design 2026-05-23](2026-05-23-fw-0048-coercion-aware-signing-design.md) — coercion-aware signing (composition seam at §6.2; canonical AP-014 vector)
+- [FW-0049 design 2026-05-23](2026-05-23-fw-0049-safe-address-handling-design.md) — safe-address handling (composition seam at §6.3; safe-* auto-marks respondent-only)
+- [FW-0050 design 2026-05-23 §7.1](2026-05-23-fw-0050-multi-party-submission-design.md) — multi-party (composition seam at §6.4; per-party filer)
+- [FW-0034 design 2026-05-24](2026-05-24-fw-0034-honest-correction-path-design.md) — honest correction (composition seam at §6.5; `correctableFilerPosture`)
+- [FW-0058 design 2026-05-24 §7.7](2026-05-24-fw-0058-ai-agent-filer-chain-design.md) — AI-agent filer (vocabulary firewall reciprocated at §6.7; three-way framing table)
+- [FW-0051 design 2026-05-23](2026-05-23-fw-0051-bring-your-own-assistant-design.md) — BYO-assistant (composition note at §6.8; filer-uses-assistant deferred)
+- [FW-0030 — `PLANNING.md:441`](../../PLANNING.md) — federated identity (composition seam at §6.6; informational)
+- Source brief: [`thoughts/sketches/2026-05-24-fw-0037-filer-not-signer-research-brief.md`](../sketches/2026-05-24-fw-0037-filer-not-signer-research-brief.md)
+- Journey: [J-012 in `JOURNEYS.md:343`](../../JOURNEYS.md)
+- Anti-patterns: [AP-014 in `JOURNEYS.md:131`](../../JOURNEYS.md), [AP-023 in `JOURNEYS.md:185`](../../JOURNEYS.md)
+- External prior art: IRS Form 1040 Paid Preparer; IRS Form 8879 e-file Signature Authorization; ABA Model Rule 5.3; HIPAA pre-visit intake (Phreesia, Klara, EHR portals); GOV.UK "I'm helping someone" patterns; CMS Marketplace "Application Filer" role; USCIS Form G-28 Notice of Appearance; NIST SP 800-63-3; W3C Verifiable Credentials Data Model 2.0
