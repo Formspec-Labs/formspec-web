@@ -368,6 +368,20 @@ Verification run after remediation:
 - `git diff --check`
 - In `../formspec`: `.venv/bin/python -m pytest tests/conformance/schemas/test_respondent_ledger_schema.py`
 
+### 2026-05-25 — W1.2 / XS-1 multi-party intake ADR review-loop closure
+
+Independent generic reviewer `019e5f5c-3303-7e02-a9dc-afaa16739bb4` reviewed ADR 0155 for W1.2 / XS-1 and returned REQUEST CHANGES. Specialized `formspec-specs:*` reviewer roles were still not exposed, so this was a generic semi-formal review over the current cross-stack ADR and cited FW-0050 / FW-0061 boundaries.
+
+Finding remediated:
+
+- WARNING F1: ADR 0155 used "authorizes" language while the ADR was still `proposed`, overclaiming its authority relative to the FW-0050 proposal status and FW-0061 upstream-ratification boundary. Remediation: ADR 0155 now says it proposes the contract and does not authorize implementation until ratified; the follow-on blocker now keeps FW-0061's cross-stack product row blocked on ratification of ADR 0155 plus EXT-3 / EXT-28.
+
+Reviewer re-check returned APPROVE with no remaining findings. ADR 0155 remains proposed; this closes the review loop for the recorded XS-1 ADR slice, not the owner ratification or downstream schema/WOS/Trellis work.
+
+Verification run after remediation:
+
+- `git diff --check -- thoughts/adr/0155-multi-party-intake.md`
+
 ### 2026-05-25 — Conservative W1/W2 cycle ledger
 
 Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dispatch table against current committed artifacts. Specialized `formspec-specs:*` scout/reviewer roles were not exposed in this runtime, so the check was a generic read-only scout pass. Disposition rule: implementation, ratification, or remediation commits are **not** enough to check off a row as closed unless the implementer→reviewer→remediator→verifier loop is explicit in the plan or commit evidence.
@@ -375,7 +389,7 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | Row | Current evidence | Cycle disposition |
 |---|---|---|
 | W1.1 / ADR-0011 + EXT-5 bot-protection | `formspec-web` `a85ed7a`; `formspec` `92295d48`; review-loop closure recorded above | cycle-closed for the recorded ADR/spec slice; `preparerFiling` remains unavailable-only until FW-0037 build |
-| W1.2 / XS-1 multi-party intake ADR | stack root `b8c0814`; ADR 0155 remains proposed | authored, not cycle-closed |
+| W1.2 / XS-1 multi-party intake ADR | stack root `b8c0814`, `83f33d1`; ADR 0155 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR slice; owner ratification and downstream schema/WOS/Trellis work remain open |
 | W1.3 / XS-3 coercion-aware signing ADR | stack root `61cd59b`; ADR 0156 remains proposed | authored, not cycle-closed |
 | W1.4 / XS-4 safe-address + XS-5 record-lifecycle ADRs | stack root `1800448`, `c001309`, `522f858`; ADRs 0157/0158 remain proposed | authored/remediated, not cycle-closed |
 | W1.5 / SC-1, SC-2, SC-5 sidecars | `formspec` `0533fb9f`, `1dcce96d`, `f11f82be` | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
@@ -391,4 +405,4 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W2.3 / FW-0060 safe-address build | `formspec-web` `6e02690`, `8e5a163`, `338ebd1`, `b53cbe3`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
 | W2.4 / FW-0061 multi-party build | `formspec-web` `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for XS-1/upstream ratification |
 
-Closeout consequence: W1.1, W1.9, W1.10, W1.11, W1.12, W2.1, W2.2, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
+Closeout consequence: W1.1, W1.2, W1.9, W1.10, W1.11, W1.12, W2.1, W2.2, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
