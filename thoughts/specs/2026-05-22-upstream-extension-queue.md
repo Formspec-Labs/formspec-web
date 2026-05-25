@@ -304,7 +304,9 @@ Single filer per submission for slice 1. Multi-party composition extends additiv
 4. Filer + per-field `respondentOnly` composition.
 5. Filer + multi-party composition (per-party filer; per FW-0050 §7.1).
 6. Filer + tight-temporal-ordering (family-helper; T2 - T1 < 60s).
-7. Filer-session-incomplete + signer-signs (no `sessionCompletedAt`; `metadata.filer` absent in submission).
+7. Filer-session-incomplete + signer-signs — **two sub-cases per code-review MED F8 (suppression-by-tab-close fix):**
+   - **7a.** Filer authored ZERO fields AND signer == draft-owner: `metadata.filer` MUST be absent (self-fill fall-through).
+   - **7b.** Filer authored AT LEAST ONE field AND signer ≠ draft-owner: `metadata.filer` MUST materialize with partial filer record (`sessionCompletedAt: null` sentinel or last-mutation timestamp; `handoffMethod: "abandoned-before-handoff"`); suppression-by-tab-close is forbidden.
 8. Filer-with-distinct-IdP-from-signer.
 9. Negative: `filerNotSigner: forbidden` form-policy + `metadata.filer` present (verifier surfaces form-policy violation).
 10. Negative: `metadata.filer.filerId == AuthoredSignature.signerId` (filer-equals-signer; structural-coherence warning; runtime SHOULD elide the carrier).
