@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { FormDefinition } from '@formspec-org/types';
 import type { DefinitionSource } from '../ports/definition-source.ts';
 import type { DraftStore } from '../ports/draft-store.ts';
-import type { IdentityProvider } from '../ports/identity-provider.ts';
+import type {
+  AssuranceLevel,
+  IdentityProvider,
+  IdpOption,
+} from '../ports/identity-provider.ts';
 import type { NotificationDelivery, NotificationMessage } from '../ports/notification-delivery.ts';
 import type {
   RespondentPlaceSnapshot,
@@ -358,6 +362,12 @@ export function defineIdentityProviderConformance(
       expect(claim.assuranceLevel).toBe('L3');
     });
 
+    it('does not return under-assurance options when a floor is requested', async () => {
+      const subject = setup();
+      const options = await subject.adapter.discover('L3');
+      expect(options.every((option) => idpOptionMeetsAssurance(option, 'L3'))).toBe(true);
+    });
+
     it('represents privacy tier independently from assurance level', async () => {
       const subject = setup();
       const options = await subject.adapter.discover('L3');
@@ -383,6 +393,14 @@ export function defineIdentityProviderConformance(
       expect(received).toEqual([null, claim, null]);
     });
   });
+}
+
+function idpOptionMeetsAssurance(option: IdpOption, required: AssuranceLevel): boolean {
+  return assuranceRank(option.minAssurance) >= assuranceRank(required);
+}
+
+function assuranceRank(level: AssuranceLevel): number {
+  return Number(level.slice(1));
 }
 
 export function defineNotificationDeliveryConformance(

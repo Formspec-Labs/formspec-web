@@ -89,6 +89,7 @@ import {
   hydrateEngineFromResponse,
   identityClaimMeetsAssurance,
   identitySubjectChanged,
+  idpOptionMeetsAssurance,
   isIdentityInteractionStarted,
   multiPartyComplete,
   multiPartyDraftKey,
@@ -1010,7 +1011,9 @@ async function createReadyState(
   }
 
   if (!identityClaimMeetsAssurance(claim, formAssuranceFloor)) {
-    const discoveredOptions = await composition.identityProvider.discover(formAssuranceFloor);
+    const discoveredOptions = (
+      await composition.identityProvider.discover(formAssuranceFloor)
+    ).filter((option) => idpOptionMeetsAssurance(option, formAssuranceFloor));
     const signInOptions = signInOptionsForIdentityPolicy({
       options: discoveredOptions,
       identityMode: config.identity.mode,

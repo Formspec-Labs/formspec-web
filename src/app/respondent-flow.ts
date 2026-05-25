@@ -136,6 +136,13 @@ export function identityClaimMeetsAssurance(
   );
 }
 
+export function idpOptionMeetsAssurance(
+  option: IdpOption,
+  required: AssuranceLevel | undefined,
+): boolean {
+  return required === undefined || assuranceRank(option.minAssurance) >= assuranceRank(required);
+}
+
 export function subjectRefInvalidatedByIdentityChange(
   previous: IdentityClaim | null,
   next: IdentityClaim | null,

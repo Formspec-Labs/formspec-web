@@ -217,6 +217,29 @@ describe('CompositeIdentityProvider', () => {
     expect(received).toEqual([null, firstClaim, refreshedClaim]);
   });
 
+  it('emits same-subject credential evidence refreshes', async () => {
+    const option = {
+      kind: 'oidc',
+      issuer: 'https://idp-evidence-refresh.example.test',
+      displayName: 'Evidence refresh IdP',
+      minAssurance: 'L3',
+    } satisfies Extract<IdpOption, { kind: 'oidc' }>;
+    const provider = sameSubjectEvidenceRefreshProvider(option);
+    const composite = new CompositeIdentityProvider([provider]);
+
+    const received: Array<IdentityClaim | null> = [];
+    const unsubscribe = composite.subscribe((claim) => received.push(claim));
+
+    const [discoveredOption] = await composite.discover('L3');
+    const firstClaim = await composite.authenticate(discoveredOption);
+    const refreshedClaim = await composite.authenticate(discoveredOption);
+    unsubscribe();
+
+    expect(firstClaim.subjectRef).toBe(refreshedClaim.subjectRef);
+    expect(firstClaim.evidenceRef).not.toBe(refreshedClaim.evidenceRef);
+    expect(received).toEqual([null, firstClaim, refreshedClaim]);
+  });
+
   it('does not enumerate IdPs the deployment did not configure (no oversharing)', async () => {
     const composite = new CompositeIdentityProvider([new AnonymousAdapter()]);
 
@@ -360,6 +383,41 @@ function sameSubjectNistRefreshProvider(
           aal: 'AAL3',
           fal: authenticateCount === 1 ? 'FAL1' : 'FAL2',
         },
+      };
+      for (const listener of listeners) listener(claim);
+      return claim;
+    }),
+    revoke: vi.fn(async () => {
+      for (const listener of listeners) listener(null);
+    }),
+    subscribe(listener) {
+      listeners.add(listener);
+      listener(null);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+function sameSubjectEvidenceRefreshProvider(
+  option: Extract<IdpOption, { kind: 'oidc' }>,
+): IdentityProvider {
+  const listeners = new Set<(claim: IdentityClaim | null) => void>();
+  let authenticateCount = 0;
+  return {
+    discover: vi.fn(async () => [option]),
+    authenticate: vi.fn(async () => {
+      authenticateCount += 1;
+      const claim: IdentityClaim = {
+        provider: 'https://idp-evidence-refresh.example.test',
+        adapter: 'stub-evidence-refresh@0',
+        subjectRef: 'oidc:same-evidence-subject',
+        credentialType: 'oidc-token',
+        credentialRef: `credential:${authenticateCount}`,
+        evidenceRef: `evidence:${authenticateCount}`,
+        expiresAt: `2026-05-25T0${authenticateCount}:00:00.000Z`,
+        subjectBinding: 'respondent',
+        assuranceLevel: 'L3',
+        privacyTier: 'pseudonymous',
       };
       for (const listener of listeners) listener(claim);
       return claim;

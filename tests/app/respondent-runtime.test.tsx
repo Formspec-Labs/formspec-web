@@ -332,6 +332,76 @@ describe('RespondentRuntime identity sign-in', () => {
     }));
   });
 
+  it('FW-0028 slice 2: filters under-assurance step-up options returned by an adapter', async () => {
+    const identityProvider = new TestIdentityProvider({
+      honorAssuranceFilter: false,
+      options: [
+        {
+          kind: 'oidc',
+          issuer: 'https://idp-low.example.test',
+          displayName: 'Lower Assurance IdP',
+          minAssurance: 'L2',
+        },
+        {
+          kind: 'oidc',
+          issuer: 'https://idp-high.example.test',
+          displayName: 'High Assurance IdP',
+          minAssurance: 'L3',
+        },
+        { kind: 'anonymous', minAssurance: 'L1' },
+      ],
+    });
+    const definition = {
+      ...demoSampleForm,
+      metadata: { assurance: { aal: 'L3' } },
+    } as FormDefinition;
+    const composition = testComposition(identityProvider, { definition }, publicPortalProfile);
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Choose how to sign in');
+    await clickButton('Continue without an account');
+    await waitForText('Use a stronger sign-in');
+
+    const stepUpText = text();
+    expect(stepUpText).toContain('Sign in with High Assurance IdP');
+    expect(stepUpText).not.toContain('Sign in with Lower Assurance IdP');
+    expect(stepUpText).not.toContain('Continue without an account');
+  });
+
+  it('FW-0028 slice 2: same-subject assurance step-up restarts form load', async () => {
+    const identityProvider = new TestIdentityProvider({
+      subjectRef: 'shared:test-subject',
+      options: [
+        {
+          kind: 'oidc',
+          issuer: 'https://idp-high.example.test',
+          displayName: 'High Assurance IdP',
+          minAssurance: 'L3',
+        },
+        { kind: 'anonymous', minAssurance: 'L1' },
+      ],
+    });
+    const definition = {
+      ...demoSampleForm,
+      metadata: { assurance: { ial: 'L3' } },
+    } as FormDefinition;
+    const composition = testComposition(identityProvider, { definition }, publicPortalProfile);
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Choose how to sign in');
+    await clickButton('Continue without an account');
+    await waitForText('Use a stronger sign-in');
+    expect(composition.draftStore.load).not.toHaveBeenCalled();
+
+    await clickButton('Sign in with High Assurance IdP');
+    await waitForText('Demo Benefits Intake');
+
+    expect(composition.draftStore.invalidateSubject).not.toHaveBeenCalled();
+    expect(composition.draftStore.load).toHaveBeenCalledWith(expect.objectContaining({
+      subjectRef: 'shared:test-subject',
+    }));
+  });
+
   it('FW-0028: keeps "Sign in to continue" heading when a single OIDC option is on offer', async () => {
     const identityProvider = new TestIdentityProvider();
     const composition = testComposition(identityProvider);
@@ -817,7 +887,7 @@ class TestIdentityProvider implements IdentityProvider {
     if (this.error) {
       throw this.error;
     }
-    this.current = testClaimForOption(option);
+    this.current = testClaimForOption(option, this.init.subjectRef);
     for (const listener of this.listeners) {
       listener(this.current);
     }
@@ -835,7 +905,7 @@ class TestIdentityProvider implements IdentityProvider {
             minAssurance: 'L2',
           } as const,
         ];
-    if (!formAssuranceRequirements) {
+    if (!formAssuranceRequirements || this.init.honorAssuranceFilter === false) {
       return options;
     }
     return options.filter(
@@ -847,7 +917,12 @@ class TestIdentityProvider implements IdentityProvider {
   private current: IdentityClaim | null = null;
 
   constructor(
-    private readonly init: { error?: unknown; options?: readonly IdpOption[] } = {},
+    private readonly init: {
+      error?: unknown;
+      honorAssuranceFilter?: boolean;
+      options?: readonly IdpOption[];
+      subjectRef?: string;
+    } = {},
   ) {}
 
   private get error(): unknown {
@@ -1133,12 +1208,12 @@ function respondentPlaceSnapshotWithData(
   };
 }
 
-function testClaimForOption(option: IdpOption): IdentityClaim {
+function testClaimForOption(option: IdpOption, subjectRef?: string): IdentityClaim {
   if (option.kind === 'anonymous') {
     return {
       provider: 'anonymous',
       adapter: 'test-anonymous',
-      subjectRef: 'anonymous:test-subject',
+      subjectRef: subjectRef ?? 'anonymous:test-subject',
       credentialType: 'other',
       subjectBinding: 'respondent',
       assuranceLevel: 'L1',
@@ -1149,7 +1224,7 @@ function testClaimForOption(option: IdpOption): IdentityClaim {
   return {
     provider: option.kind === 'oidc' ? option.issuer : `magic-link:${option.channel}`,
     adapter: 'test-oidc',
-    subjectRef: 'oidc:test-subject',
+    subjectRef: subjectRef ?? 'oidc:test-subject',
     credentialType: option.kind === 'oidc' ? 'oidc-token' : 'provider-assertion',
     subjectBinding: 'respondent',
     assuranceLevel: option.minAssurance,

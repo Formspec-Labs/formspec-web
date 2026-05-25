@@ -239,6 +239,31 @@ Verification run after remediation:
 - `npm run build`
 - `git diff --check`
 
+### 2026-05-25 — W1.11 / FW-0028 assurance step-up review-loop closure
+
+Independent generic reviewer `019e5f10-5205-7390-8b8a-c0ffacaaf00f` reviewed the FW-0028 slice 2 assurance step-up work and returned REQUEST CHANGES. Specialized `formspec-specs:*` reviewer roles were still not exposed, so this was a generic semi-formal code review over the current implementation.
+
+Findings remediated:
+
+- BLOCKER F1: targeted step-up trusted `discover(formAssuranceFloor)` to return only satisfying options, so a mixed/misbehaving adapter could expose under-assurance choices. Remediation: `RespondentRuntime` filters step-up options through `idpOptionMeetsAssurance()` before rendering; IdentityProvider conformance now rejects under-assurance results for a requested floor; runtime coverage includes a misbehaving adapter that returns L1/L2/L3 while the L3 step-up surface only renders the L3 IdP.
+- WARNING F2: runtime coverage exercised anonymous-to-OIDC as a subject-change branch, not the same-subject assurance restart branch. Remediation: a same-subject L1→L3 runtime regression now proves no draft load while under-assured, no subject invalidation, and draft hydration only after the stronger same-subject claim arrives.
+- WARNING F3: composite same-subject evidence refresh handling only considered `nistAssurance`. Remediation: `CompositeIdentityProvider` claim equivalence now includes credential/session/evidence fields (`credentialType`, `credentialRef`, `evidenceRef`, `expiresAt`, DID / verification / personhood / binding / privacy / selective-disclosure fields) in addition to assurance and NIST evidence; coverage verifies same-subject credential evidence refresh emissions.
+
+Reviewer re-check returned APPROVE with no remaining blockers or warnings for W1.11 closure.
+
+Verification run after remediation:
+
+- `npm test -- tests/app/respondent-flow.test.ts tests/app/respondent-runtime.test.tsx tests/adapters/identity/composite.test.ts tests/adapter-conformance/identity-provider/conformance.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run test:unit`
+- `npm run test:conformance`
+- `npm run check:testing-plan`
+- `npm run check:mvp-audit`
+- `npm run check:conformance-coverage`
+- `npm run build`
+- `git diff --check`
+
 ### 2026-05-25 — Conservative W1/W2 cycle ledger
 
 Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dispatch table against current committed artifacts. Specialized `formspec-specs:*` scout/reviewer roles were not exposed in this runtime, so the check was a generic read-only scout pass. Disposition rule: implementation, ratification, or remediation commits are **not** enough to check off a row as closed unless the implementer→reviewer→remediator→verifier loop is explicit in the plan or commit evidence.
@@ -255,11 +280,11 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 | W1.8 / EXT ratifications batch | `formspec` `425d9933`, `042dec3e` | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
 | W1.9 / FW-0041 public-terminal hygiene | `formspec-web` `ddff89a`, `8cff5eb`; review-loop closure recorded above | cycle-closed for the recorded build slice |
 | W1.10 / FW-0019 server Locale Documents | `formspec-web` `58522ad`, `7d2cc63`; review-loop closure recorded above | cycle-closed for the recorded build slice |
-| W1.11 / FW-0028 slice 2 assurance step-up | `formspec-web` `2f85951`, `986af74`; `PLANNING.md` marks slice 2 shipped; EXT-8 remains external | integrated/fixed, not cycle-closed |
+| W1.11 / FW-0028 slice 2 assurance step-up | `formspec-web` `2f85951`, `986af74`; review-loop closure recorded above; EXT-8 remains external | cycle-closed for the recorded build slice |
 | W1.12 / FW-0073/0074/0076/0077 file-upload slice 2 | `formspec-web` `4e0a8d3`, `854040d`; `PLANNING.md` marks bundled rows live | partially reviewed/remediated, not cycle-closed — verifier evidence is not explicit |
 | W2.1 / FW-0113 trusted reviewer build | `formspec-web` `5fc4d96`, `751d9a0`; FW-0113 row remains open/blocked | integrated/fixed, not cycle-closed |
 | W2.2 / FW-0038 record lifecycle build | `formspec-web` `d5f6a9b`, `01bb024`; FW-0038 row remains open/gated | integrated/fixed, not cycle-closed |
 | W2.3 / FW-0060 safe-address build | `formspec-web` `6e02690`, `8e5a163`, `338ebd1`, `b53cbe3`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for upstream/verifier-grade gates |
 | W2.4 / FW-0061 multi-party build | `formspec-web` `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; reviewer findings, remediation details, final clean review, and verification gate list above | cycle-closed for the recorded build slice; product row remains open for XS-1/upstream ratification |
 
-Closeout consequence: only W2.3 and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.
+Closeout consequence: W1.9, W1.10, W1.11, W2.3, and W2.4 are checked off as cycle-closed in this plan. All other W1/W2 rows are committed/integrated at their current evidence level but remain pending explicit reviewer/verifier closure before this plan can claim full end-to-end completion.

@@ -12,6 +12,7 @@ import {
   hydrateEngineFromData,
   identityClaimMeetsAssurance,
   identitySubjectChanged,
+  idpOptionMeetsAssurance,
   isIdentityInteractionStarted,
   multiPartyComplete,
   multiPartyDraftKey,
@@ -457,6 +458,18 @@ describe('respondent flow helpers', () => {
     expect(identityClaimMeetsAssurance(claim('subject-l2', 'L2'), 'L3')).toBe(false);
     expect(identityClaimMeetsAssurance(claim('subject-l4', 'L4'), 'L3')).toBe(true);
     expect(identityClaimMeetsAssurance(null, 'L1')).toBe(false);
+    expect(idpOptionMeetsAssurance({
+      kind: 'oidc',
+      issuer: 'issuer-a',
+      displayName: 'Issuer A',
+      minAssurance: 'L2',
+    }, 'L3')).toBe(false);
+    expect(idpOptionMeetsAssurance({
+      kind: 'oidc',
+      issuer: 'issuer-b',
+      displayName: 'Issuer B',
+      minAssurance: 'L4',
+    }, 'L3')).toBe(true);
   });
 
   it('FW-0028 slice 2: rejects invalid EXT-8 assurance values loudly', () => {

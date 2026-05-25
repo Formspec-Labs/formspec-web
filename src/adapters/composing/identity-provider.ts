@@ -163,6 +163,16 @@ function claimEquivalent(
     a.subjectRef === b.subjectRef &&
     a.provider === b.provider &&
     a.adapter === b.adapter &&
+    a.credentialType === b.credentialType &&
+    a.credentialRef === b.credentialRef &&
+    a.evidenceRef === b.evidenceRef &&
+    a.expiresAt === b.expiresAt &&
+    a.did === b.did &&
+    a.verificationMethod === b.verificationMethod &&
+    a.personhoodCheck === b.personhoodCheck &&
+    a.subjectBinding === b.subjectBinding &&
+    a.privacyTier === b.privacyTier &&
+    a.selectiveDisclosureProfile === b.selectiveDisclosureProfile &&
     a.assuranceLevel === b.assuranceLevel &&
     nistAssuranceEquivalent(a.nistAssurance, b.nistAssurance)
   );
