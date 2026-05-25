@@ -23,7 +23,7 @@ import type {
   OfflineSubmitQueue,
   QueuedSubmit,
 } from '../ports/offline-submit-queue.ts';
-import type { SubmitConfirmation } from '../ports/submit-transport.ts';
+import type { IntakeHandoff, SubmitConfirmation } from '../ports/submit-transport.ts';
 import {
   isFormFeaturePolicyMode,
   isRuntimeFeatureKey,
