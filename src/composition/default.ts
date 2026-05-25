@@ -163,6 +163,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
       // replace the sentinel slots / deferred port bindings. FW-0038 has a
       // real port now, but no production reference adapter ships yet.
       trustedReviewer: 'unavailable',
+      preparerFiling: 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'unavailable',
       duressAware: 'unavailable',
@@ -181,8 +182,9 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
         embed: 'allowed',
         screener: 'allowed',
         trustedReviewer: 'allowed',
+        preparerFiling: 'allowed',
         bringYourOwnAssistant: 'allowed',
-      safeAddress: 'allowed',
+        safeAddress: 'allowed',
         duressAware: 'allowed',
         multiParty: 'allowed',
         recordLifecycle: 'allowed',

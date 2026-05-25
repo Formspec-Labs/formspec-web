@@ -1101,6 +1101,7 @@ function testComposition(
       // doesn't consume the screener; 'unavailable' satisfies the resolver.
       screener: 'unavailable',
       trustedReviewer: 'unavailable',
+      preparerFiling: 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'unavailable',
       duressAware: 'unavailable',

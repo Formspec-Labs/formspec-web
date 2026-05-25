@@ -79,6 +79,8 @@
  *     fixture.
  *
  * Pre-allocated before the 2026-05-25 parallel Wave A dispatch:
+ *   - preparerFiling → FW-0037 future reservation; no code port yet because
+ *     SignerHandoff / filer-session adapter shape lands with the build row.
  *   - trustedReviewer → FW-0113 build, backed by ReviewerSession +
  *     ReviewThreadStore per FW-0042.
  *   - bringYourOwnAssistant → FW-0062 future reservation; no code port yet
@@ -118,6 +120,7 @@ export const RUNTIME_FEATURE_KEYS = [
   'payment',
   'embed',
   'screener',
+  'preparerFiling',
   'trustedReviewer',
   'bringYourOwnAssistant',
   'safeAddress',

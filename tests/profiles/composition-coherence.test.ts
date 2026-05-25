@@ -66,6 +66,7 @@ function productionCompositionLike(overrides: Partial<CompositionLike> = {}): Co
       embed: 'unavailable',
       screener: 'unavailable',
       trustedReviewer: 'unavailable',
+      preparerFiling: 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'unavailable',
       duressAware: 'unavailable',
@@ -164,6 +165,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -189,6 +191,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -231,6 +234,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'available',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -256,6 +260,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'available',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -266,6 +271,31 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
       reviewThreadStore: unmarkedReviewThreadStore(),
     });
     expect(() => assertCompositionCoherence(composition)).toThrow(/reviewerSession/);
+  });
+
+  it('keeps preparerFiling unavailable-only until a concrete FW-0037 port lands', () => {
+    const composition = productionCompositionLike({
+      instanceCapabilities: {
+        respondentPlace: 'unavailable',
+        status: 'unavailable',
+        documentPresentation: 'unavailable',
+        fileUpload: 'unavailable',
+        crossIssuerHistory: 'unavailable',
+        offlineSubmit: 'unavailable',
+        payment: 'unavailable',
+        embed: 'unavailable',
+        screener: 'unavailable',
+        trustedReviewer: 'unavailable',
+        preparerFiling: 'available',
+        bringYourOwnAssistant: 'unavailable',
+        safeAddress: 'unavailable',
+        duressAware: 'unavailable',
+        multiParty: 'unavailable',
+        recordLifecycle: 'unavailable',
+      },
+    });
+    expect(() => assertCompositionCoherence(composition)).toThrow(/preparerFiling/);
+    expect(() => assertCompositionCoherence(composition)).toThrow(/no backing port binding/);
   });
 });
 
@@ -358,6 +388,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -383,6 +414,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -408,6 +440,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -434,6 +467,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -459,6 +493,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -486,6 +521,7 @@ describe('Composition coherence — shared-slot independent declarations (FW-005
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',

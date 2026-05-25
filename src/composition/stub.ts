@@ -163,6 +163,7 @@ export function createStubComposition(): Composition {
       // satisfy the demo posture. Production remains unavailable until an
       // adopter wires durable capability URL + SC-6 storage adapters.
       trustedReviewer: 'demo-stub',
+      preparerFiling: 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'demo-stub',
       duressAware: 'unavailable',
@@ -181,6 +182,7 @@ export function createStubComposition(): Composition {
         embed: 'allowed',
         screener: 'allowed',
         trustedReviewer: 'allowed',
+        preparerFiling: 'allowed',
         bringYourOwnAssistant: 'allowed',
         safeAddress: 'allowed',
         duressAware: 'allowed',

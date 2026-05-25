@@ -60,6 +60,11 @@ export const FEATURE_PORT_MAP = {
   // (catalog service / static bundle / authoring-tool preview) are
   // adopter-side per web ADR-0004.
   screener: 'screenerDocumentSource',
+  // FW-0037 future reservation. ADR-0011 split the old reviewer/preparer
+  // umbrella into sibling keys; the actual SignerHandoff / filer-session
+  // port shape lands with the preparer-filing build, so this key is
+  // unavailable-only until then.
+  preparerFiling: [],
   // FW-0113 preallocation: trusted reviewer requires both ports. A one-slot
   // mapping would let an adopter declare the feature available while one half
   // of the substrate is missing, so the coherence assertion supports

@@ -210,6 +210,7 @@ function buildProductionNarrowedComposition({
     // crossIssuerHistory pattern).
     screener: 'unavailable',
     trustedReviewer: route.consumes.has('trustedReviewer') ? 'available' : 'unavailable',
+    preparerFiling: 'unavailable',
     bringYourOwnAssistant: 'unavailable',
     safeAddress: 'unavailable',
     duressAware: 'unavailable',
@@ -363,6 +364,7 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
       // routing.
       screener: route.consumes.has('screener') ? 'demo-stub' : 'unavailable',
       trustedReviewer: route.consumes.has('trustedReviewer') ? 'demo-stub' : 'unavailable',
+      preparerFiling: 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'unavailable',
       duressAware: 'unavailable',
@@ -388,6 +390,7 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       embed: 'allowed',
       screener: 'allowed',
       trustedReviewer: 'allowed',
+      preparerFiling: 'allowed',
       bringYourOwnAssistant: 'allowed',
       safeAddress: 'allowed',
       duressAware: 'allowed',

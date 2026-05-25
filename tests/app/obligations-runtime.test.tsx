@@ -450,6 +450,7 @@ function productionCompositionWithIdentity(
       // FW-0046: closed-taxonomy key — declare for resolver input validity.
       screener: 'unavailable',
       trustedReviewer: 'unavailable',
+      preparerFiling: 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'unavailable',
       duressAware: 'unavailable',

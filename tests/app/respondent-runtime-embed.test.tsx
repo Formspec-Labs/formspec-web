@@ -80,6 +80,7 @@ function buildComposition(args: BuildOptions): Composition {
     embed: 'demo-stub',
     screener: 'unavailable',
     trustedReviewer: 'unavailable',
+    preparerFiling: 'unavailable',
     bringYourOwnAssistant: 'unavailable',
     safeAddress: 'unavailable',
     duressAware: 'unavailable',

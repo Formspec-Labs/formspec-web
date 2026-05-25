@@ -87,6 +87,7 @@ function buildComposition(options: BuildOptions = {}): Composition {
     embed: 'demo-stub',
     screener: availability,
     trustedReviewer: 'unavailable',
+    preparerFiling: 'unavailable',
     bringYourOwnAssistant: 'unavailable',
     safeAddress: 'unavailable',
     duressAware: 'unavailable',

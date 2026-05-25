@@ -33,6 +33,7 @@ const baseInstance = {
   // honest-unavailable posture for these fixtures.
   screener: 'unavailable',
   trustedReviewer: 'unavailable',
+  preparerFiling: 'unavailable',
   bringYourOwnAssistant: 'unavailable',
   safeAddress: 'unavailable',
   duressAware: 'unavailable',
@@ -117,6 +118,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -178,6 +180,7 @@ describe('resolveRuntimeFeatures — ADR-0011 §Failure Semantics', () => {
           embed: 'unavailable',
           screener: 'unavailable',
           trustedReviewer: 'unavailable',
+          preparerFiling: 'unavailable',
           bringYourOwnAssistant: 'unavailable',
           safeAddress: 'unavailable',
           duressAware: 'unavailable',

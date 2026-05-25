@@ -105,6 +105,7 @@ function buildPaymentComposition(args: {
     // input validity.
     screener: 'unavailable',
     trustedReviewer: 'unavailable',
+    preparerFiling: 'unavailable',
     bringYourOwnAssistant: 'unavailable',
     safeAddress: 'unavailable',
     duressAware: 'unavailable',
@@ -328,6 +329,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',
@@ -436,6 +438,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
         embed: 'unavailable',
         screener: 'unavailable',
         trustedReviewer: 'unavailable',
+        preparerFiling: 'unavailable',
         bringYourOwnAssistant: 'unavailable',
         safeAddress: 'unavailable',
         duressAware: 'unavailable',

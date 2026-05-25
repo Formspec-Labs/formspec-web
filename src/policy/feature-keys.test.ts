@@ -13,7 +13,7 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     // adds fileUpload after it; FW-0057 adds crossIssuerHistory after that;
     // FW-0044 adds offlineSubmit (sixth key); FW-0027 adds payment (seventh
     // key); FW-0040 adds embed (eighth key); FW-0046 adds screener (ninth
-    // key). The 2026-05-25 dispatch preallocates positions 10-15 before
+    // key). The 2026-05-25 dispatch preallocates positions 10-16 before
     // Wave A. Re-sorting alphabetically would silently change the
     // resolver-loop iteration order; new feature ADRs append.
     expect([...RUNTIME_FEATURE_KEYS]).toEqual([
@@ -26,6 +26,7 @@ describe('RUNTIME_FEATURE_KEYS', () => {
       'payment',
       'embed',
       'screener',
+      'preparerFiling',
       'trustedReviewer',
       'bringYourOwnAssistant',
       'safeAddress',
@@ -45,6 +46,7 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isRuntimeFeatureKey('payment')).toBe(true);
     expect(isRuntimeFeatureKey('embed')).toBe(true);
     expect(isRuntimeFeatureKey('screener')).toBe(true);
+    expect(isRuntimeFeatureKey('preparerFiling')).toBe(true);
     expect(isRuntimeFeatureKey('trustedReviewer')).toBe(true);
     expect(isRuntimeFeatureKey('bringYourOwnAssistant')).toBe(true);
     expect(isRuntimeFeatureKey('safeAddress')).toBe(true);
@@ -70,6 +72,7 @@ describe('RUNTIME_FEATURE_KEYS', () => {
     expect(isLocaleConditionalFeatureKey('payment')).toBe(false);
     expect(isLocaleConditionalFeatureKey('embed')).toBe(false);
     expect(isLocaleConditionalFeatureKey('screener')).toBe(false);
+    expect(isLocaleConditionalFeatureKey('preparerFiling')).toBe(false);
     expect(isLocaleConditionalFeatureKey('trustedReviewer')).toBe(false);
     expect(isLocaleConditionalFeatureKey('bringYourOwnAssistant')).toBe(false);
     expect(isLocaleConditionalFeatureKey('safeAddress')).toBe(false);

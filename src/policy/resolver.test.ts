@@ -31,6 +31,7 @@ const allAvailable: InstanceCapabilities = {
   // FW-0046 slice 1: declare screener so resolver validation passes.
   screener: 'available',
   trustedReviewer: 'available',
+  preparerFiling: 'unavailable',
   bringYourOwnAssistant: 'unavailable',
   safeAddress: 'available',
   duressAware: 'unavailable',
@@ -50,6 +51,7 @@ const allowAllOrg: OrgRuntimePolicy = {
     embed: 'allowed',
     screener: 'allowed',
     trustedReviewer: 'allowed',
+    preparerFiling: 'allowed',
     bringYourOwnAssistant: 'allowed',
     safeAddress: 'allowed',
     duressAware: 'allowed',

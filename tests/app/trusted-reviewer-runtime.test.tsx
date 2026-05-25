@@ -84,6 +84,7 @@ function buildComposition(): Composition {
     embed: 'demo-stub',
     screener: 'unavailable',
     trustedReviewer: 'demo-stub',
+    preparerFiling: 'unavailable',
     bringYourOwnAssistant: 'unavailable',
     safeAddress: 'unavailable',
     duressAware: 'unavailable',
@@ -102,6 +103,7 @@ function buildComposition(): Composition {
       embed: 'allowed',
       screener: 'allowed',
       trustedReviewer: 'allowed',
+      preparerFiling: 'allowed',
       bringYourOwnAssistant: 'allowed',
       safeAddress: 'allowed',
       duressAware: 'allowed',
@@ -307,12 +309,14 @@ describe('trusted reviewer runtime surfaces', () => {
         ...allUnavailableCapabilities(),
         safeAddress: 'demo-stub',
         trustedReviewer: 'demo-stub',
+        preparerFiling: 'unavailable',
       },
       org: {
         features: {
           ...allAllowedFeatures(),
           safeAddress: 'allowed',
           trustedReviewer: 'allowed',
+          preparerFiling: 'allowed',
         },
         limits: {
           safeAddress: {
@@ -422,6 +426,7 @@ function allUnavailableCapabilities(): InstanceCapabilities {
     embed: 'unavailable',
     screener: 'unavailable',
     trustedReviewer: 'unavailable',
+    preparerFiling: 'unavailable',
     bringYourOwnAssistant: 'unavailable',
     safeAddress: 'unavailable',
     duressAware: 'unavailable',
@@ -442,6 +447,7 @@ function allAllowedFeatures(): OrgRuntimePolicy['features'] {
     embed: 'allowed',
     screener: 'allowed',
     trustedReviewer: 'allowed',
+    preparerFiling: 'allowed',
     bringYourOwnAssistant: 'allowed',
     safeAddress: 'allowed',
     duressAware: 'allowed',

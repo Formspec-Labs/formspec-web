@@ -462,6 +462,7 @@ function productionCompositionWithIdentity(
       embed: 'unavailable',
       screener: 'unavailable',
       trustedReviewer: 'unavailable',
+      preparerFiling: 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'unavailable',
       duressAware: 'unavailable',
