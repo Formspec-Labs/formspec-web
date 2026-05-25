@@ -26,6 +26,19 @@
  *     synthesis" addendum. Production posture is `unavailable` until XS-2
  *     (multi-issuer token bag) lands; demo posture is `demo-stub`.
  *
+ * Extended at FW-0044 slice 1 (offline-capable form-fill with deferred
+ * submit):
+ *   - offlineSubmit → gated against the new OfflineSubmitQueue port (1:1
+ *     mapping). IN-FORM consumer (no standalone route) — the runtime
+ *     detects an offline network at submit time and routes through the
+ *     queue when the resolved profile enables the feature; same engine,
+ *     same draft path, same idempotency key. Form-policy extractor reads
+ *     `definition.extensions['x-formspec-offline-submit'] === true` and
+ *     declares `'optional'` (not `'required'`; see design §"Optional, not
+ *     required"). SIXTH key — explicit FW-0080 trigger fired (the
+ *     `consumes*` boolean ladder on `RouteNarrowing` should consolidate
+ *     into a `ReadonlySet<RuntimeFeatureKey>`; see FW-0080 row body).
+ *
  * Extension protocol: every future feature ADR adds its key here and to the
  * Composition's InstanceCapabilities declaration. No string-typed feature keys
  * outside this set — the resolver rejects unknown keys with
@@ -48,6 +61,7 @@ export const RUNTIME_FEATURE_KEYS = [
   'documentPresentation',
   'fileUpload',
   'crossIssuerHistory',
+  'offlineSubmit',
 ] as const;
 
 export type RuntimeFeatureKey = (typeof RUNTIME_FEATURE_KEYS)[number];
