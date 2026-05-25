@@ -363,6 +363,108 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
     expect(config?.acpJurisdictionsAccepted).toEqual(['CA-ACP']);
   });
 
+  it('falls back to org safe-address limits when extracted form arrays are empty', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: allAvailable,
+      org: {
+        ...allowAllOrg,
+        limits: {
+          safeAddress: {
+            receiptPostureTier: 'phase-1-fallback',
+            acpJurisdictionsAccepted: ['CA-ACP'],
+            authorizedAudiences: ['issuer_verification'],
+          },
+        },
+      },
+      form: {
+        features: { safeAddress: 'required' },
+        limits: {
+          safeAddress: {
+            acpJurisdictionsAccepted: [],
+            authorizedAudiences: [],
+            fields: [
+              {
+                path: '/protectedHomeAddress',
+                accessClass: 'safe-address',
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const config = getSafeAddressRuntimeConfig(profile);
+    expect(config?.acpJurisdictionsAccepted).toEqual(['CA-ACP']);
+    expect(config?.authorizedAudiences).toEqual(['issuer_verification']);
+  });
+
+  it('rejects verifier-grade form posture when the deployment only supports fallback', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: {
+          ...allowAllOrg,
+          limits: {
+            safeAddress: {
+              receiptPostureTier: 'phase-1-fallback',
+              acpJurisdictionsAccepted: ['CA-ACP'],
+              authorizedAudiences: ['issuer_verification'],
+            },
+          },
+        },
+        form: {
+          features: { safeAddress: 'required' },
+          limits: {
+            safeAddress: {
+              receiptPostureTier: 'verifier-grade',
+              fields: [
+                {
+                  path: '/protectedHomeAddress',
+                  accessClass: 'safe-address',
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/exceeds deployment capability/);
+  });
+
+  it('allows verifier-grade form posture when the deployment supports it', () => {
+    const profile = resolveRuntimeFeatures({
+      mode: 'production',
+      instance: allAvailable,
+      org: {
+        ...allowAllOrg,
+        limits: {
+          safeAddress: {
+            receiptPostureTier: 'verifier-grade',
+            acpJurisdictionsAccepted: ['CA-ACP'],
+            authorizedAudiences: ['issuer_verification'],
+          },
+        },
+      },
+      form: {
+        features: { safeAddress: 'required' },
+        limits: {
+          safeAddress: {
+            receiptPostureTier: 'verifier-grade',
+            fields: [
+              {
+                path: '/protectedHomeAddress',
+                accessClass: 'safe-address',
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(getSafeAddressRuntimeConfig(profile)?.receiptPostureTier).toBe('verifier-grade');
+  });
+
   it('throws InvalidRuntimePolicyError for empty party-policy x safe-address intersections', () => {
     expect(() =>
       resolveRuntimeFeatures({

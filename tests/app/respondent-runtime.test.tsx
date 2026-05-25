@@ -438,6 +438,158 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(input.value).toBe('123 Private St');
   });
 
+  it('validates safe-address substitute values before submit handoff', async () => {
+    const definition = {
+      ...demoSampleForm,
+      url: 'https://test.example/forms/safe-address-submit',
+      title: 'Safe address submit test',
+      items: [
+        {
+          key: 'protectedHomeAddress',
+          type: 'field',
+          dataType: 'string',
+          label: 'Protected home address',
+          accessControl: { class: 'safe-address' },
+        },
+      ],
+      extensions: {
+        'x-formspec-safe-address': {
+          mode: 'required',
+          acpJurisdictionsAccepted: ['CA-ACP'],
+          authorizedAudiences: ['issuer_verification'],
+          fields: [
+            {
+              path: '/protectedHomeAddress',
+              accessClass: 'safe-address',
+            },
+          ],
+        },
+      },
+    } as FormDefinition;
+    const identityProvider = new TestIdentityProvider();
+    const composition = testComposition(identityProvider, { definition });
+    composition.instanceCapabilities = {
+      ...composition.instanceCapabilities,
+      safeAddress: 'available',
+    };
+    composition.formRuntimePolicyExtractor = {
+      extract: () => ({
+        features: { respondentPlace: 'optional', status: 'optional', safeAddress: 'required' },
+        limits: {
+          safeAddress: definition.extensions?.['x-formspec-safe-address'],
+        },
+      }),
+    };
+    composition.safeAddressDirectory = {
+      supportedJurisdictions: vi.fn(async () => []),
+      validateSubstituteAddress: vi.fn(async (request) => ({
+        valid: true as const,
+        jurisdictionKey: request.jurisdictionKey,
+        normalizedSubstitute: 'PO Box 846, Sacramento, CA 95812',
+      })),
+    };
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Protected home address');
+    await clickButton('Reveal protected value');
+    const input = container?.querySelector('.formspec-safe-address-field input') as HTMLInputElement;
+    if (!input) throw new Error('safe-address input not found');
+
+    await act(async () => {
+      input.focus();
+      fireEvent.change(input, { target: { value: 'PO Box 846, Sacramento, CA 95812' } });
+      await tick();
+      input.blur();
+      await tick();
+    });
+    await clickSubmit();
+    await waitForText('TEST-0001');
+
+    expect(composition.safeAddressDirectory.validateSubstituteAddress).toHaveBeenCalledWith({
+      jurisdictionKey: 'CA-ACP',
+      candidate: 'PO Box 846, Sacramento, CA 95812',
+      accessClass: 'safe-address',
+    });
+    expect(composition.submitTransport.submit).toHaveBeenCalledOnce();
+  });
+
+  it('blocks submit when a safe-address substitute is not recognized', async () => {
+    const definition = {
+      ...demoSampleForm,
+      url: 'https://test.example/forms/safe-address-invalid-submit',
+      title: 'Safe address invalid submit test',
+      items: [
+        {
+          key: 'protectedHomeAddress',
+          type: 'field',
+          dataType: 'string',
+          label: 'Protected home address',
+          accessControl: { class: 'safe-address' },
+        },
+      ],
+      extensions: {
+        'x-formspec-safe-address': {
+          mode: 'required',
+          acpJurisdictionsAccepted: ['CA-ACP'],
+          authorizedAudiences: ['issuer_verification'],
+          fields: [
+            {
+              path: '/protectedHomeAddress',
+              label: 'Protected home address',
+              accessClass: 'safe-address',
+            },
+          ],
+        },
+      },
+    } as FormDefinition;
+    const identityProvider = new TestIdentityProvider();
+    const composition = testComposition(identityProvider, { definition });
+    composition.instanceCapabilities = {
+      ...composition.instanceCapabilities,
+      safeAddress: 'available',
+    };
+    composition.formRuntimePolicyExtractor = {
+      extract: () => ({
+        features: { respondentPlace: 'optional', status: 'optional', safeAddress: 'required' },
+        limits: {
+          safeAddress: definition.extensions?.['x-formspec-safe-address'],
+        },
+      }),
+    };
+    composition.safeAddressDirectory = {
+      supportedJurisdictions: vi.fn(async () => []),
+      validateSubstituteAddress: vi.fn(async (request) => ({
+        valid: false as const,
+        jurisdictionKey: request.jurisdictionKey,
+        reason: 'not-recognized' as const,
+        message: 'This is not a recognized substitute address for the selected program.',
+      })),
+    };
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Protected home address');
+    await clickButton('Reveal protected value');
+    const input = container?.querySelector('.formspec-safe-address-field input') as HTMLInputElement;
+    if (!input) throw new Error('safe-address input not found');
+
+    await act(async () => {
+      input.focus();
+      fireEvent.change(input, { target: { value: '123 Private St' } });
+      await tick();
+      input.blur();
+      await tick();
+    });
+    await clickSubmit();
+    await waitForText('We could not submit this form.');
+    await waitForText('This is not a recognized substitute address');
+
+    expect(composition.submitTransport.submit).not.toHaveBeenCalled();
+  });
+
   it('persists multi-party progress across identity changes and submits aggregate party responses', async () => {
     const identityProvider = new SwitchingIdentityProvider('subject-a');
     const definition: FormDefinition = {

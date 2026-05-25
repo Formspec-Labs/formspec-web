@@ -286,14 +286,14 @@ export function extractSafeAddressPolicy(
   definition: FormDefinition,
 ): FormRuntimePolicy | undefined {
   const raw = definition.extensions?.['x-formspec-safe-address'];
-  if (raw === false) {
-    return { features: { safeAddress: 'forbidden' } };
-  }
   const block = parseSafeAddressBlock(raw);
   const fields = [
     ...safeAddressFieldsFromItems(definition.items),
     ...(block.fields ?? []),
   ];
+  if (raw === false && fields.length === 0) {
+    return { features: { safeAddress: 'forbidden' } };
+  }
   if (!block.enabled && fields.length === 0) return undefined;
   const config: SafeAddressRuntimeConfig = {
     enabledClasses: block.enabledClasses ?? uniqueSafeClasses(fields),
@@ -307,7 +307,7 @@ export function extractSafeAddressPolicy(
   };
   return {
     features: {
-      safeAddress: block.mode ?? 'required',
+      safeAddress: fields.length > 0 ? 'required' : block.mode ?? 'required',
     },
     limits: { safeAddress: config },
   };

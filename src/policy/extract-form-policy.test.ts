@@ -500,7 +500,7 @@ describe('extractSafeAddressPolicy', () => {
     });
   });
 
-  it('accepts the explicit extension field carrier and optional mode', () => {
+  it('upgrades explicit safe-address field carriers to required mode', () => {
     const definition: FormDefinition = {
       ...baseDefinition,
       extensions: {
@@ -520,7 +520,7 @@ describe('extractSafeAddressPolicy', () => {
       items: [],
     };
     const policy = extractSafeAddressPolicy(definition);
-    expect(policy?.features.safeAddress).toBe('optional');
+    expect(policy?.features.safeAddress).toBe('required');
     expect(policy?.limits?.safeAddress).toMatchObject({
       enabledClasses: ['safe-contact'],
       acpJurisdictionsAccepted: ['WA-ACP'],
@@ -534,5 +534,26 @@ describe('extractSafeAddressPolicy', () => {
       items: [],
     };
     expect(extractSafeAddressPolicy(definition)?.features.safeAddress).toBe('forbidden');
+  });
+
+  it('does not let an explicit false extension disable discovered safe-* fields', () => {
+    const definition = {
+      ...baseDefinition,
+      items: [
+        {
+          key: 'protectedHomeAddress',
+          type: 'field',
+          dataType: 'string',
+          label: 'Protected home address',
+          accessControl: { class: 'safe-address' },
+        },
+      ],
+      extensions: { 'x-formspec-safe-address': false },
+    } as FormDefinition;
+    const policy = extractSafeAddressPolicy(definition);
+    expect(policy?.features.safeAddress).toBe('required');
+    expect(policy?.limits?.safeAddress).toMatchObject({
+      fields: [{ path: '/protectedHomeAddress', accessClass: 'safe-address' }],
+    });
   });
 });

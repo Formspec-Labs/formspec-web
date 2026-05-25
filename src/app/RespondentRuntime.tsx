@@ -122,6 +122,7 @@ import {
   reviewerThreadIdForDraft,
   trustedReviewerPolicySnapshot,
 } from './trusted-reviewer.ts';
+import { validateSafeAddressResponseData } from './safe-address.ts';
 import { useResolvedRuntimeProfile } from './hooks/useResolvedRuntimeProfile.ts';
 
 interface RespondentRuntimeProps {
@@ -591,6 +592,14 @@ export function RespondentRuntime({
           ? { id: respondentState.claim.subjectRef, type: 'respondent' }
           : undefined,
       });
+      const safeAddressConfig = getSafeAddressRuntimeConfig(respondentState.runtimeProfile);
+      if (safeAddressConfig) {
+        await validateSafeAddressResponseData({
+          config: safeAddressConfig,
+          directory: composition.safeAddressDirectory,
+          data: completedResponse.data,
+        });
+      }
       await composition.draftStore.save(activeDraftKey, completedResponse);
       let completedMultiPartyState: MultiPartyPersistedState | null = null;
       if (multiPartyPolicy && currentMultiPartyState) {

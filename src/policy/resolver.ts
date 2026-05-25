@@ -691,21 +691,24 @@ function resolveSafeAddressPolicy(
   const org = safeAddressLimitObject(orgLimit);
   const form = safeAddressLimitObject(formLimit);
   const fields = fieldPolicies(form.fields);
-  const enabledClasses = stringArrayFrom(form.enabledClasses)
-    ?.filter(isSafeAddressAccessClass) ??
+  const enabledClasses =
+    nonEmptyStringArrayFrom(form.enabledClasses)?.filter(isSafeAddressAccessClass) ??
+    nonEmptyStringArrayFrom(org.enabledClasses)?.filter(isSafeAddressAccessClass) ??
     unique(fields.map((field) => field.accessClass));
   const authorizedAudiences =
-    stringArrayFrom(form.authorizedAudiences) ??
+    nonEmptyStringArrayFrom(form.authorizedAudiences) ??
     stringArrayFrom(org.authorizedAudiences) ??
     ['issuer_verification'];
   const acpJurisdictionsAccepted =
-    stringArrayFrom(form.acpJurisdictionsAccepted) ??
+    nonEmptyStringArrayFrom(form.acpJurisdictionsAccepted) ??
     stringArrayFrom(org.acpJurisdictionsAccepted) ??
     [];
-  const receiptPostureTier =
-    (form.receiptPostureTier as SafeAddressReceiptPostureTier | undefined) ??
+  const deploymentReceiptPostureTier =
     (org.receiptPostureTier as SafeAddressReceiptPostureTier | undefined) ??
     'phase-1-fallback';
+  const receiptPostureTier =
+    (form.receiptPostureTier as SafeAddressReceiptPostureTier | undefined) ??
+    deploymentReceiptPostureTier;
 
   if (fields.length === 0) {
     throw new InvalidRuntimePolicyError(
@@ -729,6 +732,12 @@ function resolveSafeAddressPolicy(
     throw new InvalidRuntimePolicyError(
       'org',
       'safeAddress is enabled but no authorized plaintext audience is configured',
+    );
+  }
+  if (safeAddressTierRank(receiptPostureTier) > safeAddressTierRank(deploymentReceiptPostureTier)) {
+    throw new InvalidRuntimePolicyError(
+      'form',
+      `safeAddress receiptPostureTier "${receiptPostureTier}" exceeds deployment capability "${deploymentReceiptPostureTier}"`,
     );
   }
   for (const field of fields) {
@@ -818,6 +827,15 @@ function stringArrayFrom(value: unknown): readonly string[] | undefined {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
     : undefined;
+}
+
+function nonEmptyStringArrayFrom(value: unknown): readonly string[] | undefined {
+  const entries = stringArrayFrom(value);
+  return entries && entries.length > 0 ? entries : undefined;
+}
+
+function safeAddressTierRank(tier: SafeAddressReceiptPostureTier): number {
+  return tier === 'verifier-grade' ? 2 : 1;
 }
 
 function unique<T extends string>(values: readonly T[]): readonly T[] {
