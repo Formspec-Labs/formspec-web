@@ -523,11 +523,14 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 ### FW-0040 — Embed: form lives in the host's page
 
 - **Phase:** Post-MVP
-- **Status:** open
+- **Status:** live (slice 1) 2026-05-24
 - **Persona:** Respondent
 - **Journey:** [J-018](JOURNEYS.md#j-018--im-filling-this-out-on-a-site-i-came-to-for-something-else)
 - **Done:** A nonprofit, clinic, or city department can put the form on their own page. The respondent never leaves the host's site, never sees "powered by" chrome, never gets bounced to an unfamiliar domain.
-- **Blocked on:** uses existing `<formspec-render>` web component from `formspec/packages/formspec-webcomponent`. Post-MVP for scope.
+- **Canonical shape:** [FW-0040 design 2026-05-24](thoughts/specs/2026-05-24-fw-0040-embed-design.md) — new `EmbedTransport` port (`isEmbedded`, `hostOrigin`, `postMessage`, `subscribeFromHost`) + `EmbedMessage` union seeded with `host-handshake`; `embed` capability key (**eighth** in the closed `RUNTIME_FEATURE_KEYS` taxonomy after `payment`); `EmbeddableExtractor` walks `definition.extensions['x-formspec-embeddable'] === true` and declares `'optional'` (an embeddable form still mounts directly on its issuer's URL); new `EmbedLimits` shape on `orgRuntimePolicy.limits.embed.allowedOrigins`; new `EmbedOriginNotAllowedError extends RuntimePolicyError`; runtime `verifyEmbedOriginAllowed` gate in `createReadyState` after the resolver; honest "this form is not set up to be shown on this site." fail-load copy.
+- **Delivered:** `EmbedTransport` port + stub + unavailable sentinel + conformance suite; `embed` feature key (eighth extension); `EmbeddableExtractor` form-policy adapter; `orgRuntimePolicy.limits.embed.allowedOrigins` typed shape + resolver validation; `EmbedOriginNotAllowedError` + form-load error copy; full composition wiring (default + stub + route-narrowed factories); 27 pre-existing policy-resolution fixtures backfilled + 3 new embed cases; end-to-end `RespondentRuntime` iframe-context tests + vocabulary firewall assertion. Implementation plan at [`thoughts/plans/2026-05-24-fw-0040-embed.md`](thoughts/plans/2026-05-24-fw-0040-embed.md). Custom Element wrapper + production postMessage / penpal / comlink adapters defer per design §"What FW-0040 ships and what stays open."
+- **Named release gaps:** Custom Element wrapper `<formspec-embed>` is **FW-0053** (depends on this slice's substrate). Production postMessage RPC reference adapter (handshake + theme-handoff + resize-request messages) is **FW-0102**. Penpal / comlink wrapper docs cookbook is **FW-0103**. Cross-origin storage / cookie isolation guidance is **FW-0104**. Multi-form-per-iframe composition is **FW-0105**. Demo form flipping `x-formspec-embeddable: true` once a worked host-page demo lands is **FW-0106** (gated on FW-0053 + FW-0102). Partial-origin matching (subdomain globs / regex) is a future row with a deliberate matcher.
+- **Cross-row touch (FW-0027 + FW-0040 coordination):** FW-0027 landed `payment` as the 7th key first; FW-0040 appended `embed` as the 8th per the append-only protocol. Both rows added `embedTransport` slot fixture-backfill to each other's runtime tests during the parallel slide.
 
 ### FW-0041 — Public-terminal hygiene
 
@@ -1139,3 +1142,48 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 - **Gap (from FW-0027):** A payment-required form on an instance with `offlineSubmit` enabled cannot be queued — the authorization expires before the user reconnects (typical rail hold expiration is 7 days for card networks, faster for others; offline-queued submits may sit indefinitely). The slice-1 runtime hard-rejects this composition: "This form requires payment and cannot be saved for later. Please reconnect and try again."
 - **Done:** A substrate exists for held-authorization-replay — the queue stores the authorization handle alongside the queued submit; on replay, the runtime re-authorizes (or revives) the hold AFTER the network returns. Requires deep rail-side coordination (most rails don't support reviving expired authorizations); may require a different shape entirely (e.g., generate a pay-on-success token that the user fills offline + completes payment on reconnect).
 - **Blocked on:** Substantive rail-side work. Filed by FW-0027 closeout as the explicit lift-the-restriction row.
+
+### FW-0102 — Production postMessage RPC reference adapter for `EmbedTransport`
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (host-page integrator wiring iframe-embedded forms)
+- **Journey:** [J-018](JOURNEYS.md#j-018--im-filling-this-out-on-a-site-i-came-to-for-something-else)
+- **Done:** A production-grade `EmbedTransport` reference adapter using raw `window.postMessage` + a typed handshake protocol that resolves `hostOrigin()` after the host page replies. Includes the FW-0053-driven message vocabulary (resize-request, theme-handoff, submit-complete, etc.) as the `EmbedMessage` union grows. Conformance suite extended to cover the handshake's async resolution semantics.
+- **Blocked on:** Nothing upstream from formspec-web; depends on the FW-0040 substrate (shipped). Material design + security review needed before landing in adopter compositions.
+
+### FW-0103 — penpal / comlink wrapper docs (adopter cookbook)
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (host-page integrator preferring battle-tested postMessage RPC libraries)
+- **Journey:** [J-018](JOURNEYS.md#j-018--im-filling-this-out-on-a-site-i-came-to-for-something-else)
+- **Done:** Worked-example adopter docs for wrapping `penpal` and `comlink` behind `EmbedTransport`. Covers handshake initiation, origin verification, timeout handling, type-safe message channels, and the `<iframe sandbox>` interaction matrix. Sibling to FW-0102 (FW-0102 is the in-tree reference; FW-0103 is the third-party-library cookbook).
+- **Blocked on:** FW-0040 substrate (shipped). May land alongside FW-0102 or as a separate doc-only row.
+
+### FW-0104 — Cross-origin storage / cookie isolation guidance + adapter shape
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (handling third-party-context cookie partitioning, CHIPS, Storage Access API)
+- **Journey:** [J-018](JOURNEYS.md#j-018--im-filling-this-out-on-a-site-i-came-to-for-something-else)
+- **Done:** A guidance doc + (if needed) a thin adapter for browsers that partition third-party storage. Covers the Storage Access API, CHIPS, the path forward for SameSite-Lax-by-default browsers, and the migration story for adopters whose form runtime stores drafts in third-party-context cookies.
+- **Blocked on:** Browser-substrate maturity; this is more of a "we have an opinion on the right shape" output than substrate work. Filed by FW-0040 closeout.
+
+### FW-0105 — Multi-form-per-iframe composition
+
+- **Phase:** Post-MVP
+- **Status:** open
+- **Persona:** Adopter (mounts multiple forms simultaneously in one iframe; rare but real)
+- **Journey:** [J-018](JOURNEYS.md#j-018--im-filling-this-out-on-a-site-i-came-to-for-something-else)
+- **Done:** The runtime supports mounting multiple `RespondentRuntime` instances inside a single iframe with independent form contexts but shared `EmbedTransport`. Message routing covers per-form identification.
+- **Blocked on:** Real adopter demand (no demand today). Filed by FW-0040 closeout.
+
+### FW-0106 — Demo form: declare `x-formspec-embeddable: true` once a worked host-page demo lands
+
+- **Phase:** Post-MVP
+- **Status:** open (blocked on FW-0053 + FW-0102)
+- **Persona:** Maintainer (demo surface honesty)
+- **Journey:** [J-018](JOURNEYS.md#j-018--im-filling-this-out-on-a-site-i-came-to-for-something-else)
+- **Done:** The bundled `sample-form.json` declares `extensions['x-formspec-embeddable']: true` AND `npm run dev` users can see a worked host-page demo mounting the iframe. Today's slice-1 stub returns "not embedded" because the bundled demo loads top-level; declaring embeddable on the demo form without a host-page demo to show the affordance is dishonest.
+- **Blocked on:** FW-0053 (Custom Element wrapper) + FW-0102 (production postMessage adapter). Until those land, the demo form stays silent on embed.

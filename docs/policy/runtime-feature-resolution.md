@@ -58,6 +58,21 @@ The closed taxonomy lives in `src/policy/feature-keys.ts`. Today's keys:
   wire Stripe / Square / W3C Payment Request / PayNearMe / in-person POS
   per their merchant relationships); demo declares `'demo-stub'` with an
   in-memory authorization-state map.
+- `embed` — iframe-host transport substrate (FW-0040 slice 1
+  extension; **eighth key** in the closed taxonomy; gated against the
+  new `EmbedTransport` port, 1:1 mapping). IN-FORM consumer — no
+  standalone route; the runtime detects iframe context at form load and
+  verifies the host origin against
+  `orgRuntimePolicy.limits.embed.allowedOrigins`. Form-policy extractor
+  walks `definition.extensions['x-formspec-embeddable']` and declares
+  `'optional'` (an embeddable form still mounts directly on its issuer's
+  URL; declaring `'required'` would fail-load every embeddable form
+  accessed directly). Production declares `'unavailable'` (no OSS
+  reference postMessage adapter ships — adopters fork to wire raw
+  postMessage / penpal / comlink wrappers per their host integration);
+  demo declares `'demo-stub'` with an in-memory transport defaulting to
+  "not embedded". The Custom Element wrapper (`<formspec-embed>`) is
+  FW-0053; production transport adapters are FW-0102 + FW-0103.
 
 Future feature ADRs extend the taxonomy; the resolver rejects unknown keys
 with `InvalidRuntimePolicyError` so drift is caught at boot.
@@ -130,6 +145,7 @@ Semantics declares illegal:
 | Form forbids a feature the org requires | `FeaturePolicyConflictError` |
 | Required production capability backed by a demo stub | `UnsupportedRequiredFeatureError` |
 | Configured limits or modes are invalid | `InvalidRuntimePolicyError` |
+| Form is mounted in an iframe whose host origin is not in the org's `limits.embed.allowedOrigins` allow-list (FW-0040) | `EmbedOriginNotAllowedError` |
 
 The form-load boundary in `RespondentRuntime` catches every
 `RuntimePolicyError`, renders a plain-language unavailable page, and
@@ -593,3 +609,55 @@ declare `x-formspec-payment-required: true` today (FW-0100 flips the
 demo once a method-picker UX ships, gated on FW-0089 + FW-0094);
 adopters who want the affordance live can compose their own demo form
 with the extensions.
+
+## Worked example: the in-form iframe-origin gate (FW-0040 slice 1)
+
+`embed` is the third feature key driven by **definition introspection**
+(after `fileUpload` and `payment`) and the first IN-FORM key whose
+runtime branch is **mount-context-conditional**. The composition's
+`formRuntimePolicyExtractor` (specifically the `EmbeddableExtractor`
+reference adapter at
+`src/adapters/composing/form-runtime-policy-extractor.ts`) walks the
+loaded `FormDefinition` for
+`extensions['x-formspec-embeddable'] === true`. When present, the
+form's policy declares `embed: 'optional'`.
+
+At form load, `RespondentRuntime` calls `verifyEmbedOriginAllowed(...)`
+after the resolver. The helper reads `composition.embedTransport`:
+
+| `embed` enabled? | `isEmbedded()` | `hostOrigin()` | Allow-list match | Outcome |
+|---|---|---|---|---|
+| any | `false` | any | any | No-op (form mounts; gate never fires). |
+| `false` | any | any | any | No-op (gate skipped; resolver's disabled-cause drives any other behavior). |
+| `true` | `true` | non-null + matches | yes | No-op (form mounts). |
+| `true` | `true` | non-null + matches wildcard `'*'` | yes | No-op (form mounts). |
+| `true` | `true` | non-null + does not match | no | `EmbedOriginNotAllowedError` → form-load error page renders "This form is not set up to be shown on this site." |
+| `true` | `true` | `null` | n/a | `EmbedOriginNotAllowedError` (fail-closed: unknown origin cannot be allow-listed). |
+
+The form-load error boundary in `RespondentRuntime` catches
+`EmbedOriginNotAllowedError` like every other `RuntimePolicyError` and
+renders the plain-language copy with the support reference
+`EmbedOriginNotAllowed`.
+
+The narrowed-route compositions (`/status`, `/obligations`,
+`/documents`, `/history`) declare `embed: 'unavailable'` and wire
+`unavailableEmbedTransport()` because no narrowed surface itself
+mounts in a host iframe today. Uniform across descriptors — no
+descriptor adds `'embed'` to its `consumes` set today; a future
+narrowed surface that needs iframe embedding would add the membership
+and branch the wiring per FW-0080's closed-taxonomy shape.
+
+Production posture: `'unavailable'` (no OSS reference postMessage
+adapter ships; adopters fork to wire raw postMessage, penpal, or
+comlink wrappers per their host integration — FW-0102 / FW-0103).
+Demo posture: `'demo-stub'` with an in-memory transport defaulting to
+"not embedded". The bundled `sample-form.json` does NOT declare
+`x-formspec-embeddable: true` today (FW-0106 flips the demo once a
+worked host-page demo lands, gated on FW-0053 + FW-0102); the
+substrate is exercised through synthetic-definition tests and the
+conformance suite.
+
+Forbidden in the rendered DOM: `iframe`, `postMessage`, `EmbedTransport`,
+`allowedOrigins`, `hostOrigin`, `host-handshake`, `embed-transport`,
+`embedTransport`. The vocabulary firewall is enforced by the embed
+test suite.
