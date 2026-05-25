@@ -165,3 +165,28 @@ Independent scout `019e5e39-e16a-7431-b450-24d761bdd075` returned a BLOCK Wave A
 - HIGH F3: FW-0060 port allocation corrected from `SafeAddressMaskingPolicy` to `SafeAddressDirectory`.
 - HIGH F4: FW-0061 `PartyAuthority` preallocation removed. `multiParty` is reserved unavailable-only until FW-0061 proves whether a new port is forced; the normative design extends `DraftStore`, `IdentityProvider`, and `SubmitTransport`.
 - MED F5: `bringYourOwnAssistant`, `duressAware`, and `multiParty` have empty `FEATURE_PORT_MAP` bindings. This keeps the RuntimeFeatureKey positions reserved while `assertCompositionCoherence` rejects any non-`unavailable` declaration until the deferred build rows land a concrete port/capability-proof shape.
+
+### 2026-05-25 — Wave-B formspec-web build hardening and review-loop closure
+
+The W2.3/W2.4 formspec-web build rows needed review-driven rework after the first integration pass. These are not new rows; they are the remediator/verifier cycles required by §4.
+
+| Row | Cycle status | Current evidence |
+|---|---|---|
+| W2.3 / FW-0060 safe-address build | closed after reviewer findings from Meitner, Tesla, Fermat, and final clean review by Nietzsche | commits `6e02690`, `8e5a163`, `338ebd1`, `b53cbe3`; `PLANNING.md` FW-0060 progress note updated; final gates green before root pointer `2effdc3` |
+| W2.4 / FW-0061 multi-party build | closed after reviewer findings from Banach, Plato, Hubble, and final clean review by Turing/Volta | commits `fb142c4`, `c41a151`, `0700b2e`, `634ac02`, `d38a66a`; `PLANNING.md` FW-0061 progress note updated; final gates green before root pointer `2effdc3` |
+
+Remediation details:
+
+- FW-0060 safe-address: protected safe-* fields now force required mode even if the extension says `false` or `optional`; form-empty arrays no longer override org jurisdiction/audience limits; form-level and field-level audiences are intersected with org safe-address policy; verifier-grade requests over a fallback-only deployment throw `UnsupportedRequiredFeatureError`; `SafeAddressDirectory` validation runs before intake handoff construction.
+- FW-0061 multi-party: signer progress persists through `DraftStore`; aggregate handoff/HTTP `response_data` is built from all party responses; same-session replay is blocked while awaiting the next signer; persisted-reload replay validates signer eligibility before any party-draft write; the regression now checks the subject-scoped `multiPartyDraftKey`.
+- Ad-hoc gate fixes: `9cd3f55` registered `MultiPartyPolicyExtractor` and `SafeAddressPolicyExtractor` in the conformance suite after `check:conformance-coverage` exposed the gap; `9070ec2` made `npm run lint` ignore generated agent worktrees and `21bc7d2` narrowed that ignore to `.claude/worktrees/**` after reviewer feedback.
+
+Verification run before root pointer `2effdc3`:
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm run test:unit`
+- `npm run test:conformance`
+- `npm run check:conformance-coverage`
+- `npm run build`
+- `git diff --check`
