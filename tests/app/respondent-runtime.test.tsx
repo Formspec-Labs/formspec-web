@@ -370,7 +370,7 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(rootStack?.dataset.formspecNodePath).toBeUndefined();
   });
 
-  it('passes host-supplied LayoutHostEvidence into the React renderer as inert UI policy metadata', async () => {
+  it('passes host-supplied LayoutHostEvidence into the React renderer as UI policy metadata and active route landmark', async () => {
     const componentDocument = componentDocumentForRuntime();
     const componentGraph: ComponentGraphProjectionContext = {
       component: {
@@ -408,8 +408,9 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(rootStack?.dataset.formspecUiPolicySource).toBe('host://policy/respondent-ui-policy');
     expect(rootStack?.dataset.formspecUiPolicySurfaceUrl).toBe('https://surfaces.example.test/intake');
     expect(rootStack?.dataset.formspecUiPolicyRoute).toBe('apply');
-    expect(rootStack?.dataset.formspecUiPolicyA11yLandmark).toBe('main');
+    expect(rootStack?.dataset.formspecUiPolicyA11yLandmark).toBe('complementary');
     expect(rootStack?.dataset.formspecUiPolicyKeyboardNavigation).toBe('true');
+    expect(rootStack?.getAttribute('role')).toBe('complementary');
     expect(rootStack?.dataset.formspecUiPolicyResponsiveMinColumns).toBe('1');
     expect(rootStack?.dataset.formspecUiPolicyResponsiveCollapseOrder).toBe('["summary","details"]');
     expect(notesField?.dataset.formspecUiPolicySchema).toBeUndefined();
@@ -449,6 +450,7 @@ describe('RespondentRuntime identity sign-in', () => {
 
     const rootStack = container?.querySelector('.formspec-stack') as HTMLElement | null;
     expect(rootStack?.dataset.formspecUiPolicySchema).toBeUndefined();
+    expect(rootStack?.getAttribute('role')).toBeNull();
     expect(rootStack?.dataset.formspecComponentHandle).toBe('respondent');
     expect(composition.definitionSource.getLayoutHostEvidence).toHaveBeenCalledWith(demoSampleForm.url);
   });
@@ -1846,6 +1848,7 @@ function componentDocumentForRuntime(): ComponentDocument {
 
 type UiGraphPolicyHostEvidenceOptions = {
   hiddenDefinitionRefs?: Array<{ url: string; version?: string }>;
+  landmark?: 'main' | 'navigation' | 'complementary' | 'region';
   phases?: NonNullable<LayoutHostEvidence['appGraphReport']>['phases'];
   reportOk?: boolean;
   targetSurfaceUrl?: string;
@@ -1900,7 +1903,7 @@ function uiGraphPolicyHostEvidence(
         routePolicies: [{
           routeId: 'apply',
           a11y: {
-            landmark: 'main',
+            landmark: options.landmark ?? 'complementary',
             keyboardNavigation: true,
           },
           responsive: {

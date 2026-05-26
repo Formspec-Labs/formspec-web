@@ -527,6 +527,7 @@ async function expectApplyRouteMetadata(page: Page): Promise<void> {
     'data-formspec-ui-policy-route',
     'apply',
   );
+  await expect(page.locator('.formspec-stack')).toHaveAttribute('role', 'complementary');
 }
 
 function runtimeOwnershipSidecars(
@@ -653,7 +654,7 @@ function layoutHostEvidenceForRuntime(
             {
               routeId: 'apply',
               a11y: {
-                landmark: 'main',
+                landmark: 'complementary',
                 keyboardNavigation: true,
               },
               responsive: {

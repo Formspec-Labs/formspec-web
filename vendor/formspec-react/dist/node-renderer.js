@@ -222,6 +222,8 @@ function LayoutNodeInner({ node }) {
                     cssClasses: node.cssClasses ?? [],
                     style: node.style,
                     accessibility: node.accessibility,
+                    componentGraphIdentity: node.componentGraphIdentity,
+                    uiGraphRoutePolicy: node.uiGraphRoutePolicy,
                     children: pages,
                 };
                 return (_jsxs(_Fragment, { children: [orphans.map((child) => (_jsx(FormspecNode, { node: child }, child.id))), _jsx(LayoutNodeInner, { node: wizardNode })] }));
@@ -241,6 +243,8 @@ function LayoutNodeInner({ node }) {
                     cssClasses: node.cssClasses ?? [],
                     style: node.style,
                     accessibility: node.accessibility,
+                    componentGraphIdentity: node.componentGraphIdentity,
+                    uiGraphRoutePolicy: node.uiGraphRoutePolicy,
                     children: pages,
                 };
                 return (_jsxs(_Fragment, { children: [_jsx(LayoutNodeInner, { node: tabsNode }), orphans.map((child) => (_jsx(FormspecNode, { node: child }, child.id)))] }));
