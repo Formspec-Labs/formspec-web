@@ -8,11 +8,11 @@ import '../theme/upstream/adapters/tailwind-formspec-core.css';
 import { App } from './App.tsx';
 import './app.css';
 import { CompositionProvider } from './CompositionProvider.tsx';
-import { chooseComposition } from './main-helpers.ts';
-import { formRouteErrorCopy, isFormRouteError, type FormRouteError } from './form-route.ts';
+import { formRouteErrorCopy, type FormRouteError } from './form-route.ts';
+import { useRoutedComposition } from './routed-composition.ts';
+import type { FormspecWebConfig } from '../config/types.ts';
 
 const activeConfig = resolveActiveConfig(rootConfig, readRuntimeConfig());
-const bootState = bootComposition(window.location.href);
 const rootEl = document.getElementById('root');
 if (!rootEl) {
   throw new Error('Root element #root not found');
@@ -22,35 +22,20 @@ applyBrandTheme(document.documentElement, activeConfig.brand);
 
 createRoot(rootEl).render(
   <StrictMode>
-    {bootState.status === 'ready' ? (
-      <CompositionProvider value={bootState.composition}>
-        <App config={activeConfig} />
-      </CompositionProvider>
-    ) : (
-      <FormRouteBootError error={bootState.error} />
-    )}
+    <RoutedApp config={activeConfig} />
   </StrictMode>,
 );
 
-function bootComposition(href: string):
-  | { status: 'ready'; composition: ReturnType<typeof chooseComposition> }
-  | { status: 'form-route-error'; error: FormRouteError } {
-  try {
-    return {
-      status: 'ready',
-      composition: chooseComposition({ href, config: activeConfig }),
-    };
-  } catch (error) {
-    const routeError = formRouteError(error);
-    if (routeError) {
-      return { status: 'form-route-error', error: routeError };
-    }
-    throw error;
+function RoutedApp({ config }: { config: FormspecWebConfig }) {
+  const routeState = useRoutedComposition(config);
+  if (routeState.status === 'form-route-error') {
+    return <FormRouteBootError error={routeState.error} />;
   }
-}
-
-function formRouteError(error: unknown): FormRouteError | null {
-  return isFormRouteError(error) ? error : null;
+  return (
+    <CompositionProvider value={routeState.composition}>
+      <App config={config} href={routeState.href} />
+    </CompositionProvider>
+  );
 }
 
 function FormRouteBootError({ error }: { error: FormRouteError }) {

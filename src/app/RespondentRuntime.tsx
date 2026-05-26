@@ -812,6 +812,15 @@ export function RespondentRuntime({
             onSubmit={(result) => {
               void handleSubmit(result);
             }}
+            onActionResult={(result) => {
+              const action = result.resolution.action;
+              if (!action) return;
+              composition.surfaceRouter?.transitionAfterResponseAction({
+                actionId: action.id,
+                status: result.status,
+                componentGraph: respondentState.componentGraph,
+              });
+            }}
           >
             <RespondentSurface
               activeLocale={respondentState.activeLocale}

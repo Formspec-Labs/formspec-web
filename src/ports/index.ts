@@ -77,6 +77,11 @@ export type {
   ResponseActionRuntimeContext,
 } from './response-action-ledger.ts';
 export type {
+  SurfaceRouteActionResult,
+  SurfaceRouteState,
+  SurfaceRouter,
+} from './surface-router.ts';
+export type {
   RespondentHistorySource,
   HistoryQuery,
   HistorySnapshot,

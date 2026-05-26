@@ -20,7 +20,20 @@ one `form` parameter into `Composition.initialDefinitionUrl` for the full-app
 production composition and rejects empty or duplicate `form` parameters before
 constructing production HTTP adapters. The selected value still flows through
 the default form-id resolver above; this does not close EXT-20 canonical URL
-resolution and does not model a route-param selected Response instance.
+resolution.
+
+The root `response=` route parameter is an explicit Response id binding for
+submit. It is consumed by the HTTP submit adapter's `responseIdResolver`, does
+not rewrite the selected Definition tuple from `form=`, and does not widen
+`DefinitionSource.getDefinition()` into a draft-state loader.
+
+The `surface`, `surfaceVersion`, `surfaceRoute`, `surfaceNextRoute`, and
+`surfaceTriggerAction` route parameters are host-owned Surface route state. The
+browser Surface router may advance `surfaceRoute` after a completed matching
+Response Action, but it does not execute the action, infer Response identity, or
+dispatch the app-level route-transition event after updating the URL. Internal
+Surface route state updates replace the current browser history entry; app-level
+route transitions remain reserved for app routes such as `/status`.
 
 The adapter extracts concrete Locale Documents from `locales`,
 `locale_documents`, and `localeDocuments` members of the same runtime payload.

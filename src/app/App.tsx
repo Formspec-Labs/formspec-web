@@ -12,6 +12,7 @@ import { parseReviewerRoute, type ReviewerRouteParams } from './reviewer-route.t
 
 interface AppProps {
   config: FormspecWebConfig;
+  href?: string;
 }
 
 interface RespondentRuntimeProps {
@@ -100,7 +101,7 @@ type RuntimeState =
     }
   | { status: 'error'; error: unknown };
 
-export function App({ config }: AppProps) {
+export function App({ config, href = window.location.href }: AppProps) {
   const composition = useComposition();
   const [runtimeState, setRuntimeState] = useState<RuntimeState>({ status: 'loading' });
 
@@ -111,22 +112,22 @@ export function App({ config }: AppProps) {
   useEffect(() => {
     let cancelled = false;
     setRuntimeState({ status: 'loading' });
-    const statusParams = parseStatusRoute(window.location.href);
-    const obligationsParams = statusParams ? null : parseObligationsRoute(window.location.href);
+    const statusParams = parseStatusRoute(href);
+    const obligationsParams = statusParams ? null : parseObligationsRoute(href);
     const documentsParams =
-      statusParams || obligationsParams ? null : parseDocumentsRoute(window.location.href);
+      statusParams || obligationsParams ? null : parseDocumentsRoute(href);
     const historyParams =
       statusParams || obligationsParams || documentsParams
         ? null
-        : parseHistoryRoute(window.location.href);
+        : parseHistoryRoute(href);
     const screenerParams =
       statusParams || obligationsParams || documentsParams || historyParams
         ? null
-        : parseScreenerRoute(window.location.href);
+        : parseScreenerRoute(href);
     const reviewerParams =
       statusParams || obligationsParams || documentsParams || historyParams || screenerParams
         ? null
-        : parseReviewerRoute(window.location.href);
+        : parseReviewerRoute(href);
     const loader = statusParams
       ? import('./StatusRuntime.tsx').then((module) => ({
           status: 'ready' as const,
@@ -188,7 +189,7 @@ export function App({ config }: AppProps) {
     return () => {
       cancelled = true;
     };
-  }, [composition]);
+  }, [composition, href]);
 
   const isBusy = runtimeState.status === 'loading';
 

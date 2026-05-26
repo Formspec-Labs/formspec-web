@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { App } from '../../src/app/App.tsx';
 import { CompositionProvider } from '../../src/app/CompositionProvider.tsx';
+import { navigateAppRoute } from '../../src/app/route-transition.ts';
+import { useRoutedComposition } from '../../src/app/routed-composition.ts';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 
@@ -106,26 +108,43 @@ describe('App route selection (FW-0039 slice 1)', () => {
       ).not.toBeNull();
     });
   });
+
+  it('explicit route transitions recompute composition and mounted runtime', async () => {
+    setHref('http://localhost:3000/');
+    render(<RoutedAppHarness />);
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('heading', { name: /Demo Benefits Intake/i, level: 1 }),
+      ).not.toBeNull();
+    });
+
+    await act(async () => {
+      navigateAppRoute('/status?case=urn:wos:case_demo_000001');
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('heading', { name: /Your application status/i, level: 1 }),
+      ).not.toBeNull();
+    });
+    expect(screen.queryByRole('heading', { name: /Demo Benefits Intake/i, level: 1 })).toBeNull();
+  });
 });
 
+function RoutedAppHarness() {
+  const routeState = useRoutedComposition(departmentAppProfile);
+  if (routeState.status === 'form-route-error') {
+    return <div role="alert">{routeState.error.code}</div>;
+  }
+  return (
+    <CompositionProvider value={routeState.composition}>
+      <App config={departmentAppProfile} href={routeState.href} />
+    </CompositionProvider>
+  );
+}
+
 function setHref(href: string): void {
-  const url = new URL(href);
-  // happy-dom honours direct property writes on location for pathname/search.
-  // Using Object.defineProperty avoids navigating in the harness.
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    writable: true,
-    value: {
-      ...window.location,
-      href: url.href,
-      pathname: url.pathname,
-      search: url.search,
-      origin: url.origin,
-      host: url.host,
-      hostname: url.hostname,
-      port: url.port,
-      protocol: url.protocol,
-      hash: url.hash,
-    },
-  });
+  const url = new URL(href, window.location.href);
+  const sameOriginUrl = new URL(`${url.pathname}${url.search}${url.hash}`, window.location.origin);
+  window.history.replaceState(null, '', sameOriginUrl);
 }

@@ -75,7 +75,29 @@ export function chooseComposition({
   return createDefaultComposition(
     config,
     rootFormRoute?.kind === 'selected'
-      ? { initialDefinitionUrl: rootFormRoute.initialDefinitionUrl }
+      ? {
+          initialDefinitionUrl: rootFormRoute.initialDefinitionUrl,
+          ...(rootFormRoute.selectedResponseId
+            ? { selectedResponseId: rootFormRoute.selectedResponseId }
+            : {}),
+          ...(rootFormRoute.surfaceRoute
+            ? {
+                surfaceRoute: {
+                  surfaceUrl: rootFormRoute.surfaceRoute.surfaceUrl,
+                  ...(rootFormRoute.surfaceRoute.surfaceVersion
+                    ? { surfaceVersion: rootFormRoute.surfaceRoute.surfaceVersion }
+                    : {}),
+                  routeId: rootFormRoute.surfaceRoute.routeId,
+                  ...(rootFormRoute.surfaceRoute.nextRouteId
+                    ? { nextRouteId: rootFormRoute.surfaceRoute.nextRouteId }
+                    : {}),
+                  ...(rootFormRoute.surfaceRoute.triggerActionId
+                    ? { triggerActionId: rootFormRoute.surfaceRoute.triggerActionId }
+                    : {}),
+                },
+              }
+            : {}),
+        }
       : undefined,
   );
 }

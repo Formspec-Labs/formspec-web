@@ -229,6 +229,69 @@ test.describe.serial('live Response Actions browser ledger path', () => {
     expectTrellisBackedReceipt(append.response);
   });
 
+  test('public RespondentRuntime keeps route-param Response identity explicit across Surface route transition', async ({
+    page,
+    request,
+  }) => {
+    if (!liveServerBaseUrl) {
+      test.fail(true, 'FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_URL is required');
+      return;
+    }
+    const runtimeDefinitionUrl = `${liveServerBaseUrl}/runtime/forms/${SELECTED_FORM_ID}`;
+    await publishDemoIntake(request, {
+      formId: SELECTED_FORM_ID,
+      serverBaseUrl: liveServerBaseUrl,
+      runtimeDefinitionUrl,
+      title: 'Browser Response Actions Route Param Response',
+    });
+    const selectedResponseId = `response_route_param_${Date.now()}_${process.pid}`;
+    const captures = await routeLiveServerThroughTestBff(page, request, {
+      serverBaseUrl: liveServerBaseUrl,
+    });
+    await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
+
+    const selectedRoute = selectedFormRoute(runtimeDefinitionUrl, {
+      responseId: selectedResponseId,
+      surfaceRoute: {
+        surfaceUrl: RUNTIME_SURFACE_URL,
+        surfaceVersion: '1.0.0',
+        routeId: 'apply',
+        nextRouteId: 'confirmation',
+        triggerActionId: 'submit',
+      },
+    });
+    await page.goto(selectedRoute);
+    await expect(page.getByRole('heading', { name: 'Browser Response Actions Route Param Response' })).toBeVisible();
+    await expectApplyRouteMetadata(page);
+    await page.getByLabel('Name').fill('Ada Lovelace');
+    await page.getByRole('button', { name: 'Submit' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Submission received' })).toBeVisible();
+    await expect.poll(() => captures.appends.length, { timeout: 30_000 }).toBe(1);
+    const routeUrl = new URL(page.url());
+    expect(routeUrl.searchParams.get('form')).toBe(runtimeDefinitionUrl);
+    expect(routeUrl.searchParams.get('response')).toBe(selectedResponseId);
+    expect(routeUrl.searchParams.get('surface')).toBe(RUNTIME_SURFACE_URL);
+    expect(routeUrl.searchParams.get('surfaceVersion')).toBe('1.0.0');
+    expect(routeUrl.searchParams.get('surfaceRoute')).toBe('confirmation');
+    expect(routeUrl.searchParams.get('surfaceNextRoute')).toBeNull();
+    expect(routeUrl.searchParams.get('surfaceTriggerAction')).toBeNull();
+
+    expect(captures.sessions).toHaveLength(1);
+    expect(captures.submits).toHaveLength(1);
+    expect(captures.appends).toHaveLength(1);
+    expect(requestJson<{ response_id: string }>(captures.submits[0]).response_id).toBe(
+      selectedResponseId,
+    );
+    const append = captures.appends[0]!;
+    expect(append.response).toMatchObject({
+      ledgerScope: append.body.ledgerScope,
+      idempotencyKey: append.body.idempotencyKey,
+      status: 'anchored',
+    });
+    expectTrellisBackedReceipt(append.response);
+  });
+
   test('public RespondentRuntime does not infer a route transition from denied Response Action ledger work', async ({
     page,
     request,
@@ -422,8 +485,37 @@ async function routeRuntimeConfig(
   });
 }
 
-function selectedFormRoute(runtimeDefinitionUrl: string): string {
-  return `/?form=${encodeURIComponent(runtimeDefinitionUrl)}`;
+function selectedFormRoute(
+  runtimeDefinitionUrl: string,
+  options: {
+    responseId?: string;
+    surfaceRoute?: {
+      surfaceUrl: string;
+      surfaceVersion?: string;
+      routeId: string;
+      nextRouteId?: string;
+      triggerActionId?: string;
+    };
+  } = {},
+): string {
+  const params = new URLSearchParams({ form: runtimeDefinitionUrl });
+  if (options.responseId) {
+    params.set('response', options.responseId);
+  }
+  if (options.surfaceRoute) {
+    params.set('surface', options.surfaceRoute.surfaceUrl);
+    if (options.surfaceRoute.surfaceVersion) {
+      params.set('surfaceVersion', options.surfaceRoute.surfaceVersion);
+    }
+    params.set('surfaceRoute', options.surfaceRoute.routeId);
+    if (options.surfaceRoute.nextRouteId) {
+      params.set('surfaceNextRoute', options.surfaceRoute.nextRouteId);
+    }
+    if (options.surfaceRoute.triggerActionId) {
+      params.set('surfaceTriggerAction', options.surfaceRoute.triggerActionId);
+    }
+  }
+  return `/?${params.toString()}`;
 }
 
 function pathAndSearch(page: Page): string {

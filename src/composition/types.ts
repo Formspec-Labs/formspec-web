@@ -10,6 +10,7 @@ import type {
   OfflineSubmitQueue,
   PaymentRailAdapter,
   ResponseActionInvokerFactory,
+  SurfaceRouter,
   ReviewerSession,
   ReviewThreadStore,
   RespondentHistorySource,
@@ -56,6 +57,12 @@ export interface Composition {
    * capabilities server-side; browser code must not hold mint HMAC material.
    */
   responseActionInvoker?: ResponseActionInvokerFactory;
+  /**
+   * ADR 0153 runtime ownership seam. Surface route state stays host-owned and
+   * explicit: the router may observe a completed Response Action and advance a
+   * Surface route, but it must not execute the action or infer Response identity.
+   */
+  surfaceRouter?: SurfaceRouter;
   /** ADR-0010: respondent-held obligations, documents, and history. */
   respondentPlaceSource: RespondentPlaceSource;
   /** ADR-0010/FW-0039: WOS applicant API resource shapes, not a web status vocabulary. */

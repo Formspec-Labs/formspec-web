@@ -200,6 +200,27 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     );
   });
 
+  it('chooseComposition wires an explicit response route parameter into HTTP submit only', () => {
+    const selectedRuntimeDefinitionUrl =
+      'https://formspec-server.example.test/runtime/forms/selected-intake';
+    const selectedResponseId = 'response_route_param_selected';
+    const composition = chooseComposition({
+      href: `http://localhost/?form=${encodeURIComponent(selectedRuntimeDefinitionUrl)}&response=${encodeURIComponent(selectedResponseId)}`,
+      config: publicProductionConfig(),
+    });
+
+    expect(composition.initialDefinitionUrl).toBe(selectedRuntimeDefinitionUrl);
+    expect(spies.httpDef).toHaveBeenCalled();
+    expect(spies.httpAnonProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ formUrl: selectedRuntimeDefinitionUrl }),
+    );
+    const submitCalls = spies.httpSubmit.mock.calls as unknown as Array<[unknown]>;
+    const submitConfig = submitCalls.at(-1)?.[0] as
+      | { responseIdResolver?: () => string | undefined }
+      | undefined;
+    expect(submitConfig?.responseIdResolver?.()).toBe(selectedResponseId);
+  });
+
   it('chooseComposition rejects duplicate root form parameters before constructing production HTTP adapters', () => {
     expect(() =>
       chooseComposition({

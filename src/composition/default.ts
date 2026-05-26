@@ -8,6 +8,7 @@ import {
   createHttpResponseActionLedgerCapabilityProvider,
   createHttpResponseActionLedgerInvokerFactory,
 } from '../adapters/http/response-action-ledger.ts';
+import { createBrowserSurfaceRouter } from '../adapters/browser/surface-router.ts';
 import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
@@ -47,6 +48,7 @@ import type { IdentityProvider } from '../ports/identity-provider.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
 import { createDemoComposition } from './demo.ts';
 import type { Composition } from './types.ts';
+import type { SurfaceRouteState } from '../ports/surface-router.ts';
 
 /**
  * Default composition for the OSS reference deployment. Without an explicit
@@ -60,6 +62,8 @@ import type { Composition } from './types.ts';
  */
 export interface DefaultCompositionOptions {
   initialDefinitionUrl?: string;
+  selectedResponseId?: string;
+  surfaceRoute?: SurfaceRouteState;
 }
 
 export function createDefaultComposition(
@@ -89,6 +93,9 @@ export function createDefaultComposition(
   const { draftStore, submitTransport } = createHttpAdapterCohort({
     ...httpConfig,
     anonymousSessions,
+    ...(options.selectedResponseId
+      ? { responseIdResolver: () => options.selectedResponseId }
+      : {}),
   });
   const responseActionCapabilityUrl =
     config.referenceAdapters?.formspecStack?.responseActionLedgerCapabilityUrl;
@@ -126,6 +133,9 @@ export function createDefaultComposition(
     safeAddressDirectory: unavailableSafeAddressDirectory(),
     lifecycleActionClient: unavailableLifecycleActionClient(),
     ...(responseActionInvoker ? { responseActionInvoker } : {}),
+    ...(options.surfaceRoute
+      ? { surfaceRouter: createBrowserSurfaceRouter(options.surfaceRoute) }
+      : {}),
     // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —
