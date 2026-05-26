@@ -1,5 +1,11 @@
 import { createHmac } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page, type Route } from '@playwright/test';
+import type {
+  ComponentDocument,
+  ComponentGraphProjectionContext,
+  FormDefinition,
+  LayoutHostEvidence,
+} from '../../src/ports/index.ts';
 
 const liveServerBaseUrl = process.env.FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_URL?.replace(/\/+$/, '');
 const liveServerSecret =
@@ -25,6 +31,11 @@ const RESPONSE_ACTION_LEDGER_CAPABILITY_HEADER =
 const RESPONSE_ACTION_LEDGER_MINT_AUTHORITY_HEADER =
   'x-formspec-runtime-ledger-mint-authority';
 const TEST_CAPABILITY_PATH = '/__test/response-actions/ledger/capability';
+const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
+const COMPONENT_GRAPH_CONTEXT_SCHEMA_ID =
+  'https://formspec.org/schemas/componentGraphProjectionContext/0.1';
+const RUNTIME_COMPONENT_URL = 'https://components.example.test/respondent-live';
+const RUNTIME_SURFACE_URL = 'https://surfaces.example.test/intake-live';
 
 type ScopeHeaders = typeof defaultScope;
 
@@ -98,7 +109,9 @@ type LiveRouteCaptures = {
   }>;
 };
 
-test.describe('live Response Actions browser ledger path', () => {
+let publishCounter = 0;
+
+test.describe.serial('live Response Actions browser ledger path', () => {
   test.skip(
     !liveServerBaseUrl,
     'set FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_URL to run the managed-single-cell browser ledger proof',
@@ -120,21 +133,23 @@ test.describe('live Response Actions browser ledger path', () => {
     const captures = await routeLiveServerThroughTestBff(page, request, {
       serverBaseUrl: liveServerBaseUrl,
     });
-    await page.route('**/formspec-runtime-config.js', async (route) => {
-      await route.fulfill({
-        contentType: 'application/javascript',
-        body: [
-          'window.__FORMSPEC_RUNTIME_CONFIG__ = {',
-          '  profileName: "publicPortal",',
-          `  formspecServerUrl: ${JSON.stringify(liveServerBaseUrl)},`,
-          `  responseActionLedgerCapabilityUrl: ${JSON.stringify(`${liveServerBaseUrl}${TEST_CAPABILITY_PATH}`)}`,
-          '};',
-        ].join('\n'),
-      });
-    });
+    await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
 
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Browser Response Actions Ledger' })).toBeVisible();
+    await expect(page.locator('.formspec-stack')).toHaveAttribute(
+      'data-formspec-component-handle',
+      'respondent',
+    );
+    await expect(page.locator('.formspec-stack')).toHaveAttribute('data-formspec-route', 'apply');
+    await expect(page.locator('.formspec-stack')).toHaveAttribute(
+      'data-formspec-ui-policy-route',
+      'apply',
+    );
+    await expect(page.locator('.formspec-field[data-name="name"]')).toHaveAttribute(
+      'data-formspec-component-node-id',
+      'name-node',
+    );
     await page.getByLabel('Name').fill('Ada Lovelace');
     await page.getByRole('button', { name: 'Submit' }).click();
 
@@ -210,18 +225,55 @@ test.describe('live Response Actions browser ledger path', () => {
     });
     expectTrellisBackedReceipt(append.response);
   });
+
+  test('public RespondentRuntime rejects hidden route-local Definition state before draft and action work', async ({
+    page,
+    request,
+  }) => {
+    if (!liveServerBaseUrl) {
+      test.fail(true, 'FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_URL is required');
+      return;
+    }
+    const runtimeDefinitionUrl = `${liveServerBaseUrl}/runtime/forms/${DEMO_FORM_ID}`;
+    await publishDemoIntake(request, {
+      serverBaseUrl: liveServerBaseUrl,
+      runtimeDefinitionUrl,
+      title: 'Browser Response Actions Hidden State',
+      hiddenOnActiveRoute: true,
+    });
+    const captures = await routeLiveServerThroughTestBff(page, request, {
+      serverBaseUrl: liveServerBaseUrl,
+    });
+    await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
+
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'This form cannot be loaded.' })).toBeVisible();
+    await expect(page.getByText(/This form is not available on this route/)).toBeVisible();
+
+    expect(captures.sessions).toHaveLength(1);
+    expect(captures.drafts).toHaveLength(0);
+    expect(captures.submits).toHaveLength(0);
+    expect(captures.capabilities).toHaveLength(0);
+    expect(captures.appends).toHaveLength(0);
+  });
 });
 
 async function publishDemoIntake(
   request: APIRequestContext,
-  input: { serverBaseUrl: string; runtimeDefinitionUrl: string },
+  input: {
+    serverBaseUrl: string;
+    runtimeDefinitionUrl: string;
+    title?: string;
+    hiddenOnActiveRoute?: boolean;
+  },
 ): Promise<string> {
+  const title = input.title ?? 'Browser Response Actions Ledger';
   const create = await request.post(`${input.serverBaseUrl}/forms`, {
     headers: defaultScope,
     data: {
       form_id: DEMO_FORM_ID,
       slug: 'demo-intake',
-      display_name: 'Browser Response Actions Ledger',
+      display_name: title,
       created_by: 'principal_playwright_web_admin',
     },
   });
@@ -229,27 +281,36 @@ async function publishDemoIntake(
     throw new Error(`creating ${DEMO_FORM_ID} returned ${create.status()}: ${await create.text()}`);
   }
 
-  const definitionVersion = `999999.${Date.now()}.${process.pid}`;
+  const definitionVersion = `999999.${Date.now()}.${process.pid}.${++publishCounter}`;
+  const definition: FormDefinition = {
+    $formspec: '1.0',
+    url: input.runtimeDefinitionUrl,
+    version: definitionVersion,
+    title,
+    items: [{ key: 'name', type: 'field', dataType: 'string', label: 'Name' }],
+    binds: [{ path: 'name', required: 'true' }],
+  };
+  const sidecars = runtimeOwnershipSidecars(definition, {
+    hiddenOnActiveRoute: input.hiddenOnActiveRoute ?? false,
+  });
   const publish = await request.post(`${input.serverBaseUrl}/forms/${DEMO_FORM_ID}/versions/publish`, {
     headers: defaultScope,
     data: {
-      form_version_id: `form_version_web_response_actions_${Date.now()}_${process.pid}`,
+      form_version_id: `form_version_web_response_actions_${Date.now()}_${process.pid}_${publishCounter}`,
       definition_url: input.runtimeDefinitionUrl,
       definition_version: definitionVersion,
-      definition: {
-        $formspec: '1.0',
-        url: input.runtimeDefinitionUrl,
-        version: definitionVersion,
-        title: 'Browser Response Actions Ledger',
-        items: [{ key: 'name', type: 'field', dataType: 'string', label: 'Name' }],
-        binds: [{ path: 'name', required: 'true' }],
-      },
+      definition,
       definition_hash: `sha256:browser-response-actions-ledger-${definitionVersion}`,
       theme_ref: 'theme:playwright-web',
       locale_refs: ['en-US'],
       references: [{ url: 'https://example.test/formspec-web/response-actions-ledger' }],
       ontology: { concepts: ['formspec-web-response-actions-ledger'] },
-      runtime_config: { mode: 'published' },
+      component_document: sidecars.componentDocument,
+      runtime_config: {
+        mode: 'published',
+        component_graph: sidecars.componentGraph,
+        host_evidence: sidecars.hostEvidence,
+      },
       created_by: 'principal_playwright_web_admin',
     },
   });
@@ -257,6 +318,171 @@ async function publishDemoIntake(
     throw new Error(`publishing ${DEMO_FORM_ID} returned ${publish.status()}: ${await publish.text()}`);
   }
   return definitionVersion;
+}
+
+async function routeRuntimeConfig(
+  page: Page,
+  input: { serverBaseUrl: string },
+): Promise<void> {
+  await page.route('**/formspec-runtime-config.js', async (route) => {
+    await route.fulfill({
+      contentType: 'application/javascript',
+      body: [
+        'window.__FORMSPEC_RUNTIME_CONFIG__ = {',
+        '  profileName: "publicPortal",',
+        `  formspecServerUrl: ${JSON.stringify(input.serverBaseUrl)},`,
+        `  responseActionLedgerCapabilityUrl: ${JSON.stringify(`${input.serverBaseUrl}${TEST_CAPABILITY_PATH}`)}`,
+        '};',
+      ].join('\n'),
+    });
+  });
+}
+
+function runtimeOwnershipSidecars(
+  definition: FormDefinition,
+  options: { hiddenOnActiveRoute: boolean },
+): {
+  componentDocument: ComponentDocument;
+  componentGraph: ComponentGraphProjectionContext;
+  hostEvidence: LayoutHostEvidence;
+} {
+  const componentDocument = componentDocumentForRuntime();
+  const componentGraph: ComponentGraphProjectionContext = {
+    component: {
+      handle: 'respondent',
+      url: componentDocument.url,
+      version: componentDocument.version,
+    },
+    surface: {
+      url: RUNTIME_SURFACE_URL,
+      version: '1.0.0',
+    },
+    route: 'apply',
+  };
+  return {
+    componentDocument,
+    componentGraph,
+    hostEvidence: layoutHostEvidenceForRuntime(definition, componentGraph, options),
+  };
+}
+
+function componentDocumentForRuntime(): ComponentDocument {
+  return {
+    $formspecComponent: '1.2',
+    url: RUNTIME_COMPONENT_URL,
+    version: '1.0.0',
+    targetSurfaceRoutes: [
+      {
+        surface: {
+          url: RUNTIME_SURFACE_URL,
+          version: '1.0.0',
+        },
+        route: 'apply',
+      },
+    ],
+    tree: {
+      component: 'Stack',
+      id: 'root-stack',
+      children: [
+        {
+          component: 'TextInput',
+          bind: 'name',
+          id: 'name-node',
+        },
+      ],
+    },
+  } as unknown as ComponentDocument;
+}
+
+function layoutHostEvidenceForRuntime(
+  definition: FormDefinition,
+  componentGraph: ComponentGraphProjectionContext,
+  options: { hiddenOnActiveRoute: boolean },
+): LayoutHostEvidence {
+  const uiPolicySource = 'host://policy/respondent-runtime-ownership';
+  const componentGraphSource = 'host://component-graph/respondent-runtime-ownership';
+  const hiddenDefinitionRefs = options.hiddenOnActiveRoute
+    ? [{ url: definition.url, version: definition.version }]
+    : [{ url: 'https://forms.example.test/internal-notes', version: '1.0.0' }];
+  return {
+    appGraphReport: {
+      ok: true,
+      summary: {
+        artifacts: 0,
+        loadedArtifacts: 0,
+        schemaFailures: 0,
+        unvalidatedArtifacts: 0,
+        graphErrors: 0,
+        errors: 0,
+        warnings: 0,
+        infos: 0,
+        importedDiagnostics: 0,
+        unsupportedFeatures: 0,
+        skippedPhases: 0,
+      },
+      schemaResults: [],
+      evidenceResults: [
+        {
+          evidenceSlot: 'hostEvidence.uiGraphPolicies[0]',
+          schemaId: UI_GRAPH_POLICY_SCHEMA_ID,
+          source: uiPolicySource,
+          status: 'completed',
+          ok: true,
+          diagnostics: [],
+        },
+        {
+          evidenceSlot: 'hostEvidence.componentGraphContexts[0]',
+          schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID,
+          source: componentGraphSource,
+          status: 'completed',
+          ok: true,
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+      phases: [
+        { phase: 'schema', status: 'completed' },
+        { phase: 'cross-artifact', status: 'completed' },
+      ],
+    },
+    uiGraphPolicies: [
+      {
+        schemaId: UI_GRAPH_POLICY_SCHEMA_ID,
+        source: uiPolicySource,
+        document: {
+          $formspecUiGraphPolicy: '0.1',
+          version: '1.0.0',
+          targetSurface: {
+            url: RUNTIME_SURFACE_URL,
+            version: '1.0.0',
+          },
+          routePolicies: [
+            {
+              routeId: 'apply',
+              a11y: {
+                landmark: 'main',
+                keyboardNavigation: true,
+              },
+              responsive: {
+                minColumns: 1,
+                collapseOrder: ['summary', 'details'],
+              },
+              definitionVisibility: {
+                hiddenDefinitionRefs,
+              },
+            },
+          ],
+        },
+      },
+    ],
+    componentGraphContexts: [
+      {
+        schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID,
+        source: componentGraphSource,
+        document: componentGraph,
+      },
+    ],
+  };
 }
 
 async function routeLiveServerThroughTestBff(
