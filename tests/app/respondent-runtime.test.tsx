@@ -279,6 +279,47 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(composition.definitionSource.getComponentGraphContext).toHaveBeenCalledWith(demoSampleForm.url);
   });
 
+  it.each([
+    ['source mismatch', { reportSource: 'host://component-graph/other' }],
+    ['evidence schema mismatch', { evidenceSchemaId: 'https://formspec.org/schemas/other/0.1' }],
+    ['report schema mismatch', { reportSchemaId: 'https://formspec.org/schemas/other/0.1' }],
+    ['duplicate evidence slot', { duplicateEvidenceSlot: true }],
+  ])('suppresses Component graph sidecars when AppGraph proof has %s', async (_name, overrides) => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+        hostEvidence: componentGraphHostEvidence(componentGraph, overrides),
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    const rootStack = container?.querySelector('.formspec-stack') as HTMLElement | null;
+    expect(rootStack?.dataset.formspecComponentHandle).toBeUndefined();
+    expect(rootStack?.dataset.formspecRoute).toBeUndefined();
+    expect(rootStack?.dataset.formspecNodePath).toBeUndefined();
+  });
+
   it('passes host-supplied LayoutHostEvidence into the React renderer as inert UI policy metadata', async () => {
     const componentDocument = componentDocumentForRuntime();
     const componentGraph: ComponentGraphProjectionContext = {
@@ -1828,10 +1869,28 @@ function uiGraphPolicyHostEvidence(
   };
 }
 
+type ComponentGraphHostEvidenceOptions = {
+  duplicateEvidenceSlot?: boolean;
+  evidenceSchemaId?: string;
+  reportSchemaId?: string;
+  reportSource?: string;
+};
+
 function componentGraphHostEvidence(
   componentGraph: ComponentGraphProjectionContext,
-  reportSource = 'host://component-graph/respondent',
+  options: ComponentGraphHostEvidenceOptions = {},
 ): LayoutHostEvidence {
+  const evidenceSchemaId = options.evidenceSchemaId ?? COMPONENT_GRAPH_CONTEXT_SCHEMA_ID;
+  const reportSchemaId = options.reportSchemaId ?? COMPONENT_GRAPH_CONTEXT_SCHEMA_ID;
+  const reportSource = options.reportSource ?? 'host://component-graph/respondent';
+  const evidenceResult = {
+    evidenceSlot: 'hostEvidence.componentGraphContexts[0]',
+    schemaId: reportSchemaId,
+    source: reportSource,
+    status: 'completed' as const,
+    ok: true as const,
+    diagnostics: [],
+  };
   return {
     appGraphReport: {
       ok: true,
@@ -1849,14 +1908,9 @@ function componentGraphHostEvidence(
         skippedPhases: 0,
       },
       schemaResults: [],
-      evidenceResults: [{
-        evidenceSlot: 'hostEvidence.componentGraphContexts[0]',
-        schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID,
-        source: reportSource,
-        status: 'completed',
-        ok: true,
-        diagnostics: [],
-      }],
+      evidenceResults: options.duplicateEvidenceSlot
+        ? [evidenceResult, { ...evidenceResult, source: 'host://component-graph/duplicate' }]
+        : [evidenceResult],
       diagnostics: [],
       phases: [
         { phase: 'schema', status: 'completed' },
@@ -1864,7 +1918,7 @@ function componentGraphHostEvidence(
       ],
     },
     componentGraphContexts: [{
-      schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID,
+      schemaId: evidenceSchemaId,
       source: 'host://component-graph/respondent',
       document: componentGraph,
     }],

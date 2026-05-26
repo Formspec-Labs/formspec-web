@@ -233,6 +233,31 @@ describe('HttpDefinitionSource', () => {
       hostEvidence,
     );
   });
+
+  it('rejects malformed Component graph context evidence lists without reindexing slots', async () => {
+    const componentGraph = componentGraphContextForRuntime();
+    const hostEvidence = componentGraphHostEvidence(componentGraph);
+    const { fetch } = recordingFetch(() =>
+      jsonResponse({
+        definition: sampleFormDefinition,
+        app_graph_validation_report: hostEvidence.appGraphReport,
+        runtime_config: {
+          component_graph_contexts: [
+            { schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID, source: 'host://component-graph/bad' },
+            hostEvidence.componentGraphContexts?.[0],
+          ],
+        },
+      }),
+    );
+    const adapter = new HttpDefinitionSource({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+    });
+
+    await expect(adapter.getLayoutHostEvidence(sampleFormDefinition.url)).resolves.toEqual({
+      appGraphReport: hostEvidence.appGraphReport,
+    });
+  });
 });
 
 function localeDocumentFor(

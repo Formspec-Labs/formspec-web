@@ -413,8 +413,10 @@ function componentGraphProjectionEvidenceListFromValue(
   if (!Array.isArray(value)) {
     return null;
   }
-  const entries = value.filter(isComponentGraphProjectionEvidence);
-  return entries.length > 0 ? entries : null;
+  if (value.length === 0 || !value.every(isComponentGraphProjectionEvidence)) {
+    return null;
+  }
+  return value;
 }
 
 function isComponentGraphProjectionEvidence(
