@@ -153,10 +153,6 @@ export function extractComponentGraphContext(
   return firstComponentGraphContext([
     payload.component_graph,
     payload.componentGraph,
-    runtimeConfigValue(payload.runtime_config, 'component_graph'),
-    runtimeConfigValue(payload.runtime_config, 'componentGraph'),
-    runtimeConfigValue(payload.runtimeConfig, 'component_graph'),
-    runtimeConfigValue(payload.runtimeConfig, 'componentGraph'),
   ]);
 }
 
@@ -170,10 +166,6 @@ export function extractLayoutHostEvidence(
   const direct = firstLayoutHostEvidence([
     payload.host_evidence,
     payload.hostEvidence,
-    runtimeConfigValue(payload.runtime_config, 'host_evidence'),
-    runtimeConfigValue(payload.runtime_config, 'hostEvidence'),
-    runtimeConfigValue(payload.runtimeConfig, 'host_evidence'),
-    runtimeConfigValue(payload.runtimeConfig, 'hostEvidence'),
   ]);
   if (direct) {
     return direct;
@@ -183,26 +175,14 @@ export function extractLayoutHostEvidence(
     appGraphReport: firstAppGraphValidationReport([
       payload.app_graph_validation_report,
       payload.appGraphValidationReport,
-      runtimeConfigValue(payload.runtime_config, 'app_graph_validation_report'),
-      runtimeConfigValue(payload.runtime_config, 'appGraphValidationReport'),
-      runtimeConfigValue(payload.runtimeConfig, 'app_graph_validation_report'),
-      runtimeConfigValue(payload.runtimeConfig, 'appGraphValidationReport'),
     ]),
     uiGraphPolicies: firstUiGraphPolicyProjectionEvidenceList([
       payload.ui_graph_policies,
       payload.uiGraphPolicies,
-      runtimeConfigValue(payload.runtime_config, 'ui_graph_policies'),
-      runtimeConfigValue(payload.runtime_config, 'uiGraphPolicies'),
-      runtimeConfigValue(payload.runtimeConfig, 'ui_graph_policies'),
-      runtimeConfigValue(payload.runtimeConfig, 'uiGraphPolicies'),
     ]),
     componentGraphContexts: firstComponentGraphProjectionEvidenceList([
       payload.component_graph_contexts,
       payload.componentGraphContexts,
-      runtimeConfigValue(payload.runtime_config, 'component_graph_contexts'),
-      runtimeConfigValue(payload.runtime_config, 'componentGraphContexts'),
-      runtimeConfigValue(payload.runtimeConfig, 'component_graph_contexts'),
-      runtimeConfigValue(payload.runtimeConfig, 'componentGraphContexts'),
     ]),
   });
 }
@@ -241,10 +221,6 @@ function isComponentDocument(value: unknown): value is ComponentDocument {
     isRecord(value.tree) &&
     typeof value.tree.component === 'string'
   );
-}
-
-function runtimeConfigValue(value: unknown, key: string): unknown {
-  return isRecord(value) ? value[key] : undefined;
 }
 
 function firstComponentGraphContext(values: unknown[]): ComponentGraphProjectionContext | null {

@@ -448,11 +448,10 @@ async function publishDemoIntake(
       references: [{ url: 'https://example.test/formspec-web/response-actions-ledger' }],
       ontology: { concepts: ['formspec-web-response-actions-ledger'] },
       component_document: sidecars.componentDocument,
-      runtime_config: {
-        mode: 'published',
-        component_graph: sidecars.componentGraph,
-        host_evidence: sidecars.hostEvidence,
-      },
+      app_graph_validation_report: sidecars.hostEvidence.appGraphReport,
+      component_graph: sidecars.componentGraph,
+      host_evidence: sidecars.hostEvidence,
+      runtime_config: { mode: 'published' },
       created_by: 'principal_playwright_web_admin',
     },
   });
@@ -633,6 +632,8 @@ function layoutHostEvidenceForRuntime(
       ],
       diagnostics: [],
       phases: [
+        { phase: 'artifact-resolution', status: 'completed' },
+        { phase: 'module-resolution', status: 'completed' },
         { phase: 'schema', status: 'completed' },
         { phase: 'cross-artifact', status: 'completed' },
       ],

@@ -145,9 +145,7 @@ describe('HttpDefinitionSource', () => {
       jsonResponse({
         definition: sampleFormDefinition,
         component_document: componentDocument,
-        runtime_config: {
-          component_graph: componentGraph,
-        },
+        component_graph: componentGraph,
       }),
     );
     const adapter = new HttpDefinitionSource({
@@ -172,9 +170,7 @@ describe('HttpDefinitionSource', () => {
     const { fetch, requests } = recordingFetch(() =>
       jsonResponse({
         definition: sampleFormDefinition,
-        runtime_config: {
-          hostEvidence,
-        },
+        host_evidence: hostEvidence,
       }),
     );
     const adapter = new HttpDefinitionSource({
@@ -219,9 +215,7 @@ describe('HttpDefinitionSource', () => {
       jsonResponse({
         definition: sampleFormDefinition,
         app_graph_validation_report: hostEvidence.appGraphReport,
-        runtime_config: {
-          component_graph_contexts: hostEvidence.componentGraphContexts,
-        },
+        component_graph_contexts: hostEvidence.componentGraphContexts,
       }),
     );
     const adapter = new HttpDefinitionSource({
@@ -241,12 +235,10 @@ describe('HttpDefinitionSource', () => {
       jsonResponse({
         definition: sampleFormDefinition,
         app_graph_validation_report: hostEvidence.appGraphReport,
-        runtime_config: {
-          component_graph_contexts: [
-            { schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID, source: 'host://component-graph/bad' },
-            hostEvidence.componentGraphContexts?.[0],
-          ],
-        },
+        component_graph_contexts: [
+          { schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID, source: 'host://component-graph/bad' },
+          hostEvidence.componentGraphContexts?.[0],
+        ],
       }),
     );
     const adapter = new HttpDefinitionSource({
@@ -257,6 +249,39 @@ describe('HttpDefinitionSource', () => {
     await expect(adapter.getLayoutHostEvidence(sampleFormDefinition.url)).resolves.toEqual({
       appGraphReport: hostEvidence.appGraphReport,
     });
+  });
+
+  it('ignores stale graph proof hidden inside runtime_config', async () => {
+    const componentGraph = componentGraphContextForRuntime();
+    const hostEvidence = componentGraphHostEvidence(componentGraph);
+    const { fetch } = recordingFetch(() =>
+      jsonResponse({
+        definition: sampleFormDefinition,
+        runtime_config: {
+          component_graph: componentGraph,
+          componentGraph,
+          host_evidence: hostEvidence,
+          hostEvidence,
+          app_graph_validation_report: hostEvidence.appGraphReport,
+          appGraphValidationReport: hostEvidence.appGraphReport,
+          component_graph_contexts: hostEvidence.componentGraphContexts,
+          componentGraphContexts: hostEvidence.componentGraphContexts,
+        },
+        runtimeConfig: {
+          component_graph: componentGraph,
+          host_evidence: hostEvidence,
+          app_graph_validation_report: hostEvidence.appGraphReport,
+          component_graph_contexts: hostEvidence.componentGraphContexts,
+        },
+      }),
+    );
+    const adapter = new HttpDefinitionSource({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+    });
+
+    await expect(adapter.getComponentGraphContext(sampleFormDefinition.url)).resolves.toBeNull();
+    await expect(adapter.getLayoutHostEvidence(sampleFormDefinition.url)).resolves.toBeNull();
   });
 });
 
