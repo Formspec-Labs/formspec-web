@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page, type Route } from '@playwright/test';
 import type {
   ComponentDocument,
@@ -8,10 +7,6 @@ import type {
 } from '../../src/ports/index.ts';
 
 const liveServerBaseUrl = process.env.FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_URL?.replace(/\/+$/, '');
-const liveServerSecret =
-  process.env.FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_APPLICATION_SECRET
-  ?? process.env.FORMSPEC_SERVER_APPLICATION_SECRET
-  ?? 'replace-with-32-byte-minimum-production-secret';
 
 const defaultScope = {
   'x-formspec-tenant-id': process.env.FORMSPEC_WEB_LIVE_FORMSPEC_TENANT ?? 'tenant_managed_single_cell',
@@ -24,14 +19,14 @@ const defaultScope = {
 
 const DEMO_FORM_ID = 'demo-intake';
 const SELECTED_FORM_ID = 'selected-demo-intake';
-const LEDGER_MINT_AUTHORITY_DOMAIN = 'formspec-runtime-ledger-mint-authority-v1';
 const RESPONSE_ACTION_LEDGER_APPEND_ROUTE =
   '/runtime/response-actions/ledger/session-op-batches';
+const RESPONSE_ACTION_LEDGER_CAPABILITY_ROUTE =
+  '/runtime/response-actions/ledger/capability';
 const RESPONSE_ACTION_LEDGER_CAPABILITY_HEADER =
   'x-formspec-runtime-ledger-capability';
 const RESPONSE_ACTION_LEDGER_MINT_AUTHORITY_HEADER =
   'x-formspec-runtime-ledger-mint-authority';
-const TEST_CAPABILITY_PATH = '/__test/response-actions/ledger/capability';
 const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
 const COMPONENT_GRAPH_CONTEXT_SCHEMA_ID =
   'https://formspec.org/schemas/componentGraphProjectionContext/0.1';
@@ -139,7 +134,7 @@ test.describe.serial('live Response Actions browser ledger path', () => {
       runtimeDefinitionUrl,
       title: 'Browser Response Actions Ledger',
     });
-    const captures = await routeLiveServerThroughTestBff(page, request, {
+    const captures = await routeLiveServerThroughManagedScope(page, request, {
       serverBaseUrl: liveServerBaseUrl,
     });
     await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
@@ -245,7 +240,7 @@ test.describe.serial('live Response Actions browser ledger path', () => {
       title: 'Browser Response Actions Route Param Response',
     });
     const selectedResponseId = `response_route_param_${Date.now()}_${process.pid}`;
-    const captures = await routeLiveServerThroughTestBff(page, request, {
+    const captures = await routeLiveServerThroughManagedScope(page, request, {
       serverBaseUrl: liveServerBaseUrl,
     });
     await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
@@ -307,7 +302,7 @@ test.describe.serial('live Response Actions browser ledger path', () => {
       runtimeDefinitionUrl,
       title: 'Browser Response Actions Route Guard',
     });
-    const captures = await routeLiveServerThroughTestBff(page, request, {
+    const captures = await routeLiveServerThroughManagedScope(page, request, {
       serverBaseUrl: liveServerBaseUrl,
       denyCapability: true,
     });
@@ -347,7 +342,7 @@ test.describe.serial('live Response Actions browser ledger path', () => {
       title: 'Browser Response Actions Hidden State',
       hiddenOnActiveRoute: true,
     });
-    const captures = await routeLiveServerThroughTestBff(page, request, {
+    const captures = await routeLiveServerThroughManagedScope(page, request, {
       serverBaseUrl: liveServerBaseUrl,
     });
     await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
@@ -384,7 +379,7 @@ test.describe.serial('live Response Actions browser ledger path', () => {
       runtimeDefinitionUrl: selectedRuntimeDefinitionUrl,
       title: 'Browser Response Actions Selected',
     });
-    const captures = await routeLiveServerThroughTestBff(page, request, {
+    const captures = await routeLiveServerThroughManagedScope(page, request, {
       serverBaseUrl: liveServerBaseUrl,
     });
     await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
@@ -478,7 +473,7 @@ async function routeRuntimeConfig(
         'window.__FORMSPEC_RUNTIME_CONFIG__ = {',
         '  profileName: "publicPortal",',
         `  formspecServerUrl: ${JSON.stringify(input.serverBaseUrl)},`,
-        `  responseActionLedgerCapabilityUrl: ${JSON.stringify(`${input.serverBaseUrl}${TEST_CAPABILITY_PATH}`)}`,
+        `  responseActionLedgerCapabilityUrl: ${JSON.stringify(`${input.serverBaseUrl}${RESPONSE_ACTION_LEDGER_CAPABILITY_ROUTE}`)}`,
         '};',
       ].join('\n'),
     });
@@ -682,7 +677,7 @@ function layoutHostEvidenceForRuntime(
   };
 }
 
-async function routeLiveServerThroughTestBff(
+async function routeLiveServerThroughManagedScope(
   page: Page,
   request: APIRequestContext,
   input: { serverBaseUrl: string; denyCapability?: boolean },
@@ -697,48 +692,33 @@ async function routeLiveServerThroughTestBff(
 
   await page.route(`${input.serverBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === TEST_CAPABILITY_PATH) {
+    if (url.pathname === RESPONSE_ACTION_LEDGER_CAPABILITY_ROUTE && input.denyCapability) {
       const body = postJson<CapabilityCommandRequest>(route);
-      if (input.denyCapability) {
-        const response = { error: 'capability denied by test route' };
-        captures.capabilities.push({
-          url: route.request().url(),
-          body,
-          headers: normalizedHeaders(route.request().headers()),
-          response,
-        });
-        await route.fulfill({
-          status: 403,
-          contentType: 'application/json',
-          body: JSON.stringify(response),
-        });
-        return;
-      }
-      const sessionId = sessionIdFromLedgerScope(body.appendCommand.ledgerScope);
-      const response = await request.post(
-        `${input.serverBaseUrl}/runtime/forms/${body.formId}/response-actions/ledger/capability`,
-        {
-          headers: {
-            ...headersForServer(route),
-            ...defaultScope,
-            [RESPONSE_ACTION_LEDGER_MINT_AUTHORITY_HEADER]: responseActionLedgerMintAuthority(
-              defaultScope,
-              body.formId,
-              body.appendCommand,
-              sessionId,
-            ),
-          },
-          data: {
-            anonymousSessionToken: body.anonymousSessionToken,
-            appendCommand: body.appendCommand,
-          },
-        },
-      );
-      await fulfillAndCapture(route, response, captures.capabilities, body);
+      const response = { error: 'capability denied by test route' };
+      captures.capabilities.push({
+        url: route.request().url(),
+        body,
+        headers: normalizedHeaders(route.request().headers()),
+        response,
+      });
+      await route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        body: JSON.stringify(response),
+      });
       return;
     }
 
     const response = await forwardBrowserRequest(request, route, defaultScope);
+    if (url.pathname === RESPONSE_ACTION_LEDGER_CAPABILITY_ROUTE) {
+      await fulfillAndCapture(
+        route,
+        response,
+        captures.capabilities,
+        postJson<CapabilityCommandRequest>(route),
+      );
+      return;
+    }
     if (url.pathname === RESPONSE_ACTION_LEDGER_APPEND_ROUTE) {
       await fulfillAndCaptureAppend(route, response, captures.appends);
       return;
@@ -794,11 +774,13 @@ async function fulfillAndCaptureAppend(
   target: LiveRouteCaptures['appends'],
 ): Promise<void> {
   const text = await response.text();
+  const responseBody = parseJsonOrText(text);
+  const body = postJson<ResponseActionSessionOpBatchAppendCommand>(route);
   target.push({
     url: route.request().url(),
-    body: postJson<ResponseActionSessionOpBatchAppendCommand>(route),
+    body,
     headers: normalizedHeaders(route.request().headers()),
-    response: parseJsonOrText(text) as ResponseActionLedgerAppendReceipt,
+    response: responseBody as ResponseActionLedgerAppendReceipt,
   });
   await route.fulfill({
     status: response.status(),
@@ -808,9 +790,15 @@ async function fulfillAndCaptureAppend(
 }
 
 function captureTargetFor(pathname: string, captures: LiveRouteCaptures): CapturedForward[] {
-  if (pathname.endsWith('/sessions/anonymous')) return captures.sessions;
-  if (pathname.endsWith('/drafts')) return captures.drafts;
-  if (pathname.endsWith('/submit')) return captures.submits;
+  if (pathname.endsWith('/sessions/anonymous')) {
+    return captures.sessions;
+  }
+  if (pathname.endsWith('/drafts')) {
+    return captures.drafts;
+  }
+  if (pathname.endsWith('/submit')) {
+    return captures.submits;
+  }
   return [];
 }
 
@@ -871,40 +859,6 @@ function normalizedHeaders(headers: Record<string, string>): Record<string, stri
   return Object.fromEntries(
     Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value]),
   );
-}
-
-function responseActionLedgerMintAuthority(
-  scope: ScopeHeaders,
-  formId: string,
-  command: ResponseActionSessionOpBatchAppendCommand,
-  sessionId: string,
-): string {
-  const hmac = createHmac('sha256', liveServerSecret);
-  for (const part of [
-    LEDGER_MINT_AUTHORITY_DOMAIN,
-    scope['x-formspec-tenant-id'],
-    scope['x-formspec-workspace-id'],
-    scope['x-formspec-environment-id'],
-    scope['x-formspec-cell-id'],
-    formId,
-    sessionId,
-    command.ledgerScope,
-    command.branchId,
-    command.opBatchHash,
-    command.idempotencyKey,
-  ]) {
-    hmac.update(part, 'utf8');
-    hmac.update('\0', 'utf8');
-  }
-  return hmac.digest('hex');
-}
-
-function sessionIdFromLedgerScope(ledgerScope: string): string {
-  const prefix = 'urn:formspec:session:';
-  if (!ledgerScope.startsWith(prefix)) {
-    throw new Error(`Unexpected Response Actions ledger scope: ${ledgerScope}`);
-  }
-  return ledgerScope.slice(prefix.length);
 }
 
 function expectTrellisBackedReceipt(receipt: ResponseActionLedgerAppendReceipt): void {

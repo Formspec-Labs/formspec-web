@@ -32,7 +32,7 @@ deploy-time environment variables.
 | --- | --- |
 | `FORMSPEC_WEB_PROFILE` | Reference profile name: `publicPortal` or `departmentApp`. |
 | `FORMSPEC_WEB_SERVER_URL` | Enables production mode and points HTTP adapters at a formspec-server base URL. |
-| `FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` | Optional trusted BFF endpoint that returns per-command Response Actions Ledger append capabilities without exposing mint HMAC material to the browser. |
+| `FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` | Optional trusted BFF endpoint that returns per-command Response Actions Ledger append capabilities without exposing mint HMAC material to the browser. The reference `formspec-server` route is `/runtime/response-actions/ledger/capability`. |
 | `FORMSPEC_WEB_OIDC_ISSUER` | Overrides the profile OIDC issuer. |
 | `FORMSPEC_WEB_OIDC_CLIENT_ID` | Overrides the profile OIDC client id. |
 | `FORMSPEC_WEB_OIDC_REDIRECT_URI` | Overrides the profile OIDC redirect URI. |
@@ -59,9 +59,10 @@ claiming server-backed OIDC. When the variable is provided, compose forwards it
 to both services: `publicPortal` uses the reference anonymous-session draft and
 submit path, while `departmentApp` renders explicit sign-in and remains blocked
 from full server-backed OIDC proof until EXT-23 server validation lands. Compose
-also forwards `FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` when set; that
-only wires the browser-to-BFF capability seam and does not by itself prove a
-live server/Trellis ledger path.
+also forwards `FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` when set; use
+the reference `/runtime/response-actions/ledger/capability` route when compose is
+backed by `formspec-server`. That only wires the browser-to-BFF capability seam
+and does not by itself prove a live server/Trellis ledger path.
 
 ## Hosted Demo Decision
 

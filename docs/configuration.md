@@ -15,8 +15,12 @@ tokens, and port composition choices. Stack-specific URLs, tenant-header
 dialects, OIDC client endpoints, and magic-link callback paths live under
 `referenceAdapters.formspecStack` so those details do not leak into the portable
 port contracts. The Response Actions Ledger capability URL is also stack
-specific: it must point at a trusted BFF endpoint that mints per-command append
-capabilities server-side, never at a browser-exposed mint-secret flow.
+specific: for the reference `formspec-server` deployment, point it at
+`/runtime/response-actions/ledger/capability`. That deployable BFF endpoint
+verifies the anonymous session and mints only the requested per-command append
+capability. Do not point browser config at the trusted-host
+`/runtime/forms/{form_id}/response-actions/ledger/capability` route; that route
+requires server-side mint-authority material.
 
 Production static bundles load `/formspec-runtime-config.js` before React
 bootstraps. The Docker/nginx image writes that file from deploy-time
