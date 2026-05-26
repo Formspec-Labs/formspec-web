@@ -21,11 +21,11 @@ import {
   IssuerChromeSlot,
   DefaultField,
   useFormspecContext,
-  componentGraphIdentityAttrs,
+  projectionMetadataAttrs,
   type FieldComponentProps,
   type SubmitResult,
 } from '@formspec-org/react';
-import type { ComponentGraphProjectionContext } from '@formspec-org/layout';
+import type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
 import type {
   ComponentDocument,
   FormDefinition,
@@ -153,6 +153,7 @@ type RespondentState =
       definition: FormDefinition;
       componentDocument: ComponentDocument | null;
       componentGraph: ComponentGraphProjectionContext | null;
+      hostEvidence: LayoutHostEvidence | null;
       engine: IFormEngine;
       draftKey: DraftKey;
       claim: IdentityClaim | null;
@@ -793,6 +794,7 @@ export function RespondentRuntime({
             engine={respondentState.engine}
             componentDocument={respondentState.componentDocument ?? undefined}
             componentGraph={respondentState.componentGraph ?? undefined}
+            hostEvidence={respondentState.hostEvidence ?? undefined}
             responseActionsDocument={responseActionsDocument}
             responseActionInvoker={responseActionInvoker}
             components={{
@@ -844,7 +846,7 @@ function SafeAddressTextField(props: FieldComponentProps) {
     return <DefaultField {...props} />;
   }
   const { field, node } = props;
-  const graphAttrs = componentGraphIdentityAttrs(node);
+  const graphAttrs = projectionMetadataAttrs(node);
   const showPlaintext = focused || revealed;
   const maskToken = config?.rendererHints?.maskRenderToken ?? '(protected)';
   const revealLabel = config?.rendererHints?.revealAffordanceLabel ?? 'Reveal protected value';
@@ -1080,6 +1082,9 @@ async function createReadyState(
   const componentGraph = await composition.definitionSource.getComponentGraphContext?.(
     composition.initialDefinitionUrl,
   ) ?? null;
+  const hostEvidence = await composition.definitionSource.getLayoutHostEvidence?.(
+    composition.initialDefinitionUrl,
+  ) ?? null;
   for (const localeDocument of localeDocuments ?? []) {
     engine.loadLocale(localeDocument);
   }
@@ -1092,6 +1097,7 @@ async function createReadyState(
     definition,
     componentDocument,
     componentGraph,
+    hostEvidence,
     engine,
     draftKey,
     claim,

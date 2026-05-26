@@ -3,6 +3,7 @@ import type {
   ComponentGraphProjectionContext,
   DefinitionSource,
   FormDefinition,
+  LayoutHostEvidence,
   LocaleDocument,
 } from '../../ports/definition-source.ts';
 
@@ -15,11 +16,13 @@ export function stubDefinitionSource(): DefinitionSource & {
   registerLocaleDocuments(url: string, documents: readonly LocaleDocument[], version?: string): void;
   registerComponentDocument(url: string, document: ComponentDocument, version?: string): void;
   registerComponentGraphContext(url: string, context: ComponentGraphProjectionContext, version?: string): void;
+  registerLayoutHostEvidence(url: string, evidence: LayoutHostEvidence, version?: string): void;
 } {
   const registry = new Map<string, FormDefinition>();
   const localeRegistry = new Map<string, LocaleDocument[]>();
   const componentDocumentRegistry = new Map<string, ComponentDocument>();
   const componentGraphRegistry = new Map<string, ComponentGraphProjectionContext>();
+  const layoutHostEvidenceRegistry = new Map<string, LayoutHostEvidence>();
   const key = (url: string, version?: string): string => `${url}@${version ?? 'latest'}`;
 
   return {
@@ -34,6 +37,9 @@ export function stubDefinitionSource(): DefinitionSource & {
     },
     registerComponentGraphContext(url, context, version) {
       componentGraphRegistry.set(key(url, version), context);
+    },
+    registerLayoutHostEvidence(url, evidence, version) {
+      layoutHostEvidenceRegistry.set(key(url, version), evidence);
     },
     async getDefinition(url, version) {
       const found = registry.get(key(url, version));
@@ -50,6 +56,9 @@ export function stubDefinitionSource(): DefinitionSource & {
     },
     async getComponentGraphContext(url, version) {
       return componentGraphRegistry.get(key(url, version)) ?? null;
+    },
+    async getLayoutHostEvidence(url, version) {
+      return layoutHostEvidenceRegistry.get(key(url, version)) ?? null;
     },
   };
 }

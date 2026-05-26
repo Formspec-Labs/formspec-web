@@ -20,6 +20,7 @@ import type {
   ComponentDocument,
   ComponentGraphProjectionContext,
   FormDefinition,
+  LayoutHostEvidence,
   LocaleDocument,
   RespondentPlaceSnapshot,
   RespondentSubmissionRecord,
@@ -35,6 +36,8 @@ import {
   RESPONSE_ACTION_LEDGER_CAPABILITY_HEADER,
   createHttpResponseActionLedgerInvokerFactory,
 } from '../../src/adapters/http/response-action-ledger.ts';
+
+const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
 
 describe('RespondentRuntime identity sign-in', () => {
   let root: Root | undefined;
@@ -236,6 +239,88 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(notesField?.dataset.formspecNodePath).toBe('/root-stack/notes');
     expect(composition.definitionSource.getComponentDocument).toHaveBeenCalledWith(demoSampleForm.url);
     expect(composition.definitionSource.getComponentGraphContext).toHaveBeenCalledWith(demoSampleForm.url);
+  });
+
+  it('passes host-supplied LayoutHostEvidence into the React renderer as inert UI policy metadata', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const hostEvidence = uiGraphPolicyHostEvidence();
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+        hostEvidence,
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    const rootStack = container?.querySelector('.formspec-stack') as HTMLElement | null;
+    const notesField = container?.querySelector('.formspec-field[data-name="notes"]') as HTMLElement | null;
+    expect(rootStack?.dataset.formspecUiPolicySchema).toBe(UI_GRAPH_POLICY_SCHEMA_ID);
+    expect(rootStack?.dataset.formspecUiPolicySource).toBe('host://policy/respondent-ui-policy');
+    expect(rootStack?.dataset.formspecUiPolicySurfaceUrl).toBe('https://surfaces.example.test/intake');
+    expect(rootStack?.dataset.formspecUiPolicyRoute).toBe('apply');
+    expect(rootStack?.dataset.formspecUiPolicyA11yLandmark).toBe('main');
+    expect(rootStack?.dataset.formspecUiPolicyKeyboardNavigation).toBe('true');
+    expect(rootStack?.dataset.formspecUiPolicyResponsiveMinColumns).toBe('1');
+    expect(rootStack?.dataset.formspecUiPolicyResponsiveCollapseOrder).toBe('["summary","details"]');
+    expect(notesField?.dataset.formspecUiPolicySchema).toBeUndefined();
+    expect(composition.definitionSource.getLayoutHostEvidence).toHaveBeenCalledWith(demoSampleForm.url);
+  });
+
+  it('fails closed when LayoutHostEvidence lacks matching completed AppGraph report proof', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const hostEvidence = uiGraphPolicyHostEvidence('host://policy/other-ui-policy');
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+        hostEvidence,
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    const rootStack = container?.querySelector('.formspec-stack') as HTMLElement | null;
+    expect(rootStack?.dataset.formspecUiPolicySchema).toBeUndefined();
+    expect(rootStack?.dataset.formspecComponentHandle).toBe('respondent');
+    expect(composition.definitionSource.getLayoutHostEvidence).toHaveBeenCalledWith(demoSampleForm.url);
   });
 
   it('renders respondent-place history, saved files, and status feedback', async () => {
@@ -1153,6 +1238,7 @@ function testComposition(
     applicantStatus?: ApplicantStatusResource;
     componentDocument?: ComponentDocument | null;
     componentGraph?: ComponentGraphProjectionContext | null;
+    hostEvidence?: LayoutHostEvidence | null;
     definition?: FormDefinition;
     initialDefinitionUrl?: string;
     localeDocuments?: readonly LocaleDocument[];
@@ -1170,6 +1256,7 @@ function testComposition(
       getLocaleDocuments: vi.fn(async () => [...(options.localeDocuments ?? [])]),
       getComponentDocument: vi.fn(async () => options.componentDocument ?? null),
       getComponentGraphContext: vi.fn(async () => options.componentGraph ?? null),
+      getLayoutHostEvidence: vi.fn(async () => options.hostEvidence ?? null),
     },
     draftStore: {
       load: vi.fn(async () => undefined),
@@ -1318,6 +1405,73 @@ function componentDocumentForRuntime(): ComponentDocument {
       ],
     },
   } as unknown as ComponentDocument;
+}
+
+function uiGraphPolicyHostEvidence(
+  reportSource = 'host://policy/respondent-ui-policy',
+): LayoutHostEvidence {
+  const policySource = 'host://policy/respondent-ui-policy';
+  return {
+    appGraphReport: {
+      ok: true,
+      summary: {
+        artifacts: 0,
+        loadedArtifacts: 0,
+        schemaFailures: 0,
+        unvalidatedArtifacts: 0,
+        graphErrors: 0,
+        errors: 0,
+        warnings: 0,
+        infos: 0,
+        importedDiagnostics: 0,
+        unsupportedFeatures: 0,
+        skippedPhases: 0,
+      },
+      schemaResults: [],
+      evidenceResults: [{
+        evidenceSlot: 'hostEvidence.uiGraphPolicies[0]',
+        schemaId: UI_GRAPH_POLICY_SCHEMA_ID,
+        source: reportSource,
+        status: 'completed',
+        ok: true,
+        diagnostics: [],
+      }],
+      diagnostics: [],
+      phases: [
+        { phase: 'schema', status: 'completed' },
+        { phase: 'cross-artifact', status: 'completed' },
+      ],
+    },
+    uiGraphPolicies: [{
+      schemaId: UI_GRAPH_POLICY_SCHEMA_ID,
+      source: policySource,
+      document: {
+        $formspecUiGraphPolicy: '0.1',
+        version: '1.0.0',
+        targetSurface: {
+          url: 'https://surfaces.example.test/intake',
+          version: '1.0.0',
+        },
+        routePolicies: [{
+          routeId: 'apply',
+          a11y: {
+            landmark: 'main',
+            keyboardNavigation: true,
+          },
+          responsive: {
+            minColumns: 1,
+            collapseOrder: ['summary', 'details'],
+          },
+          definitionVisibility: {
+            hiddenDefinitionRefs: [{
+              url: 'https://forms.example.test/internal-notes',
+              version: '1.0.0',
+            }],
+          },
+        }],
+      },
+    }],
+  };
 }
 
 function emptyRespondentPlaceSnapshot(): RespondentPlaceSnapshot {

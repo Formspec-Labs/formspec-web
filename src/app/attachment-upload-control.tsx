@@ -23,7 +23,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
-import { componentGraphIdentityAttrs, type FieldComponentProps } from '@formspec-org/react';
+import { projectionMetadataAttrs, type FieldComponentProps } from '@formspec-org/react';
 import {
   AttachmentUploadError,
   type AttachmentRef,
@@ -94,7 +94,7 @@ function formatSize(bytes: number): string {
 
 export function FormspecWebAttachmentControl({ field, node }: FieldComponentProps) {
   const attachmentStore = useAttachmentStore();
-  const graphAttrs = componentGraphIdentityAttrs(node);
+  const graphAttrs = projectionMetadataAttrs(node);
   const accept = (node.props?.accept as string | undefined) ?? undefined;
   const multiple = node.props?.multiple === true;
   const dragDrop = node.props?.dragDrop !== false;

@@ -3,7 +3,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 /** @filedesc Wizard layout component — multi-step form navigation with soft validation. */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useFormspecContext } from '../../context';
-import { componentGraphIdentityAttrs } from '../../projection-metadata.js';
+import { projectionMetadataAttrs } from '../../projection-metadata.js';
 // ---- helpers ----------------------------------------------------------------
 /** Collect all bindPaths in a LayoutNode subtree (fields and groups). */
 function collectBindPaths(node) {
@@ -115,7 +115,7 @@ export function Wizard({ node, children }) {
         className: cx('formspec-wizard', showSideNav && 'formspec-wizard--with-sidenav'),
         role: 'group',
         'aria-label': `Wizard: Step ${currentStep + 1} of ${totalSteps}`,
-        ...componentGraphIdentityAttrs(node),
+        ...projectionMetadataAttrs(node),
     };
     if (!showSideNav) {
         return _jsx("div", { ...rootProps, children: stepBody });

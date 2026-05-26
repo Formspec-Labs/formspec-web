@@ -2,7 +2,7 @@
 import React from 'react';
 import type { ActionRefFinding, ActionResolution, IFormEngine, IssuerFetcher, IssuerSource, ReadonlyEngineSignal, ResponseAction, ResponseActionEffectDispatchContext, ResponseActionEffectOutcome, ResponseActionIdempotencyKeyContext, ResponseActionInvocationPorts, ResponseActionInvocationResult, ResponseActionPreconditionResult, ResponseActionsDocumentInput } from '@formspec-org/engine';
 import type { EffectRequest, FormResponse, Precondition, ValidationReport } from '@formspec-org/types';
-import type { ComponentGraphProjectionContext, LayoutNode } from '@formspec-org/layout';
+import type { ComponentGraphProjectionContext, LayoutHostEvidence, LayoutNode } from '@formspec-org/layout';
 import type { ComponentMap } from './component-map';
 export type ResponseActionsDocument = ResponseActionsDocumentInput;
 export type { ActionRefFinding, ActionResolution, ResponseAction };
@@ -30,6 +30,8 @@ export interface FormspecContextValue {
     componentDocument?: any;
     /** Host-supplied Component graph projection context. Projection-only; no runtime authority. */
     componentGraph?: ComponentGraphProjectionContext | null;
+    /** Host-supplied UI Graph Policy validation evidence. Projection-only; no runtime authority. */
+    hostEvidence?: LayoutHostEvidence | null;
     /** Response Actions document used by ActionButton actionRef resolution. */
     responseActionsDocument?: ResponseActionsDocument | null;
     /** Callback invoked on form submission. Absent means no built-in submit button. */
@@ -72,6 +74,8 @@ export interface FormspecProviderProps {
     componentDocument?: any;
     /** Host-supplied Component graph projection context for inert renderer metadata. */
     componentGraph?: ComponentGraphProjectionContext | null;
+    /** Host-supplied UI Graph Policy validation evidence for inert renderer metadata. */
+    hostEvidence?: LayoutHostEvidence | null;
     /** Theme document for presentation cascade. */
     themeDocument?: any;
     /** Response Actions document for ActionButton actionRef resolution. */

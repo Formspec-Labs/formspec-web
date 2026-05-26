@@ -4,7 +4,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { positionPopupNearTrigger, clearPopupFixedPosition, MODAL_FIRST_FOCUSABLE_SELECTOR, } from '@formspec-org/layout';
 import { useWhen } from '../../use-when';
-import { componentGraphIdentityAttrs } from '../../projection-metadata.js';
+import { projectionMetadataAttrs } from '../../projection-metadata.js';
 /**
  * Default layout renderer — dispatches to the correct container component
  * based on node.component, applying formspec CSS classes and theme styles.
@@ -105,9 +105,9 @@ function StackLayout({ node, children, themeClass, style }) {
     // the planner emits Stack for definition groups, Card for explicit cards)
     const title = props.title;
     if (title && node.bindPath) {
-        return (_jsxs("section", { className: mergeClasses('formspec-group', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...accessibilityAttrs(node), ...componentGraphIdentityAttrs(node), children: [_jsx("h3", { className: "formspec-group-title", children: title }), children] }));
+        return (_jsxs("section", { className: mergeClasses('formspec-group', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...accessibilityAttrs(node), ...projectionMetadataAttrs(node), children: [_jsx("h3", { className: "formspec-group-title", children: title }), children] }));
     }
-    return (_jsx("div", { className: mergeClasses('formspec-stack', themeClass), style: stackStyle, ...componentGraphIdentityAttrs(node), children: children }));
+    return (_jsx("div", { className: mergeClasses('formspec-stack', themeClass), style: stackStyle, ...projectionMetadataAttrs(node), children: children }));
 }
 // ── Grid ─────────────────────────────────────────────────────────
 function GridLayout({ node, children, themeClass, style }) {
@@ -140,7 +140,7 @@ function GridLayout({ node, children, themeClass, style }) {
         ...(gap ? { gap } : {}),
         ...(rowGap ? { rowGap } : {}),
     };
-    return (_jsx("div", { className: mergeClasses('formspec-grid', themeClass), style: gridStyle, ...componentGraphIdentityAttrs(node), children: children }));
+    return (_jsx("div", { className: mergeClasses('formspec-grid', themeClass), style: gridStyle, ...projectionMetadataAttrs(node), children: children }));
 }
 // ── Card / Section ────────────────────────────────────────────────
 function CardLayout({ node, children, themeClass, style }) {
@@ -149,15 +149,15 @@ function CardLayout({ node, children, themeClass, style }) {
     const subtitle = props.subtitle;
     const headingLevel = Math.min(6, Math.max(1, props.headingLevel ?? 3));
     const Heading = `h${headingLevel}`;
-    return (_jsxs("section", { className: mergeClasses('formspec-card', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...componentGraphIdentityAttrs(node), children: [label && _jsx(Heading, { className: "formspec-card-title", children: label }), subtitle && _jsx("p", { className: "formspec-card-subtitle", children: subtitle }), children] }));
+    return (_jsxs("section", { className: mergeClasses('formspec-card', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...projectionMetadataAttrs(node), children: [label && _jsx(Heading, { className: "formspec-card-title", children: label }), subtitle && _jsx("p", { className: "formspec-card-subtitle", children: subtitle }), children] }));
 }
 // ── Divider ───────────────────────────────────────────────────────
 function DividerLayout({ node, themeClass, style }) {
     const label = node.props?.label;
     if (label) {
-        return (_jsxs("div", { className: mergeClasses('formspec-divider formspec-divider--labeled', themeClass), style: style, ...componentGraphIdentityAttrs(node), children: [_jsx("hr", {}), _jsx("span", { children: label }), _jsx("hr", {})] }));
+        return (_jsxs("div", { className: mergeClasses('formspec-divider formspec-divider--labeled', themeClass), style: style, ...projectionMetadataAttrs(node), children: [_jsx("hr", {}), _jsx("span", { children: label }), _jsx("hr", {})] }));
     }
-    return _jsx("hr", { className: mergeClasses('formspec-divider', themeClass), style: style, ...componentGraphIdentityAttrs(node) });
+    return _jsx("hr", { className: mergeClasses('formspec-divider', themeClass), style: style, ...projectionMetadataAttrs(node) });
 }
 // ── Section ──────────────────────────────────────────────────────
 function SectionLayout({ node, children, themeClass, style }) {
@@ -166,14 +166,14 @@ function SectionLayout({ node, children, themeClass, style }) {
     const description = props.description;
     const headingLevel = Math.min(6, Math.max(1, props.headingLevel ?? 2));
     const Heading = `h${headingLevel}`;
-    return (_jsxs("section", { className: mergeClasses('formspec-section', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...componentGraphIdentityAttrs(node), children: [title && _jsx(Heading, { children: title }), description && _jsx("p", { className: "formspec-section-description", children: description }), children] }));
+    return (_jsxs("section", { className: mergeClasses('formspec-section', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...projectionMetadataAttrs(node), children: [title && _jsx(Heading, { children: title }), description && _jsx("p", { className: "formspec-section-description", children: description }), children] }));
 }
 // ── Collapsible ───────────────────────────────────────────────────
 function CollapsibleLayout({ node, children, themeClass, style }) {
     const props = node.props ?? {};
     const title = props.title ?? 'Details';
     const defaultOpen = props.defaultOpen;
-    return (_jsxs("details", { className: mergeClasses('formspec-collapsible', themeClass), style: style, open: defaultOpen || false, ...componentGraphIdentityAttrs(node), children: [_jsx("summary", { children: title }), _jsx("div", { className: "formspec-collapsible-content", children: children })] }));
+    return (_jsxs("details", { className: mergeClasses('formspec-collapsible', themeClass), style: style, open: defaultOpen || false, ...projectionMetadataAttrs(node), children: [_jsx("summary", { children: title }), _jsx("div", { className: "formspec-collapsible-content", children: children })] }));
 }
 // ── Accordion ────────────────────────────────────────────────────
 function AccordionLayout({ node, children, themeClass, style }) {
@@ -240,7 +240,7 @@ function AccordionLayout({ node, children, themeClass, style }) {
             summaries[summaries.length - 1]?.focus();
         }
     }, []);
-    return (_jsx("div", { ref: containerRef, className: mergeClasses('formspec-accordion', themeClass), style: style, onKeyDown: handleKeyDown, ...componentGraphIdentityAttrs(node), children: childArray.map((child, idx) => {
+    return (_jsx("div", { ref: containerRef, className: mergeClasses('formspec-accordion', themeClass), style: style, onKeyDown: handleKeyDown, ...projectionMetadataAttrs(node), children: childArray.map((child, idx) => {
             const label = labels[idx] ?? `Section ${idx + 1}`;
             const isOpen = allowMultiple ? openIndices.has(idx) : (openIndex === idx);
             return (_jsxs("details", { className: "formspec-accordion-item", open: isOpen, onToggle: (e) => handleToggle(idx, e.currentTarget.open), children: [_jsx("summary", { children: label }), _jsx("div", { className: "formspec-accordion-content", children: child })] }, idx));
@@ -257,7 +257,7 @@ function PanelLayout({ node, children, themeClass, style }) {
         ...(width ? { width } : {}),
         ...surfaceStyle(props, style),
     };
-    return (_jsxs("div", { className: mergeClasses('formspec-panel', themeClass), style: panelStyle, ...elevationAttrs(props), ...componentGraphIdentityAttrs(node), children: [title && _jsx("div", { className: "formspec-panel-header", children: title }), _jsx("div", { className: "formspec-panel-body", children: children })] }));
+    return (_jsxs("div", { className: mergeClasses('formspec-panel', themeClass), style: panelStyle, ...elevationAttrs(props), ...projectionMetadataAttrs(node), children: [title && _jsx("div", { className: "formspec-panel-header", children: title }), _jsx("div", { className: "formspec-panel-body", children: children })] }));
 }
 // ── Modal ─────────────────────────────────────────────────────────
 function parseModalPlacement(raw) {
@@ -352,7 +352,7 @@ function ModalLayout({ node, children, themeClass, style }) {
         dialog.addEventListener('close', onClose);
         return () => dialog.removeEventListener('close', onClose);
     }, []);
-    return (_jsxs(_Fragment, { children: [triggerMode === 'button' && (_jsx("button", { type: "button", className: "formspec-modal-trigger formspec-focus-ring", ref: triggerRef, onClick: openModal, children: triggerLabel })), _jsxs("dialog", { ref: dialogRef, className: mergeClasses('formspec-modal', themeClass), style: style, "aria-labelledby": title ? titleId : undefined, "aria-label": title ? undefined : triggerLabel, ...(size ? { 'data-size': size } : {}), onClick: handleDialogClick, ...componentGraphIdentityAttrs(node), children: [closable && (_jsx("button", { type: "button", className: "formspec-modal-close formspec-focus-ring", "aria-label": "Close", onClick: closeModal, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), title && (_jsx(Heading, { className: "formspec-modal-title", id: titleId, children: title })), _jsx("div", { className: "formspec-modal-content", children: children })] })] }));
+    return (_jsxs(_Fragment, { children: [triggerMode === 'button' && (_jsx("button", { type: "button", className: "formspec-modal-trigger formspec-focus-ring", ref: triggerRef, onClick: openModal, children: triggerLabel })), _jsxs("dialog", { ref: dialogRef, className: mergeClasses('formspec-modal', themeClass), style: style, "aria-labelledby": title ? titleId : undefined, "aria-label": title ? undefined : triggerLabel, ...(size ? { 'data-size': size } : {}), onClick: handleDialogClick, ...projectionMetadataAttrs(node), children: [closable && (_jsx("button", { type: "button", className: "formspec-modal-close formspec-focus-ring", "aria-label": "Close", onClick: closeModal, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), title && (_jsx(Heading, { className: "formspec-modal-title", id: titleId, children: title })), _jsx("div", { className: "formspec-modal-content", children: children })] })] }));
 }
 // ── Popover ───────────────────────────────────────────────────────
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
@@ -429,9 +429,9 @@ function PopoverLayout({ node, children, themeClass, style }) {
             }
         }
     }, [close]);
-    return (_jsxs("div", { ref: wrapperRef, className: mergeClasses('formspec-popover', themeClass), style: style, ...componentGraphIdentityAttrs(node), children: [_jsx("button", { type: "button", className: "formspec-popover-trigger", ref: triggerRef, "aria-haspopup": "dialog", "aria-expanded": open, onClick: toggle, children: triggerLabel }), _jsx("div", { ref: contentRef, className: "formspec-popover-content", role: "dialog", "aria-label": title ?? triggerLabel, tabIndex: -1, onKeyDown: handleKeyDown, hidden: !open, children: children })] }));
+    return (_jsxs("div", { ref: wrapperRef, className: mergeClasses('formspec-popover', themeClass), style: style, ...projectionMetadataAttrs(node), children: [_jsx("button", { type: "button", className: "formspec-popover-trigger", ref: triggerRef, "aria-haspopup": "dialog", "aria-expanded": open, onClick: toggle, children: triggerLabel }), _jsx("div", { ref: contentRef, className: "formspec-popover-content", role: "dialog", "aria-label": title ?? triggerLabel, tabIndex: -1, onKeyDown: handleKeyDown, hidden: !open, children: children })] }));
 }
 // ── Generic fallback ──────────────────────────────────────────────
 function DefaultContainer({ node, children, themeClass, style }) {
-    return (_jsx("div", { className: mergeClasses(`formspec-${node.component.toLowerCase()}`, themeClass), style: style, ...componentGraphIdentityAttrs(node), children: children }));
+    return (_jsx("div", { className: mergeClasses(`formspec-${node.component.toLowerCase()}`, themeClass), style: style, ...projectionMetadataAttrs(node), children: children }));
 }

@@ -13,6 +13,7 @@ export type {
   ComponentGraphProjectionContext,
   DefinitionSource,
   FormDefinition,
+  LayoutHostEvidence,
   LocaleDocument,
 } from './definition-source.ts';
 export type { DraftStore, DraftKey, FormResponse } from './draft-store.ts';

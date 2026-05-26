@@ -5,10 +5,10 @@
  * `formspec/schemas/definition.schema.json`.
  */
 
-import type { ComponentGraphProjectionContext } from '@formspec-org/layout';
+import type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
 import type { ComponentDocument, FormDefinition, LocaleDocument } from '@formspec-org/types';
 
-export type { ComponentGraphProjectionContext } from '@formspec-org/layout';
+export type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
 export type { ComponentDocument, FormDefinition, LocaleDocument } from '@formspec-org/types';
 
 export interface DefinitionSource {
@@ -48,4 +48,13 @@ export interface DefinitionSource {
    * graph producer.
    */
   getComponentGraphContext?(url: string, version?: string): Promise<ComponentGraphProjectionContext | null>;
+
+  /**
+   * Optional projection-only host evidence. Sources that fetch a published
+   * runtime payload MAY return the already host-validated LayoutHostEvidence
+   * snapshot carried beside the Definition. Browser runtime code treats this
+   * as inert layout projection input only; validation, route authority,
+   * hidden-state rejection, and authorization remain host-owned.
+   */
+  getLayoutHostEvidence?(url: string, version?: string): Promise<LayoutHostEvidence | null>;
 }

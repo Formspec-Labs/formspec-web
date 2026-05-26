@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { useFormspecContext } from '../../context';
 import { GroupControl } from './group-control';
 import { renderControl } from './render-control';
-import { componentGraphIdentityAttrs } from '../../projection-metadata.js';
+import { projectionMetadataAttrs } from '../../projection-metadata.js';
 /**
  * Default field renderer — works for any field type.
  * Renders semantic HTML with ARIA attributes, theme-resolved classes,
@@ -17,7 +17,7 @@ export function DefaultField({ field, node }) {
     const isReadonly = field.readonly || isProtected;
     const showError = !!(field.error && field.touched);
     const themeClass = node.cssClasses?.join(' ') || '';
-    const graphAttrs = componentGraphIdentityAttrs(node);
+    const graphAttrs = projectionMetadataAttrs(node);
     const { registryEntries } = useFormspecContext();
     const extensionAttrs = useMemo(() => {
         const extensions = node.fieldItem?.extensions;
