@@ -1,4 +1,6 @@
 import type {
+  ComponentDocument,
+  ComponentGraphProjectionContext,
   DefinitionSource,
   FormDefinition,
   LocaleDocument,
@@ -12,10 +14,16 @@ export interface HttpDefinitionSourceConfig extends HttpClientConfig {
 
 interface PublishedRuntimeView {
   definition?: unknown;
+  component_document?: unknown;
+  componentDocument?: unknown;
+  component_graph?: unknown;
+  componentGraph?: unknown;
   locales?: unknown;
   locale_documents?: unknown;
   localeDocuments?: unknown;
   locale_refs?: unknown;
+  runtime_config?: unknown;
+  runtimeConfig?: unknown;
 }
 
 export class HttpDefinitionSource implements DefinitionSource {
@@ -37,6 +45,19 @@ export class HttpDefinitionSource implements DefinitionSource {
     const payload = await this.getRuntimePayload(url, version);
     const definition = extractDefinition(payload);
     return extractLocaleDocuments(payload, definition);
+  }
+
+  async getComponentDocument(url: string, version?: string): Promise<ComponentDocument | null> {
+    const payload = await this.getRuntimePayload(url, version);
+    return extractComponentDocument(payload);
+  }
+
+  async getComponentGraphContext(
+    url: string,
+    version?: string,
+  ): Promise<ComponentGraphProjectionContext | null> {
+    const payload = await this.getRuntimePayload(url, version);
+    return extractComponentGraphContext(payload);
   }
 
   private async getRuntimePayload(
@@ -94,6 +115,34 @@ export function extractLocaleDocuments(
   ]).filter((document) => document.targetDefinition.url === definition.url);
 }
 
+export function extractComponentDocument(
+  payload: PublishedRuntimeView | FormDefinition,
+): ComponentDocument | null {
+  if (isFormDefinition(payload)) {
+    return null;
+  }
+  return firstComponentDocument([
+    payload.component_document,
+    payload.componentDocument,
+  ]);
+}
+
+export function extractComponentGraphContext(
+  payload: PublishedRuntimeView | FormDefinition,
+): ComponentGraphProjectionContext | null {
+  if (isFormDefinition(payload)) {
+    return null;
+  }
+  return firstComponentGraphContext([
+    payload.component_graph,
+    payload.componentGraph,
+    runtimeConfigValue(payload.runtime_config, 'component_graph'),
+    runtimeConfigValue(payload.runtime_config, 'componentGraph'),
+    runtimeConfigValue(payload.runtimeConfig, 'component_graph'),
+    runtimeConfigValue(payload.runtimeConfig, 'componentGraph'),
+  ]);
+}
+
 function isFormDefinition(value: unknown): value is FormDefinition {
   if (!isRecord(value)) {
     return false;
@@ -104,6 +153,58 @@ function isFormDefinition(value: unknown): value is FormDefinition {
     typeof value.version === 'string' &&
     typeof value.title === 'string' &&
     Array.isArray(value.items)
+  );
+}
+
+function firstComponentDocument(values: unknown[]): ComponentDocument | null {
+  for (const value of values) {
+    if (isComponentDocument(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function isComponentDocument(value: unknown): value is ComponentDocument {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    (value.$formspecComponent === '1.0' ||
+      value.$formspecComponent === '1.1' ||
+      value.$formspecComponent === '1.2') &&
+    typeof value.version === 'string' &&
+    isRecord(value.tree) &&
+    typeof value.tree.component === 'string'
+  );
+}
+
+function runtimeConfigValue(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function firstComponentGraphContext(values: unknown[]): ComponentGraphProjectionContext | null {
+  for (const value of values) {
+    if (isComponentGraphProjectionContext(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function isComponentGraphProjectionContext(value: unknown): value is ComponentGraphProjectionContext {
+  if (!isRecord(value) || !isRecord(value.component) || !isRecord(value.surface)) {
+    return false;
+  }
+  const component = value.component;
+  const surface = value.surface;
+  return (
+    typeof component.handle === 'string' &&
+    (component.url === undefined || typeof component.url === 'string') &&
+    (component.version === undefined || typeof component.version === 'string') &&
+    typeof surface.url === 'string' &&
+    (surface.version === undefined || typeof surface.version === 'string') &&
+    typeof value.route === 'string'
   );
 }
 

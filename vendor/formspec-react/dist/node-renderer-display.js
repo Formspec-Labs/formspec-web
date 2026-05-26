@@ -7,6 +7,7 @@ import { useFormspecContext, findItemByKey } from './context.js';
 import { useSignal } from './use-signal';
 import { useRepeatCount } from './use-repeat-count';
 import { ValidationSummary } from './validation-summary';
+import { componentGraphIdentityAttrs } from './projection-metadata.js';
 /**
  * Minimal markdown-to-HTML converter. Handles the subset required by the Text
  * component spec: bold, italic, links, inline code, and newlines.
@@ -42,23 +43,24 @@ export function DisplayNode({ node }) {
     }
     const cssClass = node.cssClasses?.join(' ') || undefined;
     const style = node.style;
+    const graphAttrs = componentGraphIdentityAttrs(node);
     switch (node.component) {
         case 'Heading': {
             const level = node.props?.level || 2;
             const Tag = `h${Math.min(6, Math.max(1, level))}`;
-            return _jsx(Tag, { className: cssClass || 'formspec-heading', style: style, children: text });
+            return _jsx(Tag, { className: cssClass || 'formspec-heading', style: style, ...graphAttrs, children: text });
         }
         case 'Divider':
-            return _jsx("hr", { className: cssClass || 'formspec-divider', style: style });
+            return _jsx("hr", { className: cssClass || 'formspec-divider', style: style, ...graphAttrs });
         case 'Alert': {
             const severity = node.props?.severity || 'info';
             const alertRole = severity === 'error' || severity === 'warning' ? 'alert' : 'status';
             const dismissible = node.props?.dismissible === true;
-            return (_jsx(DismissibleAlert, { severity: severity, alertRole: alertRole, dismissible: dismissible, text: text, cssClass: cssClass, style: style }));
+            return (_jsx(DismissibleAlert, { severity: severity, alertRole: alertRole, dismissible: dismissible, text: text, cssClass: cssClass, style: style, metadataAttrs: graphAttrs }));
         }
         case 'Badge': {
             const variant = node.props?.variant || 'default';
-            return (_jsx("span", { className: `formspec-badge formspec-badge--${variant}${cssClass ? ' ' + cssClass : ''}`, style: style, children: text }));
+            return (_jsx("span", { className: `formspec-badge formspec-badge--${variant}${cssClass ? ' ' + cssClass : ''}`, style: style, ...graphAttrs, children: text }));
         }
         case 'ProgressBar': {
             const bindPath = node.props?.bind;
@@ -66,18 +68,18 @@ export function DisplayNode({ node }) {
             const showPercent = node.props?.showPercent === true;
             const progressLabel = node.props?.label || 'Progress';
             if (bindPath) {
-                return (_jsx(BoundProgressBar, { bind: bindPath, max: max, showPercent: showPercent, progressLabel: progressLabel, cssClass: cssClass, style: style }));
+                return (_jsx(BoundProgressBar, { bind: bindPath, max: max, showPercent: showPercent, progressLabel: progressLabel, cssClass: cssClass, style: style, metadataAttrs: graphAttrs }));
             }
             const value = node.props?.value ?? 0;
             const pct = Math.round((value / max) * 100);
-            return (_jsxs("div", { className: `formspec-progress-bar${cssClass ? ' ' + cssClass : ''}`, style: style, children: [_jsx("progress", { value: value, max: max, "aria-label": progressLabel }), showPercent && (_jsxs("span", { className: "formspec-progress-percent", children: [pct, "%"] }))] }));
+            return (_jsxs("div", { className: `formspec-progress-bar${cssClass ? ' ' + cssClass : ''}`, style: style, ...graphAttrs, children: [_jsx("progress", { value: value, max: max, "aria-label": progressLabel }), showPercent && (_jsxs("span", { className: "formspec-progress-percent", children: [pct, "%"] }))] }));
         }
         case 'Summary': {
             const items = node.props?.items || [];
-            return (_jsx(SummaryDisplay, { node: node, items: items, cssClass: cssClass, style: style }));
+            return (_jsx(SummaryDisplay, { node: node, items: items, cssClass: cssClass, style: style, metadataAttrs: graphAttrs }));
         }
         case 'DataTable':
-            return _jsx(DataTableDisplay, { node: node, cssClass: cssClass, style: style });
+            return _jsx(DataTableDisplay, { node: node, cssClass: cssClass, style: style, metadataAttrs: graphAttrs });
         case 'ValidationSummary':
             return _jsx(ValidationSummaryDisplay, {});
         case 'Text':
@@ -86,14 +88,14 @@ export function DisplayNode({ node }) {
             const bindPath = node.props?.bind;
             const textClassName = `formspec-text${format === 'markdown' ? ' formspec-text--markdown' : ''}${cssClass ? ` ${cssClass}` : ''}`;
             if (format === 'markdown' && !bindPath) {
-                return (_jsx("p", { className: textClassName, style: style, dangerouslySetInnerHTML: { __html: simpleMarkdown(text) } }));
+                return (_jsx("p", { className: textClassName, style: style, ...graphAttrs, dangerouslySetInnerHTML: { __html: simpleMarkdown(text) } }));
             }
-            return (_jsx("p", { className: textClassName, style: style, children: bindPath ? _jsx(BoundText, { bind: bindPath }) : text }));
+            return (_jsx("p", { className: textClassName, style: style, ...graphAttrs, children: bindPath ? _jsx(BoundText, { bind: bindPath }) : text }));
         }
     }
 }
-function SummaryDisplay({ node: _node, items, cssClass, style, }) {
-    return (_jsx("dl", { className: `formspec-summary${cssClass ? ' ' + cssClass : ''}`, style: style, children: items.map((item, i) => (_jsx(SummaryItem, { label: item.label, bind: item.bind }, item.bind || i))) }));
+function SummaryDisplay({ node: _node, items, cssClass, style, metadataAttrs, }) {
+    return (_jsx("dl", { className: `formspec-summary${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: items.map((item, i) => (_jsx(SummaryItem, { label: item.label, bind: item.bind }, item.bind || i))) }));
 }
 function BoundText({ bind }) {
     const { engine } = useFormspecContext();
@@ -101,19 +103,19 @@ function BoundText({ bind }) {
     const rawValue = useSignal(sig);
     return _jsx(_Fragment, { children: rawValue != null ? String(rawValue) : '' });
 }
-function BoundProgressBar({ bind, max, showPercent, progressLabel, cssClass, style }) {
+function BoundProgressBar({ bind, max, showPercent, progressLabel, cssClass, style, metadataAttrs }) {
     const { engine } = useFormspecContext();
     const sig = engine.signals[bind] ?? NO_VALUE;
     const rawValue = useSignal(sig);
     const value = typeof rawValue === 'number' ? rawValue : 0;
     const pct = Math.round((value / max) * 100);
-    return (_jsxs("div", { className: `formspec-progress-bar${cssClass ? ' ' + cssClass : ''}`, style: style, children: [_jsx("progress", { value: value, max: max, "aria-label": progressLabel }), showPercent && (_jsxs("span", { className: "formspec-progress-percent", children: [pct, "%"] }))] }));
+    return (_jsxs("div", { className: `formspec-progress-bar${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [_jsx("progress", { value: value, max: max, "aria-label": progressLabel }), showPercent && (_jsxs("span", { className: "formspec-progress-percent", children: [pct, "%"] }))] }));
 }
-function DismissibleAlert({ severity, alertRole, dismissible, text, cssClass, style }) {
+function DismissibleAlert({ severity, alertRole, dismissible, text, cssClass, style, metadataAttrs }) {
     const [dismissed, setDismissed] = useState(false);
     if (dismissed)
         return null;
-    return (_jsxs("div", { role: alertRole, className: `formspec-alert formspec-alert--${severity}${dismissible ? ' formspec-alert--dismissible' : ''}${cssClass ? ' ' + cssClass : ''}`, style: style, children: [text, dismissible && (_jsx("button", { type: "button", className: "formspec-alert-close", "aria-label": "Dismiss", onClick: () => setDismissed(true), children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) }))] }));
+    return (_jsxs("div", { role: alertRole, className: `formspec-alert formspec-alert--${severity}${dismissible ? ' formspec-alert--dismissible' : ''}${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [text, dismissible && (_jsx("button", { type: "button", className: "formspec-alert-close", "aria-label": "Dismiss", onClick: () => setDismissed(true), children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) }))] }));
 }
 function formatMoney(value, locale = 'en-US') {
     if (value == null)
@@ -224,7 +226,7 @@ function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, }) {
     }
     return (_jsx("td", { children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "text", value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value) })) }));
 }
-function DataTableDisplay({ node, cssClass, style, }) {
+function DataTableDisplay({ node, cssClass, style, metadataAttrs, }) {
     const { engine } = useFormspecContext();
     const bindKey = node.props?.bind;
     const columns = node.props?.columns || [];
@@ -251,9 +253,9 @@ function DataTableDisplay({ node, cssClass, style, }) {
             engine.removeRepeatInstance(repeatPath, idx);
     }, [engine, repeatPath]);
     if (!bindKey || columns.length === 0) {
-        return (_jsx("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, children: _jsx("table", { className: "formspec-data-table" }) }));
+        return (_jsx("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: _jsx("table", { className: "formspec-data-table" }) }));
     }
-    return (_jsxs("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, children: [_jsxs("table", { className: "formspec-data-table", children: [node.props?.title && (_jsx("caption", { children: node.props?.title })), _jsx("thead", { children: _jsxs("tr", { children: [showRowNumbers && _jsx("th", { scope: "col", children: "#" }), columns.map((col, ci) => (_jsx("th", { scope: "col", children: col.header }, ci))), allowRemove && (_jsx("th", { scope: "col", children: _jsx("span", { className: "formspec-sr-only", children: "Actions" }) }))] }) }), _jsx("tbody", { children: Array.from({ length: count }, (_, i) => (_jsxs("tr", { children: [showRowNumbers && _jsx("td", { className: "formspec-row-number", children: i + 1 }), columns.map((col, ci) => (_jsx(DataTableCell, { signalPath: `${bindKey}[${i}].${col.bind}`, column: col, fieldDef: fieldByKey.get(col.bind), defaultCurrency: defaultCurrency }, ci))), allowRemove && (_jsx("td", { children: _jsx("button", { type: "button", className: "formspec-datatable-remove formspec-button-danger formspec-focus-ring", "aria-label": `Remove row ${i + 1}`, onClick: () => handleRemove(i), children: "Remove" }) }))] }, i))) })] }), allowAdd && (_jsx("button", { type: "button", className: "formspec-datatable-add formspec-focus-ring", onClick: handleAdd, children: "Add Row" }))] }));
+    return (_jsxs("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [_jsxs("table", { className: "formspec-data-table", children: [node.props?.title && (_jsx("caption", { children: node.props?.title })), _jsx("thead", { children: _jsxs("tr", { children: [showRowNumbers && _jsx("th", { scope: "col", children: "#" }), columns.map((col, ci) => (_jsx("th", { scope: "col", children: col.header }, ci))), allowRemove && (_jsx("th", { scope: "col", children: _jsx("span", { className: "formspec-sr-only", children: "Actions" }) }))] }) }), _jsx("tbody", { children: Array.from({ length: count }, (_, i) => (_jsxs("tr", { children: [showRowNumbers && _jsx("td", { className: "formspec-row-number", children: i + 1 }), columns.map((col, ci) => (_jsx(DataTableCell, { signalPath: `${bindKey}[${i}].${col.bind}`, column: col, fieldDef: fieldByKey.get(col.bind), defaultCurrency: defaultCurrency }, ci))), allowRemove && (_jsx("td", { children: _jsx("button", { type: "button", className: "formspec-datatable-remove formspec-button-danger formspec-focus-ring", "aria-label": `Remove row ${i + 1}`, onClick: () => handleRemove(i), children: "Remove" }) }))] }, i))) })] }), allowAdd && (_jsx("button", { type: "button", className: "formspec-datatable-add formspec-focus-ring", onClick: handleAdd, children: "Add Row" }))] }));
 }
 function ValidationSummaryDisplay() {
     const { engine, touchedVersion } = useFormspecContext();

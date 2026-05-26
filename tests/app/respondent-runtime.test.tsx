@@ -17,6 +17,8 @@ import type { IdentityClaim, IdentityProvider, IdpOption } from '../../src/ports
 import type { IntakeHandoff } from '../../src/ports/submit-transport.ts';
 import type {
   ApplicantStatusResource,
+  ComponentDocument,
+  ComponentGraphProjectionContext,
   FormDefinition,
   LocaleDocument,
   RespondentPlaceSnapshot,
@@ -194,6 +196,46 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(requests.map((request) => request.url)).toEqual([
       'https://formspec-server.example.test/runtime/forms/demo-benefits-intake-live',
     ]);
+  });
+
+  it('passes host-supplied Component graph sidecars into the React renderer as inert metadata', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    const rootStack = container?.querySelector('.formspec-stack') as HTMLElement | null;
+    const notesField = container?.querySelector('.formspec-field[data-name="notes"]') as HTMLElement | null;
+    expect(rootStack?.dataset.formspecComponentHandle).toBe('respondent');
+    expect(rootStack?.dataset.formspecRoute).toBe('apply');
+    expect(rootStack?.dataset.formspecNodePath).toBe('/root-stack');
+    expect(notesField?.dataset.formspecComponentNodeId).toBe('notes-node');
+    expect(notesField?.dataset.formspecNodePath).toBe('/root-stack/notes');
+    expect(composition.definitionSource.getComponentDocument).toHaveBeenCalledWith(demoSampleForm.url);
+    expect(composition.definitionSource.getComponentGraphContext).toHaveBeenCalledWith(demoSampleForm.url);
   });
 
   it('renders respondent-place history, saved files, and status feedback', async () => {
@@ -1109,6 +1151,8 @@ function testComposition(
   identityProvider: IdentityProvider,
   options: {
     applicantStatus?: ApplicantStatusResource;
+    componentDocument?: ComponentDocument | null;
+    componentGraph?: ComponentGraphProjectionContext | null;
     definition?: FormDefinition;
     initialDefinitionUrl?: string;
     localeDocuments?: readonly LocaleDocument[];
@@ -1124,6 +1168,8 @@ function testComposition(
     definitionSource: {
       getDefinition: vi.fn(async () => definition),
       getLocaleDocuments: vi.fn(async () => [...(options.localeDocuments ?? [])]),
+      getComponentDocument: vi.fn(async () => options.componentDocument ?? null),
+      getComponentGraphContext: vi.fn(async () => options.componentGraph ?? null),
     },
     draftStore: {
       load: vi.fn(async () => undefined),
@@ -1244,6 +1290,34 @@ function testComposition(
       }),
     },
   };
+}
+
+function componentDocumentForRuntime(): ComponentDocument {
+  return {
+    $formspecComponent: '1.2',
+    url: 'https://components.example.test/respondent',
+    version: '1.0.0',
+    targetSurfaceRoutes: [
+      {
+        surface: {
+          url: 'https://surfaces.example.test/intake',
+          version: '1.0.0',
+        },
+        route: 'apply',
+      },
+    ],
+    tree: {
+      component: 'Stack',
+      id: 'root-stack',
+      children: [
+        {
+          component: 'TextInput',
+          bind: 'notes',
+          id: 'notes-node',
+        },
+      ],
+    },
+  } as unknown as ComponentDocument;
 }
 
 function emptyRespondentPlaceSnapshot(): RespondentPlaceSnapshot {

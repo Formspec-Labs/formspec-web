@@ -20,6 +20,7 @@ export { useRuntimeContext } from './use-runtime-context';
 export { FormspecForm } from './renderer';
 export { FormspecNode } from './node-renderer';
 export { IssuerChromeSlot, parseQueryIssuerOverride } from './issuer';
+export { componentGraphIdentityAttrs } from './projection-metadata';
 // ── Screener ──
 export { FormspecScreener, useScreener } from './screener';
 // ── Default components (for composition / override bases) ──

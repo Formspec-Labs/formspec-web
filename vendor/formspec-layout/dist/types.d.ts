@@ -1,5 +1,5 @@
 /** @filedesc Core layout plan types: LayoutNode and PlanContext interfaces. */
-import type { ComponentDocument, FormDefinition, FormItem, ThemeDocument } from '@formspec-org/types';
+import type { ComponentNodeIdentityRef, ComponentDocument, FormDefinition, FormItem, AppGraphValidationReport, ThemeDocument, UiGraphPolicyDocument } from '@formspec-org/types';
 import type { PresentationBlock } from './theme-resolver.js';
 export type { FormItem };
 /** Generates unique layout node IDs for a single plan invocation. */
@@ -8,6 +8,33 @@ export type NodeIdGenerator = (prefix: string) => string;
 export type ComponentTreeNode = Record<string, unknown> & {
     component: string;
 };
+/** Graph context used by app-graph-aware projection consumers. */
+export interface ComponentGraphProjectionContext {
+    component: ComponentNodeIdentityRef['component'];
+    surface: ComponentNodeIdentityRef['surface'];
+    route: string;
+}
+/** Host-supplied UI Graph Policy evidence shaped like AppGraphValidator request evidence. */
+export interface UiGraphPolicyProjectionEvidence {
+    schemaId: string;
+    source: string;
+    document: UiGraphPolicyDocument;
+}
+/** Projection-only host evidence. Layout does not fetch, validate, or discover these documents. */
+export interface LayoutHostEvidence {
+    /** Completed AppGraphValidator report for the supplied host evidence. */
+    appGraphReport?: AppGraphValidationReport;
+    uiGraphPolicies?: UiGraphPolicyProjectionEvidence[];
+}
+/** Inert route-policy metadata copied from a matching UI Graph Policy document. */
+export interface UiGraphRoutePolicyProjection {
+    schemaId: string;
+    source: string;
+    targetSurface: UiGraphPolicyDocument['targetSurface'];
+    routeId: string;
+    a11y?: NonNullable<UiGraphPolicyDocument['routePolicies'][number]['a11y']>;
+    responsive?: NonNullable<UiGraphPolicyDocument['routePolicies'][number]['responsive']>;
+}
 /**
  * A JSON-serializable layout plan node. Produced by the planner and consumed
  * by renderers (webcomponent, React, PDF, SSR, etc.).
@@ -37,6 +64,13 @@ export interface LayoutNode {
     children: LayoutNode[];
     /** Page mode for a planner-authoritative root whose direct Section children are page units. */
     pageMode?: 'wizard' | 'tabs';
+    /** Graph-wide Component node identity per Component §11.6, when caller supplies graph context. */
+    componentGraphIdentity?: ComponentNodeIdentityRef;
+    /**
+     * Projection-only UI Graph Policy route metadata. Renderers MUST NOT infer
+     * runtime hidden-state, ARIA implementation, or authorization behavior from it.
+     */
+    uiGraphRoutePolicy?: UiGraphRoutePolicyProjection;
     /** Full bind path (e.g. "applicantInfo.orgName"). */
     bindPath?: string;
     /** Snapshot of the definition item this field maps to. */
@@ -83,6 +117,10 @@ export interface PlanContext {
     formPresentation?: FormDefinition['formPresentation'];
     /** The loaded component document (tree, components, tokens, breakpoints). */
     componentDocument?: ComponentDocument;
+    /** App-graph Component membership/surface/route scope for projection-only identity. */
+    componentGraph?: ComponentGraphProjectionContext;
+    /** Projection-only host evidence, matching `hostEvidence.uiGraphPolicies[]`. */
+    hostEvidence?: LayoutHostEvidence;
     /** The loaded theme document. */
     theme?: ThemeDocument;
     /** Currently active breakpoint name, or null. */

@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import { useFormspecContext } from '../../context';
 import { GroupControl } from './group-control';
 import { renderControl } from './render-control';
+import { componentGraphIdentityAttrs } from '../../projection-metadata.js';
 /**
  * Default field renderer — works for any field type.
  * Renders semantic HTML with ARIA attributes, theme-resolved classes,
@@ -16,6 +17,7 @@ export function DefaultField({ field, node }) {
     const isReadonly = field.readonly || isProtected;
     const showError = !!(field.error && field.touched);
     const themeClass = node.cssClasses?.join(' ') || '';
+    const graphAttrs = componentGraphIdentityAttrs(node);
     const { registryEntries } = useFormspecContext();
     const extensionAttrs = useMemo(() => {
         const extensions = node.fieldItem?.extensions;
@@ -55,17 +57,17 @@ export function DefaultField({ field, node }) {
         const offLabel = node.props?.offLabel;
         const hasToggleLabels = onLabel || offLabel;
         const checkboxInput = (_jsx("input", { id: field.id, type: "checkbox", className: "formspec-input", role: "switch", checked: !!field.value, onChange: isReadonly ? undefined : (e) => field.setValue(e.target.checked), onBlur: () => field.touch(), disabled: isReadonly, "aria-invalid": showError, "aria-required": field.required || undefined, ...(supplementaryDescribedBy ? { 'aria-describedby': supplementaryDescribedBy } : {}) }));
-        return (_jsxs("div", { className: `formspec-field formspec-field--inline ${isProtected ? 'formspec-protected' : ''} ${themeClass}`.trim(), style: node.style, "data-name": field.path, children: [_jsxs("label", { htmlFor: field.id, className: "formspec-label", children: [field.label, requiredNode] }), descriptionNode, hintNode, _jsxs("div", { className: `formspec-toggle${field.value ? ' formspec-toggle--on' : ''}`.trim(), children: [hasToggleLabels && (_jsx("span", { className: "formspec-toggle-label formspec-toggle-off", "aria-hidden": "true", children: offLabel })), checkboxInput, hasToggleLabels && (_jsx("span", { className: "formspec-toggle-label formspec-toggle-on", "aria-hidden": "true", children: onLabel }))] }), errorNode] }));
+        return (_jsxs("div", { className: `formspec-field formspec-field--inline ${isProtected ? 'formspec-protected' : ''} ${themeClass}`.trim(), style: node.style, "data-name": field.path, ...graphAttrs, children: [_jsxs("label", { htmlFor: field.id, className: "formspec-label", children: [field.label, requiredNode] }), descriptionNode, hintNode, _jsxs("div", { className: `formspec-toggle${field.value ? ' formspec-toggle--on' : ''}`.trim(), children: [hasToggleLabels && (_jsx("span", { className: "formspec-toggle-label formspec-toggle-off", "aria-hidden": "true", children: offLabel })), checkboxInput, hasToggleLabels && (_jsx("span", { className: "formspec-toggle-label formspec-toggle-on", "aria-hidden": "true", children: onLabel }))] }), errorNode] }));
     }
     if (node.component === 'RadioGroup' || node.component === 'CheckboxGroup') {
         const labelId = `${field.id}-label`;
         const labelHidden = node.labelPosition === 'hidden';
         const groupSupplementaryDescribedBy = [field.description ? descId : '', field.hint ? `${field.id}-hint` : ''].filter(Boolean).join(' ') || undefined;
-        return (_jsxs("fieldset", { className: [`formspec-fieldset`, isProtected ? 'formspec-protected' : '', themeClass].filter(Boolean).join(' ').trim(), style: node.style, "data-name": field.path, children: [_jsxs("legend", { id: labelId, className: labelHidden ? 'formspec-legend formspec-sr-only' : 'formspec-legend', children: [field.label, requiredNode] }), descriptionNode, hintNode, _jsx(GroupControl, { field: field, node: node, isReadonly: isReadonly, labelId: labelId, groupSupplementaryDescribedBy: groupSupplementaryDescribedBy }), errorNode] }));
+        return (_jsxs("fieldset", { className: [`formspec-fieldset`, isProtected ? 'formspec-protected' : '', themeClass].filter(Boolean).join(' ').trim(), style: node.style, "data-name": field.path, ...graphAttrs, children: [_jsxs("legend", { id: labelId, className: labelHidden ? 'formspec-legend formspec-sr-only' : 'formspec-legend', children: [field.label, requiredNode] }), descriptionNode, hintNode, _jsx(GroupControl, { field: field, node: node, isReadonly: isReadonly, labelId: labelId, groupSupplementaryDescribedBy: groupSupplementaryDescribedBy }), errorNode] }));
     }
     const controlSurfaceClass = node.component === 'Slider' ? 'formspec-slider'
         : node.component === 'Rating' ? 'formspec-rating'
             : node.component === 'FileUpload' ? 'formspec-file-upload'
                 : '';
-    return (_jsxs("div", { className: [`formspec-field`, isProtected ? 'formspec-protected' : '', themeClass, controlSurfaceClass].filter(Boolean).join(' ').trim(), style: node.style, "data-name": field.path, ...(node.accessibility?.role ? { role: node.accessibility.role } : {}), ...(node.accessibility?.description ? { 'aria-description': node.accessibility.description } : {}), children: [_jsxs("label", { htmlFor: field.id, className: node.labelPosition === 'hidden' ? 'formspec-label formspec-sr-only' : 'formspec-label', children: [field.label, requiredNode] }), descriptionNode, hintNode, renderControl(field, node, supplementaryDescribedBy, isProtected, extensionAttrs, resolvePlaceholder), errorNode] }));
+    return (_jsxs("div", { className: [`formspec-field`, isProtected ? 'formspec-protected' : '', themeClass, controlSurfaceClass].filter(Boolean).join(' ').trim(), style: node.style, "data-name": field.path, ...graphAttrs, ...(node.accessibility?.role ? { role: node.accessibility.role } : {}), ...(node.accessibility?.description ? { 'aria-description': node.accessibility.description } : {}), children: [_jsxs("label", { htmlFor: field.id, className: node.labelPosition === 'hidden' ? 'formspec-label formspec-sr-only' : 'formspec-label', children: [field.label, requiredNode] }), descriptionNode, hintNode, renderControl(field, node, supplementaryDescribedBy, isProtected, extensionAttrs, resolvePlaceholder), errorNode] }));
 }

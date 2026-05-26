@@ -145,6 +145,31 @@ describe('FormspecWebAttachmentControl', () => {
     filename: 'existing.pdf',
   };
 
+  it('emits Component graph metadata on the primary upload control', () => {
+    const harness = makeFieldHarness();
+    const node = {
+      ...makeNode({ dragDrop: true }),
+      componentGraphIdentity: {
+        component: { handle: 'respondent' },
+        surface: { url: 'https://surfaces.example.test/intake' },
+        route: 'apply',
+        nodePath: '/root/supportingDocument',
+        id: 'supporting-document-node',
+      },
+    } as LayoutNode;
+    render(
+      <AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl field={harness.field} node={node} />
+      </AttachmentStoreProvider>,
+    );
+
+    const dropZone = container!.querySelector('.formspec-file-drop-zone') as HTMLElement;
+    expect(dropZone.dataset.formspecComponentHandle).toBe('respondent');
+    expect(dropZone.dataset.formspecRoute).toBe('apply');
+    expect(dropZone.dataset.formspecNodePath).toBe('/root/supportingDocument');
+    expect(dropZone.dataset.formspecComponentNodeId).toBe('supporting-document-node');
+  });
+
   it('uploads a picked file through the AttachmentStore and writes the AttachmentRef into the engine value (single)', async () => {
     const store = stubAttachmentStore();
     const harness = makeFieldHarness();

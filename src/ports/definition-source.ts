@@ -5,9 +5,11 @@
  * `formspec/schemas/definition.schema.json`.
  */
 
-import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
+import type { ComponentGraphProjectionContext } from '@formspec-org/layout';
+import type { ComponentDocument, FormDefinition, LocaleDocument } from '@formspec-org/types';
 
-export type { FormDefinition, LocaleDocument } from '@formspec-org/types';
+export type { ComponentGraphProjectionContext } from '@formspec-org/layout';
+export type { ComponentDocument, FormDefinition, LocaleDocument } from '@formspec-org/types';
 
 export interface DefinitionSource {
   /**
@@ -30,4 +32,20 @@ export interface DefinitionSource {
    * form ids keep locale sidecars attached to the original runtime payload.
    */
   getLocaleDocuments?(url: string, version?: string): Promise<LocaleDocument[]>;
+
+  /**
+   * Optional Component-document sidecar. Sources that fetch a published
+   * runtime payload MAY return the Component Document carried beside the
+   * Definition. This does not widen `getDefinition`; callers that need layout
+   * graph projection fetch the sidecar explicitly.
+   */
+  getComponentDocument?(url: string, version?: string): Promise<ComponentDocument | null>;
+
+  /**
+   * Optional host-validated Component graph context for inert renderer
+   * metadata. The browser treats this as projection input only; route,
+   * authorization, and validation authority remain with the host/runtime
+   * graph producer.
+   */
+  getComponentGraphContext?(url: string, version?: string): Promise<ComponentGraphProjectionContext | null>;
 }

@@ -17,7 +17,7 @@ function pageModeFromPresentation(presentation) {
  * Accepts either a pre-built `engine` or a raw `definition` (creates engine internally).
  */
 export function FormspecProvider(props) {
-    const { engine: externalEngine, definition, componentDocument, themeDocument, responseActionsDocument, initialData, registryEntries, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
+    const { engine: externalEngine, definition, componentDocument, componentGraph, themeDocument, responseActionsDocument, initialData, registryEntries, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
     const hasIssuerOverrideProp = Object.prototype.hasOwnProperty.call(props, 'issuerOverride');
     const engine = useMemo(() => {
         if (externalEngine)
@@ -97,6 +97,7 @@ export function FormspecProvider(props) {
             items,
             formPresentation: mergedFormPresentation,
             componentDocument,
+            componentGraph: componentGraph ?? undefined,
             theme: themeDocument,
             activeBreakpoint,
             findItem: (key) => findItemByKey(items, key),
@@ -131,7 +132,7 @@ export function FormspecProvider(props) {
             }
         }
         return root;
-    }, [engine, componentDocument, themeDocument, activeBreakpoint, onSubmit, responseActionsDocument, mergedFormPresentation]);
+    }, [engine, componentDocument, componentGraph, themeDocument, activeBreakpoint, onSubmit, responseActionsDocument, mergedFormPresentation]);
     // §10: surface a finding when the host wires onSubmit but no submit Action
     // is published — otherwise auto-inject silently no-ops.
     useEffect(() => {
@@ -185,6 +186,7 @@ export function FormspecProvider(props) {
         components,
         themeDocument,
         componentDocument,
+        componentGraph,
         responseActionsDocument,
         onSubmit,
         onHostEvent,
@@ -201,7 +203,7 @@ export function FormspecProvider(props) {
         isTouched,
         registryEntries: registryMap,
         formPresentation: mergedFormPresentation,
-    }), [engine, layoutPlan, components, themeDocument, componentDocument, responseActionsDocument, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, touchField, touchAllFields, touchedVersionSignal, isTouched, registryMap, mergedFormPresentation]);
+    }), [engine, layoutPlan, components, themeDocument, componentDocument, componentGraph, responseActionsDocument, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, touchField, touchAllFields, touchedVersionSignal, isTouched, registryMap, mergedFormPresentation]);
     return (_jsx(FormspecContext.Provider, { value: value, children: children }));
 }
 /** Access the FormspecContext. Throws if used outside FormspecProvider. */

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { HttpDefinitionSource } from '../../../src/adapters/http/definition-source.ts';
 import { sampleFormDefinition } from '../../../src/adapter-conformance/fixtures.ts';
-import type { LocaleDocument } from '../../../src/ports/index.ts';
+import type {
+  ComponentDocument,
+  ComponentGraphProjectionContext,
+  LocaleDocument,
+} from '../../../src/ports/index.ts';
 import { jsonResponse, problemResponse, recordingFetch } from './test-fetch.ts';
 
 describe('HttpDefinitionSource', () => {
@@ -118,6 +122,46 @@ describe('HttpDefinitionSource', () => {
     ]);
     expect(requests).toHaveLength(1);
   });
+
+  it('extracts Component sidecars from the shared runtime payload without widening getDefinition', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const { fetch, requests } = recordingFetch(() =>
+      jsonResponse({
+        definition: sampleFormDefinition,
+        component_document: componentDocument,
+        runtime_config: {
+          component_graph: componentGraph,
+        },
+      }),
+    );
+    const adapter = new HttpDefinitionSource({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+    });
+
+    await expect(adapter.getDefinition(sampleFormDefinition.url)).resolves.toEqual(
+      sampleFormDefinition,
+    );
+    await expect(adapter.getComponentDocument(sampleFormDefinition.url)).resolves.toEqual(
+      componentDocument,
+    );
+    await expect(adapter.getComponentGraphContext(sampleFormDefinition.url)).resolves.toEqual(
+      componentGraph,
+    );
+    expect(requests).toHaveLength(1);
+  });
 });
 
 function localeDocumentFor(
@@ -133,4 +177,32 @@ function localeDocumentFor(
     targetDefinition: { url: definitionUrl },
     strings,
   };
+}
+
+function componentDocumentForRuntime(): ComponentDocument {
+  return {
+    $formspecComponent: '1.2',
+    url: 'https://components.example.test/respondent',
+    version: '1.0.0',
+    targetSurfaceRoutes: [
+      {
+        surface: {
+          url: 'https://surfaces.example.test/intake',
+          version: '1.0.0',
+        },
+        route: 'apply',
+      },
+    ],
+    tree: {
+      component: 'Stack',
+      id: 'root-stack',
+      children: [
+        {
+          component: 'TextInput',
+          bind: 'sample',
+          id: 'sample-node',
+        },
+      ],
+    },
+  } as unknown as ComponentDocument;
 }

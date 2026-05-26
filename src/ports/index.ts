@@ -8,7 +8,13 @@
  * respondent-place consumer ports.
  */
 
-export type { DefinitionSource, FormDefinition, LocaleDocument } from './definition-source.ts';
+export type {
+  ComponentDocument,
+  ComponentGraphProjectionContext,
+  DefinitionSource,
+  FormDefinition,
+  LocaleDocument,
+} from './definition-source.ts';
 export type { DraftStore, DraftKey, FormResponse } from './draft-store.ts';
 export type { SubmitTransport, IntakeHandoff, SubmitConfirmation } from './submit-transport.ts';
 export type {

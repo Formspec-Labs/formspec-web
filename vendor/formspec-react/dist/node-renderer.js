@@ -15,6 +15,7 @@ import { Wizard } from './defaults/layout/wizard';
 import { Tabs } from './defaults/layout/tabs';
 import { DisplayNode } from './node-renderer-display.js';
 import { RepeatGroup, RepeatAccordion } from './node-renderer-repeat.js';
+import { componentGraphIdentityAttrs } from './projection-metadata.js';
 const BUILTIN_LAYOUT = {
     Wizard,
     Tabs,
@@ -162,7 +163,7 @@ function ActionButtonNode({ node }) {
         // type="submit" cascades to native form submission and bypasses
         // Response Actions entirely. type="button" eliminates the
         // foot-gun and keeps cross-renderer parity.
-        type: "button", className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved, onClick: handleClick, children: label }));
+        type: "button", className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved, onClick: handleClick, ...componentGraphIdentityAttrs(node), children: label }));
 }
 function WhenGuard({ node }) {
     const visible = useWhen(node.when, node.whenPrefix);

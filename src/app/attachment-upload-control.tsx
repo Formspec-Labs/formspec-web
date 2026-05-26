@@ -23,7 +23,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
-import type { FieldComponentProps } from '@formspec-org/react';
+import { componentGraphIdentityAttrs, type FieldComponentProps } from '@formspec-org/react';
 import {
   AttachmentUploadError,
   type AttachmentRef,
@@ -94,6 +94,7 @@ function formatSize(bytes: number): string {
 
 export function FormspecWebAttachmentControl({ field, node }: FieldComponentProps) {
   const attachmentStore = useAttachmentStore();
+  const graphAttrs = componentGraphIdentityAttrs(node);
   const accept = (node.props?.accept as string | undefined) ?? undefined;
   const multiple = node.props?.multiple === true;
   const dragDrop = node.props?.dragDrop !== false;
@@ -705,6 +706,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           className="formspec-file-browse-btn formspec-focus-ring formspec-button-secondary"
           onClick={() => fileInputRef.current?.click()}
           disabled={field.readonly}
+          {...graphAttrs}
         >
           Choose file{multiple ? 's' : ''}
         </button>
@@ -732,6 +734,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         tabIndex={field.readonly ? -1 : 0}
         role="button"
         aria-label="Drop files here or click to choose"
+        {...graphAttrs}
         onKeyDown={handleKey}
         onDragOver={(event) => {
           event.preventDefault();

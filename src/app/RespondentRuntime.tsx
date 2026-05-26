@@ -21,10 +21,13 @@ import {
   IssuerChromeSlot,
   DefaultField,
   useFormspecContext,
+  componentGraphIdentityAttrs,
   type FieldComponentProps,
   type SubmitResult,
 } from '@formspec-org/react';
+import type { ComponentGraphProjectionContext } from '@formspec-org/layout';
 import type {
+  ComponentDocument,
   FormDefinition,
   ValidationReport,
 } from '@formspec-org/types';
@@ -148,6 +151,8 @@ type RespondentState =
   | {
       status: 'ready';
       definition: FormDefinition;
+      componentDocument: ComponentDocument | null;
+      componentGraph: ComponentGraphProjectionContext | null;
       engine: IFormEngine;
       draftKey: DraftKey;
       claim: IdentityClaim | null;
@@ -786,6 +791,8 @@ export function RespondentRuntime({
         <AttachmentStoreProvider value={composition.attachmentStore}>
           <FormspecProvider
             engine={respondentState.engine}
+            componentDocument={respondentState.componentDocument ?? undefined}
+            componentGraph={respondentState.componentGraph ?? undefined}
             responseActionsDocument={responseActionsDocument}
             responseActionInvoker={responseActionInvoker}
             components={{
@@ -837,6 +844,7 @@ function SafeAddressTextField(props: FieldComponentProps) {
     return <DefaultField {...props} />;
   }
   const { field, node } = props;
+  const graphAttrs = componentGraphIdentityAttrs(node);
   const showPlaintext = focused || revealed;
   const maskToken = config?.rendererHints?.maskRenderToken ?? '(protected)';
   const revealLabel = config?.rendererHints?.revealAffordanceLabel ?? 'Reveal protected value';
@@ -856,6 +864,7 @@ function SafeAddressTextField(props: FieldComponentProps) {
       className="formspec-field formspec-safe-address-field"
       data-name={field.path}
       style={node.style}
+      {...graphAttrs}
     >
       <label
         htmlFor={field.id}
@@ -1065,6 +1074,12 @@ async function createReadyState(
   const localeDocuments = await composition.definitionSource.getLocaleDocuments?.(
     composition.initialDefinitionUrl,
   );
+  const componentDocument = await composition.definitionSource.getComponentDocument?.(
+    composition.initialDefinitionUrl,
+  ) ?? null;
+  const componentGraph = await composition.definitionSource.getComponentGraphContext?.(
+    composition.initialDefinitionUrl,
+  ) ?? null;
   for (const localeDocument of localeDocuments ?? []) {
     engine.loadLocale(localeDocument);
   }
@@ -1075,6 +1090,8 @@ async function createReadyState(
   return {
     status: 'ready',
     definition,
+    componentDocument,
+    componentGraph,
     engine,
     draftKey,
     claim,

@@ -2,6 +2,7 @@
 import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc Tabs layout component — WAI-ARIA tabbed panel navigation with keyboard support. */
 import React, { useState, useRef, useCallback } from 'react';
+import { componentGraphIdentityAttrs } from '../../projection-metadata.js';
 /**
  * Tabs layout component.
  *
@@ -73,5 +74,5 @@ export function Tabs({ node, children }) {
     return (_jsx("div", { className: cssClass, style: {
             ...style,
             ...(placement === 'left' || placement === 'right' ? { display: 'flex', flexDirection: 'row' } : {}),
-        }, "data-placement": placement !== 'top' ? placement : undefined, children: placement === 'bottom' || placement === 'right' ? (_jsxs(_Fragment, { children: [panels, tabBar] })) : (_jsxs(_Fragment, { children: [tabBar, panels] })) }));
+        }, "data-placement": placement !== 'top' ? placement : undefined, ...componentGraphIdentityAttrs(node), children: placement === 'bottom' || placement === 'right' ? (_jsxs(_Fragment, { children: [panels, tabBar] })) : (_jsxs(_Fragment, { children: [tabBar, panels] })) }));
 }

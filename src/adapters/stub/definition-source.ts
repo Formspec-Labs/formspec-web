@@ -1,4 +1,6 @@
 import type {
+  ComponentDocument,
+  ComponentGraphProjectionContext,
   DefinitionSource,
   FormDefinition,
   LocaleDocument,
@@ -11,9 +13,13 @@ import type {
 export function stubDefinitionSource(): DefinitionSource & {
   registerDefinition(url: string, definition: FormDefinition, version?: string): void;
   registerLocaleDocuments(url: string, documents: readonly LocaleDocument[], version?: string): void;
+  registerComponentDocument(url: string, document: ComponentDocument, version?: string): void;
+  registerComponentGraphContext(url: string, context: ComponentGraphProjectionContext, version?: string): void;
 } {
   const registry = new Map<string, FormDefinition>();
   const localeRegistry = new Map<string, LocaleDocument[]>();
+  const componentDocumentRegistry = new Map<string, ComponentDocument>();
+  const componentGraphRegistry = new Map<string, ComponentGraphProjectionContext>();
   const key = (url: string, version?: string): string => `${url}@${version ?? 'latest'}`;
 
   return {
@@ -22,6 +28,12 @@ export function stubDefinitionSource(): DefinitionSource & {
     },
     registerLocaleDocuments(url, documents, version) {
       localeRegistry.set(key(url, version), [...documents]);
+    },
+    registerComponentDocument(url, document, version) {
+      componentDocumentRegistry.set(key(url, version), document);
+    },
+    registerComponentGraphContext(url, context, version) {
+      componentGraphRegistry.set(key(url, version), context);
     },
     async getDefinition(url, version) {
       const found = registry.get(key(url, version));
@@ -32,6 +44,12 @@ export function stubDefinitionSource(): DefinitionSource & {
     },
     async getLocaleDocuments(url, version) {
       return [...(localeRegistry.get(key(url, version)) ?? [])];
+    },
+    async getComponentDocument(url, version) {
+      return componentDocumentRegistry.get(key(url, version)) ?? null;
+    },
+    async getComponentGraphContext(url, version) {
+      return componentGraphRegistry.get(key(url, version)) ?? null;
     },
   };
 }
