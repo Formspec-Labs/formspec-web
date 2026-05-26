@@ -248,7 +248,7 @@ The §2.1 / §2.2 / §2.3 measurements (port-method calls, consumer-LOC,
 gap-count) remain the prior art for any future shape decision. The code
 is gone; the measurements survive in this report.
 
-## 5. Honest deferrals not in the spike's scope
+## 6. Honest deferrals not in the spike's scope
 
 The spike does NOT resolve (and explicitly punts to FW-0061 build per
 §8.9):
