@@ -150,7 +150,10 @@ Silent downgrade is forbidden for required features. A payment-required form wit
 | Embed/widget | iframe/web component transport | allowed origins and CSP | form embeddable |
 | Multi-party | party/session orchestration | allowed party roles | party model declared |
 | Safe address | privacy/redaction substrate | jurisdictional protection policy | protected fields declared |
-| Trusted reviewer | `ReviewerSession` + `ReviewThreadStore` ports | allowed reviewer roles, share scope, expiration, and revocation policy | reviewer sharing forbidden/comment-allowed/suggest-allowed |
+| Preparer filing | `SignerHandoff` + filer-session port (unavailable-only until FW-0037 lands concrete ports; EXT-3 capacity/authority binding required for signer-handoff metadata) | allowed preparer roles, signer-handoff acceptance window, filer identity assurance floor | form declares preparer-filed path (preparer authors, signer affirms) |
+| Trusted reviewer | `ReviewerSession` + `ReviewThreadStore` ports (both required per §"Multi-port feature bindings"; SC-6 Review Thread Sidecar is the substrate carrier) | allowed reviewer roles, share scope, expiration, and revocation policy | reviewer sharing forbidden/comment-allowed/suggest-allowed |
+
+**2026-05-26 amendment — bundled `trustedReviewer` + `preparerFiling` row ratification.** The §"Instance capabilities" table already enumerated both keys (the FW-0037 / FW-0042 split-keys discipline established line 52 above) and `RUNTIME_FEATURE_KEYS` already carries both positions. This amendment ratifies the matching Feature Ownership Table rows at the ADR layer so the table is no longer trailing the capability/key inventory. Bundled as one amendment because both rows share the same architectural mechanism (fail-closed multi-port availability per §"DI and Port Rule"), the same split-keys discipline citation (line 52), and the same Feature Ownership Table — splitting would be divergent-change-for-one-reason.
 
 ## DI and Port Rule
 
