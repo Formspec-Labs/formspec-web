@@ -15,6 +15,13 @@ so an issuer may publish a canonical definition URL that differs from the
 server runtime form id without causing locale sidecars to be fetched from a
 different runtime form.
 
+The root `/?form=` route is selected Definition plumbing. Boot copies exactly
+one `form` parameter into `Composition.initialDefinitionUrl` for the full-app
+production composition and rejects empty or duplicate `form` parameters before
+constructing production HTTP adapters. The selected value still flows through
+the default form-id resolver above; this does not close EXT-20 canonical URL
+resolution and does not model a route-param selected Response instance.
+
 The adapter extracts concrete Locale Documents from `locales`,
 `locale_documents`, and `localeDocuments` members of the same runtime payload.
 String-only `locale_refs` entries are treated as references and ignored by the

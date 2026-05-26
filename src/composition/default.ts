@@ -58,7 +58,14 @@ import type { Composition } from './types.ts';
  * parameterized by descriptor (FW-0070) — they are not siblings of this
  * factory; this file owns the full-app form-route composition only.
  */
-export function createDefaultComposition(config: FormspecWebConfig = departmentAppProfile): Composition {
+export interface DefaultCompositionOptions {
+  initialDefinitionUrl?: string;
+}
+
+export function createDefaultComposition(
+  config: FormspecWebConfig = departmentAppProfile,
+  options: DefaultCompositionOptions = {},
+): Composition {
   const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
   if (!serverUrl) {
     return createDemoComposition();
@@ -70,7 +77,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     baseUrl: serverUrl,
     tenantBinding: config.tenantBinding,
   };
-  const initialDefinitionUrl = productionInitialDefinitionUrl(serverUrl);
+  const initialDefinitionUrl = options.initialDefinitionUrl ?? productionInitialDefinitionUrl(serverUrl);
   const anonymousSessions = new AnonymousSessionBridge(baseHttpConfig);
   const identityBinding = identityProviderFor(config, notificationDelivery, {
     anonymousSessions,

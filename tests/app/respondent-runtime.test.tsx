@@ -157,6 +157,56 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(composition.definitionSource.getLocaleDocuments).toHaveBeenCalledWith(runtimeDefinitionUrl);
   });
 
+  it('loads the Definition and all sidecars from the selected runtime Definition URL', async () => {
+    const selectedRuntimeDefinitionUrl =
+      'https://formspec-server.example.test/runtime/forms/selected-benefits-intake-live';
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        initialDefinitionUrl: selectedRuntimeDefinitionUrl,
+        componentDocument,
+        componentGraph,
+        hostEvidence: withComponentGraphEvidence(uiGraphPolicyHostEvidence(), componentGraph),
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    expect(composition.definitionSource.getDefinition).toHaveBeenCalledWith(
+      selectedRuntimeDefinitionUrl,
+    );
+    expect(composition.definitionSource.getLocaleDocuments).toHaveBeenCalledWith(
+      selectedRuntimeDefinitionUrl,
+    );
+    expect(composition.definitionSource.getComponentDocument).toHaveBeenCalledWith(
+      selectedRuntimeDefinitionUrl,
+    );
+    expect(composition.definitionSource.getComponentGraphContext).toHaveBeenCalledWith(
+      selectedRuntimeDefinitionUrl,
+    );
+    expect(composition.definitionSource.getLayoutHostEvidence).toHaveBeenCalledWith(
+      selectedRuntimeDefinitionUrl,
+    );
+  });
+
   it('uses one HTTP runtime payload for the definition and Locale Documents', async () => {
     const identityProvider = new TestIdentityProvider();
     const runtimeDefinitionUrl =

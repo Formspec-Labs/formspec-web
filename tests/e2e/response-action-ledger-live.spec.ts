@@ -23,6 +23,7 @@ const defaultScope = {
 } as const;
 
 const DEMO_FORM_ID = 'demo-intake';
+const SELECTED_FORM_ID = 'selected-demo-intake';
 const LEDGER_MINT_AUTHORITY_DOMAIN = 'formspec-runtime-ledger-mint-authority-v1';
 const RESPONSE_ACTION_LEDGER_APPEND_ROUTE =
   '/runtime/response-actions/ledger/session-op-batches';
@@ -125,17 +126,25 @@ test.describe.serial('live Response Actions browser ledger path', () => {
       test.fail(true, 'FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_URL is required');
       return;
     }
-    const runtimeDefinitionUrl = `${liveServerBaseUrl}/runtime/forms/${DEMO_FORM_ID}`;
+    const defaultRuntimeDefinitionUrl = `${liveServerBaseUrl}/runtime/forms/${DEMO_FORM_ID}`;
+    await publishDemoIntake(request, {
+      serverBaseUrl: liveServerBaseUrl,
+      runtimeDefinitionUrl: defaultRuntimeDefinitionUrl,
+      title: 'Browser Response Actions Default',
+    });
+    const runtimeDefinitionUrl = `${liveServerBaseUrl}/runtime/forms/${SELECTED_FORM_ID}`;
     const definitionVersion = await publishDemoIntake(request, {
+      formId: SELECTED_FORM_ID,
       serverBaseUrl: liveServerBaseUrl,
       runtimeDefinitionUrl,
+      title: 'Browser Response Actions Ledger',
     });
     const captures = await routeLiveServerThroughTestBff(page, request, {
       serverBaseUrl: liveServerBaseUrl,
     });
     await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
 
-    await page.goto('/');
+    await page.goto(`/?form=${encodeURIComponent(runtimeDefinitionUrl)}`);
     await expect(page.getByRole('heading', { name: 'Browser Response Actions Ledger' })).toBeVisible();
     await expect(page.locator('.formspec-stack')).toHaveAttribute(
       'data-formspec-component-handle',
@@ -165,7 +174,7 @@ test.describe.serial('live Response Actions browser ledger path', () => {
     const append = captures.appends[0]!;
     const capability = captures.capabilities[0]!;
     const capabilityResponse = responseJson<LedgerCapabilityView>(capability);
-    expect(session.form_id).toBe(DEMO_FORM_ID);
+    expect(session.form_id).toBe(SELECTED_FORM_ID);
     expect(session.subject_ref).toMatch(/^anon:/);
     expect(append.body).toMatchObject({
       ledgerScope: `urn:formspec:session:${requestJson<{ session_id: string }>(captures.sessions[0]).session_id}`,
@@ -191,7 +200,7 @@ test.describe.serial('live Response Actions browser ledger path', () => {
       ]),
     });
     expect(requestJson<CapabilityCommandRequest>(capability)).toMatchObject({
-      formId: DEMO_FORM_ID,
+      formId: SELECTED_FORM_ID,
       runtimeDefinitionUrl,
       definitionVersion,
       anonymousSessionToken: session.session_token,
@@ -256,29 +265,70 @@ test.describe.serial('live Response Actions browser ledger path', () => {
     expect(captures.capabilities).toHaveLength(0);
     expect(captures.appends).toHaveLength(0);
   });
+
+  test('public RespondentRuntime rejects ambiguous multi-form routes before runtime state work', async ({
+    page,
+    request,
+  }) => {
+    if (!liveServerBaseUrl) {
+      test.fail(true, 'FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_URL is required');
+      return;
+    }
+    const defaultRuntimeDefinitionUrl = `${liveServerBaseUrl}/runtime/forms/${DEMO_FORM_ID}`;
+    const selectedRuntimeDefinitionUrl = `${liveServerBaseUrl}/runtime/forms/${SELECTED_FORM_ID}`;
+    await publishDemoIntake(request, {
+      serverBaseUrl: liveServerBaseUrl,
+      runtimeDefinitionUrl: defaultRuntimeDefinitionUrl,
+      title: 'Browser Response Actions Default',
+    });
+    await publishDemoIntake(request, {
+      formId: SELECTED_FORM_ID,
+      serverBaseUrl: liveServerBaseUrl,
+      runtimeDefinitionUrl: selectedRuntimeDefinitionUrl,
+      title: 'Browser Response Actions Selected',
+    });
+    const captures = await routeLiveServerThroughTestBff(page, request, {
+      serverBaseUrl: liveServerBaseUrl,
+    });
+    await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
+
+    await page.goto(
+      `/?form=${encodeURIComponent(defaultRuntimeDefinitionUrl)}&form=${encodeURIComponent(selectedRuntimeDefinitionUrl)}`,
+    );
+    await expect(page.getByRole('heading', { name: 'This form cannot be loaded.' })).toBeVisible();
+    await expect(page.getByText(/names more than one form/)).toBeVisible();
+
+    expect(captures.sessions).toHaveLength(0);
+    expect(captures.drafts).toHaveLength(0);
+    expect(captures.submits).toHaveLength(0);
+    expect(captures.capabilities).toHaveLength(0);
+    expect(captures.appends).toHaveLength(0);
+  });
 });
 
 async function publishDemoIntake(
   request: APIRequestContext,
   input: {
+    formId?: string;
     serverBaseUrl: string;
     runtimeDefinitionUrl: string;
     title?: string;
     hiddenOnActiveRoute?: boolean;
   },
 ): Promise<string> {
+  const formId = input.formId ?? DEMO_FORM_ID;
   const title = input.title ?? 'Browser Response Actions Ledger';
   const create = await request.post(`${input.serverBaseUrl}/forms`, {
     headers: defaultScope,
     data: {
-      form_id: DEMO_FORM_ID,
-      slug: 'demo-intake',
+      form_id: formId,
+      slug: formId,
       display_name: title,
       created_by: 'principal_playwright_web_admin',
     },
   });
   if (!create.ok() && create.status() !== 409) {
-    throw new Error(`creating ${DEMO_FORM_ID} returned ${create.status()}: ${await create.text()}`);
+    throw new Error(`creating ${formId} returned ${create.status()}: ${await create.text()}`);
   }
 
   const definitionVersion = `999999.${Date.now()}.${process.pid}.${++publishCounter}`;
@@ -293,10 +343,10 @@ async function publishDemoIntake(
   const sidecars = runtimeOwnershipSidecars(definition, {
     hiddenOnActiveRoute: input.hiddenOnActiveRoute ?? false,
   });
-  const publish = await request.post(`${input.serverBaseUrl}/forms/${DEMO_FORM_ID}/versions/publish`, {
+  const publish = await request.post(`${input.serverBaseUrl}/forms/${formId}/versions/publish`, {
     headers: defaultScope,
     data: {
-      form_version_id: `form_version_web_response_actions_${Date.now()}_${process.pid}_${publishCounter}`,
+      form_version_id: `form_version_web_response_actions_${formId.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}_${process.pid}_${publishCounter}`,
       definition_url: input.runtimeDefinitionUrl,
       definition_version: definitionVersion,
       definition,

@@ -8,6 +8,7 @@ import { OBLIGATIONS_ROUTE_NARROWING, parseObligationsRoute } from './obligation
 import { REVIEWER_ROUTE_NARROWING, parseReviewerRoute } from './reviewer-route.ts';
 import { SCREENER_ROUTE_NARROWING, parseScreenerRoute } from './screener-route.ts';
 import { STATUS_ROUTE_NARROWING, parseStatusRoute } from './status-route.ts';
+import { parseRootFormRoute } from './form-route.ts';
 
 /**
  * Picks the right composition factory based on the current route (FW-0068,
@@ -70,5 +71,11 @@ export function chooseComposition({
       route: REVIEWER_ROUTE_NARROWING,
     });
   }
-  return createDefaultComposition(config);
+  const rootFormRoute = parseRootFormRoute(href);
+  return createDefaultComposition(
+    config,
+    rootFormRoute?.kind === 'selected'
+      ? { initialDefinitionUrl: rootFormRoute.initialDefinitionUrl }
+      : undefined,
+  );
 }

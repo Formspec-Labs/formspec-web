@@ -84,9 +84,10 @@ import { createRouteNarrowedComposition } from '../../src/composition/route-narr
 import { DOCUMENTS_ROUTE_NARROWING } from '../../src/app/documents-route.ts';
 import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts';
 import { STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
-import { departmentAppProfile } from '../../src/profiles/profiles.ts';
+import { departmentAppProfile, publicPortalProfile } from '../../src/profiles/profiles.ts';
 import type { FormspecWebConfig, PortCompositionConfig } from '../../src/config/types.ts';
 import { chooseComposition } from '../../src/app/main-helpers.ts';
+import { AmbiguousFormRouteError } from '../../src/app/form-route.ts';
 
 function productionConfig(): FormspecWebConfig {
   return {
@@ -95,6 +96,20 @@ function productionConfig(): FormspecWebConfig {
     referenceAdapters: {
       formspecStack: {
         ...departmentAppProfile.referenceAdapters?.formspecStack,
+        tenantHeaderDialect: 'formspec',
+        formspecServerUrl: 'https://formspec-server.example.test',
+      },
+    },
+  };
+}
+
+function publicProductionConfig(): FormspecWebConfig {
+  return {
+    ...publicPortalProfile,
+    ports: referenceHttpDataPorts(publicPortalProfile.ports),
+    referenceAdapters: {
+      formspecStack: {
+        ...publicPortalProfile.referenceAdapters?.formspecStack,
         tenantHeaderDialect: 'formspec',
         formspecServerUrl: 'https://formspec-server.example.test',
       },
@@ -168,6 +183,36 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     });
     // The full-app factory in production mode constructs the HTTP adapters.
     expect(spies.httpDef).toHaveBeenCalled();
+  });
+
+  it('chooseComposition binds a root form parameter into the production initialDefinitionUrl', () => {
+    const selectedRuntimeDefinitionUrl =
+      'https://formspec-server.example.test/runtime/forms/selected-intake';
+    const composition = chooseComposition({
+      href: `http://localhost/?form=${encodeURIComponent(selectedRuntimeDefinitionUrl)}`,
+      config: publicProductionConfig(),
+    });
+
+    expect(composition.initialDefinitionUrl).toBe(selectedRuntimeDefinitionUrl);
+    expect(spies.httpDef).toHaveBeenCalled();
+    expect(spies.httpAnonProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ formUrl: selectedRuntimeDefinitionUrl }),
+    );
+  });
+
+  it('chooseComposition rejects duplicate root form parameters before constructing production HTTP adapters', () => {
+    expect(() =>
+      chooseComposition({
+        href: 'http://localhost/?form=demo-intake&form=renewal-intake',
+        config: publicProductionConfig(),
+      }),
+    ).toThrow(AmbiguousFormRouteError);
+
+    expect(spies.httpDef).not.toHaveBeenCalled();
+    expect(spies.httpDraft).not.toHaveBeenCalled();
+    expect(spies.httpSubmit).not.toHaveBeenCalled();
+    expect(spies.anonSession).not.toHaveBeenCalled();
+    expect(spies.httpAnonProvider).not.toHaveBeenCalled();
   });
 
   it('obligations-route narrowed composition does NOT construct the real identity adapter when respondentPlace is unavailable (MED-4 via FW-0070)', async () => {
