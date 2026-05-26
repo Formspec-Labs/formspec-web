@@ -605,7 +605,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 ### FW-0048 — Coercion-aware signing: research and threat-model row
 
 - **Phase:** Post-MVP (design row)
-- **Status:** in design
+- **Status:** **withdrawn 2026-05-26** — stack-root [ADR-0156 (coercion-aware-signing-pipeline)](../thoughts/adr/0156-coercion-aware-signing-pipeline.md) withdrawn (commit bac4b65). The framing inflated priority through "survivor-safety load-bearing" language on a greenfield surface with no consumer; see `feedback_survivor_safety_framing_trap` for the discipline this confirms. Design notes preserved as historical context for a possible future row; if a real adopter ships a high-coercion-risk template and surfaces concrete requirements, a new design row should be filed from observed needs rather than synthesized adjacent threat models. J-027 person-need is not retired — it remains a real journey; what is retired is the particular design framing. Downstream cascade: FW-0059 (build) withdrawn; queue EXT-30 (issuer-sidecar `safetyTeamRecipients[]`) withdrawn; queue XS-3 (cross-stack) withdrawn; queue EXT-5 `submission.duress-signaled` event sub-clause withdrawn.
 - **Persona:** Signer / Platform
 - **Journey:** [J-027](JOURNEYS.md#j-027--when-im-being-coerced-give-me-a-back-channel-that-doesnt-tip-off-the-coercer)
 - **Done:** A worked threat-model and design output for coercion-aware signing on the high-risk template set — financial powers of attorney, immigration sponsorship, benefits redirection, advance directives, marriage and divorce filings. Names the discreet duress affordance, the routing target, how activation stays invisible.
@@ -710,7 +710,7 @@ Each row preserves its original `Done` content; the new `Blocked on:` annotation
 ### FW-0059 — Coercion-aware signing build
 
 - **Phase:** Post-MVP (build)
-- **Status:** open
+- **Status:** **withdrawn 2026-05-26** — parent FW-0048 design row withdrawn the same day with stack-root [ADR-0156 (coercion-aware-signing-pipeline)](../thoughts/adr/0156-coercion-aware-signing-pipeline.md). No build authorization without a ratified parent. If FW-0048 is re-filed from observed adopter needs, a new build row will be queued downstream of it. See FW-0048 row above for the full cascade and rationale.
 - **Persona:** Signer
 - **Journey:** [J-027](JOURNEYS.md#j-027--when-im-being-coerced-give-me-a-back-channel-that-doesnt-tip-off-the-coercer)
 - **Done:** The duress affordance designed in FW-0048 lands on the high-risk template set. Activation is invisible to a shoulder-surfer, routes to issuer-defined victim services without halting the form, and is recorded in the platform's private audit trail but not in the public receipt.
