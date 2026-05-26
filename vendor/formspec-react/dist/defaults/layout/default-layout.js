@@ -430,7 +430,7 @@ function PopoverLayout({ node, children, themeClass, style }) {
             }
         }
     }, [close]);
-    return (_jsxs("div", { ref: wrapperRef, className: mergeClasses('formspec-popover', themeClass), style: style, ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [_jsx("button", { type: "button", className: "formspec-popover-trigger", ref: triggerRef, "aria-haspopup": "dialog", "aria-expanded": open, onClick: toggle, children: triggerLabel }), _jsx("div", { ref: contentRef, className: "formspec-popover-content", role: "dialog", "aria-label": title ?? triggerLabel, tabIndex: -1, onKeyDown: handleKeyDown, hidden: !open, children: children })] }));
+    return (_jsxs("div", { ref: wrapperRef, className: mergeClasses('formspec-popover', themeClass), style: style, ...projectionMetadataAttrs(node), children: [_jsx("button", { type: "button", className: "formspec-popover-trigger", ref: triggerRef, "aria-haspopup": "dialog", "aria-expanded": open, onClick: toggle, children: triggerLabel }), _jsx("div", { ref: contentRef, className: "formspec-popover-content", role: "dialog", "aria-label": title ?? triggerLabel, tabIndex: -1, onKeyDown: handleKeyDown, hidden: !open, children: children })] }));
 }
 // ── Generic fallback ──────────────────────────────────────────────
 function DefaultContainer({ node, children, themeClass, style }) {
