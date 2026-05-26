@@ -156,8 +156,8 @@ test.describe.serial('live Response Actions browser ledger path', () => {
     await page.getByRole('button', { name: 'Submit' }).click();
 
     await expect(page.getByRole('heading', { name: 'Submission received' })).toBeVisible();
-    expect(pathAndSearch(page)).toBe(selectedRoute);
     await expect.poll(() => captures.appends.length, { timeout: 30_000 }).toBe(1);
+    expect(pathAndSearch(page)).toBe(selectedRoute);
     expect(captures.sessions).toHaveLength(1);
     expect(captures.capabilities).toHaveLength(1);
     expect(captures.submits).toHaveLength(1);
