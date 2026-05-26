@@ -4,7 +4,7 @@
  * Generated from schemas/*.schema.json by scripts/generate-types.mjs.
  * Re-run: npm run types:generate
  */
-import type { Extensions, TargetDefinition, Tokens, AccessibilityBlock, Breakpoints, ThemeWidgetName } from './common.js';
+import type { ModuleRef, Extensions, TargetDefinition, Tokens, AccessibilityBlock, Breakpoints, ThemeWidgetName } from './common.js';
 /**
  * Cascade level 1 (lowest theme specificity): baseline PresentationBlock applied to every item before selectors or per-item overrides. Sets the form-wide visual baseline. Overrides Tier 1 inline presentation hints (level 0) and formPresentation globals (level -1). Overridden by selectors (level 2) and items (level 3). Merge is shallow per-property — nested objects (widgetConfig, style, accessibility) are replaced as a whole, not deep-merged. Exception: cssClass uses union semantics across all levels.
  */
@@ -57,6 +57,13 @@ export type SelectorMatch = {
     dataType?: 'string' | 'text' | 'integer' | 'decimal' | 'boolean' | 'date' | 'dateTime' | 'time' | 'uri' | 'attachment' | 'choice' | 'multiChoice' | 'money';
 };
 /**
+ * Semantic token type. Tooling uses types to select appropriate editors and validate values. Types do not affect CSS custom property emission. Inlined from the retired token-registry.schema.json#/$defs/TokenType per ADR 0150 §2.3/§4.2/§10 row 9.
+ *
+ * This interface was referenced by `ThemeDocument`'s JSON-Schema
+ * via the `definition` "TokenType".
+ */
+export type TokenType = 'color' | 'dimension' | 'fontFamily' | 'fontWeight' | 'duration' | 'opacity' | 'shadow' | 'number';
+/**
  * A Formspec Theme document — a sidecar JSON file that controls the visual presentation of a Formspec Definition without modifying it. A Theme binds to a Definition by URL, overrides inline Tier 1 presentation hints through a three-level cascade (defaults → selectors → item overrides), assigns widgets with typed configuration and fallback chains, defines page layout on a 12-column grid, and provides design tokens for visual consistency. Multiple Theme documents MAY target the same Definition, enabling platform-specific rendering (web, mobile, PDF, kiosk). A Theme MUST NOT affect data collection, validation, or behavioral semantics — it controls only how items are displayed.
  */
 export interface ThemeDocument {
@@ -64,6 +71,10 @@ export interface ThemeDocument {
      * Theme specification version. MUST be '1.0'.
      */
     $formspecTheme: '1.0';
+    /**
+     * OPTIONAL declaration of substrate modules this document depends on. Each entry is a canonical ModuleRef (id + version, with optional publisher + lockHash for posture admission). Default-module-set behavior per ADR 0150 §4.9 preserves form-only documents — omitting modules[] is identical to declaring the core module set. Per ADR 0150 §4.3.
+     */
+    modules?: ModuleRef[];
     /**
      * Canonical identifier for this theme. Stable across theme versions — the pair (url, version) SHOULD be globally unique.
      */
@@ -116,7 +127,7 @@ export interface ThemeDocument {
      */
     tokenMeta?: {
         /**
-         * Custom token categories keyed by category prefix. Each category follows the Token Registry Category schema.
+         * Custom token categories keyed by category prefix. Each category follows the Token Registry Category shape (Category/TokenEntry/TokenType $defs inlined per ADR 0150 §2.3/§4.2/§10 row 9 — standalone token-registry.schema.json retired; Category shape preserved here for theme.tokenMeta validation. The runtime canonical token document at packages/formspec-layout/src/token-registry.json also conforms to this same Category shape per category).
          */
         categories?: {
             [k: string]: Category;
@@ -202,7 +213,10 @@ export interface Region {
     };
 }
 /**
- * A group of tokens sharing a category prefix and default type.
+ * A group of tokens sharing a category prefix and default type. Inlined from the retired token-registry.schema.json#/$defs/Category per ADR 0150 §2.3/§4.2/§10 row 9 — token-registry as a standalone schema folds into the unified Registry as a `token-category` contribution; the structural Category/TokenEntry/TokenType shape is preserved here so theme.tokenMeta validation and the runtime token-registry.json document continue to share the same shape.
+ *
+ * This interface was referenced by `ThemeDocument`'s JSON-Schema
+ * via the `definition` "Category".
  */
 export interface Category {
     /**
@@ -225,7 +239,10 @@ export interface Category {
     };
 }
 /**
- * Metadata for a single design token.
+ * Metadata for a single design token. Inlined from the retired token-registry.schema.json#/$defs/TokenEntry per ADR 0150 §2.3/§4.2/§10 row 9.
+ *
+ * This interface was referenced by `ThemeDocument`'s JSON-Schema
+ * via the `definition` "TokenEntry".
  */
 export interface TokenEntry {
     /**

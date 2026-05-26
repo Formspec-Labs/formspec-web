@@ -4,7 +4,7 @@
  * Generated from schemas/*.schema.json by scripts/generate-types.mjs.
  * Re-run: npm run types:generate
  */
-import type { Party, LangMap, ContactPoint } from './common.js';
+import type { Party, LangMap, ContactPoint, ModuleRef } from './common.js';
 /**
  * Organization publishing this registry document. Provides provenance and contact information for all entries unless overridden at the entry level.
  */
@@ -38,9 +38,9 @@ export type RegistryEntry = {
      */
     name: string;
     /**
-     * The entry category. Determines which category-specific properties are required: dataType requires baseType; function requires parameters and returns; constraint requires parameters; concept requires conceptUri; vocabulary requires vocabularySystem; property and namespace have no additional required properties.
+     * The entry category. Determines which category-specific properties are required: dataType requires baseType; function requires parameters and returns; constraint requires parameters; concept requires conceptUri; vocabulary requires vocabularySystem; module requires contributes; unit-kind requires semantics; widget requires widgetShape; action-intent requires validation; slot-type requires slotShape; validation-mapping-row requires row; token-category requires categoryShape. property has no additional required properties. `namespace` was renamed to `module` per ADR 0150 §4.1 (greenfield rename, no alias).
      */
-    category: 'dataType' | 'function' | 'constraint' | 'property' | 'namespace' | 'concept' | 'vocabulary';
+    category: 'dataType' | 'function' | 'constraint' | 'property' | 'module' | 'concept' | 'vocabulary' | 'unit-kind' | 'widget' | 'action-intent' | 'slot-type' | 'validation-mapping-row' | 'token-category';
     /**
      * Semver version of the extension itself (not the Formspec version). Within a registry document, the (name, version) tuple MUST be unique. A new major version MAY re-enter draft status.
      */
@@ -125,9 +125,51 @@ export type RegistryEntry = {
      */
     returns?: string;
     /**
-     * Array of x-prefixed extension names grouped under this namespace. Only meaningful when category is 'namespace'. Members should be other entries in the same or a referenced registry.
+     * Array of x-prefixed Registry entry names this module bundles. REQUIRED when category is 'module'. Each MUST exist in this or a referenced registry. Replaces the old `members[]` per ADR 0150 §4.1.
      */
-    members?: string[];
+    contributes?: string[];
+    /**
+     * Other modules this module requires. OPTIONAL when category is 'module'. Uses the canonical `ModuleRef` $def for shape parity with document `modules[]` and `posture.allowedModules[]`.
+     */
+    dependencies?: ModuleRef[];
+    /**
+     * Processor/renderer obligations describing the unit-kind's behavioral semantics. REQUIRED when category is 'unit-kind'. Free-form per module; module ships canonical sub-schema referenced from `schemaUrl` for richer validation. Per ADR 0150 §4.2.
+     */
+    semantics?: {};
+    /**
+     * Widget contract (props, children policy, fallback chain, and optional graph-visible token slots). REQUIRED when category is 'widget'. The `props` sub-object is the JSON Schema validating Theme's `widgetConfig` slot (theme.schema.json) when a Theme configures a module-supplied widget. `tokenSlots[]` is the production Registry evidence for UI Graph Policy Theme token-slot assignment checks; processors MUST NOT read the v4 spike `semantics.themeTokenSlots` field as authority. Per ADR 0150 §4.2 / Component §progressive-to-core and ADR 0153 UI graph policy gates.
+     */
+    widgetShape?: {
+        /**
+         * JSON Schema fragment for widget configuration payloads such as Theme widgetConfig or Surface module-widget binding.config.
+         */
+        props?: {};
+        /**
+         * Renderer-facing child composition policy for the widget.
+         */
+        childrenPolicy?: string;
+        /**
+         * Fallback core widget or rendering strategy used when this widget is unavailable.
+         */
+        fallback?: string;
+        /**
+         * Graph-visible Theme token slots accepted by this widget. ModuleResolver normalizes this evidence into ModuleResolutionReport.widgetTokenSlots for UI Graph Policy validators; this field does not define token values, cascade, or renderer behavior.
+         */
+        tokenSlots?: WidgetTokenSlot[];
+    };
+    /**
+     * Full ValidationTuple per VM §6.1. REQUIRED when category is 'action-intent'. Per ADR 0150 §4.2.
+     */
+    validation?: {};
+    /**
+     * What the slot binds to + composition rules. REQUIRED when category is 'slot-type'. Per ADR 0150 §4.2.
+     */
+    slotShape?: {};
+    /**
+     * Closed MappingEntry shape per VM §6. REQUIRED when category is 'validation-mapping-row'. Contributes a row to the `validation-mapping.MasterTable` after the §4.2 four-constraint demotion. Per ADR 0150 §4.2.
+     */
+    row?: {};
+    categoryShape?: TokenCategoryShape;
     /**
      * The concept IRI in the external ontology or standard. REQUIRED when category is 'concept'. This is the globally unique identifier for the concept this entry represents.
      */
@@ -155,6 +197,13 @@ export type RegistryEntry = {
     filter?: VocabularyFilter;
 };
 /**
+ * Semantic token type used by tooling to select editors and validate values.
+ *
+ * This interface was referenced by `RegistryDocument`'s JSON-Schema
+ * via the `definition` "TokenCategoryTokenType".
+ */
+export type TokenCategoryTokenType = 'color' | 'dimension' | 'fontFamily' | 'fontWeight' | 'duration' | 'opacity' | 'shadow' | 'number';
+/**
  * A static JSON document format for publishing, discovering, and validating Formspec extensions and semantic metadata. A Registry Document enumerates named entries — custom data types, functions, constraints, properties, namespaces, concept identities, and vocabulary bindings — with metadata, version history, compatibility bounds, and machine-readable schemas. Any organization MAY publish its own Registry Document. Interoperability is achieved through the common format, not centralized authority.
  */
 export interface RegistryDocument {
@@ -179,6 +228,92 @@ export interface RegistryDocument {
      * Registry-level extension properties for vendor-specific metadata. All property keys MUST be x-prefixed.
      */
     extensions?: {};
+}
+/**
+ * Extension object whose keys must be prefixed with x-.
+ */
+export interface Extensions {
+}
+/**
+ * A Theme token slot declared by a module widget. Slot declarations are Registry evidence for UI Graph Policy checks only; they do not define token values, Theme cascade, renderer fallback, runtime state, or authorization.
+ *
+ * This interface was referenced by `RegistryDocument`'s JSON-Schema
+ * via the `definition` "WidgetTokenSlot".
+ */
+export interface WidgetTokenSlot {
+    /**
+     * Token slot name as referenced by UI Graph Policy theme.assignments[].slot.
+     */
+    name: string;
+    /**
+     * Accepted Theme token category prefixes for this slot, such as 'color', 'spacing', or 'x-agency'. These values are category prefixes, not Registry entry names. Platform prefixes are owned by token-registry.json; custom x-* prefixes require normalized ModuleResolver token-category evidence before UI Graph Policy treats them as compatible.
+     *
+     * @minItems 1
+     */
+    acceptedTokenCategories: [string, ...string[]];
+    /**
+     * Whether the widget contract expects this slot to be assigned by policy.
+     */
+    required?: boolean;
+    /**
+     * Human-readable purpose of the token slot.
+     */
+    description?: string;
+}
+/**
+ * Token category shape. REQUIRED when category is 'token-category'. The `prefix` field is the graph-visible Theme token category prefix; the Registry entry `name` is not prefix authority. Folds Token Registry into the unified Registry as a contribution profile per ADR 0150 §2.3/§4.2 and ADR 0153 UI Graph Policy gates.
+ */
+export interface TokenCategoryShape {
+    /**
+     * Custom Theme token category prefix, such as `x-agency`. Platform prefixes (`color`, `font`, `radius`, `spacing`) remain platform token authority and are not module-contributed Registry categories.
+     */
+    prefix: string;
+    /**
+     * Human-readable description of the custom token category.
+     */
+    description?: string;
+    /**
+     * Default token type for entries in this category. Entries may override with their own type.
+     */
+    type: 'color' | 'dimension' | 'fontFamily' | 'fontWeight' | 'duration' | 'opacity' | 'shadow' | 'number';
+    /**
+     * Prefix for dark-mode counterpart tokens. Only categories whose type is `color` SHOULD declare darkPrefix.
+     */
+    darkPrefix?: string;
+    /**
+     * Token entries keyed by full dot-delimited token key. Each key MUST start with the category `prefix` followed by a dot.
+     */
+    tokens: {
+        [k: string]: TokenCategoryTokenEntry;
+    };
+}
+/**
+ * Metadata for one custom token entry in a Registry token-category contribution.
+ *
+ * This interface was referenced by `RegistryDocument`'s JSON-Schema
+ * via the `definition` "TokenCategoryTokenEntry".
+ */
+export interface TokenCategoryTokenEntry {
+    /**
+     * Human-readable description of the token's purpose.
+     */
+    description?: string;
+    /**
+     * Token type, overriding the category default.
+     */
+    type?: 'color' | 'dimension' | 'fontFamily' | 'fontWeight' | 'duration' | 'opacity' | 'shadow' | 'number';
+    /**
+     * Default value shipped with the module token category.
+     */
+    default?: string | number;
+    /**
+     * Default dark-mode value. Only meaningful when the containing category declares a darkPrefix.
+     */
+    dark?: string | number;
+    /**
+     * Example token values for documentation and tooling hints.
+     */
+    examples?: (string | number)[];
 }
 /**
  * Declares that the bound concept is equivalent to a concept in another system. Relationship types follow SKOS (Simple Knowledge Organization System) semantics.

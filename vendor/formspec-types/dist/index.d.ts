@@ -65,7 +65,7 @@ export type FormItem = Item & {
     constraint?: string;
     message?: string;
 };
-type FormDefinitionKnownFields = Pick<GeneratedFormDefinition, '$formspec' | 'url' | 'version' | 'versionAlgorithm' | 'derivedFrom' | 'name' | 'title' | 'description' | 'date' | 'shapes' | 'instances' | 'variables' | 'nonRelevantBehavior' | 'issuer' | 'optionSets' | 'migrations' | 'extensions'>;
+type FormDefinitionKnownFields = Pick<GeneratedFormDefinition, '$formspec' | 'url' | 'version' | 'versionAlgorithm' | 'derivedFrom' | 'name' | 'title' | 'description' | 'date' | 'metadata' | 'shapes' | 'instances' | 'variables' | 'nonRelevantBehavior' | 'issuer' | 'optionSets' | 'migrations' | 'fees' | 'extensions'>;
 export type FormDefinition = FormDefinitionKnownFields & {
     items: FormItem[];
     status?: GeneratedFormDefinition['status'];
@@ -78,9 +78,16 @@ export type FormDefinition = FormDefinitionKnownFields & {
 import type { ComponentDocument } from './generated/component.js';
 import type { ThemeDocument } from './generated/theme.js';
 import type { MappingDocument } from './generated/mapping.js';
+import type { ScreenerDocument } from './generated/screener.js';
+import type { ExperienceDocument } from './generated/experience.js';
+import type { ResponseActionsDocument } from './generated/response-actions.js';
 export interface ProjectBundle {
-    /** The form definition artifact. */
-    definition: FormDefinition;
+    /**
+     * The form definition artifacts. Plural per ADR 0150 §5.2 App Manifest reframe;
+     * at P0 the authoring project still exports a single Definition, so this array
+     * carries exactly one element. Multi-Definition authoring lands at P1+.
+     */
+    definitions: FormDefinition[];
     /** The component (UI tree) artifact. */
     component: ComponentDocument;
     /** The theme (presentation) artifact. */
@@ -89,4 +96,10 @@ export interface ProjectBundle {
     mappings: Record<string, MappingDocument>;
     /** Locale documents keyed by BCP 47 code (present only when locales are loaded). */
     locales?: Record<string, unknown>;
+    /** Standalone Screener Document (present only when a screener is loaded). */
+    screener?: ScreenerDocument;
+    /** Standalone Experience Document (present only when an experience is loaded). */
+    experience?: ExperienceDocument;
+    /** Standalone Response Actions Document (present only when response-actions are loaded). */
+    responseActions?: ResponseActionsDocument;
 }

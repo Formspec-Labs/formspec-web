@@ -476,7 +476,7 @@ describe('respondent flow helpers', () => {
     const definition = {
       ...demoSampleForm,
       metadata: { assurance: { aal: 'AAL2' } },
-    } as FormDefinition;
+    } as unknown as FormDefinition;
 
     expect(() => formAssuranceFloorForDefinition(definition)).toThrow(
       /metadata\.assurance\.aal/,
@@ -487,7 +487,7 @@ describe('respondent flow helpers', () => {
     const definition = {
       ...demoSampleForm,
       metadata: { assurance: { aal: 'L2', jurisdiction: 123 } },
-    } as FormDefinition;
+    } as unknown as FormDefinition;
 
     expect(() => formAssuranceFloorForDefinition(definition)).toThrow(
       /metadata\.assurance\.jurisdiction/,

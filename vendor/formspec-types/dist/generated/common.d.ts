@@ -5,6 +5,13 @@
  * Re-run: npm run types:generate
  */
 /**
+ * Shared origin class for response values and respondent-ledger changes. Closed-core values mirror respondent-ledger-event.schema.json ChangeSetEntry.valueClass; module-contributed extensions use the x-* registry lane.
+ *
+ * This interface was referenced by `CommonSchema`'s JSON-Schema
+ * via the `definition` "ValueClass".
+ */
+export type ValueClass = ('user-input' | 'prepopulated' | 'calculated' | 'imported' | 'attachment' | 'system-derived' | 'migration-derived') | `x-${string}`;
+/**
  * This interface was referenced by `CommonSchema`'s JSON-Schema
  * via the `definition` "BuiltInWidgetName".
  */
@@ -26,6 +33,13 @@ export type WidgetName = BuiltInWidgetName | CustomWidgetName;
  * via the `definition` "ThemeWidgetName".
  */
 export type ThemeWidgetName = BuiltInWidgetName | CustomWidgetName | 'none';
+/**
+ * Bundle-derived URN for a studio-core singleton kernel document per ADR 0150 §5.6 URN survey. Shape: urn:formspec:doc:<manifest-scope-hash>:<docType> where manifest-scope-hash = sha256(bundleId)[0:16] (hex), matching the §5.5 SessionRef pattern. Minted by KernelDocRefBinder.bindSingleton at @formspec-org/studio-core@1.0.0+ and returned from kernel.refs.<type>() accessors. Used by Forms-MCP / Wireframes-MCP / Ledger event payloads (verbatim carry per §5.4). The four docTypes are terminal-closed — additions are a major-bump per kernel-api spec §5.
+ *
+ * This interface was referenced by `CommonSchema`'s JSON-Schema
+ * via the `definition` "KernelDocUrn".
+ */
+export type KernelDocUrn = string;
 /**
  * Shared schema definitions used by Formspec Definition, Theme, and Component documents.
  */
@@ -173,4 +187,174 @@ export interface VisualSurfaceProps {
      * Container elevation token or renderer value.
      */
     elevation?: string | number;
+}
+/**
+ * Canonical module reference per ADR 0150 §4.4. Used by document `modules[]` (§4.3), `posture.allowedModules[]` (§4.4), `bundle-manifest.modules[]` (§5.2), and `module.dependencies[]` (§4.1).
+ *
+ * This interface was referenced by `CommonSchema`'s JSON-Schema
+ * via the `definition` "ModuleRef".
+ */
+export interface ModuleRef {
+    /**
+     * Module ID following the Registry naming pattern per ADR 0150 §4.8. Despite §4.4 prose calling this a 'URN', §4.3 examples and §4.8 regex are bare `^x-` prefix (e.g. 'x-formspec-core-task'). This pattern matches the canonical regex.
+     */
+    id: string;
+    /**
+     * Strict SemVer string or range expression (e.g. '1.0.0', '^1.0.0', '>=1.0.0 <2.0.0').
+     */
+    version: string;
+    /**
+     * OPTIONAL provenance assertion (the document asserts; posture admission checks).
+     */
+    publisher?: string;
+    /**
+     * OPTIONAL digest pin (e.g. 'sha256:...'). Pins hostile-substitution risk when paired with posture.allowedModules[].
+     */
+    lockHash?: string;
+    extensions?: Extensions;
+}
+/**
+ * Authoring identity per ADR 0150 §5.4. Distinct from `respondent-ledger-event.Actor` (respondent-identity) and `experience.Actor` (workflow-role) — three Actor $defs by design. `kind` and `actChannel` are terminal-closed enums; product nuance (e.g. discriminating Wireframes-MCP from Forms-MCP, both `actChannel: 'mcp'`) rides URN-encoded into `id`, not via new enum values.
+ *
+ * This interface was referenced by `CommonSchema`'s JSON-Schema
+ * via the `definition` "AuthorActor".
+ */
+export interface AuthorActor {
+    /**
+     * Stable actor URN (urn:formspec:actor:... scheme). Product nuance rides URN-encoded (e.g. urn:formspec:actor:mcp:wireframes:agent-7).
+     */
+    id: string;
+    /**
+     * Terminal-closed per §5.4 (NOT §4.5-extensible). Answers 'what kind of authoring entity'.
+     */
+    kind: 'human' | 'ai-agent' | 'service';
+    /**
+     * Terminal-closed per §5.4. Orthogonal to kind. Answers 'through what channel'. An ai-agent MAY have actChannel:'mcp' (mediated via MCP) OR 'agent' (autonomous). A human MAY have actChannel:'human' (direct editor) OR 'mcp' (CLI-driven MCP).
+     */
+    actChannel: 'human' | 'mcp' | 'agent' | 'service';
+    /**
+     * Optional human-readable label for timeline/support views.
+     */
+    display?: string;
+    extensions?: Extensions;
+}
+/**
+ * App Manifest session index entry per ADR 0150 §5.5. App Manifest carries `sessions: SessionRef[]` as the durable list of sessions held against the app; each entry is a temporal grouping with the act-record in the ledger via `respondent-ledger.sessionRefs[]` referencing this URN.
+ *
+ * This interface was referenced by `CommonSchema`'s JSON-Schema
+ * via the `definition` "SessionRef".
+ */
+export interface SessionRef {
+    /**
+     * Stable session URN.
+     */
+    id: string;
+    openedAt: string;
+    /**
+     * Absent = currently open.
+     */
+    closedAt?: string;
+    /**
+     * URN refs into the App Manifest's actor list.
+     *
+     * @minItems 1
+     */
+    actors: [string, ...string[]];
+    extensions?: Extensions;
+}
+/**
+ * Generalized x-generation provenance carrier per ADR 0150 §5.3/§5.4. SUPERSET of the existing inline x-generation shape at component.schema.json:240-282 — every pre-existing field (source, strategy, generatedBy, generatedAt, anchors) remains valid; new fields (sourceModule, movedFrom, copiedFrom) layered on top. `generatedBy` migrates from free-form string to `oneOf [string, AuthorActor]` for backward compatibility while enabling structured authoring identity. `additionalProperties` stays open (no false) so tool-layer use is unconstrained beyond the documented superset.
+ *
+ * This interface was referenced by `CommonSchema`'s JSON-Schema
+ * via the `definition` "Generation".
+ */
+export interface Generation {
+    /**
+     * Existing field (component.schema.json:256-259): generator source label, such as an Experience Unit, prompt, template, or generator input bundle. Preserved as-is.
+     */
+    source?: string;
+    /**
+     * Existing field (component.schema.json:260-263): generator strategy identifier, such as unit-to-section or a host-defined strategy name. Preserved as-is.
+     */
+    strategy?: string;
+    /**
+     * Existing field (component.schema.json:268-271): generation timestamp. Authors SHOULD use an RFC 3339 date-time string. Preserved as-is.
+     */
+    generatedAt?: string;
+    /**
+     * Existing field (component.schema.json:272-279): source anchors with a standard prefix and source-layer-owned suffix. Preserves original `^(item|unit|task|action|concept):.+$` items pattern enforcement.
+     */
+    anchors?: string[];
+    /**
+     * Actor attribution per §5.4. Migration-friendly: pre-existing free-form string values (e.g. 'component-generator/1.0.0') continue to validate; new authoring stamps the full AuthorActor inline.
+     */
+    generatedBy?: string | AuthorActor;
+    sourceModule?: ModuleRef;
+    /**
+     * Set by tooling on cross-Component move per §5.3. Graph-wide provenance uses ComponentNodeIdentityRef; CrossComponentRef is retained only as same-runtime compatibility evidence.
+     */
+    movedFrom?: ComponentNodeIdentityRef | CrossComponentRef;
+    /**
+     * Set by tooling on cross-Component copy per §5.3. Graph-wide provenance uses ComponentNodeIdentityRef; CrossComponentRef is retained only as same-runtime compatibility evidence.
+     */
+    copiedFrom?: ComponentNodeIdentityRef | CrossComponentRef;
+    extensions?: Extensions;
+}
+/**
+ * Graph-wide Component node identity for x-generation movedFrom/copiedFrom provenance. Mirrors the app-graph Component node identity tuple: Component membership, Surface sibling identity, route, absolute route-scoped nodePath, and optional public/structural node ids. This is provenance metadata only; it does not authorize, execute, or resolve runtime behavior.
+ *
+ * This interface was referenced by `CommonSchema`'s JSON-Schema
+ * via the `definition` "ComponentNodeIdentityRef".
+ */
+export interface ComponentNodeIdentityRef {
+    component: {
+        /**
+         * App Manifest components[] membership handle.
+         */
+        handle: string;
+        /**
+         * Canonical URL of the Component document when available.
+         */
+        url?: string;
+        /**
+         * Component document version evidence when available.
+         */
+        version?: string;
+    };
+    surface: {
+        /**
+         * Canonical URL of the Surface document.
+         */
+        url: string;
+        /**
+         * Surface document version evidence when available.
+         */
+        version?: string;
+    };
+    /**
+     * Surface routes[].id for the route-scoped node.
+     */
+    route: string;
+    /**
+     * Absolute route-scoped Component node path built from stable node segments.
+     */
+    nodePath: string;
+    /**
+     * Optional ComponentBase.id evidence for the node.
+     */
+    id?: string;
+    /**
+     * Optional structural authoring identity for the node.
+     */
+    nodeId?: string;
+}
+/**
+ * Legacy same-runtime route + intra-document node path. Retained for Studio/kernel compatibility; it is not sufficient graph-wide Component provenance once multiple Surfaces or Component documents are loaded.
+ *
+ * This interface was referenced by `CommonSchema`'s JSON-Schema
+ * via the `definition` "CrossComponentRef".
+ */
+export interface CrossComponentRef {
+    route: string;
+    nodePath: string;
 }

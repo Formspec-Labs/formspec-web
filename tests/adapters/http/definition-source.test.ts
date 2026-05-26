@@ -10,6 +10,7 @@ import type {
 import { jsonResponse, problemResponse, recordingFetch } from './test-fetch.ts';
 
 const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
+const COMPONENT_GRAPH_CONTEXT_SCHEMA_ID = 'https://formspec.org/schemas/componentGraphProjectionContext/0.1';
 
 describe('HttpDefinitionSource', () => {
   it('mirrors formspec-server GET /runtime/forms/{form_id}', async () => {
@@ -189,6 +190,49 @@ describe('HttpDefinitionSource', () => {
     );
     expect(requests).toHaveLength(1);
   });
+
+  it('preserves direct Component graph context host evidence from runtime payloads', async () => {
+    const componentGraph = componentGraphContextForRuntime();
+    const hostEvidence = componentGraphHostEvidence(componentGraph);
+    const { fetch, requests } = recordingFetch(() =>
+      jsonResponse({
+        definition: sampleFormDefinition,
+        componentGraph,
+        hostEvidence,
+      }),
+    );
+    const adapter = new HttpDefinitionSource({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+    });
+
+    await expect(adapter.getLayoutHostEvidence(sampleFormDefinition.url)).resolves.toEqual(
+      hostEvidence,
+    );
+    expect(requests).toHaveLength(1);
+  });
+
+  it('assembles Component graph context host evidence from split sidecar fields', async () => {
+    const componentGraph = componentGraphContextForRuntime();
+    const hostEvidence = componentGraphHostEvidence(componentGraph);
+    const { fetch } = recordingFetch(() =>
+      jsonResponse({
+        definition: sampleFormDefinition,
+        app_graph_validation_report: hostEvidence.appGraphReport,
+        runtime_config: {
+          component_graph_contexts: hostEvidence.componentGraphContexts,
+        },
+      }),
+    );
+    const adapter = new HttpDefinitionSource({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+    });
+
+    await expect(adapter.getLayoutHostEvidence(sampleFormDefinition.url)).resolves.toEqual(
+      hostEvidence,
+    );
+  });
 });
 
 function localeDocumentFor(
@@ -232,6 +276,21 @@ function componentDocumentForRuntime(): ComponentDocument {
       ],
     },
   } as unknown as ComponentDocument;
+}
+
+function componentGraphContextForRuntime(): ComponentGraphProjectionContext {
+  return {
+    component: {
+      handle: 'respondent',
+      url: 'https://components.example.test/respondent',
+      version: '1.0.0',
+    },
+    surface: {
+      url: 'https://surfaces.example.test/intake',
+      version: '1.0.0',
+    },
+    route: 'apply',
+  };
 }
 
 function uiGraphPolicyHostEvidence(): LayoutHostEvidence {
@@ -288,6 +347,48 @@ function uiGraphPolicyHostEvidence(): LayoutHostEvidence {
           },
         }],
       },
+    }],
+  };
+}
+
+function componentGraphHostEvidence(
+  componentGraph: ComponentGraphProjectionContext,
+): LayoutHostEvidence {
+  return {
+    appGraphReport: {
+      ok: true,
+      summary: {
+        artifacts: 0,
+        loadedArtifacts: 0,
+        schemaFailures: 0,
+        unvalidatedArtifacts: 0,
+        graphErrors: 0,
+        errors: 0,
+        warnings: 0,
+        infos: 0,
+        importedDiagnostics: 0,
+        unsupportedFeatures: 0,
+        skippedPhases: 0,
+      },
+      schemaResults: [],
+      evidenceResults: [{
+        evidenceSlot: 'hostEvidence.componentGraphContexts[0]',
+        schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID,
+        source: 'host://component-graph/respondent',
+        status: 'completed',
+        ok: true,
+        diagnostics: [],
+      }],
+      diagnostics: [],
+      phases: [
+        { phase: 'schema', status: 'completed' },
+        { phase: 'cross-artifact', status: 'completed' },
+      ],
+    },
+    componentGraphContexts: [{
+      schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID,
+      source: 'host://component-graph/respondent',
+      document: componentGraph,
     }],
   };
 }

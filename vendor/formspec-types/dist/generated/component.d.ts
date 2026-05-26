@@ -4,8 +4,63 @@
  * Generated from schemas/*.schema.json by scripts/generate-types.mjs.
  * Re-run: npm run types:generate
  */
-import type { TargetDefinition, Tokens, Breakpoints, StyleMap, AccessibilityBlock, Extensions, VisualSurfaceProps } from './common.js';
+import type { ModuleRef, TargetDefinition, Tokens, Breakpoints, StyleMap, AccessibilityBlock, Extensions, VisualSurfaceProps, Generation } from './common.js';
 import type { ConceptRef } from './experience.js';
+/**
+ * A Formspec Component Document per the Component Specification. Defines a Tier 3 parallel presentation tree of UI components bound to a Formspec Definition's items via slot binding or to Surface routes via Component 1.2 route identity. The component tree controls layout and widget selection but cannot override core behavioral semantics (required, relevant, readonly, calculate, constraint) from the Definition.
+ */
+export type ComponentDocument = {
+    /**
+     * Component specification version. MUST be '1.0', '1.1', or '1.2'. Version 1.2 admits Surface-route identity while preserving form-bound 1.0/1.1 documents.
+     */
+    $formspecComponent: '1.0' | '1.1' | '1.2';
+    /**
+     * OPTIONAL declaration of substrate modules this document depends on. Each entry is a canonical ModuleRef (id + version, with optional publisher + lockHash for posture admission). Omitting modules[] is identical to declaring the core module set, which preserves form-only documents.
+     */
+    modules?: ModuleRef[];
+    /**
+     * Canonical URI identifier for this Component Document.
+     */
+    url?: string;
+    /**
+     * Machine-friendly short identifier.
+     */
+    name?: string;
+    /**
+     * Human-readable name.
+     */
+    title?: string;
+    /**
+     * Human-readable description.
+     */
+    description?: string;
+    /**
+     * Version of this Component Document.
+     */
+    version: string;
+    targetDefinition?: TargetDefinition;
+    /**
+     * Component 1.2 bindings to Surface routes, slots, or app-shell targets. Each entry is an applicability claim resolved by AppGraph validation against the enclosing App Manifest and Surface documents; it does not create routes or slots.
+     *
+     * @minItems 1
+     */
+    targetSurfaceRoutes?: [SurfaceRouteTarget, ...SurfaceRouteTarget[]];
+    breakpoints?: Breakpoints;
+    tokens?: Tokens;
+    /**
+     * Registry of custom component templates. Keys are PascalCase names (MUST NOT collide with built-in names). Each template has params and a tree that is instantiated with {param} interpolation.
+     */
+    components?: {
+        [k: string]: CustomComponentDef;
+    };
+    tree: AnyComponent3;
+    extensions?: Extensions;
+    /**
+     * This interface was referenced by `undefined`'s JSON-Schema definition
+     * via the `patternProperty` "^x-".
+     */
+    [k: `x-${string}`]: unknown;
+} & (LegacyFormBoundComponentDocumentIdentity | Component12DefinitionIdentity | Component12SurfaceRouteIdentity | Component12MixedIdentity);
 /**
  * Component subtree instantiated when this custom component is used.
  */
@@ -28,7 +83,7 @@ export type Section = ComponentBase & VisualSurfaceProps & {
     children?: ChildrenArray;
 };
 /**
- * This interface was referenced by `ComponentDocument`'s JSON-Schema
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "AnyComponent".
  */
 export type AnyComponent1 = {
@@ -84,7 +139,7 @@ export type Grid = ComponentBase & VisualSurfaceProps & {
 /**
  * A grid track fragment. String values are CSS track fragments or token references; numeric values normalize to fr weights.
  *
- * This interface was referenced by `ComponentDocument`'s JSON-Schema
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "GridTrack".
  */
 export type GridTrack = string | number;
@@ -125,7 +180,7 @@ export type Panel = ComponentBase & VisualSurfaceProps & {
 /**
  * Ordered list of child components. Renderers MUST preserve array order.
  *
- * This interface was referenced by `ComponentDocument`'s JSON-Schema
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ChildrenArray".
  */
 export type ChildrenArray = AnyComponent1[];
@@ -136,49 +191,36 @@ export type AnyComponent3 = {
     component: string;
 } & (Section | Stack | Grid | TextInput | NumberInput | DatePicker | Select | CheckboxGroup | Toggle | FileUpload | Heading | Text | Divider | Card | Collapsible | ConditionalGroup | Tabs | ActionButton | Accordion | RadioGroup | MoneyInput | Slider | Rating | Signature | Alert | Badge | ProgressBar | Summary | ValidationSummary | DataTable | Panel | Modal | Popover | CustomComponentRef);
 /**
- * A Formspec Component Document per the Component Specification v1.0. Defines a Tier 3 parallel presentation tree of UI components bound to a Formspec Definition's items via slot binding. The component tree controls layout and widget selection but cannot override core behavioral semantics (required, relevant, readonly, calculate, constraint) from the Definition. Multiple Component Documents MAY target the same Definition for platform-specific presentations.
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "SurfaceRouteTarget".
  */
-export interface ComponentDocument {
+export interface SurfaceRouteTarget {
+    surface: SurfaceRef;
     /**
-     * Component specification version. MUST be '1.0' or '1.1'.
+     * Surface routes[].id targeted by this Component. This is not the URL path.
      */
-    $formspecComponent: '1.0' | '1.1';
+    route: string;
     /**
-     * Canonical URI identifier for this Component Document.
+     * Optional slot key on the target route. When omitted, the Component targets the whole route projection.
      */
-    url?: string;
+    slot?: string;
     /**
-     * Machine-friendly short identifier.
+     * Role of this route target in the initial Component 1.2 contract.
      */
-    name?: string;
+    role: 'route' | 'slot' | 'app-shell';
+}
+/**
+ * Surface sibling identity for the route target.
+ */
+export interface SurfaceRef {
     /**
-     * Human-readable name.
+     * Canonical URL of a Surface document included in the enclosing App Manifest surfaces[].
      */
-    title?: string;
+    url: string;
     /**
-     * Human-readable description.
+     * Optional exact version or range expression compatible with the App Manifest Surface pin.
      */
-    description?: string;
-    /**
-     * Version of this Component Document.
-     */
-    version: string;
-    targetDefinition: TargetDefinition;
-    breakpoints?: Breakpoints;
-    tokens?: Tokens;
-    /**
-     * Registry of custom component templates. Keys are PascalCase names (MUST NOT collide with built-in names). Each template has params and a tree that is instantiated with {param} interpolation.
-     */
-    components?: {
-        [k: string]: CustomComponentDef;
-    };
-    tree: AnyComponent3;
-    extensions?: Extensions;
-    /**
-     * This interface was referenced by `ComponentDocument`'s JSON-Schema definition
-     * via the `patternProperty` "^x-".
-     */
-    [k: `x-${string}`]: unknown;
+    version?: string;
 }
 /**
  * A reusable component template. Instantiated by using the registry key as the component value and providing params. Templates MUST NOT reference themselves (directly or indirectly).
@@ -186,7 +228,7 @@ export interface ComponentDocument {
  * This interface was referenced by `undefined`'s JSON-Schema definition
  * via the `patternProperty` "^[A-Z][a-zA-Z0-9]*$".
  *
- * This interface was referenced by `ComponentDocument`'s JSON-Schema
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "CustomComponentDef".
  */
 export interface CustomComponentDef {
@@ -885,9 +927,51 @@ export interface CustomComponentRef extends ComponentBase {
     };
 }
 /**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "LegacyFormBoundComponentDocumentIdentity".
+ */
+export interface LegacyFormBoundComponentDocumentIdentity {
+    $formspecComponent: '1.0' | '1.1';
+    targetDefinition: TargetDefinition;
+    targetSurfaceRoutes?: never;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "Component12DefinitionIdentity".
+ */
+export interface Component12DefinitionIdentity {
+    $formspecComponent: '1.2';
+    targetDefinition: TargetDefinition;
+    targetSurfaceRoutes?: never;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "Component12SurfaceRouteIdentity".
+ */
+export interface Component12SurfaceRouteIdentity {
+    $formspecComponent: '1.2';
+    targetDefinition?: never;
+    /**
+     * @minItems 1
+     */
+    targetSurfaceRoutes: [SurfaceRouteTarget, ...SurfaceRouteTarget[]];
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "Component12MixedIdentity".
+ */
+export interface Component12MixedIdentity {
+    $formspecComponent: '1.2';
+    targetDefinition: TargetDefinition;
+    /**
+     * @minItems 1
+     */
+    targetSurfaceRoutes: [SurfaceRouteTarget, ...SurfaceRouteTarget[]];
+}
+/**
  * Breakpoint-keyed prop overrides. Keys are breakpoint names; values are objects of component-specific props to shallow-merge at that breakpoint. MUST NOT contain component, bind, when, children, or responsive.
  *
- * This interface was referenced by `ComponentDocument`'s JSON-Schema
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ResponsiveOverrides".
  */
 export interface ResponsiveOverrides {
@@ -896,12 +980,12 @@ export interface ResponsiveOverrides {
 /**
  * Base properties shared by all component objects. Every component inherits these via $ref.
  *
- * This interface was referenced by `ComponentDocument`'s JSON-Schema
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ComponentBase".
  */
 export interface ComponentBase {
     /**
-     * Optional unique identifier for this node within the component tree. Used for locale string addressing ($component.<id>.prop), test selectors, and accessibility anchoring. When present, MUST be unique across the entire component tree document. Inside repeat templates (DataTable, Accordion), the id identifies the template node — all rendered instances share the same id.
+     * Optional unique identifier for this node. Used for locale string addressing ($component.<id>.prop), test selectors, and accessibility anchoring. **Uniqueness scope is bundle-graph-wide when present** — every authored `id` MUST be unique across every Component document reachable from a single App Manifest, not merely unique within its own tree. JSON Schema cannot enforce graph-level uniqueness across multiple documents; the invariant is upheld by linter rule E605 (COMP-BUNDLE-ID-COLLISION) which walks the bundle graph and hard-fails on duplicates. This is a precondition for cross-document move and copy maps: the target document must have no collision. Inside repeat templates (DataTable, Accordion), the id identifies the template node — all rendered instances share the same id, which counts as a single id occurrence for collision purposes.
      */
     id?: string;
     /**
@@ -916,32 +1000,8 @@ export interface ComponentBase {
      * Optional concept references using the Experience ConceptRef shape. Host-policy metadata; does not execute validation or mapping logic.
      */
     conceptRefs?: ConceptRef[];
-    /**
-     * Optional generation provenance metadata. Renderers MUST ignore this object for default runtime output.
-     */
-    'x-generation'?: {
-        /**
-         * Generator source label, such as an Experience Unit, prompt, template, or generator input bundle.
-         */
-        source?: string;
-        /**
-         * Generator strategy identifier, such as unit-to-section or a host-defined strategy name.
-         */
-        strategy?: string;
-        /**
-         * Generator name and version, service id, or other producer identifier.
-         */
-        generatedBy?: string;
-        /**
-         * Generation timestamp. Authors SHOULD use an RFC 3339 date-time string.
-         */
-        generatedAt?: string;
-        /**
-         * Source anchors with a standard prefix and source-layer-owned suffix.
-         */
-        anchors?: string[];
-        [k: string]: unknown;
-    };
+    extensions?: Extensions;
+    'x-generation'?: Generation;
     /**
      * Component type name. MUST be a built-in name or a key in the components registry.
      */
@@ -958,6 +1018,80 @@ export interface ComponentBase {
      */
     cssClass?: string | string[];
     layout?: ComponentLayout;
+}
+/**
+ * Authoring identity per ADR 0150 §5.4. Distinct from `respondent-ledger-event.Actor` (respondent-identity) and `experience.Actor` (workflow-role) — three Actor $defs by design. `kind` and `actChannel` are terminal-closed enums; product nuance (e.g. discriminating Wireframes-MCP from Forms-MCP, both `actChannel: 'mcp'`) rides URN-encoded into `id`, not via new enum values.
+ */
+export interface AuthorActor {
+    /**
+     * Stable actor URN (urn:formspec:actor:... scheme). Product nuance rides URN-encoded (e.g. urn:formspec:actor:mcp:wireframes:agent-7).
+     */
+    id: string;
+    /**
+     * Terminal-closed per §5.4 (NOT §4.5-extensible). Answers 'what kind of authoring entity'.
+     */
+    kind: 'human' | 'ai-agent' | 'service';
+    /**
+     * Terminal-closed per §5.4. Orthogonal to kind. Answers 'through what channel'. An ai-agent MAY have actChannel:'mcp' (mediated via MCP) OR 'agent' (autonomous). A human MAY have actChannel:'human' (direct editor) OR 'mcp' (CLI-driven MCP).
+     */
+    actChannel: 'human' | 'mcp' | 'agent' | 'service';
+    /**
+     * Optional human-readable label for timeline/support views.
+     */
+    display?: string;
+    extensions?: Extensions;
+}
+/**
+ * Graph-wide Component node identity for x-generation movedFrom/copiedFrom provenance. Mirrors the app-graph Component node identity tuple: Component membership, Surface sibling identity, route, absolute route-scoped nodePath, and optional public/structural node ids. This is provenance metadata only; it does not authorize, execute, or resolve runtime behavior.
+ */
+export interface ComponentNodeIdentityRef {
+    component: {
+        /**
+         * App Manifest components[] membership handle.
+         */
+        handle: string;
+        /**
+         * Canonical URL of the Component document when available.
+         */
+        url?: string;
+        /**
+         * Component document version evidence when available.
+         */
+        version?: string;
+    };
+    surface: {
+        /**
+         * Canonical URL of the Surface document.
+         */
+        url: string;
+        /**
+         * Surface document version evidence when available.
+         */
+        version?: string;
+    };
+    /**
+     * Surface routes[].id for the route-scoped node.
+     */
+    route: string;
+    /**
+     * Absolute route-scoped Component node path built from stable node segments.
+     */
+    nodePath: string;
+    /**
+     * Optional ComponentBase.id evidence for the node.
+     */
+    id?: string;
+    /**
+     * Optional structural authoring identity for the node.
+     */
+    nodeId?: string;
+}
+/**
+ * Legacy same-runtime route + intra-document node path. Retained for Studio/kernel compatibility; it is not sufficient graph-wide Component provenance once multiple Surfaces or Component documents are loaded.
+ */
+export interface CrossComponentRef {
+    route: string;
+    nodePath: string;
 }
 /**
  * Typed structural placement hints. Grid placement applies when the node is a child of a Grid or another documented grid context.

@@ -4,6 +4,7 @@
  * Generated from schemas/*.schema.json by scripts/generate-types.mjs.
  * Re-run: npm run types:generate
  */
+import type { ModuleRef } from './common.js';
 /**
  * This interface was referenced by `ResponseActionsDocument`'s JSON-Schema
  * via the `definition` "Action".
@@ -96,6 +97,10 @@ export interface ResponseActionsDocument {
      */
     $formspecResponseActions: '1.0';
     /**
+     * OPTIONAL declaration of substrate modules this document depends on. Each entry is a canonical ModuleRef (id + version, with optional publisher + lockHash for posture admission). Default-module-set behavior per ADR 0150 §4.9 preserves form-only documents — omitting modules[] is identical to declaring the core module set. Per ADR 0150 §4.3.
+     */
+    modules?: ModuleRef[];
+    /**
      * Version of this Response Actions document. SemVer RECOMMENDED.
      */
     version: string;
@@ -118,6 +123,16 @@ export interface ResponseActionsDocument {
      * @minItems 1
      */
     actions: [Action, ...Action[]];
+    /**
+     * This interface was referenced by `ResponseActionsDocument`'s JSON-Schema definition
+     * via the `patternProperty` "^x-".
+     */
+    [k: `x-${string}`]: unknown;
+}
+/**
+ * Extension object whose keys must be prefixed with x-.
+ */
+export interface Extensions {
 }
 /**
  * A FEL-guarded precondition.

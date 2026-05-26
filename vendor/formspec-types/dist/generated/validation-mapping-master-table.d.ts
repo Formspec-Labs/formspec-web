@@ -6,7 +6,7 @@
  */
 import type { MappingEntry } from './validation-mapping.js';
 /**
- * Frozen mirror of schemas/validation-mapping.schema.json#/$defs/MasterTable/const.
+ * Frozen mirror of tests/conformance/fixtures/validation-mapping/closed-core-5-rows-jcs.json.
  * Runtime consumers (Response Actions intent->validation-tuple resolution)
  * MUST consult this generated const, never a hand-authored copy.
  */

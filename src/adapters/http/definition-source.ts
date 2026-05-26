@@ -25,6 +25,8 @@ interface PublishedRuntimeView {
   appGraphValidationReport?: unknown;
   ui_graph_policies?: unknown;
   uiGraphPolicies?: unknown;
+  component_graph_contexts?: unknown;
+  componentGraphContexts?: unknown;
   locales?: unknown;
   locale_documents?: unknown;
   localeDocuments?: unknown;
@@ -194,6 +196,14 @@ export function extractLayoutHostEvidence(
       runtimeConfigValue(payload.runtimeConfig, 'ui_graph_policies'),
       runtimeConfigValue(payload.runtimeConfig, 'uiGraphPolicies'),
     ]),
+    componentGraphContexts: firstComponentGraphProjectionEvidenceList([
+      payload.component_graph_contexts,
+      payload.componentGraphContexts,
+      runtimeConfigValue(payload.runtime_config, 'component_graph_contexts'),
+      runtimeConfigValue(payload.runtime_config, 'componentGraphContexts'),
+      runtimeConfigValue(payload.runtimeConfig, 'component_graph_contexts'),
+      runtimeConfigValue(payload.runtimeConfig, 'componentGraphContexts'),
+    ]),
   });
 }
 
@@ -285,20 +295,32 @@ function layoutHostEvidenceFromValue(value: unknown): LayoutHostEvidence | null 
       value.uiGraphPolicies,
       value.ui_graph_policies,
     ]),
+    componentGraphContexts: firstComponentGraphProjectionEvidenceList([
+      value.componentGraphContexts,
+      value.component_graph_contexts,
+    ]),
   });
 }
 
 function layoutHostEvidenceFromParts(parts: {
   appGraphReport: LayoutHostEvidence['appGraphReport'] | null;
   uiGraphPolicies: LayoutHostEvidence['uiGraphPolicies'] | null;
+  componentGraphContexts: LayoutHostEvidence['componentGraphContexts'] | null;
 }): LayoutHostEvidence | null {
-  if (!parts.appGraphReport && (!parts.uiGraphPolicies || parts.uiGraphPolicies.length === 0)) {
+  if (
+    !parts.appGraphReport &&
+    (!parts.uiGraphPolicies || parts.uiGraphPolicies.length === 0) &&
+    (!parts.componentGraphContexts || parts.componentGraphContexts.length === 0)
+  ) {
     return null;
   }
   return {
     ...(parts.appGraphReport ? { appGraphReport: parts.appGraphReport } : {}),
     ...(parts.uiGraphPolicies && parts.uiGraphPolicies.length > 0
       ? { uiGraphPolicies: parts.uiGraphPolicies }
+      : {}),
+    ...(parts.componentGraphContexts && parts.componentGraphContexts.length > 0
+      ? { componentGraphContexts: parts.componentGraphContexts }
       : {}),
   };
 }
@@ -370,6 +392,39 @@ function isUiGraphPolicyDocument(value: unknown): boolean {
     value.routePolicies.every((routePolicy) =>
       isRecord(routePolicy) && typeof routePolicy.routeId === 'string',
     )
+  );
+}
+
+function firstComponentGraphProjectionEvidenceList(
+  values: unknown[],
+): LayoutHostEvidence['componentGraphContexts'] | null {
+  for (const value of values) {
+    const entries = componentGraphProjectionEvidenceListFromValue(value);
+    if (entries) {
+      return entries;
+    }
+  }
+  return null;
+}
+
+function componentGraphProjectionEvidenceListFromValue(
+  value: unknown,
+): LayoutHostEvidence['componentGraphContexts'] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const entries = value.filter(isComponentGraphProjectionEvidence);
+  return entries.length > 0 ? entries : null;
+}
+
+function isComponentGraphProjectionEvidence(
+  value: unknown,
+): value is NonNullable<LayoutHostEvidence['componentGraphContexts']>[number] {
+  return (
+    isRecord(value) &&
+    typeof value.schemaId === 'string' &&
+    typeof value.source === 'string' &&
+    isComponentGraphProjectionContext(value.document)
   );
 }
 

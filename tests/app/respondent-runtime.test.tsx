@@ -38,6 +38,7 @@ import {
 } from '../../src/adapters/http/response-action-ledger.ts';
 
 const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
+const COMPONENT_GRAPH_CONTEXT_SCHEMA_ID = 'https://formspec.org/schemas/componentGraphProjectionContext/0.1';
 
 describe('RespondentRuntime identity sign-in', () => {
   let root: Root | undefined;
@@ -201,7 +202,48 @@ describe('RespondentRuntime identity sign-in', () => {
     ]);
   });
 
-  it('passes host-supplied Component graph sidecars into the React renderer as inert metadata', async () => {
+  it('passes host-supplied Component graph sidecars into the React renderer as inert metadata when AppGraph proof matches', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+        hostEvidence: componentGraphHostEvidence(componentGraph),
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    const rootStack = container?.querySelector('.formspec-stack') as HTMLElement | null;
+    const notesField = container?.querySelector('.formspec-field[data-name="notes"]') as HTMLElement | null;
+    expect(rootStack?.dataset.formspecComponentHandle).toBe('respondent');
+    expect(rootStack?.dataset.formspecRoute).toBe('apply');
+    expect(rootStack?.dataset.formspecNodePath).toBe('/root-stack');
+    expect(notesField?.dataset.formspecComponentNodeId).toBe('notes-node');
+    expect(notesField?.dataset.formspecNodePath).toBe('/root-stack/notes');
+    expect(composition.definitionSource.getComponentDocument).toHaveBeenCalledWith(demoSampleForm.url);
+    expect(composition.definitionSource.getComponentGraphContext).toHaveBeenCalledWith(demoSampleForm.url);
+  });
+
+  it('suppresses host-supplied Component graph sidecars without matching AppGraph proof', async () => {
     const componentDocument = componentDocumentForRuntime();
     const componentGraph: ComponentGraphProjectionContext = {
       component: {
@@ -231,13 +273,9 @@ describe('RespondentRuntime identity sign-in', () => {
     await waitForText('Demo Benefits Intake');
 
     const rootStack = container?.querySelector('.formspec-stack') as HTMLElement | null;
-    const notesField = container?.querySelector('.formspec-field[data-name="notes"]') as HTMLElement | null;
-    expect(rootStack?.dataset.formspecComponentHandle).toBe('respondent');
-    expect(rootStack?.dataset.formspecRoute).toBe('apply');
-    expect(rootStack?.dataset.formspecNodePath).toBe('/root-stack');
-    expect(notesField?.dataset.formspecComponentNodeId).toBe('notes-node');
-    expect(notesField?.dataset.formspecNodePath).toBe('/root-stack/notes');
-    expect(composition.definitionSource.getComponentDocument).toHaveBeenCalledWith(demoSampleForm.url);
+    expect(rootStack?.dataset.formspecComponentHandle).toBeUndefined();
+    expect(rootStack?.dataset.formspecRoute).toBeUndefined();
+    expect(rootStack?.dataset.formspecNodePath).toBeUndefined();
     expect(composition.definitionSource.getComponentGraphContext).toHaveBeenCalledWith(demoSampleForm.url);
   });
 
@@ -264,7 +302,7 @@ describe('RespondentRuntime identity sign-in', () => {
       {
         componentDocument,
         componentGraph,
-        hostEvidence,
+        hostEvidence: withComponentGraphEvidence(hostEvidence, componentGraph),
       },
       publicPortalProfile,
     );
@@ -275,6 +313,7 @@ describe('RespondentRuntime identity sign-in', () => {
     const rootStack = container?.querySelector('.formspec-stack') as HTMLElement | null;
     const notesField = container?.querySelector('.formspec-field[data-name="notes"]') as HTMLElement | null;
     expect(rootStack?.dataset.formspecUiPolicySchema).toBe(UI_GRAPH_POLICY_SCHEMA_ID);
+    expect(rootStack?.dataset.formspecComponentHandle).toBe('respondent');
     expect(rootStack?.dataset.formspecUiPolicySource).toBe('host://policy/respondent-ui-policy');
     expect(rootStack?.dataset.formspecUiPolicySurfaceUrl).toBe('https://surfaces.example.test/intake');
     expect(rootStack?.dataset.formspecUiPolicyRoute).toBe('apply');
@@ -309,7 +348,7 @@ describe('RespondentRuntime identity sign-in', () => {
       {
         componentDocument,
         componentGraph,
-        hostEvidence,
+        hostEvidence: withComponentGraphEvidence(hostEvidence, componentGraph),
       },
       publicPortalProfile,
     );
@@ -348,7 +387,7 @@ describe('RespondentRuntime identity sign-in', () => {
       {
         componentDocument,
         componentGraph,
-        hostEvidence,
+        hostEvidence: withComponentGraphEvidence(hostEvidence, componentGraph),
       },
       publicPortalProfile,
     );
@@ -389,7 +428,7 @@ describe('RespondentRuntime identity sign-in', () => {
       {
         componentDocument,
         componentGraph,
-        hostEvidence,
+        hostEvidence: withComponentGraphEvidence(hostEvidence, componentGraph),
       },
       publicPortalProfile,
     );
@@ -427,7 +466,7 @@ describe('RespondentRuntime identity sign-in', () => {
       {
         componentDocument,
         componentGraph,
-        hostEvidence,
+        hostEvidence: withComponentGraphEvidence(hostEvidence, componentGraph),
       },
       publicPortalProfile,
     );
@@ -460,9 +499,23 @@ describe('RespondentRuntime identity sign-in', () => {
           },
           route: 'review',
         },
-        hostEvidence: uiGraphPolicyHostEvidence(undefined, {
-          hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
-        }),
+        hostEvidence: withComponentGraphEvidence(
+          uiGraphPolicyHostEvidence(undefined, {
+            hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
+          }),
+          {
+            component: {
+              handle: 'respondent',
+              url: componentDocument.url,
+              version: componentDocument.version,
+            },
+            surface: {
+              url: 'https://surfaces.example.test/intake',
+              version: '1.0.0',
+            },
+            route: 'review',
+          },
+        ),
       },
       publicPortalProfile,
     );
@@ -495,10 +548,24 @@ describe('RespondentRuntime identity sign-in', () => {
           },
           route: 'apply',
         },
-        hostEvidence: uiGraphPolicyHostEvidence(undefined, {
-          hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
-          targetSurfaceUrl: 'https://surfaces.example.test/review',
-        }),
+        hostEvidence: withComponentGraphEvidence(
+          uiGraphPolicyHostEvidence(undefined, {
+            hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
+            targetSurfaceUrl: 'https://surfaces.example.test/review',
+          }),
+          {
+            component: {
+              handle: 'respondent',
+              url: componentDocument.url,
+              version: componentDocument.version,
+            },
+            surface: {
+              url: 'https://surfaces.example.test/intake',
+              version: '1.0.0',
+            },
+            route: 'apply',
+          },
+        ),
       },
       publicPortalProfile,
     );
@@ -532,9 +599,12 @@ describe('RespondentRuntime identity sign-in', () => {
       {
         componentDocument,
         componentGraph,
-        hostEvidence: uiGraphPolicyHostEvidence(undefined, {
-          hiddenDefinitionRefs: [{ url: demoSampleForm.url, version: '9.9.9' }],
-        }),
+        hostEvidence: withComponentGraphEvidence(
+          uiGraphPolicyHostEvidence(undefined, {
+            hiddenDefinitionRefs: [{ url: demoSampleForm.url, version: '9.9.9' }],
+          }),
+          componentGraph,
+        ),
       },
       publicPortalProfile,
     );
@@ -1755,6 +1825,69 @@ function uiGraphPolicyHostEvidence(
         }],
       },
     }],
+  };
+}
+
+function componentGraphHostEvidence(
+  componentGraph: ComponentGraphProjectionContext,
+  reportSource = 'host://component-graph/respondent',
+): LayoutHostEvidence {
+  return {
+    appGraphReport: {
+      ok: true,
+      summary: {
+        artifacts: 0,
+        loadedArtifacts: 0,
+        schemaFailures: 0,
+        unvalidatedArtifacts: 0,
+        graphErrors: 0,
+        errors: 0,
+        warnings: 0,
+        infos: 0,
+        importedDiagnostics: 0,
+        unsupportedFeatures: 0,
+        skippedPhases: 0,
+      },
+      schemaResults: [],
+      evidenceResults: [{
+        evidenceSlot: 'hostEvidence.componentGraphContexts[0]',
+        schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID,
+        source: reportSource,
+        status: 'completed',
+        ok: true,
+        diagnostics: [],
+      }],
+      diagnostics: [],
+      phases: [
+        { phase: 'schema', status: 'completed' },
+        { phase: 'cross-artifact', status: 'completed' },
+      ],
+    },
+    componentGraphContexts: [{
+      schemaId: COMPONENT_GRAPH_CONTEXT_SCHEMA_ID,
+      source: 'host://component-graph/respondent',
+      document: componentGraph,
+    }],
+  };
+}
+
+function withComponentGraphEvidence(
+  hostEvidence: LayoutHostEvidence,
+  componentGraph: ComponentGraphProjectionContext,
+): LayoutHostEvidence {
+  const componentEvidence = componentGraphHostEvidence(componentGraph);
+  return {
+    ...hostEvidence,
+    appGraphReport: {
+      ...(hostEvidence.appGraphReport ?? componentEvidence.appGraphReport!),
+      ok: hostEvidence.appGraphReport?.ok === true && componentEvidence.appGraphReport?.ok === true,
+      evidenceResults: [
+        ...(hostEvidence.appGraphReport?.evidenceResults ?? []),
+        ...(componentEvidence.appGraphReport?.evidenceResults ?? []),
+      ],
+      phases: hostEvidence.appGraphReport?.phases ?? componentEvidence.appGraphReport?.phases ?? [],
+    },
+    componentGraphContexts: componentEvidence.componentGraphContexts,
   };
 }
 

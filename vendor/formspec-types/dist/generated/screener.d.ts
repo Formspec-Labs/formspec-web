@@ -69,6 +69,95 @@ export interface Availability {
     until?: string;
 }
 /**
+ * Respondent-facing consequences associated with this item, including triggered deadlines, lock-in effects, and external actions such as referrals.
+ */
+export interface ConsequencesMetadata {
+    /**
+     * Plain-language consequence summary.
+     */
+    summary?: string;
+    /**
+     * Whether the action or answer creates an irreversible effect.
+     */
+    irreversible?: boolean;
+    /**
+     * Whether this item becomes locked after submission.
+     */
+    locksAfterSubmit?: boolean;
+    /**
+     * Deadlines or clocks triggered by this item or action.
+     */
+    deadlines?: ConsequenceDeadline[];
+    /**
+     * External actions triggered by this item or action, such as a referral, payment, or mandatory report.
+     */
+    externalActions?: ExternalAction[];
+    /**
+     * Reference to the rule, citation, or authority chain explaining the consequence.
+     */
+    authorityRef?: string;
+}
+/**
+ * One clock or deadline that starts when an answer or submission action occurs.
+ */
+export interface ConsequenceDeadline {
+    label: string;
+    /**
+     * Absolute deadline when known.
+     */
+    due?: string;
+    /**
+     * Relative deadline such as `30 days after submission`.
+     */
+    offset?: string;
+    authorityRef?: string;
+}
+/**
+ * External act that may require its own deliberate consent moment.
+ */
+export interface ExternalAction {
+    /**
+     * Closed core external-action kind. `referral` covers cross-agency referral warnings.
+     */
+    kind: 'referral' | 'payment' | 'credit-check' | 'mandatory-report' | 'identity-verification' | 'other';
+    label: string;
+    description?: string;
+    /**
+     * Agency, system, or recipient that receives the action.
+     */
+    recipient?: string;
+    /**
+     * Whether the renderer should collect a distinct deliberate consent act before this action fires.
+     */
+    consentRequired?: boolean;
+    authorityRef?: string;
+}
+/**
+ * Plain-language purpose and citation metadata explaining why this item is asked or shown.
+ */
+export interface PurposeMetadata {
+    /**
+     * Plain-language reason this item is asked or shown.
+     */
+    summary?: string;
+    /**
+     * Reference to a rule, citation, or PKAF authority chain supporting the question.
+     */
+    authorityRef?: string;
+    /**
+     * References to citations in a References document or external citation registry.
+     */
+    citationRefs?: string[];
+    /**
+     * Plain-language or registry-backed audience names that use this answer.
+     */
+    recipientAudiences?: string[];
+    /**
+     * Plain-language retention statement when known.
+     */
+    retention?: string;
+}
+/**
  * A single stage in the evaluation pipeline. Each phase declares a strategy that determines how its routes are evaluated. Phases execute in declaration order and produce independent results aggregated into the Determination Record.
  *
  * This interface was referenced by `ScreenerDocument`'s JSON-Schema
@@ -88,9 +177,9 @@ export interface Phase {
      */
     description?: string;
     /**
-     * Evaluation strategy. Normative values: 'first-match', 'fan-out', 'score-threshold'. Extension strategies MUST use the 'x-' prefix.
+     * Evaluation strategy. Normative closed-core values: 'first-match', 'fan-out', 'score-threshold'. Module extension strategies follow the canonical `^x-[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$` regex (ADR 0150 §4.5/§4.8).
      */
-    strategy: string;
+    strategy: ('first-match' | 'fan-out' | 'score-threshold') | string;
     /**
      * Routes to evaluate using this phase's strategy.
      */
@@ -142,7 +231,7 @@ export interface Route {
      */
     threshold?: number;
     /**
-     * Route destination URI. May be a Formspec Definition reference (url|version), an external URI, or a named outcome (outcome:name).
+     * Route destination URI. Four categories: (1) a Formspec Definition reference (url|version), (2) an external URI, (3) a named outcome (outcome:name), (4) a Surface route reference (surface:<route-id>) per ADR 0150 §7 — when the bundle includes a Surface document, a Screener terminal-hop with this scheme lands the respondent inside that Surface's route composition. The <route-id> after `surface:` MUST resolve to a route id in the bundle's Surface document.
      */
     target: string;
     /**

@@ -1,5 +1,5 @@
 /** @filedesc Core layout plan types: LayoutNode and PlanContext interfaces. */
-import type { ComponentNodeIdentityRef, ComponentDocument, FormDefinition, FormItem, AppGraphValidationReport, ThemeDocument, UiGraphPolicyDocument } from '@formspec-org/types';
+import type { ComponentNodeIdentityRef, ComponentDocument, ComponentGraphProjectionContext, FormDefinition, FormItem, AppGraphValidationReport, ThemeDocument, UiGraphPolicyDocument } from '@formspec-org/types';
 import type { PresentationBlock } from './theme-resolver.js';
 export type { FormItem };
 /** Generates unique layout node IDs for a single plan invocation. */
@@ -8,23 +8,25 @@ export type NodeIdGenerator = (prefix: string) => string;
 export type ComponentTreeNode = Record<string, unknown> & {
     component: string;
 };
-/** Graph context used by app-graph-aware projection consumers. */
-export interface ComponentGraphProjectionContext {
-    component: ComponentNodeIdentityRef['component'];
-    surface: ComponentNodeIdentityRef['surface'];
-    route: string;
-}
+export type { ComponentGraphProjectionContext };
 /** Host-supplied UI Graph Policy evidence shaped like AppGraphValidator request evidence. */
 export interface UiGraphPolicyProjectionEvidence {
     schemaId: string;
     source: string;
     document: UiGraphPolicyDocument;
 }
+/** Host-supplied Component graph projection context evidence shaped like AppGraphValidator request evidence. */
+export interface ComponentGraphProjectionEvidence {
+    schemaId: string;
+    source: string;
+    document: ComponentGraphProjectionContext;
+}
 /** Projection-only host evidence. Layout does not fetch, validate, or discover these documents. */
 export interface LayoutHostEvidence {
     /** Completed AppGraphValidator report for the supplied host evidence. */
     appGraphReport?: AppGraphValidationReport;
     uiGraphPolicies?: UiGraphPolicyProjectionEvidence[];
+    componentGraphContexts?: ComponentGraphProjectionEvidence[];
 }
 /** Inert route-policy metadata copied from a matching UI Graph Policy document. */
 export interface UiGraphRoutePolicyProjection {

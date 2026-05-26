@@ -139,6 +139,7 @@ interface RespondentRuntimeProps {
 
 const engineReady = initFormspecEngine();
 const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
+const COMPONENT_GRAPH_CONTEXT_SCHEMA_ID = 'https://formspec.org/schemas/componentGraphProjectionContext/0.1';
 
 type RespondentState =
   | { status: 'loading' }
@@ -1066,8 +1067,11 @@ async function createReadyState(
     composition.definitionSource.getComponentGraphContext?.(composition.initialDefinitionUrl),
     composition.definitionSource.getLayoutHostEvidence?.(composition.initialDefinitionUrl),
   ]);
+  const verifiedComponentGraph = componentGraphHasCompletedEvidence({ componentGraph, hostEvidence })
+    ? componentGraph ?? null
+    : null;
 
-  if (uiGraphPolicyHidesDefinitionOnActiveRoute({ definition, componentGraph, hostEvidence })) {
+  if (uiGraphPolicyHidesDefinitionOnActiveRoute({ definition, componentGraph: verifiedComponentGraph, hostEvidence })) {
     throw new HiddenDefinitionRuntimeStateError(definition.url);
   }
 
@@ -1102,7 +1106,7 @@ async function createReadyState(
     status: 'ready',
     definition,
     componentDocument: componentDocument ?? null,
-    componentGraph: componentGraph ?? null,
+    componentGraph: verifiedComponentGraph,
     hostEvidence: hostEvidence ?? null,
     engine,
     draftKey,
@@ -1113,6 +1117,30 @@ async function createReadyState(
     multiPartyState,
     runtimeProfile,
   };
+}
+
+function componentGraphHasCompletedEvidence(input: {
+  componentGraph: ComponentGraphProjectionContext | null | undefined;
+  hostEvidence: LayoutHostEvidence | null | undefined;
+}): boolean {
+  const { componentGraph, hostEvidence } = input;
+  const evidence = hostEvidence?.componentGraphContexts;
+  if (!componentGraph || !Array.isArray(evidence) || evidence.length === 0) {
+    return false;
+  }
+
+  const validatedContextSources = validatedComponentGraphContextEvidenceSources(hostEvidence?.appGraphReport);
+  if (validatedContextSources.size === 0) {
+    return false;
+  }
+
+  return evidence.some((entry, index) => {
+    if (!isComponentGraphProjectionEvidenceLike(entry)) return false;
+    const evidenceSlot = `hostEvidence.componentGraphContexts[${index}]`;
+    if (validatedContextSources.get(evidenceSlot) !== entry.source) return false;
+    if (entry.schemaId !== COMPONENT_GRAPH_CONTEXT_SCHEMA_ID) return false;
+    return componentGraphContextMatches(entry.document, componentGraph);
+  });
 }
 
 function uiGraphPolicyHidesDefinitionOnActiveRoute({
@@ -1201,6 +1229,44 @@ function validatedUiGraphPolicyEvidenceSources(
   return sourcesBySlot;
 }
 
+function validatedComponentGraphContextEvidenceSources(
+  report: LayoutHostEvidence['appGraphReport'] | undefined,
+): Map<string, string> {
+  if (
+    !report ||
+    typeof report !== 'object' ||
+    report.ok !== true ||
+    !Array.isArray(report.phases) ||
+    !Array.isArray(report.evidenceResults)
+  ) {
+    return new Map();
+  }
+
+  const phases = new Map<string, string>();
+  for (const phase of report.phases) {
+    if (!isAppGraphPhaseLike(phase) || phases.has(phase.phase)) {
+      return new Map();
+    }
+    phases.set(phase.phase, phase.status);
+  }
+  if (phases.get('schema') !== 'completed' || phases.get('cross-artifact') !== 'completed') {
+    return new Map();
+  }
+
+  const sourcesBySlot = new Map<string, string>();
+  const seenEvidenceSlots = new Set<string>();
+  for (const result of report.evidenceResults) {
+    if (!isAppGraphEvidenceResultLike(result) || seenEvidenceSlots.has(result.evidenceSlot)) {
+      return new Map();
+    }
+    seenEvidenceSlots.add(result.evidenceSlot);
+    if (isCompletedComponentGraphContextEvidenceResult(result)) {
+      sourcesBySlot.set(result.evidenceSlot, result.source);
+    }
+  }
+  return sourcesBySlot;
+}
+
 function isAppGraphPhaseLike(value: unknown): value is { phase: string; status: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const phase = value as { phase?: unknown; status?: unknown };
@@ -1243,6 +1309,77 @@ function isCompletedUiGraphPolicyEvidenceResult(value: unknown): value is {
     result.ok === true &&
     typeof result.evidenceSlot === 'string' &&
     typeof result.source === 'string';
+}
+
+function isCompletedComponentGraphContextEvidenceResult(value: unknown): value is {
+  evidenceSlot: string;
+  schemaId: typeof COMPONENT_GRAPH_CONTEXT_SCHEMA_ID;
+  source: string;
+  status: 'completed';
+  ok: true;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const result = value as {
+    evidenceSlot?: unknown;
+    schemaId?: unknown;
+    source?: unknown;
+    status?: unknown;
+    ok?: unknown;
+  };
+  return result.schemaId === COMPONENT_GRAPH_CONTEXT_SCHEMA_ID &&
+    result.status === 'completed' &&
+    result.ok === true &&
+    typeof result.evidenceSlot === 'string' &&
+    typeof result.source === 'string';
+}
+
+function isComponentGraphProjectionEvidenceLike(value: unknown): value is {
+  schemaId: string;
+  source: string;
+  document: unknown;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const evidence = value as {
+    schemaId?: unknown;
+    source?: unknown;
+  };
+  return typeof evidence.schemaId === 'string' && typeof evidence.source === 'string' && 'document' in value;
+}
+
+function componentGraphContextMatches(
+  value: unknown,
+  componentGraph: ComponentGraphProjectionContext,
+): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const context = value as {
+    component?: unknown;
+    surface?: unknown;
+    route?: unknown;
+  };
+  if (!context.component || typeof context.component !== 'object' || Array.isArray(context.component)) return false;
+  if (!context.surface || typeof context.surface !== 'object' || Array.isArray(context.surface)) return false;
+  const component = context.component as {
+    handle?: unknown;
+    url?: unknown;
+    version?: unknown;
+  };
+  const surface = context.surface as {
+    url?: unknown;
+    version?: unknown;
+  };
+  return component.handle === componentGraph.component.handle &&
+    optionalStringMatches(component.url, componentGraph.component.url) &&
+    optionalStringMatches(component.version, componentGraph.component.version) &&
+    surface.url === componentGraph.surface.url &&
+    optionalStringMatches(surface.version, componentGraph.surface.version) &&
+    context.route === componentGraph.route;
+}
+
+function optionalStringMatches(left: unknown, right: unknown): boolean {
+  if (left === undefined || right === undefined) {
+    return left === right;
+  }
+  return typeof left === 'string' && left === right;
 }
 
 function isUiGraphPolicyProjectionEvidenceLike(value: unknown): value is {
