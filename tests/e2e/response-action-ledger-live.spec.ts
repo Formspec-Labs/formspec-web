@@ -144,17 +144,10 @@ test.describe.serial('live Response Actions browser ledger path', () => {
     });
     await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
 
-    await page.goto(`/?form=${encodeURIComponent(runtimeDefinitionUrl)}`);
+    const selectedRoute = selectedFormRoute(runtimeDefinitionUrl);
+    await page.goto(selectedRoute);
     await expect(page.getByRole('heading', { name: 'Browser Response Actions Ledger' })).toBeVisible();
-    await expect(page.locator('.formspec-stack')).toHaveAttribute(
-      'data-formspec-component-handle',
-      'respondent',
-    );
-    await expect(page.locator('.formspec-stack')).toHaveAttribute('data-formspec-route', 'apply');
-    await expect(page.locator('.formspec-stack')).toHaveAttribute(
-      'data-formspec-ui-policy-route',
-      'apply',
-    );
+    await expectApplyRouteMetadata(page);
     await expect(page.locator('.formspec-field[data-name="name"]')).toHaveAttribute(
       'data-formspec-component-node-id',
       'name-node',
@@ -163,6 +156,7 @@ test.describe.serial('live Response Actions browser ledger path', () => {
     await page.getByRole('button', { name: 'Submit' }).click();
 
     await expect(page.getByRole('heading', { name: 'Submission received' })).toBeVisible();
+    expect(pathAndSearch(page)).toBe(selectedRoute);
     await expect.poll(() => captures.appends.length, { timeout: 30_000 }).toBe(1);
     expect(captures.sessions).toHaveLength(1);
     expect(captures.capabilities).toHaveLength(1);
@@ -233,6 +227,46 @@ test.describe.serial('live Response Actions browser ledger path', () => {
       status: 'anchored',
     });
     expectTrellisBackedReceipt(append.response);
+  });
+
+  test('public RespondentRuntime does not infer a route transition from denied Response Action ledger work', async ({
+    page,
+    request,
+  }) => {
+    if (!liveServerBaseUrl) {
+      test.fail(true, 'FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_URL is required');
+      return;
+    }
+    const runtimeDefinitionUrl = `${liveServerBaseUrl}/runtime/forms/${SELECTED_FORM_ID}`;
+    await publishDemoIntake(request, {
+      formId: SELECTED_FORM_ID,
+      serverBaseUrl: liveServerBaseUrl,
+      runtimeDefinitionUrl,
+      title: 'Browser Response Actions Route Guard',
+    });
+    const captures = await routeLiveServerThroughTestBff(page, request, {
+      serverBaseUrl: liveServerBaseUrl,
+      denyCapability: true,
+    });
+    await routeRuntimeConfig(page, { serverBaseUrl: liveServerBaseUrl });
+
+    const selectedRoute = selectedFormRoute(runtimeDefinitionUrl);
+    await page.goto(selectedRoute);
+    await expect(page.getByRole('heading', { name: 'Browser Response Actions Route Guard' })).toBeVisible();
+    await expectApplyRouteMetadata(page);
+
+    await page.getByLabel('Name').fill('Ada Lovelace');
+    await page.getByRole('button', { name: 'Submit' }).click();
+    await expect.poll(() => captures.capabilities.length, { timeout: 30_000 }).toBe(1);
+    await expect(page.getByRole('heading', { name: 'Submission received' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    expect(pathAndSearch(page)).toBe(selectedRoute);
+
+    expect(captures.sessions).toHaveLength(1);
+    expect(captures.drafts.length).toBeGreaterThan(0);
+    expect(captures.submits).toHaveLength(1);
+    expect(captures.capabilities).toHaveLength(1);
+    expect(captures.appends).toHaveLength(0);
   });
 
   test('public RespondentRuntime rejects hidden route-local Definition state before draft and action work', async ({
@@ -388,6 +422,27 @@ async function routeRuntimeConfig(
   });
 }
 
+function selectedFormRoute(runtimeDefinitionUrl: string): string {
+  return `/?form=${encodeURIComponent(runtimeDefinitionUrl)}`;
+}
+
+function pathAndSearch(page: Page): string {
+  const url = new URL(page.url());
+  return `${url.pathname}${url.search}`;
+}
+
+async function expectApplyRouteMetadata(page: Page): Promise<void> {
+  await expect(page.locator('.formspec-stack')).toHaveAttribute(
+    'data-formspec-component-handle',
+    'respondent',
+  );
+  await expect(page.locator('.formspec-stack')).toHaveAttribute('data-formspec-route', 'apply');
+  await expect(page.locator('.formspec-stack')).toHaveAttribute(
+    'data-formspec-ui-policy-route',
+    'apply',
+  );
+}
+
 function runtimeOwnershipSidecars(
   definition: FormDefinition,
   options: { hiddenOnActiveRoute: boolean },
@@ -538,7 +593,7 @@ function layoutHostEvidenceForRuntime(
 async function routeLiveServerThroughTestBff(
   page: Page,
   request: APIRequestContext,
-  input: { serverBaseUrl: string },
+  input: { serverBaseUrl: string; denyCapability?: boolean },
 ): Promise<LiveRouteCaptures> {
   const captures: LiveRouteCaptures = {
     capabilities: [],
@@ -552,6 +607,21 @@ async function routeLiveServerThroughTestBff(
     const url = new URL(route.request().url());
     if (url.pathname === TEST_CAPABILITY_PATH) {
       const body = postJson<CapabilityCommandRequest>(route);
+      if (input.denyCapability) {
+        const response = { error: 'capability denied by test route' };
+        captures.capabilities.push({
+          url: route.request().url(),
+          body,
+          headers: normalizedHeaders(route.request().headers()),
+          response,
+        });
+        await route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify(response),
+        });
+        return;
+      }
       const sessionId = sessionIdFromLedgerScope(body.appendCommand.ledgerScope);
       const response = await request.post(
         `${input.serverBaseUrl}/runtime/forms/${body.formId}/response-actions/ledger/capability`,
