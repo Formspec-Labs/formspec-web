@@ -5,11 +5,15 @@ status: complete
 spike: FW-0115
 adr: thoughts/adr/0155-multi-party-intake.md (§8)
 sources:
-  - src/composition/spike/multi-party-commit-A/
-  - src/composition/spike/multi-party-commit-B/
-  - tests/composition/spike/multi-party-commit-A.test.ts
-  - tests/composition/spike/multi-party-commit-B.test.ts
-  - scripts/spike-multi-party-commit-measure.mjs
+  # All four spike artifacts have been deleted (see §4 revised note).
+  # Listed here for historical provenance only; the measurements in §2
+  # survive in this report. Git history holds the deleted scaffolds for
+  # any future re-measurement against new fixtures.
+  - src/composition/spike/multi-party-commit-A/ (deleted)
+  - src/composition/spike/multi-party-commit-B/ (deleted)
+  - tests/composition/spike/multi-party-commit-A.test.ts (deleted)
+  - tests/composition/spike/multi-party-commit-B.test.ts (deleted)
+  - scripts/spike-multi-party-commit-measure.mjs (deleted)
 ---
 
 # Multi-Party Commitment-Protocol Spike — Observation Report
@@ -177,28 +181,72 @@ No third shape emerged during the spike. §8.7's escape hatch does not fire.
 
 ## 4. What lands
 
-Per ADR-0155 §8.7:
+**Revised 2026-05-25 (orphan-port cleanup).** The original close-out moved
+Shape A to `src/ports/multi-party-commit.ts` as a locked port and retained
+its spike adapter + F1..F4 test as the working reference. Subsequent
+verification found that no production code consumed the port: FW-0061
+shipped at commit `fb142c4` ~11 hours BEFORE the port lock at `a2f340f`,
+using the original FW-0050 §3.2 'extend three existing ports' path
+(`DraftStore.partyRef` extension + hand-rolled FSM in
+`src/app/respondent-flow.ts`). The locked port was orphan code.
 
-- The winning shape (Shape A — 2PC explicit states) moves to
-  `src/ports/multi-party-commit.ts` as the locked port.
-- The losing shape (Shape B — eventual-consistency) is deleted
-  (`src/composition/spike/multi-party-commit-B/` and its test).
-- **Shape A's spike directory is RETAINED** at
-  `src/composition/spike/multi-party-commit-A/` (`in-memory.ts`,
-  `scenario.ts`, plus the matching test under `tests/composition/spike/`)
-  as the in-memory reference adapter for the locked port — until
-  FW-0061 ships the production adapter. The locked port file's
-  doc-comment header pins this rationale so future agents don't
-  delete it as "spike scaffold."
-- The local `port.ts` inside `multi-party-commit-A/` was deleted
-  when the locked port shipped at `src/ports/multi-party-commit.ts`;
-  the adapter and scenario re-point at the locked port.
-- The measurement script
-  (`scripts/spike-multi-party-commit-measure.mjs`) was deleted —
-  the §8.5 measurement was one-shot and is preserved in this report.
+Per DEVELOPMENT-PHILOSOPHY.md "throw away the loser" and "no half-
+implementations": the locked port file, the Shape A adapter + scenario,
+and the F1..F4 test were deleted. What survives:
 
-ADR-0155 §8 is updated with §8.10 recording the verdict + this
-observation report's path.
+- This observation report (`§2` measurements + `§3` verdict + `§5` insight).
+- ADR-0155 §8.10 verdict prose (corrected to record "no new port minted").
+- FW-0050 §3.2 RESOLVED note (corrected to record that the original
+  three-port proposal won unconditionally).
+
+What was deleted (in addition to the original Shape B + measurement-runner
+cleanup at commit `a2f340f`):
+
+- `src/ports/multi-party-commit.ts` (the orphan locked port).
+- `src/composition/spike/multi-party-commit-A/{in-memory.ts,scenario.ts}`.
+- `tests/composition/spike/multi-party-commit-A.test.ts`.
+- The empty parent directories (`src/composition/spike/`,
+  `tests/composition/spike/`).
+
+The §8.5 measurement script was already deleted at the original close-out
+and remains deleted — the measurements survive in §2 of this report.
+
+## 5. Architectural insight for future coordination-port shapes
+
+The spike tested two new-port shapes (A — 2PC explicit states; B —
+eventual-consistency with explicit GC) against the four §8.4 fixtures.
+Neither displaced the FW-0050 §3.2 "extend three existing ports" approach
+that FW-0061 actually shipped on — sequential signer progress over a
+`DraftStore.partyRef` extension, with the FSM hand-rolled in the consumer
+(`src/app/respondent-flow.ts`). The shapes were measured against
+intake-tier multi-party coordination where parties collect independent
+single-signatures (one COSE_Sign1 per party, no cryptographic dependency
+between signers); that case does not need a new coordination port.
+
+A 2PC-shaped port becomes load-bearing if/when the stack adopts true
+multi-party cryptographic schemes — threshold signatures (FROST,
+threshold ECDSA, MLS), distributed key generation (DKG), or general
+multi-party computation. Those families structurally require bounded
+coordination rounds, explicit prepare/commit phases with transcript
+binding, cascade-on-message-change, and live-session timeouts at the
+protocol layer because partial state is meaningful (one party's
+contribution depends on another's commitments).
+
+**Caveat — preserve the family, not the specific shape.** Shape A's
+specific API (`addParty`/`amend`/`prepare`/`commit`/`abort`/`snapshot`/
+`tickClock` with `PreparationWindow`) is one expression of the 2PC
+family, frozen against the spike's §8.4 fixtures. A future FROST or
+threshold-ECDSA adapter would need different round semantics (multi-round
+nonce commitments before signature shares), different transcript binding
+(every party-contribution hashed into the round transcript), and a
+different abort taxonomy (round-timeout vs adversarial-abort vs
+key-share-loss). Retaining Shape A's exact TypeScript port file as
+"future inventory" would be preserving a guess — the family is shared;
+the port shape is not.
+
+The §2.1 / §2.2 / §2.3 measurements (port-method calls, consumer-LOC,
+gap-count) remain the prior art for any future shape decision. The code
+is gone; the measurements survive in this report.
 
 ## 5. Honest deferrals not in the spike's scope
 
