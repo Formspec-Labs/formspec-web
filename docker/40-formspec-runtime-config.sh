@@ -15,6 +15,7 @@ cat > "$target" <<EOF
 window.__FORMSPEC_RUNTIME_CONFIG__ = {
   profileName: $(json_string "${FORMSPEC_WEB_PROFILE:-}"),
   formspecServerUrl: $(json_string "${FORMSPEC_WEB_SERVER_URL:-}"),
+  responseActionLedgerCapabilityUrl: $(json_string "${FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL:-}"),
   oidcIssuer: $(json_string "${FORMSPEC_WEB_OIDC_ISSUER:-}"),
   oidcClientId: $(json_string "${FORMSPEC_WEB_OIDC_CLIENT_ID:-}"),
   oidcRedirectUri: $(json_string "${FORMSPEC_WEB_OIDC_REDIRECT_URI:-}"),

@@ -5,6 +5,10 @@ import {
   HttpAnonymousIdentityProvider,
 } from '../adapters/http/anonymous-session.ts';
 import {
+  createHttpResponseActionLedgerCapabilityProvider,
+  createHttpResponseActionLedgerInvokerFactory,
+} from '../adapters/http/response-action-ledger.ts';
+import {
   AttachmentRequirementExtractor,
   CompositeFormRuntimePolicyExtractor,
   EmbeddableExtractor,
@@ -79,6 +83,20 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     ...httpConfig,
     anonymousSessions,
   });
+  const responseActionCapabilityUrl =
+    config.referenceAdapters?.formspecStack?.responseActionLedgerCapabilityUrl;
+  const responseActionInvoker = responseActionCapabilityUrl
+    ? createHttpResponseActionLedgerInvokerFactory({
+        endpoint: serverUrl,
+        tenantBinding: config.tenantBinding,
+        anonymousSessions,
+        capabilityProvider: createHttpResponseActionLedgerCapabilityProvider({
+          endpoint: responseActionCapabilityUrl,
+          tenantBinding: config.tenantBinding,
+          accessToken: identityBinding.accessToken,
+        }),
+      })
+    : undefined;
 
   const composition: Composition = {
     mode: 'production',
@@ -100,6 +118,7 @@ export function createDefaultComposition(config: FormspecWebConfig = departmentA
     reviewThreadStore: unavailableReviewThreadStore(),
     safeAddressDirectory: unavailableSafeAddressDirectory(),
     lifecycleActionClient: unavailableLifecycleActionClient(),
+    ...(responseActionInvoker ? { responseActionInvoker } : {}),
     // ADR-0011 §Rationale #1 ("reference deployments must be honest"):
     // production composition wires the unavailable* sentinels and declares
     // `unavailable` to match. Adopters who need the capability swap BOTH —

@@ -75,6 +75,25 @@ describe('composition root smoke', () => {
     );
   });
 
+  it('createDefaultComposition wires the response action invoker through a BFF capability URL', () => {
+    const c = createDefaultComposition({
+      ...publicPortalProfile,
+      ports: referenceHttpDataPorts(publicPortalProfile.ports),
+      referenceAdapters: {
+        formspecStack: {
+          ...publicPortalProfile.referenceAdapters?.formspecStack,
+          tenantHeaderDialect: 'formspec',
+          formspecServerUrl: 'https://formspec-server.example.test',
+          responseActionLedgerCapabilityUrl:
+            'https://formspec-bff.example.test/response-actions/ledger/capability',
+        },
+      },
+    });
+
+    expect(c.mode).toBe('production');
+    expect(c.responseActionInvoker).toBeDefined();
+  });
+
   it('production composition does not expose empty respondent-place stubs', async () => {
     const c = createDefaultComposition({
       ...departmentAppProfile,

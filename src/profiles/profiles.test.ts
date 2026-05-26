@@ -41,6 +41,8 @@ describe('reference profiles', () => {
       VITE_FORMSPEC_WEB_PROFILE: 'publicPortal',
       VITE_FORMSPEC_WEB_SERVER_URL: 'http://dev.example.test/formspec',
       FORMSPEC_WEB_SERVER_URL: 'https://runtime.example.test/formspec',
+      FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL:
+        'https://runtime.example.test/bff/response-actions/ledger/capability',
       FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH: '/runtime/magic-link/callback',
       FORMSPEC_WEB_OIDC_ISSUER: 'https://runtime-idp.example.test',
       FORMSPEC_WEB_OIDC_CLIENT_ID: 'runtime-client',
@@ -57,6 +59,9 @@ describe('reference profiles', () => {
     expect(activeConfig.identity.magicLink?.callbackPath).toBe('/runtime/magic-link/callback');
     expect(activeConfig.referenceAdapters?.formspecStack?.formspecServerUrl).toBe(
       'https://runtime.example.test/formspec',
+    );
+    expect(activeConfig.referenceAdapters?.formspecStack?.responseActionLedgerCapabilityUrl).toBe(
+      'https://runtime.example.test/bff/response-actions/ledger/capability',
     );
     expect(activeConfig.ports).toMatchObject({
       definitionSource: 'reference-http',

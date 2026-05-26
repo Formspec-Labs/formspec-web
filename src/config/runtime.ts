@@ -12,6 +12,10 @@ type RuntimeEnvRecord = Record<string, string | boolean | undefined>;
 const runtimeEnvMap = {
   profileName: ['FORMSPEC_WEB_PROFILE', 'VITE_FORMSPEC_WEB_PROFILE'],
   formspecServerUrl: ['FORMSPEC_WEB_SERVER_URL', 'VITE_FORMSPEC_WEB_SERVER_URL'],
+  responseActionLedgerCapabilityUrl: [
+    'FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL',
+    'VITE_FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL',
+  ],
   oidcIssuer: ['FORMSPEC_WEB_OIDC_ISSUER', 'VITE_FORMSPEC_WEB_OIDC_ISSUER'],
   oidcClientId: ['FORMSPEC_WEB_OIDC_CLIENT_ID', 'VITE_FORMSPEC_WEB_OIDC_CLIENT_ID'],
   oidcRedirectUri: ['FORMSPEC_WEB_OIDC_REDIRECT_URI', 'VITE_FORMSPEC_WEB_OIDC_REDIRECT_URI'],
@@ -71,6 +75,7 @@ function applyRuntimeOverrides(
   );
   const hasReferenceRuntimeOverride =
     runtimeConfig.formspecServerUrl ||
+    runtimeConfig.responseActionLedgerCapabilityUrl ||
     runtimeConfig.magicLinkCallbackPath ||
     runtimeConfig.oidcIssuer ||
     runtimeConfig.oidcClientId ||
@@ -82,6 +87,9 @@ function applyRuntimeOverrides(
           ...referenceAdapter,
           tenantHeaderDialect: referenceAdapter?.tenantHeaderDialect ?? 'formspec',
           formspecServerUrl: runtimeConfig.formspecServerUrl ?? referenceAdapter?.formspecServerUrl,
+          responseActionLedgerCapabilityUrl:
+            runtimeConfig.responseActionLedgerCapabilityUrl
+            ?? referenceAdapter?.responseActionLedgerCapabilityUrl,
           oidc,
           magicLinkCallbackPath:
             runtimeConfig.magicLinkCallbackPath ?? referenceAdapter?.magicLinkCallbackPath,

@@ -14,7 +14,9 @@ The portable config names the profile, tenant binding, identity policy, brand
 tokens, and port composition choices. Stack-specific URLs, tenant-header
 dialects, OIDC client endpoints, and magic-link callback paths live under
 `referenceAdapters.formspecStack` so those details do not leak into the portable
-port contracts.
+port contracts. The Response Actions Ledger capability URL is also stack
+specific: it must point at a trusted BFF endpoint that mints per-command append
+capabilities server-side, never at a browser-exposed mint-secret flow.
 
 Production static bundles load `/formspec-runtime-config.js` before React
 bootstraps. The Docker/nginx image writes that file from deploy-time
@@ -35,6 +37,7 @@ Supported runtime variables:
 | --- | --- | --- |
 | `profileName` | `FORMSPEC_WEB_PROFILE` | `VITE_FORMSPEC_WEB_PROFILE` |
 | `formspecServerUrl` | `FORMSPEC_WEB_SERVER_URL` | `VITE_FORMSPEC_WEB_SERVER_URL` |
+| `responseActionLedgerCapabilityUrl` | `FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` | `VITE_FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` |
 | `oidcIssuer` | `FORMSPEC_WEB_OIDC_ISSUER` | `VITE_FORMSPEC_WEB_OIDC_ISSUER` |
 | `oidcClientId` | `FORMSPEC_WEB_OIDC_CLIENT_ID` | `VITE_FORMSPEC_WEB_OIDC_CLIENT_ID` |
 | `oidcRedirectUri` | `FORMSPEC_WEB_OIDC_REDIRECT_URI` | `VITE_FORMSPEC_WEB_OIDC_REDIRECT_URI` |

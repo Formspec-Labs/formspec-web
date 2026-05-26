@@ -24,7 +24,7 @@ import {
   defaultFormIdResolver,
   type FormIdResolver,
 } from './form-id.ts';
-import type { FetchLike } from './http-client.ts';
+import type { AccessTokenProvider, FetchLike } from './http-client.ts';
 
 export const RESPONSE_ACTION_LEDGER_APPEND_ROUTE =
   '/runtime/response-actions/ledger/session-op-batches';
@@ -132,6 +132,26 @@ export type ResponseActionLedgerCapabilityProvider = (
   request: ResponseActionLedgerCapabilityRequest,
 ) => string | Promise<string>;
 
+export interface HttpResponseActionLedgerCapabilityProviderOptions {
+  endpoint: string;
+  tenantBinding?: TenantBindingConfig;
+  accessToken?: string | AccessTokenProvider;
+  fetchImpl?: FetchLike;
+}
+
+export interface ResponseActionLedgerCapabilityProviderCommandRequest {
+  formId: string;
+  runtimeDefinitionUrl: string;
+  definitionVersion?: string;
+  anonymousSessionToken: string;
+  appendCommand: ResponseActionSessionOpBatchAppendCommand;
+}
+
+export interface ResponseActionLedgerCapabilityResponse {
+  ledgerScope?: string;
+  capability: string;
+}
+
 export interface HttpResponseActionLedgerInvokerOptions {
   endpoint: string;
   tenantBinding?: TenantBindingConfig;
@@ -210,6 +230,44 @@ export function createHttpResponseActionLedgerInvokerFactory(
         invocation: ledgerInvocation.invocation,
       } satisfies ResponseActionInvokerResult<SubmitResult>;
     };
+  };
+}
+
+export function createHttpResponseActionLedgerCapabilityProvider(
+  options: HttpResponseActionLedgerCapabilityProviderOptions,
+): ResponseActionLedgerCapabilityProvider {
+  if (!options.endpoint.trim()) {
+    throw new Error('Response Actions Ledger capability endpoint is required.');
+  }
+
+  return async (request) => {
+    const fetchImpl = fetchFor(options.fetchImpl);
+    const headers = new Headers(tenantHeaders(options.tenantBinding));
+    headers.set('accept', 'application/json');
+    headers.set('content-type', 'application/json');
+    const accessToken = await resolveAccessToken(options.accessToken);
+    if (accessToken) {
+      headers.set('authorization', `Bearer ${accessToken}`);
+    }
+
+    const body: ResponseActionLedgerCapabilityProviderCommandRequest = definedProps({
+      formId: request.formId,
+      runtimeDefinitionUrl: request.context.runtimeDefinitionUrl,
+      definitionVersion: request.context.definition.version,
+      anonymousSessionToken: request.anonymousSession.sessionToken,
+      appendCommand: request.appendCommand,
+    });
+    const response = await fetchImpl(options.endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Response Actions Ledger capability request failed (${response.status}): ${await problemDetail(response)}`,
+      );
+    }
+    return parseCapabilityResponse(await response.json(), request.appendCommand.ledgerScope);
   };
 }
 
@@ -382,6 +440,30 @@ function parseAnchoredReceipt(payload: unknown): ResponseActionLedgerAppendRecei
   };
 }
 
+function parseCapabilityResponse(payload: unknown, ledgerScope: string): string {
+  if (!isRecord(payload)) {
+    throw new Error('Response Actions Ledger capability response must be a JSON object.');
+  }
+  const capability = payload.capability;
+  if (
+    typeof capability !== 'string'
+    || capability.length === 0
+    || capability.trim() !== capability
+  ) {
+    throw new Error('Response Actions Ledger capability must be a non-empty trimmed string.');
+  }
+  const responseLedgerScope = payload.ledgerScope;
+  if (responseLedgerScope !== undefined) {
+    if (typeof responseLedgerScope !== 'string' || responseLedgerScope.length === 0) {
+      throw new Error('Response Actions Ledger capability response has invalid ledgerScope.');
+    }
+    if (responseLedgerScope !== ledgerScope) {
+      throw new Error('Response Actions Ledger capability response ledgerScope mismatch.');
+    }
+  }
+  return capability;
+}
+
 export async function computeJcsSha256Digest(value: unknown): Promise<string> {
   const text = canonicalize(value);
   if (typeof text !== 'string') {
@@ -455,6 +537,12 @@ function fetchFor(fetchImpl?: FetchLike): FetchLike {
     throw new Error('Response Actions Ledger HTTP adapter requires a fetch implementation.');
   }
   return globalThis.fetch.bind(globalThis);
+}
+
+async function resolveAccessToken(
+  accessToken: string | AccessTokenProvider | undefined,
+): Promise<string | undefined> {
+  return typeof accessToken === 'function' ? accessToken() : accessToken;
 }
 
 function tenantHeaders(binding?: TenantBindingConfig): HeadersInit {

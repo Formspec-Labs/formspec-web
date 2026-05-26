@@ -60,6 +60,7 @@ export interface PortCompositionConfig {
 
 export interface FormspecStackReferenceAdapterConfig {
   formspecServerUrl?: string;
+  responseActionLedgerCapabilityUrl?: string;
   tenantHeaderDialect: 'formspec';
   oidc?: OidcClientConfig;
   magicLinkCallbackPath?: string;
@@ -81,6 +82,7 @@ export interface FormspecWebConfig {
 export interface RuntimeConfig {
   profileName?: string;
   formspecServerUrl?: string;
+  responseActionLedgerCapabilityUrl?: string;
   oidcIssuer?: string;
   oidcClientId?: string;
   oidcRedirectUri?: string;
