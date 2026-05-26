@@ -489,3 +489,25 @@ Verification:
 
 - `git diff --check -- thoughts/adr/0066-stack-amendment-and-supersession.md thoughts/adr/0158-record-lifecycle-three-act-mapping.md` (in `../formspec-stack`)
 - `git diff --check -- formspec-web/thoughts/plans/2026-05-25-14-item-maximum-parallel-dispatch.md`
+
+### 2026-05-25 — FW-0115 orphan-port discovery and cleanup (post-Wave-2 closure pass)
+
+The most architecturally consequential event of the dispatch went unrecorded until this entry. The §9 ledger captured every other review-loop closure but skipped this one. AR-D's F4 flagged the omission; this entry closes it.
+
+**What happened.** FW-0115 (multi-party commitment-protocol Spike-and-Observe) was dispatched in Wave-2 parallel with FW-0061 (multi-party submission build). The spike returned a Shape A verdict; the new port was locked at `formspec-web/src/ports/multi-party-commit.ts` in commit `a2f340f`. An 8-agent verification swarm CR4, run after both Wave-2 paths landed, discovered the port had **no production consumer**: FW-0061 had shipped roughly 11 hours earlier at commit `fb142c4` on the FW-0050 §3.2 "extend three existing ports" path (`DraftStore.partyRef` extension + per-party `IdentityClaim`s + merged-Response `SubmitTransport`, with the FSM hand-rolled in `src/app/respondent-flow.ts`). Both paths shipped under independent reviewer-loop closure; neither saw the other's verdict before landing.
+
+**Closure pass (this commit train).** Seven commits ran the cleanup along the seam:
+
+- `970e618` — delete orphan multi-party-commit port + spike scaffold.
+- `f32e5fb` — observation report §5 records the architectural insight that survives the deletion (2PC-shape becomes load-bearing if/when threshold sigs / DKG / MLS / MPC enter the stack; the measurements survive even though the code does not).
+- `26516bf` — FW-0050 §3.2 + §9 record that the original "extend three existing ports" proposal won unconditionally.
+- `5791052` — formspec-web `PLANNING.md` FW-0115 row closed.
+- `16c090e` — original FW-0117 row filed (subsequently reshaped — see Tier 2 entries below).
+- `e783d62` — ADR-0155 §8.10 verdict + adjacent prose corrected post-orphan-discovery.
+
+**Lessons learned (lifted into doctrine).** Bad architecture compiles: a spike port can pass every fixture and satisfy every observation criterion and still be orphaned the moment it lands if the consumer it was meant to serve has converged elsewhere during the spike. Doctrine amendments:
+
+- `DEVELOPMENT-PHILOSOPHY.md` Spike-and-Observe — step 5 added (verify the consumer of the chosen shape still exists and still expects it; if not, verdict is NO_PORT).
+- Stack-root `CLAUDE.md` — behavioral interrupt added: "Dispatch a spike in parallel with the consumer that will fork on its verdict."
+
+**Post-cleanup architecture review pass.** Four independent reviews (AR-A, AR-B, AR-C, AR-D) ran the full closure pass: AR-A approved the orphan-port closure (2 reshape); AR-B approved the ADR-0155 post-deletion state (1 concern); AR-C reconsidered FW-0117 (2 blocker + 3 concern — produced the tenancy-boundary reshape now landed as the FW-0034 + FW-0038 cross-row touch notes + stack-root PLN-0431); AR-D reconsidered the session arc meta with 1 blocker doctrine amendment + 5 reshape items (closed by this very entry and the Tier 1 doctrine amendments above).
