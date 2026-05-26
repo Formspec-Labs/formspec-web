@@ -1,6 +1,6 @@
 # FW-0048 Coercion-aware signing — Research Brief
 
-**Status:** Sketch / research artifact. Not a design proposal. Seeds the brainstorm conversation.
+**Status:** Sketch / research artifact — **historical only** (parent FW-0048 / stack-root ADR-0156 withdrawn 2026-05-26). Not a design proposal or forward commitment.
 **FW row:** [FW-0048 in `PLANNING.md:566`](../../PLANNING.md) (design); paired build row [FW-0059 at `PLANNING.md:673`](../../PLANNING.md).
 **Journey:** [J-027 in `JOURNEYS.md:526`](../../JOURNEYS.md).
 **Anti-patterns:** [AP-014 in `JOURNEYS.md:131`](../../JOURNEYS.md), [AP-021 in `JOURNEYS.md:173`](../../JOURNEYS.md).
@@ -32,7 +32,7 @@ The hardest finding: **the user-visible surface is the load-bearing constraint, 
 |---|---|---|
 | EXT-5 (queued) — ledger event taxonomy expansion | [`thoughts/specs/2026-05-22-upstream-extension-queue.md:73`](../specs/2026-05-22-upstream-extension-queue.md) | Event `submission.duress-signaled` enumerated as a Phase-1 addition to `respondent-ledger-event.schema.json`. Carries explicit annotation: "with private-sidecar discipline per `trellis-operational-companion.md` §13 Disclosure Manifest". |
 | `respondent-ledger-spec.md` §6.7 (disclosure tier vs assurance) | [`formspec/specs/audit/respondent-ledger-spec.md:413`](../../../formspec/specs/audit/respondent-ledger-spec.md) | Disclosure tier (`anonymous` / `pseudonymous` / `identified` / `public`) is independent of assurance. Suggests a tier-aware reading of duress signals (an `anonymous` tier event still carries duress) but no duress-specific tier today. |
-| `respondent-ledger-spec.md` §6.5 (source) | [`formspec/specs/audit/respondent-ledger-spec.md:339`](../../../formspec/specs/audit/respondent-ledger-spec.md) | `source.kind` enumerates `web | mobile | api | import | system-job | unknown`. **No `coercion-context` channel modifier.** The duress signal cannot ride on the source object today. |
+| `respondent-ledger-spec.md` §6.5 (source) | [`formspec/specs/audit/respondent-ledger-spec.md:339`](../../../formspec/specs/audit/respondent-ledger-spec.md) | `source.kind` enumerates `web | mobile | api | import | system-job | unknown`. **No`coercion-context` channel modifier.** The duress signal cannot ride on the source object today. |
 | `respondent-ledger-spec.md` §6.8 (authored signatures vs recorded attestations) | [`formspec/specs/audit/respondent-ledger-spec.md:428`](../../../formspec/specs/audit/respondent-ledger-spec.md) | Ledger records lifecycle history; does NOT replace authored signature semantics. **Implies the duress mark is a ledger event, not a signature modifier.** The signature stays valid (so the receipt is not silently broken); the ledger records that the signature was issued under duress. |
 | EXT-3 (queued) — `capacity` on AuthoredSignature | [`thoughts/specs/2026-05-22-upstream-extension-queue.md:47`](../specs/2026-05-22-upstream-extension-queue.md) | `capacity` enum: `self | poa | guardian | executor | parent | licensed-professional | corporate-officer | ai-agent`. **`coerced-self` is NOT in the enum** and should not be added there — capacity is a legal-role declaration the principal owns; duress is a signal *about* the act of signing, not a role-of-signer. Putting duress on the signature surface invites the coercer to read it. |
 

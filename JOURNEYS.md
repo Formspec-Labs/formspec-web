@@ -534,6 +534,7 @@ The anti-pattern shape is intentionally complaint-flavored ("MUST NOT," "SHOULD 
 - **Surfaces:** *(no archive mockup — surface designed from scratch with extreme care)*.
 - **Backs:** (TBD)
 - **Note:** The hardest journey in the corpus and the one most builders refuse to engage. It is also the one that distinguishes a serious rights-impacting form platform from a fancier Jotform. The threat model is real, the population is real, and the primitive — a hidden, structured, form-level signal that the submission may not be freely given — is small. The cowardly move is to call it out-of-scope.
+- **Planning (2026-05-26):** [FW-0048](../PLANNING.md) design row and stack-root [ADR-0156](../../../thoughts/adr/0156-coercion-aware-signing-pipeline.md) withdrawn — the particular design framing retired, not the person-need. Re-file from observed adopter requirements.
 - **Status:** *open*
 
 ## J-028 — "Warn me before my answer triggers a referral to a different agency"

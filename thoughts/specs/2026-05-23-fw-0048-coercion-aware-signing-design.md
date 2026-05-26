@@ -1,7 +1,7 @@
 # FW-0048 — Coercion-aware signing: design proposal
 
 **Date:** 2026-05-23
-**Status:** PROPOSAL (not ratified). Owner pushback expected during review; framing decisions Q1–Q4 are open until accepted. **Safety-critical row** — review discipline strict.
+**Status:** **WITHDRAWN 2026-05-26** with stack-root [ADR-0156 (coercion-aware-signing-pipeline)](../../../thoughts/adr/0156-coercion-aware-signing-pipeline.md) and paired build row FW-0059. Body preserved as historical context only; not a forward commitment. See `feedback_survivor_safety_framing_trap` for the discipline this confirms.
 **Row:** [FW-0048 in `PLANNING.md:566`](../../PLANNING.md) (design); paired build row [FW-0059 in `PLANNING.md:673`](../../PLANNING.md).
 **Journey:** [J-027 in `JOURNEYS.md:526`](../../JOURNEYS.md).
 **Anti-patterns:** [AP-014 in `JOURNEYS.md:131`](../../JOURNEYS.md), [AP-021 in `JOURNEYS.md:173`](../../JOURNEYS.md).
@@ -53,14 +53,17 @@ Three coercion-class boundaries:
 Each scenario gives: the setup, what the duress signal must achieve, what this design's posture provides.
 
 **2.3.1 Domestic-abuse POA.** Survivor at home, abuser present, financial POA on a bank's intake portal. Abuser observes the screen.
+
 - **Required:** duress signal that fires invisibly, produces a byte-identical receipt, routes to the bank's safety team (not visible in the public ledger / receipt the abuser sees).
 - **Design posture:** §3 detection primitive — dual-passkey (Q1 candidate 5) for instances supporting `duressAware`; §4 byte-identical receipt with §5.2 HPKE-wrapped payload (DEK wrapped in `key_bag`; ciphertext in `payload_ref`) to the safety team; §5.3 quarantine semantics. **Canonical scenario; design optimizes for this.**
 
 **2.3.2 Trafficking — immigration sponsorship beneficiary.** Trafficked person, handler present, on handler's device. Handler controls the device fully.
+
 - **Required:** a way to signal duress that does not require the survivor to operate the handler's device unattended.
 - **Design posture:** **partial coverage.** The in-flow duress affordance works in the rare moments the handler steps away or doesn't watch closely; an in-flow signal during a passkey ceremony with the handler watching is not reliably available. The design honestly cites this as a gap (§8). Recovery-channel routing (a separate, off-device "I am being trafficked" path) is **out of scope** — it belongs to FW-0030 federated-identity recovery / external safety services, not FW-0048. **Half-coverage scenario; design acknowledges and bounds.**
 
 **2.3.3 Elder coercion — benefits redirect.** Elder, predatory "helper" present, real government form on a real government portal. The coercion is informational (the elder doesn't realize the payee is fraudulent) at least as much as it is physical.
+
 - **Required:** the elder needs a way to slow the ceremony down (cool-off, secondary confirmation), not a way to fire a silent alarm — they wouldn't know to fire one.
 - **Design posture:** **out of scope per §1.2(d).** The elder-coercion-by-misrepresentation scenario belongs to a separate row covering cool-off windows + secondary confirmation. FW-0048's in-flow duress affordance does not help an elder who doesn't realize they need to use it.
 
@@ -170,7 +173,7 @@ The proposal: add `duressAware` to the [Feature Ownership Table at line 138](../
 |---|---|
 | Instance capability | Adapter-backed duress-signal pipeline: dual-credential enrollment registry + HPKE wrap to safety-team recipient + routing-target dispatch (webhook or WOS task). Instance declares the highest tier it can serve. |
 | Org policy | `allowed mechanisms` (closed enum subset of `{dual-passkey, dual-pin, pin-second-entry}`), `routingTier` allow-list (`{issuer-webhook, wos-task}`), per-template safety-team-recipient public-key registry, per-jurisdiction policy floor (some jurisdictions may mandate `wos-task` for legal admissibility). |
-| Form policy | Form declares required `duressAware` tier (`mechanism: dual-passkey | dual-pin | pin-second-entry`, `routingTier: issuer-webhook | wos-task`) as a first-class authoring declaration. High-risk templates (financial POA, immigration, advance directive, marriage / divorce, custody) declare `duressAware` required. |
+| Form policy | Form declares required `duressAware` tier (`mechanism: dual-passkey | dual-pin | pin-second-entry`,`routingTier: issuer-webhook | wos-task`) as a first-class authoring declaration. High-risk templates (financial POA, immigration, advance directive, marriage / divorce, custody) declare`duressAware` required. |
 | Resolved runtime profile | Enabled mechanism + routing tier + recipient public-key handle + ceremony-side configuration. Form-load throws `UnsupportedRequiredFeatureError` if the instance tier doesn't satisfy the form's required tier. |
 
 **Tier is a first-class form-policy declaration, not a runtime-derived value** — same discipline as `multiParty.tier` in [FW-0050 §3.1](2026-05-23-fw-0050-multi-party-submission-design.md). The mechanism/routing axes are orthogonal to the form's per-template risk classification; the form author declares both explicitly; the resolver does not infer.
@@ -390,7 +393,7 @@ FW-0058 (AI-agent filer chain) and FW-0048 (coercion-aware signing) compose at t
 
 FW-0042 (share-draft-with-trusted-reviewer) is the **canonical AP-014 vector** at the share-draft surface: the "trusted reviewer" who is also the coercer (abusive partner who insists on "helping review" the protective-order form; predatory legal-aid grifter steering a vulnerable respondent toward bad advice). Per [FW-0042 §6.2](2026-05-25-fw-0042-trusted-reviewer-design.md), this design's high-coercion-risk template set (§6.4: financial POA, immigration sponsorship, advance directive, marriage/divorce, custody, benefits-redirect) SHOULD default `trustedReviewer: forbidden` — the same template-set that defaults `duressAware: required` on the signing side. Combined posture: no share-affordance exists at the respondent UI for high-coercion templates, AND the duress channel is available on signing.
 
-**Layered defense (per FW-0042 §2.3.4).** When `trustedReviewer: forbidden` is overridden per-deployment OR when a non-high-coercion form is shared with a reviewer who turns out to be the coercer, the substrate-class layers AND-compose: (a) per-template forbidden-list at form-load, (b) safe-* fields auto-mask for reviewers per FW-0049 composition (the survivor's safe-* address never renders in the reviewer's session regardless of reviewer-identity), (c) capability-URL revocability is the first-class survivor affordance (the survivor can revoke immediately the URL granted under duress; subsequent reviewer accesses fail with `CapabilityRevokedError`), (d) signer-ceremony refuses reviewer-capability-URL sessions structurally (the cryptographic gate holds even if the reviewer obtains the draft via shoulder-surf or coerced share — the reviewer cannot reach the signing surface, so the duress affordance is never visible to them).
+**Layered defense (per FW-0042 §2.3.4).** When `trustedReviewer: forbidden` is overridden per-deployment OR when a non-high-coercion form is shared with a reviewer who turns out to be the coercer, the substrate-class layers AND-compose: (a) per-template forbidden-list at form-load, (b) safe-*fields auto-mask for reviewers per FW-0049 composition (the survivor's safe-* address never renders in the reviewer's session regardless of reviewer-identity), (c) capability-URL revocability is the first-class survivor affordance (the survivor can revoke immediately the URL granted under duress; subsequent reviewer accesses fail with `CapabilityRevokedError`), (d) signer-ceremony refuses reviewer-capability-URL sessions structurally (the cryptographic gate holds even if the reviewer obtains the draft via shoulder-surf or coerced share — the reviewer cannot reach the signing surface, so the duress affordance is never visible to them).
 
 **Asymmetric assurance for high-coercion templates with override.** Per FW-0042 §6.2: when `trustedReviewer: comment-allowed | suggest-allowed` is permitted on a high-coercion template (overriding the default-forbidden), the form-policy SHOULD require Tier-2 (IdP-bound) reviewer-identity. Pseudonymous coercer-reviewers are filtered; only named-and-bound parties can review the draft.
 

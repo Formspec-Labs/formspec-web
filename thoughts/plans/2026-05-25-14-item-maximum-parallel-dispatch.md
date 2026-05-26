@@ -396,6 +396,10 @@ Findings remediated:
 
 Reviewer re-check returned APPROVE on both the ADR remediation and the extension-queue sync. ADR 0156 remains proposed; this closes the review loop for the recorded XS-3 ADR / queue-alignment slice, not owner ratification or downstream EXT/WOS/Trellis implementation.
 
+### 2026-05-26 — W1.3 / XS-3 / ADR-0156 owner withdrawal
+
+Stack-root [ADR-0156 (coercion-aware-signing-pipeline)](../../../thoughts/adr/0156-coercion-aware-signing-pipeline.md) flipped `proposed → withdrawn` (commit bac4b65). Rationale: survivor-safety framing inflated priority on a greenfield surface with no consumer — see `feedback_survivor_safety_framing_trap`. Cascade landed in `formspec-web` commit 6e4ff80: FW-0048 / FW-0059 PLANNING rows withdrawn; EXT-5 Batch B (`submission.duress-signaled`), EXT-30, and XS-3 queue entries retired. W1.3 is **closed-withdrawn** — not ratified, not open for downstream implementation. Re-file from observed adopter needs rather than synthesized adjacent threat models.
+
 Verification run after remediation:
 
 - `git diff --check -- thoughts/adr/0156-coercion-aware-signing-pipeline.md`
@@ -460,7 +464,7 @@ Independent generic scout `019e5eed-d058-7961-ae40-deae8592e266` audited the dis
 |---|---|---|
 | W1.1 / ADR-0011 + EXT-5 bot-protection | `formspec-web` `a85ed7a`; `formspec` `92295d48`; review-loop closure recorded above | cycle-closed for the recorded ADR/spec slice; `preparerFiling` remains unavailable-only until FW-0037 build |
 | W1.2 / XS-1 multi-party intake ADR | stack root `b8c0814`, `83f33d1`; ADR 0155 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR slice; owner ratification and downstream schema/WOS/Trellis work remain open |
-| W1.3 / XS-3 coercion-aware signing ADR | stack root `61cd59b`, `86f2f4a`; `formspec-web` `93cea73`; ADR 0156 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR / queue-alignment slice; owner ratification and downstream EXT/WOS/Trellis work remain open |
+| W1.3 / XS-3 coercion-aware signing ADR | stack root `bac4b65` (withdrawn); `formspec-web` `6e4ff80` (cascade) | **withdrawn 2026-05-26** — owner pulled ADR-0156; FW-0048/FW-0059/EXT-30/XS-3 retired; re-file from observed adopter needs |
 | W1.4 / XS-4 safe-address + XS-5 record-lifecycle ADRs | stack root `1800448`, `c001309`, `522f858`, `e7a4d01`; XS-5 subsequently merged into ADR-0066 §D-6 and ADR-0158 stub-superseded (see §9 deviation `2026-05-25 — XS-5 ADR-0158 → ADR-0066 §D-6 absorption`); ADR 0157 remains proposed; review-loop closure recorded above | cycle-closed for the recorded ADR slice; owner ratification and downstream EXT/WOS/Trellis work remain open |
 | W1.5 / SC-1, SC-2, SC-5 sidecars | `formspec` `0533fb9f`, `1dcce96d`, `f11f82be`, `e95a8a21`; review-loop closure recorded above | cycle-closed for the recorded sidecar hardening slice |
 | W1.6 / SC-4 identity binding profile | `formspec` `be21eb2b`, `5d34f058`, `e95a8a21`; review-loop closure recorded above | cycle-closed for the recorded identity-binding hardening slice |

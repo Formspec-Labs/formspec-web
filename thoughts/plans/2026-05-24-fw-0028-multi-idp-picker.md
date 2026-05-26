@@ -165,5 +165,5 @@ Update `PLANNING.md` FW-0028:
 - Cross-IdP identity continuity (FW-0020).
 - Federated handoff (FW-0030).
 - Passkey-first adapter (FW-0031; needs SC-4).
-- Coercion-aware filter (FW-0048 / FW-0059 build).
+- Coercion-aware filter — deferred (FW-0048 / FW-0059 withdrawn 2026-05-26 with stack-root ADR-0156).
 - Long-list picker affordance.

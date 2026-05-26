@@ -181,7 +181,7 @@ the form definition is loaded AFTER identity is established. Two paths:
   the bar. This is the FW-0030 (federated identity claim handoff) flow.
 
 Slice 1 ships the call shape + the composite; slice 2 ships the re-discover
-+ step-up.
+- step-up.
 
 ### Picker UI — multi-mode `AuthRequiredSurface`
 
@@ -352,8 +352,8 @@ substrate and does not ship in this slice).
   adapters cannot route a coerced authenticate (duress-credential
   detection). Per-adapter capability declaration — the
   `IdentityProvider` port would extend with an optional
-  `supports?: { duressCredentials?: boolean }` discovery hint. Deferred
-  to FW-0028 slice 2 / FW-0059 build.
+  `supports?: { duressCredentials?: boolean }` discovery hint. **Deferred
+  indefinitely** — FW-0048 / FW-0059 withdrawn 2026-05-26 with stack-root ADR-0156.
 - **FW-0051 (BYO assistant)** — no composition. The assistant runs in
   respondent tools; the picker layer is the respondent's own sign-in
   surface. The assistant has no role here.
@@ -403,7 +403,7 @@ substrate and does not ship in this slice).
 - **Passkey-first integration.** `PasskeyAdapter` adapter (FW-0031);
   separate row, depends on SC-4 + WebAuthn substrate.
 - **Coercion-aware filter.** Filter IdPs by `duressAware: required` form
-  policy (FW-0048 / FW-0059 build); separate composition.
+  policy — deferred (FW-0048 / FW-0059 withdrawn 2026-05-26 with stack-root ADR-0156).
 - **Long-list affordance.** Picker today is a button list; deployments
   with >10 IdPs may need search / grouping. Defer until a real adopter
   trips the threshold.

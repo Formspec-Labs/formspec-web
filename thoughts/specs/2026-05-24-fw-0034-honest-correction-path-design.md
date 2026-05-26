@@ -69,14 +69,17 @@ The threat model is the load-bearing input. Stated explicitly so the design's su
 ### 2.3 Three grounded scenarios
 
 **2.3.1 Benefits applicant — household-size typo.** Applicant submits a state-Medi-Cal benefits application; types household-size as `1` (typo); the correct answer is `3`. Discovers the error 2 days post-submit. The household-size value affects eligibility-band determination.
+
 - **Required:** the applicant can correct the household-size field without losing queue position; the original `1` and corrected `3` are both preserved; the caseworker sees the correction-with-evidence (applicant attaches a household-composition statement) as routine, not as fraud suspicion; the form's amendment-window policy permits corrections until determination issuance.
 - **Design posture:** §3.1 user-act = `correct`; routes to Formspec [§11.4 `response.correction-recorded`](../../../formspec/specs/audit/respondent-ledger-spec.md) per §3.2; WOS Kernel §13.9 `correction` mode permitted by the form's `governance.amendmentTaxonomy`; the receipt-chain surfaces both events linearly (§4); the verifier renders the correction lineage honestly (§5). **Canonical J-044 scenario; design optimizes for this.**
 
 **2.3.2 Court filing — substantive error in petitioner's address.** Petitioner files a court motion; the address field carries an error (mistyped street number); the address is the legal-service-of-process address. The error is discovered 1 day post-filing.
+
 - **Required:** the petitioner can issue an amendment that supersedes the address field but preserves the original chain; the court's clerk-of-court system sees the amendment as a new filing referencing the original (the SEC 10-K/A pattern per research brief §4.2); the amendment carries an authority reference (e.g., the petitioner's attorney's authorization).
 - **Design posture:** the address field is a **substantive change** beyond a narrow factual correction — routes to Formspec [§11.1 `response.amendment-opened`](../../../formspec/specs/audit/respondent-ledger-spec.md) cycle, NOT to §11.4 `response.correction-recorded`. The WOS Kernel §13.9 `amendment` mode applies — a new task is created per the §2180 rule; `supersedesResponseId` references the prior. **Boundary case for the Q1 decision (correction vs. amendment)**: §3.2 specifies the predicate that routes to the right primitive (narrow factual correction subset vs. substantive change). **Distinguishes the user-act**: this is `correct` from the respondent's perspective; the substrate routes to the amendment primitive when the field set exceeds the correction-subset discipline. The user-visible noun stays `correct`; the substrate noun is `amendment`.
 
 **2.3.3 Mortgage signer — discovered misinformation after signing.** Signer completes a mortgage refinance closing; later discovers the loan terms presented were materially misrepresented (e.g., the rate-lock was misstated). The signer does NOT want to "correct" the record (the record accurately captures what they signed); they want to attach a dispute note attesting to the misinformation, preserving the original record and the signer's counter-attestation in the same chain.
+
 - **Required:** the signer files a `dispute` user-act; the original signed record remains valid and visible; the dispute note is itself signed by the signer; the dispute is undeletable by the counterparty (lender); verifiers see both the original signed record AND the signed dispute attestation.
 - **Design posture:** §3.1 user-act = `dispute`; routes to EXT-5 [`response.dispute-attached` event type](../specs/2026-05-22-upstream-extension-queue.md) (queued); the event carries the signer's signature, the disputed event hash, the dispute statement text, and a neutral authority reference. The original record's signature MUST remain verifiable; the dispute is an additional event on the chain, not a replacement. **Canonical J-016 adversarial scenario; design provides the signer-side counter-attestation path without invalidating the original.**
 - **`dispute` vs `rescissionRequested` decision sits with the signer (not the runtime).** "Materially misrepresented" is the kind of injury that may motivate either path. The user-visible chooser (§3.3 "What you can do" panel) MUST surface both options when both are available with plain-language framing of the difference: `dispute` = "this record is accurate as signed, but I attest to the misrepresentation" (contract remains operative); `withdraw` (which becomes a `rescissionRequested` intent post-determination per §3.1) = "I no longer consent to be bound by this contract" (issuer governance decides acceptance). Adopters MUST NOT auto-classify; ambiguous intent is a respondent-decision boundary, not a runtime predicate. Cross-references the §3.1 act-confusion vocabulary firewall and the §2.3.1 confusion-attack class (a).
@@ -121,6 +124,7 @@ The five framing questions seeded in the research brief §5 land here.
 **Concrete predicate (FW-0034 codifies):**
 
 The respondent's `correct` user-act resolves to `response.correction-recorded` (Formspec §11.4) IFF all of the following hold:
+
 1. The changed field set is bounded — the form declares `correctableFieldSet[]` listing which fields qualify for narrow correction;
 2. The case lifecycle state is not yet `decision-reached` (per [WOS applicant API `ApplicantStatusTimelineEntry.event`](../../../work-spec/specs/api/applicant.md) reserved literals) — when a determination has been issued, the `correct` user-act routes to `amendment` (the determination itself becomes the supersession boundary). This is a **state-machine check, not a determination-graph walk** — the formspec-web runtime queries the case's lifecycle state via the existing `StatusReader` port (FW-0039 surface), it does NOT inspect which fields flow into which determinations;
 3. The change does NOT introduce new fields (only updates values within the declared subset).
@@ -136,17 +140,20 @@ Otherwise the user-act resolves to `response.amendment-opened` (Formspec §11.1)
 **Decision.** The post-submit lifecycle action surface lives **on the existing FW-0039 `/status?case={urn}` route**, not on a separate `/lifecycle` route.
 
 Rationale:
+
 - The respondent already arrives at `/status` to see "where is my submission" per FW-0039 slice 1.
 - The three lifecycle action affordances are direct extensions of the status surface ("here's where your submission is" → "here are the actions available on this submission").
 - A separate route fragments the discovery path; adds a second URL the respondent must learn; doubles the synthesis pattern under [ADR-0011 §"Non-form surface synthesis"](../adr/0011-runtime-feature-resolution-and-policy-gates.md) without payoff.
 
 **Surface composition.** The `/status` route's existing timeline-and-tasks shape extends with a "What you can do" panel rendered when:
+
 - the resolved runtime profile enables `recordLifecycle` (per §4),
 - the case's lifecycle state permits the action per the form's `recordLifecycle` form-policy + the WOS governance state.
 
 The panel surfaces up to three buttons per the three user-acts: **"Correct a fact"** / **"Withdraw this submission"** / **"Add a dispute note"** (signer-only, only surfaced when the requesting actor is a signer per the WOS applicant API's actor scope).
 
 **Empty / disabled state copy** per the FW-0039 disabled-cause discipline:
+
 - `optional-no-instance`: "Correction, withdrawal, and dispute are not available on this site."
 - `org-forbidden`: "This sender does not allow correction or withdrawal here."
 - `window-closed`: "The correction window closed on [date]. To request a change, contact [sender contact]."
@@ -196,19 +203,23 @@ Dispute attached          [timestamp]  by: signer                   [verified �
 ```
 
 **Reason text rendering discipline:**
+
 - When the correction's `reason` field carries no `accessControl.class` (default): render the reason text inline beneath the correction row.
 - When the correction's `reason` field carries `accessControl.class: "safe-*"`: render "reason withheld" beneath the row (per FW-0049 §3.3 mask discipline; §7.3 composition rule).
 - When the form-policy declares `correctable.requiresReason: false`: the reason is absent; render no reason row.
 
 **Original-vs-corrected value rendering:**
+
 - Default: render both `originalValue` and `correctedValue` per the Formspec §11.4 `fieldValues[]` preservation.
 - When a field-value carries `accessControl.class: "safe-*"`: render per the FW-0049 §3.3 discipline (masked-by-default; per-act-reveal only to authorized audiences).
 
 **Withdrawal rendering:**
+
 - The original submission's row remains; a "Withdrawn" event row is appended; the original's "verified ✓" stays (the original is still cryptographically verifiable, just no longer operative).
 - WOS governance state surfaces as the case lifecycle state ("Withdrawn by applicant on [date]").
 
 **Dispute rendering:**
+
 - The original signed-record row remains with its signature verification intact.
 - The dispute row appears with its own signature verification ("Dispute signed by [signer] on [date]").
 - The dispute statement text renders per the same reason-class discipline as corrections.
@@ -224,6 +235,7 @@ Dispute attached          [timestamp]  by: signer                   [verified �
 **Decision.** Per-act tier axes — `correctable: "supported" | "unsupported"` × `withdrawable: "supported" | "unsupported"` × `disputable: "supported" | "unsupported"`.
 
 Rationale:
+
 - The substrate is uniform (Phase 1 chaining is sufficient for all three).
 - Deployment composition is what varies — some deployments don't ship WOS governance (no instance-termination path); some don't yet wire EXT-5 events (no dispute primitive); the correction path can land independently of the others.
 - Per-act tiers mirror the per-act framing of FW-0048 (`mechanism` × `routingTier`) and FW-0049 (`receiptPostureTier`), aligning the design vocabulary across the recent capability-key landings.
@@ -456,6 +468,8 @@ FW-0048 (coercion-aware signing) and FW-0034 (record lifecycle) compose **mechan
 
 **FW-0038 build constraint addition (consumed by FW-0038 author directly):** the FW-0059 build (FW-0048's build row) MUST ship the duress mechanism over the lifecycle-action submit ceremonies, not just the original submission ceremony. Coordinate with FW-0038 build to ensure the lifecycle-action surfaces consume the duress mechanism from the same composition point. **No new XS-* row required** — XS-3 (FW-0048's cross-stack ADR) already specifies the duress mechanism across the formspec + WOS + trellis pipeline; lifecycle-action submits ride on the same pipeline.
 
+> **Withdrawn 2026-05-26:** FW-0048, FW-0059, XS-3, and stack-root ADR-0156 withdrawn the same day. §7.2 duress-at-lifecycle-submit composition is historical only; FW-0038 lifecycle acts remain valid without it.
+
 ### 7.3 FW-0049 composition (safe-* fields in correction reason / values)
 
 FW-0049 (safe-address handling) and FW-0034 (record lifecycle) compose at the per-field accessControl.class layer.
@@ -485,6 +499,7 @@ Default: `unclassified` (the reason renders openly per §3.4). When declared as 
 FW-0050 (multi-party submission) and FW-0034 (record lifecycle) compose at the per-party event scoping layer.
 
 **Composition rule.** In a multi-party flow declared per [FW-0050 §3](2026-05-23-fw-0050-multi-party-submission-design.md), each lifecycle event carries an optional `partyRef` field (per §6.2 EXT-5 extension) naming which party authored the act. The visibility of the event on each party's view is gated by:
+
 - the FW-0050 `visibleTo[]` policy on the changed field set (corrections);
 - the form's `recordLifecycle.disputable.signerOnly: true` policy (disputes — only the specific signer who signed can dispute their signature);
 - the WOS governance policy on multi-party termination (withdraw — varies; some multi-party flows require all-party consent to withdraw, others permit any party to withdraw their portion).
