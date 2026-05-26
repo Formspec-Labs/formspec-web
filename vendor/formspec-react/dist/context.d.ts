@@ -1,11 +1,21 @@
 /** @filedesc FormspecProvider — React context wrapping a FormEngine + optional layout plan. */
 import React from 'react';
-import type { ActionRefFinding, ActionResolution, IFormEngine, IssuerFetcher, IssuerSource, ReadonlyEngineSignal, ResponseAction, ResponseActionEffectDispatchContext, ResponseActionEffectOutcome, ResponseActionIdempotencyKeyContext, ResponseActionInvocationResult, ResponseActionPreconditionResult, ResponseActionsDocumentInput } from '@formspec-org/engine';
+import type { ActionRefFinding, ActionResolution, IFormEngine, IssuerFetcher, IssuerSource, ReadonlyEngineSignal, ResponseAction, ResponseActionEffectDispatchContext, ResponseActionEffectOutcome, ResponseActionIdempotencyKeyContext, ResponseActionInvocationPorts, ResponseActionInvocationResult, ResponseActionPreconditionResult, ResponseActionsDocumentInput } from '@formspec-org/engine';
 import type { EffectRequest, FormResponse, Precondition, ValidationReport } from '@formspec-org/types';
 import type { LayoutNode } from '@formspec-org/layout';
 import type { ComponentMap } from './component-map';
 export type ResponseActionsDocument = ResponseActionsDocumentInput;
 export type { ActionRefFinding, ActionResolution, ResponseAction };
+export interface ResponseActionInvokerInput<TDetail = SubmitResult> {
+    document: ResponseActionsDocument | null | undefined;
+    actionRef: string;
+    nodeId?: string;
+    ports: ResponseActionInvocationPorts<TDetail>;
+}
+export type ResponseActionInvokerResult<TDetail = SubmitResult> = ResponseActionInvocationResult<TDetail> | {
+    invocation: ResponseActionInvocationResult<TDetail>;
+};
+export type ResponseActionInvoker<TDetail = SubmitResult> = (input: ResponseActionInvokerInput<TDetail>) => ResponseActionInvokerResult<TDetail> | Promise<ResponseActionInvokerResult<TDetail>>;
 export interface SubmitResult {
     response: FormResponse;
     validationReport: ValidationReport | null;
@@ -28,6 +38,8 @@ export interface FormspecContextValue {
     onActionFinding?: (finding: ActionRefFinding) => void;
     /** Callback invoked after every ActionButton invocation terminal. */
     onActionResult?: (result: ResponseActionInvocationResult<SubmitResult>) => void;
+    /** Optional host-owned invoker that can wrap the engine executor with durable runtime plumbing. */
+    responseActionInvoker?: ResponseActionInvoker<SubmitResult> | null;
     /** Host precondition evaluator for Response Actions that declare FEL preconditions. */
     evaluateActionPrecondition?: (precondition: Precondition, action: ResponseAction) => ResponseActionPreconditionResult;
     /** Host durable-effect adapter for non-hostEvent Response Action effects. */
@@ -80,6 +92,8 @@ export interface FormspecProviderProps {
     onActionFinding?: (finding: ActionRefFinding) => void;
     /** Callback invoked after every ActionButton invocation terminal. */
     onActionResult?: (result: ResponseActionInvocationResult<SubmitResult>) => void;
+    /** Optional host-owned invoker that can wrap the engine executor with durable runtime plumbing. */
+    responseActionInvoker?: ResponseActionInvoker<SubmitResult> | null;
     /** Host precondition evaluator for Response Actions that declare FEL preconditions. */
     evaluateActionPrecondition?: (precondition: Precondition, action: ResponseAction) => ResponseActionPreconditionResult;
     /** Host durable-effect adapter for non-hostEvent Response Action effects. */

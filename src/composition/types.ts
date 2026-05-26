@@ -9,6 +9,7 @@ import type {
   NotificationDelivery,
   OfflineSubmitQueue,
   PaymentRailAdapter,
+  ResponseActionInvokerFactory,
   ReviewerSession,
   ReviewThreadStore,
   RespondentHistorySource,
@@ -48,6 +49,13 @@ export interface Composition {
   identityProvider: IdentityProvider;
   /** Optional — only required when an adapter consumes it (e.g., MagicLinkAdapter). */
   notificationDelivery?: NotificationDelivery;
+  /**
+   * ADR-0153/0154 Response Actions host seam. When supplied, the runtime
+   * injects this factory's invoker into the upstream React ActionButton path.
+   * Trusted/BFF compositions use it to mint per-command Ledger append
+   * capabilities server-side; browser code must not hold mint HMAC material.
+   */
+  responseActionInvoker?: ResponseActionInvokerFactory;
   /** ADR-0010: respondent-held obligations, documents, and history. */
   respondentPlaceSource: RespondentPlaceSource;
   /** ADR-0010/FW-0039: WOS applicant API resource shapes, not a web status vocabulary. */

@@ -17,7 +17,7 @@ function pageModeFromPresentation(presentation) {
  * Accepts either a pre-built `engine` or a raw `definition` (creates engine internally).
  */
 export function FormspecProvider(props) {
-    const { engine: externalEngine, definition, componentDocument, themeDocument, responseActionsDocument, initialData, registryEntries, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, onHostEvent, onActionFinding, onActionResult, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
+    const { engine: externalEngine, definition, componentDocument, themeDocument, responseActionsDocument, initialData, registryEntries, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
     const hasIssuerOverrideProp = Object.prototype.hasOwnProperty.call(props, 'issuerOverride');
     const engine = useMemo(() => {
         if (externalEngine)
@@ -190,6 +190,7 @@ export function FormspecProvider(props) {
         onHostEvent,
         onActionFinding,
         onActionResult,
+        responseActionInvoker,
         evaluateActionPrecondition,
         dispatchActionEffect,
         resolveActionIdempotencyKey,
@@ -200,7 +201,7 @@ export function FormspecProvider(props) {
         isTouched,
         registryEntries: registryMap,
         formPresentation: mergedFormPresentation,
-    }), [engine, layoutPlan, components, themeDocument, componentDocument, responseActionsDocument, onSubmit, onHostEvent, onActionFinding, onActionResult, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, touchField, touchAllFields, touchedVersionSignal, isTouched, registryMap, mergedFormPresentation]);
+    }), [engine, layoutPlan, components, themeDocument, componentDocument, responseActionsDocument, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, touchField, touchAllFields, touchedVersionSignal, isTouched, registryMap, mergedFormPresentation]);
     return (_jsx(FormspecContext.Provider, { value: value, children: children }));
 }
 /** Access the FormspecContext. Throws if used outside FormspecProvider. */

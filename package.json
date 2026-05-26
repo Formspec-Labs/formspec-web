@@ -48,6 +48,7 @@
     "@formspec-org/layout": "file:vendor/formspec-layout",
     "@formspec-org/react": "file:vendor/formspec-react",
     "@formspec-org/types": "file:vendor/formspec-types",
+    "canonicalize": "^3.0.0",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

@@ -539,6 +539,12 @@ export function RespondentRuntime({
   const responseActionsDocument = createDemoSubmitResponseActions({
     definitionUrl: respondentState.definition.url,
   });
+  const responseActionInvoker = composition.responseActionInvoker?.({
+    runtimeDefinitionUrl: composition.initialDefinitionUrl,
+    definition: respondentState.definition,
+    draftKey: respondentState.draftKey,
+    claim: respondentState.claim,
+  }) ?? null;
 
   const handleLocaleChange = (locale: string): void => {
     if (anyEnabledFeatureIsLocaleConditional(respondentState.runtimeProfile.enabled)) {
@@ -781,6 +787,7 @@ export function RespondentRuntime({
           <FormspecProvider
             engine={respondentState.engine}
             responseActionsDocument={responseActionsDocument}
+            responseActionInvoker={responseActionInvoker}
             components={{
               fields: {
                 Text: SafeAddressTextField,

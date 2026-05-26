@@ -17,6 +17,7 @@ export interface AnonymousSessionBridgeConfig extends HttpClientConfig {
 }
 
 export interface AnonymousSession {
+  sessionId: string;
   sessionToken: string;
   subjectRef: string;
   formId: string;
@@ -101,6 +102,7 @@ export class AnonymousSessionBridge {
       { session_id: sessionId },
     );
     return {
+      sessionId,
       sessionToken: view.session_token,
       subjectRef: view.subject_ref,
       formId: view.form_id,

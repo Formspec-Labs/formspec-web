@@ -66,6 +66,10 @@ export type {
 export { AttachmentUploadError, isResumableAttachmentStore } from './attachment-store.ts';
 export type { FormRuntimePolicyExtractor } from './form-runtime-policy-extractor.ts';
 export type {
+  ResponseActionInvokerFactory,
+  ResponseActionRuntimeContext,
+} from './response-action-ledger.ts';
+export type {
   RespondentHistorySource,
   HistoryQuery,
   HistorySnapshot,

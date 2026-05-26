@@ -43,3 +43,14 @@ export {
   createHttpReviewThreadStore,
   type HttpReviewThreadStoreConfig,
 } from './review-thread-store.ts';
+export {
+  RESPONSE_ACTION_LEDGER_APPEND_ROUTE,
+  RESPONSE_ACTION_LEDGER_CAPABILITY_HEADER,
+  computeJcsSha256Digest,
+  createHttpResponseActionLedgerInvokerFactory,
+  type HttpResponseActionLedgerInvokerOptions,
+  type ResponseActionLedgerAppendReceipt,
+  type ResponseActionLedgerCapabilityProvider,
+  type ResponseActionLedgerCapabilityRequest,
+  type ResponseActionSessionOpBatchAppendCommand,
+} from './response-action-ledger.ts';

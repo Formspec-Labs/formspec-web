@@ -3,7 +3,7 @@ import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-run
 /** @filedesc Recursive LayoutNode renderer — dispatches to field or layout components. */
 import { useMemo, useCallback, useEffect } from 'react';
 import { signal as createSignal } from '@preact/signals-core';
-import { invokeResponseAction } from '@formspec-org/engine';
+import { invokeResponseAction, } from '@formspec-org/engine';
 import { useFormspecContext } from './context';
 import { useSignal } from './use-signal';
 import { useField } from './use-field';
@@ -73,8 +73,17 @@ function actionRefFor(node) {
     const value = node.props?.actionRef;
     return typeof value === 'string' ? value : '';
 }
+function isPromiseLike(value) {
+    return !!value && typeof value.then === 'function';
+}
+function normalizeInvokerResult(result) {
+    return 'invocation' in result ? result.invocation : result;
+}
+function errorMessage(error) {
+    return error instanceof Error ? error.message : String(error);
+}
 function ActionButtonNode({ node }) {
-    const { onSubmit, onHostEvent, onActionFinding, onActionResult, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, } = useFormspecContext();
+    const { onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, } = useFormspecContext();
     const form = useForm();
     const actionRef = actionRefFor(node);
     const resolution = resolveActionRef(actionRef, node.id);
@@ -89,7 +98,7 @@ function ActionButtonNode({ node }) {
         }
     }, [findingKey, onActionFinding]);
     const handleClick = useCallback(() => {
-        const result = invokeResponseAction(responseActionsDocument, actionRef, {
+        const ports = {
             submit: ({ profile, validationTuple }) => form.submit({ profile, validationTuple }),
             dispatchHostEvent: (eventName, detail, action) => {
                 onHostEvent?.(eventName, detail, action);
@@ -100,12 +109,37 @@ function ActionButtonNode({ node }) {
             ...(evaluateActionPrecondition ? { evaluatePrecondition: evaluateActionPrecondition } : {}),
             ...(dispatchActionEffect ? { dispatchEffect: dispatchActionEffect } : {}),
             ...(resolveActionIdempotencyKey ? { resolveIdempotencyKey: resolveActionIdempotencyKey } : {}),
-        }, node.id);
-        onActionResult?.(result);
-        if (result.finding) {
-            onActionFinding?.(result.finding);
+        };
+        const finish = (result) => {
+            onActionResult?.(result);
+            if (result.finding) {
+                onActionFinding?.(result.finding);
+            }
+        };
+        if (responseActionInvoker) {
+            const result = responseActionInvoker({
+                document: responseActionsDocument,
+                actionRef,
+                nodeId: node.id,
+                ports,
+            });
+            if (isPromiseLike(result)) {
+                void result
+                    .then(value => finish(normalizeInvokerResult(value)))
+                    .catch(error => finish({
+                    status: 'failed',
+                    resolution,
+                    validationTuple: null,
+                    detail: null,
+                    effectTrace: [],
+                    failureReason: errorMessage(error),
+                }));
+                return;
+            }
+            finish(normalizeInvokerResult(result));
             return;
         }
+        finish(invokeResponseAction(responseActionsDocument, actionRef, ports, node.id));
     }, [
         actionRef,
         dispatchActionEffect,
@@ -116,6 +150,7 @@ function ActionButtonNode({ node }) {
         onActionResult,
         onHostEvent,
         onSubmit,
+        responseActionInvoker,
         resolveActionIdempotencyKey,
         responseActionsDocument,
     ]);

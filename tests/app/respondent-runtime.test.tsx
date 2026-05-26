@@ -29,6 +29,10 @@ import {
 } from '../../src/app/respondent-flow.ts';
 import { stubDraftStore } from '../../src/adapters/stub/draft-store.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
+import {
+  RESPONSE_ACTION_LEDGER_CAPABILITY_HEADER,
+  createHttpResponseActionLedgerInvokerFactory,
+} from '../../src/adapters/http/response-action-ledger.ts';
 
 describe('RespondentRuntime identity sign-in', () => {
   let root: Root | undefined;
@@ -409,6 +413,119 @@ describe('RespondentRuntime identity sign-in', () => {
     await renderRuntime(composition);
     await waitForText('Sign in to continue');
     expect(text()).not.toContain('Choose how to sign in');
+  });
+
+  it('injects a route-backed Response Actions Ledger invoker into the public respondent runtime', async () => {
+    const runtimeDefinitionUrl = 'https://formspec-server.example.test/runtime/forms/demo-intake';
+    const endpoint = 'https://formspec-server.example.test';
+    const anonymousSession = {
+      sessionId: 'anon_session_web_ledger',
+      sessionToken: 'anon-token-web-ledger',
+      subjectRef: 'anon:web-ledger',
+      formId: 'demo-intake',
+      expiresAt: '2026-05-26T01:00:00.000Z',
+    };
+    const anonymousSessions = {
+      sessionForForm: vi.fn(async () => anonymousSession),
+    };
+    const capabilityRequests: Array<{ formId: string; anonymousSessionToken: string; appendCommand: any }> = [];
+    const httpRequests: Array<{ url: string; body: any; headers: Headers }> = [];
+    const fetchHostRoute = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const headers = new Headers(init?.headers);
+      httpRequests.push({ url: String(url), body, headers });
+
+      if (String(url).endsWith('/runtime/response-actions/ledger/session-op-batches')) {
+        return jsonResponse({
+          ledgerScope: body.ledgerScope,
+          priorEventHash: null,
+          eventHash: 'sha256:6666666666666666666666666666666666666666666666666666666666666666',
+          idempotencyKey: body.idempotencyKey,
+          status: 'anchored',
+          substrateEventId: 'evt_web_ledger',
+          sequence: 0,
+          checkpointReference: 'checkpoint:web-ledger',
+          bundleRef: 'bundle:web-ledger',
+        });
+      }
+
+      return jsonResponse({ title: 'unexpected route' }, 404);
+    });
+    const responseActionInvoker = createHttpResponseActionLedgerInvokerFactory({
+      endpoint,
+      tenantBinding: publicPortalProfile.tenantBinding,
+      anonymousSessions,
+      capabilityProvider: async (request) => {
+        capabilityRequests.push({
+          formId: request.formId,
+          anonymousSessionToken: request.anonymousSession.sessionToken,
+          appendCommand: request.appendCommand,
+        });
+        return 'route-backed-web-ledger-capability';
+      },
+      fetchImpl: fetchHostRoute,
+      branchId: 'branch-web-ledger',
+      invocationId: () => 'inv-web-submit',
+      now: () => '2026-05-26T00:00:00.000Z',
+    });
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+      subjectRef: anonymousSession.subjectRef,
+    });
+    const composition = {
+      ...testComposition(identityProvider, { initialDefinitionUrl: runtimeDefinitionUrl }, publicPortalProfile),
+      responseActionInvoker,
+    };
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+    await clickSubmit();
+    await waitFor(() => httpRequests.length === 1 && capabilityRequests.length === 1);
+
+    expect(anonymousSessions.sessionForForm).toHaveBeenCalledWith(
+      runtimeDefinitionUrl,
+      demoSampleForm.version,
+    );
+    expect(capabilityRequests[0]).toMatchObject({
+      formId: 'demo-intake',
+      anonymousSessionToken: anonymousSession.sessionToken,
+      appendCommand: {
+        ledgerScope: 'urn:formspec:session:anon_session_web_ledger',
+        branchId: 'branch-web-ledger',
+        mode: 'require-anchored',
+      },
+    });
+    expect(httpRequests[0]!.url).toBe(`${endpoint}/runtime/response-actions/ledger/session-op-batches`);
+    expect(capabilityRequests[0]!.appendCommand).toEqual(httpRequests[0]!.body);
+    expect(httpRequests[0]!.headers.get(RESPONSE_ACTION_LEDGER_CAPABILITY_HEADER)).toBe(
+      'route-backed-web-ledger-capability',
+    );
+    expect(httpRequests[0]!.body).toMatchObject({
+      ledgerScope: 'urn:formspec:session:anon_session_web_ledger',
+      branchId: 'branch-web-ledger',
+      mode: 'require-anchored',
+      opBatch: {
+        sessionRef: {
+          id: 'urn:formspec:session:anon_session_web_ledger',
+          actors: ['urn:formspec:actor:human:anon:web-ledger'],
+        },
+        actor: {
+          id: 'urn:formspec:actor:human:anon:web-ledger',
+          kind: 'human',
+          actChannel: 'human',
+        },
+        semanticOps: expect.arrayContaining([
+          expect.objectContaining({
+            op: 'responseAction.invocation',
+            actionId: 'submit',
+            invocationId: 'inv-web-submit',
+            status: 'completed',
+          }),
+        ]),
+      },
+    });
+    expect(httpRequests[0]!.body.opBatchHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(httpRequests[0]!.body.idempotencyKey).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   it('requests submission status by submission id when a projection has no resource ref', async () => {
