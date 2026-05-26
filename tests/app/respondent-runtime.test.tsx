@@ -323,6 +323,270 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(composition.definitionSource.getLayoutHostEvidence).toHaveBeenCalledWith(demoSampleForm.url);
   });
 
+  it('rejects hidden route-local Definition state before loading a draft', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const hostEvidence = uiGraphPolicyHostEvidence(undefined, {
+      hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
+    });
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+        hostEvidence,
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('This form cannot be loaded.');
+
+    expect(text()).toContain('This form is not available on this route.');
+    expect(text()).toContain('HiddenDefinitionRuntimeState');
+    expect(composition.definitionSource.getComponentGraphContext).toHaveBeenCalledWith(demoSampleForm.url);
+    expect(composition.definitionSource.getLayoutHostEvidence).toHaveBeenCalledWith(demoSampleForm.url);
+    expect(composition.draftStore.load).not.toHaveBeenCalled();
+    expect(composition.submitTransport.submit).not.toHaveBeenCalled();
+  });
+
+  it('does not apply hidden-state rejection without completed matching UI policy proof', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const hostEvidence = uiGraphPolicyHostEvidence('host://policy/other-ui-policy', {
+      hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
+    });
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+        hostEvidence,
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    expect(text()).not.toContain('This form is not available on this route.');
+    expect(composition.draftStore.load).toHaveBeenCalled();
+  });
+
+  it('does not apply hidden-state rejection when the AppGraph report is not ok', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const hostEvidence = uiGraphPolicyHostEvidence(undefined, {
+      hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
+      reportOk: false,
+    });
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+        hostEvidence,
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    expect(text()).not.toContain('This form is not available on this route.');
+    expect(composition.draftStore.load).toHaveBeenCalled();
+  });
+
+  it('does not apply hidden-state rejection for non-matching route scope', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph: {
+          component: {
+            handle: 'respondent',
+            url: componentDocument.url,
+            version: componentDocument.version,
+          },
+          surface: {
+            url: 'https://surfaces.example.test/intake',
+            version: '1.0.0',
+          },
+          route: 'review',
+        },
+        hostEvidence: uiGraphPolicyHostEvidence(undefined, {
+          hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
+        }),
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    expect(text()).not.toContain('This form is not available on this route.');
+    expect(composition.draftStore.load).toHaveBeenCalled();
+  });
+
+  it('does not apply hidden-state rejection for non-matching Surface scope', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph: {
+          component: {
+            handle: 'respondent',
+            url: componentDocument.url,
+            version: componentDocument.version,
+          },
+          surface: {
+            url: 'https://surfaces.example.test/intake',
+            version: '1.0.0',
+          },
+          route: 'apply',
+        },
+        hostEvidence: uiGraphPolicyHostEvidence(undefined, {
+          hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
+          targetSurfaceUrl: 'https://surfaces.example.test/review',
+        }),
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    expect(text()).not.toContain('This form is not available on this route.');
+    expect(composition.draftStore.load).toHaveBeenCalled();
+  });
+
+  it('does not apply hidden-state rejection for a non-matching Definition version', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+        hostEvidence: uiGraphPolicyHostEvidence(undefined, {
+          hiddenDefinitionRefs: [{ url: demoSampleForm.url, version: '9.9.9' }],
+        }),
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    expect(text()).not.toContain('This form is not available on this route.');
+    expect(composition.draftStore.load).toHaveBeenCalled();
+  });
+
+  it('does not apply hidden-state rejection when AppGraph proof is incomplete', async () => {
+    const componentDocument = componentDocumentForRuntime();
+    const componentGraph: ComponentGraphProjectionContext = {
+      component: {
+        handle: 'respondent',
+        url: componentDocument.url,
+        version: componentDocument.version,
+      },
+      surface: {
+        url: 'https://surfaces.example.test/intake',
+        version: '1.0.0',
+      },
+      route: 'apply',
+    };
+    const hostEvidence = uiGraphPolicyHostEvidence(undefined, {
+      hiddenDefinitionRefs: [{ url: demoSampleForm.url }],
+      phases: [
+        { phase: 'schema', status: 'completed' },
+        { phase: 'cross-artifact', status: 'skipped' },
+      ],
+    });
+    const identityProvider = new TestIdentityProvider({
+      options: [{ kind: 'anonymous', minAssurance: 'L1' }],
+    });
+    const composition = testComposition(
+      identityProvider,
+      {
+        componentDocument,
+        componentGraph,
+        hostEvidence,
+      },
+      publicPortalProfile,
+    );
+
+    await renderRuntime(composition, publicPortalProfile);
+    await waitForText('Demo Benefits Intake');
+
+    expect(text()).not.toContain('This form is not available on this route.');
+    expect(composition.draftStore.load).toHaveBeenCalled();
+  });
+
   it('renders respondent-place history, saved files, and status feedback', async () => {
     const identityProvider = new TestIdentityProvider();
     const applicantStatus: ApplicantStatusResource = {
@@ -555,10 +819,22 @@ describe('RespondentRuntime identity sign-in', () => {
     const anonymousSessions = {
       sessionForForm: vi.fn(async () => anonymousSession),
     };
-    const capabilityRequests: Array<{ formId: string; anonymousSessionToken: string; appendCommand: any }> = [];
-    const httpRequests: Array<{ url: string; body: any; headers: Headers }> = [];
+    type LedgerAppendCommand = {
+      ledgerScope?: unknown;
+      idempotencyKey?: unknown;
+      opBatchHash?: unknown;
+      branchId?: unknown;
+      mode?: unknown;
+      opBatch?: unknown;
+    };
+    const capabilityRequests: Array<{
+      formId: string;
+      anonymousSessionToken: string;
+      appendCommand: unknown;
+    }> = [];
+    const httpRequests: Array<{ url: string; body: LedgerAppendCommand; headers: Headers }> = [];
     const fetchHostRoute = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      const body = init?.body ? JSON.parse(String(init.body)) as LedgerAppendCommand : {};
       const headers = new Headers(init?.headers);
       httpRequests.push({ url: String(url), body, headers });
 
@@ -1407,13 +1683,21 @@ function componentDocumentForRuntime(): ComponentDocument {
   } as unknown as ComponentDocument;
 }
 
+type UiGraphPolicyHostEvidenceOptions = {
+  hiddenDefinitionRefs?: Array<{ url: string; version?: string }>;
+  phases?: NonNullable<LayoutHostEvidence['appGraphReport']>['phases'];
+  reportOk?: boolean;
+  targetSurfaceUrl?: string;
+};
+
 function uiGraphPolicyHostEvidence(
   reportSource = 'host://policy/respondent-ui-policy',
+  options: UiGraphPolicyHostEvidenceOptions = {},
 ): LayoutHostEvidence {
   const policySource = 'host://policy/respondent-ui-policy';
   return {
     appGraphReport: {
-      ok: true,
+      ok: options.reportOk ?? true,
       summary: {
         artifacts: 0,
         loadedArtifacts: 0,
@@ -1437,7 +1721,7 @@ function uiGraphPolicyHostEvidence(
         diagnostics: [],
       }],
       diagnostics: [],
-      phases: [
+      phases: options.phases ?? [
         { phase: 'schema', status: 'completed' },
         { phase: 'cross-artifact', status: 'completed' },
       ],
@@ -1449,7 +1733,7 @@ function uiGraphPolicyHostEvidence(
         $formspecUiGraphPolicy: '0.1',
         version: '1.0.0',
         targetSurface: {
-          url: 'https://surfaces.example.test/intake',
+          url: options.targetSurfaceUrl ?? 'https://surfaces.example.test/intake',
           version: '1.0.0',
         },
         routePolicies: [{
@@ -1463,7 +1747,7 @@ function uiGraphPolicyHostEvidence(
             collapseOrder: ['summary', 'details'],
           },
           definitionVisibility: {
-            hiddenDefinitionRefs: [{
+            hiddenDefinitionRefs: options.hiddenDefinitionRefs ?? [{
               url: 'https://forms.example.test/internal-notes',
               version: '1.0.0',
             }],

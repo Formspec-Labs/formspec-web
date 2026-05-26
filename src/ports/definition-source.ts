@@ -50,11 +50,11 @@ export interface DefinitionSource {
   getComponentGraphContext?(url: string, version?: string): Promise<ComponentGraphProjectionContext | null>;
 
   /**
-   * Optional projection-only host evidence. Sources that fetch a published
+   * Optional host-validated layout evidence. Sources that fetch a published
    * runtime payload MAY return the already host-validated LayoutHostEvidence
-   * snapshot carried beside the Definition. Browser runtime code treats this
-   * as inert layout projection input only; validation, route authority,
-   * hidden-state rejection, and authorization remain host-owned.
+   * snapshot carried beside the Definition. Browser runtime code may use this
+   * for inert renderer metadata and the ADR 0153 hidden-state consumer gate;
+   * validation, route authority, and authorization remain host-owned.
    */
   getLayoutHostEvidence?(url: string, version?: string): Promise<LayoutHostEvidence | null>;
 }

@@ -14,7 +14,8 @@ export type RuntimePolicyErrorCode =
   | 'OrgPolicyUnsatisfied'
   | 'InvalidRuntimePolicy'
   | 'EmbedOriginNotAllowed'
-  | 'PaymentRequiresOnline';
+  | 'PaymentRequiresOnline'
+  | 'HiddenDefinitionRuntimeState';
 
 export abstract class RuntimePolicyError extends Error {
   abstract readonly code: RuntimePolicyErrorCode;
@@ -104,6 +105,18 @@ export class PaymentRequiresOnlineError extends RuntimePolicyError {
     super(
       'This form requires payment and cannot be saved for later — you must be online to fill it.',
     );
+  }
+}
+
+/**
+ * ADR 0153 UI Graph Policy runtime consumer gate. Thrown before draft or
+ * Response Action state is created when completed host evidence says the
+ * active route hides the currently loaded Definition.
+ */
+export class HiddenDefinitionRuntimeStateError extends RuntimePolicyError {
+  readonly code = 'HiddenDefinitionRuntimeState' as const;
+  constructor(readonly definitionUrl: string) {
+    super(`Definition is hidden on the active route: ${definitionUrl}`);
   }
 }
 

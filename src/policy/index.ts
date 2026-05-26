@@ -55,6 +55,7 @@ export {
 export {
   EmbedOriginNotAllowedError,
   FeaturePolicyConflictError,
+  HiddenDefinitionRuntimeStateError,
   InvalidRuntimePolicyError,
   OrgPolicyUnsatisfiedError,
   PaymentRequiresOnlineError,

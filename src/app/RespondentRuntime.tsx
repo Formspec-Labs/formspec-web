@@ -67,6 +67,7 @@ import { isProblemJson, type ProblemJson } from '../shared/problem-json.ts';
 import {
   EmbedOriginNotAllowedError,
   FeaturePolicyConflictError,
+  HiddenDefinitionRuntimeStateError,
   InvalidRuntimePolicyError,
   OrgPolicyUnsatisfiedError,
   PaymentRequiresOnlineError,
@@ -137,6 +138,7 @@ interface RespondentRuntimeProps {
 }
 
 const engineReady = initFormspecEngine();
+const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
 
 type RespondentState =
   | { status: 'loading' }
@@ -1052,6 +1054,23 @@ async function createReadyState(
     };
   }
 
+  const activeLocale = options.locale ?? defaultLocaleForDefinition(definition);
+  const [
+    localeDocuments,
+    componentDocument,
+    componentGraph,
+    hostEvidence,
+  ] = await Promise.all([
+    composition.definitionSource.getLocaleDocuments?.(composition.initialDefinitionUrl),
+    composition.definitionSource.getComponentDocument?.(composition.initialDefinitionUrl),
+    composition.definitionSource.getComponentGraphContext?.(composition.initialDefinitionUrl),
+    composition.definitionSource.getLayoutHostEvidence?.(composition.initialDefinitionUrl),
+  ]);
+
+  if (uiGraphPolicyHidesDefinitionOnActiveRoute({ definition, componentGraph, hostEvidence })) {
+    throw new HiddenDefinitionRuntimeStateError(definition.url);
+  }
+
   const draftKey: DraftKey = {
     formUrl: definition.url,
     formVersion: definition.version,
@@ -1068,23 +1087,10 @@ async function createReadyState(
       ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef)
       : draftKey,
   );
-  const activeLocale = options.locale ?? defaultLocaleForDefinition(definition);
 
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
   });
-  const localeDocuments = await composition.definitionSource.getLocaleDocuments?.(
-    composition.initialDefinitionUrl,
-  );
-  const componentDocument = await composition.definitionSource.getComponentDocument?.(
-    composition.initialDefinitionUrl,
-  ) ?? null;
-  const componentGraph = await composition.definitionSource.getComponentGraphContext?.(
-    composition.initialDefinitionUrl,
-  ) ?? null;
-  const hostEvidence = await composition.definitionSource.getLayoutHostEvidence?.(
-    composition.initialDefinitionUrl,
-  ) ?? null;
   for (const localeDocument of localeDocuments ?? []) {
     engine.loadLocale(localeDocument);
   }
@@ -1095,9 +1101,9 @@ async function createReadyState(
   return {
     status: 'ready',
     definition,
-    componentDocument,
-    componentGraph,
-    hostEvidence,
+    componentDocument: componentDocument ?? null,
+    componentGraph: componentGraph ?? null,
+    hostEvidence: hostEvidence ?? null,
     engine,
     draftKey,
     claim,
@@ -1107,6 +1113,223 @@ async function createReadyState(
     multiPartyState,
     runtimeProfile,
   };
+}
+
+function uiGraphPolicyHidesDefinitionOnActiveRoute({
+  definition,
+  componentGraph,
+  hostEvidence,
+}: {
+  definition: FormDefinition;
+  componentGraph: ComponentGraphProjectionContext | null | undefined;
+  hostEvidence: LayoutHostEvidence | null | undefined;
+}): boolean {
+  const evidence = hostEvidence?.uiGraphPolicies;
+  if (!componentGraph || !Array.isArray(evidence) || evidence.length === 0) {
+    return false;
+  }
+
+  const validatedPolicySources = validatedUiGraphPolicyEvidenceSources(hostEvidence?.appGraphReport);
+  if (validatedPolicySources.size === 0) {
+    return false;
+  }
+
+  const matchingRoutePolicies: unknown[] = [];
+  for (const [index, entry] of evidence.entries()) {
+    if (!isUiGraphPolicyProjectionEvidenceLike(entry)) continue;
+    const evidenceSlot = `hostEvidence.uiGraphPolicies[${index}]`;
+    if (validatedPolicySources.get(evidenceSlot) !== entry.source) continue;
+    if (entry.schemaId !== UI_GRAPH_POLICY_SCHEMA_ID) continue;
+    const document = entry.document;
+    if (!isUiGraphPolicyDocumentLike(document)) continue;
+    if (!targetSurfaceMatches(document.targetSurface, componentGraph.surface)) continue;
+    for (const routePolicy of document.routePolicies) {
+      if (routePolicy.routeId === componentGraph.route) {
+        matchingRoutePolicies.push(routePolicy);
+      }
+    }
+  }
+
+  if (matchingRoutePolicies.length !== 1) {
+    return false;
+  }
+
+  const [routePolicy] = matchingRoutePolicies;
+  if (!isUiGraphRoutePolicyLike(routePolicy)) {
+    return false;
+  }
+  const hiddenRefs = routePolicy.definitionVisibility?.hiddenDefinitionRefs;
+  return Array.isArray(hiddenRefs) &&
+    hiddenRefs.some((ref) => hiddenDefinitionRefMatches(ref, definition));
+}
+
+function validatedUiGraphPolicyEvidenceSources(
+  report: LayoutHostEvidence['appGraphReport'] | undefined,
+): Map<string, string> {
+  if (
+    !report ||
+    typeof report !== 'object' ||
+    report.ok !== true ||
+    !Array.isArray(report.phases) ||
+    !Array.isArray(report.evidenceResults)
+  ) {
+    return new Map();
+  }
+
+  const phases = new Map<string, string>();
+  for (const phase of report.phases) {
+    if (!isAppGraphPhaseLike(phase) || phases.has(phase.phase)) {
+      return new Map();
+    }
+    phases.set(phase.phase, phase.status);
+  }
+  if (phases.get('schema') !== 'completed' || phases.get('cross-artifact') !== 'completed') {
+    return new Map();
+  }
+
+  const sourcesBySlot = new Map<string, string>();
+  const seenEvidenceSlots = new Set<string>();
+  for (const result of report.evidenceResults) {
+    if (!isAppGraphEvidenceResultLike(result) || seenEvidenceSlots.has(result.evidenceSlot)) {
+      return new Map();
+    }
+    seenEvidenceSlots.add(result.evidenceSlot);
+    if (isCompletedUiGraphPolicyEvidenceResult(result)) {
+      sourcesBySlot.set(result.evidenceSlot, result.source);
+    }
+  }
+  return sourcesBySlot;
+}
+
+function isAppGraphPhaseLike(value: unknown): value is { phase: string; status: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const phase = value as { phase?: unknown; status?: unknown };
+  return typeof phase.phase === 'string' && typeof phase.status === 'string';
+}
+
+function isAppGraphEvidenceResultLike(value: unknown): value is {
+  evidenceSlot: string;
+  schemaId: string;
+  source: string;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const result = value as {
+    evidenceSlot?: unknown;
+    schemaId?: unknown;
+    source?: unknown;
+  };
+  return typeof result.evidenceSlot === 'string' &&
+    typeof result.schemaId === 'string' &&
+    typeof result.source === 'string';
+}
+
+function isCompletedUiGraphPolicyEvidenceResult(value: unknown): value is {
+  evidenceSlot: string;
+  schemaId: typeof UI_GRAPH_POLICY_SCHEMA_ID;
+  source: string;
+  status: 'completed';
+  ok: true;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const result = value as {
+    evidenceSlot?: unknown;
+    schemaId?: unknown;
+    source?: unknown;
+    status?: unknown;
+    ok?: unknown;
+  };
+  return result.schemaId === UI_GRAPH_POLICY_SCHEMA_ID &&
+    result.status === 'completed' &&
+    result.ok === true &&
+    typeof result.evidenceSlot === 'string' &&
+    typeof result.source === 'string';
+}
+
+function isUiGraphPolicyProjectionEvidenceLike(value: unknown): value is {
+  schemaId: string;
+  source: string;
+  document: unknown;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const evidence = value as { schemaId?: unknown; source?: unknown };
+  return typeof evidence.schemaId === 'string' &&
+    typeof evidence.source === 'string' &&
+    'document' in value;
+}
+
+function isUiGraphPolicyDocumentLike(value: unknown): value is {
+  $formspecUiGraphPolicy: '0.1';
+  targetSurface: { url: string; version?: string };
+  routePolicies: Array<{
+    routeId: string;
+    definitionVisibility?: {
+      hiddenDefinitionRefs?: unknown[];
+    };
+  }>;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const document = value as {
+    $formspecUiGraphPolicy?: unknown;
+    targetSurface?: unknown;
+    routePolicies?: unknown;
+  };
+  const targetSurface = document.targetSurface;
+  if (
+    document.$formspecUiGraphPolicy !== '0.1' ||
+    !targetSurface ||
+    typeof targetSurface !== 'object' ||
+    Array.isArray(targetSurface) ||
+    typeof (targetSurface as { url?: unknown }).url !== 'string' ||
+    ('version' in targetSurface &&
+      typeof (targetSurface as { version?: unknown }).version !== 'string') ||
+    !Array.isArray(document.routePolicies)
+  ) {
+    return false;
+  }
+  return document.routePolicies.every(isUiGraphRoutePolicyLike);
+}
+
+function isUiGraphRoutePolicyLike(value: unknown): value is {
+  routeId: string;
+  definitionVisibility?: {
+    hiddenDefinitionRefs?: unknown[];
+  };
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const routePolicy = value as {
+    routeId?: unknown;
+    definitionVisibility?: unknown;
+  };
+  if (typeof routePolicy.routeId !== 'string') return false;
+  if (!('definitionVisibility' in routePolicy)) return true;
+  if (
+    !routePolicy.definitionVisibility ||
+    typeof routePolicy.definitionVisibility !== 'object' ||
+    Array.isArray(routePolicy.definitionVisibility)
+  ) {
+    return false;
+  }
+  const visibility = routePolicy.definitionVisibility as {
+    hiddenDefinitionRefs?: unknown;
+  };
+  return !('hiddenDefinitionRefs' in visibility) ||
+    Array.isArray(visibility.hiddenDefinitionRefs);
+}
+
+function targetSurfaceMatches(
+  policySurface: { url: string },
+  scopeSurface: ComponentGraphProjectionContext['surface'],
+): boolean {
+  return policySurface.url === scopeSurface.url;
+}
+
+function hiddenDefinitionRefMatches(ref: unknown, definition: FormDefinition): boolean {
+  if (!ref || typeof ref !== 'object' || Array.isArray(ref)) {
+    return false;
+  }
+  const candidate = ref as { url?: unknown; version?: unknown };
+  return candidate.url === definition.url &&
+    (candidate.version === undefined || candidate.version === definition.version);
 }
 
 async function loadRespondentPlace(
@@ -2131,6 +2354,9 @@ function runtimePolicyErrorCopy(error: RuntimePolicyError): string {
   }
   if (error instanceof PaymentRequiresOnlineError) {
     return PAYMENT_REQUIRES_ONLINE_COPY;
+  }
+  if (error instanceof HiddenDefinitionRuntimeStateError) {
+    return 'This form is not available on this route. Try again later, or contact the sender for help.';
   }
   if (
     error instanceof UnsupportedRequiredFeatureError ||

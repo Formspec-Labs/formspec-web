@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FeaturePolicyConflictError,
+  HiddenDefinitionRuntimeStateError,
   InvalidRuntimePolicyError,
   OrgPolicyUnsatisfiedError,
   RuntimePolicyError,
@@ -33,6 +34,12 @@ describe('typed configuration errors (ADR-0011 §Failure Semantics)', () => {
     const err = new InvalidRuntimePolicyError('form', 'unknown feature key "payment"');
     expect(err.code).toBe('InvalidRuntimePolicy');
     expect(err.documentKind).toBe('form');
+  });
+
+  it('HiddenDefinitionRuntimeStateError carries the hidden Definition URL', () => {
+    const err = new HiddenDefinitionRuntimeStateError('https://example.test/forms/internal');
+    expect(err.code).toBe('HiddenDefinitionRuntimeState');
+    expect(err.definitionUrl).toBe('https://example.test/forms/internal');
   });
 
   it('isRuntimePolicyError discriminates against ordinary Errors', () => {
