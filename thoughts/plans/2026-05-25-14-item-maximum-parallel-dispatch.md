@@ -8,6 +8,8 @@ rows: FW-0015 / FW-0019 / FW-0028 slice 2 / FW-0038 / FW-0041 / FW-0060 / FW-006
 
 # Plan — 14-item maximum-parallel dispatch
 
+**Note:** The "Wave 1/2/3" (and "Wave A/B") framing in this plan is session-orchestration vocabulary specific to the 2026-05-25 dispatch. It is NOT canonical project vocabulary. Future ratification work should use per-spec status per the canonical taxonomy at [`thoughts/adr/README.md`](../../../thoughts/adr/README.md) with explicit gates named per item.
+
 ## §0 Reality check
 
 "All in parallel" has real dependency edges. The honest shape:
