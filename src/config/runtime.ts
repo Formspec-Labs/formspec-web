@@ -23,7 +23,10 @@ const runtimeEnvMap = {
     'FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
     'VITE_FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
   ],
-} as const satisfies Record<keyof RuntimeConfig, readonly string[]>;
+} as const satisfies Record<
+  Exclude<keyof RuntimeConfig, 'surfaceBundle'>,
+  readonly string[]
+>;
 
 export function readRuntimeConfig(): RuntimeConfig {
   const viteConfig = runtimeConfigFromEnvRecord(import.meta.env);
@@ -39,7 +42,7 @@ export function readRuntimeConfig(): RuntimeConfig {
 export function runtimeConfigFromEnvRecord(env: RuntimeEnvRecord): RuntimeConfig {
   const config: RuntimeConfig = {};
   for (const [runtimeKey, envNames] of Object.entries(runtimeEnvMap) as Array<
-    [keyof RuntimeConfig, readonly string[]]
+    [Exclude<keyof RuntimeConfig, 'surfaceBundle'>, readonly string[]]
   >) {
     const value = firstPresent(env, envNames);
     if (value) {
@@ -79,7 +82,8 @@ function applyRuntimeOverrides(
     runtimeConfig.magicLinkCallbackPath ||
     runtimeConfig.oidcIssuer ||
     runtimeConfig.oidcClientId ||
-    runtimeConfig.oidcRedirectUri;
+    runtimeConfig.oidcRedirectUri
+    || runtimeConfig.surfaceBundle;
 
   const formspecStack =
     referenceAdapter || hasReferenceRuntimeOverride
@@ -93,6 +97,8 @@ function applyRuntimeOverrides(
           oidc,
           magicLinkCallbackPath:
             runtimeConfig.magicLinkCallbackPath ?? referenceAdapter?.magicLinkCallbackPath,
+          surfaceBundle:
+            runtimeConfig.surfaceBundle ?? referenceAdapter?.surfaceBundle,
         }
       : undefined;
 
@@ -179,7 +185,11 @@ function identityMagicLink(identity: IdentityPolicyConfig): MagicLinkConfig | un
 
 function compactRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
   return Object.fromEntries(
-    Object.entries(config).filter(([, value]) => typeof value === 'string' && value.length > 0),
+    Object.entries(config).filter(([key, value]) => (
+      key === 'surfaceBundle'
+        ? typeof value === 'object' && value !== null
+        : typeof value === 'string' && value.length > 0
+    )),
   ) as RuntimeConfig;
 }
 

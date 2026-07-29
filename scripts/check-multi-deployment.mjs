@@ -4,15 +4,58 @@ import { spawnSync } from 'node:child_process';
 import { Buffer } from 'node:buffer';
 import http from 'node:http';
 import process from 'node:process';
+import { isDeepStrictEqual } from 'node:util';
 import { chromium } from '@playwright/test';
+import { parseRuntimeConfigScript } from './parse-runtime-config-script.mjs';
 
 const imageTag = `formspec-web:multi-${process.pid}`;
+const respondentSurfaceBundle = {
+  locator: 'https://bundles.example.gov/respondent.cose',
+  allowedOrigins: ['https://bundles.example.gov'],
+  maxBytes: 1_000_000,
+  timeoutMs: 15_000,
+  redirectPolicy: 'refuse',
+  starterModuleId: 'x-respondent',
+  receiptResourceUrl: 'https://runtime.example.gov/respondent/receipt',
+  verification: {
+    expectedAppId: 'https://example.gov/apps/respondent',
+    methodRegistry: {
+      version: '1.0.0',
+      entries: [{
+        id: 'urn:formspec:sig-method:ed25519-cose-sign1@1',
+        suite: 'Ed25519',
+        wire: 'COSE_Sign1',
+        alg: -8,
+        status: 'registered',
+      }],
+    },
+    keys: [{
+      kid: 'cmVzcG9uZGVudC1rZXk',
+      publicKey: 'fx3_yLroLm6rm0sr39ep4fO15R7XxmMZWaJX731JUfY',
+    }],
+    authorities: [{
+      kid: 'cmVzcG9uZGVudC1rZXk',
+      publisherId: 'https://publisher.example.gov/',
+      publisherDisplayName: 'Example publisher',
+      appIds: ['https://example.gov/apps/respondent'],
+      methods: ['urn:formspec:sig-method:ed25519-cose-sign1@1'],
+      validFrom: '2026-01-01T00:00:00.000Z',
+      validUntil: '2027-01-01T00:00:00.000Z',
+      revoked: false,
+    }],
+    pinnedReleases: [{
+      digest: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      releaseId: 'respondent-2026-07-28',
+    }],
+  },
+};
 const containers = [
   {
     name: `formspec-web-multi-public-${process.pid}`,
     profileName: 'publicPortal',
     brandName: 'formspec-public',
     respondentName: 'Ada Public',
+    surfaceBundle: respondentSurfaceBundle,
   },
   {
     name: `formspec-web-multi-department-${process.pid}`,
@@ -44,6 +87,10 @@ async function main() {
       '127.0.0.1::80',
       '-e',
       `FORMSPEC_WEB_PROFILE=${container.profileName}`,
+      '-e',
+      `FORMSPEC_WEB_SURFACE_BUNDLE_JSON=${
+        container.surfaceBundle ? JSON.stringify(container.surfaceBundle) : ''
+      }`,
       imageTag,
     ]);
     container.port = publishedPort(container.name);
@@ -104,10 +151,15 @@ function publishedPort(containerName) {
 async function assertRuntimeConfig(container) {
   const response = await request(container.port, '/formspec-runtime-config.js');
   assertStatus(response, 200, `${container.profileName} runtime config`);
-  const profileLiteral = `profileName: "${container.profileName}"`;
-  if (!response.body.includes(profileLiteral)) {
+  const config = parseRuntimeConfigScript(response.body);
+  if (config.profileName !== container.profileName) {
     throw new Error(
-      `multi-deployment check failed: ${container.profileName} runtime config did not include ${profileLiteral}`,
+      `multi-deployment check failed: ${container.profileName} runtime config selected ${String(config.profileName)}`,
+    );
+  }
+  if (!isDeepStrictEqual(config.surfaceBundle, container.surfaceBundle)) {
+    throw new Error(
+      `multi-deployment check failed: ${container.profileName} runtime config did not preserve surfaceBundle`,
     );
   }
 }

@@ -46,3 +46,98 @@ Supported runtime variables:
 | `oidcClientId` | `FORMSPEC_WEB_OIDC_CLIENT_ID` | `VITE_FORMSPEC_WEB_OIDC_CLIENT_ID` |
 | `oidcRedirectUri` | `FORMSPEC_WEB_OIDC_REDIRECT_URI` | `VITE_FORMSPEC_WEB_OIDC_REDIRECT_URI` |
 | `magicLinkCallbackPath` | `FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH` | `VITE_FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH` |
+| `surfaceBundle` | `FORMSPEC_WEB_SURFACE_BUNDLE_JSON` | None; supply the object through runtime JavaScript. |
+
+## Signed respondent Surface
+
+The signed respondent path requires the `publicPortal` profile with its
+anonymous identity adapter, `FORMSPEC_WEB_SERVER_URL`, and a complete
+`FORMSPEC_WEB_SURFACE_BUNDLE_JSON` object. A bundle location by itself does not
+activate this path. OIDC and department profiles keep their existing runtime;
+this prevents the current subject-free browser receipt store from crossing an
+authenticated subject boundary.
+
+Store the deployment-owned object as JSON, for example:
+
+```json
+{
+  "locator": "https://bundles.example.gov/respondent.cose",
+  "allowedOrigins": ["https://bundles.example.gov"],
+  "maxBytes": 1000000,
+  "timeoutMs": 15000,
+  "redirectPolicy": "refuse",
+  "starterModuleId": "x-respondent",
+  "receiptResourceUrl": "https://runtime.example.gov/respondent/receipt",
+  "verification": {
+    "expectedAppId": "https://example.gov/apps/respondent",
+    "methodRegistry": {
+      "version": "1.0.0",
+      "entries": [
+        {
+          "id": "urn:formspec:sig-method:ed25519-cose-sign1@1",
+          "suite": "Ed25519",
+          "wire": "COSE_Sign1",
+          "alg": -8,
+          "status": "registered"
+        }
+      ]
+    },
+    "keys": [
+      {
+        "kid": "cmVzcG9uZGVudC1rZXk",
+        "publicKey": "fx3_yLroLm6rm0sr39ep4fO15R7XxmMZWaJX731JUfY"
+      }
+    ],
+    "authorities": [
+      {
+        "kid": "cmVzcG9uZGVudC1rZXk",
+        "publisherId": "https://publisher.example.gov/",
+        "publisherDisplayName": "Example publisher",
+        "appIds": ["https://example.gov/apps/respondent"],
+        "methods": ["urn:formspec:sig-method:ed25519-cose-sign1@1"],
+        "validFrom": "2026-01-01T00:00:00.000Z",
+        "validUntil": "2027-01-01T00:00:00.000Z",
+        "revoked": false
+      }
+    ],
+    "pinnedReleases": [
+      {
+        "digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "releaseId": "respondent-2026-07-28"
+      }
+    ]
+  }
+}
+```
+
+Replace every example trust value with the publisher's release data.
+`verification.keys[].publicKey` is unpadded base64url for the raw 32-byte
+Ed25519 public key. It is not a SubjectPublicKeyInfo (SPKI) value. Keep the
+signing private key outside this client configuration. `timeoutMs` is the
+deployment-owned deadline for the complete bundle acquisition; expiry aborts
+the request and leaves the host in its fixed unavailable state.
+
+The browser checks authority validity against the device clock. Required
+release digest pins still prevent an expired key from authorizing different
+bytes, but clock-based expiry is not adversary-resistant. Remove expired or
+revoked keys and their pins from deployment configuration until the host has a
+trusted time source.
+
+This is an accepted limitation of the current anonymous, digest-pinned host.
+Claiming adversary-resistant expiry or adding a trusted-time source requires a
+new tracker item, an accepted design, and new release evidence.
+
+Save the object as `respondent-surface.json`, then pass its compact form to
+Docker or Compose:
+
+```bash
+FORMSPEC_WEB_SERVER_URL=https://formspec-server.example.gov \
+FORMSPEC_WEB_SURFACE_BUNDLE_JSON="$(jq -c . respondent-surface.json)" \
+docker compose up --build
+```
+
+The container parses this variable as one JSON object. Invalid JSON, JSON
+arrays, and JSON `null` stop container startup. The entrypoint uses a JSON
+processor for every scalar and nested value, then atomically replaces
+`/formspec-runtime-config.js`; it does not paste environment values into
+JavaScript source.

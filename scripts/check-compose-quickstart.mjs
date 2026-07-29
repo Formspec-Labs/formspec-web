@@ -6,6 +6,7 @@ import http from 'node:http';
 import net from 'node:net';
 import process from 'node:process';
 import { chromium } from '@playwright/test';
+import { parseRuntimeConfigScript } from './parse-runtime-config-script.mjs';
 
 const projectName = `formspec-web-quickstart-${process.pid}`;
 const composeEnv = {
@@ -40,7 +41,14 @@ try {
 async function main() {
   await assertQuickstartPortsAvailable();
   run('docker', ['compose', 'config', '--quiet']);
-  run('docker', ['compose', '-p', projectName, 'up', '--build', '-d']);
+  run('docker', [
+    'compose',
+    '-p',
+    projectName,
+    'up',
+    '--build',
+    '-d',
+  ]);
 
   for (const instance of instances) {
     await waitForHealth(instance);
@@ -111,10 +119,10 @@ async function portAvailable(port) {
 async function assertRuntimeConfig(instance) {
   const response = await request(instance.port, '/formspec-runtime-config.js');
   assertStatus(response, 200, `${instance.profileName} runtime config`);
-  const profileLiteral = `profileName: "${instance.profileName}"`;
-  if (!response.body.includes(profileLiteral)) {
+  const config = parseRuntimeConfigScript(response.body);
+  if (config.profileName !== instance.profileName) {
     throw new Error(
-      `compose quickstart check failed: ${instance.profileName} runtime config did not include ${profileLiteral}`,
+      `compose quickstart check failed: ${instance.profileName} runtime config selected ${String(config.profileName)}`,
     );
   }
 }

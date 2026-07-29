@@ -37,6 +37,11 @@ deploy-time environment variables.
 | `FORMSPEC_WEB_OIDC_CLIENT_ID` | Overrides the profile OIDC client id. |
 | `FORMSPEC_WEB_OIDC_REDIRECT_URI` | Overrides the profile OIDC redirect URI. |
 | `FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH` | Overrides the magic-link callback path. |
+| `FORMSPEC_WEB_SURFACE_BUNDLE_JSON` | Complete signed respondent bundle location, trust, pinned-release, module, and receipt configuration as one JSON object. |
+
+See [Configuration](configuration.md#signed-respondent-surface) for the exact
+object shape and key encoding. The container rejects a non-empty malformed
+value instead of starting with a partial signed-bundle configuration.
 
 ## Compose
 
@@ -63,12 +68,23 @@ also forwards `FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` when set; use
 the reference `/runtime/response-actions/ledger/capability` route when compose is
 backed by `formspec-server`. That only wires the browser-to-BFF capability seam
 and does not by itself prove a live server/Trellis ledger path.
+Compose also forwards `FORMSPEC_WEB_SURFACE_BUNDLE_JSON`. The signed respondent
+path activates only for the anonymous `publicPortal` service when that complete
+object and `FORMSPEC_WEB_SERVER_URL` are both present. The department OIDC
+service does not activate this root.
 
 ## Hosted Demo Decision
 
 Hosted demo selection is deferred to user action. Local Docker compose is the
 release proof for M8, and no internet-reachable URL is claimed until an owner
 chooses a hosting target and DNS name.
+
+This deferral is an accepted release boundary, not unfinished work in the local
+web artifact. No tracker item currently authorizes a hosted URL. Selecting a
+host, DNS name, credentials, and operating owner requires a new tracker item
+and explicit release authorization. The
+[manual release gates](testing-plan.md#manual-release-gates) remain the evidence
+entry point.
 
 The static hosting recipes below are ready-to-run deployment paths for that
 owner decision. For a public evaluation demo, leave the server URL unset so the
@@ -156,5 +172,13 @@ startup rather than baking production values into the JS bundle.
 
 The M8 plan originally calls for one `formspec-server` instance plus its
 dependencies in this compose file. That full stack remains deferred because
-EXT-23 blocks server-side OIDC validation and EXT-25 tracks a production
-server image. The current compose file is the shippable local web demo.
+[EXT-23](../thoughts/specs/2026-05-22-upstream-extension-queue.md#ext-23-per-tenant-oidc-trusted-issuer-and-jwks-validation)
+blocks server-side OpenID Connect (OIDC) validation, and
+[EXT-25](../thoughts/specs/2026-05-22-upstream-extension-queue.md#ext-25-production-formspec-server-image)
+tracks a production server image. The current compose file is the shippable
+local web demo.
+
+This is an accepted release boundary for the current web-only compose shape.
+Neither upstream item authorizes this repository to add or deploy the server
+stack. A full-stack release requires the upstream work, a new local tracker
+item, and explicit release authorization.
