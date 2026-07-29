@@ -8,7 +8,10 @@ import { isDeepStrictEqual } from 'node:util';
 import { chromium } from '@playwright/test';
 import { parseRuntimeConfigScript } from './parse-runtime-config-script.mjs';
 
-const imageTag = `formspec-web:multi-${process.pid}`;
+const usePrebuiltImage = process.env.FORMSPEC_WEB_TEST_USE_PREBUILT_IMAGE === '1';
+const imageTag = usePrebuiltImage
+  ? 'formspec-web:local'
+  : `formspec-web:multi-${process.pid}`;
 const respondentSurfaceBundle = {
   locator: 'https://bundles.example.gov/respondent.cose',
   allowedOrigins: ['https://bundles.example.gov'],
@@ -71,11 +74,15 @@ try {
   for (const container of containers) {
     spawnSync('docker', ['rm', '-f', container.name], { stdio: 'ignore' });
   }
-  spawnSync('docker', ['image', 'rm', imageTag], { stdio: 'ignore' });
+  if (!usePrebuiltImage) {
+    spawnSync('docker', ['image', 'rm', imageTag], { stdio: 'ignore' });
+  }
 }
 
 async function main() {
-  run('docker', ['build', '-t', imageTag, '.']);
+  if (!usePrebuiltImage) {
+    run('docker', ['build', '-t', imageTag, '.']);
+  }
   for (const container of containers) {
     run('docker', [
       'run',

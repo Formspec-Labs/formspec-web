@@ -1,9 +1,11 @@
 # Testing Plan
 
-This plan is the test contract for the M0-M8 MVP. It maps each risk to an
-executable gate or to an explicit manual release gate. A new adapter, port
-change, profile change, or runtime path is not complete until this file names
-the proof that covers it.
+This plan is the test record for the M0-M8 MVP and the post-MVP signed Surface
+host. It maps each risk to an executable gate or an explicit manual release
+gate. A new adapter, port change, profile change, or runtime path is not
+complete until this file names its proof. The implementation paths below
+describe the current local worktree; they do not claim a commit, release, or
+deployment.
 
 ## Command Gates
 
@@ -17,24 +19,32 @@ the proof that covers it.
 | Release docs | `npm run check:release-docs` | Yes | Ensures M5 quickstart proof, M8 hosted-demo deferral, static-export recipes, Docker reverse-proxy recipe, README release state, and server-stack blockers stay documented. |
 | Conformance coverage | `npm run check:conformance-coverage` | Yes | Ensures every first-party adapter stays registered in its port conformance suite and that local suites re-export the public harness surface. |
 | Port conformance | `npm run test:conformance` | Yes | First-party adapters for active ports, including `DefinitionSource`, `DraftStore`, `SubmitTransport`, `IdentityProvider`, `NotificationDelivery`, `RespondentPlaceSource`, `StatusReader`, `ReviewerSession`, and `ReviewThreadStore`. |
-| Unit and smoke tests | `npm run test:unit` | Yes | HTTP adapters, identity adapters, respondent-place runtime rendering, respondent flow helpers, runtime config, sample form, composition smoke, idempotency, Problem JSON. |
+| Unit and smoke tests | `npm run test:unit` | Yes | HTTP adapters, identity adapters, respondent-place runtime rendering, signed Surface admission and authenticated status, respondent flow helpers, runtime config, sample form, composition smoke, idempotency, Problem JSON. |
 | Vendor firewall | `npm run check:vendor-leaks` | Yes | Prevents provider-native vocabulary and disallowed vendor names from leaking through portable surfaces. |
 | Upstream theme sync | `npm run check:upstream-theme` | Yes | Verifies copied upstream theme assets are byte-for-byte synced and sourced from Apache-2.0 manifests. |
-| Browser accessibility | `npm run test:e2e` | Yes | Playwright Chromium smoke with axe checks for demo, load-error, OIDC sign-in, and mobile tap-target surfaces. |
+| Signed Surface bundle vendor sync | `npm run check:surface-bundle-vendor` | Local stack | Verifies the signed-bundle profile and integrity dependencies are byte-for-byte synced with sibling builds, Apache-2.0 licensed, and below the source-size ceiling. |
+| Browser accessibility | `npm run test:e2e` | Yes | Playwright Chromium smoke with axe checks for demo, load-error, OIDC sign-in, mobile tap targets, and signed respondent admission and refusal states. |
 | Production build | `npm run build` | Yes | Vite production bundle and TypeScript build. |
 | Bundle budget | `npm run check:bundle-budget` | Yes | Initial JS <=200 KiB gzip and each lazy JS chunk <=200 KiB gzip after production build. |
 | Compose config | `npm run check:compose-config` | Yes | Validates the reference `docker-compose.yml` used for local quickstart and multi-instance demo. |
 | Compose quickstart | `npm run test:compose-quickstart` | Yes | Runs the documented `docker compose up --build` path on ports 8080/8081, checks isolated runtime profiles and brands, submits both demo forms in Chromium, and fails on browser warnings/errors. |
 | Deployment headers | `npm run test:deployment` | Yes | Docker/nginx image serves JS/CSS/WASM with gzip and immutable asset caching, keeps HTML revalidated, and keeps runtime config no-store. |
 | Multi-deployment smoke | `npm run test:multi-deployment` | Yes | Two Docker/nginx instances boot with separate runtime profiles, apply isolated brands, submit the demo form, and emit no browser warnings/errors. |
-| Full local gate | `npm run ci` | Yes | Runs all automated gates above in release order. |
+| Full local gate | `npm run ci` | Local stack | Runs every automated `Yes` and `Local stack` gate above in release order. GitHub Actions runs the `Yes` rows individually instead of invoking this sibling-dependent command. |
 
-GitHub CI uses the commands marked `Yes`. The local stack gate also runs the
-`Local stack` blocker check, because it needs a sibling `formspec-server`
-checkout that the public workflow cannot fetch without private repository
-credentials. `npm test` remains a convenient single Vitest command, but CI
-calls `test:conformance` and `test:unit` separately so conformance failures are
-visible as their own class.
+GitHub CI uses the commands marked `Yes`. The local `npm run ci` gate also runs
+the two `Local stack` checks. `check:upstream-blockers` reads the sibling
+`formspec-server` source, and `check:surface-bundle-vendor` compares built
+artifacts with the sibling `formspec` worktree. The public workflow does not
+run either sibling-dependent check. `npm test` remains a convenient single
+Vitest command, but CI calls `test:conformance` and `test:unit` separately so
+conformance failures remain visible as their own class.
+
+The three Docker smoke scripts build their image by default. A developer may
+set `FORMSPEC_WEB_TEST_USE_PREBUILT_IMAGE=1` only after separately building and
+inspecting the current `formspec-web:local` image. This supports diagnosis when
+a local builder exports the image but fails to return control; it does not
+change the default or CI gate.
 
 ## Coverage Matrix
 
@@ -50,6 +60,7 @@ visible as their own class.
 | M7 identity | Anonymous, HTTP anonymous session, OIDC, and magic-link conformance; OIDC ACR L1-L4 and downgrade failures; runtime fail-closed policy, explicit sign-in, redirect-started handling, bearer-token bridge for `oidc-required`, and identity docs. | `tests/adapter-conformance/identity-provider/conformance.test.ts`; `tests/adapters/http/anonymous-session.test.ts`; `tests/adapters/identity/anonymous.test.ts`; `tests/adapters/identity/oidc.test.ts`; `tests/adapters/identity/magic-link.test.ts`; `tests/app/respondent-flow.test.ts`; `tests/app/respondent-runtime.test.tsx`; `tests/smoke/composition.test.ts`; `docs/identity/integration.md`; `docs/identity/multi-flow.md`; `npm run check:upstream-blockers`; `scripts/check-upstream-blockers.mjs`; `tests/scripts/check-upstream-blockers.test.mjs`. |
 | M7a multi-instance demo | Runtime config per container, profile/brand isolation, and submit smoke on two Docker/nginx instances. | `npm run test:compose-quickstart`; `npm run test:multi-deployment`; `scripts/check-compose-quickstart.mjs`; `scripts/check-multi-deployment.mjs`; `docker-compose.yml`; documented `docker compose up --build` plus the browser smoke in `docs/multi-deployment.md` for human spot-checks. |
 | M8 deployment closeout | Docker build, runtime config emission, nginx compression/cache headers, compose config, docs for deferred server stack, hosted-demo deferral, EXT-19..27 migration, operations, deployment, multi-deployment, and README final polish. | `npm run build`, `npm run check:mvp-audit`, `npm run check:upstream-blockers`, `npm run check:release-docs`, `npm run check:compose-config`, `npm run test:compose-quickstart`, `npm run test:deployment`, `npm run test:multi-deployment`, `scripts/check-mvp-audit.mjs`, `tests/scripts/check-mvp-audit.test.mjs`, `docs/mvp-audit.md`, `scripts/check-upstream-blockers.mjs`, `tests/scripts/check-upstream-blockers.test.mjs`, `scripts/check-release-docs.mjs`, `tests/scripts/check-release-docs.test.mjs`, `thoughts/specs/2026-05-22-upstream-extension-queue.md`, `docker-compose.yml`, `README.md`, `docs/deployment.md`, `docs/operations.md`, `docs/multi-deployment.md`. |
+| Post-MVP signed Surface host | Source and verifier conformance; bounded acquisition; runtime configuration; AppGraph, actor, entry, dereference, and renderability checks before release commit; fixed pre-admission UI; no early bundle output; real respondent draft, submit, receipt, Locale, Theme, and widget behavior; authenticated status; staff and ceremony refusal; vendor reproducibility; browser accessibility; and production build. | `npm run check:surface-bundle-vendor`; `tests/adapter-conformance/surface-bundle-source/conformance.test.ts`; `tests/adapter-conformance/surface-bundle-verifier/conformance.test.ts`; `tests/adapters/http/surface-bundle-source.test.ts`; `tests/app/verifying-surface-host.test.tsx`; `tests/app/respondent-public-app-validation.test.ts`; `tests/app/verified-respondent-surface.test.tsx`; `tests/app/respondent-receipt-data-source.test.ts`; `tests/app/respondent-receipt-session-store.test.ts`; `tests/app/respondent-surface-locale.test.tsx`; `tests/app/respondent-widget-module.test.ts`; `tests/e2e/signed-respondent-root.spec.ts`; `tests/e2e/surface-shell-fixture.spec.ts`; `tests/scripts/runtime-config-entrypoint.test.mjs`; `scripts/check-surface-bundle-vendor.mjs`; `docs/verifying-surface.md`. |
 
 ## Adapter Rules
 
@@ -89,6 +100,13 @@ These checks are not automated yet and block release sign-off:
 | Full OIDC server validation | `docs/identity/integration.md` | Blocked by EXT-23. |
 | Cross-reload or cross-device draft resume | `docs/adapters/draft-store.md` | Blocked by EXT-26. |
 | Session-bound anonymous draft update | `docs/adapters/draft-store.md` | Blocked by EXT-27. |
+
+The current anonymous signed Surface also has two accepted limitations. Its
+browser-session receipt is not bound to an authenticated subject, and authority
+expiry uses the device clock. These limits do not block the current anonymous,
+digest-pinned deployment shape. Expanding to an authenticated signed root or
+claiming adversary-resistant time requires a new tracker item, an accepted
+design, and new release evidence.
 
 Do not describe M6, M7b, or the full server-backed reference composition as
 release-signed until the relevant rows above are closed.

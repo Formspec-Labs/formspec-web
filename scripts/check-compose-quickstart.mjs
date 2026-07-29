@@ -8,6 +8,7 @@ import process from 'node:process';
 import { chromium } from '@playwright/test';
 import { parseRuntimeConfigScript } from './parse-runtime-config-script.mjs';
 
+const usePrebuiltImage = process.env.FORMSPEC_WEB_TEST_USE_PREBUILT_IMAGE === '1';
 const projectName = `formspec-web-quickstart-${process.pid}`;
 const composeEnv = {
   ...process.env,
@@ -46,7 +47,7 @@ async function main() {
     '-p',
     projectName,
     'up',
-    '--build',
+    usePrebuiltImage ? '--no-build' : '--build',
     '-d',
   ]);
 

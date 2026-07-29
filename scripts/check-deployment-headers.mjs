@@ -5,19 +5,26 @@ import http from 'node:http';
 import net from 'node:net';
 import process from 'node:process';
 
-const imageTag = `formspec-web:headers-${process.pid}`;
+const usePrebuiltImage = process.env.FORMSPEC_WEB_TEST_USE_PREBUILT_IMAGE === '1';
+const imageTag = usePrebuiltImage
+  ? 'formspec-web:local'
+  : `formspec-web:headers-${process.pid}`;
 const containerName = `formspec-web-header-check-${process.pid}`;
 
 try {
   await main();
 } finally {
   spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
-  spawnSync('docker', ['image', 'rm', imageTag], { stdio: 'ignore' });
+  if (!usePrebuiltImage) {
+    spawnSync('docker', ['image', 'rm', imageTag], { stdio: 'ignore' });
+  }
 }
 
 async function main() {
   const port = await availablePort();
-  run('docker', ['build', '-t', imageTag, '.']);
+  if (!usePrebuiltImage) {
+    run('docker', ['build', '-t', imageTag, '.']);
+  }
   run('docker', [
     'run',
     '--rm',
