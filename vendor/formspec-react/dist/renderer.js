@@ -21,8 +21,10 @@ function syncSystemAppearanceClass(el, systemPrefersDark) {
 }
 function useEmitThemeTokensOnFormspecContainerRef() {
     const ref = useRef(null);
-    const { themeDocument, componentDocument } = useFormspecContext();
+    const { themeDocument, componentDocument, emitThemeTokens: shouldEmitThemeTokens, } = useFormspecContext();
     useLayoutEffect(() => {
+        if (!shouldEmitThemeTokens)
+            return;
         const el = ref.current;
         if (!el)
             return;
@@ -40,7 +42,7 @@ function useEmitThemeTokensOnFormspecContainerRef() {
                 }
             }
         };
-    }, [themeDocument, componentDocument]);
+    }, [themeDocument, componentDocument, shouldEmitThemeTokens]);
     useLayoutEffect(() => {
         const el = ref.current;
         if (!el || typeof window === 'undefined' || typeof window.matchMedia !== 'function')

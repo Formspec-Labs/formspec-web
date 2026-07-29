@@ -9,6 +9,7 @@ export const evaluateScreenerDocument: (a: number, b: number, c: number, d: numb
 export const felExprIsInterpolationStaticLiteral: (a: number, b: number) => number;
 export const evalFEL: (a: number, b: number, c: number, d: number, e: number) => void;
 export const evalFELWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
+export const evalFELWithContextTrace: (a: number, b: number, c: number, d: number, e: number) => void;
 export const evalFELWithContext: (a: number, b: number, c: number, d: number, e: number) => void;
 export const getFELDependencies: (a: number, b: number, c: number) => void;
 export const analyzeFEL: (a: number, b: number, c: number) => void;

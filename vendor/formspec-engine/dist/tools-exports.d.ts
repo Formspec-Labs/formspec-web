@@ -15,7 +15,7 @@ export { isNumericType, isDateType, isChoiceType, isTextType, isBinaryType, isBo
 export { interpolateMessage } from './interpolate-message.js';
 export type { InterpolateResult, InterpolationWarning } from './interpolate-message.js';
 export { LocaleStore } from './locale.js';
-export type { LookupResult } from './locale.js';
+export type { LocaleTargetIdentity, LookupResult } from './locale.js';
 export { analyzeExperience, coverageFindings, referentialIntegrityFindings, targetDefinitionFindings, unresolvedItemRefFindings, } from './experience.js';
 export type { ExperienceAnalysis, ExperienceFinding, ExperienceFindingCode } from './experience.js';
 export { createFieldViewModel } from './field-view-model.js';

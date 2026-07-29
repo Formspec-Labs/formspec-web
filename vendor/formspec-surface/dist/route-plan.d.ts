@@ -1,0 +1,76 @@
+/**
+ * @filedesc The route plan — one matched route, fully decided, with every
+ * diagnostic the deciding produced.
+ *
+ * `surface-shell-spec.md` defines *route plan* as "the shell core's output for
+ * one matched route: the resolved slots in order, the theme grant, the
+ * transition plan, and the diagnostics." Those four were produced by three
+ * separate calls a binding had to make in the right order and union itself, and
+ * the shipped React binding unioned three of the four: `planRoute` and
+ * `planTransitions` diagnostics were computed per route and **discarded**, so
+ * `SLOT-BINDING-INCOMPLETE`, `STATIC-IMAGE-NO-ALT`, `EMBED-ROUTE-*`,
+ * `WIDGET-*`, per-slot `BUNDLE-DOCUMENT-MISSING` and every
+ * `TRANSITION-UNFIREABLE` reached the screen and never the host. Per-route
+ * stages produce most of the code set, so that delivered the minority of it.
+ *
+ * This module is why that cannot happen again: the union is here, once, in the
+ * core, and a binding that renders a {@link SurfaceRoutePlan} has the whole
+ * diagnostic list in its hand by construction. §7.1: "Every diagnostic the
+ * shell produces MUST reach the host's diagnostic channel, whatever stage
+ * produced it."
+ *
+ * It also puts the `supplied-by-slot` walk (§5.3) on the same side of the seam
+ * as the slot plan it walks, which is the only place it can be got right once.
+ */
+import type { ExperienceDocument, FormDefinition, RegistryEntry } from '@formspec-org/types';
+import type { SurfaceApp, SurfaceRouteHandle } from './composition.js';
+import type { SurfaceDiagnostic } from './diagnostics.js';
+import type { WidgetRegistry } from './registry.js';
+import type { DataSourceCatalogHandle } from './data-source-loader.js';
+import { type SlotPlan } from './slot-plan.js';
+import type { HeadingLevel, SurfaceStaticAssetResolver } from './static-content.js';
+import type { SurfaceStringOverrides, SurfaceStrings } from './strings.js';
+import type { ThemeAuthority, ThemeGrant } from './theme-authority.js';
+import { type PlannedTransition, type ResponseActionsDocumentLike, type TransitionConditionEvaluator } from './transitions.js';
+export interface SurfaceRoutePlanInput<TComponent> {
+    handle: SurfaceRouteHandle;
+    app: SurfaceApp;
+    /** Route-parameter values, from the matched path and the host. */
+    params?: Readonly<Record<string, string>> | undefined;
+    experiences: readonly ExperienceDocument[];
+    definitions: ReadonlyMap<string, FormDefinition>;
+    registryEntries: readonly RegistryEntry[];
+    widgets: WidgetRegistry<TComponent>;
+    dataSources?: readonly DataSourceCatalogHandle[] | undefined;
+    /** Exact manifest URL for the matched Surface document. */
+    surfaceRef?: string | undefined;
+    responseActions?: readonly ResponseActionsDocumentLike[] | undefined;
+    themeAuthority: ThemeAuthority;
+    /** Whether the host supplied a Response Actions executor. Never assumed. */
+    hasExecutor?: boolean | undefined;
+    /** Whether mapped widget outputs can reach a Response Actions executor. */
+    hasWidgetActionExecutor?: boolean | undefined;
+    /** Host-owned FEL evaluation over validated bundle state. */
+    evaluateCondition?: TransitionConditionEvaluator | undefined;
+    /**
+     * Level this route's content starts at. `2` — the route title is the page's
+     * single `h1` — unless a host that owns the page heading moves it (§3.4.1
+     * obligation 3). A shell that hard-codes the outline cannot be embedded.
+     */
+    headingBaseLevel?: HeadingLevel | undefined;
+    /** Host admission boundary for authored static image sources. */
+    staticAssetResolver?: SurfaceStaticAssetResolver | undefined;
+    strings?: SurfaceStrings | SurfaceStringOverrides | undefined;
+}
+export interface SurfaceRoutePlan<TComponent> {
+    handle: SurfaceRouteHandle;
+    surfaceRef?: string | undefined;
+    params: Readonly<Record<string, string>>;
+    slots: readonly SlotPlan<TComponent>[];
+    grant: ThemeGrant;
+    transitions: readonly PlannedTransition[];
+    headingBaseLevel: HeadingLevel;
+    /** Slot, theme and transition diagnostics, in the order the stages ran. */
+    diagnostics: readonly SurfaceDiagnostic[];
+}
+export declare function planMatchedRoute<TComponent>(input: SurfaceRoutePlanInput<TComponent>): SurfaceRoutePlan<TComponent>;

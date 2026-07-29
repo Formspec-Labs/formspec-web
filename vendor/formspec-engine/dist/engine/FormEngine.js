@@ -1,6 +1,7 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
 import { diffEvalResults } from '../diff.js';
 import { interpolateMessage } from '../interpolate-message.js';
+import { analyzeFEL, evalFELWithContextTrace, getFELDependencies, } from '../fel/fel-api-runtime.js';
 import { preactReactiveRuntime } from '../reactivity/preact-runtime.js';
 import { LocaleStore } from '../locale.js';
 import { FetchIssuerFetcher } from '../issuer/IssuerFetcher.js';
@@ -14,7 +15,7 @@ import { patchDeltaSignalsFromWasm, patchErrorSignalsFromWasm, patchValueSignals
 import { applyRepeatGroupTreeSnapshot, clearRepeatIndexedSubtree, snapshotRepeatGroupTree, } from './repeat-ops.js';
 import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
 import { buildWasmFelExpressionContext, mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
-import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getAncestorBasePaths, getNestedValue, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, safeEvaluateExpression, setNestedPathValue, setResponsePathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
+import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getAncestorBasePaths, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, safeEvaluateExpression, setNestedPathValue, setResponsePathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
 import { DefaultValidationProfileResolver, } from '../validation/index.js';
 export class FormEngine {
     constructor(definition, optionsOrRuntimeContext, legacyRegistryEntries) {
@@ -43,6 +44,7 @@ export class FormEngine {
         this._remoteOptionsTasks = [];
         this._instanceSourceTasks = [];
         this._variableSignalKeys = new Map();
+        this._derivationTraceCache = new Map();
         this._externalValidation = [];
         this._fieldViewModels = {};
         this._data = {};
@@ -67,7 +69,10 @@ export class FormEngine {
         this.definition = cloneValue(definition);
         // Locale store — direction mode from formPresentation.direction or 'ltr'
         const directionMode = definition.formPresentation?.direction ?? 'ltr';
-        this._localeStore = new LocaleStore(this._rx, directionMode);
+        this._localeStore = new LocaleStore(this._rx, directionMode, {
+            kind: 'definition',
+            url: definition.url,
+        });
         this.localeSignal = this._localeStore.version;
         this._variableDefs = [...(this.definition.variables ?? [])];
         if (runtimeContext) {
@@ -360,6 +365,89 @@ export class FormEngine {
             }
         }
         return true;
+    }
+    whyRelevant(path) {
+        const basePath = toBasePath(path);
+        const bindPath = this.findGoverningRelevanceBindPath(basePath);
+        if (!bindPath) {
+            return {
+                bindId: null,
+                expression: null,
+                dependsOn: [],
+                evaluatedAs: this.isPathRelevant(path),
+            };
+        }
+        const expression = this._bindConfigs[bindPath]?.relevant ?? null;
+        return {
+            bindId: bindPath,
+            expression,
+            dependsOn: expression ? this.expressionDependencies(expression, bindPath) : [],
+            evaluatedAs: this.relevantSignals[bindPath]?.value ?? this.isPathRelevant(bindPath),
+        };
+    }
+    getDerivationTree(path) {
+        const basePath = toBasePath(path);
+        const calculate = this._bindConfigs[basePath]?.calculate;
+        if (!calculate) {
+            return [];
+        }
+        const version = this._evaluationVersion.value;
+        const cached = this._derivationTraceCache.get(basePath);
+        if (cached && cached.version === version) {
+            return cached.trace.map((step) => cloneValue(step));
+        }
+        try {
+            const result = evalFELWithContextTrace(this.normalizeExpressionForWasm(calculate, basePath), buildWasmFelExpressionContext({
+                currentItemPath: basePath,
+                data: this._data,
+                fullResult: this._fullResult,
+                fieldSignals: this.signals,
+                validationResults: this.validationResults,
+                relevantSignals: this.relevantSignals,
+                readonlySignals: this.readonlySignals,
+                requiredSignals: this.requiredSignals,
+                repeats: this.repeats,
+                bindConfigs: this._bindConfigs,
+                fieldDataTypes: this.fieldDataTypesSnapshot(),
+                variableDefs: this._variableDefs,
+                variableSignals: this.variableSignals,
+                instanceData: this.instanceData,
+                nowIso: this.nowISO(),
+                locale: this._runtimeContext.locale,
+                meta: this._runtimeContext.meta,
+            }));
+            const trace = Array.isArray(result.trace) ? result.trace : [];
+            this._derivationTraceCache.set(basePath, {
+                version,
+                trace: trace.map((step) => cloneValue(step)),
+            });
+            return trace.map((step) => cloneValue(step));
+        }
+        catch {
+            return [];
+        }
+    }
+    getDownstreamImpact(path) {
+        const source = toBasePath(path);
+        const edges = this.downstreamDependencyEdges();
+        const impacted = new Set();
+        const queue = [source];
+        while (queue.length > 0) {
+            const current = queue.shift();
+            for (const [dependency, targets] of edges.entries()) {
+                if (!FormEngine.pathDependencyMatches(current, dependency)) {
+                    continue;
+                }
+                for (const target of targets) {
+                    if (target === source || impacted.has(target)) {
+                        continue;
+                    }
+                    impacted.add(target);
+                    queue.push(target);
+                }
+            }
+        }
+        return [...impacted].sort();
     }
     getFieldPaths() {
         return Object.keys(this._fieldViewModels).sort();
@@ -984,6 +1072,136 @@ export class FormEngine {
     }
     repeatCountsSnapshot() {
         return Object.fromEntries(Object.entries(this.repeats).map(([path, repeatSignal]) => [path, repeatSignal.value]));
+    }
+    relevanceBindPathCandidates(path) {
+        const parts = splitIndexedPath(path);
+        const candidates = [];
+        let current = '';
+        for (const part of parts) {
+            current = current ? appendPath(current, part) : part;
+            candidates.push(toBasePath(current));
+        }
+        return candidates;
+    }
+    findGoverningRelevanceBindPath(path) {
+        const candidates = this.relevanceBindPathCandidates(path);
+        for (const candidate of candidates) {
+            if (this._bindConfigs[candidate]?.relevant && this.relevantSignals[candidate]?.value === false) {
+                return candidate;
+            }
+        }
+        for (const candidate of candidates.reverse()) {
+            if (this._bindConfigs[candidate]?.relevant) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+    expressionDependencies(expression, currentPath = '') {
+        return [...this.collectExpressionDependencies(expression, currentPath, new Set())].sort();
+    }
+    collectExpressionDependencies(expression, currentPath, seenVariables) {
+        const dependencies = new Set();
+        try {
+            const normalized = this.normalizeExpressionForWasm(expression, currentPath);
+            for (const dependency of getFELDependencies(normalized)
+                .map(FormEngine.normalizeDependencyPath)
+                .filter((dependency) => dependency.length > 0)) {
+                dependencies.add(dependency);
+            }
+        }
+        catch {
+            // Static dependency extraction is best-effort; callers treat missing deps as no impact.
+        }
+        for (const variableDef of this.visibleVariableDefinitions(expression, currentPath)) {
+            const scope = variableDef.scope ?? '#';
+            const key = `${scope}:${variableDef.name}`;
+            if (seenVariables.has(key)) {
+                continue;
+            }
+            seenVariables.add(key);
+            const variablePath = scope === '#' ? '' : scope;
+            for (const dependency of this.collectExpressionDependencies(variableDef.expression, variablePath, seenVariables)) {
+                dependencies.add(dependency);
+            }
+        }
+        return dependencies;
+    }
+    visibleVariableDefinitions(expression, currentPath) {
+        let names;
+        try {
+            const analysis = analyzeFEL(expression);
+            names = Array.isArray(analysis.variables) ? analysis.variables : [];
+        }
+        catch {
+            return [];
+        }
+        const definitions = [];
+        const scopes = ['#', ...getScopeAncestors(currentPath)];
+        for (const name of names) {
+            let visible;
+            for (const scope of scopes) {
+                for (const variableDef of this._variableDefs) {
+                    if (variableDef.name === name && (variableDef.scope ?? '#') === scope) {
+                        visible = variableDef;
+                    }
+                }
+            }
+            if (visible) {
+                definitions.push(visible);
+            }
+        }
+        return definitions;
+    }
+    downstreamDependencyEdges() {
+        const edges = new Map();
+        const addEdges = (targetPath, expressions) => {
+            const target = targetPath === '#' ? '#' : toBasePath(targetPath);
+            for (const expression of expressions) {
+                if (typeof expression !== 'string' || expression.length === 0) {
+                    continue;
+                }
+                for (const dependency of this.expressionDependencies(expression, target)) {
+                    if (dependency === target) {
+                        continue;
+                    }
+                    const targets = edges.get(dependency) ?? new Set();
+                    targets.add(target);
+                    edges.set(dependency, targets);
+                }
+            }
+        };
+        for (const bind of Object.values(this._bindConfigs)) {
+            addEdges(bind.path, [
+                bind.calculate,
+                bind.relevant,
+                bind.required,
+                bind.readonly,
+                bind.constraint,
+            ]);
+        }
+        for (const shape of this.definition.shapes ?? []) {
+            const composedExpressions = [
+                ...(shape.and ?? []),
+                ...(shape.or ?? []),
+                ...(shape.xone ?? []),
+                shape.not,
+            ].filter((entry) => typeof entry === 'string');
+            addEdges(shape.target, [
+                shape.constraint,
+                shape.activeWhen,
+                ...composedExpressions,
+            ]);
+        }
+        return edges;
+    }
+    static normalizeDependencyPath(path) {
+        return toBasePath(path.replace(/^\$/, '').replace(/^\./, ''));
+    }
+    static pathDependencyMatches(source, dependency) {
+        return source === dependency
+            || source.startsWith(`${dependency}.`)
+            || dependency.startsWith(`${source}.`);
     }
     assertNoRemovedModeOption(options, method) {
         if (options && typeof options === 'object' && 'mode' in options) {

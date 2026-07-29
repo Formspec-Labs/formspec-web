@@ -84,6 +84,7 @@ export interface WasmLintDocumentOptions {
     themeDocument?: unknown;
     componentDocuments?: unknown[];
     localeDocuments?: unknown[];
+    appGraphValidationReport?: unknown;
     schemaOnly?: boolean;
     noFel?: boolean;
 }
@@ -92,6 +93,10 @@ export declare function wasmLintDocument(doc: unknown, options?: WasmLintDocumen
     documentType: string | null;
     valid: boolean;
     diagnostics: any[];
+    appGraphReport?: {
+        ok: boolean;
+        diagnostics: any[];
+    };
 };
 /** @deprecated Use `wasmLintDocument(doc, { registryDocuments })`. */
 export declare function wasmLintDocumentWithRegistries(doc: unknown, registries: unknown[]): {

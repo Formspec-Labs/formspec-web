@@ -44,6 +44,11 @@ export function evalFEL(expression: string, fields_json: string): string;
 export function evalFELWithContext(expression: string, context_json: string): string;
 
 /**
+ * Evaluate a FEL expression with full context and trace each evaluation step.
+ */
+export function evalFELWithContextTrace(expression: string, context_json: string): string;
+
+/**
  * Evaluate a FEL expression with a structured trace of evaluation steps.
  *
  * Returns a JSON string of shape `{ "value": ..., "diagnostics": [...], "trace": [TraceStep, ...] }`.
@@ -123,6 +128,7 @@ export interface InitOutput {
     readonly felExprIsInterpolationStaticLiteral: (a: number, b: number) => number;
     readonly evalFEL: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly evalFELWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly evalFELWithContextTrace: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly evalFELWithContext: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly getFELDependencies: (a: number, b: number, c: number) => void;
     readonly analyzeFEL: (a: number, b: number, c: number) => void;

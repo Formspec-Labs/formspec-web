@@ -17,11 +17,11 @@ export type Slot = {
      */
     id: string;
     /**
-     * Closed v0.1 slot-type taxonomy per ADR 0150 §6.2. Each value pins a binding shape (see allOf gates below). Closed at v0.1 — extensions land via the module Registry's `slot-type` contribution category in a future rev.
+     * Closed v0.2 slot-type taxonomy per ADR 0150 §6.2. Each value pins a binding shape (see allOf gates below). Extensions land via the module Registry's `slot-type` contribution category in a future revision.
      */
     slotType: 'definition-form' | 'experience-unit' | 'module-widget' | 'static-content' | 'embed-route';
     /**
-     * OPTIONAL renderer hint naming a layout position (e.g. 'left', 'main', 'right', 'header'). Author-defined; renderers consume per their layout model. v0.1 carries no normative position vocabulary.
+     * OPTIONAL renderer hint naming a layout position (e.g. 'left', 'main', 'right', 'header'). Author-defined; renderers consume per their layout model. v0.2 carries no normative position vocabulary.
      */
     position?: string;
     title?: string;
@@ -40,9 +40,9 @@ export type Slot = {
  */
 export interface SurfaceDocument {
     /**
-     * Surface specification version. MUST be '0.1'.
+     * Surface specification version. MUST be '0.2'.
      */
-    $formspecSurface: '0.1';
+    $formspecSurface: '0.2';
     /**
      * Stable identifier for this Surface document. Unique within the bundle.
      */
@@ -83,7 +83,7 @@ export interface Route {
      */
     id: string;
     /**
-     * URL-style path for this route. SHOULD start with '/'. v0.1 route parameters use simple URI Template markers like '/matter/{matterId}'; paths with no `{name}` markers and no params[] remain opaque non-empty strings.
+     * URL-style path for this route. SHOULD start with '/'. v0.2 route parameters use simple URI Template markers like '/matter/{matterId}'. Colon-prefixed framework parameters, wildcards, regex captures, matrix/query parameters, optional segments, URI Template operators, and malformed markers are invalid. Paths with no `{name}` markers and no params[] remain opaque non-empty strings.
      */
     path: string;
     /**
@@ -91,11 +91,15 @@ export interface Route {
      */
     params?: RouteParam[];
     /**
+     * OPTIONAL closed, NON-EXTENSIBLE vocabulary naming WHAT THIS ROUTE PRESENTS. `intake` = a Definition-backed capture from a respondent. `proof` = an artifact the platform issued that a third party relies on as evidence (receipt, certificate, disclosure). `ceremony` = the act of signing or attesting, where the signer's preimage IS the thing signed. `verification` = independent checking of an issued artifact. `attestation` = a claim the platform publishes about itself that a third party relies on (trust center, capability matrix, subprocessor list, data-flow disclosure, status) — the accountable party is the publisher, not a port, which is why `proof` cannot absorb it. `authentication` = a credential exchange binding an actor to an external identity, where the chrome IS the anti-phishing control. `operation` = operator-facing product UI (dashboards, admin, developer, authoring) — a negative declaration, "someone looked and found nothing to declare", NOT an assertion that the route carries no trust claim. Names the route's kind, NOT a permission — rules derive from it (theme authority admits tenant Theme assignments on `intake` routes and refuses them on every other value; see ui-graph-policy-spec.md §5.7, `THEME-ROUTE-CLASS`). Deliberately orthogonal to access posture and route lifecycle; MUST NOT absorb either. NO DEFAULT: an absent routeClass means *unclassified* (nobody has stated what this route is), which is a distinct state from `operation` and refuses nothing. Processors MUST NOT treat absence as `operation`. See surface-spec.md §3 Route Class.
+     */
+    routeClass?: 'intake' | 'proof' | 'ceremony' | 'verification' | 'attestation' | 'authentication' | 'operation';
+    /**
      * Human-readable route title (for navigation chrome, breadcrumbs, etc.).
      */
     title?: string;
     /**
-     * Slots bound on this route. Each slot has a typed binding per §6.2 closed taxonomy. v0.1 does NOT pin slot positions in the schema — `position` is an optional renderer hint. Each slot has exactly one slotType discriminator.
+     * Slots bound on this route. Each slot has a typed binding per §6.2 closed taxonomy. v0.2 does NOT pin slot positions in the schema — `position` is an optional renderer hint. Each slot has exactly one slotType discriminator.
      *
      * @minItems 1
      */
@@ -120,7 +124,7 @@ export interface RouteParam {
      */
     name: string;
     /**
-     * Route parameter value type. v0.1 admits strings only; richer coercion belongs to runtime or Data Sources consumers.
+     * Route parameter value type. v0.2 admits strings only; richer coercion belongs to runtime or Data Sources consumers.
      */
     type: 'string';
     description?: string;
@@ -137,7 +141,7 @@ export interface RouteParam {
  */
 export interface Transition {
     /**
-     * Transition trigger declaration. Typically references a Response Actions action ID (resolved against the bundle's response-actions document) or names a Response Actions intent value (per x-formspec-core-actions). Surface declares the navigation trigger; Response Actions remains the executor for preconditions, validation, effects, idempotency, replay, retry, blocking, and terminal state.
+     * Transition trigger declaration. Typically references a Response Actions action ID (resolved against the bundle's response-actions document) or names a standard Response Actions intent value declared by exactly one loaded action. Surface declares the navigation trigger; Response Actions remains the executor for preconditions, validation, effects, idempotency, replay, retry, blocking, and terminal state.
      */
     trigger: string;
     /**
@@ -169,4 +173,40 @@ export interface RouteParamMap {
      * via the `patternProperty` "^[a-zA-Z][a-zA-Z0-9_-]*$".
      */
     [k: string]: string;
+}
+/**
+ * This interface was referenced by `SurfaceDocument`'s JSON-Schema
+ * via the `definition` "WidgetDataBindings".
+ */
+export interface WidgetDataBindings {
+    /**
+     * This interface was referenced by `WidgetDataBindings`'s JSON-Schema definition
+     * via the `patternProperty` "^[A-Za-z][A-Za-z0-9_-]*$".
+     */
+    [k: string]: {
+        /**
+         * Canonical Data Sources URL. App-graph validation requires an exact match to one App Manifest dataSources[].url.
+         */
+        catalogRef: string;
+        /**
+         * Data Sources 1.0 source id. App-graph validation resolves it only within catalogRef; unqualified source lookup is forbidden.
+         */
+        sourceRef: string;
+    };
+}
+/**
+ * This interface was referenced by `SurfaceDocument`'s JSON-Schema
+ * via the `definition` "WidgetActionBindings".
+ */
+export interface WidgetActionBindings {
+    /**
+     * This interface was referenced by `WidgetActionBindings`'s JSON-Schema definition
+     * via the `patternProperty` "^[A-Za-z][A-Za-z0-9_-]*$".
+     */
+    [k: string]: {
+        /**
+         * Exact actions[].id from one loaded Response Actions document. This value is not a route id, intent, or widget output name.
+         */
+        actionRef: string;
+    };
 }

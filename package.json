@@ -41,17 +41,29 @@
     "test:multi-deployment": "node scripts/check-multi-deployment.mjs",
     "check:vendor-leaks": "scripts/check-vendor-leaks.sh",
     "check:upstream-theme": "node scripts/check-upstream-theme-assets.mjs",
-    "ci": "npm run typecheck && npm run lint && npm run check:testing-plan && npm run check:mvp-audit && npm run check:upstream-blockers && npm run check:release-docs && npm run check:conformance-coverage && npm run test:conformance && npm run test:unit && npm run check:vendor-leaks && npm run check:upstream-theme && npm run test:e2e && npm run build && npm run check:bundle-budget && npm run check:compose-config && npm run test:compose-quickstart && npm run test:deployment && npm run test:multi-deployment"
+    "check:surface-bundle-vendor": "node scripts/check-surface-bundle-vendor.mjs",
+    "ci": "npm run typecheck && npm run lint && npm run check:testing-plan && npm run check:mvp-audit && npm run check:upstream-blockers && npm run check:release-docs && npm run check:conformance-coverage && npm run test:conformance && npm run test:unit && npm run check:vendor-leaks && npm run check:upstream-theme && npm run check:surface-bundle-vendor && npm run test:e2e && npm run build && npm run check:bundle-budget && npm run check:compose-config && npm run test:compose-quickstart && npm run test:deployment && npm run test:multi-deployment"
   },
   "dependencies": {
+    "@formspec-org/app-graph": "file:vendor/formspec-app-graph",
     "@formspec-org/engine": "file:vendor/formspec-engine",
     "@formspec-org/layout": "file:vendor/formspec-layout",
     "@formspec-org/react": "file:vendor/formspec-react",
+    "@formspec-org/surface": "file:vendor/formspec-surface",
+    "@formspec-org/surface-bundle-signing": "file:vendor/formspec-surface-bundle-signing",
+    "@formspec-org/surface-react": "file:vendor/formspec-surface-react",
     "@formspec-org/types": "file:vendor/formspec-types",
+    "@integrity-stack/cose": "file:vendor/integrity-cose",
+    "@integrity-stack/signature-adapter-webcrypto": "file:vendor/integrity-signature-adapter-webcrypto",
+    "@integrity-stack/signature-port": "file:vendor/integrity-signature-port",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "canonicalize": "^3.0.0",
+    "jsonc-parser": "^3.3.1",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "semver": "^7.8.1",
     "uuid": "^14.0.0"
   },
   "devDependencies": {

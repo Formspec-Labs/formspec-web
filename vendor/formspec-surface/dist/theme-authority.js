@@ -1,0 +1,143 @@
+/**
+ * @filedesc The runtime half of THEME-ROUTE-CLASS: the only place a shell is
+ * allowed to read a tenant Theme.
+ *
+ * ## The shape, and why it is a factory rather than a function
+ *
+ * `THEME-ROUTE-CLASS` shipped as an authoring-time validator rule with no
+ * runtime owner. A renderer that honours it "carefully" honours it until
+ * someone adds a prop. What makes the boundary hold is structure, not care:
+ *
+ * - {@link createThemeAuthority} takes the tenant Theme **once**, closes over
+ *   it, and returns an object whose only output is a {@link ThemeGrant}.
+ * - On a refusing route class, the grant's `themeDocument` is built from the
+ *   platform theme alone. The tenant's tokens are not merged, not overridden,
+ *   not defaulted — the closure's tenant branch never runs. There is nothing
+ *   for a careless prop downstream to leak, because nothing tenant-shaped was
+ *   ever constructed on that path.
+ * - Every route yields the same grant *type*, so there is no `null` arm inviting
+ *   a later "just pass the theme when it's missing" fix.
+ *
+ * A host holding a `ThemeGrant` cannot get back to the tenant Theme through it.
+ * That is the whole design.
+ *
+ * ## The rule is imported, never restated
+ *
+ * `ROUTE_CLASS_THEME_AUTHORITY` (`@formspec-org/app-graph`) decides. This module
+ * reads it and supplies the words a person sees; it does not carry a second copy
+ * of which classes admit. A shell that restated the map would be a shell that
+ * could disagree with the validator that signed the bundle off.
+ */
+import { ROUTE_CLASS_THEME_AUTHORITY } from '@formspec-org/app-graph';
+import { buildPlatformTheme, mergePlatformAndTenantTheme } from '@formspec-org/layout';
+import { surfaceDiagnostic, } from './diagnostics.js';
+/**
+ * One sentence per class, in the language of the person reading the page rather
+ * than of the spec. Keyed exhaustively over `RouteClass` by construction — a new
+ * or renamed class fails to compile HERE, the same discipline
+ * `ROUTE_CLASS_THEME_AUTHORITY` uses at its own decision site.
+ *
+ * The reasons are shipped rather than left to hosts because a refusal is a trust
+ * claim: *"this signing page is not branded, so what you are agreeing to cannot
+ * be dressed up."* Every host writing its own wording means one normative rule
+ * reaches people as several different promises. Which class admits is still the
+ * imported map's call; this only supplies the words.
+ */
+export const ROUTE_CLASS_THEME_REASON = {
+    intake: 'This page collects information from the person filling it in, so it carries the organisation’s branding.',
+    proof: 'This page is a receipt the platform issued. It looks the same for everyone, so nobody can be shown a receipt styled to look more official than it is.',
+    ceremony: 'This page is where you sign. Signing pages are not branded, so what you are agreeing to cannot be dressed up.',
+    verification: 'This page checks something independently. An independent check carrying the checked party’s branding is not independent.',
+    attestation: 'This page is a claim the platform makes about itself. The platform, not a customer, is accountable for how it looks.',
+    authentication: 'This page asks for credentials. Its appearance is the anti-phishing control, so it is not a customer’s to change.',
+    operation: 'This page is an internal work screen, so customer branding does not apply to it.',
+};
+/**
+ * What a shell says when nobody classified the route.
+ *
+ * ADR 0161 §6 declares absence a distinct state and then leaves the renderer
+ * posture undefined. Reading absence as "admit" would let an unclassified
+ * receipt route carry tenant branding — fail-open on the one vocabulary whose
+ * whole purpose is a trust rule. Reading it as "refuse" costs a tenant their
+ * branding on a page nobody has classified, which is recoverable by classifying
+ * it. This package refuses, and says why in those terms. The spec should state
+ * this; until it does, the choice is here rather than in every host.
+ */
+export const UNCLASSIFIED_THEME_REASON = 'Nobody has said what this page is for, so it stays in platform styling until someone does.';
+function tokensOf(theme) {
+    const tokens = theme?.tokens;
+    return tokens ?? {};
+}
+export function createThemeAuthority(input = {}) {
+    const platformTheme = input.platformTheme ?? buildPlatformTheme();
+    const platformTokens = tokensOf(platformTheme);
+    // The tenant Theme is read exactly here. The normalized copy below preserves
+    // its presentation metadata while replacing its tokens with the alias-aware
+    // map; no branch retains or mutates the caller's document.
+    const authored = tokensOf(input.tenantTheme);
+    const aliases = input.tokenAliases ?? {};
+    const tenantTokens = {};
+    for (const [key, value] of Object.entries(authored)) {
+        tenantTokens[key] = value;
+        for (const target of aliases[key] ?? []) {
+            if (tenantTokens[target] === undefined)
+                tenantTokens[target] = value;
+        }
+    }
+    const tenantTokenKeys = Object.keys(tenantTokens);
+    const tenantTokenValues = Object.values(tenantTokens).map(String);
+    const normalizedTenantTheme = input.tenantTheme
+        ? { ...input.tenantTheme, tokens: tenantTokens }
+        : undefined;
+    function platformOnlyGrant(routeClass, posture, reason, grantDiagnostics = []) {
+        return {
+            routeClass,
+            posture,
+            admitsTenantTheme: false,
+            reason,
+            // Built from the platform tokens alone. `tenantTokens` is not spread,
+            // not merged, not consulted — this expression cannot be edited into
+            // leaking without the edit being obvious.
+            themeDocument: { ...platformTheme, tokens: { ...platformTokens } },
+            tenantTokenKeys: [],
+            diagnostics: grantDiagnostics,
+        };
+    }
+    return {
+        tenantTokenKeys,
+        tenantTokenValues,
+        diagnostics: [],
+        grantFor(route, site = {}) {
+            const routeClass = route.routeClass;
+            if (routeClass === undefined) {
+                // §7.3: fires when the shell resolves a grant for a route declaring no
+                // `routeClass` AND a tenant Theme is present — nothing was withheld
+                // when there was nothing to withhold. `info`, because it reports what
+                // the shell did rather than judging the document: ADR 0161 §9 item 4 is
+                // deliberately silent on an authoring-time unclassified diagnostic.
+                const withheld = tenantTokenKeys.length > 0
+                    ? [
+                        surfaceDiagnostic('THEME-UNCLASSIFIED-REFUSED', `Route "${site.surfaceId ?? ''}/${site.routeId ?? route.id}" declares no routeClass, so tenant theming was withheld from it. A permission cannot be derived from silence; declaring a routeClass restores the branding on any class that admits it.`, site, { routeId: route.id, withheldTokenKeys: tenantTokenKeys }),
+                    ]
+                    : [];
+                return platformOnlyGrant(undefined, 'unclassified', UNCLASSIFIED_THEME_REASON, withheld);
+            }
+            if (ROUTE_CLASS_THEME_AUTHORITY[routeClass] === 'refuses') {
+                return platformOnlyGrant(routeClass, 'refuses', ROUTE_CLASS_THEME_REASON[routeClass]);
+            }
+            // Admitted. One shared layout helper owns the platform-under-tenant
+            // cascade for every renderer.
+            return {
+                routeClass,
+                posture: 'admits',
+                admitsTenantTheme: true,
+                reason: ROUTE_CLASS_THEME_REASON[routeClass],
+                themeDocument: normalizedTenantTheme
+                    ? mergePlatformAndTenantTheme(platformTheme, normalizedTenantTheme)
+                    : mergePlatformAndTenantTheme(platformTheme),
+                tenantTokenKeys,
+                diagnostics: [],
+            };
+        },
+    };
+}

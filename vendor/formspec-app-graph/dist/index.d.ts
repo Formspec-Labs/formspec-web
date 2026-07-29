@@ -1,0 +1,25 @@
+/** @filedesc Public exports for the AppGraphValidator report kernel. */
+export * from './types.js';
+export { artifactIdentityKey, compareDiagnostics, createAppGraphReport, diagnosticSourceForHandle, normalizeDiagnostics, type CreateAppGraphReportInput, } from './report.js';
+export { componentNodeIdentityKey, type AppGraphComponentMembershipIdentity, type AppGraphComponentNodeIdentity, } from './component-identity.js';
+export { produceBundleExportAppGraphValidationReport, produceAppGraphValidationReport, type AppGraphReportProducerRequest, type AppGraphReportProducerResult, type BundleExportAppGraphReportProducerRequest, } from './producer.js';
+export { artifactResolutionGraphInput, resolveArtifacts, resolveBundleExportArtifacts, type ArtifactResolutionGraphInput, type ArtifactLoader, type ArtifactLoaderDiagnosticInput, type ArtifactLoaderInput, type ArtifactLoaderOutcome, type ArtifactResolverRequest, type ArtifactResolverSupportProfile, type BundleExportArtifactResolverRequest, } from './artifact-resolver.js';
+export { evaluateActorPostureAdmission, evaluateModulePostureAdmission, type ModulePostureAdmissionResult, type PostureModuleField, type PostureModuleRef, } from './posture-admission.js';
+export { moduleResolverInputFromAppGraph, resolveModules, type ModulePayloadValidator, type ModulePayloadValidatorInput, type ModulePayloadValidatorResult, type ModuleResolverGraphInput, type ModuleResolverAdmissionInput, type ModuleResolverContributionUse, type ModuleResolverDocumentInput, type ModuleResolverInput, type ModuleResolverModuleInput, type ModuleResolverRegistryEntry, type ModuleResolverRegistryInput, type ModuleResolverSupportInput, } from './module-resolver.js';
+export { validateComponentGraphContexts, } from './component-graph-context.js';
+export { validateAppEntry, } from './app-entry.js';
+export { validateComponentRouteTargets, } from './component-routes.js';
+export { validateExperienceActionRefs, } from './experience-action-refs.js';
+export { validateDataSources, } from './data-sources.js';
+export { normalizeLocaleTag, validateLocaleAssociations, } from './locale-associations.js';
+export { validateNeedsCoverage, type NeedsEarlFrame, type NeedStatus, } from './needs-coverage.js';
+export { validateScreenerSurfaceTargets, } from './screener-surface-targets.js';
+export { validateSurfaceDefinitionSlots, } from './surface-definition-slots.js';
+export { validateSurfaceExperienceUnits, } from './surface-experience-units.js';
+export { CLOSED_RESPONSE_ACTION_INTENTS, validateSurfaceResponseActionTriggers, } from './surface-response-action-triggers.js';
+export { routeHasWidgetActionSource, validateSurfaceWidgetActions, } from './surface-widget-actions.js';
+export { validateThemeTokenRegistry, } from './theme-token-registry.js';
+export { PLATFORM_BRAND_TOKEN_KEY, PLATFORM_TOKEN_KEYS, } from './platform-token-keys.js';
+export { resolveWidgetContribution, type WidgetContributionEntry, type WidgetContributionIdentity, } from './widget-contribution.js';
+export { ROUTE_CLASS_THEME_AUTHORITY, TENANT_THEMING_REFUSING_ROUTE_CLASSES, validateUiGraphPolicy, } from './ui-graph-policy.js';
+export { artifactHandlesFor, validateAppGraph, } from './validator.js';

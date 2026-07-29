@@ -1,11 +1,11 @@
 /** @filedesc FormspecProvider — React context wrapping a FormEngine + optional layout plan. */
 import React from 'react';
 import type { ActionRefFinding, ActionResolution, IFormEngine, IssuerFetcher, IssuerSource, ReadonlyEngineSignal, ResponseAction, ResponseActionEffectDispatchContext, ResponseActionEffectOutcome, ResponseActionIdempotencyKeyContext, ResponseActionInvocationPorts, ResponseActionInvocationResult, ResponseActionPreconditionResult, ResponseActionsDocumentInput } from '@formspec-org/engine';
-import type { EffectRequest, FormResponse, Precondition, ValidationReport } from '@formspec-org/types';
-import type { ComponentGraphProjectionContext, LayoutHostEvidence, LayoutNode } from '@formspec-org/layout';
+import type { EffectRequest, FormResponse, Precondition, ThemeDocument as SchemaThemeDocument, ValidationReport } from '@formspec-org/types';
+import type { ComponentGraphProjectionContext, LayoutHostEvidence, LayoutNode, ThemeDocument as LayoutThemeDocument } from '@formspec-org/layout';
 import type { ComponentMap } from './component-map';
 export type ResponseActionsDocument = ResponseActionsDocumentInput;
-export type { ActionRefFinding, ActionResolution, ResponseAction };
+export type { ActionRefFinding, ActionResolution, ResponseAction, ResponseActionInvocationResult, };
 export interface ResponseActionInvokerInput<TDetail = SubmitResult> {
     document: ResponseActionsDocument | null | undefined;
     actionRef: string;
@@ -25,7 +25,9 @@ export interface FormspecContextValue {
     layoutPlan: LayoutNode | null;
     components: ComponentMap;
     /** Theme document from the provider (used for container token emission). */
-    themeDocument?: any;
+    themeDocument?: LayoutThemeDocument;
+    /** Whether this tree owns theme-token emission. */
+    emitThemeTokens: boolean;
     /** Component document from the provider (used for container token emission). */
     componentDocument?: any;
     /** Host-supplied Component graph projection context. Projection-only; no runtime authority. */
@@ -77,7 +79,12 @@ export interface FormspecProviderProps {
     /** Host-supplied UI Graph Policy validation evidence for inert renderer metadata. */
     hostEvidence?: LayoutHostEvidence | null;
     /** Theme document for presentation cascade. */
-    themeDocument?: any;
+    themeDocument?: SchemaThemeDocument;
+    /**
+     * Emit theme tokens on provider and form-container elements. Default true.
+     * Set false when an owning shell already emitted the effective token map.
+     */
+    emitThemeTokens?: boolean;
     /** Response Actions document for ActionButton actionRef resolution. */
     responseActionsDocument?: ResponseActionsDocument | null;
     /** Initial response data to pre-populate fields (for edit flows). */
@@ -121,7 +128,12 @@ export declare function useFormspecContext(): FormspecContextValue;
 /**
  * Emit theme tokens as --formspec-* CSS custom properties.
  * Converts dotted token keys (e.g., `color.primary`) to `--formspec-color-primary`.
- * Defaults to `document.documentElement` when no target is provided.
+ *
+ * `target` defaults to `document.documentElement` — a HOST may choose to paint
+ * the document root, and the shipped examples do. `FormspecProvider` does not:
+ * a renderer that writes tenant tokens to `<html>` makes a global mutation that
+ * outlives the component and that a composing host can only clean up after,
+ * never prevent. Always pass a target from inside a component.
  */
 export declare function emitThemeTokens(tokens: Record<string, string | number>, target?: HTMLElement): void;
 /** Recursive item lookup by dotted key path. */

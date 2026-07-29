@@ -133,6 +133,8 @@ export interface FelTraceResult {
  * losing FEL type fidelity (money/date) but gaining universal readability.
  */
 export declare function wasmEvalFELWithTrace(expression: string, fields?: Record<string, unknown>): FelTraceResult;
+/** Evaluate a FEL expression against full FormspecEnvironment context and trace each step. */
+export declare function wasmEvalFELWithContextTrace(expression: string, context: WasmFelContext): FelTraceResult;
 /** Locale §3.3.1 — true if the expression AST is only literals and unary `not` / `!` / `-`. */
 export declare function wasmFelExprIsInterpolationStaticLiteral(expression: string): boolean;
 /** Normalize FEL source before evaluation (bare `$`, repeat qualifiers, repeat aliases). */

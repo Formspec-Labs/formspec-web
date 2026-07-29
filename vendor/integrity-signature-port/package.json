@@ -1,0 +1,21 @@
+{
+  "name": "@integrity-stack/signature-port",
+  "version": "0.1.0",
+  "description": "Generic signature verifier port and verification receipt types",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Formspec-Labs/integrity-stack.git",
+    "directory": "packages/integrity-signature-port"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "sideEffects": false
+}

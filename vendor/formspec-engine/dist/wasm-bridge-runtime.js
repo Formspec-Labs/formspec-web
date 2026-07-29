@@ -95,6 +95,11 @@ export function wasmEvalFELWithTrace(expression, fields = {}) {
     const resultJson = wasm().evalFELWithTrace(expression, JSON.stringify(fields));
     return JSON.parse(resultJson);
 }
+/** Evaluate a FEL expression against full FormspecEnvironment context and trace each step. */
+export function wasmEvalFELWithContextTrace(expression, context) {
+    const resultJson = wasm().evalFELWithContextTrace(expression, JSON.stringify(context));
+    return JSON.parse(resultJson);
+}
 /** Locale §3.3.1 — true if the expression AST is only literals and unary `not` / `!` / `-`. */
 export function wasmFelExprIsInterpolationStaticLiteral(expression) {
     return wasm().felExprIsInterpolationStaticLiteral(expression);

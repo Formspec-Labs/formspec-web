@@ -11,3 +11,15 @@ export declare const platformSelectors: ThemeSelector[];
  * are derived from `dark` values, keyed under the category's `darkPrefix`.
  */
 export declare function buildPlatformTheme(): ThemeDocument;
+export declare function mergePlatformAndTenantTheme<TPlatform extends {
+    tokens?: Record<string, string | number>;
+}, TTenant extends {
+    tokens?: Record<string, string | number>;
+}>(platformTheme: TPlatform, tenantTheme: TTenant): Omit<TPlatform, 'tokens'> & Omit<TTenant, 'tokens'> & {
+    tokens: Record<string, string | number>;
+};
+export declare function mergePlatformAndTenantTheme<TPlatform extends {
+    tokens?: Record<string, string | number>;
+}>(platformTheme: TPlatform, tenantTheme?: null): Omit<TPlatform, 'tokens'> & {
+    tokens: Record<string, string | number>;
+};

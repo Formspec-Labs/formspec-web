@@ -1,0 +1,26 @@
+{
+  "name": "@formspec-org/surface",
+  "description": "Renderer-independent Surface shell",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Formspec-org/formspec.git",
+    "directory": "packages/formspec-surface"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
+  "dependencies": {
+    "@formspec-org/app-graph": "file:../formspec-app-graph",
+    "@formspec-org/layout": "file:../formspec-layout",
+    "@formspec-org/types": "file:../formspec-types"
+  }
+}

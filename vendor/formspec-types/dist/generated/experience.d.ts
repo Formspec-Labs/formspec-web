@@ -13,7 +13,7 @@ import type { ModuleRef, TargetDefinition, Extensions } from './common.js';
  */
 export type UnitKind = ('data-entry' | 'review' | 'confirmation' | 'evidence-collection' | 'attestation' | 'error-resolution' | 'assistance') | string;
 /**
- * A Formspec Experience Document per the Experience specification. A standalone sidecar that names abstract task intent for a Formspec Definition: actors, tasks, units, applicability, and typed references to items, concepts, and actions. Like Theme, Component, Locale, and References documents, an Experience Document targets a Definition but lives alongside it. Multiple Experience Documents MAY target the same Definition (e.g., different actor populations, platforms, or postures). Experience metadata MUST NOT alter core behavioral semantics (required, relevant, readonly, calculate, validation).
+ * A Formspec Experience Document per the Experience specification. A standalone sidecar that names abstract task intent: actors, tasks, units, applicability, and typed references to items, concepts, and actions. Like Theme, Component, Locale, and References documents, an Experience Document lives alongside the artifacts it describes. Scope is set by targetDefinition: present binds the Experience to one Definition (multiple Experience Documents MAY target the same Definition — different actor populations, platforms, or postures); absent makes the Experience bundle-scoped, naming task intent across the App Manifest bundle rather than one Definition, which is the only representable posture for an app envelope with an empty definitions[] (ADR 0150 §5.2). Experience metadata MUST NOT alter core behavioral semantics (required, relevant, readonly, calculate, validation).
  */
 export interface ExperienceDocument {
     /**
@@ -28,7 +28,7 @@ export interface ExperienceDocument {
      * Version of this Experience Document. SemVer is RECOMMENDED.
      */
     version: string;
-    targetDefinition: TargetDefinition;
+    targetDefinition?: TargetDefinition;
     name?: string;
     title?: string;
     description?: string;
@@ -113,6 +113,10 @@ export interface Unit {
     taskRefs?: string[];
     itemRefs?: ItemRef[];
     conceptRefs?: ConceptRef[];
+    /**
+     * Needs this unit serves, in the paired Needs Document (needs-spec S7). Inverse of the OSLC-RM satisfiedBy edge, carried on the satisfying side. Deliberately unpinned — no revision — so a copy-edit to a Statement never invalidates authored intent; pinning is the need: anchor's job.
+     */
+    needRefs?: NeedRef[];
     actionRefs?: ActionRef[];
     applicability?: Applicability;
     accessibility?: Accessibility;
@@ -144,6 +148,20 @@ export interface ConceptRef {
      */
     id: string;
     source?: 'registry' | 'ontology' | 'external';
+    description?: string;
+    extensions?: Extensions;
+}
+/**
+ * Citation from an Experience Unit to a Need it serves (needs-spec S7). Resolves against the caller-paired Needs Document; when none is paired, resolution is inapplicable and emits nothing.
+ *
+ * This interface was referenced by `ExperienceDocument`'s JSON-Schema
+ * via the `definition` "NeedRef".
+ */
+export interface NeedRef {
+    /**
+     * A need.id in the paired Needs Document. Deliberately unpinned: no revision — the Unit serves the Need as currently worded (needs-spec S7).
+     */
+    id: string;
     description?: string;
     extensions?: Extensions;
 }

@@ -1,6 +1,7 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
 import type { FormDefinition, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
-import type { AuthoredSignatureInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, JsonRecord, JsonValue, PinnedResponseReference, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
+import type { AuthoredSignatureInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
+import { type FelTraceStep } from '../fel/fel-api-runtime.js';
 import type { EngineSignal, ReadonlyEngineSignal } from '../reactivity/types.js';
 import { type LocaleDocument } from '../locale.js';
 import type { IssuerSource, ResolvedIssuer } from '../issuer/types.js';
@@ -41,6 +42,7 @@ export declare class FormEngine implements IFormEngine {
     private readonly _instanceSourceTasks;
     private readonly _variableDefs;
     private readonly _variableSignalKeys;
+    private readonly _derivationTraceCache;
     private readonly _externalValidation;
     private readonly _issuerStore;
     private readonly _validationProfileResolver;
@@ -92,6 +94,9 @@ export declare class FormEngine implements IFormEngine {
     private produceValidationReport;
     evaluateShape(shapeId: string): ValidationResult[];
     isPathRelevant(path: string): boolean;
+    whyRelevant(path: string): RelevanceExplanation;
+    getDerivationTree(path: string): FelTraceStep[];
+    getDownstreamImpact(path: string): string[];
     getFieldPaths(): string[];
     getProgress(): import('../interfaces.js').FormProgress;
     getResponse(meta?: {
@@ -154,6 +159,14 @@ export declare class FormEngine implements IFormEngine {
     private validateInstanceSchema;
     private evaluateExpression;
     private repeatCountsSnapshot;
+    private relevanceBindPathCandidates;
+    private findGoverningRelevanceBindPath;
+    private expressionDependencies;
+    private collectExpressionDependencies;
+    private visibleVariableDefinitions;
+    private downstreamDependencyEdges;
+    private static normalizeDependencyPath;
+    private static pathDependencyMatches;
     private assertNoRemovedModeOption;
     private assertValidationReportOptions;
     private shapedEvalResult;

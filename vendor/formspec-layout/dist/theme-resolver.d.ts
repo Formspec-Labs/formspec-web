@@ -75,7 +75,8 @@ export interface Page {
 export interface ThemeDocument {
     $formspecTheme: '1.0';
     version: string;
-    targetDefinition: {
+    /** Definition binding. Absent = bundle-scoped Theme (ADR 0150 §5.2 app envelope); the cascade is unaffected either way. */
+    targetDefinition?: {
         url: string;
         compatibleVersions?: string;
     };

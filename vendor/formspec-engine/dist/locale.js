@@ -5,10 +5,11 @@
  * for active locale and text direction.
  */
 export class LocaleStore {
-    constructor(rx, directionMode) {
+    constructor(rx, directionMode, activeTarget) {
         this._documents = new Map();
         this._rx = rx;
         this._directionMode = directionMode ?? 'ltr';
+        this._activeTarget = activeTarget ? { ...activeTarget } : null;
         this.activeLocale = rx.signal('');
         this.version = rx.signal(0);
         this._directionVersion = rx.signal(0);
@@ -28,34 +29,55 @@ export class LocaleStore {
     }
     loadLocale(doc) {
         const code = LocaleStore.normalizeCode(doc.locale);
-        this._documents.set(code, { ...doc, locale: code });
+        const target = { ...doc.target };
+        if (this._activeTarget === null) {
+            this._activeTarget = { kind: target.kind, url: target.url };
+        }
+        this._documents.set(LocaleStore.documentKey(target, code), { ...doc, target, locale: code });
         // Any loaded locale can affect cascade resolution for the active locale.
         this.version.value += 1;
+    }
+    setTarget(target) {
+        this._activeTarget = { ...target };
+        this.version.value += 1;
+    }
+    getActiveTarget() {
+        return this._activeTarget ? { ...this._activeTarget } : null;
     }
     setLocale(code) {
         this.activeLocale.value = LocaleStore.normalizeCode(code);
         this.version.value += 1;
     }
-    getAvailableLocales() {
-        return [...this._documents.keys()];
+    getAvailableLocales(target = this._activeTarget) {
+        if (target === null)
+            return [];
+        const prefix = LocaleStore.targetKey(target);
+        return [...this._documents.entries()]
+            .filter(([, document]) => LocaleStore.targetKey(document.target) === prefix)
+            .map(([, document]) => document.locale);
     }
     lookupKey(key) {
         return this.lookupKeyWithMeta(key).value;
     }
     lookupKeyWithMeta(key) {
-        const activeCode = this.activeLocale.value;
+        if (this._activeTarget === null)
+            return { value: null, source: null };
+        return this.lookupKeyForTarget(key, this._activeTarget);
+    }
+    lookupKeyForTarget(key, target, localeCode = this.activeLocale.value) {
+        const activeCode = LocaleStore.normalizeCode(localeCode);
         if (!activeCode)
             return { value: null, source: null };
-        return this._cascadeLookup(key, activeCode, new Set());
+        return this._cascadeLookup(key, target, activeCode, activeCode, new Set());
     }
-    _cascadeLookup(key, code, visited) {
+    _cascadeLookup(key, target, code, requestedCode, visited) {
         if (visited.has(code))
             return { value: null, source: null };
         visited.add(code);
-        const doc = this._documents.get(code);
+        const doc = this._documents.get(LocaleStore.documentKey(target, code));
         // Direct hit in this document
         if (doc && key in doc.strings) {
-            const isActive = code === this.activeLocale.value;
+            const isActive = code === requestedCode;
             return {
                 value: doc.strings[key],
                 source: isActive ? 'regional' : (doc.fallback != null ? 'fallback' : 'implicit'),
@@ -65,7 +87,7 @@ export class LocaleStore {
         // Explicit fallback chain
         if (doc?.fallback) {
             const fallbackCode = LocaleStore.normalizeCode(doc.fallback);
-            const result = this._cascadeLookup(key, fallbackCode, visited);
+            const result = this._cascadeLookup(key, target, fallbackCode, requestedCode, visited);
             if (result.value !== null) {
                 return { ...result, source: 'fallback' };
             }
@@ -75,7 +97,7 @@ export class LocaleStore {
         if (dashIdx > 0) {
             const baseCode = code.substring(0, dashIdx);
             if (!visited.has(baseCode)) {
-                const result = this._cascadeLookup(key, baseCode, visited);
+                const result = this._cascadeLookup(key, target, baseCode, requestedCode, visited);
                 if (result.value !== null) {
                     return { ...result, source: 'implicit' };
                 }
@@ -89,6 +111,12 @@ export class LocaleStore {
      */
     static normalizeCode(code) {
         return normalizeBcp47(code);
+    }
+    static targetKey(target) {
+        return JSON.stringify([target.kind, target.url]);
+    }
+    static documentKey(target, locale) {
+        return JSON.stringify([target.kind, target.url, LocaleStore.normalizeCode(locale)]);
     }
 }
 LocaleStore.RTL_LANGUAGES = new Set([

@@ -1,0 +1,21 @@
+{
+  "name": "@integrity-stack/cose",
+  "version": "0.1.0",
+  "description": "TypeScript COSE_Sign1 byte helpers and method dispatch enforcement",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Formspec-Labs/integrity-stack.git",
+    "directory": "packages/integrity-cose"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "sideEffects": false
+}

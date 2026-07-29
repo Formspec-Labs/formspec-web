@@ -17,6 +17,7 @@ import type { FieldViewModel } from './field-view-model.js';
 import type { FormViewModel } from './form-view-model.js';
 import type { IssuerFetcher } from './issuer/IssuerFetcher.js';
 import type { IssuerSource, ResolvedIssuer } from './issuer/types.js';
+import type { FelTraceStep } from './fel/fel-api-runtime.js';
 export interface FELBuiltinFunctionCatalogEntry {
     name: string;
     category: string;
@@ -69,7 +70,7 @@ export interface FELRewriteOptions {
     rewriteInstanceName?: (name: string) => string;
     rewriteNavigationTarget?: (name: string, fn: 'prev' | 'next' | 'parent') => string;
 }
-export type DocumentType = 'definition' | 'issuer' | 'theme' | 'component' | 'mapping' | 'validation_mapping' | 'response_actions' | 'ontology' | 'references' | 'experience' | 'response' | 'intake_handoff' | 'validation_report' | 'validation_result' | 'registry' | 'changelog' | 'fel_functions' | 'locale' | 'screener' | 'determination';
+export type DocumentType = 'definition' | 'issuer' | 'theme' | 'component' | 'mapping' | 'validation_mapping' | 'response_actions' | 'ontology' | 'references' | 'experience' | 'response' | 'intake_handoff' | 'validation_report' | 'validation_result' | 'registry' | 'changelog' | 'fel_functions' | 'locale' | 'screener' | 'determination' | 'surface';
 export interface SchemaValidationError {
     path: string;
     message: string;
@@ -100,6 +101,7 @@ export interface SchemaValidatorSchemas {
     locale?: object;
     screener?: object;
     determination?: object;
+    surface?: object;
 }
 export interface SchemaValidator {
     validate(document: unknown, documentType?: DocumentType | null): SchemaValidationResult;
@@ -312,6 +314,12 @@ export interface EngineReplayResult {
         error: string;
     }>;
 }
+export interface RelevanceExplanation {
+    bindId: string | null;
+    expression: string | null;
+    dependsOn: string[];
+    evaluatedAs: boolean;
+}
 export interface IFormEngine {
     readonly signals: Record<string, EngineSignal<FormFieldValue>>;
     readonly relevantSignals: Record<string, EngineSignal<boolean>>;
@@ -355,6 +363,9 @@ export interface IFormEngine {
     getValidationReport(options: ValidationReportOptions): ValidationReport | null;
     evaluateShape(shapeId: string): ValidationResult[];
     isPathRelevant(path: string): boolean;
+    whyRelevant(path: string): RelevanceExplanation;
+    getDerivationTree(path: string): FelTraceStep[];
+    getDownstreamImpact(path: string): string[];
     getFieldPaths(): string[];
     getProgress(): FormProgress;
     getResponse(meta?: {

@@ -158,6 +158,29 @@ export interface PurposeMetadata {
     retention?: string;
 }
 /**
+ * EXT-28 / ADR-0155 §5: per-item party-scoped visibility, editability, and signature obligation policy. Absence means the item is visible-to, editable-by, and signed-by all declared parties (legacy single-party semantics extended to N parties). See core spec §4.8.3.
+ */
+export interface ItemPartyPolicy {
+    /**
+     * Role IDs of parties that MAY see this item. Each entry MUST resolve to a `parties[*].roleId` declared in the same Definition. An empty array is a definition error per MP-10.
+     *
+     * @minItems 1
+     */
+    visibleTo?: [string, ...string[]];
+    /**
+     * Role IDs of parties that MAY edit this item. MUST be a subset of `visibleTo` per MP-11.
+     *
+     * @minItems 1
+     */
+    editableBy?: [string, ...string[]];
+    /**
+     * Role IDs of parties whose `AuthoredSignature` MUST cover this item. MUST be a subset of `visibleTo` per MP-11.
+     *
+     * @minItems 1
+     */
+    signedBy?: [string, ...string[]];
+}
+/**
  * A single stage in the evaluation pipeline. Each phase declares a strategy that determines how its routes are evaluated. Phases execute in declaration order and produce independent results aggregated into the Determination Record.
  *
  * This interface was referenced by `ScreenerDocument`'s JSON-Schema
@@ -231,7 +254,7 @@ export interface Route {
      */
     threshold?: number;
     /**
-     * Route destination URI. Four categories: (1) a Formspec Definition reference (url|version), (2) an external URI, (3) a named outcome (outcome:name), (4) a Surface route reference (surface:<route-id>) per ADR 0150 §7 — when the bundle includes a Surface document, a Screener terminal-hop with this scheme lands the respondent inside that Surface's route composition. The <route-id> after `surface:` MUST resolve to a route id in the bundle's Surface document.
+     * Route destination URI. Four categories: (1) a Formspec Definition reference (url|version), (2) an external URI, (3) a named outcome (outcome:name), (4) a Surface route reference (surface:<route-id>) per ADR 0150 §7. The Screener remains freestanding; AppGraphValidator validates surface:<route-id> only when App Manifest v2.3 screeners[] explicitly associates the Screener with loaded Surface documents. The <route-id> after `surface:` MUST resolve to exactly one loaded Surface routes[].id in that associated app graph.
      */
     target: string;
     /**

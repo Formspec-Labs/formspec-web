@@ -187,6 +187,24 @@ function projectUiGraphRoutePolicy(node, ctx) {
     }
     return node;
 }
+function hostReservedLandmarks(hostEvidence) {
+    const reserved = hostEvidence?.hostLandmarks?.reserved ?? [];
+    const roles = new Set();
+    for (const landmark of reserved) {
+        if (landmark === 'main' || landmark === 'navigation' || landmark === 'complementary') {
+            roles.add(landmark);
+        }
+    }
+    return roles;
+}
+function projectRouteA11y(a11y, hostReserved) {
+    const projected = { ...a11y };
+    const landmark = projected.landmark;
+    if (landmark && landmark !== 'region' && hostReserved.has(landmark)) {
+        projected.landmarkSuppressed = true;
+    }
+    return projected;
+}
 function uiGraphRoutePolicyProjection(ctx) {
     const scope = ctx.componentGraph;
     const hostEvidence = ctx.hostEvidence;
@@ -211,6 +229,7 @@ function uiGraphRoutePolicyProjection(ctx) {
             continue;
         if (!targetSurfaceMatches(document.targetSurface, scope.surface))
             continue;
+        const hostReserved = hostReservedLandmarks(hostEvidence);
         for (const routePolicy of document.routePolicies) {
             if (routePolicy.routeId !== scope.route)
                 continue;
@@ -219,7 +238,7 @@ function uiGraphRoutePolicyProjection(ctx) {
                 source: entry.source,
                 targetSurface: { ...document.targetSurface },
                 routeId: routePolicy.routeId,
-                ...(routePolicy.a11y ? { a11y: { ...routePolicy.a11y } } : {}),
+                ...(routePolicy.a11y ? { a11y: projectRouteA11y(routePolicy.a11y, hostReserved) } : {}),
                 ...(routePolicy.responsive ? {
                     responsive: {
                         ...routePolicy.responsive,
@@ -323,6 +342,9 @@ function isUiGraphRoutePolicyLike(value) {
         const a11y = routePolicy.a11y;
         if ('landmark' in a11y
             && !['main', 'navigation', 'complementary', 'region'].includes(String(a11y.landmark))) {
+            return false;
+        }
+        if ('landmarkLabel' in a11y && typeof a11y.landmarkLabel !== 'string') {
             return false;
         }
         if ('keyboardNavigation' in a11y && typeof a11y.keyboardNavigation !== 'boolean') {

@@ -40,12 +40,23 @@ export const platformSelectors = [
 /**
  * Extract all token values from the registry: light-mode defaults plus
  * dark-mode variants keyed under each category's `darkPrefix`.
+ *
+ * **Tokens carrying `derivedFrom` are skipped.** A derived token's whole point
+ * is that it resolves through another token when a Theme leaves it unset
+ * (`color.ring` through `color.primary`). Emitting the platform default for it
+ * here would give every theme an explicit value, so the CSS chain
+ * `var(--formspec-color-ring, var(--formspec-color-primary, …))` could never
+ * reach its second arm and a tenant setting only the brand token would keep the
+ * platform focus ring. Its `default` still reaches the skin as the innermost
+ * CSS fallback.
  */
 function extractTokens(registry) {
     const tokens = {};
     for (const category of Object.values(registry.categories)) {
         const { darkPrefix } = category;
         for (const [tokenName, entry] of Object.entries(category.tokens)) {
+            if (entry.derivedFrom !== undefined)
+                continue;
             tokens[tokenName] = entry.default;
             if (darkPrefix && entry.dark) {
                 // "color.primary" with darkPrefix "color.dark" becomes "color.dark.primary"
@@ -76,5 +87,15 @@ export function buildPlatformTheme() {
         tokens,
         defaults: platformDefaults,
         selectors: platformSelectors,
+    };
+}
+export function mergePlatformAndTenantTheme(platformTheme, tenantTheme) {
+    return {
+        ...platformTheme,
+        ...(tenantTheme ?? {}),
+        tokens: {
+            ...(platformTheme.tokens ?? {}),
+            ...(tenantTheme?.tokens ?? {}),
+        },
     };
 }

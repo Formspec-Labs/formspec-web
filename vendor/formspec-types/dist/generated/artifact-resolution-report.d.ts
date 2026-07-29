@@ -152,6 +152,7 @@ export interface ArtifactResolutionArtifacts {
     ontology?: ArtifactResolutionHandle[];
     registries?: ArtifactResolutionHandle[];
     surfaces?: ArtifactResolutionHandle[];
+    screeners?: ArtifactResolutionHandle[];
     dataSources?: ArtifactResolutionHandle[];
     locales?: ArtifactResolutionHandle[];
     mappings?: ArtifactResolutionHandle[];

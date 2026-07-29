@@ -10,6 +10,26 @@
  */
 export type ModuleId = string;
 /**
+ * This interface was referenced by `UiGraphPolicyDocument`'s JSON-Schema
+ * via the `definition` "RouteA11yPolicy".
+ */
+export type RouteA11YPolicy = {
+    [k: string]: unknown;
+} & {
+    /**
+     * Route-level landmark category. A web renderer may map validated projected main, navigation, or complementary policy to a route-root layout container role under the UI Graph Policy route-landmark profile. Region maps only when landmarkLabel is present under the named-region profile.
+     */
+    landmark?: 'main' | 'navigation' | 'complementary' | 'region';
+    /**
+     * Accessible name for region landmarks. Required when landmark is region.
+     */
+    landmarkLabel?: string;
+    /**
+     * Graph-visible obligation that route-level keyboard navigation is required. Renderers may expose this as inert metadata only; they MUST NOT implement focus movement or tabindex inference from this field.
+     */
+    keyboardNavigation?: boolean;
+};
+/**
  * Structural source contract for UI Graph Policy v0.1. This document constrains a loaded Surface graph with module Locale key ownership, route-level accessibility policy, responsive route slot collapse order, hidden Definition references, and Theme token assignments to module widget token slots. It is host-loaded evidence only in v0.1: it is not an App Manifest sibling slot, not an ArtifactResolver group, not an AppGraphValidator implementation, not ModuleResolver token-slot authority, not runtime hidden-state behavior, and not an authorization policy.
  */
 export interface UiGraphPolicyDocument {
@@ -72,20 +92,6 @@ export interface RoutePolicy {
     a11y?: RouteA11YPolicy;
     responsive?: ResponsiveRoutePolicy;
     definitionVisibility?: DefinitionVisibilityPolicy;
-}
-/**
- * This interface was referenced by `UiGraphPolicyDocument`'s JSON-Schema
- * via the `definition` "RouteA11yPolicy".
- */
-export interface RouteA11YPolicy {
-    /**
-     * Route-level landmark category. Renderer-specific ARIA or platform mapping is out of scope.
-     */
-    landmark?: 'main' | 'navigation' | 'complementary' | 'region';
-    /**
-     * Whether the route-level policy profile requires keyboard navigation support.
-     */
-    keyboardNavigation?: boolean;
 }
 /**
  * This interface was referenced by `UiGraphPolicyDocument`'s JSON-Schema

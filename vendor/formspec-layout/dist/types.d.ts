@@ -1,6 +1,6 @@
 /** @filedesc Core layout plan types: LayoutNode and PlanContext interfaces. */
-import type { ComponentNodeIdentityRef, ComponentDocument, ComponentGraphProjectionContext, FormDefinition, FormItem, AppGraphValidationReport, ThemeDocument, UiGraphPolicyDocument } from '@formspec-org/types';
-import type { PresentationBlock } from './theme-resolver.js';
+import type { ComponentNodeIdentityRef, ComponentDocument, ComponentGraphProjectionContext, FormDefinition, FormItem, AppGraphValidationReport, UiGraphPolicyDocument } from '@formspec-org/types';
+import type { PresentationBlock, ThemeDocument } from './theme-resolver.js';
 export type { FormItem };
 /** Generates unique layout node IDs for a single plan invocation. */
 export type NodeIdGenerator = (prefix: string) => string;
@@ -21,20 +21,30 @@ export interface ComponentGraphProjectionEvidence {
     source: string;
     document: ComponentGraphProjectionContext;
 }
+export type LayoutHostLandmarkRole = 'main' | 'navigation' | 'complementary';
+export interface LayoutHostLandmarks {
+    reserved: LayoutHostLandmarkRole[];
+}
 /** Projection-only host evidence. Layout does not fetch, validate, or discover these documents. */
 export interface LayoutHostEvidence {
     /** Completed AppGraphValidator report for the supplied host evidence. */
     appGraphReport?: AppGraphValidationReport;
     uiGraphPolicies?: UiGraphPolicyProjectionEvidence[];
     componentGraphContexts?: ComponentGraphProjectionEvidence[];
+    hostLandmarks?: LayoutHostLandmarks;
 }
-/** Inert route-policy metadata copied from a matching UI Graph Policy document. */
+/** Route-policy a11y metadata copied from policy plus projection-only suppression. */
+export type UiGraphRoutePolicyA11yProjection = NonNullable<UiGraphPolicyDocument['routePolicies'][number]['a11y']> & {
+    landmarkLabel?: string;
+    landmarkSuppressed?: boolean;
+};
+/** Route-policy metadata copied from a matching UI Graph Policy document. */
 export interface UiGraphRoutePolicyProjection {
     schemaId: string;
     source: string;
     targetSurface: UiGraphPolicyDocument['targetSurface'];
     routeId: string;
-    a11y?: NonNullable<UiGraphPolicyDocument['routePolicies'][number]['a11y']>;
+    a11y?: UiGraphRoutePolicyA11yProjection;
     responsive?: NonNullable<UiGraphPolicyDocument['routePolicies'][number]['responsive']>;
 }
 /**
@@ -69,8 +79,9 @@ export interface LayoutNode {
     /** Graph-wide Component node identity per Component §11.6, when caller supplies graph context. */
     componentGraphIdentity?: ComponentNodeIdentityRef;
     /**
-     * Projection-only UI Graph Policy route metadata. Renderers MUST NOT infer
-     * runtime hidden-state, ARIA implementation, or authorization behavior from it.
+     * Projection-only UI Graph Policy route metadata. Web renderers may consume
+     * the route-landmark profile; they MUST NOT infer keyboard behavior,
+     * runtime hidden-state, general ARIA synthesis, or authorization from it.
      */
     uiGraphRoutePolicy?: UiGraphRoutePolicyProjection;
     /** Full bind path (e.g. "applicantInfo.orgName"). */

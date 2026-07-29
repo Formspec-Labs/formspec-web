@@ -21,5 +21,7 @@ export { resolvePageSequence } from './page-sequence.js';
 export type { PageSequenceEntry } from './page-sequence.js';
 export { positionPopupNearTrigger, clearPopupFixedPosition, POPUP_EDGE_PADDING, POPUP_TRIGGER_GAP, MODAL_FIRST_FOCUSABLE_SELECTOR, } from './popup-position.js';
 export type { PopupPlacement } from './popup-position.js';
-export { platformDefaults, platformSelectors, buildPlatformTheme } from './platform-defaults.js';
+export { platformDefaults, platformSelectors, buildPlatformTheme, mergePlatformAndTenantTheme, } from './platform-defaults.js';
+export { resolveRouteLandmark } from './route-landmark-projection.js';
+export type { ResolvedRouteLandmark, ResolvedRouteLandmarkRole } from './route-landmark-projection.js';
 export type { ComponentGraphProjectionContext, LayoutHostEvidence, LayoutNode, PlanContext, UiGraphPolicyProjectionEvidence, UiGraphRoutePolicyProjection, } from './types.js';

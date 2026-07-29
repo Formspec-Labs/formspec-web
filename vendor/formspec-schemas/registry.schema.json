@@ -1,0 +1,1064 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formspec.org/schemas/registry/v1.1/registry.json",
+  "title": "Formspec Registry Document (v1.1)",
+  "description": "A static JSON document format for publishing, discovering, and validating Formspec extensions and semantic metadata. A Registry Document enumerates named entries — custom data types, functions, constraints, properties, modules, concept identities, and vocabulary bindings — with metadata, version history, compatibility bounds, and machine-readable schemas. Registry 1.1 separates a widget's authored configuration props, named runtime data inputs, and named action outputs. Any organization MAY publish its own Registry Document. Interoperability is achieved through the common format, not centralized authority.",
+  "type": "object",
+  "required": [
+    "$formspecRegistry",
+    "publisher",
+    "published",
+    "entries"
+  ],
+  "properties": {
+    "$formspecRegistry": {
+      "type": "string",
+      "const": "1.1",
+      "description": "Registry specification version. MUST be '1.1'.",
+      "examples": ["1.1"],
+      "x-lm": {
+        "critical": true,
+        "intent": "Version pin for registry document compatibility."
+      }
+    },
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional JSON Schema URI for editor validation and autocompletion."
+    },
+    "publisher": {
+      "$ref": "#/$defs/Publisher",
+      "description": "Organization publishing this registry document. Provides provenance and contact information for all entries unless overridden at the entry level.",
+      "examples": [
+        {
+          "name": "Federal Grants Commission",
+          "url": "https://grants.gov",
+          "contact": "formspec@grants.gov"
+        }
+      ],
+      "x-lm": {
+        "critical": true,
+        "intent": "Publisher identity and contact provenance for this registry."
+      }
+    },
+    "published": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp indicating when this registry version was published. Used for freshness checks and conditional GET cache validation.",
+      "examples": ["2025-07-10T14:30:00Z"],
+      "x-lm": {
+        "critical": true,
+        "intent": "Publication timestamp used for freshness and cache validation."
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryEntry"
+      },
+      "description": "Array of extension registry entries. Each entry describes one extension with its category, version, compatibility bounds, and category-specific metadata. Within a single document, the (name, version) tuple MUST be unique.",
+      "examples": [
+        [
+          {
+            "name": "x-acme-currency",
+            "category": "dataType",
+            "version": "1.0.0",
+            "status": "stable",
+            "description": "Custom currency data type extending decimal with 2-digit precision.",
+            "compatibility": { "formspecVersion": ">=1.0.0 <2.0.0" },
+            "baseType": "decimal",
+            "constraints": { "minimum": 0 },
+            "metadata": { "prefix": "$", "precision": 2 }
+          },
+          {
+            "name": "x-acme-fiscal-year",
+            "category": "function",
+            "version": "1.0.0",
+            "status": "stable",
+            "description": "Returns the federal fiscal year for a given date.",
+            "compatibility": { "formspecVersion": ">=1.0.0 <2.0.0" },
+            "parameters": [
+              { "name": "date", "type": "date", "description": "The date to classify." }
+            ],
+            "returns": "integer"
+          },
+          {
+            "name": "x-acme-duns-check",
+            "category": "constraint",
+            "version": "1.0.0",
+            "status": "stable",
+            "description": "Validates that a string is a well-formed DUNS number (9 digits, valid check digit).",
+            "compatibility": { "formspecVersion": ">=1.0.0 <2.0.0" },
+            "parameters": [
+              { "name": "value", "type": "string", "description": "The DUNS number to validate." }
+            ]
+          },
+          {
+            "name": "x-acme-grants",
+            "category": "module",
+            "version": "2.0.0",
+            "status": "stable",
+            "description": "Module bundling federal grants management extensions.",
+            "compatibility": { "formspecVersion": ">=1.0.0 <2.0.0" },
+            "contributes": [
+              "x-acme-currency",
+              "x-acme-fiscal-year",
+              "x-acme-duns-check"
+            ]
+          },
+          {
+            "name": "x-onto-ein",
+            "category": "concept",
+            "version": "1.0.0",
+            "status": "stable",
+            "description": "IRS Employer Identification Number — a 9-digit tax identifier assigned to business entities.",
+            "compatibility": { "formspecVersion": ">=1.0.0" },
+            "conceptUri": "https://www.irs.gov/terms/employer-identification-number",
+            "conceptSystem": "https://www.irs.gov/terms",
+            "conceptCode": "EIN",
+            "metadata": { "displayName": "Employer Identification Number" },
+            "equivalents": [
+              { "system": "https://schema.org", "code": "taxID", "type": "broader" },
+              { "system": "urn:fhir:r4", "code": "Organization.identifier", "type": "exact" }
+            ]
+          },
+          {
+            "name": "x-vocab-icd10-mental-health",
+            "category": "vocabulary",
+            "version": "1.0.0",
+            "status": "stable",
+            "description": "ICD-10-CM mental and behavioural disorders chapter (F00-F99), depth-limited to 3 levels.",
+            "compatibility": { "formspecVersion": ">=1.0.0" },
+            "vocabularySystem": "http://hl7.org/fhir/sid/icd-10",
+            "vocabularyVersion": "2024",
+            "metadata": { "displayName": "ICD-10-CM Mental Health Codes" },
+            "filter": { "ancestor": "F00-F99", "maxDepth": 3 }
+          }
+        ]
+      ],
+      "x-lm": {
+        "critical": true,
+        "intent": "Primary catalog of extension definitions exposed by the registry."
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Registry-level extension properties for vendor-specific metadata. All property keys MUST be x-prefixed.",
+      "propertyNames": {
+        "pattern": "^x-"
+      },
+      "examples": [
+        {
+          "x-acme-registry-policy": {
+            "reviewRequired": true,
+            "autoRetireAfterDays": 365
+          }
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Publisher": {
+      "type": "object",
+      "description": "Organization publishing this registry document. Extends $defs/Party from common.schema.json. Legacy fields preserved: `url` aliases Party.homepage (deprecated, removed in v1.2); `contact: string` deprecated in favor of contactPoint (removed in v1.2).",
+      "required": ["name"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$ref": "https://formspec.org/schemas/common/1.0#/$defs/Party"
+        }
+      ],
+      "properties": {
+        "name": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "https://formspec.org/schemas/common/1.0#/$defs/LangMap"
+            }
+          ]
+        },
+        "identifier": {
+          "type": "string",
+          "format": "uri"
+        },
+        "homepage": {
+          "type": "string",
+          "format": "uri"
+        },
+        "contactPoint": {
+          "oneOf": [
+            {
+              "$ref": "https://formspec.org/schemas/common/1.0#/$defs/ContactPoint"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "https://formspec.org/schemas/common/1.0#/$defs/ContactPoint"
+              }
+            }
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "deprecated": true,
+          "description": "DEPRECATED: alias for `homepage`. Removed in v1.2."
+        },
+        "contact": {
+          "type": "string",
+          "deprecated": true,
+          "description": "DEPRECATED: prefer structured `contactPoint`. Removed in v1.2."
+        }
+      }
+    },
+    "RegistryEntry": {
+      "type": "object",
+      "description": "A single registry entry. Describes one Formspec extension or semantic metadata entry — its identity, category, lifecycle status, compatibility bounds, and category-specific metadata. Category-specific properties become required based on the category value: dataType requires baseType; function requires parameters and returns; constraint requires parameters; concept requires conceptUri; vocabulary requires vocabularySystem.",
+      "required": [
+        "name",
+        "category",
+        "version",
+        "status",
+        "description",
+        "compatibility"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^x-[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$",
+          "description": "The x-prefixed extension identifier. Must be lowercase ASCII with hyphen-separated segments, each starting with a letter. The prefix x-formspec- is reserved for future core promotion.",
+          "examples": ["x-acme-currency", "x-gov-grants-fiscal-year", "x-health-icd10", "x-onto-ein", "x-vocab-icd10-cm"],
+          "x-lm": {
+            "critical": true,
+            "intent": "Globally unique extension identifier used for resolution and collision avoidance."
+          }
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "dataType",
+            "function",
+            "constraint",
+            "property",
+            "module",
+            "concept",
+            "vocabulary",
+            "unit-kind",
+            "widget",
+            "action-intent",
+            "slot-type",
+            "validation-mapping-row",
+            "token-category"
+          ],
+          "description": "The entry category. Determines which category-specific properties are required: dataType requires baseType; function requires parameters and returns; constraint requires parameters; concept requires conceptUri; vocabulary requires vocabularySystem; module requires contributes; unit-kind requires semantics; widget requires widgetShape; action-intent requires validation; slot-type requires slotShape; validation-mapping-row requires row; token-category requires categoryShape. property has no additional required properties. `namespace` was renamed to `module` per ADR 0150 §4.1 (greenfield rename, no alias).",
+          "examples": ["dataType", "function", "constraint", "module", "concept", "vocabulary", "widget", "unit-kind", "token-category"],
+          "x-lm": {
+            "critical": true,
+            "intent": "Discriminator that drives conditional required properties and tells processors how to consume the extension."
+          }
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+          "description": "Semver version of the extension itself (not the Formspec version). Within a registry document, the (name, version) tuple MUST be unique. A new major version MAY re-enter draft status.",
+          "examples": ["1.0.0", "2.1.3", "0.9.0"],
+          "x-lm": {
+            "critical": true,
+            "intent": "Extension version for uniqueness, ordering, and compatibility resolution."
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "stable",
+            "deprecated",
+            "retired"
+          ],
+          "description": "Lifecycle status. Transitions: draft → stable → deprecated → retired. Transitions MUST NOT skip states. Stable means the interface is frozen for the major version. Deprecated requires a deprecationNotice. Processors encountering retired extensions SHOULD emit a warning.",
+          "examples": ["stable", "deprecated"],
+          "x-lm": {
+            "critical": true,
+            "intent": "Lifecycle stage governing processor behavior — warnings for retired, notices for deprecated."
+          }
+        },
+        "publisher": {
+          "$ref": "#/$defs/Publisher",
+          "description": "Entry-level publisher override. When present, takes precedence over the document-level publisher for this specific entry. Useful for multi-organization registries."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable summary of the extension's purpose and behavior.",
+          "examples": [
+            "US Dollar currency type with 2-digit precision and non-negative constraint.",
+            "Returns the federal fiscal year (Oct 1 start) for a given date."
+          ]
+        },
+        "specUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Link to the full human-readable extension documentation or specification.",
+          "examples": ["https://grants.gov/formspec/x-gov-grants/v2.0/spec.html"]
+        },
+        "schemaUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Link to a JSON Schema for validating the extension's data as it appears in a Formspec Definition document. Registry-aware processors SHOULD fetch and validate against this schema.",
+          "examples": ["https://grants.gov/formspec/x-gov-grants/v2.0/schema.json"]
+        },
+        "compatibility": {
+          "type": "object",
+          "description": "Version compatibility bounds. Processors MUST verify the current Formspec version satisfies formspecVersion. A mismatch produces a warning (or hard error if x-formspec-strict is set in extensions).",
+          "required": [
+            "formspecVersion"
+          ],
+          "properties": {
+            "formspecVersion": {
+              "type": "string",
+              "description": "Semver range of compatible Formspec core specification versions. Uses npm-style range syntax.",
+              "examples": [">=1.0.0 <2.0.0", ">=1.2.0"]
+            },
+            "mappingDslVersion": {
+              "type": "string",
+              "description": "Semver range of compatible Mapping DSL versions. Only relevant for extensions that interact with the Mapping specification.",
+              "examples": [">=1.0.0 <2.0.0"]
+            }
+          },
+          "additionalProperties": false,
+          "examples": [
+            { "formspecVersion": ">=1.0.0 <2.0.0" },
+            { "formspecVersion": ">=1.0.0 <2.0.0", "mappingDslVersion": ">=1.0.0" }
+          ],
+          "x-lm": {
+            "critical": true,
+            "intent": "Compatibility bounds that processors MUST check before accepting an extension."
+          }
+        },
+        "license": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.\\-]*[A-Za-z0-9]$",
+          "description": "SPDX license identifier for the extension (e.g. 'Apache-2.0', 'MIT', 'CC0-1.0'). See https://spdx.org/licenses/ for valid identifiers.",
+          "examples": ["Apache-2.0", "MIT", "CC0-1.0"]
+        },
+        "deprecationNotice": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable deprecation message explaining why the extension is deprecated and identifying a replacement if one exists. REQUIRED when status is 'deprecated'. Processors SHOULD surface this message to form authors.",
+          "examples": [
+            "Superseded by x-acme-currency-v2. Migrate by 2026-01-01.",
+            "Use the core money dataType instead. This extension will be retired in v3.0."
+          ]
+        },
+        "examples": {
+          "type": "array",
+          "items": true,
+          "description": "Array of JSON values demonstrating how this extension is used in a Formspec Definition. Each element is a free-form JSON value — typically a fragment of a definition document or an item using the extension."
+        },
+        "extensions": {
+          "type": "object",
+          "description": "Entry-level extension properties for vendor-specific metadata. All property keys MUST be x-prefixed.",
+          "propertyNames": {
+            "pattern": "^x-"
+          }
+        },
+        "baseType": {
+          "type": "string",
+          "enum": [
+            "string",
+            "integer",
+            "decimal",
+            "boolean",
+            "date",
+            "dateTime",
+            "time",
+            "uri"
+          ],
+          "description": "The core Formspec data type that this custom dataType extends. REQUIRED when category is 'dataType'. The custom type inherits the base type's serialization, comparison, and FEL operator semantics.",
+          "examples": ["decimal", "string", "date"],
+          "x-lm": {
+            "critical": true,
+            "intent": "Base type inheritance for custom dataType extensions — determines serialization and operator semantics."
+          }
+        },
+        "constraints": {
+          "type": "object",
+          "description": "Default constraint values applied to fields using this custom dataType. Keys are constraint names, values are their defaults. Only meaningful when category is 'dataType'.",
+          "examples": [
+            { "minimum": 0 },
+            { "minimum": 0, "maxLength": 11 }
+          ]
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Presentation and descriptive metadata for this entry. For dataType entries, provides rendering hints (prefix, precision, formatting). For concept and vocabulary entries, provides display metadata (displayName). Open object — keys are not restricted.",
+          "examples": [
+            { "prefix": "$", "precision": 2, "thousandsSeparator": true },
+            { "prefix": "EUR ", "precision": 2 }
+          ]
+        },
+        "parameters": {
+          "type": "array",
+          "description": "Function or constraint signature parameters. REQUIRED when category is 'function' or 'constraint'. Each parameter declares name, type, and optional description. Parameters are positional — order matters for function calls in FEL.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "type"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Parameter name used in documentation and error messages."
+              },
+              "type": {
+                "type": "string",
+                "description": "Core Formspec data type name for this parameter (e.g. 'string', 'number', 'date', 'boolean', 'array')."
+              },
+              "description": {
+                "type": "string",
+                "description": "Human-readable explanation of what this parameter represents."
+              }
+            },
+            "additionalProperties": false
+          },
+          "examples": [
+            [
+              { "name": "date", "type": "date", "description": "The date to classify." }
+            ],
+            [
+              { "name": "value", "type": "string", "description": "The string to validate." },
+              { "name": "pattern", "type": "string", "description": "Regex pattern to match against." }
+            ]
+          ],
+          "x-lm": {
+            "critical": true,
+            "intent": "Function/constraint signature for arity checking and type validation in FEL expressions."
+          }
+        },
+        "returns": {
+          "type": "string",
+          "description": "Core Formspec data type name for the return value of a custom function. REQUIRED when category is 'function'. Used by processors for type checking in FEL expressions.",
+          "examples": ["integer", "boolean", "string", "number"],
+          "x-lm": {
+            "critical": true,
+            "intent": "Return type declaration enabling static type checking of custom function calls in FEL."
+          }
+        },
+        "contributes": {
+          "type": "array",
+          "description": "Array of x-prefixed Registry entry names this module bundles. REQUIRED when category is 'module'. Each MUST exist in this or a referenced registry. Replaces the old `members[]` per ADR 0150 §4.1.",
+          "items": {
+            "type": "string",
+            "pattern": "^x-[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$"
+          },
+          "examples": [
+            ["x-formspec-email", "x-formspec-phone", "x-formspec-ssn"]
+          ]
+        },
+        "dependencies": {
+          "type": "array",
+          "description": "Other modules this module requires. OPTIONAL when category is 'module'. Uses the canonical `ModuleRef` $def for shape parity with document `modules[]` and `posture.allowedModules[]`.",
+          "items": {
+            "$ref": "https://formspec.org/schemas/common/1.0#/$defs/ModuleRef"
+          },
+          "examples": [
+            [{"id": "x-formspec-core-task", "version": "^1.0.0"}]
+          ]
+        },
+        "semantics": {
+          "type": "object",
+          "description": "Processor/renderer obligations describing the unit-kind's behavioral semantics. REQUIRED when category is 'unit-kind'. Free-form per module; module ships canonical sub-schema referenced from `schemaUrl` for richer validation. Per ADR 0150 §4.2.",
+          "examples": [
+            {"processorObligation": "render-as-gallery", "rendererObligation": "media-grid"}
+          ]
+        },
+        "widgetShape": {
+          "type": "object",
+          "description": "Widget contract (widget name, authored configuration props, named runtime data inputs, named action outputs, children policy, fallback chain, and optional graph-visible token slots). REQUIRED when category is 'widget'. `widgetName` is the name a Surface `module-widget` binding resolves against — the only link from a binding to this entry. `props`, `dataInputs`, and `actionOutputs` are separate channels: configuration MUST NOT carry runtime data or emitted actions. `tokenSlots[]` is the production Registry evidence for UI Graph Policy Theme token-slot assignment checks; processors MUST NOT read the v4 spike `semantics.themeTokenSlots` field as authority. Per ADR 0150 §4.2 / Component §progressive-to-core and ADR 0153 UI graph policy gates.",
+          "properties": {
+            "widgetName": {
+              "type": "string",
+              "description": "Name a Surface `module-widget` slot binds by (surface.schema.json `binding.widgetName`). ModuleResolver maps a binding to this entry ONLY by matching this field against the widget contributions of the binding's owning module — an entry that omits it cannot satisfy any binding, and a same-name widget owned by a different admitted module MUST NOT satisfy it (module-resolver-spec.md §Contribution use sites). Distinct from the entry's `name`, which is the globally unique `x-`-prefixed contribution id.",
+              "examples": [
+                "designerCanvas",
+                "currencyInput"
+              ],
+              "x-lm": {
+                "critical": true,
+                "intent": "The sole mapping from a Surface module-widget binding to this widget contribution."
+              }
+            },
+            "props": {
+              "type": "object",
+              "description": "JSON Schema fragment for authored, static widget configuration such as Theme widgetConfig or Surface module-widget binding.config. It is not a runtime data or action channel."
+            },
+            "dataInputs": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/WidgetDataInput"
+              },
+              "description": "Named runtime values the widget accepts. Names MUST be unique within this widget shape. Surface dataBindings maps each name to a qualified Data Sources 1.0 source; the Registry does not duplicate the source payload schema."
+            },
+            "actionOutputs": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/WidgetActionOutput"
+              },
+              "description": "Named events the widget may emit. Names MUST be unique within this widget shape. An output name is not an App action id, route id, Response Actions intent, or generic host command."
+            },
+            "childrenPolicy": {
+              "type": "string",
+              "description": "Renderer-facing child composition policy for the widget."
+            },
+            "fallback": {
+              "type": "string",
+              "description": "Fallback core widget or rendering strategy used when this widget is unavailable."
+            },
+            "tokenSlots": {
+              "type": "array",
+              "description": "Graph-visible Theme token slots accepted by this widget. ModuleResolver normalizes this evidence into ModuleResolutionReport.widgetTokenSlots for UI Graph Policy validators; this field does not define token values, cascade, or renderer behavior.",
+              "items": {
+                "$ref": "#/$defs/WidgetTokenSlot"
+              }
+            }
+          },
+          "examples": [
+            {
+              "widgetName": "designerCanvas",
+              "props": {"type": "object"},
+              "dataInputs": [
+                {"name": "caseSummary", "required": true}
+              ],
+              "actionOutputs": [
+                {"name": "openReceipt"}
+              ],
+              "childrenPolicy": "no-children",
+              "fallback": "Stack",
+              "tokenSlots": [
+                {"name": "accent", "acceptedTokenCategories": ["color"]}
+              ]
+            }
+          ]
+        },
+        "validation": {
+          "type": "object",
+          "description": "Full ValidationTuple per VM §6.1. REQUIRED when category is 'action-intent'. Per ADR 0150 §4.2.",
+          "examples": [
+            {"blocking": true, "sourceCanonical": ["error"], "actionEffectIfBlocked": "abort"}
+          ]
+        },
+        "slotShape": {
+          "type": "object",
+          "description": "What the slot binds to + composition rules. REQUIRED when category is 'slot-type'. Per ADR 0150 §4.2.",
+          "examples": [
+            {"binds": "embed-route", "compositionRule": "one-route-per-slot"}
+          ]
+        },
+        "row": {
+          "type": "object",
+          "description": "Closed MappingEntry shape per VM §6. REQUIRED when category is 'validation-mapping-row'. Contributes a row to the `validation-mapping.MasterTable` after the §4.2 four-constraint demotion. Per ADR 0150 §4.2.",
+          "examples": [
+            {"blocking": true, "sourceCanonical": ["error"], "targetSeverity": "error", "actionEffectIfBlocked": "abort"}
+          ]
+        },
+        "categoryShape": {
+          "$ref": "#/$defs/TokenCategoryShape",
+          "description": "Token category shape. REQUIRED when category is 'token-category'. The `prefix` field is the graph-visible Theme token category prefix; the Registry entry `name` is not prefix authority. Folds Token Registry into the unified Registry as a contribution profile per ADR 0150 §2.3/§4.2 and ADR 0153 UI Graph Policy gates.",
+          "examples": [
+            {
+              "prefix": "x-agency",
+              "type": "color",
+              "tokens": {
+                "x-agency.seal-color": {
+                  "description": "Official agency seal color",
+                  "type": "color"
+                }
+              }
+            }
+          ]
+        },
+        "conceptUri": {
+          "type": "string",
+          "format": "uri",
+          "description": "The concept IRI in the external ontology or standard. REQUIRED when category is 'concept'. This is the globally unique identifier for the concept this entry represents.",
+          "examples": [
+            "https://www.irs.gov/terms/employer-identification-number",
+            "https://schema.org/birthDate",
+            "http://terminology.hl7.org/CodeSystem/v2-0203#MR"
+          ],
+          "x-lm": {
+            "critical": true,
+            "intent": "The globally unique IRI for the concept this registry entry represents."
+          }
+        },
+        "conceptSystem": {
+          "type": "string",
+          "format": "uri",
+          "description": "The ontology or concept system URI. RECOMMENDED when category is 'concept'. Identifies which ontology or standard the concept belongs to.",
+          "examples": [
+            "https://www.irs.gov/terms",
+            "https://schema.org",
+            "http://terminology.hl7.org/CodeSystem/v2-0203"
+          ]
+        },
+        "conceptCode": {
+          "type": "string",
+          "description": "Short code within the concept system (e.g., 'EIN', 'MR'). Only meaningful when category is 'concept'.",
+          "examples": ["EIN", "MR", "SSN"]
+        },
+        "equivalents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConceptEquivalent"
+          },
+          "description": "Cross-system equivalences for this concept. Each element declares that the concept is equivalent to a concept in another system, with a SKOS-inspired relationship type. Only meaningful when category is 'concept'.",
+          "examples": [
+            [
+              { "system": "https://schema.org", "code": "taxID", "type": "broader" },
+              { "system": "urn:fhir:r4", "code": "Organization.identifier", "type": "exact" }
+            ]
+          ]
+        },
+        "vocabularySystem": {
+          "type": "string",
+          "format": "uri",
+          "description": "The terminology system URI. REQUIRED when category is 'vocabulary'. Identifies the external terminology system this entry represents.",
+          "examples": [
+            "http://hl7.org/fhir/sid/icd-10",
+            "http://hl7.org/fhir/ValueSet/administrative-gender"
+          ],
+          "x-lm": {
+            "critical": true,
+            "intent": "Identifies which external terminology system this vocabulary entry represents."
+          }
+        },
+        "vocabularyVersion": {
+          "type": "string",
+          "description": "Version of the external terminology. Only meaningful when category is 'vocabulary'.",
+          "examples": ["2024", "5.0.0"]
+        },
+        "filter": {
+          "$ref": "#/$defs/VocabularyFilter",
+          "description": "Subset constraints limiting which portion of the vocabulary is in scope. Only meaningful when category is 'vocabulary'."
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "module"
+              }
+            },
+            "required": ["category"]
+          },
+          "then": {
+            "required": [
+              "contributes"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "unit-kind"
+              }
+            },
+            "required": ["category"]
+          },
+          "then": {
+            "required": [
+              "semantics"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "widget"
+              }
+            },
+            "required": ["category"]
+          },
+          "then": {
+            "required": [
+              "widgetShape"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "action-intent"
+              }
+            },
+            "required": ["category"]
+          },
+          "then": {
+            "required": [
+              "validation"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "slot-type"
+              }
+            },
+            "required": ["category"]
+          },
+          "then": {
+            "required": [
+              "slotShape"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "validation-mapping-row"
+              }
+            },
+            "required": ["category"]
+          },
+          "then": {
+            "required": [
+              "row"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "token-category"
+              }
+            },
+            "required": ["category"]
+          },
+          "then": {
+            "required": [
+              "categoryShape"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "dataType"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "baseType"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "function"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "parameters",
+              "returns"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "constraint"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "concept"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "conceptUri"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "vocabulary"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "vocabularySystem"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "deprecated"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": [
+              "deprecationNotice"
+            ]
+          }
+        }
+      ]
+    },
+    "TokenCategoryShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Module-contributed custom Theme token category evidence. `prefix` is the graph-visible category prefix consumed by ModuleResolver and UI Graph Policy. Token keys in `tokens` MUST start with `prefix + \".\"`; processors enforce that dynamic invariant.",
+      "required": ["prefix", "type", "tokens"],
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "pattern": "^x-[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$",
+          "description": "Custom Theme token category prefix, such as `x-agency`. Platform prefixes (`color`, `font`, `radius`, `spacing`) remain platform token authority and are not module-contributed Registry categories."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the custom token category."
+        },
+        "type": {
+          "$ref": "#/$defs/TokenCategoryTokenType",
+          "description": "Default token type for entries in this category. Entries may override with their own type."
+        },
+        "darkPrefix": {
+          "type": "string",
+          "description": "Prefix for dark-mode counterpart tokens. Only categories whose type is `color` SHOULD declare darkPrefix."
+        },
+        "tokens": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/TokenCategoryTokenEntry"
+          },
+          "description": "Token entries keyed by full dot-delimited token key. Each key MUST start with the category `prefix` followed by a dot."
+        }
+      }
+    },
+    "TokenCategoryTokenEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Metadata for one custom token entry in a Registry token-category contribution.",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the token's purpose."
+        },
+        "type": {
+          "$ref": "#/$defs/TokenCategoryTokenType",
+          "description": "Token type, overriding the category default."
+        },
+        "default": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" }
+          ],
+          "description": "Default value shipped with the module token category."
+        },
+        "dark": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" }
+          ],
+          "description": "Default dark-mode value. Only meaningful when the containing category declares a darkPrefix."
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" }
+            ]
+          },
+          "description": "Example token values for documentation and tooling hints."
+        }
+      }
+    },
+    "TokenCategoryTokenType": {
+      "type": "string",
+      "enum": [
+        "color",
+        "dimension",
+        "fontFamily",
+        "fontWeight",
+        "duration",
+        "opacity",
+        "shadow",
+        "number"
+      ],
+      "description": "Semantic token type used by tooling to select editors and validate values."
+    },
+    "WidgetTokenSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A Theme token slot declared by a module widget. Slot declarations are Registry evidence for UI Graph Policy checks only; they do not define token values, Theme cascade, renderer fallback, runtime state, or authorization.",
+      "required": ["name", "acceptedTokenCategories"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Token slot name as referenced by UI Graph Policy theme.assignments[].slot."
+        },
+        "acceptedTokenCategories": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Accepted Theme token category prefixes for this slot, such as 'color', 'spacing', or 'x-agency'. These values are category prefixes, not Registry entry names. Platform prefixes are owned by token-registry.json; custom x-* prefixes require normalized ModuleResolver token-category evidence before UI Graph Policy treats them as compatible."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the widget contract expects this slot to be assigned by policy."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable purpose of the token slot."
+        }
+      }
+    },
+    "WidgetDataInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "required"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "description": "Stable input name, unique within the enclosing widgetShape.dataInputs array. Surface dataBindings uses this exact name."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the widget is unavailable when this input is unbound, unauthorized, fails to load, or fails Data Sources payload validation."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable purpose of the runtime input."
+        }
+      }
+    },
+    "WidgetActionOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "description": "Stable event name, unique within the enclosing widgetShape.actionOutputs array. Surface actionBindings uses this exact name."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the event the widget may emit."
+        }
+      }
+    },
+    "ConceptEquivalent": {
+      "type": "object",
+      "required": ["system", "code"],
+      "additionalProperties": false,
+      "description": "Declares that the bound concept is equivalent to a concept in another system. Relationship types follow SKOS (Simple Knowledge Organization System) semantics.",
+      "properties": {
+        "system": {
+          "type": "string",
+          "format": "uri",
+          "description": "The target system URI.",
+          "examples": ["https://schema.org", "urn:fhir:r4"]
+        },
+        "code": {
+          "type": "string",
+          "description": "The concept code within the target system.",
+          "examples": ["taxID", "Patient.identifier"]
+        },
+        "display": {
+          "type": "string",
+          "description": "Human-readable name in the target system."
+        },
+        "type": {
+          "type": "string",
+          "description": "Relationship type (SKOS-inspired). When absent, processors MUST treat as 'exact'. Standard values: 'exact' (identical concept), 'close' (very similar), 'broader' (source is more specific), 'narrower' (source is more general), 'related' (associatively related). Custom types MUST be x-prefixed.",
+          "examples": ["exact", "broader", "narrower", "related", "close"]
+        }
+      },
+      "examples": [
+        { "system": "https://schema.org", "code": "taxID", "type": "broader" }
+      ]
+    },
+    "VocabularyFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Constrains which portion of a terminology is in scope for this vocabulary entry.",
+      "properties": {
+        "ancestor": {
+          "type": "string",
+          "description": "Root code for hierarchical filtering. Only descendants of this code are included.",
+          "examples": ["F00-F99", "11"]
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum depth from the ancestor code."
+        },
+        "include": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Explicit list of codes to include."
+        },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Explicit list of codes to exclude."
+        }
+      },
+      "examples": [
+        { "ancestor": "F00-F99", "maxDepth": 3 }
+      ]
+    }
+  }
+}

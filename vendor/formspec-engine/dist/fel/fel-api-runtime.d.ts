@@ -1,7 +1,7 @@
 /** @filedesc Path helpers and runtime-WASM FEL surface (`wasm-bridge-runtime` only; ADR 0050). */
 import type { FELAnalysis } from '../interfaces.js';
 export type { FELAnalysis } from '../interfaces.js';
-import { wasmComputeDependencyGroups, wasmEvalFELWithTrace, wasmEvaluateDefinition, wasmIsValidFelIdentifier, wasmItemAtPath, wasmNormalizeIndexedPath, wasmSanitizeFelIdentifier } from '../wasm-bridge-runtime.js';
+import { wasmComputeDependencyGroups, wasmEvalFELWithTrace, wasmEvalFELWithContextTrace, wasmEvaluateDefinition, wasmIsValidFelIdentifier, wasmItemAtPath, wasmNormalizeIndexedPath, wasmSanitizeFelIdentifier } from '../wasm-bridge-runtime.js';
 export type { FelTraceStep, FelTraceResult } from '../wasm-bridge-runtime.js';
 import { lineColumnAtCharOffset, normalizeFelAnalysisError, type WasmFelAnalysisErrorWire } from './normalize-fel-analysis-error.js';
 export { lineColumnAtCharOffset, normalizeFelAnalysisError, type WasmFelAnalysisErrorWire };
@@ -33,6 +33,7 @@ export declare function getFELDependencies(expression: string): string[];
  * See `FelTraceStep` for the step variants; wire format matches Rust `fel_core::TraceStep`.
  */
 export declare const evalFELWithTrace: typeof wasmEvalFELWithTrace;
+export declare const evalFELWithContextTrace: typeof wasmEvalFELWithContextTrace;
 export declare const evaluateDefinition: typeof wasmEvaluateDefinition;
 /** Check if a string is a valid FEL identifier (canonical Rust lexer rule). */
 export declare const isValidFELIdentifier: typeof wasmIsValidFelIdentifier;

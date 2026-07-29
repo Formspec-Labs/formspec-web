@@ -4,7 +4,8 @@ import { jsx as _jsx } from "react/jsx-runtime";
 import { createContext, useContext, useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import { signal } from '@preact/signals-core';
 import { createFormEngine, findResponseActionByIntent, missingSubmitActionFinding, resolveResponseAction } from '@formspec-org/engine';
-import { planDefinitionFallback, planComponentTree, preparePlanContext, ensureActionButton, mergeFormPresentationForPlanning, } from '@formspec-org/layout';
+import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, preparePlanContext, ensureActionButton, mergeFormPresentationForPlanning, } from '@formspec-org/layout';
+const platformTheme = buildPlatformTheme();
 const FormspecContext = createContext(null);
 function pageModeFromPresentation(presentation) {
     return presentation?.pageMode === 'wizard' || presentation?.pageMode === 'tabs'
@@ -18,7 +19,30 @@ function pageModeFromPresentation(presentation) {
  */
 export function FormspecProvider(props) {
     const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, initialData, registryEntries, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
+    const shouldEmitThemeTokens = props.emitThemeTokens ?? true;
     const hasIssuerOverrideProp = Object.prototype.hasOwnProperty.call(props, 'issuerOverride');
+    const effectiveThemeDocument = useMemo(() => themeDocument
+        ? mergePlatformAndTenantTheme(platformTheme, themeDocument)
+        : mergePlatformAndTenantTheme(platformTheme), [themeDocument]);
+    /**
+     * The element the provider's theme tokens are written to.
+     *
+     * The provider used to call `emitThemeTokens(themeDocument.tokens)` with no
+     * target, which defaults to `document.documentElement`, and never cleaned
+     * up. One mount of a tenant-themed tree left that tenant's tokens inline on
+     * `<html>` for the life of the page: they survived unmount, survived
+     * client-side navigation to a route whose `routeClass` refuses tenant
+     * theming, and reached everything outside a `.formspec-container` — host
+     * chrome, a second embedded renderer, any skin that paints the brand token.
+     * A host composing this provider could clean up after it but never prevent
+     * it, which is the runtime hole under ADR 0161's theme-authority promise.
+     *
+     * `display: contents` is inline rather than in a stylesheet so the element
+     * generates no box even when the default skin is not loaded. Custom
+     * properties inherit through it regardless of `display`, so the tokens
+     * reach exactly the subtree the provider owns and nothing above it.
+     */
+    const themeScopeRef = useRef(null);
     const engine = useMemo(() => {
         if (externalEngine)
             return externalEngine;
@@ -99,7 +123,7 @@ export function FormspecProvider(props) {
             componentDocument,
             componentGraph: componentGraph ?? undefined,
             hostEvidence: hostEvidence ?? undefined,
-            theme: themeDocument,
+            theme: effectiveThemeDocument,
             activeBreakpoint,
             findItem: (key) => findItemByKey(items, key),
         });
@@ -133,7 +157,7 @@ export function FormspecProvider(props) {
             }
         }
         return root;
-    }, [engine, componentDocument, componentGraph, hostEvidence, themeDocument, activeBreakpoint, onSubmit, responseActionsDocument, mergedFormPresentation]);
+    }, [engine, componentDocument, componentGraph, hostEvidence, effectiveThemeDocument, activeBreakpoint, onSubmit, responseActionsDocument, mergedFormPresentation]);
     // §10: surface a finding when the host wires onSubmit but no submit Action
     // is published — otherwise auto-inject silently no-ops.
     useEffect(() => {
@@ -169,12 +193,26 @@ export function FormspecProvider(props) {
         return touchedFieldsRef.current.has(path);
     }, []);
     const resolveActionRef = useCallback((actionRef, nodeId) => resolveResponseAction(responseActionsDocument, actionRef, nodeId), [responseActionsDocument]);
-    // Auto-emit theme tokens as CSS custom properties when themeDocument has tokens
+    // Auto-emit theme tokens as CSS custom properties onto the provider's OWN
+    // element — never the document root. See `themeScopeRef` below for why.
     useEffect(() => {
-        if (typeof document === 'undefined' || !themeDocument?.tokens)
+        if (!shouldEmitThemeTokens)
             return;
-        emitThemeTokens(themeDocument.tokens);
-    }, [themeDocument]);
+        const el = themeScopeRef.current;
+        if (!el)
+            return;
+        const tokens = effectiveThemeDocument.tokens;
+        if (!tokens)
+            return;
+        emitThemeTokens(tokens, el);
+        return () => {
+            for (let i = el.style.length - 1; i >= 0; i--) {
+                const property = el.style[i];
+                if (property.startsWith('--formspec-'))
+                    el.style.removeProperty(property);
+            }
+        };
+    }, [effectiveThemeDocument, shouldEmitThemeTokens]);
     useEffect(() => {
         // Only dispose if we created the engine internally
         if (!externalEngine && engine) {
@@ -185,7 +223,8 @@ export function FormspecProvider(props) {
         engine,
         layoutPlan,
         components,
-        themeDocument,
+        themeDocument: effectiveThemeDocument,
+        emitThemeTokens: shouldEmitThemeTokens,
         componentDocument,
         componentGraph,
         hostEvidence,
@@ -205,9 +244,11 @@ export function FormspecProvider(props) {
         isTouched,
         registryEntries: registryMap,
         formPresentation: mergedFormPresentation,
-    }), [engine, layoutPlan, components, themeDocument, componentDocument, componentGraph, hostEvidence, responseActionsDocument, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, touchField, touchAllFields, touchedVersionSignal, isTouched, registryMap, mergedFormPresentation]);
-    return (_jsx(FormspecContext.Provider, { value: value, children: children }));
+    }), [engine, layoutPlan, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, responseActionsDocument, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, touchField, touchAllFields, touchedVersionSignal, isTouched, registryMap, mergedFormPresentation]);
+    return (_jsx(FormspecContext.Provider, { value: value, children: _jsx("div", { ref: themeScopeRef, className: "formspec-theme-scope", style: THEME_SCOPE_STYLE, children: children }) }));
 }
+/** See `themeScopeRef` — the scope element must not generate a box. */
+const THEME_SCOPE_STYLE = { display: 'contents' };
 /** Access the FormspecContext. Throws if used outside FormspecProvider. */
 export function useFormspecContext() {
     const ctx = useContext(FormspecContext);
@@ -239,7 +280,12 @@ function detectBreakpoint(breakpoints) {
 /**
  * Emit theme tokens as --formspec-* CSS custom properties.
  * Converts dotted token keys (e.g., `color.primary`) to `--formspec-color-primary`.
- * Defaults to `document.documentElement` when no target is provided.
+ *
+ * `target` defaults to `document.documentElement` — a HOST may choose to paint
+ * the document root, and the shipped examples do. `FormspecProvider` does not:
+ * a renderer that writes tenant tokens to `<html>` makes a global mutation that
+ * outlives the component and that a composing host can only clean up after,
+ * never prevent. Always pass a target from inside a component.
  */
 export function emitThemeTokens(tokens, target) {
     const el = target ?? document.documentElement;

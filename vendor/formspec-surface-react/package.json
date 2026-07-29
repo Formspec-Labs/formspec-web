@@ -1,0 +1,35 @@
+{
+  "name": "@formspec-org/surface-react",
+  "description": "React binding for the Surface shell",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Formspec-org/formspec.git",
+    "directory": "packages/formspec-surface-react"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./widgets": {
+      "types": "./dist/widgets/index.d.ts",
+      "default": "./dist/widgets/index.js"
+    },
+    "./formspec-surface.css": "./dist/formspec-surface.css"
+  },
+  "sideEffects": [
+    "./dist/formspec-surface.css"
+  ],
+  "peerDependencies": {
+    "@formspec-org/layout": "*",
+    "@formspec-org/react": "*",
+    "@formspec-org/surface": "*",
+    "@formspec-org/types": "*",
+    "react": "^18.0.0 || ^19.0.0"
+  }
+}
