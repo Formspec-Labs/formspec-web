@@ -170,6 +170,26 @@ describe('FormspecWebAttachmentControl', () => {
     expect(dropZone.dataset.formspecComponentNodeId).toBe('supporting-document-node');
   });
 
+  it('labels the native picker and keeps focusable controls out of button semantics', () => {
+    const harness = makeFieldHarness();
+    render(
+      <AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl
+          field={harness.field}
+          node={makeNode({ dragDrop: true })}
+        />
+      </AttachmentStoreProvider>,
+    );
+
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    const label = container!.querySelector(`label[for="${input.id}"]`);
+    const dropZone = container!.querySelector('.formspec-file-drop-zone');
+    expect(label?.textContent).toContain('Lease');
+    expect(dropZone?.getAttribute('role')).toBe('group');
+    expect(dropZone?.hasAttribute('tabindex')).toBe(false);
+    expect(dropZone?.getAttribute('aria-labelledby')).toBe(`${input.id}-label`);
+  });
+
   it('uploads a picked file through the AttachmentStore and writes the AttachmentRef into the engine value (single)', async () => {
     const store = stubAttachmentStore();
     const harness = makeFieldHarness();

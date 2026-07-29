@@ -20,7 +20,6 @@ import {
   useState,
   type ChangeEvent,
   type DragEvent,
-  type KeyboardEvent,
   type PointerEvent,
 } from 'react';
 import { projectionMetadataAttrs, type FieldComponentProps } from '@formspec-org/react';
@@ -334,14 +333,6 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     void handleFiles(Array.from(event.dataTransfer.files));
   };
 
-  const handleKey = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (field.readonly) return;
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      fileInputRef.current?.click();
-    }
-  };
-
   const removeAt = (uri: string): void => {
     field.touch();
     // Read FRESH field state — the rendered closure may be stale relative to a
@@ -545,8 +536,41 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       multiple={multiple}
       aria-invalid={!!(field.error && field.touched)}
       aria-required={field.required}
+      aria-describedby={[
+        field.description ? `${field.id}-desc` : '',
+        field.hint ? `${field.id}-hint` : '',
+      ].filter(Boolean).join(' ') || undefined}
       onChange={handleInputChange}
     />
+  );
+
+  const fieldIntroduction = (
+    <>
+      <label
+        id={`${field.id}-label`}
+        htmlFor={field.id}
+        className={node.labelPosition === 'hidden'
+          ? 'formspec-label formspec-sr-only'
+          : 'formspec-label'}
+      >
+        {field.label}
+        {field.required ? (
+          <abbr className="formspec-required usa-label--required" title="required">
+            {' *'}
+          </abbr>
+        ) : null}
+      </label>
+      {field.description ? (
+        <div id={`${field.id}-desc`} className="formspec-description">
+          {field.description}
+        </div>
+      ) : null}
+      {field.hint ? (
+        <p id={`${field.id}-hint`} className="formspec-hint">
+          {field.hint}
+        </p>
+      ) : null}
+    </>
   );
 
   const refList = refs.length > 0 ? (
@@ -700,6 +724,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   if (!dragDrop) {
     return (
       <>
+        {fieldIntroduction}
         {hiddenInput}
         <button
           type="button"
@@ -729,13 +754,12 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 
   return (
     <>
+      {fieldIntroduction}
       <div
-        className={`formspec-file-drop-zone formspec-focus-ring${isDragOver ? ' formspec-file-drop-zone--active' : ''}`}
-        tabIndex={field.readonly ? -1 : 0}
-        role="button"
-        aria-label="Drop files here or click to choose"
+        className={`formspec-file-drop-zone${isDragOver ? ' formspec-file-drop-zone--active' : ''}`}
+        role="group"
+        aria-labelledby={`${field.id}-label`}
         {...graphAttrs}
-        onKeyDown={handleKey}
         onDragOver={(event) => {
           event.preventDefault();
           if (field.readonly) return;
