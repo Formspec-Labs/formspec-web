@@ -17,6 +17,7 @@
     "./policy": "./src/policy/index.ts",
     "./ports": "./src/ports/index.ts",
     "./shared": "./src/shared/index.ts",
+    "./verifying-surface": "./src/verifying-surface/index.ts",
     "./profiles": "./src/profiles/index.ts"
   },
   "license": "Apache-2.0",

@@ -291,11 +291,11 @@ function localeDocumentFor(
   strings: Record<string, string>,
 ): LocaleDocument {
   return {
-    $formspecLocale: '1.0',
+    $formspecLocale: '2.0',
     url: `https://formspec-server.example.test/runtime/locales/${locale}`,
     version: '1.0.0',
     locale,
-    targetDefinition: { url: definitionUrl },
+    target: { kind: 'definition', url: definitionUrl },
     strings,
   };
 }

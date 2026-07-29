@@ -8,7 +8,12 @@ export type {
   PortAdapterKind,
   PortCompositionConfig,
   ReferenceAdapterConfig,
+  RespondentSurfaceBundleConfig,
   RuntimeConfig,
+  SurfaceBundleAcquisitionConfig,
+  SurfaceBundleMethodConfig,
+  SurfaceBundlePublisherAuthorityConfig,
+  SurfaceBundleVerificationConfig,
   TenantBindingConfig,
   TenantScopeConfig,
   TokenValue,
@@ -18,3 +23,8 @@ export {
   resolveActiveConfig,
   runtimeConfigFromEnvRecord,
 } from './runtime.ts';
+export {
+  isRespondentSurfaceBundleConfig,
+  respondentSurfaceBundleConfig,
+  respondentSurfaceDeploymentIsConfigured,
+} from './respondent-surface.ts';

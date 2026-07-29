@@ -17,7 +17,9 @@ describe('demo sample form fixture', () => {
       available: ['en', 'es'],
     });
     expect(demoLocaleDocuments.map((doc) => doc.locale)).toEqual(['en', 'es']);
-    expect(demoLocaleDocuments.every((doc) => doc.targetDefinition.url === demoSampleForm.url)).toBe(
+    expect(demoLocaleDocuments.every((doc) => (
+      doc.target.kind === 'definition' && doc.target.url === demoSampleForm.url
+    ))).toBe(
       true,
     );
   });

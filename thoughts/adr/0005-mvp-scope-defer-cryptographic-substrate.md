@@ -1,7 +1,7 @@
 # ADR-0005 — MVP scope: defer cryptographic substrate; ship respondent fill + validate first
 
 **Date:** 2026-05-22
-**Status:** accepted
+**Status:** accepted (amended 2026-07-28: named post-MVP signed Surface bundle admission slice ratified; MVP unchanged)
 
 ## Context
 
@@ -9,7 +9,7 @@
 
 Realizing that triple end-to-end pulls in:
 
-- WYSIWYS signer ceremony — narrows to a UI-annex over existing stack-root [ADR-0083](../../../thoughts/adr/0083-authored-signatures-document-hash.md) + [ADR-0136](../../../thoughts/adr/0136-signature-artifact-dependency-inversion.md) + [ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) (queue SC-5, narrowed 2026-05-22)
+- WYSIWYS signer ceremony — narrows to a UI-annex over existing stack-root [ADR-0083](../../../thoughts/adr/0083-formspec-native-authored-signatures.md) + [ADR-0136](../../../thoughts/adr/0136-signature-artifact-dependency-inversion.md) + [ADR-0141](../../../thoughts/adr/0141-rendering-service-architecture.md) (queue SC-5, narrowed 2026-05-22)
 - Signature method registry binding for WebAuthn passkey-bound signing
 - **Browser verifier:** the Phase-1 COSE_Sign1 verifier ships pure-TS, no WASM (`@integrity-stack/signature-adapter-webcrypto` + `@integrity-stack/cose` + Formspec wrappers `@formspec/signature-*`). The originally-feared "Trellis verifier WASM build + size budget" concern applies only to BBS+ / ECDSA-SD selective-disclosure cryptography, not to MVP-era verification.
 - **Selective-proof viewer:** SD-JWT is the default per stack-root [ADR-0116 (selective disclosure: SD-JWT default, BBS+ profile)](../../../thoughts/adr/0116-selective-disclosure-sd-jwt-default-and-bbs-profile.md), not BBS+ as initially framed. SD-JWT is tractable with existing libraries; BBS+ is trigger-gated and dormant. FW-0010 is closer to "vector landing" than "Phase-3 cryptography."
@@ -71,9 +71,63 @@ These are all **deferred, not rejected**. Each survives in `PLANNING.md` as an u
 
 Cross-stack inventory (2026-05-22) confirmed several substrate-adjacent primitives that already ship and could be consumed sooner if MVP scope expanded. These are deferred for **scope** (size of work + UX design), not for **substrate readiness**:
 
-- **Browser COSE_Sign1 SIGNATURE-step verifier** — `@integrity-stack/signature-adapter-webcrypto`, `@integrity-stack/cose`, plus Formspec wrappers `@formspec/signature-{port,cose,adapter-webcrypto}`. Production-grade: ed25519 / P-256 / RSA-PSS, kid binding (fs-skj0), method-URI binding ([ADR-0109](../../../thoughts/adr/0109-cose-protected-header-map3.md)), three-way outcome taxonomy, sanitized reasons. **Note:** this covers the signature step only. The FULL post-MVP FW-0003 verifier pipeline (drop ZIP → walk chain → decode CBOR events → canonicalize payloads → verify signatures → chain-hash continuity → profile dispatch) needs additional integrity-stack TS coverage (WASM byte primitives + pure-TS orchestrator) per ADR-0009 §(d) hybrid TS+WASM principle. Tracked in queue EXT-15 / EXT-16 / EXT-17. No new SUBSTRATE work needed for Phase-1; the gap is TS coverage of existing Rust crates.
+- **Browser COSE_Sign1 SIGNATURE-step verifier** — `@integrity-stack/signature-adapter-webcrypto`, `@integrity-stack/cose`, plus Formspec wrappers `@formspec/signature-{port,cose,adapter-webcrypto}`. Production-grade: ed25519 / P-256 / RSA-PSS, kid binding (fs-skj0), method-URI binding ([ADR-0109](../../../thoughts/archive/adr/0109-stack-protected-header-dispatch-consolidation.md)), three-way outcome taxonomy, sanitized reasons. **Note:** this covers the signature step only. The FULL post-MVP FW-0003 verifier pipeline (drop ZIP → walk chain → decode CBOR events → canonicalize payloads → verify signatures → chain-hash continuity → profile dispatch) needs additional integrity-stack TS coverage (WASM byte primitives + pure-TS orchestrator) per ADR-0009 §(d) hybrid TS+WASM principle. Tracked in queue EXT-15 / EXT-16 / EXT-17. No new SUBSTRATE work needed for Phase-1; the gap is TS coverage of existing Rust crates.
 - **`@formspec-org/assist`** (BUSL-1.1) — 14-tool MCP-compatible surface, WebMCP shim, ProfileMatcher. Closes FW-0045 and FW-0062 substrate side. The BUSL-1.1 license is a flag: it collides with the permissive license preference for formspec-web (FW-0018 needs to factor this in).
 - **`<FormspecScreener>`** in `@formspec-org/react` — closes FW-0046 substrate side; ships fully.
 - **`stack-common-proof::ProofReportVerdict`** — four-dimensional verifier verdict (`{cryptographic_integrity, projection_integrity, domain_admissibility, relying_party_result, blocking_reasons}`) is the rendering vocabulary the post-MVP verifier UI consumes. No new spec work; verdict shape already typed.
 
 These shipped-but-deferred items are tracked in the upstream extension queue under "Shipped but deferred for MVP scope" — they are not new gaps.
+
+## 2026-07-28 amendment — named post-MVP signed Surface bundle admission
+
+The original MVP boundary still holds. Respondent fill, validate, submit, and
+confirm remains a complete MVP without cryptographic admission.
+
+The [Surface Shell specification](../../../formspec/specs/surface/surface-shell-spec.md#6-verification-before-render)
+and the
+[archived v10 gap-closure plan](../../../formspec/thoughts/archive/plans/2026-07-28-surface-render-v10-gap-closure.md)
+provided a concrete post-MVP consumer: a public respondent Surface whose
+signed app bundle must earn admission before any bundle-derived output reaches
+the browser. That evidence was specific enough to ratify this slice without
+pretending that the full receipt and claim-graph verifier had landed.
+
+This amendment names the slice **signed Surface bundle admission**. It includes:
+
+- the [`SurfaceBundleSource`](0012-surface-bundle-source-port.md) port for exact,
+  opaque acquisition;
+- the [`SurfaceBundleVerifier`](0013-surface-bundle-verifier-port.md) port for
+  signature, publisher, app, validity, revocation, and release-policy checks;
+- the host-owned
+  `acquire → verify → validate/AppGraph → actor and entry checks → dereference
+  and prove renderability → commit release → admit and render` boundary;
+- one immutable candidate snapshot, with the same byte/digest identity,
+  flowing through that whole boundary without refetch or substitution;
+- fixed checking, refusal, unsupported, and error states before admission; and
+- authenticated verification status after admission.
+
+Stack [ADR-0162](../../../thoughts/adr/0162-surface-bundle-admission-and-v10-contract-closure.md)
+owns the shared signed-bundle profile, publishing authority, app binding,
+release policy, actor split, and format transitions. formspec-web consumes
+those decisions; it does not create competing cryptographic or document
+formats.
+
+The amendment preserves these product boundaries:
+
+| Slice | Placement after this amendment |
+|---|---|
+| Signed Surface bundle admission for the respondent app | Implemented in the current local formspec-web worktree; not committed, released, or deployed |
+| Public receipt and claim-graph verifier | Separate post-MVP evaluator slice; still deferred |
+| Selective-proof viewer | Separate post-MVP evaluator slice; still deferred |
+| Public signer ceremony | Remains in formspec-web per web ADR-0001, but uses a separate signer entry point, composition, state, and signature domain |
+| Staff queue and staff operations | Outside the public respondent runtime; an authorized operator host owns them |
+| Bundle publishing and release authority | Authorized publishing process; never the respondent browser or public signer ceremony |
+
+The public signer ceremony MUST NOT become a respondent Surface route merely
+because both public slices live in this repository. Staff routes, identity,
+data, and controls MUST NOT enter either public slice.
+
+When accepted, this amendment ratified ownership and ports without claiming
+implementation. The current local worktree now contains ADR-0162's profile and
+policy types, both ports, their adapters and conformance suites, and the
+verified respondent host. This current-state note claims no commit, release,
+publication, or deployment.

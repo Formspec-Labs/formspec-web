@@ -16,3 +16,4 @@ export {
   type AdmittedSurfaceRenderInput,
   type VerifyingSurfaceHostProps,
 } from './VerifyingSurfaceHost.tsx';
+export * from './respondent/index.ts';

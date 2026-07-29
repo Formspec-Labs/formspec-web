@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import rootConfig from '../../formspec.config.ts';
 import { readRuntimeConfig, resolveActiveConfig } from '../config/runtime.ts';
@@ -11,6 +11,12 @@ import { CompositionProvider } from './CompositionProvider.tsx';
 import { formRouteErrorCopy, type FormRouteError } from './form-route.ts';
 import { useRoutedComposition } from './routed-composition.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
+import { respondentSurfaceDeploymentIsConfigured } from '../config/respondent-surface.ts';
+
+const SignedRespondentRoot = lazy(async () => {
+  const module = await import('../verifying-surface/respondent/SignedRespondentRoot.tsx');
+  return { default: module.SignedRespondentRoot };
+});
 
 const activeConfig = resolveActiveConfig(rootConfig, readRuntimeConfig());
 const rootEl = document.getElementById('root');
@@ -18,7 +24,13 @@ if (!rootEl) {
   throw new Error('Root element #root not found');
 }
 
-applyBrandTheme(document.documentElement, activeConfig.brand);
+const signedRespondentRootConfigured =
+  respondentSurfaceDeploymentIsConfigured(activeConfig);
+if (signedRespondentRootConfigured) {
+  document.getElementById('formspec-static-shell')?.remove();
+} else {
+  applyBrandTheme(document.documentElement, activeConfig.brand);
+}
 
 createRoot(rootEl).render(
   <StrictMode>
@@ -27,6 +39,17 @@ createRoot(rootEl).render(
 );
 
 function RoutedApp({ config }: { config: FormspecWebConfig }) {
+  if (respondentSurfaceDeploymentIsConfigured(config)) {
+    return (
+      <Suspense fallback={<SignedSurfaceBootPending />}>
+        <SignedRespondentRoot config={config} />
+      </Suspense>
+    );
+  }
+  return <LegacyRoutedApp config={config} />;
+}
+
+function LegacyRoutedApp({ config }: { config: FormspecWebConfig }) {
   const routeState = useRoutedComposition(config);
   if (routeState.status === 'form-route-error') {
     return <FormRouteBootError error={routeState.error} />;
@@ -35,6 +58,15 @@ function RoutedApp({ config }: { config: FormspecWebConfig }) {
     <CompositionProvider value={routeState.composition}>
       <App config={config} href={routeState.href} />
     </CompositionProvider>
+  );
+}
+
+function SignedSurfaceBootPending() {
+  return (
+    <main className="fs-surface-admission" role="status">
+      <h1>Preparing this signed app</h1>
+      <p>This site is loading the checks needed before it can show the app.</p>
+    </main>
   );
 }
 

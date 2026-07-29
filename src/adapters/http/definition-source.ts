@@ -129,7 +129,10 @@ export function extractLocaleDocuments(
     ...localeDocumentsFromValue(payload.locales),
     ...localeDocumentsFromValue(payload.locale_documents),
     ...localeDocumentsFromValue(payload.localeDocuments),
-  ]).filter((document) => document.targetDefinition.url === definition.url);
+  ]).filter((document) => (
+    document.target.kind === 'definition'
+    && document.target.url === definition.url
+  ));
 }
 
 export function extractComponentDocument(
@@ -424,11 +427,12 @@ function isLocaleDocument(value: unknown): value is LocaleDocument {
     return false;
   }
   if (
-    value.$formspecLocale !== '1.0' ||
+    value.$formspecLocale !== '2.0' ||
     typeof value.version !== 'string' ||
     typeof value.locale !== 'string' ||
-    !isRecord(value.targetDefinition) ||
-    typeof value.targetDefinition.url !== 'string' ||
+    !isRecord(value.target) ||
+    value.target.kind !== 'definition' ||
+    typeof value.target.url !== 'string' ||
     !isRecord(value.strings)
   ) {
     return false;
@@ -443,7 +447,8 @@ function uniqueLocaleDocuments(documents: LocaleDocument[]): LocaleDocument[] {
       document.locale.toLowerCase(),
       document.url ?? '',
       document.version,
-      document.targetDefinition.url,
+      document.target.kind,
+      document.target.url,
     ].join('\0');
     if (seen.has(key)) {
       return false;

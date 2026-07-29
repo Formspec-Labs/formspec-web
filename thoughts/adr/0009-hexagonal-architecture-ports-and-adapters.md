@@ -1,7 +1,7 @@
 # ADR-0009 — Hexagonal architecture: ports, adapters, and DI discipline
 
 **Date:** 2026-05-22
-**Status:** accepted (reshaped 2026-05-22 post code-scout review — port inventory narrowed to MVP only; engine-owned `IssuerStore` not duplicated; CI claims made implementable)
+**Status:** accepted (reshaped 2026-05-22; amended 2026-07-28 for the named post-MVP signed Surface bundle admission ports)
 **Supersedes framing in:** web ADR-0007 (rewritten same day), web ADR-0008 (renamed + reframed same day)
 
 ## Context
@@ -39,7 +39,7 @@ Three categories of seam are NOT listed as constitutional MVP ports here:
 
 **(a) Issuer resolution lives upstream.** `formspec/packages/formspec-engine/src/issuer/IssuerStore.ts` ships the cascade + chain walk + cycle guard + ETag fetcher. formspec-web does NOT host a port for issuer resolution — that would re-invent an upstream primitive (the exact anti-pattern web ADR-0004 forbids). The composition root wires a `FetchIssuerFetcher` strategy into `IssuerStore` at boot (see web ADR-0008 for the formspec-stack fetcher choice). Adopters who need a different fetch strategy (proxy-cached, static-inline, direct browser fetch with CORS) provide a different fetcher; they do not implement a new port.
 
-**(b) Post-MVP ports await consumer code.** `BundleSource` (content-addressed bundle locator) and `Verifier` (bundle verification, output follows `stack-common-proof::ProofReportVerdict`) remain post-MVP per web ADR-0005. Each will be ratified as its own ADR when the consumer code lands. `StatusReader` was originally in this bucket, but FW-0039 consumer code has landed and web ADR-0010 now ratifies it as an active respondent-place consumer port. Front-loading speculative port contracts before real consumers exercise them is the anti-pattern web ADR-0006 documented retroactively (engine `IssuerStore` made our originally-conceived `IssuerProvider` port moot once the React surface landed). Don't repeat it.
+**(b) Post-MVP ports require a named consumer.** `StatusReader` was originally in this bucket, but FW-0039 consumer code landed and web ADR-0010 ratified it as an active respondent-place consumer port. On 2026-07-28, the Surface Shell verification requirements and v10 gap-closure plan supplied another concrete consumer. Web ADR-0012 and ADR-0013 now ratify `SurfaceBundleSource` and `SurfaceBundleVerifier` for the named signed Surface bundle admission slice. They enter `Composition` only when the upstream bundle profile, policy types, consumer runtime, and conformance suites land. A generic `BundleSource` or `Verifier` remains unratified. In particular, the future receipt/claim-graph verifier is a separate evaluator port whose output may follow `stack-common-proof::ProofReportVerdict`; it does not subsume the pre-render Surface gate. Front-loading any other speculative port remains the anti-pattern web ADR-0006 documented retroactively (engine `IssuerStore` made our originally conceived `IssuerProvider` port moot once the React surface landed).
 
 **(c) Adopter-side seams per web ADR-0004 §exception** become ports as consumer code lands: `PaymentRail` (FW-0027 / J-029), `BotProtection` (FW-0036 / J-033), `EmbedTransport` (FW-0040 / J-018). The standing rule from ADR-0004 §exception applies — these are deployment-shaped and country/regulator-specific; their port shapes are determined when the consumer ships, not preemptively. (`AttachmentStore` is NOT in this list because per stack-root [ADR-0072](../../../thoughts/adr/0072-stack-evidence-integrity-and-attachment-binding.md), attachment handling is a composed primitive — Formspec `attachment` field + stack-common object store + Trellis attestation — not a single formspec-web port.)
 
@@ -49,7 +49,7 @@ Three categories of seam are NOT listed as constitutional MVP ports here:
 
 - **Pure TS** for primitives that have proven TS reimplementation OR adoptable off-the-shelf packages AND don't carry signature-determinative byte-exactness risk: COSE_Sign1 (proven shipped), WebCrypto signature verify (proven shipped), event sequence helpers, verifier orchestration (composition only — no byte work), HPKE Base mode (RFC 9180; `hpke-js` mature).
 - **WASM single-authority** for byte-exact primitives where JS-vs-Rust encoding drift would break signatures: JCS canonical bytes, CBOR encode/decode, deterministic ZIP read/write. Bundle these from the Rust workspace into one WASM target per package; the Rust crate split stays intact — bundling is a build target choice, not a crate-split refactor.
-- **Adapter composition** is internal. When the `Verifier` port (post-MVP) is ratified, a single adapter encapsulates the WASM-bytes + TS-COSE + WebCrypto-signature + orchestration mix. Adopters who want to swap (e.g., `ServerProjectedAdapter` for heavy bundles) implement a different adapter — they do NOT compose sub-pieces themselves. Per the architectural rule: port what's adopter-shaped; encapsulate the rest.
+- **Adapter composition** is internal. When the full receipt/claim-graph verifier port is ratified, one adapter encapsulates the WASM-bytes + TypeScript COSE + WebCrypto-signature + orchestration mix. The narrower `SurfaceBundleVerifier` follows ADR-0013 and composes the signed-bundle profile with existing integrity primitives, publishing policy, and release policy. Adopters replace either adapter as a unit; they do not assemble cryptographic sub-pieces in app code. Per the architectural rule: port what is adopter-shaped and encapsulate the rest.
 
 The TS mirrors formspec-web ships are tracked in the upstream extension queue (`EXT-11`–`EXT-18`). They should be small and conformance-fixtured so cross-stack consolidation later is mechanical. **stack-common adopting the cross-language pattern, and integrity-stack expanding its TS coverage to close the verifier kernel gap, are stack-level architectural decisions; formspec-web's queue flags the dependencies without owning the fixes.**
 
@@ -65,7 +65,11 @@ export interface Composition {
   identityProvider: IdentityProvider;
   notificationDelivery?: NotificationDelivery;  // optional — only consumed by adapters that need it (e.g., MagicLinkAdapter)
   // Issuer resolution is engine-owned (formspec-engine IssuerStore); composition wires a FetchIssuerFetcher at boot — NOT a formspec-web port (see §"Not in the constitutional inventory" (a))
-  // RespondentPlaceSource and StatusReader are active per ADR-0010; remaining post-MVP ports (BundleSource, Verifier) ratified per-port when consumer code lands (see (b))
+  // RespondentPlaceSource and StatusReader are active per ADR-0010.
+  // SurfaceBundleSource and SurfaceBundleVerifier are ratified for the named
+  // post-MVP admission slice by ADR-0012/0013 and join Composition with their
+  // consumer runtime and conformance suites (see (b)).
+  // A generic BundleSource or Verifier remains unratified.
   // Adopter-side seams (PaymentRail, BotProtection, EmbedTransport) per ADR-0004 §exception become ports when consumed (see (c))
 }
 ```
@@ -120,18 +124,29 @@ CI cannot promise to catch every service-name leak. The promise: directory-bound
 - Web ADR-0007 (Identity) is the port-spec model — drops the magic-link prescription, treats §6.6 normalization as the only architectural commitment.
 - Web ADR-0008 is the formspec-stack composition — one worked example, not architecture.
 - PLANNING rows are restated in port-shape terms for the 5 MVP ports. Post-MVP rows note that their port shape will be ratified when consumer code lands.
-- CI enforcement is layered (ESLint boundary + pre-commit grep + architectural review) — implementable.
+- CI enforcement layers the ESLint boundary, pre-commit grep, and
+  architectural review.
 - Conformance suites have a minimum-bar shape defined here; per-port fixture content lands with each port's own spec ADR.
 - Issuer resolution stays upstream — the composition wires a fetcher; no formspec-web port re-implements it.
-- Post-MVP ports + adopter-side seams have a standing rule: per-port ADR when consumer code lands.
-- ESLint config (`eslint.config.*`) is a follow-up scaffold task before FW-0001 ships; the no-restricted-paths rule is part of FW-0017's CI gate.
+- Post-MVP ports and adopter-side seams have a standing rule: a named consumer,
+  a per-port ADR, an executable conformance suite, and composition-root wiring
+  land together. ADR-0012 and ADR-0013 ratified the two signed Surface
+  admission ports because the Surface Shell and gap-closure plan defined the
+  exact consumer and failure boundary. The current local worktree includes
+  both ports in `Composition`, their adapters and conformance suites, and the
+  consumer runtime. This note claims no commit, release, or deployment.
+- `eslint.config.js` and its `import/no-restricted-paths` rule now enforce the
+  FW-0017 boundary in the current local worktree.
 
 ## What this does NOT preclude
 
 - **The formspec-stack reference deployment.** formspec-server, workspec-server, and the Trellis substrate remain valid reference adapter targets, documented in web ADR-0008. They are illustrative, not committed.
 - **First-party adapter quality.** Reference adapters can and should be production-grade — they ARE templates adopters will study and copy.
 - **Per-adapter opinions.** A `FirebaseAuthAdapter` SHOULD be opinionated about Firebase patterns; the opinion lives in the adapter, not in the architecture.
-- **Future port additions.** When `PaymentRail` / `BotProtection` / `EmbedTransport` / post-MVP ports land, each gets its own ADR; the constitutional discipline in this ADR (composition root, conformance suite, lifecycle pattern, CI enforcement) applies to all of them.
+- **Future port additions.** When `PaymentRail` / `BotProtection` /
+  `EmbedTransport` / other post-MVP ports land, each gets its own ADR; the
+  constitutional discipline in this ADR (composition root, conformance suite,
+  lifecycle pattern, CI enforcement) applies to all of them.
 
 ## Related decisions
 
@@ -141,5 +156,7 @@ CI cannot promise to catch every service-name leak. The promise: directory-bound
 - web ADR-0006 — Issuer Sidecar (the engine ships `IssuerStore`; formspec-web wires a fetcher, not a port)
 - web ADR-0007 — `IdentityProvider` port spec (the worked port-spec example)
 - web ADR-0008 — reference deployment composition (the formspec-stack composition as a worked example)
+- web ADR-0012 — `SurfaceBundleSource` port for byte-preserving, pre-admission acquisition
+- web ADR-0013 — `SurfaceBundleVerifier` port for the narrow pre-render trust gate
 - stack-root [ADR-0072](../../../thoughts/adr/0072-stack-evidence-integrity-and-attachment-binding.md) — attachment handling as composed primitive (why no `AttachmentStore` port)
-- stack-root [ADR-0128](../../../thoughts/adr/0128-frontend-surface-architecture.md) — frontend surface architecture (this ADR is the formspec-web-specific implementation of the three-app principle)
+- stack-root [ADR-0128](../../../thoughts/archive/adr/0128-frontend-surface-architecture.md) — frontend surface architecture (this ADR is the formspec-web-specific implementation of the three-app principle)

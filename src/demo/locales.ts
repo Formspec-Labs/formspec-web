@@ -3,13 +3,13 @@ import { demoSampleForm } from './index.ts';
 
 export const demoLocaleDocuments: LocaleDocument[] = [
   {
-    $formspecLocale: '1.0',
+    $formspecLocale: '2.0',
     url: 'https://demo.formspec.org/locales/demo-intake/en',
     version: '1.0.0',
     name: 'demo-intake-en',
     title: 'Demo intake English strings',
     locale: 'en',
-    targetDefinition: { url: demoSampleForm.url },
+    target: { kind: 'definition', url: demoSampleForm.url },
     strings: {
       '$form.title': 'Demo Benefits Intake',
       '$form.description': 'A compact public-intake form used by the zero-config Formspec Web demo.',
@@ -41,14 +41,14 @@ export const demoLocaleDocuments: LocaleDocument[] = [
     },
   },
   {
-    $formspecLocale: '1.0',
+    $formspecLocale: '2.0',
     url: 'https://demo.formspec.org/locales/demo-intake/es',
     version: '1.0.0',
     name: 'demo-intake-es',
     title: 'Textos en espanol para la demostracion de admision',
     locale: 'es',
     fallback: 'en',
-    targetDefinition: { url: demoSampleForm.url },
+    target: { kind: 'definition', url: demoSampleForm.url },
     strings: {
       '$form.title': 'Solicitud de beneficios de demostracion',
       '$form.description': 'Un formulario publico breve para la demostracion sin configuracion de Formspec Web.',

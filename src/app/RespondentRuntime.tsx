@@ -23,12 +23,18 @@ import {
   useFormspecContext,
   projectionMetadataAttrs,
   type FieldComponentProps,
+  type ResponseAction,
+  type ResponseActionInvocationResult,
+  type ResponseActionsDocument,
   type SubmitResult,
 } from '@formspec-org/react';
 import type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
 import type {
   ComponentDocument,
   FormDefinition,
+  LocaleDocument,
+  RegistryEntry,
+  ThemeDocument,
   ValidationReport,
 } from '@formspec-org/types';
 import type { FormspecWebConfig, IdentityPolicyConfig } from '../config/types.ts';
@@ -132,9 +138,37 @@ import {
 import { validateSafeAddressResponseData } from './safe-address.ts';
 import { useResolvedRuntimeProfile } from './hooks/useResolvedRuntimeProfile.ts';
 
-interface RespondentRuntimeProps {
+export interface RespondentRuntimeProps {
   composition: Composition;
   config: FormspecWebConfig;
+}
+
+/**
+ * Exact form inputs already selected by an admitted Surface route.
+ *
+ * The controller treats these as authority. It does not ask DefinitionSource
+ * for another copy or substitute demo Response Actions, Theme, or Registry
+ * entries.
+ */
+export interface ResolvedRespondentFormInput {
+  readonly definition: FormDefinition;
+  readonly themeDocument: ThemeDocument;
+  readonly registryEntries: readonly RegistryEntry[];
+  readonly responseActionsDocument: ResponseActionsDocument | undefined;
+  readonly localeDocuments?: readonly LocaleDocument[];
+  readonly activeLocale?: string;
+  readonly onActionCompleted?: (action: ResponseAction) => void;
+}
+
+export interface RespondentDefinitionControllerProps extends RespondentRuntimeProps {
+  readonly form: ResolvedRespondentFormInput;
+  readonly onSubmitConfirmed?: (confirmation: SubmitConfirmation) => void;
+}
+
+interface RespondentControllerProps extends RespondentRuntimeProps {
+  readonly form?: ResolvedRespondentFormInput;
+  readonly renderMode: 'standalone' | 'surface-slot';
+  readonly onSubmitConfirmed?: (confirmation: SubmitConfirmation) => void;
 }
 
 const engineReady = initFormspecEngine();
@@ -228,10 +262,40 @@ type RespondentPlaceState =
     }
   | { status: 'error'; error: unknown };
 
-export function RespondentRuntime({
+export function RespondentRuntime(props: RespondentRuntimeProps) {
+  return <RespondentController {...props} renderMode="standalone" />;
+}
+
+/**
+ * Reusable respondent controller for a verified `definition-form` Surface
+ * slot. Surface owns the route heading and navigation; this component keeps
+ * the existing draft, submit, Response Actions, payment, identity, and status
+ * behavior.
+ */
+export function RespondentDefinitionController({
   composition,
   config,
-}: RespondentRuntimeProps) {
+  form,
+  onSubmitConfirmed,
+}: RespondentDefinitionControllerProps) {
+  return (
+    <RespondentController
+      composition={composition}
+      config={config}
+      form={form}
+      renderMode="surface-slot"
+      onSubmitConfirmed={onSubmitConfirmed}
+    />
+  );
+}
+
+function RespondentController({
+  composition,
+  config,
+  form,
+  renderMode,
+  onSubmitConfirmed,
+}: RespondentControllerProps) {
   const [respondentState, setRespondentState] = useState<RespondentState>({ status: 'loading' });
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
   const [respondentPlaceState, setRespondentPlaceState] = useState<RespondentPlaceState>({
@@ -241,7 +305,12 @@ export function RespondentRuntime({
     status: 'idle',
   });
   const [multiPartyState, setMultiPartyState] = useState<MultiPartyPersistedState | null>(null);
+  const [completedAction, setCompletedAction] = useState<ResponseAction | null>(null);
   const terminalClearRequestedRef = useRef(false);
+  const onSubmitConfirmedRef = useRef(onSubmitConfirmed);
+  const onActionCompletedRef = useRef(form?.onActionCompleted);
+  onSubmitConfirmedRef.current = onSubmitConfirmed;
+  onActionCompletedRef.current = form?.onActionCompleted;
   // applyReadyState is constructed inside the bootstrap useEffect (it closes
   // over the cancel/sequence state). Expose it via ref so locale-recompute
   // (ADR-0011 §Resolution) and any future identity-refresh path can reach it
@@ -262,6 +331,7 @@ export function RespondentRuntime({
     setSubmitState({ status: 'idle' });
     setTerminalClearState({ status: 'idle' });
     setMultiPartyState(null);
+    setCompletedAction(null);
 
     const applyReadyState = async (
       claim: IdentityClaim | null,
@@ -275,7 +345,7 @@ export function RespondentRuntime({
       setSubmitState({ status: 'idle' });
       try {
         await engineReady;
-        const readyState = await createReadyState(composition, config, claim, options);
+        const readyState = await createReadyState(composition, config, claim, options, form);
 
         if (cancelled || sequence !== reloadSequence) {
           if (readyState.status === 'ready') {
@@ -378,7 +448,16 @@ export function RespondentRuntime({
       engine?.dispose();
       applyReadyStateRef.current = null;
     };
-  }, [composition]);
+  }, [
+    composition,
+    config,
+    form?.activeLocale,
+    form?.definition,
+    form?.localeDocuments,
+    form?.registryEntries,
+    form?.responseActionsDocument,
+    form?.themeDocument,
+  ]);
 
   const placeSubjectRef = respondentState.status === 'ready'
     ? respondentState.claim?.subjectRef ?? respondentState.draftKey.subjectRef
@@ -454,6 +533,7 @@ export function RespondentRuntime({
             (entry) => entry.kind === 'sent' && entry.idempotencyKey === queuedKey,
           );
           if (sent && sent.kind === 'sent') {
+            onSubmitConfirmedRef.current?.(sent.confirmation);
             setSubmitState({ status: 'confirmed', confirmation: sent.confirmation });
             return;
           }
@@ -474,6 +554,23 @@ export function RespondentRuntime({
       window.removeEventListener('online', onlineListener);
     };
   }, [queuedIdempotencyKey, composition.offlineSubmitQueue]);
+
+  // Response Actions complete synchronously after they dispatch the submit
+  // host event, while SubmitTransport is intentionally asynchronous. Hold the
+  // authored completed action until the real confirmation has updated the
+  // parent's `routeParams.caseRef`; the post-render effect then hands the
+  // action back to Surface's existing navigation boundary.
+  useEffect(() => {
+    if (
+      renderMode !== 'surface-slot'
+      || completedAction === null
+      || submitState.status !== 'confirmed'
+    ) {
+      return;
+    }
+    setCompletedAction(null);
+    onActionCompletedRef.current?.(completedAction);
+  }, [completedAction, renderMode, submitState.status]);
 
   const handleSignIn = async (option: IdpOption): Promise<void> => {
     setRespondentState((current) =>
@@ -519,6 +616,7 @@ export function RespondentRuntime({
       <AuthRequiredSurface
         authenticating={respondentState.authenticating}
         error={respondentState.error}
+        headingLevel={renderMode === 'surface-slot' ? 'h2' : 'h1'}
         options={respondentState.options}
         reason={respondentState.reason}
         onSignIn={(option) => {
@@ -530,26 +628,37 @@ export function RespondentRuntime({
 
   if (respondentState.status === 'error') {
     if (isRuntimePolicyError(respondentState.error)) {
-      return <RuntimePolicyErrorPage error={respondentState.error} />;
+      return (
+        <RuntimePolicyErrorPage
+          error={respondentState.error}
+          headingLevel={renderMode === 'surface-slot' ? 'h2' : 'h1'}
+        />
+      );
     }
     return (
       <FriendlyError
         error={respondentState.error}
-        headingLevel="h1"
+        headingLevel={renderMode === 'surface-slot' ? 'h2' : 'h1'}
         title="We could not load this form."
       />
     );
   }
 
   if (respondentState.status === 'terminal-cleared') {
-    return <TerminalClearedPanel />;
+    return (
+      <TerminalClearedPanel
+        headingLevel={renderMode === 'surface-slot' ? 'h2' : 'h1'}
+      />
+    );
   }
 
-  const responseActionsDocument = createDemoSubmitResponseActions({
-    definitionUrl: respondentState.definition.url,
-  });
+  const responseActionsDocument = form
+    ? form.responseActionsDocument
+    : createDemoSubmitResponseActions({
+        definitionUrl: respondentState.definition.url,
+      });
   const responseActionInvoker = composition.responseActionInvoker?.({
-    runtimeDefinitionUrl: composition.initialDefinitionUrl,
+    runtimeDefinitionUrl: form?.definition.url ?? composition.initialDefinitionUrl,
     definition: respondentState.definition,
     draftKey: respondentState.draftKey,
     claim: respondentState.claim,
@@ -713,6 +822,7 @@ export function RespondentRuntime({
         });
         switch (paymentOutcome.kind) {
           case 'submitted-with-payment':
+            onSubmitConfirmedRef.current?.(paymentOutcome.confirmation);
             setSubmitState({
               status: 'confirmed',
               confirmation: paymentOutcome.confirmation,
@@ -733,6 +843,7 @@ export function RespondentRuntime({
             });
             return;
           case 'capture-failed':
+            onSubmitConfirmedRef.current?.(paymentOutcome.confirmation);
             setSubmitState({
               status: 'capture-failed',
               confirmation: paymentOutcome.confirmation,
@@ -752,6 +863,7 @@ export function RespondentRuntime({
         idempotencyKey,
       });
       if (outcome.kind === 'submitted') {
+        onSubmitConfirmedRef.current?.(outcome.confirmation);
         setSubmitState({ status: 'confirmed', confirmation: outcome.confirmation });
       } else {
         setSubmitState({
@@ -798,6 +910,8 @@ export function RespondentRuntime({
             componentDocument={respondentState.componentDocument ?? undefined}
             componentGraph={respondentState.componentGraph ?? undefined}
             hostEvidence={respondentState.hostEvidence ?? undefined}
+            themeDocument={form?.themeDocument}
+            registryEntries={form ? [...form.registryEntries] : undefined}
             responseActionsDocument={responseActionsDocument}
             responseActionInvoker={responseActionInvoker}
             components={{
@@ -815,6 +929,11 @@ export function RespondentRuntime({
             onActionResult={(result) => {
               const action = result.resolution.action;
               if (!action) return;
+              if (renderMode === 'surface-slot') {
+                const completed = completedRespondentAction(result);
+                if (completed) setCompletedAction(completed);
+                return;
+              }
               composition.surfaceRouter?.transitionAfterResponseAction({
                 actionId: action.id,
                 status: result.status,
@@ -822,30 +941,60 @@ export function RespondentRuntime({
               });
             }}
           >
-            <RespondentSurface
-              activeLocale={respondentState.activeLocale}
-              brandName={config.brand.name}
-              claim={respondentState.claim}
-              composition={composition}
-              definition={respondentState.definition}
-              draftKey={respondentState.draftKey}
-              draftLoaded={respondentState.draftLoaded}
-              mode={composition.mode}
-              respondentPlaceState={respondentPlaceState}
-              resolvedIssuer={respondentState.resolvedIssuer}
-              runtimeProfile={respondentState.runtimeProfile}
-              multiPartyState={multiPartyState}
-              submitState={submitState}
-              terminalClearState={terminalClearState}
-              notificationDelivery={composition.notificationDelivery}
-              onClearTerminal={handleClearTerminal}
-              onLocaleChange={handleLocaleChange}
-            />
+            {renderMode === 'surface-slot' ? (
+              <RespondentFormContent
+                claim={respondentState.claim}
+                composition={composition}
+                definition={respondentState.definition}
+                draftKey={respondentState.draftKey}
+                multiPartyState={multiPartyState}
+                notificationDelivery={composition.notificationDelivery}
+                onClearTerminal={handleClearTerminal}
+                respondentPlaceState={respondentPlaceState}
+                runtimeProfile={respondentState.runtimeProfile}
+                submitState={submitState}
+                terminalClearState={terminalClearState}
+              />
+            ) : (
+              <RespondentSurface
+                activeLocale={respondentState.activeLocale}
+                brandName={config.brand.name}
+                claim={respondentState.claim}
+                composition={composition}
+                definition={respondentState.definition}
+                draftKey={respondentState.draftKey}
+                draftLoaded={respondentState.draftLoaded}
+                mode={composition.mode}
+                respondentPlaceState={respondentPlaceState}
+                resolvedIssuer={respondentState.resolvedIssuer}
+                runtimeProfile={respondentState.runtimeProfile}
+                multiPartyState={multiPartyState}
+                submitState={submitState}
+                terminalClearState={terminalClearState}
+                notificationDelivery={composition.notificationDelivery}
+                onClearTerminal={handleClearTerminal}
+                onLocaleChange={handleLocaleChange}
+              />
+            )}
           </FormspecProvider>
         </AttachmentStoreProvider>
       </RuntimeProfileProvider>
     </AppErrorBoundary>
   );
+}
+
+/**
+ * Same successful-terminal boundary used by Surface's default Definition
+ * renderer. The host keeps this check because its transport confirmation is
+ * deliberately later than the synchronous Response Actions terminal.
+ */
+function completedRespondentAction(
+  result: ResponseActionInvocationResult<SubmitResult>,
+): ResponseAction | undefined {
+  if (result.status !== 'completed') return undefined;
+  if (!result.resolution.resolved || !result.resolution.action) return undefined;
+  if (result.detail?.validationReport?.valid !== true) return undefined;
+  return result.resolution.action;
 }
 
 function SafeAddressTextField(props: FieldComponentProps) {
@@ -973,13 +1122,14 @@ async function createReadyState(
   config: FormspecWebConfig,
   claim: IdentityClaim | null,
   options: { locale?: string } = {},
+  form?: ResolvedRespondentFormInput,
 ): Promise<ReadyRespondentState | Extract<RespondentState, { status: 'auth-required' }>> {
   assertIdentityPolicySatisfied({
     claim,
     identityMode: config.identity.mode,
     runtimeMode: composition.mode,
   });
-  const definition = await composition.definitionSource.getDefinition(
+  const definition = form?.definition ?? await composition.definitionSource.getDefinition(
     composition.initialDefinitionUrl,
   );
   let formAssuranceFloor: AssuranceLevel | undefined;
@@ -1064,18 +1214,28 @@ async function createReadyState(
     };
   }
 
-  const activeLocale = options.locale ?? defaultLocaleForDefinition(definition);
+  const activeLocale =
+    options.locale
+    ?? form?.activeLocale
+    ?? defaultLocaleForDefinition(definition);
   const [
     localeDocuments,
     componentDocument,
     componentGraph,
     hostEvidence,
-  ] = await Promise.all([
-    composition.definitionSource.getLocaleDocuments?.(composition.initialDefinitionUrl),
-    composition.definitionSource.getComponentDocument?.(composition.initialDefinitionUrl),
-    composition.definitionSource.getComponentGraphContext?.(composition.initialDefinitionUrl),
-    composition.definitionSource.getLayoutHostEvidence?.(composition.initialDefinitionUrl),
-  ]);
+  ] = form
+    ? [
+        form.localeDocuments,
+        undefined,
+        undefined,
+        undefined,
+      ] as const
+    : await Promise.all([
+        composition.definitionSource.getLocaleDocuments?.(composition.initialDefinitionUrl),
+        composition.definitionSource.getComponentDocument?.(composition.initialDefinitionUrl),
+        composition.definitionSource.getComponentGraphContext?.(composition.initialDefinitionUrl),
+        composition.definitionSource.getLayoutHostEvidence?.(composition.initialDefinitionUrl),
+      ]);
   const verifiedComponentGraph = componentGraphHasCompletedEvidence({ componentGraph, hostEvidence })
     ? componentGraph ?? null
     : null;
@@ -1103,6 +1263,7 @@ async function createReadyState(
 
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
+    ...(form ? { registryEntries: [...form.registryEntries] } : {}),
   });
   for (const localeDocument of localeDocuments ?? []) {
     engine.loadLocale(localeDocument);
@@ -1560,7 +1721,7 @@ function RespondentSurface({
   onClearTerminal: () => Promise<void>;
   onLocaleChange: (locale: string) => void;
 }) {
-  const { engine, layoutPlan } = useFormspecContext();
+  const { engine } = useFormspecContext();
   const localeOptions = useMemo(() => localeOptionsForDefinition(definition), [definition]);
   const isUnbranded = resolvedIssuer.source === 'unbranded';
   const title = engine.resolveLocaleString('$form.title', definition.title);
@@ -1600,6 +1761,51 @@ function RespondentSurface({
         </div>
       </div>
 
+      <RespondentFormContent
+        claim={claim}
+        composition={composition}
+        definition={definition}
+        draftKey={draftKey}
+        multiPartyState={multiPartyState}
+        notificationDelivery={notificationDelivery}
+        onClearTerminal={onClearTerminal}
+        respondentPlaceState={respondentPlaceState}
+        runtimeProfile={runtimeProfile}
+        submitState={submitState}
+        terminalClearState={terminalClearState}
+      />
+    </>
+  );
+}
+
+function RespondentFormContent({
+  claim,
+  composition,
+  definition,
+  draftKey,
+  multiPartyState,
+  notificationDelivery,
+  onClearTerminal,
+  respondentPlaceState,
+  runtimeProfile,
+  submitState,
+  terminalClearState,
+}: {
+  claim: IdentityClaim | null;
+  composition: Composition;
+  definition: FormDefinition;
+  draftKey: DraftKey;
+  multiPartyState: MultiPartyPersistedState | null;
+  notificationDelivery?: NotificationDelivery;
+  onClearTerminal: () => Promise<void>;
+  respondentPlaceState: RespondentPlaceState;
+  runtimeProfile: ResolvedRuntimeProfile;
+  submitState: SubmitState;
+  terminalClearState: TerminalClearState;
+}) {
+  const { layoutPlan } = useFormspecContext();
+  return (
+    <>
       <SubmitNotice state={submitState} />
       <RespondentPlacePanel state={respondentPlaceState} />
       <TrustedReviewerPanel
@@ -2090,12 +2296,14 @@ function UnbrandedCover({
 function AuthRequiredSurface({
   authenticating,
   error,
+  headingLevel = 'h1',
   options,
   reason,
   onSignIn,
 }: {
   authenticating: boolean;
   error?: unknown;
+  headingLevel?: 'h1' | 'h2';
   options: IdpOption[];
   reason: 'initial-sign-in' | 'assurance-step-up';
   onSignIn: (option: IdpOption) => void;
@@ -2112,10 +2320,11 @@ function AuthRequiredSurface({
   const body = reason === 'assurance-step-up'
     ? 'This form needs a stronger sign-in before it can be loaded. Choose one of the listed options to continue.'
     : 'This form requires a verified sign-in before it can be loaded.';
+  const Heading = headingLevel;
   return (
     <section className="auth-required" aria-labelledby="auth-required-title">
       <p className="respondent-header__kicker">Sign in required</p>
-      <h1 id="auth-required-title">{heading}</h1>
+      <Heading id="auth-required-title">{heading}</Heading>
       <p>{body}</p>
       <div className="auth-required__actions">
         {options.map((option) => (
@@ -2437,10 +2646,15 @@ export function ConfirmationPanel({
   );
 }
 
-function TerminalClearedPanel() {
+function TerminalClearedPanel({
+  headingLevel = 'h1',
+}: {
+  headingLevel?: 'h1' | 'h2';
+}) {
+  const Heading = headingLevel;
   return (
     <div className="shell__status" role="status">
-      <h1>{PUBLIC_TERMINAL_CLEARED_TITLE}</h1>
+      <Heading>{PUBLIC_TERMINAL_CLEARED_TITLE}</Heading>
       <p>{PUBLIC_TERMINAL_CLEARED_BODY}</p>
     </div>
   );
@@ -2467,10 +2681,17 @@ export function PaymentReceivedSubCard({ captureReceipt }: { captureReceipt: Cap
   );
 }
 
-function RuntimePolicyErrorPage({ error }: { error: RuntimePolicyError }) {
+function RuntimePolicyErrorPage({
+  error,
+  headingLevel = 'h1',
+}: {
+  error: RuntimePolicyError;
+  headingLevel?: 'h1' | 'h2';
+}) {
+  const Heading = headingLevel;
   return (
     <div className="shell__status shell__status--error" role="alert">
-      <h1>This form cannot be loaded.</h1>
+      <Heading>This form cannot be loaded.</Heading>
       <p>{runtimePolicyErrorCopy(error)}</p>
       <p className="support-code">Support reference: {error.code}</p>
     </div>

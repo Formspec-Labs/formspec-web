@@ -99,11 +99,11 @@ describe('RespondentRuntime identity sign-in', () => {
   it('loads server-supplied Locale Documents through the definition source', async () => {
     const identityProvider = new TestIdentityProvider();
     const serverLocaleDocument: LocaleDocument = {
-      $formspecLocale: '1.0',
+      $formspecLocale: '2.0',
       url: 'https://formspec-server.example.test/runtime/locales/demo-intake/es',
       version: '1.0.0',
       locale: 'es',
-      targetDefinition: { url: demoSampleForm.url },
+      target: { kind: 'definition', url: demoSampleForm.url },
       strings: {
         '$form.title': 'Solicitud desde el servidor',
       },
@@ -132,11 +132,11 @@ describe('RespondentRuntime identity sign-in', () => {
       version: '2026.05.25',
     };
     const serverLocaleDocument: LocaleDocument = {
-      $formspecLocale: '1.0',
+      $formspecLocale: '2.0',
       url: 'https://formspec-server.example.test/runtime/locales/demo-benefits-intake-live/es',
       version: '1.0.0',
       locale: 'es',
-      targetDefinition: { url: canonicalDefinition.url },
+      target: { kind: 'definition', url: canonicalDefinition.url },
       strings: {
         '$form.title': 'Solicitud desde el servidor',
       },
@@ -218,11 +218,11 @@ describe('RespondentRuntime identity sign-in', () => {
       version: '2026.05.25',
     };
     const serverLocaleDocument: LocaleDocument = {
-      $formspecLocale: '1.0',
+      $formspecLocale: '2.0',
       url: 'https://formspec-server.example.test/runtime/locales/demo-benefits-intake-live/es',
       version: '1.0.0',
       locale: 'es',
-      targetDefinition: { url: canonicalDefinition.url },
+      target: { kind: 'definition', url: canonicalDefinition.url },
       strings: {
         '$form.title': 'Solicitud desde un solo payload',
       },
