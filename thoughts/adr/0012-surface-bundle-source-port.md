@@ -5,8 +5,9 @@
 **Subordinate to:** web ADR-0001, web ADR-0004, web ADR-0005, web ADR-0009, stack ADR-0162
 **Applies to:** named post-MVP signed Surface bundle admission slice
 **Implementation state:** interface, HTTP/raw/unavailable adapters, composition
-wiring, conformance suite, and respondent consumer implemented in the current
-local worktree; not committed, released, or deployed
+wiring, conformance suite, and admission host committed locally in `739cc60`;
+respondent consumer committed locally in `d16cbaa`; deployment activation
+committed locally in `30076a2`; not pushed, released, or deployed
 
 ## Context
 
@@ -146,8 +147,9 @@ Every adapter MUST pass
 
 ## Consequences
 
-- The current local Surface composition includes a required source and its
-  respondent consumer.
+- Local commit `739cc60` adds the required source to Surface composition and
+  the admission host; `d16cbaa` adds its respondent consumer; and `30076a2`
+  adds deployment activation. None has been pushed, released, or deployed.
 - The default composition uses an unavailable sentinel until deployment
   configures a real source adapter and policy.
 - Source metadata may support diagnostics, but it never supplies trusted

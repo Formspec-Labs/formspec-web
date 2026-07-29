@@ -17,7 +17,7 @@ Mixing the two means adopters who don't use formspec-stack's services either for
 
 ## Decision
 
-formspec-web's architecture is **hexagonal**: the React shell is the core; every I/O concern crosses a typed port; reference adapters live in-tree but are illustrative, not committed.
+formspec-web's architecture is **hexagonal**: the React shell is the core; every I/O concern crosses a typed port; reference adapters live in-tree but are illustrative, not mandated by this ADR.
 
 ### MVP port inventory (the contract)
 
@@ -132,15 +132,18 @@ CI cannot promise to catch every service-name leak. The promise: directory-bound
   a per-port ADR, an executable conformance suite, and composition-root wiring
   land together. ADR-0012 and ADR-0013 ratified the two signed Surface
   admission ports because the Surface Shell and gap-closure plan defined the
-  exact consumer and failure boundary. The current local worktree includes
-  both ports in `Composition`, their adapters and conformance suites, and the
-  consumer runtime. This note claims no commit, release, or deployment.
-- `eslint.config.js` and its `import/no-restricted-paths` rule now enforce the
-  FW-0017 boundary in the current local worktree.
+  exact consumer and failure boundary. Local commit `739cc60` records both
+  ports in `Composition`, their adapters, conformance suites, and admission
+  host; `d16cbaa` records the consumer runtime; and `30076a2` records its
+  deployment wiring. These commits have not been pushed, released, or
+  deployed.
+- At local commit `d16cbaa`, `eslint.config.js` and its
+  `import/no-restricted-paths` rule enforce the FW-0017 boundary. That commit
+  has not been pushed, released, or deployed.
 
 ## What this does NOT preclude
 
-- **The formspec-stack reference deployment.** formspec-server, workspec-server, and the Trellis substrate remain valid reference adapter targets, documented in web ADR-0008. They are illustrative, not committed.
+- **The formspec-stack reference deployment.** formspec-server, workspec-server, and the Trellis substrate remain valid reference adapter targets, documented in web ADR-0008. They are illustrative, not mandated by this ADR.
 - **First-party adapter quality.** Reference adapters can and should be production-grade — they ARE templates adopters will study and copy.
 - **Per-adapter opinions.** A `FirebaseAuthAdapter` SHOULD be opinionated about Firebase patterns; the opinion lives in the adapter, not in the architecture.
 - **Future port additions.** When `PaymentRail` / `BotProtection` /

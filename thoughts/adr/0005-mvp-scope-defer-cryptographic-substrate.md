@@ -115,7 +115,7 @@ The amendment preserves these product boundaries:
 
 | Slice | Placement after this amendment |
 |---|---|
-| Signed Surface bundle admission for the respondent app | Implemented in the current local formspec-web worktree; not committed, released, or deployed |
+| Signed Surface bundle admission for the respondent app | Admission ports, adapters, conformance, and host gate committed locally in `739cc60`; verified respondent runtime committed locally in `d16cbaa`; deployment activation committed locally in `30076a2`; none pushed, released, or deployed |
 | Public receipt and claim-graph verifier | Separate post-MVP evaluator slice; still deferred |
 | Selective-proof viewer | Separate post-MVP evaluator slice; still deferred |
 | Public signer ceremony | Remains in formspec-web per web ADR-0001, but uses a separate signer entry point, composition, state, and signature domain |
@@ -127,7 +127,8 @@ because both public slices live in this repository. Staff routes, identity,
 data, and controls MUST NOT enter either public slice.
 
 When accepted, this amendment ratified ownership and ports without claiming
-implementation. The current local worktree now contains ADR-0162's profile and
-policy types, both ports, their adapters and conformance suites, and the
-verified respondent host. This current-state note claims no commit, release,
-publication, or deployment.
+implementation. Local commit `739cc60` now records ADR-0162's admission ports,
+adapters, conformance suites, and host gate; `d16cbaa` records the verified
+respondent runtime; and `30076a2` records runtime-configuration and deployment
+activation. These commits remain local: they have not been pushed, released,
+published, or deployed.

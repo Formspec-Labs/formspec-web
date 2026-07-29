@@ -5,8 +5,9 @@
 **Subordinate to:** web ADR-0001, web ADR-0004, web ADR-0005, web ADR-0009, stack ADR-0162
 **Applies to:** named post-MVP signed Surface bundle admission slice
 **Implementation state:** port, reference adapter, conformance suite, and
-verified respondent host implemented in the current local worktree; not
-committed, released, or deployed
+admission host committed locally in `739cc60`; verified respondent runtime
+committed locally in `d16cbaa`; deployment trust configuration and activation
+committed locally in `30076a2`; not pushed, released, or deployed
 
 ## Context
 
@@ -228,8 +229,10 @@ to its owner.
 
 ## Consequences
 
-- The current local Surface composition includes this verifier with the
-  upstream profile, policy types, consumer runtime, and conformance fixtures.
+- Local commit `739cc60` adds this verifier, the upstream profile and policy
+  bindings, conformance fixtures, and admission host; `d16cbaa` adds the
+  verified respondent runtime; and `30076a2` adds deployment trust
+  configuration and activation. None has been pushed, released, or deployed.
 - The verification status component may show authenticated and
   provenance-labeled facts after `verified`; it shows fixed host text
   otherwise.

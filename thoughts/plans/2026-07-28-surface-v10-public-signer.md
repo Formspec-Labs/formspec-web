@@ -8,7 +8,7 @@ prerequisites_completed:
   - Surface 0.2 widget action bindings
   - Registry 1.1 widget action outputs
   - canonical widget action runtime
-decision_gate: accept the public ceremony ADR, custody model, recovery behavior, and supported signature methods
+decision_gate: accept the signer app and bundle identity, ADR-0162 admission policy, ceremony port, custody model, durable attempt recovery, and supported signature methods
 ---
 
 # Surface v10 public signing ceremony plan
@@ -30,9 +30,10 @@ this result.
 
 The current local stack contains the three prerequisites recorded above.
 Implementation has not started. Before implementation, an accepted architecture
-decision must define the public ceremony port, signer authentication, custody
-model, recovery behavior, and supported signature methods. This plan does not
-authorize a commit, release, or deployment.
+decision must define the signer app and bundle identity, the ADR-0162 admission
+policy, the public ceremony port, signer authentication, custody model, durable
+attempt recovery, and supported signature methods. This plan does not authorize
+implementation, an implementation commit, a release, or a deployment.
 
 ## Existing authority
 
@@ -49,9 +50,35 @@ This slice reuses, rather than replaces:
   or provider adapters; and
 - Surface 0.2 and Registry 1.1 action declarations.
 
-An ADR must still ratify the browser ceremony port, custody model, recovery
-behavior, and which signature methods the public reference implementation
-supports before implementation starts.
+An ADR must still ratify the browser ceremony port, signer app identity,
+signed-bundle admission policy, custody model, recovery behavior, and which
+signature methods the public reference implementation supports before
+implementation starts.
+
+## Signer app and signed-bundle admission
+
+The signer is a separate app deployment, not a respondent route. The ADR must
+name its canonical App Manifest `id`, signed-bundle location, entry Surface,
+signer actor, publisher authority, expected-app policy, and pinned or monotonic
+release policy. It must use a signer-specific app ID and bundle; it cannot reuse
+the respondent or operator app identity, artifact location, or release state.
+
+The host reuses stack ADR-0162's complete admission order over one immutable
+candidate:
+
+1. acquire one candidate snapshot;
+2. verify its signature, publisher, app, method, validity, revocation, and
+   release precondition;
+3. schema-validate and AppGraph-validate its manifest and documents;
+4. check the signer actor and select the declared entry Surface;
+5. dereference the signed documents and prove structural renderability;
+6. atomically commit release state for the signer app; and
+7. admit and render that same snapshot.
+
+Before admission, the document may contain only fixed host-owned checking,
+refusal, unsupported, or unavailable text. No signer bundle title, WYSIWYS
+content, Theme, Locale, widget, route, or diagnostic may reach the document.
+Ceremony state starts only after the signer bundle is admitted.
 
 ## Concrete control and action path
 
@@ -76,6 +103,40 @@ not create or repair signature evidence. Navigation occurs once only after the
 action reaches a successful terminal result and exactly one current-route
 transition matches.
 
+## Durable ceremony attempt and crash recovery
+
+One host-created `ceremonyAttemptId` identifies the entire attempt. The host
+persists it before contacting a provider and reuses it for:
+
+- provider idempotency, redirect correlation, and result recovery;
+- the idempotent Response write that stores one `AuthoredSignature`;
+- the `advance-after-signature` action-ledger invocation; and
+- the durable navigation-completion marker for the selected transition.
+
+The persisted attempt advances through
+`prepared → provider-pending → provider-completed → signature-persisted →
+action-completed → navigation-pending → navigation-completed`. Each transition
+compares the prior state and is idempotent. A retry with the same attempt may
+replay the same result; it may not create a second provider ceremony,
+signature, action invocation, or route-history entry.
+
+Recovery checks the durable attempt before doing work:
+
+- after provider completion but before the Response write, recover the provider
+  result by `ceremonyAttemptId`, validate it, and resume the same idempotent
+  `AuthoredSignature` write without asking the signer to sign again;
+- after the Response write but before action emission, confirm the stored
+  signature matches the attempt and emit the existing action invocation;
+- after action emission but before navigation, replay the ledger outcome and
+  persist its one eligible source-to-target transition as
+  `navigation-pending`. If the current route is already the target, mark it
+  complete. If it is still the recorded source, apply the target with
+  idempotent replacement semantics and mark it complete. Refuse any other
+  current route as stale; and
+- when provider status is unknown, query or resume the provider attempt. Do not
+  start another signature request until the prior attempt is definitively
+  cancelled or failed under the accepted recovery policy.
+
 ## What goes in, what happens, and what comes out
 
 ### Inputs
@@ -90,40 +151,56 @@ transition matches.
 
 ### Processing
 
-1. Validate the app graph, WYSIWYS sidecar, artifact references, and route.
-2. Display the exact referenced preimage and enforce the scroll and per-field
+1. Admit the signer bundle in the ADR-0162 order above, including the atomic
+   release-state commit.
+2. Validate the admitted WYSIWYS sidecar, artifact references, and current
+   signer route.
+3. Display the exact referenced preimage and enforce the scroll and per-field
    affirmative-action gates.
-3. Build the canonical Signed Response Payload with
+4. Create and durably persist one `ceremonyAttemptId`.
+5. Build the canonical Signed Response Payload with
    `authoredSignatures` omitted and bind its digest, response ID, Definition
    pin, signing time, and signing intent.
-4. Ask the injected ceremony adapter to sign or obtain provider evidence.
-5. Validate the resulting `AuthoredSignature`, including protected method
-   identity and consent fields, then persist it on the Response.
-6. Emit `signatureCompleted` with one stable invocation ID.
-7. Coalesce duplicate in-flight emission, replay a durable prior outcome, and
-   navigate once only for a current successful result.
+6. Ask the injected ceremony adapter to sign or obtain provider evidence,
+   keyed by that attempt.
+7. Persist provider completion, validate the resulting `AuthoredSignature`,
+   including protected method identity and consent fields, then write it
+   idempotently to the Response.
+8. Emit `signatureCompleted` using that attempt as the stable action invocation
+   identity.
+9. Replay a durable prior outcome when needed and claim navigation once for a
+   current successful result.
 
 ### Outputs
 
 - a canonical Response `AuthoredSignature`, not a UI-only signature image;
-- durable response and action-ledger state;
+- one durable ceremony attempt joining provider, Response, action-ledger, and
+  navigation state;
 - an explicit receipt or provider reference suitable for later verification;
   and
 - a post-signature route reached through the mapped Response Action.
 
 ## Work packages
 
-### S1 — Ratify actor, custody, and recovery
+### S1 — Ratify app admission, custody, and recovery
 
-- [ ] Accept an ADR for the public ceremony port and supported custody models.
+- [ ] Accept an ADR that names the signer App Manifest `id`, bundle location,
+  entry Surface, actor, publisher authority, expected-app policy, release
+  policy, public ceremony port, and supported custody models.
+- [ ] Reuse ADR-0162's immutable-snapshot admission order and atomic release
+  commit; define fixed pre-admission UI.
 - [ ] Define signer authentication, session expiry, cancellation, provider
   redirect recovery, and identity-evidence requirements.
+- [ ] Define `ceremonyAttemptId`, its durable state machine, provider recovery,
+  Response-write idempotency, action-ledger identity, and navigation marker.
 - [ ] Define which fields the signer controls, which the host observes, and
   which the signature or provider response authenticates.
 
 ### S2 — Author the graph
 
 - [ ] Register `WysiwysSigner` and its closed `signatureCompleted` output.
+- [ ] Package the signer graph as the separately identified signed app bundle;
+  do not place it in the respondent bundle.
 - [ ] Bind the output to `advance-after-signature` in Surface 0.2.
 - [ ] Add the exact Response Action and one eligible post-signature transition.
 - [ ] Reject missing sidecars, unresolved artifacts, undeclared outputs,
@@ -134,16 +211,23 @@ transition matches.
 - [ ] Define the narrow public-signature ceremony port and conformance suite.
 - [ ] Add one real supported adapter; keep private signing keys out of generic
   React and Surface packages.
-- [ ] Validate and durably save `AuthoredSignature` before emitting completion.
-- [ ] Resume a safe provider redirect or show an explicit unavailable state;
-  never infer completion from route state alone.
+- [ ] Validate and idempotently save `AuthoredSignature` under the durable
+  attempt before emitting completion with that same identity.
+- [ ] Resume provider completion, Response persistence, action emission, and
+  navigation from the last durable attempt state; never infer completion from
+  route state alone or ask for a second signature after a recoverable crash.
 
 ### S4 — Prove behavior and separation
 
 - [ ] Test exact preimage, scroll gate, per-field acts, consent, cancellation,
   expiry, wrong intent, changed Response, invalid method, and invalid evidence.
 - [ ] Test double-click coalescing, durable retry replay, late-result rejection,
-  ambiguous-transition refusal, and exactly-once navigation.
+  ambiguous-transition refusal, and at-most-once navigation.
+- [ ] Crash after provider completion, after Response persistence, and after
+  action emission; prove each restart resumes the same attempt without
+  re-signing or duplicating a durable side effect.
+- [ ] Prove a wrong signer app, publisher, actor, entry Surface, stale release,
+  or non-renderable bundle fails before bundle-derived output.
 - [ ] Prove the signer slice introduces no staff authority or queue source and
   is absent from the respondent MVP composition unless explicitly enabled.
 - [ ] Run browser accessibility, keyboard, mobile, unit, conformance, vendor,
@@ -152,6 +236,8 @@ transition matches.
 ## Acceptance
 
 - A real control, not route entry, initiates the ceremony.
+- A separately identified signer bundle passes the full ADR-0162 admission
+  sequence and atomic release commit before any signer content renders.
 - The signer sees the exact artifact committed by the authored signature.
 - The result is a schema-valid, verifiable `AuthoredSignature` with explicit
   intent and consent, persisted before navigation.
@@ -159,6 +245,8 @@ transition matches.
   `advance-after-signature`.
 - Retries are idempotent, stale completion cannot navigate, and one successful
   current result navigates at most once.
+- The same durable attempt resumes across every provider, Response, action, and
+  navigation crash window without asking for another signature.
 - No operator permission, route, or data source enters this public slice.
 
 ## Release boundary
