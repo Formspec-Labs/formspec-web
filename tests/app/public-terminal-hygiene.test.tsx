@@ -29,6 +29,7 @@ import { stubScreenerDocumentSource } from '../../src/adapters/stub/screener-doc
 import { stubStatusReader } from '../../src/adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../../src/adapters/stub/submit-transport.ts';
 import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
+import { unavailableSurfaceBundlePorts } from '../../src/adapters/unavailable/surface-bundle.ts';
 import type { Composition } from '../../src/composition/types.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import type { InstanceCapabilities, OrgRuntimePolicy } from '../../src/policy/index.ts';
@@ -319,6 +320,7 @@ function publicTerminalComposition(): Composition {
     mode: 'demo',
     initialDefinitionUrl: PUBLIC_TERMINAL_FORM.url,
     definitionSource,
+    ...unavailableSurfaceBundlePorts(),
     draftStore: stubDraftStore(),
     submitTransport,
     identityProvider: stubIdentityProvider(),

@@ -25,6 +25,8 @@ const portSuites = new Map([
   ['ReviewThreadStore', 'tests/adapter-conformance/review-thread-store/conformance.test.ts'],
   ['SafeAddressDirectory', 'tests/adapter-conformance/safe-address-directory/conformance.test.ts'],
   ['LifecycleActionClient', 'tests/adapter-conformance/lifecycle-action-client/conformance.test.ts'],
+  ['SurfaceBundleSource', 'tests/adapter-conformance/surface-bundle-source/conformance.test.ts'],
+  ['SurfaceBundleVerifier', 'tests/adapter-conformance/surface-bundle-verifier/conformance.test.ts'],
 ]);
 const stubPortsByPath = new Map([
   ['src/adapters/stub/definition-source.ts', 'DefinitionSource'],
@@ -59,6 +61,8 @@ const unavailableSentinelFactoriesByPath = new Map([
   ['src/adapters/unavailable/review-thread-store.ts', 'unavailableReviewThreadStore'],
   ['src/adapters/unavailable/safe-address-directory.ts', 'unavailableSafeAddressDirectory'],
   ['src/adapters/unavailable/lifecycle-action-client.ts', 'unavailableLifecycleActionClient'],
+  ['src/adapters/unavailable/surface-bundle-source.ts', 'unavailableSurfaceBundleSource'],
+  ['src/adapters/unavailable/surface-bundle-verifier.ts', 'unavailableSurfaceBundleVerifier'],
 ]);
 const requiredHarnessExports = [
   'defineDefinitionSourceConformance',
@@ -79,6 +83,8 @@ const requiredHarnessExports = [
   'defineReviewThreadStoreConformance',
   'defineSafeAddressDirectoryConformance',
   'defineLifecycleActionClientConformance',
+  'defineSurfaceBundleSourceConformance',
+  'defineSurfaceBundleVerifierConformance',
 ];
 const requiredReadmePhrases = [
   'formspec-web/adapter-conformance',
@@ -253,7 +259,7 @@ function portImplementedBy(classHeader) {
   }
   return (
     implementsMatch[1].match(
-      /\b(DefinitionSource|DraftStore|SubmitTransport|IdentityProvider|NotificationDelivery|RespondentPlaceSource|StatusReader|FormRuntimePolicyExtractor|SafeAddressDirectory)\b/,
+      /\b(DefinitionSource|DraftStore|SubmitTransport|IdentityProvider|NotificationDelivery|RespondentPlaceSource|StatusReader|FormRuntimePolicyExtractor|SafeAddressDirectory|SurfaceBundleSource|SurfaceBundleVerifier)\b/,
     )?.[1] ?? null
   );
 }

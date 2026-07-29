@@ -160,3 +160,32 @@ export type {
   SafeAddressValidationResult,
 } from './safe-address-directory.ts';
 export type { PreallocatedFeaturePort } from './preallocated-feature-port.ts';
+export type {
+  SurfaceBundleAcquisitionRequest,
+  SurfaceBundleSnapshot,
+  SurfaceBundleSource,
+  SurfaceBundleSourceErrorCode,
+  SurfaceBundleSourceEvidence,
+} from './surface-bundle-source.ts';
+export {
+  SurfaceBundleSourceError,
+  createSurfaceBundleSnapshot,
+  surfaceBundleSnapshotIdentity,
+} from './surface-bundle-source.ts';
+export type {
+  SurfaceBundleDeploymentVerificationConfig,
+  SurfaceBundleFailedVerificationResult,
+  SurfaceBundleHostCheckResult,
+  SurfaceBundleHostValidationPassed,
+  SurfaceBundleReleaseCommitRequest,
+  SurfaceBundleReleaseCommitResult,
+  SurfaceBundleReleasePrecondition,
+  SurfaceBundleUnverifiedVerificationResult,
+  SurfaceBundleVerificationProvenance,
+  SurfaceBundleVerificationResult,
+  SurfaceBundleVerifiedProvenance,
+  SurfaceBundleVerifiedResult,
+  SurfaceBundleVerifier,
+  SurfaceBundleVerifierErrorCode,
+} from './surface-bundle-verifier.ts';
+export { SurfaceBundleVerifierError } from './surface-bundle-verifier.ts';

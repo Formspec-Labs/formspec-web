@@ -16,4 +16,6 @@ export {
   defineScreenerDocumentSourceConformance,
   defineStatusReaderConformance,
   defineSubmitTransportConformance,
+  defineSurfaceBundleSourceConformance,
+  defineSurfaceBundleVerifierConformance,
 } from '../../../src/adapter-conformance/index.ts';

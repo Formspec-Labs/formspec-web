@@ -30,6 +30,15 @@ import type {
 } from '../ports/safe-address-directory.ts';
 import type { SubmitTransport } from '../ports/submit-transport.ts';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
+import type {
+  SurfaceBundleSnapshot,
+  SurfaceBundleSource,
+} from '../ports/surface-bundle-source.ts';
+import { SurfaceBundleSourceError } from '../ports/surface-bundle-source.ts';
+import type {
+  SurfaceBundleVerificationResult,
+  SurfaceBundleVerifier,
+} from '../ports/surface-bundle-verifier.ts';
 import type { FormRuntimePolicyExtractor } from '../ports/form-runtime-policy-extractor.ts';
 import type {
   OfflineSubmitQueue,
@@ -102,6 +111,35 @@ import {
 export interface DefinitionSourceConformanceSubject {
   adapter: DefinitionSource;
   registerDefinition(definition: FormDefinition): void | Promise<void>;
+}
+
+export interface SurfaceBundleSourceConformanceSubject {
+  readonly adapter: SurfaceBundleSource;
+  readonly locator: string;
+  readonly expectedBytes: Uint8Array;
+  readonly missingLocator: string;
+  readonly oversizedLocator: string;
+}
+
+export type SurfaceBundleVerifierConformanceCase =
+  | 'authorized-current'
+  | 'tampered'
+  | 'unsupported-method'
+  | 'unknown-key'
+  | 'replacement-sidecar'
+  | 'wrong-publisher'
+  | 'wrong-app'
+  | 'expired-authority'
+  | 'revoked-authority'
+  | 'stale-release';
+
+export interface SurfaceBundleVerifierConformanceSubject {
+  case(
+    name: SurfaceBundleVerifierConformanceCase,
+  ): Promise<{
+    readonly adapter: SurfaceBundleVerifier;
+    readonly snapshot: SurfaceBundleSnapshot;
+  }>;
 }
 
 export interface DraftStoreConformanceSubject {
@@ -259,6 +297,104 @@ export function defineDefinitionSourceConformance(
       const subject = setup();
       await expect(subject.adapter.getDefinition('https://missing.example.test/form')).rejects.toThrow();
     });
+  });
+}
+
+export function defineSurfaceBundleSourceConformance(
+  name: string,
+  setup: () => SurfaceBundleSourceConformanceSubject,
+): void {
+  describe(name, () => {
+    it('preserves the exact acquired bytes and records their identity', async () => {
+      const subject = setup();
+      const snapshot = await subject.adapter.acquire({ locator: subject.locator });
+      expect(snapshot.copyBytes()).toEqual(subject.expectedBytes);
+      expect(snapshot.identity).toMatch(/^sha256:[0-9a-f]{64}$/u);
+      expect(snapshot.evidence.byteCount).toBe(subject.expectedBytes.byteLength);
+      expect(snapshot.evidence.requestedLocator).toBe(subject.locator);
+    });
+
+    it('does not expose mutable snapshot storage', async () => {
+      const subject = setup();
+      const snapshot = await subject.adapter.acquire({ locator: subject.locator });
+      const first = snapshot.copyBytes();
+      first[0] = first[0] ^ 0xff;
+      expect(snapshot.copyBytes()).toEqual(subject.expectedBytes);
+    });
+
+    it('returns typed not-found and size failures', async () => {
+      const subject = setup();
+      await expect(
+        subject.adapter.acquire({ locator: subject.missingLocator }),
+      ).rejects.toMatchObject({
+        name: SurfaceBundleSourceError.name,
+        code: 'not-found',
+      });
+      await expect(
+        subject.adapter.acquire({ locator: subject.oversizedLocator }),
+      ).rejects.toMatchObject({
+        name: SurfaceBundleSourceError.name,
+        code: 'size-limit-exceeded',
+      });
+    });
+
+    it('honors an already-cancelled acquisition', async () => {
+      const subject = setup();
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        subject.adapter.acquire({
+          locator: subject.locator,
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({
+        name: SurfaceBundleSourceError.name,
+        code: 'cancelled',
+      });
+    });
+  });
+}
+
+export function defineSurfaceBundleVerifierConformance(
+  name: string,
+  setup: () => SurfaceBundleVerifierConformanceSubject,
+): void {
+  const expected = {
+    'authorized-current': { status: 'verified' },
+    tampered: { status: 'failed', code: 'integrity-failed' },
+    'unsupported-method': { status: 'unverified', code: 'integrity-unsupported' },
+    'unknown-key': { status: 'unverified', code: 'verifier-unavailable' },
+    'replacement-sidecar': { status: 'failed', code: 'candidate-invalid' },
+    'wrong-publisher': { status: 'failed', code: 'publisher-unauthorized' },
+    'wrong-app': { status: 'failed', code: 'app-unauthorized' },
+    'expired-authority': { status: 'failed', code: 'authority-expired' },
+    'revoked-authority': { status: 'failed', code: 'authority-revoked' },
+    'stale-release': { status: 'failed', code: 'release-stale' },
+  } as const satisfies Record<
+    SurfaceBundleVerifierConformanceCase,
+    { readonly status: SurfaceBundleVerificationResult['status']; readonly code?: string }
+  >;
+
+  describe(name, () => {
+    for (const [caseName, outcome] of Object.entries(expected) as Array<
+      [
+        SurfaceBundleVerifierConformanceCase,
+        { readonly status: SurfaceBundleVerificationResult['status']; readonly code?: string },
+      ]
+    >) {
+      it(`classifies ${caseName}`, async () => {
+        const subject = setup();
+        const testCase = await subject.case(caseName);
+        const result = await testCase.adapter.verify(testCase.snapshot);
+        expect(result.status).toBe(outcome.status);
+        if (outcome.code) {
+          expect('code' in result ? result.code : undefined).toBe(outcome.code);
+        }
+        expect(result.snapshotIdentity).toBe(testCase.snapshot.identity);
+        expect(result.provenance.snapshotIdentity).toBe(testCase.snapshot.identity);
+        expect(result.provenance.source).toBe(testCase.snapshot.evidence);
+      });
+    }
   });
 }
 

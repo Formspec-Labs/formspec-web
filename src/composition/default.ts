@@ -36,6 +36,8 @@ import { unavailableRespondentHistorySource } from '../adapters/unavailable/resp
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
+import { unavailableSurfaceBundleSource } from '../adapters/unavailable/surface-bundle-source.ts';
+import { unavailableSurfaceBundleVerifier } from '../adapters/unavailable/surface-bundle-verifier.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import {
   freezeComposition,
@@ -116,6 +118,8 @@ export function createDefaultComposition(
     mode: 'production',
     initialDefinitionUrl,
     definitionSource: new HttpDefinitionSource(httpConfig),
+    surfaceBundleSource: unavailableSurfaceBundleSource(),
+    surfaceBundleVerifier: unavailableSurfaceBundleVerifier(),
     draftStore,
     submitTransport,
     identityProvider: identityBinding.provider,

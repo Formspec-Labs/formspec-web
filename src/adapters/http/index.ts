@@ -58,3 +58,8 @@ export {
   type ResponseActionLedgerCapabilityResponse,
   type ResponseActionSessionOpBatchAppendCommand,
 } from './response-action-ledger.ts';
+export {
+  HttpSurfaceBundleSource,
+  createHttpSurfaceBundleSource,
+  type HttpSurfaceBundleSourceConfig,
+} from './surface-bundle-source.ts';

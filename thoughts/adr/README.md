@@ -15,3 +15,5 @@ Public reference UI architecture decisions. Numbered `NNNN-kebab-slug.md` starti
 - [ADR-0009 - Hexagonal architecture](0009-hexagonal-architecture-ports-and-adapters.md)
 - [ADR-0010 - Respondent place trust model](0010-respondent-place-trust-model.md)
 - [ADR-0011 - Runtime feature resolution and policy gates](0011-runtime-feature-resolution-and-policy-gates.md)
+- [ADR-0012 - SurfaceBundleSource port](0012-surface-bundle-source-port.md)
+- [ADR-0013 - SurfaceBundleVerifier port](0013-surface-bundle-verifier-port.md)

@@ -31,6 +31,7 @@ import { stubSubmitTransport } from '../../src/adapters/stub/submit-transport.ts
 import { createStubTrustedReviewerAdapters } from '../../src/adapters/stub/review-thread-store.ts';
 import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
+import { unavailableSurfaceBundlePorts } from '../../src/adapters/unavailable/surface-bundle.ts';
 import type { Composition } from '../../src/composition/types.ts';
 import { publicPortalProfile } from '../../src/profiles/profiles.ts';
 import {
@@ -116,6 +117,7 @@ function buildComposition(): Composition {
     mode: 'demo',
     initialDefinitionUrl: definition.url,
     definitionSource,
+    ...unavailableSurfaceBundlePorts(),
     draftStore: stubDraftStore(),
     submitTransport,
     identityProvider: stubIdentityProvider(),

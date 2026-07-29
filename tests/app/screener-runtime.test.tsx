@@ -35,6 +35,7 @@ import {
 } from '../../src/app/ScreenerRuntime.tsx';
 import { stubScreenerDocumentSource } from '../../src/adapters/stub/screener-document-source.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
+import { unavailableSurfaceBundlePorts } from '../../src/adapters/unavailable/surface-bundle.ts';
 import {
   demoScreener,
   demoScreenerUrl,
@@ -112,6 +113,7 @@ function buildComposition(options: BuildOptions = {}): Composition {
     mode: 'demo',
     initialDefinitionUrl: 'about:not-constructed',
     definitionSource: stubDefinitionSource(),
+    ...unavailableSurfaceBundlePorts(),
     draftStore: stubDraftStore(),
     submitTransport,
     identityProvider: stubIdentityProvider(),

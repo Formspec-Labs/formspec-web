@@ -25,6 +25,7 @@ import { unavailableEmbedTransport } from '../../src/adapters/unavailable/embed-
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
+import { unavailableSurfaceBundlePorts } from '../../src/adapters/unavailable/surface-bundle.ts';
 import {
   freezeComposition,
   type InstanceCapabilities,
@@ -138,6 +139,7 @@ function buildComposition({
     mode: 'demo',
     initialDefinitionUrl: definition.url,
     definitionSource,
+    ...unavailableSurfaceBundlePorts(),
     draftStore: stubDraftStore(),
     submitTransport,
     identityProvider: stubIdentityProvider(),

@@ -64,6 +64,8 @@ import { unavailableRespondentHistorySource } from '../adapters/unavailable/resp
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
 import { unavailableScreenerDocumentSource } from '../adapters/unavailable/screener-document-source.ts';
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
+import { unavailableSurfaceBundleSource } from '../adapters/unavailable/surface-bundle-source.ts';
+import { unavailableSurfaceBundleVerifier } from '../adapters/unavailable/surface-bundle-verifier.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
 import { stubLifecycleActionClient } from '../adapters/stub/lifecycle-action-client.ts';
@@ -237,6 +239,8 @@ function buildProductionNarrowedComposition({
     mode: 'production',
     initialDefinitionUrl: route.initialDefinitionUrlSentinel,
     definitionSource: noopDefinitionSource(route.routeCite),
+    surfaceBundleSource: unavailableSurfaceBundleSource(),
+    surfaceBundleVerifier: unavailableSurfaceBundleVerifier(),
     draftStore: noopDraftStore(route.routeCite),
     submitTransport: noopSubmitTransport(route.routeCite),
     identityProvider,
@@ -293,6 +297,8 @@ function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Com
     mode: 'demo',
     initialDefinitionUrl: route.initialDefinitionUrlSentinel,
     definitionSource: noopDefinitionSource(route.routeCite),
+    surfaceBundleSource: unavailableSurfaceBundleSource(),
+    surfaceBundleVerifier: unavailableSurfaceBundleVerifier(),
     draftStore: noopDraftStore(route.routeCite),
     submitTransport: noopSubmitTransport(route.routeCite),
     identityProvider: route.identityBound

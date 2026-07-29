@@ -19,6 +19,8 @@ import type {
   ScreenerDocumentSource,
   StatusReader,
   SubmitTransport,
+  SurfaceBundleSource,
+  SurfaceBundleVerifier,
 } from '../ports/index.ts';
 import type {
   InstanceCapabilities,
@@ -45,6 +47,17 @@ export interface Composition {
   mode: 'demo' | 'production';
   initialDefinitionUrl: string;
   definitionSource: DefinitionSource;
+  /**
+   * ADR-0012 post-MVP signed-app acquisition seam. It remains separate from
+   * DefinitionSource so transport success never bypasses bundle admission.
+   */
+  surfaceBundleSource: SurfaceBundleSource;
+  /**
+   * ADR-0013 post-MVP signed-app trust and rollback seam. Default
+   * compositions use unavailable sentinels; the verified respondent
+   * composition supplies the deployed verifier.
+   */
+  surfaceBundleVerifier: SurfaceBundleVerifier;
   draftStore: DraftStore;
   submitTransport: SubmitTransport;
   identityProvider: IdentityProvider;

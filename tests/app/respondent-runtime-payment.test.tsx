@@ -35,6 +35,7 @@ import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailabl
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
 import { unavailableStatusReader } from '../../src/adapters/unavailable/status-reader.ts';
+import { unavailableSurfaceBundlePorts } from '../../src/adapters/unavailable/surface-bundle.ts';
 import {
   freezeComposition,
   type InstanceCapabilities,
@@ -130,6 +131,7 @@ function buildPaymentComposition(args: {
     mode: 'demo',
     initialDefinitionUrl: definition.url,
     definitionSource,
+    ...unavailableSurfaceBundlePorts(),
     draftStore: stubDraftStore(),
     submitTransport,
     identityProvider: stubIdentityProvider(),
@@ -303,6 +305,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
       mode: 'demo' as const,
       initialDefinitionUrl: definition.url,
       definitionSource,
+      ...unavailableSurfaceBundlePorts(),
       draftStore: stubDraftStore(),
       submitTransport: stubSubmitTransport(),
       identityProvider: stubIdentityProvider(),
@@ -414,6 +417,7 @@ describe('RespondentRuntime payment integration (FW-0027)', () => {
       mode: 'demo' as const,
       initialDefinitionUrl: definition.url,
       definitionSource,
+      ...unavailableSurfaceBundlePorts(),
       draftStore: stubDraftStore(),
       submitTransport,
       identityProvider: stubIdentityProvider(),

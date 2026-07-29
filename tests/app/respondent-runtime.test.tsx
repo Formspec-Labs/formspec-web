@@ -26,6 +26,7 @@ import type {
   RespondentSubmissionRecord,
 } from '../../src/ports/index.ts';
 import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
+import { unavailableSurfaceBundlePorts } from '../../src/adapters/unavailable/surface-bundle.ts';
 import {
   multiPartyDraftKey,
   multiPartyProgressDraftKey,
@@ -1697,6 +1698,7 @@ function testComposition(
       getComponentGraphContext: vi.fn(async () => options.componentGraph ?? null),
       getLayoutHostEvidence: vi.fn(async () => options.hostEvidence ?? null),
     },
+    ...unavailableSurfaceBundlePorts(),
     draftStore: {
       load: vi.fn(async () => undefined),
       save: vi.fn(async () => undefined),

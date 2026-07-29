@@ -377,6 +377,27 @@ function createFixture(options = {}) {
       options,
     ),
   );
+  write(
+    root,
+    'tests/adapter-conformance/surface-bundle-source/conformance.test.ts',
+    suiteText(
+      'SurfaceBundleSource',
+      [
+        ['raw SurfaceBundleSource conformance', 'RawSurfaceBundleSource'],
+        ['HTTP SurfaceBundleSource conformance', 'HttpSurfaceBundleSource'],
+      ],
+      options,
+    ),
+  );
+  write(
+    root,
+    'tests/adapter-conformance/surface-bundle-verifier/conformance.test.ts',
+    suiteText(
+      'SurfaceBundleVerifier',
+      [['integrity SurfaceBundleVerifier conformance', 'IntegritySurfaceBundleVerifier']],
+      options,
+    ),
+  );
 
   return root;
 }
@@ -477,6 +498,14 @@ function writeAdapterFiles(root, options) {
       'export function unavailableLifecycleActionClient() {}',
     ],
     [
+      'src/adapters/unavailable/surface-bundle-source.ts',
+      'export function unavailableSurfaceBundleSource() {}',
+    ],
+    [
+      'src/adapters/unavailable/surface-bundle-verifier.ts',
+      'export function unavailableSurfaceBundleVerifier() {}',
+    ],
+    [
       'src/adapters/http/definition-source.ts',
       'export class HttpDefinitionSource implements DefinitionSource {}',
     ],
@@ -496,6 +525,18 @@ function writeAdapterFiles(root, options) {
       'export class MagicLinkAdapter implements IdentityProvider {}',
     ],
     ['src/adapters/identity/assurance.ts', 'export class IdentitySession {}'],
+    [
+      'src/adapters/http/surface-bundle-source.ts',
+      'export class HttpSurfaceBundleSource implements SurfaceBundleSource {}',
+    ],
+    [
+      'src/adapters/raw/surface-bundle-source.ts',
+      'export class RawSurfaceBundleSource implements SurfaceBundleSource {}',
+    ],
+    [
+      'src/adapters/integrity/surface-bundle-verifier.ts',
+      'export class IntegritySurfaceBundleVerifier implements SurfaceBundleVerifier {}',
+    ],
   ]) {
     if (path !== options.omitPath) {
       write(root, path, text);
@@ -520,6 +561,8 @@ function defaultComposition() {
     'import { unavailableReviewerSession } from "../adapters/unavailable/reviewer-session.ts";',
     'import { unavailableReviewThreadStore } from "../adapters/unavailable/review-thread-store.ts";',
     'import { unavailableLifecycleActionClient } from "../adapters/unavailable/lifecycle-action-client.ts";',
+    'import { unavailableSurfaceBundleSource } from "../adapters/unavailable/surface-bundle-source.ts";',
+    'import { unavailableSurfaceBundleVerifier } from "../adapters/unavailable/surface-bundle-verifier.ts";',
     'export function createDefaultComposition() {',
     '  return {',
     '    respondentPlaceSource: unavailableRespondentPlaceSource(),',
@@ -534,6 +577,8 @@ function defaultComposition() {
     '    reviewThreadStore: unavailableReviewThreadStore(),',
     '    safeAddressDirectory: unavailableSafeAddressDirectory(),',
     '    lifecycleActionClient: unavailableLifecycleActionClient(),',
+    '    surfaceBundleSource: unavailableSurfaceBundleSource(),',
+    '    surfaceBundleVerifier: unavailableSurfaceBundleVerifier(),',
     '  };',
     '}',
   ].join('\n');
@@ -560,6 +605,8 @@ function publicIndex() {
     '  defineReviewThreadStoreConformance,',
     '  defineSafeAddressDirectoryConformance,',
     '  defineLifecycleActionClientConformance,',
+    '  defineSurfaceBundleSourceConformance,',
+    '  defineSurfaceBundleVerifierConformance,',
     "} from './conformance.ts';",
   ].join('\n');
 }

@@ -26,6 +26,8 @@ import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-s
 import { stubSafeAddressDirectory } from '../adapters/stub/safe-address-directory.ts';
 import { stubStatusReader } from '../adapters/stub/status-reader.ts';
 import { stubSubmitTransport } from '../adapters/stub/submit-transport.ts';
+import { unavailableSurfaceBundleSource } from '../adapters/unavailable/surface-bundle-source.ts';
+import { unavailableSurfaceBundleVerifier } from '../adapters/unavailable/surface-bundle-verifier.ts';
 import { demoSampleForm, demoSampleFormUrl } from '../demo/index.ts';
 import { demoLocaleDocuments } from '../demo/locales.ts';
 import {
@@ -71,6 +73,8 @@ export function createStubComposition(): Composition {
     mode: 'demo',
     initialDefinitionUrl: demoSampleFormUrl,
     definitionSource,
+    surfaceBundleSource: unavailableSurfaceBundleSource(),
+    surfaceBundleVerifier: unavailableSurfaceBundleVerifier(),
     draftStore: stubDraftStore(),
     submitTransport,
     identityProvider: stubIdentityProvider(),

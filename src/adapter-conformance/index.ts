@@ -18,6 +18,8 @@ export {
   defineScreenerDocumentSourceConformance,
   defineStatusReaderConformance,
   defineSubmitTransportConformance,
+  defineSurfaceBundleSourceConformance,
+  defineSurfaceBundleVerifierConformance,
   sampleReviewThreadPolicySnapshot,
   type AttachmentStoreConformanceSubject,
   type DefinitionSourceConformanceSubject,
@@ -39,6 +41,9 @@ export {
   type ScreenerDocumentSourceConformanceSubject,
   type StatusReaderConformanceSubject,
   type SubmitTransportConformanceSubject,
+  type SurfaceBundleSourceConformanceSubject,
+  type SurfaceBundleVerifierConformanceCase,
+  type SurfaceBundleVerifierConformanceSubject,
 } from './conformance.ts';
 export {
   isAttachmentRef,
