@@ -72,6 +72,38 @@ describe('respondent flow helpers', () => {
     engine.dispose();
   });
 
+  // The vendored engine predates addRepeatInstance refusing rows past maxRepeat; once the vendor is refreshed
+  // this fails until hydrateEngineFromData delegates to engine.loadResponseData.
+  it('keeps saved repeat rows past maxRepeat and reports MAX_REPEAT', () => {
+    const engine = createFormEngine({
+      $formspec: '1.0',
+      url: 'https://example.test/forms/jobs',
+      version: '1.0.0',
+      title: 'Jobs',
+      items: [
+        {
+          key: 'jobs',
+          type: 'group',
+          label: 'Job',
+          repeatable: true,
+          maxRepeat: 2,
+          children: [{ key: 'employer', type: 'field', dataType: 'string', label: 'Employer' }],
+        },
+      ],
+    } as FormDefinition);
+    hydrateEngineFromData(engine, {
+      jobs: [{ employer: 'ACME' }, { employer: 'Globex' }, { employer: 'Initech' }],
+    });
+
+    expect(engine.getResponse({ profile: 'off' }).data.jobs).toEqual([
+      { employer: 'ACME' },
+      { employer: 'Globex' },
+      { employer: 'Initech' },
+    ]);
+    expect(engine.getValidationReport().results.map((result) => result.code)).toContain('MAX_REPEAT');
+    engine.dispose();
+  });
+
   it('builds a public-intake handoff with a response digest', async () => {
     const idempotencyKey = generateIdempotencyKey();
     const handoff = await buildIntakeHandoff({
