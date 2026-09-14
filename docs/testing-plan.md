@@ -22,7 +22,7 @@ deployment.
 | Unit and smoke tests | `npm run test:unit` | Yes | HTTP adapters, identity adapters, respondent-place runtime rendering, signed Surface admission and authenticated status, respondent flow helpers, runtime config, sample form, composition smoke, idempotency, Problem JSON. |
 | Vendor firewall | `npm run check:vendor-leaks` | Yes | Prevents provider-native vocabulary and disallowed vendor names from leaking through portable surfaces. |
 | Upstream theme sync | `npm run check:upstream-theme` | Yes | Verifies copied upstream theme assets are byte-for-byte synced and sourced from Apache-2.0 manifests. |
-| Signed Surface bundle vendor sync | `npm run check:surface-bundle-vendor` | Local stack | Verifies the signed-bundle profile and integrity dependencies are byte-for-byte synced with sibling builds, Apache-2.0 licensed, and below the source-size ceiling. |
+| Signed Surface bundle vendor sync | `npm run check:surface-bundle-vendor` | Local stack | Verifies the vendored Formspec engine (including its sibling WASM build), React, types, Surface, signed-bundle profile, and integrity dependencies are byte-for-byte synced with sibling builds, Apache-2.0 licensed, and below the source-size ceiling. `npm run vendor:refresh` rewrites the copies from the siblings. |
 | Browser accessibility | `npm run test:e2e` | Yes | Playwright Chromium smoke with axe checks for demo, load-error, OIDC sign-in, mobile tap targets, and signed respondent admission and refusal states. |
 | Production build | `npm run build` | Yes | Vite production bundle and TypeScript build. |
 | Bundle budget | `npm run check:bundle-budget` | Yes | Initial JS <=200 KiB gzip and each lazy JS chunk <=200 KiB gzip after production build. |

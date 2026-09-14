@@ -1,13 +1,15 @@
 /* global console, process */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const siblingFormspec = resolve(root, process.env.FORMSPEC_SOURCE_DIR ?? '../formspec');
+// `--write` copies each upstream asset over its local copy before verifying.
+const write = process.argv.includes('--write');
 
 const packageChecks = [
   { manifest: 'packages/formspec-layout/package.json', license: 'packages/formspec-layout/LICENSE' },
@@ -60,6 +62,7 @@ const mismatches = [];
 for (const check of assetChecks) {
   const source = resolve(siblingFormspec, check.source);
   const local = resolve(root, check.local);
+  if (write) copyFileSync(source, local);
   const sourceHash = sha256(source);
   const localHash = sha256(local);
   if (sourceHash !== localHash) {

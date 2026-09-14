@@ -46,6 +46,7 @@
     "check:vendor-leaks": "scripts/check-vendor-leaks.sh",
     "check:upstream-theme": "node scripts/check-upstream-theme-assets.mjs",
     "check:surface-bundle-vendor": "node scripts/check-surface-bundle-vendor.mjs",
+    "vendor:refresh": "node scripts/check-upstream-theme-assets.mjs --write && node scripts/check-surface-bundle-vendor.mjs --write",
     "ci": "npm run typecheck && npm run lint && npm run check:testing-plan && npm run check:mvp-audit && npm run check:upstream-blockers && npm run check:release-docs && npm run check:conformance-coverage && npm run test:conformance && npm run test:unit && npm run check:vendor-leaks && npm run check:upstream-theme && npm run check:surface-bundle-vendor && npm run test:e2e && npm run build && npm run check:bundle-budget && npm run check:compose-config && npm run test:compose-quickstart && npm run test:deployment && npm run test:multi-deployment"
   },
   "dependencies": {

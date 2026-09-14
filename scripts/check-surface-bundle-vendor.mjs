@@ -3,14 +3,15 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
+  cpSync,
   existsSync,
-  copyFileSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -24,7 +25,35 @@ const integrityRoot = resolve(
 );
 const maxVendoredDistBytes = 100 * 1024;
 
+// `--write` refreshes the vendored copies from fresh sibling builds, then runs
+// the same verification. Positional arguments narrow the run to those
+// `vendor/<package>` directories (`vendor/formspec-schemas` for the schemas).
+const args = process.argv.slice(2);
+const write = args.includes('--write');
+const only = args.filter((arg) => !arg.startsWith('--'));
+
 const packages = [
+  {
+    local: 'vendor/formspec-types',
+    source: resolve(formspecRoot, 'packages/formspec-types'),
+    workspace: formspecRoot,
+    licenseSource: 'package',
+  },
+  {
+    local: 'vendor/formspec-engine',
+    source: resolve(formspecRoot, 'packages/formspec-engine'),
+    workspace: formspecRoot,
+    licenseSource: 'package',
+    // wasm-pack output: compared against the sibling's last WASM build, which
+    // this check cannot rebuild.
+    prebuiltDirs: ['wasm-pkg-runtime', 'wasm-pkg-tools'],
+  },
+  {
+    local: 'vendor/formspec-react',
+    source: resolve(formspecRoot, 'packages/formspec-react'),
+    workspace: formspecRoot,
+    licenseSource: 'package',
+  },
   {
     local: 'vendor/formspec-surface-bundle-signing',
     source: resolve(formspecRoot, 'packages/formspec-surface-bundle-signing'),
@@ -73,16 +102,7 @@ const packages = [
       { source: 'src/token-registry.json', target: 'token-registry.json' },
       { source: 'src/formspec-layout.css', target: 'formspec-layout.css' },
       { source: 'src/formspec-default.css', target: 'formspec-default.css' },
-      { source: 'src/styles/default.accessibility.css', target: 'styles/default.accessibility.css' },
-      { source: 'src/styles/default.base.css', target: 'styles/default.base.css' },
-      { source: 'src/styles/default.data.css', target: 'styles/default.data.css' },
-      { source: 'src/styles/default.inputs.css', target: 'styles/default.inputs.css' },
-      { source: 'src/styles/default.navigation.css', target: 'styles/default.navigation.css' },
-      { source: 'src/styles/default.surfaces.css', target: 'styles/default.surfaces.css' },
-      { source: 'src/styles/default.tokens.css', target: 'styles/default.tokens.css' },
-      { source: 'src/styles/default.utilities.css', target: 'styles/default.utilities.css' },
-      { source: 'src/styles/layout.primitives.css', target: 'styles/layout.primitives.css' },
-      { source: 'src/styles/layout.responsive.css', target: 'styles/layout.responsive.css' },
+      { source: 'src/styles', target: 'styles' },
     ],
   },
   {
@@ -128,6 +148,17 @@ const schemaFiles = [
 if (!existsSync(formspecRoot) || !existsSync(integrityRoot)) {
   throw new Error('Surface bundle upstream sibling checkout is missing.');
 }
+const schemaRoot = join(root, 'vendor/formspec-schemas');
+const unknownPackages = only.filter(
+  (local) => local !== 'vendor/formspec-schemas'
+    && !packages.some((pkg) => pkg.local === local),
+);
+if (unknownPackages.length > 0) {
+  throw new Error(`Not a vendored package: ${unknownPackages.join(', ')}`);
+}
+const selectedPackages = only.length === 0
+  ? packages
+  : packages.filter((pkg) => only.includes(pkg.local));
 
 const integrityWorkspace = readFileSync(
   join(integrityRoot, 'Cargo.toml'),
@@ -137,13 +168,18 @@ if (!/\[workspace\.package\][\s\S]*?license\s*=\s*"Apache-2\.0"/u.test(integrity
   throw new Error('integrity-stack workspace does not declare Apache-2.0.');
 }
 
-const schemaSums = readFileSync(
-  join(root, 'vendor/formspec-schemas/SHA256SUMS'),
-  'utf8',
-);
+const selectSchemas = only.length === 0 || only.includes('vendor/formspec-schemas');
+if (write && selectSchemas) {
+  const sums = schemaFiles.map((file) => {
+    copyPath(join(formspecRoot, 'schemas', file), join(schemaRoot, file));
+    return `${sha256(join(schemaRoot, file))}  ${file}\n`;
+  });
+  writeFileSync(join(schemaRoot, 'SHA256SUMS'), sums.join(''));
+}
+const schemaSums = readFileSync(join(schemaRoot, 'SHA256SUMS'), 'utf8');
 let schemaBytes = 0;
-for (const file of schemaFiles) {
-  const local = join(root, 'vendor/formspec-schemas', file);
+for (const file of selectSchemas ? schemaFiles : []) {
+  const local = join(schemaRoot, file);
   const source = join(formspecRoot, 'schemas', file);
   const localHash = sha256(local);
   if (localHash !== sha256(source)) {
@@ -159,20 +195,12 @@ const buildRoot = mkdtempSync(join(tmpdir(), 'formspec-web-surface-bundle-vendor
 let totalBytes = 0;
 let sourceBudgetBytes = 0;
 try {
-  for (const [index, pkg] of packages.entries()) {
-    const localManifest = readJson(join(root, pkg.local, 'package.json'));
-    if (localManifest.license !== 'Apache-2.0') {
-      throw new Error(`${pkg.local}/package.json must declare Apache-2.0.`);
-    }
+  for (const [index, pkg] of selectedPackages.entries()) {
     if (pkg.licenseSource === 'package') {
       const sourceManifest = readJson(join(pkg.source, 'package.json'));
       if (sourceManifest.license !== 'Apache-2.0') {
         throw new Error(`${pkg.source}/package.json does not declare Apache-2.0.`);
       }
-    }
-    const license = readFileSync(join(root, pkg.local, 'LICENSE'), 'utf8');
-    if (!license.includes('Apache License') || !license.includes('Version 2.0')) {
-      throw new Error(`${pkg.local}/LICENSE is not Apache License Version 2.0 text.`);
     }
 
     const sourceBuild = join(buildRoot, String(index));
@@ -183,19 +211,45 @@ try {
       pkg.copiedFiles ?? [],
     );
     const files = pkg.files ?? relativeFiles(sourceBuild);
-    const observed = relativeFiles(join(root, pkg.local, 'dist'));
-    if (JSON.stringify(observed) !== JSON.stringify([...files].sort())) {
-      throw new Error(`${pkg.local}/dist contains an unexpected built-artifact set.`);
-    }
-    for (const file of files) {
-      const local = join(root, pkg.local, 'dist', file);
-      const source = join(sourceBuild, file);
-      if (sha256(local) !== sha256(source)) {
-        throw new Error(`${pkg.local}/dist/${file} differs from a fresh upstream build.`);
+    const localDist = join(root, pkg.local, 'dist');
+    if (write) {
+      rmSync(localDist, { recursive: true, force: true });
+      for (const file of files) {
+        copyPath(join(sourceBuild, file), join(localDist, file));
       }
-      const bytes = statSync(local).size;
-      totalBytes += bytes;
-      if (pkg.sourceBudget) sourceBudgetBytes += bytes;
+      for (const dir of pkg.prebuiltDirs ?? []) {
+        rmSync(join(root, pkg.local, dir), { recursive: true, force: true });
+        copyPath(join(pkg.source, dir), join(root, pkg.local, dir));
+      }
+      const localLicense = join(root, pkg.local, 'LICENSE');
+      if (!existsSync(localLicense)) {
+        const packageLicense = join(pkg.source, 'LICENSE');
+        copyPath(
+          existsSync(packageLicense) ? packageLicense : join(pkg.workspace, 'LICENSE'),
+          localLicense,
+        );
+      }
+    }
+
+    const localManifest = readJson(join(root, pkg.local, 'package.json'));
+    if (localManifest.license !== 'Apache-2.0') {
+      throw new Error(`${pkg.local}/package.json must declare Apache-2.0.`);
+    }
+    const license = readFileSync(join(root, pkg.local, 'LICENSE'), 'utf8');
+    if (!license.includes('Apache License') || !license.includes('Version 2.0')) {
+      throw new Error(`${pkg.local}/LICENSE is not Apache License Version 2.0 text.`);
+    }
+
+    const bytes = assertSameTree(sourceBuild, localDist, files, `${pkg.local}/dist`);
+    totalBytes += bytes;
+    if (pkg.sourceBudget) sourceBudgetBytes += bytes;
+    for (const dir of pkg.prebuiltDirs ?? []) {
+      assertSameTree(
+        join(pkg.source, dir),
+        join(root, pkg.local, dir),
+        relativeFiles(join(pkg.source, dir)),
+        `${pkg.local}/${dir}`,
+      );
     }
   }
 } finally {
@@ -209,7 +263,7 @@ if (sourceBudgetBytes > maxVendoredDistBytes) {
 }
 
 console.log(
-  `surface bundle vendor check passed: ${packages.length} Apache-2.0 package(s), ${schemaFiles.length} canonical schema(s), ${sourceBudgetBytes} verification bytes, ${schemaBytes} schema bytes, ${totalBytes} total built bytes`,
+  `surface bundle vendor ${write ? 'refresh' : 'check'} passed: ${selectedPackages.length} Apache-2.0 package(s), ${selectSchemas ? schemaFiles.length : 0} canonical schema(s), ${sourceBudgetBytes} verification bytes, ${schemaBytes} schema bytes, ${totalBytes} total built bytes`,
 );
 
 function readJson(path) {
@@ -218,6 +272,28 @@ function readJson(path) {
 
 function sha256(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+function copyPath(source, target) {
+  mkdirSync(dirname(target), { recursive: true });
+  cpSync(source, target, { recursive: true });
+}
+
+/** Asserts `localDir` holds exactly `files`, each byte-equal to `sourceDir`; returns their size. */
+function assertSameTree(sourceDir, localDir, files, label) {
+  const observed = relativeFiles(localDir);
+  if (JSON.stringify(observed) !== JSON.stringify([...files].sort())) {
+    throw new Error(`${label} contains an unexpected built-artifact set.`);
+  }
+  let bytes = 0;
+  for (const file of files) {
+    const local = join(localDir, file);
+    if (sha256(local) !== sha256(join(sourceDir, file))) {
+      throw new Error(`${label}/${file} differs from a fresh upstream build.`);
+    }
+    bytes += statSync(local).size;
+  }
+  return bytes;
 }
 
 function buildUpstreamPackage(workspace, source, outDir, copiedFiles) {
@@ -239,9 +315,7 @@ function buildUpstreamPackage(workspace, source, outDir, copiedFiles) {
     );
   }
   for (const file of copiedFiles) {
-    const target = join(outDir, file.target);
-    mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(join(source, file.source), target);
+    copyPath(join(source, file.source), join(outDir, file.target));
   }
 }
 
