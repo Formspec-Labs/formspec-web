@@ -78,10 +78,16 @@ export class LocaleStore {
         // Direct hit in this document
         if (doc && key in doc.strings) {
             const isActive = code === requestedCode;
+            const generation = doc.stringGeneration?.[key];
+            const anchors = Array.isArray(generation?.anchors)
+                ? generation.anchors.filter((anchor) => typeof anchor === 'string'
+                    && /^need:[a-zA-Z][a-zA-Z0-9_-]*@[1-9][0-9]*$/.test(anchor))
+                : [];
             return {
                 value: doc.strings[key],
                 source: isActive ? 'regional' : (doc.fallback != null ? 'fallback' : 'implicit'),
                 localeCode: code,
+                ...(anchors.length > 0 ? { needAnchors: [...new Set(anchors)] } : {}),
             };
         }
         // Explicit fallback chain

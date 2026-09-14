@@ -1,7 +1,9 @@
 import { surfaceDiagnostic } from './diagnostics.js';
-import { planExperienceUnit } from './experience-unit.js';
+import { planExperienceUnit, } from './experience-unit.js';
 import { planStaticContent, } from './static-content.js';
 import { dataSourceAvailableToWidget, resolveDataSourceDescriptor, } from './data-source-loader.js';
+import { generationNeedAnchors } from './need-trace.js';
+import { planDefinitionFormInitialData, } from './definition-form-initial-data.js';
 const KNOWN_SLOT_TYPES = {
     'definition-form': true,
     'experience-unit': true,
@@ -21,7 +23,11 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
         routeId: context.handle.routeId,
         slotId: slot.id,
     };
-    const shared = { slotId: slot.id, headingBaseLevel };
+    const shared = {
+        slotId: slot.id,
+        needAnchors: generationNeedAnchors(slot),
+        headingBaseLevel,
+    };
     if (typeof slot.title === 'string')
         shared.title = slot.title;
     if (typeof slot.position === 'string')
@@ -52,8 +58,27 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
             };
             if (typeof binding.presentation === 'string')
                 plan.presentation = binding.presentation;
-            if (definition !== undefined)
+            if (definition !== undefined) {
                 plan.definition = definition;
+                if (binding.initialData !== undefined) {
+                    const initialData = planDefinitionFormInitialData({
+                        binding: binding.initialData,
+                        definition,
+                        definitionRef,
+                        catalogs: context.dataSources ?? [],
+                        mappings: context.mappings ?? [],
+                        context: {
+                            surfaceRef: context.surfaceRef,
+                            routeId: context.handle.routeId,
+                            slotId: slot.id,
+                        },
+                    });
+                    plan.initialData = initialData;
+                    if (initialData.status !== 'ready') {
+                        diagnostics.push(surfaceDiagnostic('DEFINITION-FORM-DATA-UNAVAILABLE', `The form in slot "${slot.id}" cannot resolve its initial data: ${initialData.reason}`, site, { reason: initialData.status }));
+                    }
+                }
+            }
             return plan;
         }
         case 'experience-unit': {
@@ -62,6 +87,7 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
                 unitRef,
                 experienceRef: typeof binding.experienceRef === 'string' ? binding.experienceRef : undefined,
                 experiences: context.experiences,
+                experienceHandles: context.experienceHandles,
             });
             if (unitRef === '') {
                 diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'An experience-unit slot names no unit, so there is nothing to resolve.', site));
@@ -160,11 +186,14 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
             }
             const actionOutputs = declaredOutputs.map((declared) => {
                 const authored = ownRecord(actionBindings, declared.name);
+                const actionRef = authored ? ownString(authored, 'actionRef') : undefined;
+                const action = actionRef === undefined
+                    ? undefined
+                    : resolveWidgetAction(context.responseActions ?? [], actionRef);
                 return {
                     name: declared.name,
-                    ...(authored && ownString(authored, 'actionRef') !== undefined
-                        ? { actionRef: ownString(authored, 'actionRef') }
-                        : {}),
+                    ...(actionRef !== undefined ? { actionRef } : {}),
+                    ...(action !== undefined ? { action } : {}),
                 };
             });
             const plan = {
@@ -191,7 +220,13 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
                 site,
             });
             diagnostics.push(...result.diagnostics);
-            return { ...shared, slotType: 'static-content', content: result.plan };
+            const contentNeedAnchors = generationNeedAnchors(binding);
+            return {
+                ...shared,
+                slotType: 'static-content',
+                content: result.plan,
+                ...(contentNeedAnchors.length > 0 ? { contentNeedAnchors } : {}),
+            };
         }
         case 'embed-route': {
             const routeRef = typeof binding.routeRef === 'string' ? binding.routeRef : '';
@@ -234,6 +269,39 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
 }
 function exhaustive(value) {
     throw new Error(`Unhandled slot type: ${String(value)}`);
+}
+function resolveWidgetAction(documents, actionRef) {
+    const matches = documents.flatMap((document) => (document.actions ?? [])
+        .filter((action) => action.id === actionRef)
+        .map((action) => ({ document, action })));
+    if (matches.length !== 1)
+        return undefined;
+    const match = matches[0];
+    if (!match
+        || match.document.scope !== 'app'
+        || match.document.targetDefinition !== undefined) {
+        return undefined;
+    }
+    const { action } = match;
+    if (!action || typeof action.intent !== 'string')
+        return undefined;
+    const labelRecord = typeof action.label === 'object' && action.label !== null && !Array.isArray(action.label)
+        ? action.label
+        : undefined;
+    const literal = labelRecord ? ownString(labelRecord, 'literal') : undefined;
+    const ref = labelRecord ? ownString(labelRecord, 'ref') : undefined;
+    const label = literal !== undefined && ref === undefined
+        ? { literal }
+        : ref !== undefined && literal === undefined
+            ? { ref }
+            : undefined;
+    const needAnchors = generationNeedAnchors(action);
+    return {
+        actionRef,
+        intent: action.intent,
+        ...(label !== undefined ? { label } : {}),
+        ...(needAnchors.length > 0 ? { needAnchors } : {}),
+    };
 }
 function ownRecord(value, key) {
     if (!value || !Object.prototype.hasOwnProperty.call(value, key))

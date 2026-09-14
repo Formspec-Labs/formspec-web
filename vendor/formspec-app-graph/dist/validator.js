@@ -6,6 +6,8 @@ import { validateComponentGraphContexts } from './component-graph-context.js';
 import { validateAppEntry } from './app-entry.js';
 import { validateDataSources } from './data-sources.js';
 import { validateExperienceActionRefs } from './experience-action-refs.js';
+import { validateExperienceReferentialIntegrity } from './experience-referential-integrity.js';
+import { validateExecutableSchemaContracts } from './executable-schema-contracts.js';
 import { validateLocaleAssociations } from './locale-associations.js';
 import { validateNeedsCoverage } from './needs-coverage.js';
 import { validateScreenerSurfaceTargets } from './screener-surface-targets.js';
@@ -13,8 +15,10 @@ import { validateSurfaceDefinitionSlots } from './surface-definition-slots.js';
 import { validateSurfaceExperienceUnits } from './surface-experience-units.js';
 import { validateSurfaceResponseActionTriggers } from './surface-response-action-triggers.js';
 import { validateSurfaceWidgetActions } from './surface-widget-actions.js';
+import { validateStructuredPanelContracts } from './structured-panel-contracts.js';
 import { validateThemeTokenRegistry } from './theme-token-registry.js';
 import { validateUiGraphPolicy } from './ui-graph-policy.js';
+import { validateUxTitleDuplicates } from './ux-title-duplicates.js';
 const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
 const COMPONENT_GRAPH_CONTEXT_SCHEMA_ID = 'https://formspec.org/schemas/componentGraphProjectionContext/0.1';
 const NEEDS_SCHEMA_ID = 'https://formspec.org/schemas/needs/1.0';
@@ -245,6 +249,8 @@ function runCrossArtifactValidators(validators, request, handles, schemaResults,
         validateComponentGraphContexts,
         validateDataSources,
         validateExperienceActionRefs,
+        validateExperienceReferentialIntegrity,
+        validateExecutableSchemaContracts,
         validateLocaleAssociations,
         validateNeedsCoverage,
         validateScreenerSurfaceTargets,
@@ -252,8 +258,10 @@ function runCrossArtifactValidators(validators, request, handles, schemaResults,
         validateSurfaceExperienceUnits,
         validateSurfaceResponseActionTriggers,
         validateSurfaceWidgetActions,
+        validateStructuredPanelContracts,
         validateThemeTokenRegistry,
         validateUiGraphPolicy,
+        validateUxTitleDuplicates,
         ...(validators ?? []),
     ];
     return allValidators.flatMap((validator) => validator({
@@ -285,6 +293,8 @@ function importedDiagnostics(request, handles) {
         ...(request.artifactResolution?.diagnostics ?? []),
         ...(request.moduleResolution?.diagnostics ?? []).map(moduleResolutionDiagnostic),
         ...(request.surfaceLocal?.diagnostics ?? []),
+        ...(request.authorizationBoundary?.diagnostics ?? []),
+        ...(request.unsupported?.diagnostics ?? []),
         ...handles.flatMap((handle) => handle.diagnostics ?? []),
     ];
 }
@@ -303,6 +313,8 @@ function phaseStatuses(request, schemaStatus, crossArtifactStatus) {
     statuses.set('surface-local', phaseStatus('surface-local', request.surfaceLocal ? 'completed' : 'not-run'));
     statuses.set('schema', schemaStatus);
     statuses.set('cross-artifact', crossArtifactStatus);
+    statuses.set('authorization-boundary', phaseStatus('authorization-boundary', request.authorizationBoundary ? 'completed' : 'not-run'));
+    statuses.set('unsupported', phaseStatus('unsupported', request.unsupported ? 'completed' : 'not-run'));
     return [...statuses.values()];
 }
 function schemaPhaseStatus(results) {

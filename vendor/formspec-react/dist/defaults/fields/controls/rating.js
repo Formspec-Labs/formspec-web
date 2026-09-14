@@ -11,7 +11,7 @@ function resolveRatingIcons(icon) {
         return RATING_ICON_MAP.star;
     return RATING_ICON_MAP[icon] || [icon, icon];
 }
-export function RatingControl({ field, node, isReadonly, supplementaryDescribedBy, }) {
+export function RatingControl({ field, node, isReadonly, describedBy, }) {
     const showError = !!(field.error && field.touched);
     const maxFromProps = node.props?.max ?? node.props?.maxRating;
     const maxRating = typeof maxFromProps === 'number' && maxFromProps > 0 ? maxFromProps : 5;
@@ -66,7 +66,7 @@ export function RatingControl({ field, node, isReadonly, supplementaryDescribedB
         }
         setRating(value);
     };
-    return (_jsx("div", { className: "formspec-rating-stars", role: "slider", tabIndex: isReadonly ? -1 : 0, "aria-valuemin": 0, "aria-valuemax": maxRating, "aria-valuenow": currentValue, "aria-valuetext": `${currentValue} of ${maxRating}`, "aria-label": field.label, "aria-invalid": showError, ...(supplementaryDescribedBy ? { 'aria-describedby': supplementaryDescribedBy } : {}), onKeyDown: handleKeyDown, children: Array.from({ length: maxRating }, (_, idx) => {
+    return (_jsx("div", { className: "formspec-rating-stars", role: "slider", tabIndex: isReadonly ? -1 : 0, "aria-valuemin": 0, "aria-valuemax": maxRating, "aria-valuenow": currentValue, "aria-valuetext": `${currentValue} of ${maxRating}`, "aria-label": field.label, "aria-invalid": showError, ...(describedBy ? { 'aria-describedby': describedBy } : {}), onKeyDown: handleKeyDown, children: Array.from({ length: maxRating }, (_, idx) => {
             const starValue = idx + 1;
             const halfValue = idx + 0.5;
             const isSelected = starValue <= currentValue;

@@ -20,6 +20,16 @@
  */
 import type { ExperienceDocument } from '@formspec-org/types';
 export type ExperienceUnit = NonNullable<ExperienceDocument['units']>[number];
+/**
+ * One loaded Experience paired with the exact App Manifest URL that named it.
+ *
+ * Source identity stays beside the document. It is not injected into the
+ * Experience payload, whose schema has no document-level `url` or `id`.
+ */
+export interface ExperienceDocumentHandle {
+    experienceRef: string;
+    document: ExperienceDocument;
+}
 export interface ExperienceNeedSummary {
     id: string;
     description?: string;
@@ -42,5 +52,7 @@ export interface ExperienceUnitPlanInput {
     /** `binding.experienceRef` — disambiguates when a bundle carries several. */
     experienceRef?: string | undefined;
     experiences: readonly ExperienceDocument[];
+    /** Exact manifested source identity for qualified `experienceRef` matching. */
+    experienceHandles?: readonly ExperienceDocumentHandle[] | undefined;
 }
 export declare function planExperienceUnit(input: ExperienceUnitPlanInput): ExperienceUnitPlan;

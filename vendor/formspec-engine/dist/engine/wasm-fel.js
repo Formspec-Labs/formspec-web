@@ -1,5 +1,5 @@
 /** @filedesc WASM definition-eval payload, EvalResult shaping, FEL normalization, and WasmFelContext assembly. */
-import { buildGroupSnapshotForPath, buildRepeatCollection, cloneValue, getRepeatAncestors, getScopeAncestors, parentPathOf, setExpressionContextValue, snapshotSignals, tagMoneyByPath, toBasePath, toFelIndexedPath, toWasmContextValue, } from './helpers.js';
+import { appendPath, buildGroupSnapshotForPath, buildRepeatCollection, cloneValue, getRepeatAncestors, getScopeAncestors, parentPathOf, setExpressionContextValue, snapshotSignals, splitIndexedPath, tagFelValueByPath, toBasePath, toFelIndexedPath, toWasmContextValue, } from './helpers.js';
 import { wasmPrepareFelExpression } from '../wasm-bridge-runtime.js';
 /** Options object consumed by the WASM definition evaluator (JSON-serialized internally). */
 export function wasmEvaluateDefinitionPayload(options) {
@@ -63,9 +63,15 @@ export function buildFelRepeatWasmContext(options) {
     if (repeatAncestors.length === 0) {
         return undefined;
     }
+    const cache = options.cache ?? { collections: new Map(), groupSnapshots: new Map() };
     let parent;
     for (const entry of repeatAncestors) {
-        const collection = buildRepeatCollection(entry.groupPath, entry.count, options.fieldSignals);
+        const collectionKey = `${entry.groupPath}#${entry.count}`;
+        let collection = cache.collections.get(collectionKey);
+        if (!collection) {
+            collection = buildRepeatCollection(entry.groupPath, entry.count, options.fieldSignals, options.fieldDataTypes);
+            cache.collections.set(collectionKey, collection);
+        }
         parent = {
             current: collection[entry.index] ?? null,
             index: entry.index + 1,
@@ -76,15 +82,39 @@ export function buildFelRepeatWasmContext(options) {
     }
     const outerParentPath = parentPathOf(repeatAncestors[repeatAncestors.length - 1].groupPath);
     if (parent && outerParentPath) {
+        let outer = cache.groupSnapshots.get(outerParentPath);
+        if (!outer) {
+            outer = buildGroupSnapshotForPath(outerParentPath, options.fieldSignals, options.fieldDataTypes);
+            cache.groupSnapshots.set(outerParentPath, outer);
+        }
         parent.parent = {
-            current: buildGroupSnapshotForPath(outerParentPath, options.fieldSignals),
+            current: outer,
             index: 1,
             count: 1,
-            collection: [buildGroupSnapshotForPath(outerParentPath, options.fieldSignals)],
+            collection: [outer],
             parent: parent.parent,
         };
     }
     return parent;
+}
+/**
+ * Lexical scopes enclosing `currentItemPath`, outermost first (Core §3.2.1). A group or repeat-row path
+ * (`jobs[0]`, `jobs[0].address`) is its own innermost scope, so a component `when` on a row sees the row's
+ * fields as `$sibling`; a field path's innermost scope is its parent, matching Rust bind evaluation.
+ */
+export function lexicalScopeChain(currentItemPath, fieldDataTypes) {
+    if (!currentItemPath) {
+        return [];
+    }
+    const isField = Object.prototype.hasOwnProperty.call(fieldDataTypes, toBasePath(currentItemPath));
+    const innermost = isField ? parentPathOf(currentItemPath) : currentItemPath;
+    const chain = [];
+    let current = '';
+    for (const segment of splitIndexedPath(innermost)) {
+        current = current ? appendPath(current, segment) : segment;
+        chain.push(current);
+    }
+    return chain;
 }
 function tagMoneyVariableValue(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -96,7 +126,7 @@ function tagMoneyVariableValue(value) {
     }
     return value;
 }
-export function buildWasmFelExpressionContext(options) {
+export function buildWasmFelContextBase(options) {
     const result = options.resultOverride ?? options.fullResult;
     const rawFields = {
         ...(options.dataOverride ?? options.data),
@@ -106,22 +136,10 @@ export function buildWasmFelExpressionContext(options) {
     const irrelevant = (path) => options.relevantSignals[path]?.value === false;
     const fields = {};
     for (const [path, value] of Object.entries(rawFields)) {
-        setExpressionContextValue(fields, path, toWasmContextValue(tagMoneyByPath(path, resolveFelFieldValueForWasm(path, value, options.bindConfigs, irrelevant), options.bindConfigs, options.fieldDataTypes)));
-    }
-    const scopePath = parentPathOf(options.currentItemPath);
-    if (scopePath) {
-        const prefixA = `${scopePath}.`;
-        const prefixB = `${scopePath}[`;
-        for (const [path, value] of Object.entries(rawFields)) {
-            if (path.startsWith(prefixA)) {
-                setExpressionContextValue(fields, path.slice(prefixA.length), toWasmContextValue(tagMoneyByPath(path, value, options.bindConfigs, options.fieldDataTypes)));
-            }
-            else if (path.startsWith(prefixB)) {
-                setExpressionContextValue(fields, path.slice(scopePath.length + 1), toWasmContextValue(tagMoneyByPath(path, value, options.bindConfigs, options.fieldDataTypes)));
-            }
-        }
+        setExpressionContextValue(fields, path, toWasmContextValue(tagFelValueByPath(path, resolveFelFieldValueForWasm(path, value, options.bindConfigs, irrelevant), options.fieldDataTypes)));
     }
     const mipStates = {};
+    const mipStatesByPath = new Map();
     for (const path of Object.keys(options.fieldSignals)) {
         const state = {
             valid: (options.validationResults[path]?.value ?? []).every((r) => r.severity !== 'error'),
@@ -129,22 +147,47 @@ export function buildWasmFelExpressionContext(options) {
             readonly: options.readonlySignals[path]?.value ?? false,
             required: options.requiredSignals[path]?.value ?? false,
         };
-        if (path.includes('[')) {
-            mipStates[toFelIndexedPath(path)] = { ...state };
-        }
-        else {
-            mipStates[path] = state;
-        }
-        if (scopePath) {
-            const prefixA = `${scopePath}.`;
-            const prefixB = `${scopePath}[`;
-            if (path.startsWith(prefixA)) {
-                mipStates[path.slice(prefixA.length)] = { ...state };
+        mipStates[path.includes('[') ? toFelIndexedPath(path) : path] = state;
+        mipStatesByPath.set(path, state);
+    }
+    return {
+        rawFields,
+        fields,
+        mipStates,
+        mipStatesByPath,
+        repeatCache: { collections: new Map(), groupSnapshots: new Map() },
+        instances: cloneValue(options.instanceData),
+    };
+}
+/**
+ * FEL context for `currentItemPath`: the form-scope base plus each enclosing lexical scope's names, outermost
+ * first so the nearest scope shadows (Core §3.2.1). Pass a shared `base` to avoid rebuilding form-scope state
+ * per call; the scope overlay costs O(fields × scope depth).
+ */
+export function buildWasmFelExpressionContext(options, base = buildWasmFelContextBase(options)) {
+    const scopes = lexicalScopeChain(options.currentItemPath, options.fieldDataTypes);
+    let fields = base.fields;
+    let mipStates = base.mipStates;
+    if (scopes.length > 0) {
+        const scopedFields = {};
+        const scopedMipStates = {};
+        for (const scope of scopes) {
+            const prefix = `${scope}.`;
+            const level = {};
+            for (const [path, value] of Object.entries(base.rawFields)) {
+                if (path.startsWith(prefix)) {
+                    setExpressionContextValue(level, path.slice(prefix.length), toWasmContextValue(tagFelValueByPath(path, value, options.fieldDataTypes)));
+                }
             }
-            else if (path.startsWith(prefixB)) {
-                mipStates[path.slice(scopePath.length + 1)] = { ...state };
+            Object.assign(scopedFields, level);
+            for (const [path, state] of base.mipStatesByPath) {
+                if (path.startsWith(prefix)) {
+                    scopedMipStates[path.slice(prefix.length)] = state;
+                }
             }
         }
+        fields = { ...base.fields, ...scopedFields };
+        mipStates = { ...base.mipStates, ...scopedMipStates };
     }
     return {
         fields,
@@ -154,8 +197,10 @@ export function buildWasmFelExpressionContext(options) {
             currentItemPath: options.currentItemPath,
             repeats: options.repeats,
             fieldSignals: options.fieldSignals,
+            fieldDataTypes: options.fieldDataTypes,
+            cache: base.repeatCache,
         }),
-        instances: cloneValue(options.instanceData),
+        instances: base.instances,
         nowIso: options.nowIso,
         locale: options.locale,
         meta: options.meta,

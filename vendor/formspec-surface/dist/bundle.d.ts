@@ -39,25 +39,46 @@
  * gaps named. {@link bundleIsRenderable} reports structural readiness only;
  * authenticity and deployment admission remain separate host decisions.
  */
-import type { ExperienceDocument, FormDefinition, RegistryDocument, ResponseActionsDocument, SurfaceDocument, ThemeDocument } from '@formspec-org/types';
+import type { ExperienceDocument, FormDefinition, OntologyDocument, ReferencesDocument, RegistryDocument, ResponseActionsDocument, SurfaceDocument, ThemeDocument } from '@formspec-org/types';
 import type { DataSourceCatalogHandle } from './data-source-loader.js';
+import type { MappingDocumentHandle } from './definition-form-initial-data.js';
 import { type SurfaceDiagnostic } from './diagnostics.js';
+import type { ExperienceDocumentHandle } from './experience-unit.js';
 export interface BundleArtifactRef {
     url: string;
     version?: string;
+}
+export interface BundleMappingArtifactRef extends BundleArtifactRef {
+    /** Author-chosen App Manifest handle used by Mapping consumers. */
+    handle: string;
 }
 export interface BundleManifest {
     $formspecBundle?: string;
     version?: string;
     id?: string;
     title?: string;
+    'x-generation'?: {
+        anchors?: readonly string[];
+    };
     definitions?: readonly BundleArtifactRef[];
     experience?: BundleArtifactRef;
     experiences?: readonly BundleArtifactRef[];
     theme?: BundleArtifactRef;
+    /** Legacy single References association. App Manifest 2.4 adds referenceDocuments[]. */
+    references?: BundleArtifactRef;
+    /** Ordered, target-aware References associations. Legacy references loads first when both exist. */
+    referenceDocuments?: readonly BundleArtifactRef[];
+    /** Legacy single Ontology association. App Manifest 2.4 adds ontologies[]. */
+    ontology?: BundleArtifactRef;
+    /** Ordered, target-aware Ontology associations. Legacy ontology loads first when both exist. */
+    ontologies?: readonly BundleArtifactRef[];
     registries?: readonly BundleArtifactRef[];
+    /** Legacy single Response Actions association. App Manifest 2.4 adds responseActionDocuments[]. */
     responseActions?: BundleArtifactRef;
+    /** Ordered Response Actions associations. Legacy responseActions loads first when both exist. */
+    responseActionDocuments?: readonly BundleArtifactRef[];
     dataSources?: readonly BundleArtifactRef[];
+    mappings?: readonly BundleMappingArtifactRef[];
     surfaces?: readonly BundleArtifactRef[];
     entrySurface?: string;
     modules?: readonly {
@@ -88,12 +109,37 @@ export interface ResolvedBundle {
      */
     surfaceRefs?: ReadonlyMap<SurfaceDocument, string> | undefined;
     experiences: readonly ExperienceDocument[];
+    /**
+     * Loaded Experiences paired with their exact App Manifest URLs.
+     *
+     * Optional so callers that construct legacy `ResolvedBundle` values by hand
+     * keep unqualified unit resolution. Qualified bindings fail closed without
+     * these handles.
+     */
+    experienceHandles?: readonly ExperienceDocumentHandle[] | undefined;
     /** The TENANT theme. Which routes may see it is `theme-authority.ts`'s call. */
     tenantTheme: ThemeDocument | undefined;
+    /**
+     * Loaded References documents in manifest order.
+     *
+     * Each document keeps its own targetDefinition; renderers select only the
+     * documents targeting the active Definition.
+     */
+    references?: readonly ReferencesDocument[] | undefined;
+    /**
+     * Loaded Ontology documents in manifest order.
+     *
+     * Order is significant because Ontology/Assist resolution gives a later
+     * binding precedence for the same target path.
+     */
+    ontologies?: readonly OntologyDocument[] | undefined;
     registries: readonly RegistryDocument[];
+    /** Loaded legacy then plural Response Actions documents in manifest order. */
     responseActions: readonly ResponseActionsDocument[];
     /** Exact manifested catalog handles; source ids are never resolved globally. */
     dataSources?: readonly DataSourceCatalogHandle[] | undefined;
+    /** Loaded Mapping documents paired with their exact App Manifest handles. */
+    mappings?: readonly MappingDocumentHandle[] | undefined;
     /** Definitions keyed by the URL a `definition-form` binding names. */
     definitions: ReadonlyMap<string, FormDefinition>;
     diagnostics: readonly SurfaceDiagnostic[];

@@ -3,6 +3,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { optionMatchesComboboxQuery } from '@formspec-org/engine';
 import { useMemo, useRef, useEffect, useState } from 'react';
+import { needTraceAttrs } from '../../../projection-metadata.js';
 function comboboxValuePresent(v) {
     return v != null && v !== '';
 }
@@ -26,6 +27,7 @@ export function ComboboxSelect({ field, node, common, isReadonly }) {
         return [String(v)];
     }, [field.value, multiple]);
     const selectedSingle = multiple ? undefined : field.value;
+    const selectedSingleOption = useMemo(() => field.options.find((option) => option.value === String(selectedSingle ?? '')), [field.options, selectedSingle]);
     const selectedLabel = useMemo(() => {
         if (multiple || selectedSingle == null || selectedSingle === '')
             return '';
@@ -156,8 +158,9 @@ export function ComboboxSelect({ field, node, common, isReadonly }) {
         setHighlightedIndex(0);
     };
     return (_jsxs("div", { className: "formspec-combobox formspec-select-searchable", ...(multiple ? { 'data-multiple': 'true' } : {}), children: [multiple && selectedValues.length > 0 && (_jsx("div", { className: "formspec-combobox-chips", "aria-label": "Selected values", children: selectedValues.map((v) => {
-                    const label = field.options.find((o) => o.value === v)?.label ?? v;
-                    return (_jsxs("span", { className: "formspec-combobox-chip", children: [label, _jsx("button", { type: "button", className: "formspec-combobox-chip-remove", "aria-label": `Remove ${label}`, onMouseDown: (e) => e.preventDefault(), onClick: () => {
+                    const selectedOption = field.options.find((o) => o.value === v);
+                    const label = selectedOption?.label ?? v;
+                    return (_jsxs("span", { className: "formspec-combobox-chip", ...needTraceAttrs(selectedOption?.needAnchors), children: [label, _jsx("button", { type: "button", className: "formspec-combobox-chip-remove", "aria-label": `Remove ${label}`, onMouseDown: (e) => e.preventDefault(), onClick: () => {
                                     if (isReadonly)
                                         return;
                                     field.setValue(selectedValues.filter((x) => x !== v));
@@ -172,7 +175,7 @@ export function ComboboxSelect({ field, node, common, isReadonly }) {
                                 }, onBlur: () => {
                                     commonTouchBlur?.();
                                     blurTimerRef.current = setTimeout(closeList, 120);
-                                }, onChange: onInputChange, onKeyDown: handleKeyDown }), showClear && (_jsx("button", { type: "button", className: "formspec-combobox-clear", "aria-label": "Clear selection", onMouseDown: (e) => e.preventDefault(), onClick: clearAll, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), _jsx("span", { className: "formspec-combobox-chevron", "aria-hidden": "true", children: "\u25BE" })] }), _jsx("ul", { role: "listbox", id: listboxId, className: "formspec-combobox-list", hidden: !open, "aria-multiselectable": multiple || undefined, children: filtered.map((opt, index) => {
+                                }, onChange: onInputChange, onKeyDown: handleKeyDown, ...needTraceAttrs(selectedSingleOption?.needAnchors) }), showClear && (_jsx("button", { type: "button", className: "formspec-combobox-clear", "aria-label": "Clear selection", onMouseDown: (e) => e.preventDefault(), onClick: clearAll, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), _jsx("span", { className: "formspec-combobox-chevron", "aria-hidden": "true", children: "\u25BE" })] }), _jsx("ul", { role: "listbox", id: listboxId, className: "formspec-combobox-list", hidden: !open, "aria-multiselectable": multiple || undefined, children: filtered.map((opt, index) => {
                             const optId = `${common.id ?? 'formspec'}-option-${index}`;
                             const isHighlighted = index === highlightedIndex;
                             const isChosen = multiple
@@ -186,7 +189,7 @@ export function ComboboxSelect({ field, node, common, isReadonly }) {
                                     isHighlighted ? 'formspec-option--highlighted' : '',
                                 ]
                                     .filter(Boolean)
-                                    .join(' ') || undefined, onMouseDown: isReadonly
+                                    .join(' ') || undefined, ...needTraceAttrs(opt.needAnchors), onMouseDown: isReadonly
                                     ? undefined
                                     : (e) => {
                                         e.preventDefault();

@@ -1,0 +1,710 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formspec.org/schemas/response/1.0",
+  "title": "Formspec Response",
+  "description": "A Formspec Response document — a completed or in-progress Instance pinned to a specific Definition version (§2.1.6). A Response is the canonical record of captured form data: the filled-in form. It references exactly one Definition by the immutable tuple (definitionUrl, definitionVersion). A conformant processor MUST reject a Response whose definitionVersion does not match any known Definition at the given definitionUrl. Responses are always validated against their pinned Definition version, even if a newer version exists (Response Pinning Rule VP-01). The tuple (definitionUrl, definitionVersion) identifies the Definition pin this Response is bound to (Response Pinning Rule VP-01); the Response record itself is identified by its 'id' when present, and byte identity of any signed-payload commitment is carried by the relevant signedPayload.digest, not by the Definition pin. A Response MAY also carry authored signature evidence records that bind one or more signer/document acts to the canonical response envelope.",
+  "type": "object",
+  "required": [
+    "$formspecResponse",
+    "definitionUrl",
+    "definitionVersion",
+    "status",
+    "data",
+    "authored"
+  ],
+  "additionalProperties": false,
+  "dependentRequired": {
+    "authoredSignatures": ["id"]
+  },
+  "$defs": {
+    "ResponseStatus": {
+      "type": "string",
+      "enum": ["in-progress", "completed", "amended", "stopped"],
+      "description": "The current lifecycle status of a Response. A completed Response has no error-severity validation results; saving data remains allowed in every status.",
+      "examples": ["in-progress", "completed", "amended", "stopped"]
+    },
+    "ResponseMetadataPathKey": {
+      "type": "string",
+      "description": "Definition item path used as a Response metadata map key. Supports dot notation, repeat wildcards, or JSON Pointer form whose first segment is a Definition item key and whose remaining segments are Definition item keys, numeric indices, or repeat wildcards; empty strings and free-form labels are not valid item paths.",
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*(?:\\[\\*\\])?(?:\\.[A-Za-z][A-Za-z0-9_]*(?:\\[\\*\\])?)*$"
+        },
+        {
+          "pattern": "^/[A-Za-z][A-Za-z0-9_]*(?:/(?:[A-Za-z][A-Za-z0-9_]*|[0-9]+|\\*))*$"
+        }
+      ]
+    },
+    "ResponseMetadata": {
+      "type": "object",
+      "description": "Optional response metadata envelope keyed by Definition item path. The envelope records per-field provenance, derivation traces for calculated values, and respondent-visible disclosures shown during capture. Metadata is part of the Response document; processors that preserve it MUST keep entries path-keyed to the field or display item they explain.",
+      "additionalProperties": false,
+      "properties": {
+        "provenance": {
+          "type": "object",
+          "description": "Per-field value provenance keyed by item path.",
+          "propertyNames": {
+            "$ref": "#/$defs/ResponseMetadataPathKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/ResponseProvenanceEntry"
+          }
+        },
+        "derivations": {
+          "type": "object",
+          "description": "Per-field derivation traces keyed by item path. Entries usually correspond to calculated fields and preserve the FEL expression and trace used to produce the value.",
+          "propertyNames": {
+            "$ref": "#/$defs/ResponseMetadataPathKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/ResponseDerivationEntry"
+          }
+        },
+        "disclosuresShown": {
+          "type": "object",
+          "description": "Per-field disclosure evidence keyed by item path. Use this when a purpose, consequence, consent, or citation disclosure was shown to the respondent.",
+          "propertyNames": {
+            "$ref": "#/$defs/ResponseMetadataPathKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/ResponseDisclosureShownEntry"
+          }
+        }
+      }
+    },
+    "ResponseProvenanceEntry": {
+      "type": "object",
+      "description": "Provenance for one response value. `class` uses the shared value-class vocabulary; `sourceRef` identifies the source or adapter, including `assistant-suggested` for BYO-assistant suggestions confirmed by the respondent.",
+      "required": ["class", "sourceRef", "capturedAt", "attestedBy"],
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "$ref": "https://formspec.org/schemas/common/1.0#/$defs/ValueClass"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Source, adapter, or transport reference for this value. BYO-assistant suggestions SHOULD use `assistant-suggested` or a transport-qualified value such as `assistant-suggested:webmcp`."
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 timestamp when this provenance was captured."
+        },
+        "attestedBy": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Actor class or actor reference that confirmed the value, such as `respondent`, `filer`, `delegate`, `ai-agent`, or an implementation-specific URN."
+        }
+      }
+    },
+    "ResponseDerivationEntry": {
+      "type": "object",
+      "description": "Receipt-bindable derivation record for a calculated or otherwise derived value.",
+      "required": ["expression", "trace"],
+      "additionalProperties": false,
+      "properties": {
+        "expression": {
+          "type": "string",
+          "minLength": 1,
+          "description": "FEL expression used to derive the value."
+        },
+        "dependsOn": {
+          "type": "array",
+          "description": "Input paths read by the expression when known.",
+          "items": {
+            "$ref": "#/$defs/ResponseMetadataPathKey"
+          },
+          "uniqueItems": true
+        },
+        "value": {
+          "description": "JSON-projected derived value."
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 timestamp when this derivation was captured."
+        },
+        "trace": {
+          "type": "array",
+          "description": "Ordered FEL trace steps as returned by the engine trace API. The schema keeps step payloads open because the Rust FEL trace enum owns the discriminated variants.",
+          "items": {
+            "type": "object",
+            "required": ["kind"],
+            "additionalProperties": true,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "ResponseDisclosureShownEntry": {
+      "type": "object",
+      "description": "Evidence that a respondent-visible disclosure was shown for a field, purpose, consequence, or consent moment.",
+      "required": ["disclosureRef", "shownAt"],
+      "additionalProperties": false,
+      "properties": {
+        "disclosureRef": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reference to the disclosure text, citation, consent clause, purpose entry, or consequence entry shown to the respondent."
+        },
+        "shownAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 timestamp when the disclosure was shown."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Version of the disclosure text when versioned."
+        },
+        "channel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Renderer or channel that showed the disclosure, such as `web`, `paper`, `voice`, or an implementation-specific value."
+        }
+      }
+    },
+    "AuthoredSignatureIdentityBinding": {
+      "type": "object",
+      "description": "Provider-neutral identity-binding evidence attached to an authored signature. This records how the signer identity was bound to the signing act without baking one provider or ceremony vendor into the Response contract.",
+      "required": ["method", "assuranceLevel"],
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string",
+          "pattern": "^(none|email-otp|sms-otp|knowledge-based|oidc|webauthn|credential|in-person|notary|x-[a-z0-9][a-z0-9-]*)$",
+          "description": "Authentication method used to bind the signer identity to the authored signing act.",
+          "examples": ["email-otp", "credential", "notary"]
+        },
+        "assuranceLevel": {
+          "type": "string",
+          "enum": ["none", "low", "standard", "high", "very-high"],
+          "description": "Assurance strength reached by the identity-binding evidence.",
+          "examples": ["standard", "high"]
+        },
+        "providerRef": {
+          "type": "string",
+          "format": "uri",
+          "description": "URI reference to the identity or signature provider used for this identity binding, when one exists.",
+          "examples": ["urn:agency.gov:identity:providers:email-otp"]
+        },
+        "externalAttestationRef": {
+          "type": "string",
+          "format": "uri",
+          "description": "URI reference to an external identity attestation that supports this signature evidence, when one exists.",
+          "examples": ["urn:agency.gov:identity:attestations:notary:case-2026-0042"]
+        }
+      }
+    },
+    "AuthoredSignatureSignedPayload": {
+      "type": "object",
+      "description": "Digest commitment for the Formspec Signed Response Payload. This Formspec profile shape omits authoredSignatures, applies the formspec.response.signed-payload.v1 domain tag, and consumes the shared integrity-canonical-json-v1 canonical-byte primitive. The digest remains stable when later co-signatures are appended.",
+      "required": [
+        "canonicalization",
+        "digestAlgorithm",
+        "digest",
+        "responseId",
+        "definitionUrl",
+        "definitionVersion",
+        "signedAt",
+        "signingIntent"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "canonicalization": {
+          "type": "string",
+          "const": "formspec-response-signing-v1",
+          "description": "Formspec response-signing profile used to produce the signed-payload bytes. Keep this wire-visible profile name distinct from the shared integrity-canonical-json-v1 substrate primitive it consumes.",
+          "examples": ["formspec-response-signing-v1"]
+        },
+        "digestAlgorithm": {
+          "type": "string",
+          "const": "sha-256",
+          "description": "Digest algorithm used to hash the canonical signed payload. Initial signed-payload commitments use sha-256 only.",
+          "examples": ["sha-256"]
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64,128}$",
+          "description": "Digest of the Formspec Signed Response Payload: the canonical Response envelope with authoredSignatures omitted.",
+          "examples": ["0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
+        },
+        "responseId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identifier of the Response whose signed payload was hashed. It MUST equal the top-level Response id.",
+          "examples": ["resp-2026-0001"]
+        },
+        "signedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 timestamp when the signer completed the authored signing act. Part of the signed payload — a verifier MUST reject if this differs from the source-of-truth.",
+          "x-lm": { "critical": true, "intent": "Signing timestamp included in the signed payload so attackers cannot alter it without invalidating the signature." },
+          "examples": ["2026-04-22T12:00:00Z"]
+        },
+        "signingIntent": {
+          "type": "string",
+          "format": "uri",
+          "description": "URI identifying the signing intent or certification profile the signer accepted. Part of the signed payload.",
+          "x-lm": { "critical": true, "intent": "Signing intent included in signed payload so it is part of what the signer assented to." },
+          "examples": ["urn:agency.gov:signing-intent:benefits-application-certification:v1"]
+        },
+        "definitionUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Definition URL pin included in the signed payload. It MUST equal the top-level Response definitionUrl.",
+          "examples": ["https://example.org/forms/signature-attestation"]
+        },
+        "definitionVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Definition version pin included in the signed payload. It MUST equal the top-level Response definitionVersion.",
+          "examples": ["1.0.0"]
+        }
+      }
+    },
+    "AuthoredSignature": {
+      "type": "object",
+      "description": "Canonical authored-signature evidence attached to a Response. Each record binds one signer/document act to the Formspec Signed Response Payload through signedPayload.digest. The signature value may be a drawn-image reference, a typed-signature token, a detached cryptographic signature blob, or a provider-managed ceremony reference, but a signature value alone is not sufficient signing intent.",
+      "required": [
+        "signatureId",
+        "documentId",
+        "signingIntent",
+        "signatureValue",
+        "signerName",
+        "consentAccepted",
+        "consentTextRef",
+        "consentVersion",
+        "affirmationText",
+        "signedPayload",
+        "documentHash",
+        "documentHashAlgorithm",
+        "signatureProvider",
+        "ceremonyId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "signatureId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable identifier for this authored signature record within the Response.",
+          "examples": ["sig-2026-0001"]
+        },
+        "documentId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+          "description": "Identifier of the document or signing surface this authored signature affirms.",
+          "examples": ["benefitsApplication", "grantCertification"]
+        },
+        "signingIntent": {
+          "type": "string",
+          "format": "uri",
+          "description": "URI identifying the signing intent or certification profile the signer accepted. MUST equal signedPayload.signingIntent. Both are required — the top-level field enables quick lookup without payload inspection; the signed-payload copy is part of what the signer assented to.",
+          "examples": ["urn:agency.gov:signing-intent:benefits-application-certification:v1"]
+        },
+        "signatureValue": {
+          "type": "string",
+          "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+          "description": "Base64-encoded COSE_Sign1 byte string (RFC 9052). Detached payload; canonical signed bytes live in signedPayload.digest. The signing method is read from the COSE protected-header `method_uri` label (COSE label -65540, per ADR 0109): the URI selects the cryptographic adapter and algorithm from the Formspec signature-method registry. The former JSON method selector is deleted — only the signed COSE-internal selector counts.",
+          "x-lm": { "critical": true, "intent": "COSE_Sign1 signature bytes verified by the adapter routed via the signed protected-header method_uri." },
+          "examples": ["0oRWoQExiQEFQnNpZ25lZA=="]
+        },
+        "signerId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable signer identifier when the signing ceremony supplies one.",
+          "examples": ["applicant"]
+        },
+        "signerName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable signer name shown during the signing ceremony.",
+          "examples": ["Ada Lovelace"]
+        },
+        "signerEvidence": {
+          "type": "object",
+          "description": "UX evidence record — drawn artifacts, typed tokens, provider-managed ceremony references. NOT cryptographic verification input.",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["drawn", "typed", "provider-receipt"],
+              "description": "The kind of UX evidence this is.",
+              "x-lm": { "critical": true, "intent": "Drawn = signature canvas; typed = typed name/token; provider-receipt = third-party ceremony reference." },
+              "examples": ["drawn", "provider-receipt"]
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Opaque evidence value — data URL for drawn, token for typed, reference for provider-receipt.",
+              "examples": ["data:image/png;base64,iVBORw0KGgo...", "urn:provider:ceremony-2026-0001"]
+            }
+          }
+        },
+        "verificationReceipt": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+              "description": "Legacy base64-encoded COSE_Sign1 VerificationReceipt bytes. New production detached receipt signing SHOULD use the structured object form so consumers can authenticate the detached receiptBytes against the receipt body.",
+              "examples": ["0oRWoQExiQEFQnNpZ25lZA=="]
+            },
+            {
+              "$ref": "https://formspec.org/schemas/verification-receipt/1.0"
+            }
+          ],
+          "description": "Optional verification receipt evidence. Legacy responses may carry base64 COSE bytes with an embedded payload. Production detached receipt signing carries a structured VerificationReceipt object with base64 COSE receiptBytes.",
+          "examples": [
+            "0oRWoQExiQEFQnNpZ25lZA==",
+            {
+              "result": "verified",
+              "method": "urn:formspec:sig-method:ed25519-cose-sign1@1",
+              "methodRegistryVersion": "1.0.0",
+              "adapter": { "id": "urn:formspec:adapter:ring@1", "version": "1.0.0" },
+              "key": { "ref": "receipt-kid" },
+              "verifiedAt": "2026-05-17T00:00:00Z",
+              "receiptBytes": "0oRWoQExiQEFQnNpZ25lZA=="
+            }
+          ],
+          "x-lm": { "critical": true, "intent": "Detached COSE receiptBytes are only replay-verifiable when the structured receipt body is also available." }
+        },
+        "consentAccepted": {
+          "type": "boolean",
+          "description": "Whether the signer explicitly accepted the declared consent text as part of the signing act.",
+          "examples": [true]
+        },
+        "consentTextRef": {
+          "type": "string",
+          "format": "uri",
+          "description": "URI reference to the consent text the signer accepted. This keeps signing intent bound to declared text rather than to the signature image alone.",
+          "examples": ["urn:agency.gov:consent:esign-benefits:v1"]
+        },
+        "consentVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Version of the consent text accepted by the signer.",
+          "examples": ["1.0.0"]
+        },
+        "affirmationText": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Affirmation text shown to and accepted by the signer at authoring time.",
+          "examples": ["I certify under penalty of perjury that this submission is true and complete."]
+        },
+        "signedPayload": {
+          "$ref": "#/$defs/AuthoredSignatureSignedPayload"
+        },
+        "documentHash": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64,128}$",
+          "description": "Digest of the document bytes, rendered view, certification page, or signing surface shown to the signer. This is not the normative response-byte assent binding; signedPayload.digest carries that commitment.",
+          "examples": ["0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
+        },
+        "documentHashAlgorithm": {
+          "type": "string",
+          "pattern": "^(sha-256|sha-384|sha-512|x-[a-z0-9][a-z0-9-]*)$",
+          "description": "Digest algorithm used to compute documentHash.",
+          "examples": ["sha-256"]
+        },
+        "identityProofRef": {
+          "type": "string",
+          "format": "uri",
+          "description": "URI reference to the identity-proofing artifact or proof bundle associated with this signing act, when one exists.",
+          "examples": ["urn:agency.gov:identity-proof:case-2026-0042"]
+        },
+        "identityBinding": {
+          "$ref": "#/$defs/AuthoredSignatureIdentityBinding"
+        },
+        "signatureProvider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Provider or adapter that supplied the signing ceremony evidence.",
+          "examples": ["urn:agency.gov:signature:providers:formspec"]
+        },
+        "ceremonyId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identifier for the signing ceremony or provider session that produced this authored signature evidence.",
+          "examples": ["ceremony-2026-0001"]
+        }
+      }
+    }
+  },
+  "properties": {
+    "$formspecResponse": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Response specification version. MUST be '1.0'.",
+      "examples": ["1.0"],
+      "x-lm": {
+        "critical": true,
+        "intent": "Version pin for response document compatibility."
+      }
+    },
+    "definitionUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "The canonical URL of the Definition this Response was created against. This is the stable logical-form identifier shared across all versions of the same form. Combined with definitionVersion to form the immutable identity reference. MUST match the 'url' property of a known Definition.",
+      "examples": [
+        "https://example.org/forms/intake",
+        "https://grants.example.gov/forms/sf-425",
+        "https://example.gov/forms/annual-report"
+      ],
+      "x-lm": {
+        "critical": true,
+        "intent": "Canonical identifier of the form definition used to produce this response. Stable across definition versions."
+      }
+    },
+    "definitionVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The exact version of the Definition against which this Response was created. Interpretation of the version string is governed by the Definition's versionAlgorithm (default: semver). A Response is always validated against this specific version, never against a newer version — even if one exists (Pinning Rule VP-01). Once set, this value MUST NOT change for the lifetime of the Response.",
+      "examples": [
+        "2.1.0",
+        "1.0.0-rc.1",
+        "2025.06.01",
+        "42"
+      ],
+      "x-lm": {
+        "critical": true,
+        "intent": "Exact pinned definition version for validation and replay. Immutable after creation."
+      }
+    },
+    "status": {
+      "$ref": "#/$defs/ResponseStatus",
+      "description": "The current lifecycle status of this Response. 'in-progress': actively being edited, MAY contain validation errors. 'completed': all error-severity validation results resolved, form submitted — a Response with one or more error-severity results MUST NOT be marked completed. 'amended': previously completed, reopened for modification. 'stopped': abandoned before completion, data preserved for audit. Saving data MUST never be blocked by validation status (VE-05) — only the transition to 'completed' requires zero error-level results.",
+      "examples": ["in-progress", "completed", "amended", "stopped"],
+      "x-lm": {
+        "critical": true,
+        "intent": "Lifecycle state controlling completion semantics and submission eligibility."
+      }
+    },
+    "data": {
+      "type": "object",
+      "description": "The primary Instance — the form data. Structure mirrors the Definition's item tree: field Items produce scalar properties, non-repeatable group Items produce nested objects, repeatable group Items produce arrays of objects, display Items have no representation. Non-relevant fields are handled per the Definition's nonRelevantBehavior setting: 'remove' (default) omits them entirely, 'empty' retains the key with null value, 'keep' retains the last value. Calculated fields (those with a 'calculate' Bind) are included with their computed values.",
+      "additionalProperties": true,
+      "examples": [
+        {
+          "firstName": "Ada",
+          "lastName": "Lovelace"
+        },
+        {
+          "has_subcontracts": true,
+          "subcontracting": [
+            {
+              "subcontractor_name": "Acme Analytics, LLC",
+              "subcontractor_ein": "84-1234567",
+              "subcontract_amount": 45000.00,
+              "work_description": "Statistical modeling and data analysis."
+            }
+          ],
+          "subcontract_total": 45000.00
+        },
+        {
+          "has_subcontracts": false
+        }
+      ],
+      "x-lm": {
+        "critical": true,
+        "intent": "Primary response payload captured from the form instance. Shape determined by the Definition's item tree."
+      }
+    },
+    "metadata": {
+      "$ref": "#/$defs/ResponseMetadata",
+      "description": "Optional response metadata envelope for per-field provenance, derivation traces, and disclosures shown."
+    },
+    "authored": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the Response was last modified (ISO 8601 date-time with timezone). Updated on every save, not just on status transitions. Used for conflict detection, audit trails, and ordering Responses chronologically.",
+      "examples": [
+        "2025-07-10T14:30:00Z",
+        "2025-12-01T09:15:30-05:00"
+      ],
+      "x-lm": {
+        "critical": true,
+        "intent": "Last-modified timestamp for conflict detection and audit."
+      }
+    },
+    "displayedIssuer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "version"],
+      "description": "Submit-time pin of the resolved Issuer (post-cascade). Inside the signed-payload preimage by the existing authoredSignatures-only omission rule (specs/core/spec.md §Signed Response Payload). Per-event Issuer pinning is a v1 non-goal.",
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "examples": [
+        {
+          "url": "https://example.gov/issuer.json",
+          "version": "1.0.0"
+        }
+      ],
+      "x-lm": {
+        "critical": true,
+        "intent": "Audit pin of the Issuer that actually rendered. Inside signed-payload digest by JCS canonicalization (no profile change)."
+      }
+    },
+    "id": {
+      "type": "string",
+      "description": "A globally unique identifier for this Response (e.g., UUID v4). While optional in the schema, implementations SHOULD generate an id for every Response to support cross-system correlation, audit trails, amendment chains, and deduplication. When authoredSignatures are present, id becomes REQUIRED so each authored signature can bind through signedPayload.responseId.",
+      "examples": [
+        "550e8400-e29b-41d4-a716-446655440000",
+        "resp-2025-00042"
+      ]
+    },
+    "author": {
+      "type": "object",
+      "description": "Identifier and display name of the person or system that authored the Response. For human authors, 'id' is typically a user account identifier; for automated systems, 'id' identifies the service or integration.",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the author within the host system.",
+          "examples": ["user-42", "system:batch-import", "urn:oid:2.16.840.1.113883.4.6"]
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the author. For human authors, typically their full name.",
+          "examples": ["Dr. Grace Hopper", "Batch Import Service"]
+        }
+      },
+      "examples": [
+        { "id": "user-42", "name": "Dr. Grace Hopper" },
+        { "id": "system:etl-pipeline" }
+      ]
+    },
+    "subject": {
+      "type": "object",
+      "description": "The entity this Response is about — the grant, patient, project, or other domain object the form data describes. Distinct from 'author' (who filled in the form).",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the subject entity within the host system.",
+          "examples": ["grant-2025-04817", "patient-12345", "org-northwind"]
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of the subject entity. Implementations SHOULD use consistent type labels within a system.",
+          "examples": ["Grant", "Patient", "Organization", "Project"]
+        }
+      },
+      "examples": [
+        { "id": "grant-2025-04817", "type": "Grant" },
+        { "id": "patient-12345", "type": "Patient" }
+      ]
+    },
+    "validationResults": {
+      "type": "array",
+      "description": "The most recent set of ValidationResult entries for this Response. Includes results from all sources: bind constraints, validation shapes, required checks, type checks, and external validation. Only error-severity results block the transition to 'completed' status. Warning and info results are advisory. Non-relevant fields MUST NOT produce results. When persisted alongside the Response, this array represents a snapshot — it may be stale if the data has changed since the last validation run.",
+      "items": {
+        "$ref": "https://formspec.org/schemas/validationResult/1.0"
+      },
+      "examples": [
+        [],
+        [
+          {
+            "path": "ssn",
+            "severity": "error",
+            "constraintKind": "constraint",
+            "message": "SSN must be in the format 000-00-0000.",
+            "code": "CONSTRAINT_FAILED",
+            "source": "bind",
+            "constraint": "matches($, '^[0-9]{3}-[0-9]{2}-[0-9]{4}$')"
+          }
+        ],
+        [
+          {
+            "path": "budget_justification",
+            "severity": "error",
+            "constraintKind": "required",
+            "message": "This field is required.",
+            "code": "REQUIRED",
+            "source": "bind"
+          },
+          {
+            "path": "total_expenditure",
+            "severity": "warning",
+            "constraintKind": "shape",
+            "message": "Proposed expenditure differs from prior year by 40%. Changes exceeding 25% require additional justification.",
+            "code": "YOY_VARIANCE",
+            "source": "shape",
+            "shapeId": "yoy-variance-warning",
+            "value": 280000.00
+          }
+        ]
+      ]
+    },
+    "authoredSignatures": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Canonical authored-signature evidence records attached to this Response. Each entry binds one signer/document act to the Formspec Signed Response Payload through signedPayload.digest. These records are distinct from respondent-ledger attestations: they are authored evidence produced at signing time, not later audit-history observations.",
+      "items": {
+        "$ref": "#/$defs/AuthoredSignature"
+      },
+      "examples": [
+        [
+          {
+            "signatureId": "sig-2026-0001",
+            "documentId": "benefitsApplication",
+            "signingIntent": "urn:agency.gov:signing-intent:benefits-application-certification:v1",
+            "signatureValue": "0oRWoQExiQEFQnNpZ25lZA==",
+            "signerId": "applicant",
+            "signerName": "Ada Lovelace",
+            "consentAccepted": true,
+            "consentTextRef": "urn:agency.gov:consent:esign-benefits:v1",
+            "consentVersion": "1.0.0",
+            "affirmationText": "I certify under penalty of perjury that this submission is true and complete.",
+            "signedPayload": {
+              "canonicalization": "formspec-response-signing-v1",
+              "digestAlgorithm": "sha-256",
+              "digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "responseId": "resp-2026-0001",
+              "definitionUrl": "https://example.org/forms/signature-attestation",
+              "definitionVersion": "1.0.0",
+              "signedAt": "2026-04-22T12:00:00Z",
+              "signingIntent": "urn:agency.gov:signing-intent:benefits-application-certification:v1"
+            },
+            "documentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "documentHashAlgorithm": "sha-256",
+            "identityProofRef": "urn:agency.gov:identity-proof:case-2026-0042",
+            "identityBinding": {
+              "method": "email-otp",
+              "assuranceLevel": "standard",
+              "providerRef": "urn:agency.gov:identity:providers:email-otp"
+            },
+            "signatureProvider": "urn:agency.gov:signature:providers:formspec",
+            "ceremonyId": "ceremony-2026-0001"
+          }
+        ]
+      ]
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Implementor-specific extension data. All keys MUST be prefixed with 'x-'. Processors MUST ignore unrecognized extensions and MUST preserve them during round-tripping. Extensions MUST NOT alter core semantics (validation, calculation, relevance, required state).",
+      "propertyNames": { "pattern": "^x-" },
+      "examples": [
+        {
+          "x-audit": { "submittedBy": "user-42", "ipAddress": "10.0.0.1" },
+          "x-workflow": { "stage": "review", "assignee": "reviewer-7" }
+        }
+      ]
+    }
+  }
+}

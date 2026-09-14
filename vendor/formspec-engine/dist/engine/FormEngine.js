@@ -6,7 +6,7 @@ import { preactReactiveRuntime } from '../reactivity/preact-runtime.js';
 import { LocaleStore } from '../locale.js';
 import { FetchIssuerFetcher } from '../issuer/IssuerFetcher.js';
 import { IssuerStore } from '../issuer/IssuerStore.js';
-import { createFieldViewModel } from '../field-view-model.js';
+import { createFieldViewModel, resolveItemLabel } from '../field-view-model.js';
 import { createFormViewModel } from '../form-view-model.js';
 import { wasmEvaluateDefinition, wasmEvalFELWithContext, wasmEvalFELWithContextEnvelope, } from '../wasm-bridge-runtime.js';
 import { resolveOptionSetsOnDefinition, validateCalculateBindCycles, validateVariableDefinitionCycles, } from './definition-setup.js';
@@ -14,7 +14,7 @@ import { validateInstanceDataAgainstSchema } from './instance-schema.js';
 import { patchDeltaSignalsFromWasm, patchErrorSignalsFromWasm, patchValueSignalsFromWasm, } from './reactive-patches.js';
 import { applyRepeatGroupTreeSnapshot, clearRepeatIndexedSubtree, snapshotRepeatGroupTree, } from './repeat-ops.js';
 import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
-import { buildWasmFelExpressionContext, mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
+import { buildWasmFelContextBase, buildWasmFelExpressionContext, mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
 import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getAncestorBasePaths, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, safeEvaluateExpression, setNestedPathValue, setResponsePathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
 import { DefaultValidationProfileResolver, } from '../validation/index.js';
 export class FormEngine {
@@ -33,6 +33,9 @@ export class FormEngine {
         this.instanceData = {};
         this._bindConfigs = {};
         this._fieldItems = new Map();
+        /** `dataType` of every field Item by base path, from the definition (FEL value tagging, scope checks). */
+        this._fieldDataTypes = {};
+        this._felContextBase = null;
         this._groupItems = new Map();
         this._shapeTiming = new Map();
         this._instanceCalculateBinds = [];
@@ -47,10 +50,10 @@ export class FormEngine {
         this._derivationTraceCache = new Map();
         this._externalValidation = [];
         this._fieldViewModels = {};
+        this._itemLabelSignals = new Map();
         this._data = {};
         this._previousEvalResult = null;
         this._fullResult = null;
-        this._labelContext = null;
         this._issuerResolutionEpoch = 0;
         this._resolvedIssuerEpoch = -1;
         this._runtimeContext = {
@@ -105,7 +108,7 @@ export class FormEngine {
             getDefinitionDescription: () => this.definition.description ?? '',
             getPageTitle: () => undefined,
             getPageDescription: () => undefined,
-            evalFEL: (expr) => wasmEvalFELWithContextEnvelope(expr, this._buildLocaleFELContext()),
+            evalFEL: (expr) => this._evalLocaleFEL(expr),
             getValidationCounts: () => {
                 const report = this.getValidationReport();
                 return {
@@ -208,6 +211,7 @@ export class FormEngine {
         const visible = visibleScopedVariableValues(scopePath, this._variableDefs, this.variableSignals);
         return visible[name];
     }
+    /** Appends a row and returns its index; `undefined` when the path is not repeatable or already at `maxRepeat` (Core §4.2.2). */
     addRepeatInstance(itemName) {
         const path = this.resolveRepeatPath(itemName);
         const item = this._groupItems.get(path);
@@ -215,11 +219,10 @@ export class FormEngine {
             return undefined;
         }
         const index = this.repeats[path]?.value ?? 0;
-        this._rx.batch(() => {
-            this.repeats[path].value = index + 1;
-            this.registerItemChildren(item.children ?? [], `${path}[${index}]`);
-            this.structureVersion.value += 1;
-        });
+        if (item.maxRepeat !== undefined && index >= item.maxRepeat) {
+            return undefined;
+        }
+        this.appendRepeatRow(path, item);
         this._evaluate();
         return index;
     }
@@ -230,11 +233,63 @@ export class FormEngine {
         if (!item?.repeatable || index < 0 || index >= count) {
             return;
         }
-        const rows = [];
-        for (let current = 0; current < count; current += 1) {
-            rows.push(snapshotRepeatGroupTree(item.children ?? [], `${path}[${current}]`, (fieldPath) => cloneValue(this.signals[fieldPath]?.value), (repeatPath) => this.repeats[repeatPath]?.value ?? 0));
+        this.rebuildRepeatRows(path, item, (rows) => rows.filter((_row, current) => current !== index));
+        this._evaluate();
+    }
+    /**
+     * Loads a Response `data` tree with one evaluation. Definition-directed: a repeatable group present in
+     * `data` gets exactly one row per array entry, past `maxRepeat` or below `minRepeat` included, so loaded
+     * data reports MAX_REPEAT / MIN_REPEAT instead of losing rows. Keys absent from `data` keep their state;
+     * calculated fields and undeclared keys are ignored.
+     */
+    loadResponseData(data) {
+        this.loadItemsData(this.definition.items, data, '');
+        this._evaluate();
+    }
+    loadItemsData(items, data, prefix) {
+        for (const item of items) {
+            if (!Object.prototype.hasOwnProperty.call(data, item.key)) {
+                continue;
+            }
+            const path = prefix ? `${prefix}.${item.key}` : item.key;
+            const value = data[item.key];
+            if (item.type === 'field') {
+                this.writeFieldData(path, value);
+            }
+            else if (item.type === 'group' && item.repeatable && this.repeats[path]) {
+                const rows = Array.isArray(value) ? value : [];
+                if (this.repeats[path].value > rows.length) {
+                    this.rebuildRepeatRows(path, item, (snapshots) => snapshots.slice(0, rows.length));
+                }
+                while (this.repeats[path].value < rows.length) {
+                    this.appendRepeatRow(path, item);
+                }
+                rows.forEach((row, index) => {
+                    if (isJsonRecord(row)) {
+                        this.loadItemsData(item.children ?? [], row, `${path}[${index}]`);
+                    }
+                });
+            }
+            else if (item.type === 'group' && !item.repeatable && isJsonRecord(value)) {
+                this.loadItemsData(item.children ?? [], value, path);
+            }
         }
-        rows.splice(index, 1);
+    }
+    appendRepeatRow(path, item) {
+        const index = this.repeats[path].value;
+        this._rx.batch(() => {
+            this.repeats[path].value = index + 1;
+            this.registerItemChildren(item.children ?? [], `${path}[${index}]`);
+            this.structureVersion.value += 1;
+        });
+    }
+    /** Re-keys repeat `path` to the rows `select` keeps from a snapshot of every current row. O(rows). */
+    rebuildRepeatRows(path, item, select) {
+        const snapshots = [];
+        for (let current = 0; current < this.repeats[path].value; current += 1) {
+            snapshots.push(snapshotRepeatGroupTree(item.children ?? [], `${path}[${current}]`, (fieldPath) => cloneValue(this.signals[fieldPath]?.value), (repeatPath) => this.repeats[repeatPath]?.value ?? 0));
+        }
+        const rows = select(snapshots);
         this._rx.batch(() => {
             this.clearRepeatSubtree(path);
             this.repeats[path].value = rows.length;
@@ -250,7 +305,6 @@ export class FormEngine {
             }
             this.structureVersion.value += 1;
         });
-        this._evaluate();
     }
     compileExpression(expression, currentItemName = '') {
         return () => {
@@ -258,25 +312,7 @@ export class FormEngine {
             this.instanceVersion.value;
             this.structureVersion.value;
             // compileExpression is a public API — propagate errors (unlike internal evaluation).
-            return wasmEvalFELWithContext(this.normalizeExpressionForWasm(expression, currentItemName), buildWasmFelExpressionContext({
-                currentItemPath: currentItemName,
-                data: this._data,
-                fullResult: this._fullResult,
-                fieldSignals: this.signals,
-                validationResults: this.validationResults,
-                relevantSignals: this.relevantSignals,
-                readonlySignals: this.readonlySignals,
-                requiredSignals: this.requiredSignals,
-                repeats: this.repeats,
-                bindConfigs: this._bindConfigs,
-                fieldDataTypes: this.fieldDataTypesSnapshot(),
-                variableDefs: this._variableDefs,
-                variableSignals: this.variableSignals,
-                instanceData: this.instanceData,
-                nowIso: this.nowISO(),
-                locale: this._runtimeContext.locale,
-                meta: this._runtimeContext.meta,
-            }));
+            return wasmEvalFELWithContext(this.normalizeExpressionForWasm(expression, currentItemName), this.felContext(currentItemName));
         };
     }
     setValue(name, value) {
@@ -289,13 +325,19 @@ export class FormEngine {
             this._evaluate();
             return;
         }
+        if (this.writeFieldData(name, value)) {
+            this._evaluate();
+        }
+    }
+    /** Coerces and stores a field value without evaluating; false for calculated or undeclared fields. */
+    writeFieldData(name, value) {
         const basePath = toBasePath(name);
         if (this._calculatedFields.has(basePath)) {
-            return;
+            return false;
         }
         const item = this._fieldItems.get(basePath);
         if (!item) {
-            return;
+            return false;
         }
         const bind = this._bindConfigs[basePath];
         const nextValue = coerceFieldValue(item, bind, this.definition, value);
@@ -305,7 +347,7 @@ export class FormEngine {
         else {
             this._data[name] = cloneValue(nextValue);
         }
-        this._evaluate();
+        return true;
     }
     getValidationReport(options = { profile: 'live' }) {
         this.assertValidationReportOptions(options, 'getValidationReport');
@@ -314,12 +356,15 @@ export class FormEngine {
         if (trigger === 'disabled') {
             return null;
         }
-        return this.produceValidationReport(trigger);
+        return this.produceValidation(trigger).report;
     }
-    produceValidationReport(trigger) {
+    /** Report for `trigger` plus the expression diagnostics of the evaluation that produced it. */
+    produceValidation(trigger) {
         const results = [];
+        let diagnostics = this._fullResult?.diagnostics ?? [];
         if (trigger === 'demand') {
             const demandResult = this.evaluateResultForTrigger('demand');
+            diagnostics = demandResult.diagnostics;
             results.push(...collectTimedShapeValidationResults(demandResult, this._shapeTiming, 'demand'));
         }
         else {
@@ -333,10 +378,14 @@ export class FormEngine {
             }
             if (trigger === 'submit') {
                 const submitResult = this.evaluateResultForTrigger('submit');
+                diagnostics = submitResult.diagnostics;
                 results.push(...collectTimedShapeValidationResults(submitResult, this._shapeTiming, 'submit'));
             }
         }
-        return buildValidationReportEnvelope(results, this.nowISO(), this.definition.url, this.definition.version);
+        return {
+            report: buildValidationReportEnvelope(results, this.nowISO(), this.definition.url, this.definition.version),
+            diagnostics: diagnostics.map((diagnostic) => ({ ...diagnostic })),
+        };
     }
     evaluateShape(shapeId) {
         const timing = this._shapeTiming.get(shapeId) ?? 'continuous';
@@ -397,25 +446,7 @@ export class FormEngine {
             return cached.trace.map((step) => cloneValue(step));
         }
         try {
-            const result = evalFELWithContextTrace(this.normalizeExpressionForWasm(calculate, basePath), buildWasmFelExpressionContext({
-                currentItemPath: basePath,
-                data: this._data,
-                fullResult: this._fullResult,
-                fieldSignals: this.signals,
-                validationResults: this.validationResults,
-                relevantSignals: this.relevantSignals,
-                readonlySignals: this.readonlySignals,
-                requiredSignals: this.requiredSignals,
-                repeats: this.repeats,
-                bindConfigs: this._bindConfigs,
-                fieldDataTypes: this.fieldDataTypesSnapshot(),
-                variableDefs: this._variableDefs,
-                variableSignals: this.variableSignals,
-                instanceData: this.instanceData,
-                nowIso: this.nowISO(),
-                locale: this._runtimeContext.locale,
-                meta: this._runtimeContext.meta,
-            }));
+            const result = evalFELWithContextTrace(this.normalizeExpressionForWasm(calculate, basePath), this.felContext(basePath));
             const trace = Array.isArray(result.trace) ? result.trace : [];
             this._derivationTraceCache.set(basePath, {
                 version,
@@ -514,7 +545,7 @@ export class FormEngine {
                 : cloneValue(signalRef.value);
             setResponsePathValue(data, path, value);
         }
-        const report = trigger === 'disabled' ? null : this.produceValidationReport(trigger);
+        const report = trigger === 'disabled' ? null : this.produceValidation(trigger).report;
         return buildFormspecResponseEnvelope({
             definition: this.definition,
             data,
@@ -525,8 +556,12 @@ export class FormEngine {
             meta,
         });
     }
-    getDiagnosticsSnapshot(options) {
+    getDiagnosticsSnapshot(options = { profile: 'live' }) {
         this.assertValidationReportOptions(options, 'getDiagnosticsSnapshot');
+        const trigger = this._validationProfileResolver.resolve(options.profile ?? 'live');
+        const validation = trigger === 'disabled'
+            ? { report: null, diagnostics: (this._fullResult?.diagnostics ?? []).map((diagnostic) => ({ ...diagnostic })) }
+            : this.produceValidation(trigger);
         const values = {};
         const mips = {};
         const repeats = {};
@@ -554,7 +589,8 @@ export class FormEngine {
             repeats,
             values,
             mips,
-            validation: this.getValidationReport(options),
+            validation: validation.report,
+            evaluationDiagnostics: validation.diagnostics,
             runtimeContext: {
                 now: timestamp,
                 locale: this._runtimeContext.locale,
@@ -621,14 +657,45 @@ export class FormEngine {
         return this.definition;
     }
     setLabelContext(context) {
-        this._labelContext = context;
         this._labelContextSignal.value = context;
     }
+    /** Definition label for the active label context (no Locale, no `{{}}`); reactive to `setLabelContext`. */
     getLabel(item) {
-        if (this._labelContext && item.labels?.[this._labelContext]) {
-            return item.labels[this._labelContext];
+        const context = this._labelContextSignal.value;
+        if (context && item.labels?.[context]) {
+            return item.labels[context];
         }
         return item.label;
+    }
+    /**
+     * Reactive label a respondent sees for the Item at instance `path` — field, display, or group (a repeat row
+     * path such as `jobs[0]` names its group). Same cascade as `FieldViewModel.label` (Locale
+     * `<key>.label@context` → `<key>.label` → `labels[context]` → inline), `{{}}` interpolated in the Item's
+     * scope. `undefined` when no Item has that path.
+     */
+    getItemLabelSignal(path) {
+        const fieldVM = this._fieldViewModels[path];
+        if (fieldVM) {
+            return fieldVM.label;
+        }
+        const cached = this._itemLabelSignals.get(path);
+        if (cached) {
+            return cached;
+        }
+        const item = path ? this._groupItems.get(path) ?? this._groupItems.get(toBasePath(path)) : undefined;
+        if (!item) {
+            return undefined;
+        }
+        const label = this._rx.computed(() => resolveItemLabel({
+            localeStore: this._localeStore,
+            itemKey: item.key,
+            inlineLabel: item.label,
+            labels: item.labels,
+            context: this._labelContextSignal.value,
+            evalFEL: (expression) => this._evalLocaleFEL(expression, path),
+        }).value);
+        this._itemLabelSignals.set(path, label);
+        return label;
     }
     loadLocale(doc) {
         this._localeStore.loadLocale(doc);
@@ -651,17 +718,10 @@ export class FormEngine {
     getFormVM() {
         return this._formViewModel;
     }
-    resolveLocaleString(key, fallback) {
+    resolveLocaleString(key, fallback, itemPath = '') {
         const localized = this._localeStore.lookupKey(key);
         if (localized !== null) {
-            return interpolateMessage(localized, (expr) => {
-                try {
-                    return this.compileExpression(expr, '')();
-                }
-                catch {
-                    return null;
-                }
-            }).text;
+            return interpolateMessage(localized, (expr) => this._evalLocaleFEL(expr, itemPath)).text;
         }
         return fallback;
     }
@@ -739,6 +799,9 @@ export class FormEngine {
                             const base = {
                                 value: String(option.value),
                                 label: String(option.label),
+                                ...(option['x-generation']
+                                    ? { 'x-generation': option['x-generation'] }
+                                    : {}),
                             };
                             if (Array.isArray(option.keywords) && option.keywords.length > 0) {
                                 const keywords = option.keywords
@@ -773,13 +836,6 @@ export class FormEngine {
             }
             this.initializeInstanceSource(name, instance);
         }
-    }
-    fieldDataTypesSnapshot() {
-        const out = {};
-        for (const [path, item] of this._fieldItems.entries()) {
-            out[path] = item.dataType;
-        }
-        return out;
     }
     /** Returns true if the source string is fetchable (HTTP(S) or absolute path). */
     static isFetchableSource(source) {
@@ -822,6 +878,9 @@ export class FormEngine {
         for (const item of items) {
             const path = prefix ? `${prefix}.${item.key}` : item.key;
             this._groupItems.set(path, item);
+            if (item.type === 'field') {
+                this._fieldDataTypes[path] = item.dataType;
+            }
             const inlineBind = extractInlineBind(item, path);
             if (inlineBind) {
                 this._bindConfigs[path] = { ...this._bindConfigs[path], ...inlineBind };
@@ -834,7 +893,8 @@ export class FormEngine {
             }
         }
         for (const bind of this.definition.binds ?? []) {
-            const path = toBasePath(bind.path);
+            // Core §4.3.3 / Rust BindTargets: only `[*]` is stripped; a concrete `[n]` names no Item.
+            const path = bind.path.replace(/\[\*\]/g, '');
             this._bindConfigs[path] = { ...this._bindConfigs[path], ...bind, path };
             if (bind.calculate && !parseInstanceTarget(bind.path)) {
                 this._calculatedFields.add(path);
@@ -905,7 +965,7 @@ export class FormEngine {
                 continue;
             }
             if (item.repeatable) {
-                const count = item.minRepeat ?? 1;
+                const count = item.minRepeat ?? 0;
                 this.repeats[path] = this._rx.signal(count);
                 for (let index = 0; index < count; index += 1) {
                     this.registerItemChildren(item.children ?? [], `${path}[${index}]`);
@@ -943,7 +1003,7 @@ export class FormEngine {
                 continue;
             }
             if (item.repeatable) {
-                const count = item.minRepeat ?? 1;
+                const count = item.minRepeat ?? 0;
                 this.repeats[path] = this._rx.signal(count);
                 for (let index = 0; index < count; index += 1) {
                     this.registerItemChildren(item.children ?? [], `${path}[${index}]`);
@@ -1047,13 +1107,18 @@ export class FormEngine {
         validateInstanceDataAgainstSchema(instanceName, data, schema && typeof schema === 'object' ? schema : undefined);
     }
     evaluateExpression(expression, currentItemPath = '', dataOverride, resultOverride, scopedVariableOverrides, replaceSelfRef = false) {
-        return safeEvaluateExpression(this.normalizeExpressionForWasm(expression, currentItemPath, replaceSelfRef), buildWasmFelExpressionContext({
-            currentItemPath,
-            data: this._data,
-            fullResult: this._fullResult,
+        return safeEvaluateExpression(this.normalizeExpressionForWasm(expression, currentItemPath, replaceSelfRef), buildWasmFelExpressionContext(this.felContextInput(currentItemPath, {
             resultOverride,
             dataOverride,
             scopedVariableOverrides,
+        })));
+    }
+    felContextInput(currentItemPath, overrides = {}) {
+        return {
+            currentItemPath,
+            data: this._data,
+            fullResult: this._fullResult,
+            ...overrides,
             fieldSignals: this.signals,
             validationResults: this.validationResults,
             relevantSignals: this.relevantSignals,
@@ -1061,14 +1126,29 @@ export class FormEngine {
             requiredSignals: this.requiredSignals,
             repeats: this.repeats,
             bindConfigs: this._bindConfigs,
-            fieldDataTypes: this.fieldDataTypesSnapshot(),
+            fieldDataTypes: this._fieldDataTypes,
             variableDefs: this._variableDefs,
             variableSignals: this.variableSignals,
             instanceData: this.instanceData,
             nowIso: this.nowISO(),
             locale: this._runtimeContext.locale,
             meta: this._runtimeContext.meta,
-        }));
+        };
+    }
+    /**
+     * FEL context for ad-hoc reads (compileExpression, Locale `{{}}`, derivation trace). The form-scope base is
+     * built once per engine state: values, MIPs, and results change only through `_evaluate` (evaluation
+     * version), rows through structure changes, instances through the instance version. Reading those signals
+     * also re-runs a caller's computed whenever the base would change. In-flight evaluation reads use
+     * `evaluateExpression`, which always builds fresh.
+     */
+    felContext(currentItemPath) {
+        const key = `${this._evaluationVersion.value}:${this.structureVersion.value}:${this.instanceVersion.value}`;
+        const input = this.felContextInput(currentItemPath);
+        if (this._felContextBase?.key !== key) {
+            this._felContextBase = { key, base: buildWasmFelContextBase(input) };
+        }
+        return buildWasmFelExpressionContext(input, this._felContextBase.base);
     }
     repeatCountsSnapshot() {
         return Object.fromEntries(Object.entries(this.repeats).map(([path, repeatSignal]) => [path, repeatSignal.value]));
@@ -1239,6 +1319,9 @@ export class FormEngine {
         // Shape timing is enforced in Rust `revalidate` for the default continuous WASM eval;
         // no TS-side filter needed for parity with batch eval.
         const delta = diffEvalResults(this._previousEvalResult, evalResult);
+        // Assign before patching: effects that run when the batch closes read `_fullResult` through FEL contexts.
+        this._previousEvalResult = evalResult;
+        this._fullResult = evalResult;
         this._rx.batch(() => {
             patchValueSignalsFromWasm({
                 values: evalResult.values,
@@ -1265,8 +1348,6 @@ export class FormEngine {
             });
             this._evaluationVersion.value += 1;
         });
-        this._previousEvalResult = evalResult;
-        this._fullResult = evalResult;
     }
     evaluateResultForTrigger(trigger) {
         return this.shapedEvalResult(wasmEvaluateDefinition(this.definition, this._data, wasmEvaluateDefinitionPayload({
@@ -1327,6 +1408,11 @@ export class FormEngine {
                 delete this._fieldViewModels[path];
             }
         }
+        for (const path of this._itemLabelSignals.keys()) {
+            if (path.startsWith(repeatPrefix)) {
+                this._itemLabelSignals.delete(path);
+            }
+        }
         clearRepeatIndexedSubtree({
             rootRepeatPath,
             signals: this.signals,
@@ -1361,35 +1447,19 @@ export class FormEngine {
             getVisible: () => this.relevantSignals[path] ?? this._rx.signal(true),
             getReadonly: () => this.readonlySignals[path] ?? this._rx.signal(false),
             getDisabledDisplay: () => this.getDisabledDisplay(path),
-            getErrors: () => this.validationResults[basePath] ?? this._rx.signal([]),
+            // Validation results are per instance; options are per template.
+            getErrors: () => this.validationResults[path] ?? this._rx.signal([]),
             getOptions: () => this.optionSignals[basePath] ?? this._rx.signal([]),
             getOptionsState: () => this.optionStateSignals[basePath] ?? this._rx.signal({ loading: false, error: null }),
             getOptionSetName: () => item.optionSet,
             setFieldValue: (value) => this.setValue(path, value),
-            evalFEL: (expr) => wasmEvalFELWithContextEnvelope(expr, this._buildLocaleFELContext(path)),
+            evalFEL: (expr) => this._evalLocaleFEL(expr, path),
         });
         this._fieldViewModels[path] = vm;
     }
-    _buildLocaleFELContext(currentItemPath = '') {
-        return buildWasmFelExpressionContext({
-            currentItemPath,
-            data: this._data,
-            fullResult: this._fullResult,
-            fieldSignals: this.signals,
-            validationResults: this.validationResults,
-            relevantSignals: this.relevantSignals,
-            readonlySignals: this.readonlySignals,
-            requiredSignals: this.requiredSignals,
-            repeats: this.repeats,
-            bindConfigs: this._bindConfigs,
-            fieldDataTypes: this.fieldDataTypesSnapshot(),
-            variableDefs: this._variableDefs,
-            variableSignals: this.variableSignals,
-            instanceData: this.instanceData,
-            nowIso: this.nowISO(),
-            locale: this._runtimeContext.locale,
-            meta: this._runtimeContext.meta,
-        });
+    /** Locale §3.3.2: evaluate a `{{}}` segment in the binding scope of `itemPath` (form scope when empty). */
+    _evalLocaleFEL(expression, itemPath = '') {
+        return wasmEvalFELWithContextEnvelope(expression, this.felContext(itemPath));
     }
     getDisplayedIssuerPin() {
         if (this._resolvedIssuer

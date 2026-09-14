@@ -61,26 +61,34 @@ import { CLOSED_RESPONSE_ACTION_INTENTS } from '@formspec-org/app-graph';
 import { surfaceDiagnostic } from './diagnostics.js';
 import { routeHref, routeInSurface, } from './composition.js';
 import { resolveSurfaceStrings } from './strings.js';
+import { generationNeedAnchors } from './need-trace.js';
 function indexTriggers(documents) {
-    const actionIds = new Set();
+    const byId = new Map();
     const byIntent = new Map();
     for (const document of documents) {
         for (const action of document.actions ?? []) {
             const id = typeof action.id === 'string' ? action.id : undefined;
             if (!id)
                 continue;
-            actionIds.add(id);
+            byId.set(id, (byId.get(id) ?? 0) + 1);
             const intent = typeof action.intent === 'string' ? action.intent : undefined;
             if (intent && CLOSED_RESPONSE_ACTION_INTENTS.has(intent)) {
                 byIntent.set(intent, [...(byIntent.get(intent) ?? []), id]);
             }
         }
     }
-    return { actionIds, byIntent, documentCount: documents.length };
+    return { byId, byIntent, documentCount: documents.length };
 }
 function targetDefinitionUrl(document) {
     const url = document.targetDefinition?.url;
     return typeof url === 'string' ? url : undefined;
+}
+function isApplicationScoped(document) {
+    return document.scope === 'app' && targetDefinitionUrl(document) === undefined;
+}
+function isDefinitionScoped(document) {
+    return ((document.scope === undefined || document.scope === 'response')
+        && targetDefinitionUrl(document) !== undefined);
 }
 /**
  * The one Response Actions document the form renderer may use for a Definition.
@@ -90,7 +98,8 @@ function targetDefinitionUrl(document) {
  * another, which recreates the silent dead edge this check exists to prevent.
  */
 export function responseActionsDocumentForDefinition(documents, definitionRef) {
-    const matching = documents.filter((document) => targetDefinitionUrl(document) === definitionRef);
+    const matching = documents.filter((document) => isDefinitionScoped(document)
+        && targetDefinitionUrl(document) === definitionRef);
     return matching.length === 1 ? matching[0] : undefined;
 }
 /**
@@ -106,11 +115,11 @@ export function responseActionsDocumentForDefinition(documents, definitionRef) {
  *    control the host route renders — the same transitivity §4.4 applies to the
  *    theme grant. A shell that scans only a route's own `slots[]` reports a
  *    working page as dead.
- * 2. **The check follows the control this binding actually places.**
- *    `FormspecForm` auto-places one submit-intent Action and no other action.
- *    A plan that credited every published action would report a control that
- *    does not exist. The selected document and submit Action must each be
- *    unique, and the document must target the rendered Definition.
+ * 2. **The check follows the controls this binding actually places.**
+ *    `FormspecForm` auto-places each uniquely identified Action with a literal
+ *    structured label from the one response-scoped document targeting the
+ *    rendered Definition. Action ids are always exact; a closed-core intent is
+ *    credited only when exactly one loaded Action publishes it.
  *
  * A module widget contributes only through the complete declared chain:
  * Registry action output -> Surface action binding -> exact loaded action.
@@ -123,7 +132,7 @@ export function slotSuppliedTriggers(slots, responseActions = [], options = {}) 
     const supplied = new Set();
     if (responseActions.length === 0)
         return supplied;
-    const actions = responseActions.flatMap((document) => document.actions ?? []);
+    const actionDeclarations = responseActions.flatMap((document) => (document.actions ?? []).map((action) => ({ document, action })));
     const walk = (entries) => {
         for (const entry of entries) {
             if (entry.slotType === 'embed-route') {
@@ -138,15 +147,18 @@ export function slotSuppliedTriggers(slots, responseActions = [], options = {}) 
                 for (const output of entry.actionOutputs) {
                     if (!output.actionRef)
                         continue;
-                    const matches = actions.filter((action) => action.id === output.actionRef);
+                    const matches = actionDeclarations.filter(({ action }) => action.id === output.actionRef);
                     if (matches.length !== 1)
                         continue;
-                    const action = matches[0];
-                    if (!action || typeof action.id !== 'string')
+                    const match = matches[0];
+                    if (!match || !isApplicationScoped(match.document))
+                        continue;
+                    const { action } = match;
+                    if (typeof action.id !== 'string')
                         continue;
                     supplied.add(action.id);
                     if (typeof action.intent === 'string') {
-                        const intentMatches = actions.filter((candidate) => candidate.intent === action.intent);
+                        const intentMatches = actionDeclarations.filter(({ action: candidate }) => candidate.intent === action.intent);
                         if (intentMatches.length === 1)
                             supplied.add(action.intent);
                     }
@@ -162,15 +174,34 @@ export function slotSuppliedTriggers(slots, responseActions = [], options = {}) 
             const document = responseActionsDocumentForDefinition(responseActions, entry.definitionRef);
             if (!document)
                 continue;
-            const submitActions = (document.actions ?? []).filter((action) => action.intent === 'submit' && typeof action.id === 'string');
-            if (submitActions.length !== 1)
-                continue;
-            supplied.add('submit');
-            supplied.add(submitActions[0].id);
+            for (const action of document.actions ?? []) {
+                if (typeof action.id !== 'string'
+                    || action.id.length === 0
+                    || !hasLiteralActionLabel(action)) {
+                    continue;
+                }
+                const idMatches = actionDeclarations.filter(({ action: candidate }) => candidate.id === action.id);
+                if (idMatches.length !== 1)
+                    continue;
+                supplied.add(action.id);
+                if (typeof action.intent === 'string'
+                    && CLOSED_RESPONSE_ACTION_INTENTS.has(action.intent)) {
+                    const intentMatches = actionDeclarations.filter(({ action: candidate }) => candidate.intent === action.intent);
+                    if (intentMatches.length === 1)
+                        supplied.add(action.intent);
+                }
+            }
         }
     };
     walk(slots);
     return supplied;
+}
+function hasLiteralActionLabel(action) {
+    const label = action.label;
+    if (!label || typeof label !== 'object' || Array.isArray(label))
+        return false;
+    const literal = label.literal;
+    return typeof literal === 'string' && literal.trim().length > 0;
 }
 export function planTransitions(input) {
     const { handle, app } = input;
@@ -182,9 +213,17 @@ export function planTransitions(input) {
         const trigger = String(authored.trigger);
         const to = String(authored.to);
         const target = routeInSurface(app, handle.surfaceId, to);
-        const base = { trigger, to, reason: '' };
+        const base = {
+            trigger,
+            to,
+            needAnchors: generationNeedAnchors(authored),
+            reason: '',
+        };
         if (typeof authored.when === 'string')
             base.when = authored.when;
+        if (authored.params && typeof authored.params === 'object') {
+            base.params = Object.freeze({ ...authored.params });
+        }
         if (target)
             base.target = target;
         if (typeof authored.when === 'string') {
@@ -241,15 +280,19 @@ export function planTransitions(input) {
                 reason: text('transitionNoResponseActions', { to, trigger }),
             };
         }
-        const byId = resolved.actionIds.has(trigger);
+        const idMatches = resolved.byId.get(trigger) ?? 0;
         const publishers = resolved.byIntent.get(trigger) ?? [];
-        const actionId = byId ? trigger : publishers.length === 1 ? publishers[0] : undefined;
+        const actionId = idMatches > 0
+            ? idMatches === 1 ? trigger : undefined
+            : publishers.length === 1 ? publishers[0] : undefined;
         if (actionId === undefined) {
             return {
                 ...base,
                 status: 'unfireable',
                 unfireableReason: 'trigger-unresolved',
-                reason: text(publishers.length > 1 ? 'transitionTriggerAmbiguous' : 'transitionTriggerUnresolved', { to, trigger }),
+                reason: text(idMatches > 1 || publishers.length > 1
+                    ? 'transitionTriggerAmbiguous'
+                    : 'transitionTriggerUnresolved', { to, trigger }),
             };
         }
         if (input.slotSuppliedTriggers?.has(trigger)) {

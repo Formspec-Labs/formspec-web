@@ -1,7 +1,16 @@
 /** @filedesc Response Actions resolution helpers for renderers and hosts. */
-import type { Action as ResponseAction, EffectRequest, Precondition, ResponseActionsDocument, ValidationOverride, ValidationProfile } from '@formspec-org/types';
+import type { Action as ResponseAction, ActionInvocationStatus, EffectRequest, EffectOutcomeStatus, Precondition, ResponseActionsDocument, ValidationOverride, ValidationProfile } from '@formspec-org/types';
 export type { ResponseAction, ResponseActionsDocument, ValidationOverride as ResponseActionValidationTuple, };
 export type StandardResponseActionIntent = 'save-draft' | 'autosave' | 'review' | 'submit' | 'request-evidence';
+/**
+ * The only validation tuple an app-scoped Action may declare.
+ *
+ * App actions have no Response to validate or persist. Keeping this predicate
+ * next to the executor prevents build-time gates from restating a runtime
+ * invariant with subtly different defaults.
+ */
+export declare const APP_ACTION_VALIDATION_TUPLE: Readonly<ValidationOverride>;
+export declare function isAppActionValidationTuple(value: unknown): value is ValidationOverride;
 /**
  * The document accepted by the engine.
  *
@@ -16,7 +25,7 @@ export interface ActionRefFinding {
     kind: 'actionRef';
     nodeId?: string;
     target: string;
-    reason?: 'missing-actionRef' | 'no-response-actions-document' | 'missing-submit-action';
+    reason?: 'missing-actionRef' | 'no-response-actions-document' | 'missing-submit-action' | 'ambiguous-actionRef';
 }
 export interface ActionResolution {
     resolved: boolean;
@@ -32,7 +41,8 @@ export type ResponseActionPreconditionResult = boolean | {
     passed: boolean;
     reason?: string;
 };
-export type ResponseActionEffectStatus = 'succeeded' | 'failed' | 'deferred' | 'replayed' | 'not-invoked';
+/** Schema-owned closed vocabulary for one declared effect's outcome. */
+export type ResponseActionEffectStatus = EffectOutcomeStatus;
 export interface ResponseActionEffectOutcome {
     type: EffectRequest['type'];
     status: ResponseActionEffectStatus;
@@ -41,6 +51,15 @@ export interface ResponseActionEffectOutcome {
     reason?: string;
     replayToken?: string;
 }
+/**
+ * Host adapter result for one effect. Only allowlisted transition strings may
+ * cross into a completed invocation result; adapter-private data is ignored.
+ */
+export interface ResponseActionEffectDispatchResult {
+    outcome: ResponseActionEffectOutcome;
+    transitionBindings?: Readonly<Record<string, string>>;
+}
+export type ResponseActionEffectDispatchValue = ResponseActionEffectOutcome | ResponseActionEffectDispatchResult | void;
 export interface ResponseActionIdempotencyKeyContext {
     effectIndex: number;
 }
@@ -49,6 +68,26 @@ export interface ResponseActionEffectDispatchContext {
     attempt: number;
     idempotencyKey?: string;
 }
+export type ResponseActionEffectClass = 'transient' | 'browser-local' | 'durable';
+export interface PlannedResponseActionEffect {
+    /** Zero-based declaration order. */
+    effectIndex: number;
+    /** Exact authored effect. No copy or interpretation replaces owner data. */
+    effect: EffectRequest;
+    effectClass: ResponseActionEffectClass;
+    durable: boolean;
+}
+/**
+ * Pure owner classification used by executors and admission gates.
+ *
+ * Unknown effect types are treated as durable. That fail-closed default means
+ * a schema-bypassing caller cannot obtain side effects merely by inventing a
+ * new transient-looking type.
+ */
+export declare function classifyResponseActionEffect(effect: EffectRequest): ResponseActionEffectClass;
+export declare function isDurableResponseActionEffect(effect: EffectRequest): boolean;
+/** Pure, ordered effect plan. It never evaluates, dispatches, or authorizes. */
+export declare function planResponseActionEffects(action: ResponseAction): readonly PlannedResponseActionEffect[];
 /**
  * §11.3 / Ledger §8.5 published lifecycle event kinds. Authors MUST NOT
  * declare these as ledgerAppend effects; processors emit them outside the
@@ -92,11 +131,30 @@ export interface ResponseActionInvocationContext {
     invocationId?: string;
     /** When set, marks the invocation as a replay of a prior invocation. */
     priorInvocationRef?: string;
+    /**
+     * Exact loaded Response Actions artifact identity. The engine adds the
+     * resolved Action id; renderers and runners must not infer this identity
+     * from projection metadata or visible copy.
+     */
+    actionArtifact?: {
+        artifactRef: string;
+        artifactDigest: string;
+    };
 }
 export interface ResponseActionInvocationPorts<TDetail> {
-    submit: (options: ResponseActionSubmitOptions) => TDetail | null;
+    /**
+     * Definition-scoped response submission. Required at runtime when the
+     * document scope is `response` (or omitted); never called for `app`.
+     */
+    submit?: ((options: ResponseActionSubmitOptions) => TDetail | null) | undefined;
+    /**
+     * Application action input. Required at runtime for `scope: app`; this
+     * replaces form submission and gives effect adapters validated structured
+     * input without manufacturing a Response.
+     */
+    prepareAppAction?: ((action: ResponseAction) => TDetail | null) | undefined;
     dispatchHostEvent: (eventName: string, detail: TDetail, action: ResponseAction) => void;
-    dispatchEffect?: (effect: EffectRequest, detail: TDetail, action: ResponseAction, context: ResponseActionEffectDispatchContext) => ResponseActionEffectOutcome | void;
+    dispatchEffect?: (effect: EffectRequest, detail: TDetail, action: ResponseAction, context: ResponseActionEffectDispatchContext) => ResponseActionEffectDispatchValue;
     resolveIdempotencyKey?: (effect: EffectRequest, action: ResponseAction, context: ResponseActionIdempotencyKeyContext) => string;
     evaluatePrecondition?: (precondition: Precondition, action: ResponseAction) => ResponseActionPreconditionResult;
     validationReportValid?: (detail: TDetail) => boolean | null | undefined;
@@ -113,13 +171,30 @@ export interface ResponseActionInvocationPorts<TDetail> {
      */
     recordActionLifecycle?: (kind: ResponseActionLifecycleKind, payload: ResponseActionLifecyclePayload) => void;
 }
-export type ResponseActionInvocationStatus = 'unresolved' | 'blocked' | 'failed' | 'deferred' | 'completed';
+/** Async counterpart whose effect adapter may return a Promise. */
+export type ResponseActionAsyncInvocationPorts<TDetail> = Omit<ResponseActionInvocationPorts<TDetail>, 'dispatchEffect'> & {
+    dispatchEffect?: (effect: EffectRequest, detail: TDetail, action: ResponseAction, context: ResponseActionEffectDispatchContext) => ResponseActionEffectDispatchValue | PromiseLike<ResponseActionEffectDispatchValue>;
+};
+/** Schema-owned complete invocation-status vocabulary. */
+export type ResponseActionInvocationStatus = ActionInvocationStatus;
+export interface ResponseActionOwnerFacts {
+    artifactRef: string;
+    artifactDigest: string;
+    subjectKind: 'response-action';
+    subjectRef: string;
+}
 export interface ResponseActionInvocationResult<TDetail> {
     status: ResponseActionInvocationStatus;
+    /** Present once an Action resolves and invocation begins. */
+    invocationId?: string;
+    /** Caller-paired artifact identity plus the engine-resolved Action id. */
+    actionOwner?: ResponseActionOwnerFacts;
     resolution: ActionResolution;
     validationTuple: ValidationOverride | null;
     detail: TDetail | null;
     effectTrace: ResponseActionEffectOutcome[];
+    /** Present only on completed invocations with declared transition outputs. */
+    transitionBindings?: Readonly<Record<string, string>>;
     finding?: ActionRefFinding;
     blockedCause?: 'validation' | 'precondition';
     blockedPreconditionId?: string;
@@ -133,6 +208,16 @@ export interface ResponseActionInvocationResult<TDetail> {
 /** Host finding when `onSubmit` is wired but no submit-intent Action is published. */
 export declare function missingSubmitActionFinding(): ActionRefFinding;
 export declare function resolveResponseAction(document: ResponseActionsDocumentInput | null | undefined, actionRef: string, nodeId?: string): ActionResolution;
+export interface ResponseActionInvocationPlan {
+    resolution: ActionResolution;
+    effects: readonly PlannedResponseActionEffect[];
+}
+/**
+ * Resolve an Action and expose its complete effect plan without executing it.
+ * Admission layers use this before activation so all possible durable effects
+ * can be authorized as one fail-closed decision.
+ */
+export declare function planResponseActionInvocation(document: ResponseActionsDocumentInput | null | undefined, actionRef: string, nodeId?: string): ResponseActionInvocationPlan;
 export declare function findResponseActionByIntent(document: ResponseActionsDocumentInput | null | undefined, intent: string): ResponseAction | null;
 /**
  * Structured error thrown when an explicit `action.validation` override
@@ -149,4 +234,7 @@ export declare class InvalidValidationTupleError extends Error {
 export declare function resolveResponseActionValidationTuple(action: ResponseAction): ValidationOverride;
 export declare function validationProfileForAction(action: ResponseAction): ValidationProfile;
 export declare function declaresHostEvent(action: ResponseAction, eventName: string): boolean;
+/** Invoke an Action with synchronous effect adapters. Promise outcomes fail fast. */
 export declare function invokeResponseAction<TDetail>(document: ResponseActionsDocumentInput | null | undefined, actionRef: string, ports: ResponseActionInvocationPorts<TDetail>, nodeId?: string, invocationContext?: ResponseActionInvocationContext): ResponseActionInvocationResult<TDetail>;
+/** Invoke an Action while awaiting effect adapters in strict declaration order. */
+export declare function invokeResponseActionAsync<TDetail>(document: ResponseActionsDocumentInput | null | undefined, actionRef: string, ports: ResponseActionAsyncInvocationPorts<TDetail>, nodeId?: string, invocationContext?: ResponseActionInvocationContext): Promise<ResponseActionInvocationResult<TDetail>>;

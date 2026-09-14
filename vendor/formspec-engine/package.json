@@ -19,6 +19,14 @@
       "types": "./dist/engine-render-entry.d.ts",
       "default": "./dist/engine-render-entry.js"
     },
+    "./fel-runtime": {
+      "types": "./dist/fel/fel-api-runtime.d.ts",
+      "default": "./dist/fel/fel-api-runtime.js"
+    },
+    "./fel-tools": {
+      "types": "./dist/fel/fel-api-tools.d.ts",
+      "default": "./dist/fel/fel-api-tools.js"
+    },
     "./demo-fixtures": {
       "types": "./dist/demo-submit-response-actions.d.ts",
       "default": "./dist/demo-submit-response-actions.js"

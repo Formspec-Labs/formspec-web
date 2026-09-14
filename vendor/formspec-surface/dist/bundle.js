@@ -85,13 +85,39 @@ export function dereferenceBundleExport(bundle) {
     }
     const experienceRefs = bundle.manifest.experiences ??
         (bundle.manifest.experience ? [bundle.manifest.experience] : []);
-    const experiences = lookupAll(experienceRefs, 'Experience');
+    const experienceHandles = experienceRefs.flatMap((ref) => {
+        const document = lookup(ref, 'Experience');
+        return document === undefined
+            ? []
+            : [{ experienceRef: ref.url, document }];
+    });
+    const experiences = experienceHandles.map(({ document }) => document);
+    const referenceRefs = [
+        ...(bundle.manifest.references ? [bundle.manifest.references] : []),
+        ...(bundle.manifest.referenceDocuments ?? []),
+    ];
+    const references = lookupAll(referenceRefs, 'References document');
+    const ontologyRefs = [
+        ...(bundle.manifest.ontology ? [bundle.manifest.ontology] : []),
+        ...(bundle.manifest.ontologies ?? []),
+    ];
+    const ontologies = lookupAll(ontologyRefs, 'Ontology document');
     const registries = lookupAll(bundle.manifest.registries, 'Registry');
     const tenantTheme = lookup(bundle.manifest.theme, 'Theme');
-    const responseActionsDocument = lookup(bundle.manifest.responseActions, 'Response Actions document');
+    const responseActionRefs = [
+        ...(bundle.manifest.responseActions ? [bundle.manifest.responseActions] : []),
+        ...(bundle.manifest.responseActionDocuments ?? []),
+    ];
+    const responseActions = lookupAll(responseActionRefs, 'Response Actions document');
     const dataSources = (bundle.manifest.dataSources ?? []).flatMap((ref) => {
         const document = lookup(ref, 'Data Sources catalog');
         return document === undefined ? [] : [{ catalogRef: ref.url, document }];
+    });
+    const mappings = (bundle.manifest.mappings ?? []).flatMap((ref) => {
+        const document = lookup(ref, 'Mapping document');
+        return document === undefined
+            ? []
+            : [{ mappingRef: ref.handle, artifactRef: ref.url, document }];
     });
     const definitions = new Map();
     for (const ref of bundle.manifest.definitions ?? []) {
@@ -106,10 +132,14 @@ export function dereferenceBundleExport(bundle) {
         ...(entrySurface === undefined ? {} : { entrySurface }),
         surfaceRefs,
         experiences,
+        experienceHandles,
         tenantTheme,
+        references,
+        ontologies,
         registries,
-        responseActions: responseActionsDocument ? [responseActionsDocument] : [],
+        responseActions,
         dataSources,
+        mappings,
         definitions,
         diagnostics,
     };

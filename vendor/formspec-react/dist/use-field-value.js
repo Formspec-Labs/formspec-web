@@ -8,7 +8,7 @@ import { useSignal } from './use-signal';
  * Use this when you don't need label/error/required state.
  */
 export function useFieldValue(path) {
-    const { engine } = useFormspecContext();
+    const { engine, advanceSemanticResponseRevision } = useFormspecContext();
     const vm = useMemo(() => {
         const fieldVM = engine.getFieldVM(path);
         if (!fieldVM)
@@ -16,5 +16,9 @@ export function useFieldValue(path) {
         return fieldVM;
     }, [engine, path]);
     const value = useSignal(vm.value);
-    return { value, setValue: vm.setValue };
+    const setValue = useMemo(() => (nextValue) => {
+        vm.setValue(nextValue);
+        advanceSemanticResponseRevision();
+    }, [advanceSemanticResponseRevision, vm]);
+    return { value, setValue };
 }

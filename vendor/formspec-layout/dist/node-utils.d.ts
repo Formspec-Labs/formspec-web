@@ -1,5 +1,7 @@
 /** @filedesc Layout node IDs, classification, token/CSS helpers, and plan context prep. */
 import type { LayoutNode, NodeIdGenerator, PlanContext } from './types.js';
+/** Copy only canonical Need anchors from authored generation metadata. */
+export declare function needGenerationAnchors(...values: readonly unknown[]): string[];
 export declare function classifyComponent(type: string): LayoutNode['category'];
 export declare function createNodeIdGenerator(start?: number): NodeIdGenerator;
 /** Attach a per-plan ID generator when callers omit `nextId`. */

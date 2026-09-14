@@ -10,11 +10,14 @@ export function planMatchedRoute(input) {
     const route = planRoute({
         handle: input.handle,
         experiences: input.experiences,
+        experienceHandles: input.experienceHandles,
         definitions: input.definitions,
         registryEntries: input.registryEntries,
         widgets: input.widgets,
         dataSources: input.dataSources,
+        mappings: input.mappings,
         surfaceRef: input.surfaceRef,
+        responseActions: input.responseActions,
         headingBaseLevel,
         staticAssetResolver: input.staticAssetResolver,
     });

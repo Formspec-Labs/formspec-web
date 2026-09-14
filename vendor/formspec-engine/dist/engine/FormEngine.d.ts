@@ -30,6 +30,9 @@ export declare class FormEngine implements IFormEngine {
     private readonly _evaluationVersion;
     private readonly _bindConfigs;
     private readonly _fieldItems;
+    /** `dataType` of every field Item by base path, from the definition (FEL value tagging, scope checks). */
+    private readonly _fieldDataTypes;
+    private _felContextBase;
     private readonly _groupItems;
     private readonly _shapeTiming;
     private readonly _instanceCalculateBinds;
@@ -48,12 +51,12 @@ export declare class FormEngine implements IFormEngine {
     private readonly _validationProfileResolver;
     private readonly _localeStore;
     private readonly _fieldViewModels;
+    private readonly _itemLabelSignals;
     private _formViewModel;
     private readonly _labelContextSignal;
     private _data;
     private _previousEvalResult;
     private _fullResult;
-    private _labelContext;
     private _issuerOverride;
     private _resolvedIssuer;
     private _issuerResolutionPromise;
@@ -79,10 +82,24 @@ export declare class FormEngine implements IFormEngine {
     getInstanceData(name: string, path?: string): FormFieldValue;
     getDisabledDisplay(path: string): 'hidden' | 'protected';
     getVariableValue(name: string, scopePath: string): FormFieldValue;
+    /** Appends a row and returns its index; `undefined` when the path is not repeatable or already at `maxRepeat` (Core §4.2.2). */
     addRepeatInstance(itemName: string): number | undefined;
     removeRepeatInstance(itemName: string, index: number): void;
+    /**
+     * Loads a Response `data` tree with one evaluation. Definition-directed: a repeatable group present in
+     * `data` gets exactly one row per array entry, past `maxRepeat` or below `minRepeat` included, so loaded
+     * data reports MAX_REPEAT / MIN_REPEAT instead of losing rows. Keys absent from `data` keep their state;
+     * calculated fields and undeclared keys are ignored.
+     */
+    loadResponseData(data: JsonRecord): void;
+    private loadItemsData;
+    private appendRepeatRow;
+    /** Re-keys repeat `path` to the rows `select` keeps from a snapshot of every current row. O(rows). */
+    private rebuildRepeatRows;
     compileExpression(expression: string, currentItemName?: string): () => FormFieldValue;
     setValue(name: string, value: FormFieldValue): void;
+    /** Coerces and stores a field value without evaluating; false for calculated or undeclared fields. */
+    private writeFieldData;
     getValidationReport(): ValidationReport;
     getValidationReport(options: {
         profile?: EnabledValidationProfile;
@@ -91,7 +108,8 @@ export declare class FormEngine implements IFormEngine {
         profile: 'off';
     }): null;
     getValidationReport(options?: ValidationReportOptions): ValidationReport | null;
-    private produceValidationReport;
+    /** Report for `trigger` plus the expression diagnostics of the evaluation that produced it. */
+    private produceValidation;
     evaluateShape(shapeId: string): ValidationResult[];
     isPathRelevant(path: string): boolean;
     whyRelevant(path: string): RelevanceExplanation;
@@ -119,7 +137,15 @@ export declare class FormEngine implements IFormEngine {
     }): EngineReplayResult;
     getDefinition(): FormDefinition;
     setLabelContext(context: string | null): void;
+    /** Definition label for the active label context (no Locale, no `{{}}`); reactive to `setLabelContext`. */
     getLabel(item: FormItem): string;
+    /**
+     * Reactive label a respondent sees for the Item at instance `path` — field, display, or group (a repeat row
+     * path such as `jobs[0]` names its group). Same cascade as `FieldViewModel.label` (Locale
+     * `<key>.label@context` → `<key>.label` → `labels[context]` → inline), `{{}}` interpolated in the Item's
+     * scope. `undefined` when no Item has that path.
+     */
+    getItemLabelSignal(path: string): ReadonlyEngineSignal<string> | undefined;
     loadLocale(doc: LocaleDocument): void;
     setLocale(code: string): void;
     getActiveLocale(): string;
@@ -127,7 +153,7 @@ export declare class FormEngine implements IFormEngine {
     getLocaleDirection(): 'ltr' | 'rtl';
     getFieldVM(path: string): FieldViewModel | undefined;
     getFormVM(): FormViewModel;
-    resolveLocaleString(key: string, fallback: string): string;
+    resolveLocaleString(key: string, fallback: string, itemPath?: string): string;
     injectExternalValidation(results: Array<{
         path: string;
         severity: string;
@@ -143,7 +169,6 @@ export declare class FormEngine implements IFormEngine {
     private static normalizeConstructorOptions;
     private initializeOptionSignals;
     private initializeInstances;
-    private fieldDataTypesSnapshot;
     /** Returns true if the source string is fetchable (HTTP(S) or absolute path). */
     private static isFetchableSource;
     private initializeInstanceSource;
@@ -158,6 +183,15 @@ export declare class FormEngine implements IFormEngine {
     private writeInstanceValue;
     private validateInstanceSchema;
     private evaluateExpression;
+    private felContextInput;
+    /**
+     * FEL context for ad-hoc reads (compileExpression, Locale `{{}}`, derivation trace). The form-scope base is
+     * built once per engine state: values, MIPs, and results change only through `_evaluate` (evaluation
+     * version), rows through structure changes, instances through the instance version. Reading those signals
+     * also re-runs a caller's computed whenever the base would change. In-flight evaluation reads use
+     * `evaluateExpression`, which always builds fresh.
+     */
+    private felContext;
     private repeatCountsSnapshot;
     private relevanceBindPathCandidates;
     private findGoverningRelevanceBindPath;
@@ -178,6 +212,7 @@ export declare class FormEngine implements IFormEngine {
     private resolveRepeatPath;
     private clearRepeatSubtree;
     private _createFieldVM;
-    private _buildLocaleFELContext;
+    /** Locale §3.3.2: evaluate a `{{}}` segment in the binding scope of `itemPath` (form scope when empty). */
+    private _evalLocaleFEL;
     private getDisplayedIssuerPin;
 }

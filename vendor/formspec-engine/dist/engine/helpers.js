@@ -19,6 +19,9 @@ export function normalizeRemoteOptions(payload) {
         const base = {
             value: String(option.value),
             label: String(option.label),
+            ...(option['x-generation'] && typeof option['x-generation'] === 'object'
+                ? { 'x-generation': option['x-generation'] }
+                : {}),
         };
         if (Array.isArray(option.keywords) && option.keywords.length > 0) {
             const keywords = option.keywords.map((k) => String(k)).filter((s) => s.length > 0);
@@ -32,14 +35,13 @@ export function makeValidationResult(result) {
     return {
         $formspecValidationResult: '1.0',
         ...result,
-        path: toFelIndexedPath(result.path),
     };
 }
+/** Paths stay resolved instance paths with 0-based indexes (Core §4.3.3), exactly as WASM emits them. */
 export function toValidationResult(result) {
     return {
         ...result,
         $formspecValidationResult: '1.0',
-        path: toFelIndexedPath(result.path),
     };
 }
 export function toValidationResults(results) {
@@ -153,15 +155,26 @@ export function normalizeWasmValue(value) {
     }
     return cloneValue(value);
 }
-export function tagMoneyByPath(path, value, bindConfigs, fieldDataTypes = {}) {
-    if (!value || typeof value !== 'object' || Array.isArray(value))
+/**
+ * Encode a field value in the FEL type envelope its `dataType` declares (Core §2.1.3).
+ *
+ * `money` objects become `{ $type: 'money', amount, currency }`; `date` and
+ * `dateTime` strings become `{ $type: 'date', value }`. WASM (fel-core) decodes
+ * both, including the ISO date parse; this only tags the declared type.
+ */
+export function tagFelValueByPath(path, value, fieldDataTypes) {
+    const isString = typeof value === 'string';
+    const isRecord = !!value && typeof value === 'object' && !Array.isArray(value);
+    if (!isString && !isRecord)
         return value;
-    const record = value;
-    if (record.$type === 'money')
-        return value;
-    const bind = bindConfigs[toBasePath(path)];
     const dataType = fieldDataTypes[toBasePath(path)];
-    if (dataType === 'money' && 'amount' in record && 'currency' in record) {
+    if (isString) {
+        return dataType === 'date' || dataType === 'dateTime'
+            ? { $type: 'date', value }
+            : value;
+    }
+    const record = value;
+    if (record.$type === undefined && dataType === 'money' && 'amount' in record && 'currency' in record) {
         return {
             $type: 'money',
             amount: record.amount,
@@ -485,7 +498,8 @@ export function flattenObject(value, prefix = '', output = {}) {
     }
     return output;
 }
-export function buildGroupSnapshotForPath(prefix, signals) {
+/** FEL context snapshot of the non-repeat fields under `prefix`, leaves tagged by `dataType`. */
+export function buildGroupSnapshotForPath(prefix, signals, fieldDataTypes) {
     const snapshot = {};
     for (const [path, signalRef] of Object.entries(signals)) {
         if (!path.startsWith(`${prefix}.`)) {
@@ -495,23 +509,25 @@ export function buildGroupSnapshotForPath(prefix, signals) {
         if (!relative || relative.includes('[')) {
             continue;
         }
-        setNestedPathValue(snapshot, relative, cloneValue(signalRef.value));
+        setNestedPathValue(snapshot, relative, tagFelValueByPath(path, cloneValue(signalRef.value), fieldDataTypes));
     }
     return snapshot;
 }
-export function buildRepeatCollection(groupPath, count, signals) {
-    const rows = [];
-    for (let index = 0; index < count; index += 1) {
-        const prefix = `${groupPath}[${index}]`;
-        const row = {};
-        for (const [path, signalRef] of Object.entries(signals)) {
-            if (!path.startsWith(`${prefix}.`)) {
-                continue;
-            }
-            const relative = path.slice(prefix.length + 1);
-            setResponsePathValue(row, relative, cloneValue(signalRef.value));
+/** FEL context rows of repeat group `groupPath`, leaves tagged by `dataType`. One pass over signals: O(signals). */
+export function buildRepeatCollection(groupPath, count, signals, fieldDataTypes) {
+    const rows = Array.from({ length: count }, () => ({}));
+    const prefix = `${groupPath}[`;
+    for (const [path, signalRef] of Object.entries(signals)) {
+        if (!path.startsWith(prefix)) {
+            continue;
         }
-        rows.push(row);
+        const close = path.indexOf('].', prefix.length);
+        const rawIndex = close === -1 ? '' : path.slice(prefix.length, close);
+        const index = /^\d+$/.test(rawIndex) ? Number(rawIndex) : -1;
+        if (index < 0 || index >= count) {
+            continue;
+        }
+        setResponsePathValue(rows[index], path.slice(close + 2), tagFelValueByPath(path, cloneValue(signalRef.value), fieldDataTypes));
     }
     return rows;
 }
@@ -656,6 +672,7 @@ export function snapshotSignals(signals) {
     }
     return snapshot;
 }
+/** FEL expression addressing only (`$repeat[n]` is 1-based, Core §4.3.3); never for ValidationResult paths. */
 export function toFelIndexedPath(path) {
     return path.replace(/\[(\d+)\]/g, (_match, index) => `[${Number(index) + 1}]`);
 }

@@ -3,7 +3,7 @@ import { mergeBreakpointNamespace } from '@formspec-org/types';
 import { resolvePresentation } from './theme-resolver.js';
 import { resolveResponsiveProps } from './responsive.js';
 import { interpolateParams } from './params.js';
-import { classifyComponent, extractProps, gridPlacementStyleFromLayout, normalizeCssClass, preparePlanContext, resolveCssClasses, resolveGridTracks, resolveStyleTokens, resolveTokenInContext, } from './node-utils.js';
+import { classifyComponent, extractProps, gridPlacementStyleFromLayout, needGenerationAnchors, normalizeCssClass, preparePlanContext, resolveCssClasses, resolveGridTracks, resolveStyleTokens, resolveTokenInContext, } from './node-utils.js';
 import { planDefinitionItem } from './planner-definition-fallback.js';
 import { componentTreeOwnsPages, findComponentNodeByPath, findNodeByBindPath, } from './planner-path-utils.js';
 import { applyGeneratedPageMode } from './planner-page-mode.js';
@@ -39,6 +39,10 @@ export function planComponentTree(tree, ctx, prefix = '', customComponentStack, 
         customComponentStack.add(componentType);
         const result = planComponentTree(template, planCtx, prefix, customComponentStack, false, null);
         customComponentStack.delete(componentType);
+        result.needAnchors = [
+            ...(result.needAnchors ?? []),
+            ...needGenerationAnchors(comp).filter((anchor) => !result.needAnchors?.includes(anchor)),
+        ];
         return finalizeRouteProjectionRoot(result, planCtx, prefix, graphPathSegments);
     }
     const bindKey = comp.bind;
@@ -49,9 +53,6 @@ export function planComponentTree(tree, ctx, prefix = '', customComponentStack, 
     const isRepeatGroup = item?.type === 'group' && item.repeatable === true
         && componentType !== 'DataTable' && componentType !== 'Accordion';
     const props = extractProps(comp);
-    if (componentType === 'TextInput' && item?.type === 'field' && item.dataType === 'text' && props.maxLines == null) {
-        props.maxLines = 3;
-    }
     for (const prop of ['gap', 'rowGap', 'padding', 'background', 'border', 'radius', 'elevation']) {
         if (props[prop] !== undefined)
             props[prop] = resolveTokenInContext(props[prop], planCtx);
@@ -71,6 +72,7 @@ export function planComponentTree(tree, ctx, prefix = '', customComponentStack, 
             : undefined,
         cssClasses: resolveCssClasses(comp, planCtx),
         children: [],
+        needAnchors: needGenerationAnchors(comp, item),
     };
     const nextGraphPathSegments = componentGraphPathSegments(comp, graphPathSegments);
     if (planCtx.componentGraph && nextGraphPathSegments) {
@@ -105,6 +107,9 @@ export function planComponentTree(tree, ctx, prefix = '', customComponentStack, 
         const presentation = resolvePresentation(planCtx.theme, itemDesc, tier1);
         node.presentation = presentation;
         node.labelPosition = presentation.labelPosition ?? 'top';
+        if (componentType === 'TextInput' && fieldItem.dataType === 'text') {
+            props.maxLines ?? (props.maxLines = presentation.widgetConfig?.rows ?? 3);
+        }
         const presClasses = normalizeCssClass(presentation.cssClass);
         if (presClasses.length > 0) {
             const union = new Set([...node.cssClasses, ...presClasses]);
@@ -112,9 +117,10 @@ export function planComponentTree(tree, ctx, prefix = '', customComponentStack, 
         }
     }
     if (item && item.type === 'display') {
-        if (props.text == null) {
-            props.text = item.label ?? '';
-        }
+        // Component §5.14: `text` is ignored when `bind` is present. A display Item has
+        // no value, so the bound "value" is its label; `bindPath` (above) lets renderers
+        // resolve it live (Locale, FEL `{{}}`) and apply the Item's Bind relevance.
+        props.text = item.label ?? '';
         delete props.bind;
     }
     if (comp.when) {

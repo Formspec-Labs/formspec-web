@@ -1,3 +1,29 @@
+const NEED_ANCHOR = /^need:([a-zA-Z][a-zA-Z0-9_-]*)@[1-9][0-9]*$/;
+export function needTraceAttrs(candidates) {
+    const anchors = (candidates ?? []).filter((candidate) => typeof candidate === 'string' && NEED_ANCHOR.test(candidate));
+    if (anchors.length === 0)
+        return {};
+    const ids = anchors.flatMap((anchor) => {
+        const match = NEED_ANCHOR.exec(anchor);
+        return match?.[1] ? [match[1]] : [];
+    });
+    return {
+        'data-need-anchors': [...new Set(anchors)].join(' '),
+        'data-need-ids': [...new Set(ids)].join(' '),
+    };
+}
+export function generationNeedAnchors(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+        return [];
+    const generation = value['x-generation'];
+    if (!generation || typeof generation !== 'object' || Array.isArray(generation)) {
+        return [];
+    }
+    const anchors = generation.anchors;
+    return Array.isArray(anchors)
+        ? anchors.filter((anchor) => typeof anchor === 'string')
+        : [];
+}
 export function componentGraphIdentityAttrs(node) {
     const identity = node.componentGraphIdentity;
     if (!identity)
@@ -50,5 +76,6 @@ export function projectionMetadataAttrs(node) {
     return {
         ...componentGraphIdentityAttrs(node),
         ...uiGraphRoutePolicyAttrs(node),
+        ...needTraceAttrs(node.needAnchors),
     };
 }

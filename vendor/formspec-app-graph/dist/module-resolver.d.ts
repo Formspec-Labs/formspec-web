@@ -57,6 +57,11 @@ export interface ModulePayloadValidatorInput {
 export interface ModulePayloadValidatorResult {
     ok: boolean;
     path?: string;
+    reason?: string;
+    keyword?: string;
+    message?: string;
+    schemaPath?: string;
+    schemaFragmentPath?: string;
 }
 export type ModulePayloadValidator = (input: ModulePayloadValidatorInput) => ModulePayloadValidatorResult;
 export interface ModuleResolverSupportInput extends ModuleResolutionSupportProfile {

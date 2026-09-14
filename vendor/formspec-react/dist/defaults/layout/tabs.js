@@ -2,7 +2,7 @@
 import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc Tabs layout component — WAI-ARIA tabbed panel navigation with keyboard support. */
 import React, { useState, useRef, useCallback } from 'react';
-import { projectionMetadataAttrs } from '../../projection-metadata.js';
+import { needTraceAttrs, projectionMetadataAttrs, } from '../../projection-metadata.js';
 import { routeLandmarkAttrs } from '../../route-landmark.js';
 /**
  * Tabs layout component.
@@ -56,6 +56,7 @@ export function Tabs({ node, children }) {
     }, [activeTab, tabCount, setActiveTab]);
     // Spec: tabLabels prop takes precedence, then derive from child metadata
     const explicitLabels = node.props?.tabLabels;
+    const explicitLabelGeneration = node.props?.tabLabelGeneration;
     const tabLabels = node.children.map((child, idx) => explicitLabels?.[idx]
         || child.fieldItem?.label
         || child.props?.title
@@ -64,7 +65,9 @@ export function Tabs({ node, children }) {
     const renderedChildren = React.Children.toArray(children);
     const tabBar = (_jsx("div", { role: "tablist", "aria-label": ariaLabel, "aria-orientation": placement === 'left' || placement === 'right' ? 'vertical' : undefined, className: "formspec-tab-bar", onKeyDown: handleKeyDown, children: tabLabels.map((label, idx) => {
             const isActive = idx === activeTab;
-            return (_jsx("button", { type: "button", className: isActive ? 'formspec-tab formspec-tab--active' : 'formspec-tab', ref: (el) => { buttonRefs.current[idx] = el; }, role: "tab", id: `tab-${id}-${idx}`, "aria-selected": isActive, "aria-controls": `panel-${id}-${idx}`, tabIndex: isActive ? 0 : -1, onClick: () => setActiveTab(idx), children: label }, idx));
+            return (_jsx("button", { type: "button", className: isActive ? 'formspec-tab formspec-tab--active' : 'formspec-tab', ref: (el) => { buttonRefs.current[idx] = el; }, role: "tab", id: `tab-${id}-${idx}`, "aria-selected": isActive, "aria-controls": `panel-${id}-${idx}`, tabIndex: isActive ? 0 : -1, onClick: () => setActiveTab(idx), ...needTraceAttrs(explicitLabels?.[idx]
+                    ? explicitLabelGeneration?.[idx]?.anchors
+                    : node.children[idx]?.needAnchors), children: label }, idx));
         }) }));
     const panels = (_jsx("div", { className: "formspec-tab-panels", children: tabLabels.map((_, idx) => {
             const isActive = idx === activeTab;

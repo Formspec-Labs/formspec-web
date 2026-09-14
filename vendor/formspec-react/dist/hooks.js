@@ -14,3 +14,4 @@ export { useDiagnostics } from './use-diagnostics';
 export { useReplay } from './use-replay';
 export { useFocusField } from './use-focus-field';
 export { useRuntimeContext } from './use-runtime-context';
+export { useSemanticFieldControl } from './use-semantic-field-control';

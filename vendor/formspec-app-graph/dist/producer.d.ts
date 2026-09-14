@@ -9,6 +9,8 @@ export interface AppGraphReportProducerRequest extends ArtifactResolverRequest {
     moduleSupport?: ModuleResolverSupportInput;
     moduleSource?: string;
     surfaceLocal?: AppGraphDiagnosticReport;
+    authorizationBoundary?: AppGraphDiagnosticReport;
+    unsupported?: AppGraphDiagnosticReport;
     schemaValidators: AppGraphSchemaValidators;
     evidenceSchemaValidators?: AppGraphEvidenceSchemaValidators;
     crossArtifactValidators?: AppGraphCrossArtifactValidator[];

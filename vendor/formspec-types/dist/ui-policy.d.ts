@@ -268,7 +268,7 @@ export declare const UI_POLICY: {
             readonly Accordion: {
                 readonly fallback: "Stack";
                 readonly carry: readonly ["children"];
-                readonly drop: readonly ["allowMultiple", "defaultOpen"];
+                readonly drop: readonly ["allowMultiple", "defaultOpen", "allowAdd", "allowRemove"];
                 readonly translate: {
                     readonly labels: "collapsible-title";
                 };

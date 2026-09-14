@@ -1,5 +1,12 @@
 /** @filedesc Needs Document integrity, needRef resolution, and coverage diagnostics over a caller-paired bundle. */
 import { type AppGraphContext, type AppGraphDiagnostic } from './types.js';
+/**
+ * `need:<id>@<revision>` (needs-spec S8); revisions start at 1 with no leading
+ * zero, matching every runtime renderer. The shared anchor regex in
+ * `common.schema.json` stays broad by convention; the per-prefix grammar is
+ * this spec's, so it is enforced here rather than in the schema.
+ */
+export declare const NEED_ANCHOR: RegExp;
 export type NeedStatus = 'proposed' | 'adopted' | 'superseded' | 'withdrawn';
 /** One EARL-shaped report row, carried on every NEED-* diagnostic's `details`. */
 export interface NeedsEarlFrame {

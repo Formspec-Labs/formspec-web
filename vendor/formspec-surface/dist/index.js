@@ -9,6 +9,7 @@
  * See the package README for the design calls this package makes on the
  * platform's behalf and why each is here rather than in every host.
  */
+export { generationNeedAnchors, isCanonicalNeedAnchor, mergeNeedAnchors, } from './need-trace.js';
 export { SURFACE_DIAGNOSTIC_CODES, SURFACE_DIAGNOSTIC_SEVERITY, documentRootContaminationDiagnostic, surfaceDiagnostic, } from './diagnostics.js';
 export { DEFAULT_SURFACE_STRINGS, SURFACE_LOCALE_KEY_PREFIX, SURFACE_STRING_KEYS, resolveSurfaceLocaleStrings, resolveSurfaceStrings, } from './strings.js';
 export { compareRouteSpecificity, fillRoutePath, inspectRouteParams, matchRoutePath, matchRouteSegments, parseRoutePath, routeParamMarkers, routePathPatternKey, routePathSegments, } from './route-path.js';
@@ -19,6 +20,10 @@ export { STATIC_CONTENT_KINDS, planStaticContent, resolveHeadingLevel, resolveRo
 export { planExperienceUnit, } from './experience-unit.js';
 export { planRoute, } from './slot-plan.js';
 export { createDocumentResourceDataSourceLoader, dataSourceAvailableToWidget, loadWidgetDataInputs, resolveDataSourceDescriptor, } from './data-source-loader.js';
+export { createPreviewDefinitionResponseStore, } from './definition-response-store.js';
+export { dataSourceAvailableToDefinitionForm, loadDefinitionFormInitialData, planDefinitionFormInitialData, } from './definition-form-initial-data.js';
+export { createSurfaceSemanticOutputRegistry, } from './semantic-output.js';
 export { planTransitions, responseActionsDocumentForDefinition, slotSuppliedTriggers, } from './transitions.js';
 export { planMatchedRoute, } from './route-plan.js';
 export { bundleIsRenderable, dereferenceBundleExport, } from './bundle.js';
+export { SURFACE_SCENARIO_DIAGNOSTIC_CODES, createSurfacePreviewRuntime, validateSurfacePreviewScenario, } from './preview-scenario.js';

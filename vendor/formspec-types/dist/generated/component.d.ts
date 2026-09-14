@@ -439,12 +439,12 @@ export interface Heading extends ComponentBase {
     text: string;
 }
 /**
- * Static or data-bound text block. When bind is present, displays the bound item's current value as read-only. When absent, displays the static text prop.
+ * Static or data-bound text block. Bound to a field Item, displays its current value as read-only; bound to a display Item, displays the Item's resolved label (Locale, then {{expression}} interpolation) and follows its Bind relevance. When absent, displays the static text prop.
  */
 export interface Text extends ComponentBase {
     component: 'Text';
     /**
-     * Item key. When present, displays the bound item's formatted value (read-only).
+     * Item key. A field Item shows its formatted value (read-only); a display Item shows its resolved label.
      */
     bind?: string;
     /**
@@ -506,10 +506,88 @@ export interface Tabs extends ComponentBase {
      */
     tabLabels?: string[];
     /**
+     * Generation provenance aligned by index with tabLabels. Strict data-only authoring profiles require one direct current adopted Need anchor for every explicit tab label.
+     */
+    tabLabelGeneration?: Generation[];
+    /**
      * Zero-based index of the initially active tab.
      */
     defaultTab?: number;
     children?: ChildrenArray;
+}
+/**
+ * Authoring identity per ADR 0150 §5.4. Distinct from `respondent-ledger-event.Actor` (respondent-identity) and `experience.Actor` (workflow-role) — three Actor $defs by design. `kind` and `actChannel` are terminal-closed enums; product nuance (e.g. discriminating Wireframes-MCP from Forms-MCP, both `actChannel: 'mcp'`) rides URN-encoded into `id`, not via new enum values.
+ */
+export interface AuthorActor {
+    /**
+     * Stable actor URN (urn:formspec:actor:... scheme). Product nuance rides URN-encoded (e.g. urn:formspec:actor:mcp:wireframes:agent-7).
+     */
+    id: string;
+    /**
+     * Terminal-closed per §5.4 (NOT §4.5-extensible). Answers 'what kind of authoring entity'.
+     */
+    kind: 'human' | 'ai-agent' | 'service';
+    /**
+     * Terminal-closed per §5.4. Orthogonal to kind. Answers 'through what channel'. An ai-agent MAY have actChannel:'mcp' (mediated via MCP) OR 'agent' (autonomous). A human MAY have actChannel:'human' (direct editor) OR 'mcp' (CLI-driven MCP).
+     */
+    actChannel: 'human' | 'mcp' | 'agent' | 'service';
+    /**
+     * Optional human-readable label for timeline/support views.
+     */
+    display?: string;
+    extensions?: Extensions;
+}
+/**
+ * Graph-wide Component node identity for x-generation movedFrom/copiedFrom provenance. Mirrors the app-graph Component node identity tuple: Component membership, Surface sibling identity, route, absolute route-scoped nodePath, and optional public/structural node ids. This is provenance metadata only; it does not authorize, execute, or resolve runtime behavior.
+ */
+export interface ComponentNodeIdentityRef {
+    component: {
+        /**
+         * App Manifest components[] membership handle.
+         */
+        handle: string;
+        /**
+         * Canonical URL of the Component document when available.
+         */
+        url?: string;
+        /**
+         * Component document version evidence when available.
+         */
+        version?: string;
+    };
+    surface: {
+        /**
+         * Canonical URL of the Surface document.
+         */
+        url: string;
+        /**
+         * Surface document version evidence when available.
+         */
+        version?: string;
+    };
+    /**
+     * Surface routes[].id for the route-scoped node.
+     */
+    route: string;
+    /**
+     * Absolute route-scoped Component node path built from stable node segments.
+     */
+    nodePath: string;
+    /**
+     * Optional ComponentBase.id evidence for the node.
+     */
+    id?: string;
+    /**
+     * Optional structural authoring identity for the node.
+     */
+    nodeId?: string;
+}
+/**
+ * Legacy same-runtime route + intra-document node path. Retained for Studio/kernel compatibility; it is not sufficient graph-wide Component provenance once multiple Surfaces or Component documents are loaded.
+ */
+export interface CrossComponentRef {
+    route: string;
+    nodePath: string;
 }
 /**
  * Button that invokes a named Action from the loaded Response Actions document. Validation and host event behavior come from the resolved Action, not from widget-local policy.
@@ -562,6 +640,14 @@ export interface Accordion extends ComponentBase {
      * Section header labels. labels[i] is the summary text for children[i]. Falls back to 'Section {i+1}' when absent.
      */
     labels?: string[];
+    /**
+     * When bind is set: whether to show an 'Add' control for new repeat instances, subject to maxRepeat. Presentation-only — does not change minRepeat/maxRepeat cardinality, and every instance supplied by data still renders. Ignored without bind.
+     */
+    allowAdd?: boolean;
+    /**
+     * When bind is set: whether to show per-section 'Remove' controls, subject to minRepeat. Presentation-only — does not change minRepeat/maxRepeat cardinality, and every instance supplied by data still renders. Ignored without bind.
+     */
+    allowRemove?: boolean;
     children?: ChildrenArray;
 }
 /**
@@ -781,6 +867,7 @@ export interface Summary extends ComponentBase {
          * Named option set from the Definition. When set, the raw bound value is resolved to its display label.
          */
         optionSet?: string;
+        'x-generation'?: Generation;
     }[];
 }
 /**
@@ -842,17 +929,18 @@ export interface DataTable extends ComponentBase {
          * Optional step for numeric inputs.
          */
         step?: number;
+        'x-generation'?: Generation;
     }[];
     /**
      * Whether to display row numbers.
      */
     showRowNumbers?: boolean;
     /**
-     * Whether to show an 'Add row' control.
+     * Whether to show an 'Add row' control, subject to maxRepeat. Presentation-only — does not change minRepeat/maxRepeat cardinality, and every row supplied by data still renders.
      */
     allowAdd?: boolean;
     /**
-     * Whether to show per-row 'Remove' controls.
+     * Whether to show per-row 'Remove' controls, subject to minRepeat. Presentation-only — does not change minRepeat/maxRepeat cardinality, and every row supplied by data still renders.
      */
     allowRemove?: boolean;
 }
@@ -1018,80 +1106,6 @@ export interface ComponentBase {
      */
     cssClass?: string | string[];
     layout?: ComponentLayout;
-}
-/**
- * Authoring identity per ADR 0150 §5.4. Distinct from `respondent-ledger-event.Actor` (respondent-identity) and `experience.Actor` (workflow-role) — three Actor $defs by design. `kind` and `actChannel` are terminal-closed enums; product nuance (e.g. discriminating Wireframes-MCP from Forms-MCP, both `actChannel: 'mcp'`) rides URN-encoded into `id`, not via new enum values.
- */
-export interface AuthorActor {
-    /**
-     * Stable actor URN (urn:formspec:actor:... scheme). Product nuance rides URN-encoded (e.g. urn:formspec:actor:mcp:wireframes:agent-7).
-     */
-    id: string;
-    /**
-     * Terminal-closed per §5.4 (NOT §4.5-extensible). Answers 'what kind of authoring entity'.
-     */
-    kind: 'human' | 'ai-agent' | 'service';
-    /**
-     * Terminal-closed per §5.4. Orthogonal to kind. Answers 'through what channel'. An ai-agent MAY have actChannel:'mcp' (mediated via MCP) OR 'agent' (autonomous). A human MAY have actChannel:'human' (direct editor) OR 'mcp' (CLI-driven MCP).
-     */
-    actChannel: 'human' | 'mcp' | 'agent' | 'service';
-    /**
-     * Optional human-readable label for timeline/support views.
-     */
-    display?: string;
-    extensions?: Extensions;
-}
-/**
- * Graph-wide Component node identity for x-generation movedFrom/copiedFrom provenance. Mirrors the app-graph Component node identity tuple: Component membership, Surface sibling identity, route, absolute route-scoped nodePath, and optional public/structural node ids. This is provenance metadata only; it does not authorize, execute, or resolve runtime behavior.
- */
-export interface ComponentNodeIdentityRef {
-    component: {
-        /**
-         * App Manifest components[] membership handle.
-         */
-        handle: string;
-        /**
-         * Canonical URL of the Component document when available.
-         */
-        url?: string;
-        /**
-         * Component document version evidence when available.
-         */
-        version?: string;
-    };
-    surface: {
-        /**
-         * Canonical URL of the Surface document.
-         */
-        url: string;
-        /**
-         * Surface document version evidence when available.
-         */
-        version?: string;
-    };
-    /**
-     * Surface routes[].id for the route-scoped node.
-     */
-    route: string;
-    /**
-     * Absolute route-scoped Component node path built from stable node segments.
-     */
-    nodePath: string;
-    /**
-     * Optional ComponentBase.id evidence for the node.
-     */
-    id?: string;
-    /**
-     * Optional structural authoring identity for the node.
-     */
-    nodeId?: string;
-}
-/**
- * Legacy same-runtime route + intra-document node path. Retained for Studio/kernel compatibility; it is not sufficient graph-wide Component provenance once multiple Surfaces or Component documents are loaded.
- */
-export interface CrossComponentRef {
-    route: string;
-    nodePath: string;
 }
 /**
  * Typed structural placement hints. Grid placement applies when the node is a child of a Grid or another documented grid context.

@@ -13,6 +13,8 @@ export interface LookupResult {
     value: string | null;
     source: 'regional' | 'fallback' | 'implicit' | null;
     localeCode?: string;
+    /** Direct canonical Need anchors for the exact localized string selected. */
+    needAnchors?: string[];
 }
 /**
  * Manages loaded locale documents, resolves string keys through the

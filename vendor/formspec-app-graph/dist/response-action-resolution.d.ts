@@ -7,6 +7,7 @@ export declare const CLOSED_RESPONSE_ACTION_INTENTS: ReadonlySet<string>;
 export interface ResponseActionReference {
     id: string;
     intent?: string;
+    scope: 'app' | 'response' | 'invalid';
     targetDefinition?: string;
     handle: ResolvedArtifactHandle;
     actionIndex: number;

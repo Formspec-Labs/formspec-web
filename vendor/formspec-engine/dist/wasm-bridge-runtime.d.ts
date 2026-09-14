@@ -179,6 +179,12 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
 }): {
     values: any;
     validations: any[];
+    diagnostics: Array<{
+        path: string;
+        expression: string;
+        shapeId?: string;
+        message: string;
+    }>;
     nonRelevant: string[];
     variables: any;
     required: Record<string, boolean>;

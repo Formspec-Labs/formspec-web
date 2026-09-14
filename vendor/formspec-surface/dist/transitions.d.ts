@@ -26,6 +26,14 @@ export type TransitionUnfireableReason =
 interface PlannedTransitionFields {
     trigger: string;
     to: string;
+    /**
+     * Authored target-route parameter mapping. Keys are parameters declared by
+     * the target route; values name allowlisted runtime bindings returned by the
+     * completed Response Action.
+     */
+    params?: Readonly<Record<string, string>>;
+    /** Direct authored Need anchors for this rendered transition feature. */
+    needAnchors?: readonly string[];
     when?: string;
     /** One sentence a person can read, naming what is missing. */
     reason: string;
@@ -80,6 +88,8 @@ export type TransitionConditionEvaluator = (request: {
 }) => boolean | undefined;
 /** Minimal read of a Response Actions document — the fields a trigger resolves against. */
 export interface ResponseActionsDocumentLike {
+    /** Explicit application scope is required before a module-widget may invoke an action. */
+    scope?: unknown;
     /** The Definition this document binds to. `E611`'s "targeting the Definition that slot binds". */
     targetDefinition?: {
         url?: unknown;
@@ -87,6 +97,8 @@ export interface ResponseActionsDocumentLike {
     actions?: readonly {
         id?: unknown;
         intent?: unknown;
+        label?: unknown;
+        'x-generation'?: unknown;
     }[];
 }
 export interface TransitionPlanInput {
@@ -135,11 +147,11 @@ export declare function responseActionsDocumentForDefinition<TDocument extends R
  *    control the host route renders — the same transitivity §4.4 applies to the
  *    theme grant. A shell that scans only a route's own `slots[]` reports a
  *    working page as dead.
- * 2. **The check follows the control this binding actually places.**
- *    `FormspecForm` auto-places one submit-intent Action and no other action.
- *    A plan that credited every published action would report a control that
- *    does not exist. The selected document and submit Action must each be
- *    unique, and the document must target the rendered Definition.
+ * 2. **The check follows the controls this binding actually places.**
+ *    `FormspecForm` auto-places each uniquely identified Action with a literal
+ *    structured label from the one response-scoped document targeting the
+ *    rendered Definition. Action ids are always exact; a closed-core intent is
+ *    credited only when exactly one loaded Action publishes it.
  *
  * A module widget contributes only through the complete declared chain:
  * Registry action output -> Surface action binding -> exact loaded action.

@@ -1,10 +1,20 @@
 /** @filedesc Shared ModuleResolver kernel for module admission and contribution evidence. */
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 import { evaluateModulePostureAdmission, } from './posture-admission.js';
 import { resolveWidgetContribution } from './widget-contribution.js';
 const MODULE_PHASE = 'module-resolution';
 const MODULE_ORIGIN = 'module-resolver';
 const CUSTOM_TOKEN_CATEGORY_PREFIX_PATTERN = /^x-[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$/;
 const EXTENSION_NAME_PATTERN = /^x-/;
+const WIDGET_SHAPE_PROPS_VALIDATOR = 'widgetShape.props';
+const modulePayloadAjv = new Ajv2020({
+    allErrors: true,
+    strict: false,
+    strictSchema: true,
+    validateSchema: true,
+});
+addFormats(modulePayloadAjv);
 function sourceForKind(kind) {
     return `memory://${kind}`;
 }
@@ -55,6 +65,108 @@ function extensionName(value) {
 }
 function escapeJsonPointerToken(token) {
     return token.replace(/~/g, '~0').replace(/\//g, '~1');
+}
+function errorProperty(error) {
+    if (error.keyword === 'required') {
+        const missingProperty = error.params.missingProperty;
+        return typeof missingProperty === 'string' ? missingProperty : undefined;
+    }
+    if (error.keyword === 'additionalProperties' || error.keyword === 'unevaluatedProperties') {
+        const additionalProperty = error.params
+            .additionalProperty
+            ?? error.params.unevaluatedProperty;
+        return typeof additionalProperty === 'string' ? additionalProperty : undefined;
+    }
+    return undefined;
+}
+function payloadErrorPath(error) {
+    const property = errorProperty(error);
+    const pointer = property
+        ? `${error.instancePath}/${escapeJsonPointerToken(property)}`
+        : error.instancePath;
+    return pointer || undefined;
+}
+function pointerDepth(pointer) {
+    return pointer?.split('/').filter(Boolean).length ?? 0;
+}
+function comparePayloadErrors(left, right) {
+    const leftPath = payloadErrorPath(left);
+    const rightPath = payloadErrorPath(right);
+    return pointerDepth(rightPath) - pointerDepth(leftPath)
+        || (leftPath ?? '').localeCompare(rightPath ?? '')
+        || left.keyword.localeCompare(right.keyword)
+        || left.schemaPath.localeCompare(right.schemaPath)
+        || (left.message ?? '').localeCompare(right.message ?? '');
+}
+function invalidPayloadResult(error) {
+    const path = payloadErrorPath(error);
+    return {
+        ok: false,
+        reason: 'payload-schema-mismatch',
+        ...(path ? { path } : {}),
+        keyword: error.keyword,
+        ...(error.message ? { message: error.message } : {}),
+        schemaPath: error.schemaPath,
+    };
+}
+/**
+ * Execute Registry `widgetShape.props` as JSON Schema for AppGraph payloads.
+ * Invalid or unevaluable schemas fail closed instead of allowing authored
+ * configuration to pass without a result.
+ */
+const validateWidgetShapeProps = ({ payload, schema }) => {
+    const schemaObject = asRecord(schema);
+    if (!schemaObject) {
+        return {
+            ok: false,
+            reason: 'payload-schema-invalid',
+            message: 'widgetShape.props must be a JSON Schema object',
+        };
+    }
+    try {
+        if (!modulePayloadAjv.validateSchema(schemaObject)) {
+            const error = [...(modulePayloadAjv.errors ?? [])].sort(comparePayloadErrors)[0];
+            return {
+                ok: false,
+                reason: 'payload-schema-invalid',
+                ...(error?.keyword ? { keyword: error.keyword } : {}),
+                ...(error?.message ? { message: error.message } : {}),
+                ...(error?.instancePath ? { schemaFragmentPath: error.instancePath } : {}),
+                ...(error?.schemaPath ? { schemaPath: error.schemaPath } : {}),
+            };
+        }
+        const validate = modulePayloadAjv.compile(schemaObject);
+        if (validate(payload))
+            return { ok: true };
+        const error = [...(validate.errors ?? [])].sort(comparePayloadErrors)[0];
+        return error
+            ? invalidPayloadResult(error)
+            : {
+                ok: false,
+                reason: 'payload-schema-mismatch',
+                message: 'JSON Schema validation failed without an error location',
+            };
+    }
+    catch (error) {
+        return {
+            ok: false,
+            reason: 'payload-schema-evaluation-failed',
+            message: error instanceof Error ? error.message : String(error),
+        };
+    }
+};
+function appGraphModuleSupport(support) {
+    return {
+        ...(support ?? {}),
+        payloadSchemaValidators: [
+            WIDGET_SHAPE_PROPS_VALIDATOR,
+            ...(support?.payloadSchemaValidators ?? []).filter((name) => name !== WIDGET_SHAPE_PROPS_VALIDATOR),
+        ],
+        payloadValidators: {
+            ...(support?.payloadValidators ?? {}),
+            [WIDGET_SHAPE_PROPS_VALIDATOR]: validateWidgetShapeProps,
+        },
+    };
 }
 function cloneGraphRef(ref) {
     if (!ref)
@@ -354,7 +466,7 @@ export function moduleResolverInputFromAppGraph(input) {
         ...(documents.length > 0 ? { documents } : {}),
         registries,
         ...(input.admission ? { admission: input.admission } : {}),
-        ...(input.support ? { support: input.support } : {}),
+        support: appGraphModuleSupport(input.support),
         ...(input.source ? { source: input.source } : (input.manifest.source ? { source: input.manifest.source } : {})),
     };
 }
@@ -770,10 +882,24 @@ function payloadDiagnosticSource(use, fallback, path) {
     const source = use.payloadSource ?? fallback;
     if (!path)
         return source;
+    const relativePointer = path.startsWith('#') ? path.slice(1) : path;
     return {
         ...source,
-        jsonPointer: `${source.jsonPointer}/${path}`,
+        jsonPointer: `${source.jsonPointer}${relativePointer.startsWith('/') ? '' : '/'}${relativePointer}`,
     };
+}
+function payloadSchemaPointer(validatorName) {
+    return validatorName === WIDGET_SHAPE_PROPS_VALIDATOR
+        ? '/widgetShape/props'
+        : `/${escapeJsonPointerToken(validatorName)}`;
+}
+function payloadSchemaDiagnosticSource(entry, input, validatorName, result) {
+    const base = `/entries/${entry.entryIndex}${payloadSchemaPointer(validatorName)}`;
+    const resultPath = result.schemaFragmentPath
+        ?? (result.schemaPath?.startsWith('#') ? result.schemaPath.slice(1) : result.schemaPath);
+    if (!resultPath)
+        return registrySource(entry, input, base);
+    return registrySource(entry, input, `${base}${resultPath.startsWith('/') ? '' : '/'}${resultPath}`);
 }
 function resolvePayload(use, entry, source, input) {
     const validatorName = payloadValidatorName(use, entry, input);
@@ -782,17 +908,39 @@ function resolvePayload(use, entry, source, input) {
     const validate = input.support?.payloadValidators?.[validatorName];
     if (!validate)
         return { status: 'missing-validator' };
-    const result = validate({
-        payload: use.payload,
-        schema: payloadSchemaFor(entry.entry, validatorName),
-    });
+    let result;
+    try {
+        result = validate({
+            payload: use.payload,
+            schema: payloadSchemaFor(entry.entry, validatorName),
+        });
+    }
+    catch (error) {
+        result = {
+            ok: false,
+            reason: 'payload-validator-threw',
+            message: error instanceof Error ? error.message : String(error),
+        };
+    }
     if (result.ok)
         return { status: 'passed' };
+    const resultDetails = {
+        contribution: use.name,
+        validator: validatorName,
+    };
+    if (result.reason)
+        resultDetails.reason = result.reason;
+    if (result.keyword)
+        resultDetails.keyword = result.keyword;
+    if (result.message)
+        resultDetails.message = result.message;
+    if (result.schemaPath)
+        resultDetails.schemaPath = result.schemaPath;
     return {
         status: 'failed',
         diagnostic: diagnostic('MODULE-PAYLOAD-SCHEMA-MISMATCH', `Payload for contribution '${use.name}' does not match ${validatorName}.`, payloadDiagnosticSource(use, source, result.path), {
-            relatedSources: [registrySource(entry, input, `/entries/${entry.entryIndex}/widgetShape/props`)],
-            details: { contribution: use.name, validator: validatorName },
+            relatedSources: [payloadSchemaDiagnosticSource(entry, input, validatorName, result)],
+            details: resultDetails,
         }),
     };
 }

@@ -36,7 +36,7 @@ export type SurfaceStringVars = Readonly<Record<string, string>>;
  * The closed key set. Small enough to translate in one sitting, which is the
  * property that makes F7 closable.
  */
-export declare const SURFACE_STRING_KEYS: readonly ["slotUnavailableDefinitionForm", "slotUnavailableExperienceUnit", "slotUnavailableWidgetUnimplemented", "slotUnavailableWidgetUndeclared", "slotUnavailableWidgetData", "slotUnavailableStaticContent", "slotUnavailableEmbedUnresolved", "slotUnavailableEmbedCycle", "widgetEmpty", "notFoundTitle", "notFoundBody", "navigationLabel", "transitionContinue", "transitionPending", "transitionFailed", "transitionTargetUnresolved", "transitionTargetCollision", "transitionNoResponseActions", "transitionTriggerUnresolved", "transitionTriggerAmbiguous", "transitionNoExecutor", "transitionSuppliedBySlot", "transitionFireable"];
+export declare const SURFACE_STRING_KEYS: readonly ["slotUnavailableDefinitionForm", "slotUnavailableExperienceUnit", "slotUnavailableWidgetUnimplemented", "slotUnavailableWidgetIncompatible", "slotUnavailableWidgetUndeclared", "slotUnavailableWidgetData", "slotUnavailableStaticContent", "slotUnavailableEmbedUnresolved", "slotUnavailableEmbedCycle", "widgetEmpty", "notFoundTitle", "notFoundBody", "navigationLabel", "transitionContinue", "transitionPending", "transitionFailed", "transitionTargetUnresolved", "transitionTargetCollision", "transitionNoResponseActions", "transitionTriggerUnresolved", "transitionTriggerAmbiguous", "transitionNoExecutor", "transitionSuppliedBySlot", "transitionFireable"];
 export type SurfaceStringKey = (typeof SURFACE_STRING_KEYS)[number];
 /** One string, possibly interpolated from the vars its call site supplies. */
 export type SurfaceStringTemplate = (vars: SurfaceStringVars) => string;
@@ -72,6 +72,7 @@ export declare const DEFAULT_SURFACE_STRINGS: {
     readonly slotUnavailableDefinitionForm: () => string;
     readonly slotUnavailableExperienceUnit: () => string;
     readonly slotUnavailableWidgetUnimplemented: (vars: Readonly<Record<string, string>>) => string;
+    readonly slotUnavailableWidgetIncompatible: (vars: Readonly<Record<string, string>>) => string;
     readonly slotUnavailableWidgetUndeclared: (vars: Readonly<Record<string, string>>) => string;
     readonly slotUnavailableWidgetData: () => string;
     readonly slotUnavailableStaticContent: () => string;

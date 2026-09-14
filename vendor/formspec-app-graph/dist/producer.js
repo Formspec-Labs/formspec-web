@@ -19,6 +19,10 @@ function finishAppGraphValidationReport(request, artifactResolutionReport) {
         ...(request.hostEvidence ? { hostEvidence: request.hostEvidence } : {}),
         moduleResolution: moduleResolutionReport,
         ...(request.surfaceLocal ? { surfaceLocal: request.surfaceLocal } : {}),
+        ...(request.authorizationBoundary
+            ? { authorizationBoundary: request.authorizationBoundary }
+            : {}),
+        ...(request.unsupported ? { unsupported: request.unsupported } : {}),
         schemaValidators: request.schemaValidators,
         ...(request.evidenceSchemaValidators ? { evidenceSchemaValidators: request.evidenceSchemaValidators } : {}),
         ...(request.crossArtifactValidators ? { crossArtifactValidators: request.crossArtifactValidators } : {}),

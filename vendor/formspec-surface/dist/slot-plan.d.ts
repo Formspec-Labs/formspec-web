@@ -36,13 +36,17 @@ import type { ExperienceDocument } from '@formspec-org/types';
 import { type SurfaceDiagnostic } from './diagnostics.js';
 import type { SurfaceRoute } from './route-path.js';
 import type { SurfaceRouteHandle } from './composition.js';
-import { type ExperienceUnitPlan } from './experience-unit.js';
+import { type ExperienceDocumentHandle, type ExperienceUnitPlan } from './experience-unit.js';
 import { type HeadingLevel, type StaticContentPlan, type SurfaceStaticAssetResolver } from './static-content.js';
 import type { WidgetKey, WidgetRegistry, WidgetResolution } from './registry.js';
+import type { ResponseActionsDocumentLike } from './transitions.js';
 import { type DataSourceCatalogHandle, type WidgetDataInputPlan } from './data-source-loader.js';
+import { type DefinitionFormInitialDataPlan, type MappingDocumentHandle } from './definition-form-initial-data.js';
 export type SurfaceSlot = SurfaceRoute['slots'][number];
 export interface SlotPlanBase {
     slotId: string;
+    /** Direct authored Need anchors for the visible slot container and title. */
+    needAnchors?: readonly string[];
     title?: string;
     /** `slot.position` — an author hint with no normative vocabulary at v0.1. */
     position?: string;
@@ -53,6 +57,8 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     slotType: 'definition-form';
     definitionRef: string;
     presentation?: string;
+    /** Qualified Data Source plan used before the form engine mounts. */
+    initialData?: DefinitionFormInitialDataPlan;
     definition?: FormDefinition;
     registryEntries: readonly RegistryEntry[];
     status: 'ready' | 'unresolved';
@@ -71,6 +77,8 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
 } | {
     slotType: 'static-content';
     content: StaticContentPlan | undefined;
+    /** Direct authored Need anchors for the visible binding content. */
+    contentNeedAnchors?: readonly string[];
 } | {
     slotType: 'unknown';
     /** The value received after validation was bypassed or input was corrupted. */
@@ -86,21 +94,44 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
 export interface SlotPlanContext<TComponent> {
     handle: SurfaceRouteHandle;
     experiences: readonly ExperienceDocument[];
+    /** Exact manifested source identity for qualified Experience bindings. */
+    experienceHandles?: readonly ExperienceDocumentHandle[] | undefined;
     definitions: ReadonlyMap<string, FormDefinition>;
     registryEntries: readonly RegistryEntry[];
     widgets: WidgetRegistry<TComponent>;
     /** Exact manifested Data Sources catalog handles. */
     dataSources?: readonly DataSourceCatalogHandle[] | undefined;
+    /** Manifested Mapping documents keyed by their App Manifest handles. */
+    mappings?: readonly MappingDocumentHandle[] | undefined;
     /** Manifest URL of `handle.surface`, required by Surface/route/slot availability. */
     surfaceRef?: string | undefined;
+    /** Loaded Response Actions documents used to resolve bound widget action metadata. */
+    responseActions?: readonly ResponseActionsDocumentLike[] | undefined;
     /** Level route content starts at. Default 2 — the route title is the `h1`. */
     headingBaseLevel?: HeadingLevel;
     /** Host admission boundary for authored static image sources. */
     staticAssetResolver?: SurfaceStaticAssetResolver | undefined;
 }
+export type WidgetActionLabelPlan = Readonly<{
+    literal: string;
+}> | Readonly<{
+    ref: string;
+}>;
+export interface WidgetActionMetadataPlan {
+    /** Exact action id selected by the Surface output binding. */
+    actionRef: string;
+    /** Authored Response Actions intent. Metadata only; execution stays in the host port. */
+    intent: string;
+    /** Authored label form, retained without inventing display text. */
+    label?: WidgetActionLabelPlan | undefined;
+    /** Direct authored Need anchors on the resolved Response Actions Action. */
+    needAnchors?: readonly string[] | undefined;
+}
 export interface WidgetActionOutputPlan {
     name: string;
     actionRef?: string | undefined;
+    /** Present only when `actionRef` resolves to exactly one loaded Action. */
+    action?: WidgetActionMetadataPlan | undefined;
 }
 export interface RoutePlan<TComponent> {
     handle: SurfaceRouteHandle;

@@ -1,9 +1,10 @@
 /** @filedesc FormspecProvider — React context wrapping a FormEngine + optional layout plan. */
 import React from 'react';
-import type { ActionRefFinding, ActionResolution, IFormEngine, IssuerFetcher, IssuerSource, ReadonlyEngineSignal, ResponseAction, ResponseActionEffectDispatchContext, ResponseActionEffectOutcome, ResponseActionIdempotencyKeyContext, ResponseActionInvocationPorts, ResponseActionInvocationResult, ResponseActionPreconditionResult, ResponseActionsDocumentInput } from '@formspec-org/engine';
+import type { ActionRefFinding, ActionResolution, IFormEngine, IssuerFetcher, IssuerSource, ReadonlyEngineSignal, ResponseAction, ResponseActionEffectDispatchContext, ResponseActionEffectOutcome, ResponseActionIdempotencyKeyContext, ResponseActionInvocationPorts, ResponseActionInvocationContext, ResponseActionInvocationResult, ResponseActionPreconditionResult, ResponseActionsDocumentInput } from '@formspec-org/engine';
 import type { EffectRequest, FormResponse, Precondition, ThemeDocument as SchemaThemeDocument, ValidationReport } from '@formspec-org/types';
 import type { ComponentGraphProjectionContext, LayoutHostEvidence, LayoutNode, ThemeDocument as LayoutThemeDocument } from '@formspec-org/layout';
 import type { ComponentMap } from './component-map';
+import type { SemanticControlScope, SemanticResponseBinding } from './semantic-controls';
 export type ResponseActionsDocument = ResponseActionsDocumentInput;
 export type { ActionRefFinding, ActionResolution, ResponseAction, ResponseActionInvocationResult, };
 export interface ResponseActionInvokerInput<TDetail = SubmitResult> {
@@ -11,6 +12,7 @@ export interface ResponseActionInvokerInput<TDetail = SubmitResult> {
     actionRef: string;
     nodeId?: string;
     ports: ResponseActionInvocationPorts<TDetail>;
+    invocationContext?: ResponseActionInvocationContext;
 }
 export type ResponseActionInvokerResult<TDetail = SubmitResult> = ResponseActionInvocationResult<TDetail> | {
     invocation: ResponseActionInvocationResult<TDetail>;
@@ -20,6 +22,28 @@ export interface SubmitResult {
     response: FormResponse;
     validationReport: ValidationReport | null;
 }
+/** Human-facing help resolved from manifested References sidecars. */
+export interface FormspecHumanReference {
+    id?: string;
+    title: string;
+    description?: string;
+    content?: string;
+    uri?: string;
+    type?: string;
+    /** Direct current Need anchors on this exact rendered reference. */
+    needAnchors: readonly string[];
+}
+export type FormspecFieldHelpResolver = (path: string) => readonly FormspecHumanReference[];
+/**
+ * Host policy for turning a References URI into a browser destination.
+ *
+ * Returning `undefined` keeps the human-readable reference but renders its
+ * title as text. A host may translate a non-browser scheme into a trusted
+ * internal route; the default admits only HTTPS and same-app relative URIs.
+ */
+export type FormspecFieldHelpUriAdmission = (uri: string) => string | undefined;
+/** Fail-closed browser policy for human Reference links. */
+export declare function admitDefaultFieldHelpUri(uri: string): string | undefined;
 export interface FormspecContextValue {
     engine: IFormEngine;
     layoutPlan: LayoutNode | null;
@@ -54,6 +78,10 @@ export interface FormspecContextValue {
     resolveActionIdempotencyKey?: (effect: EffectRequest, action: ResponseAction, context: ResponseActionIdempotencyKeyContext) => string;
     /** Resolve an ActionButton actionRef against the loaded Response Actions document. */
     resolveActionRef: (actionRef: string, nodeId?: string) => ActionResolution;
+    /** Exact runtime identity used only by the public semantic-control seam. */
+    semanticControlScope?: SemanticControlScope;
+    currentSemanticResponseBinding: () => SemanticResponseBinding | null;
+    advanceSemanticResponseRevision: () => SemanticResponseBinding | null;
     /** Mark a field as touched (e.g., on blur). */
     touchField: (path: string) => void;
     /** Touch every field in the definition (e.g., before submit to reveal all errors). */
@@ -64,6 +92,12 @@ export interface FormspecContextValue {
     isTouched: (path: string) => boolean;
     /** Registry entries for extension resolution. */
     registryEntries: Map<string, any>;
+    /** Human References for a field path. Agent-only context never enters this seam. */
+    resolveFieldHelp?: FormspecFieldHelpResolver;
+    /** Admit or translate a human Reference URI before it reaches an anchor. */
+    admitFieldHelpUri: FormspecFieldHelpUriAdmission;
+    /** Localizable disclosure label for resolved field help. */
+    fieldHelpLabel: string;
     /** Effective formPresentation (definition merged with component document). */
     formPresentation?: Record<string, unknown>;
 }
@@ -87,10 +121,21 @@ export interface FormspecProviderProps {
     emitThemeTokens?: boolean;
     /** Response Actions document for ActionButton actionRef resolution. */
     responseActionsDocument?: ResponseActionsDocument | null;
-    /** Initial response data to pre-populate fields (for edit flows). */
+    /**
+     * Exact artifact, render, and Response identity for renderer-owned
+     * semantic controls. Omit for ordinary human-only rendering.
+     */
+    semanticControlScope?: SemanticControlScope;
+    /** Response `data` to load for edit flows (`engine.loadResponseData`: every saved repeat row is kept). */
     initialData?: Record<string, any>;
     /** Registry entries for extension field validation. */
     registryEntries?: any[];
+    /** Human References resolver for the active Definition. */
+    resolveFieldHelp?: FormspecFieldHelpResolver;
+    /** Host URI policy. Defaults to HTTPS and same-app relative destinations. */
+    admitFieldHelpUri?: FormspecFieldHelpUriAdmission;
+    /** Localizable disclosure label for resolved field help. */
+    fieldHelpLabel?: string;
     /** Runtime context for FEL today(), locale formatting, etc. */
     runtimeContext?: any;
     /** Optional fetcher for remote Issuer documents. */

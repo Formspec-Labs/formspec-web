@@ -50,6 +50,16 @@
     }
   },
   "$defs": {
+    "DataSourceLoadState": {
+      "type": "string",
+      "enum": ["loaded", "unavailable"],
+      "description": "Host-reported outcome of one Data Source load request."
+    },
+    "DataSourceFreshness": {
+      "type": "string",
+      "enum": ["fresh", "stale"],
+      "description": "Host-reported freshness of a loaded Data Source value. Hosts report this value; consumers do not infer it from a clock."
+    },
     "DataSourceKind": {
       "type": "string",
       "enum": [
@@ -98,6 +108,39 @@
                   }
                 }
               }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": { "const": "definition-response" },
+              "runtime": {
+                "properties": {
+                  "delivery": { "enum": ["snapshot", "live"] }
+                },
+                "required": ["delivery"]
+              }
+            },
+            "required": ["kind", "runtime"]
+          },
+          "then": {
+            "required": ["definitionVersion", "responseSelection"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": { "not": { "const": "definition-response" } }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["definitionVersion"] },
+                { "required": ["responseSelection"] }
+              ]
             }
           }
         },
@@ -181,7 +224,8 @@
                   }
                 }
               }
-            }
+            },
+            "not": { "required": ["responseSelection"] }
           }
         }
       ],
@@ -197,6 +241,15 @@
           "format": "uri",
           "description": "Canonical Definition URL when this source family reads or exposes Definition-response state."
         },
+        "definitionVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact Definition version used to partition non-draft Definition-response selection. The pair (definitionRef, definitionVersion) is immutable selection identity."
+        },
+        "responseSelection": {
+          "$ref": "#/$defs/ResponseSelection",
+          "description": "Complete deterministic selection policy for a non-draft Definition-response source."
+        },
         "owner": {
           "type": "string",
           "enum": ["host", "formspec", "module"],
@@ -209,6 +262,10 @@
         },
         "availability": { "$ref": "#/$defs/Availability" },
         "runtime": { "$ref": "#/$defs/RuntimeBehavior" },
+        "x-generation": {
+          "$ref": "https://formspec.org/schemas/common/1.0#/$defs/Generation",
+          "description": "Direct generation provenance for this Data Source declaration. Strict data-only authoring profiles require this source's own current adopted Need anchor; catalog or consuming widget-binding anchors do not cover it."
+        },
         "schema": {
           "type": "object",
           "description": "Optional JSON Schema fragment describing payload shape. This is a contract for hosts and validators, not inline source data."
@@ -218,6 +275,34 @@
         },
         "extensions": {
           "$ref": "https://formspec.org/schemas/common/1.0#/$defs/Extensions"
+        }
+      }
+    },
+    "ResponseSelection": {
+      "type": "object",
+      "required": ["status", "cardinality", "orderBy", "tieBreak", "partitionBy"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "https://formspec.org/schemas/response/1.0#/$defs/ResponseStatus",
+          "const": "completed",
+          "description": "Select only Responses whose owner-defined ResponseStatus is completed."
+        },
+        "cardinality": {
+          "const": "latest",
+          "description": "Return exactly the latest matching Response when one exists."
+        },
+        "orderBy": {
+          "const": "authored-desc",
+          "description": "Order matching Responses by the RFC 3339 instant represented by authored, newest first."
+        },
+        "tieBreak": {
+          "const": "response-id-asc",
+          "description": "Resolve equal authored instants by Response id ascending in unsigned UTF-8 byte order."
+        },
+        "partitionBy": {
+          "const": "definition",
+          "description": "Select only within the exact (definitionRef, definitionVersion) partition."
         }
       }
     },

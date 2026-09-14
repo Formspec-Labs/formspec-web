@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { createFormEngine } from '@formspec-org/engine';
+import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import { demoLocaleDocuments } from '../../src/demo/locales.ts';
+
+beforeAll(async () => {
+  await initFormspecEngine();
+});
 
 describe('demo sample form fixture', () => {
   it('is branded with an inline issuer document', () => {
@@ -22,6 +28,17 @@ describe('demo sample form fixture', () => {
     ))).toBe(
       true,
     );
+  });
+
+  it('localizes group and repeat children through bare Item keys', () => {
+    const engine = createFormEngine(demoSampleForm);
+    for (const document of demoLocaleDocuments) engine.loadLocale(document);
+    engine.setLocale('es');
+
+    expect(engine.getFieldVM('applicant.fullName')?.label.value).toBe('Nombre completo');
+    expect(engine.getFieldVM('applicant.fullName')?.hint.value).toBe('Como aparece en su identificacion.');
+    expect(engine.getFieldVM('household[0].memberName')?.label.value).toBe('Nombre del miembro');
+    engine.dispose();
   });
 
   it('covers required, optional, repeat, and conditional fields', () => {

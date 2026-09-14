@@ -1,4 +1,4 @@
-import { surfaceDiagnostic, } from './diagnostics.js';
+import { surfaceDiagnostic, } from "./diagnostics.js";
 function own(record, key) {
     return Object.prototype.hasOwnProperty.call(record, key);
 }
@@ -33,34 +33,34 @@ export function resolveDataSourceDescriptor(catalogs, binding) {
 export function dataSourceAvailableToWidget(descriptor, context) {
     const availability = descriptor.source.availability;
     switch (availability.level) {
-        case 'app':
+        case "app":
             return true;
-        case 'definition':
+        case "definition":
             return false;
-        case 'surface':
+        case "surface":
             return (context.surfaceRef !== undefined &&
                 availability.surfaceRef === context.surfaceRef);
-        case 'route':
+        case "route":
             return (context.surfaceRef !== undefined &&
                 availability.surfaceRef === context.surfaceRef &&
                 availability.routeRef === context.routeId);
-        case 'slot':
+        case "slot":
             return (context.surfaceRef !== undefined &&
                 availability.surfaceRef === context.surfaceRef &&
                 availability.routeRef === context.routeId &&
                 availability.slotId === context.slotId);
-        case 'module':
+        case "module":
             return availability.moduleId === context.moduleId;
     }
 }
 function planFailure(input) {
-    if (input.status === 'ready')
+    if (input.status === "ready")
         return undefined;
-    const reason = input.status === 'unbound'
-        ? 'unbound'
-        : input.status === 'unresolved'
-            ? 'unresolved'
-            : 'unavailable';
+    const reason = input.status === "unbound"
+        ? "unbound"
+        : input.status === "unresolved"
+            ? "unresolved"
+            : "unavailable";
     return {
         inputName: input.name,
         required: input.required,
@@ -81,7 +81,7 @@ function runtimeFailure(input, reason, message) {
     };
 }
 function diagnosticForFailure(failure, site) {
-    return surfaceDiagnostic('WIDGET-DATA-REQUIRED-UNAVAILABLE', `Required widget input "${failure.inputName}" is unavailable: ${failure.message}`, site, {
+    return surfaceDiagnostic("WIDGET-DATA-REQUIRED-UNAVAILABLE", `Required widget input "${failure.inputName}" is unavailable: ${failure.message}`, site, {
         inputName: failure.inputName,
         reason: failure.reason,
         ...(failure.failureMode ? { failureMode: failure.failureMode } : {}),
@@ -100,24 +100,24 @@ export async function loadWidgetDataInputs(request) {
     const failures = [];
     const degradedInputs = [];
     for (const input of request.inputs) {
-        if (input.status !== 'ready') {
+        if (input.status !== "ready") {
             const plannedFailure = planFailure(input);
             if (!plannedFailure)
                 continue;
             if (input.required) {
                 failures.push(plannedFailure);
             }
-            else if (plannedFailure.failureMode === 'degraded-widget') {
+            else if (plannedFailure.failureMode === "degraded-widget") {
                 degradedInputs.push(plannedFailure);
             }
-            else if (input.status !== 'unbound') {
+            else if (input.status !== "unbound") {
                 failures.push(plannedFailure);
             }
             continue;
         }
         if (!dataSourceAvailableToWidget(input.descriptor, request.context)) {
-            const failure = runtimeFailure(input, 'unavailable', 'its availability selector does not cover this widget');
-            if (!input.required && failure.failureMode === 'degraded-widget') {
+            const failure = runtimeFailure(input, "unavailable", "its availability selector does not cover this widget");
+            if (!input.required && failure.failureMode === "degraded-widget") {
                 degradedInputs.push(failure);
             }
             else {
@@ -126,8 +126,8 @@ export async function loadWidgetDataInputs(request) {
             continue;
         }
         if (!request.authorize) {
-            const failure = runtimeFailure(input, 'unauthorized', 'the host supplied no authorization decision');
-            if (!input.required && failure.failureMode === 'degraded-widget') {
+            const failure = runtimeFailure(input, "unauthorized", "the host supplied no authorization decision");
+            if (!input.required && failure.failureMode === "degraded-widget") {
                 degradedInputs.push(failure);
             }
             else {
@@ -143,11 +143,11 @@ export async function loadWidgetDataInputs(request) {
             });
         }
         catch (error) {
-            authorization = { status: 'refused', reason: errorText(error) };
+            authorization = { status: "refused", reason: errorText(error) };
         }
-        if (authorization.status !== 'authorized') {
-            const failure = runtimeFailure(input, 'unauthorized', authorization.reason ?? 'the host refused access');
-            if (!input.required && failure.failureMode === 'degraded-widget') {
+        if (authorization.status !== "authorized") {
+            const failure = runtimeFailure(input, "unauthorized", authorization.reason ?? "the host refused access");
+            if (!input.required && failure.failureMode === "degraded-widget") {
                 degradedInputs.push(failure);
             }
             else {
@@ -156,8 +156,8 @@ export async function loadWidgetDataInputs(request) {
             continue;
         }
         if (!request.loader) {
-            const failure = runtimeFailure(input, 'load-failed', 'the host supplied no DataSourceLoader');
-            if (!input.required && failure.failureMode === 'degraded-widget') {
+            const failure = runtimeFailure(input, "load-failed", "the host supplied no DataSourceLoader");
+            if (!input.required && failure.failureMode === "degraded-widget") {
                 degradedInputs.push(failure);
             }
             else {
@@ -173,11 +173,8 @@ export async function loadWidgetDataInputs(request) {
             });
         }
         catch (error) {
-            loaded = { status: 'unavailable', reason: errorText(error) };
-        }
-        if (loaded.status !== 'loaded') {
-            const failure = runtimeFailure(input, 'load-failed', loaded.reason);
-            if (!input.required && failure.failureMode === 'degraded-widget') {
+            const failure = runtimeFailure(input, "load-failed", errorText(error));
+            if (!input.required && failure.failureMode === "degraded-widget") {
                 degradedInputs.push(failure);
             }
             else {
@@ -185,10 +182,20 @@ export async function loadWidgetDataInputs(request) {
             }
             continue;
         }
-        if (loaded.freshness === 'stale' &&
-            input.descriptor.source.runtime.failureMode !== 'stale-ok') {
-            const failure = runtimeFailure(input, 'stale-disallowed', 'the loader returned stale data and the catalog does not allow it');
-            if (!input.required && failure.failureMode === 'degraded-widget') {
+        if (loaded.status !== "loaded") {
+            const failure = runtimeFailure(input, "unavailable", loaded.reason);
+            if (!input.required && failure.failureMode === "degraded-widget") {
+                degradedInputs.push(failure);
+            }
+            else {
+                failures.push(failure);
+            }
+            continue;
+        }
+        if (loaded.freshness === "stale" &&
+            input.descriptor.source.runtime.failureMode !== "stale-ok") {
+            const failure = runtimeFailure(input, "stale-disallowed", "the loader returned stale data and the catalog does not allow it");
+            if (!input.required && failure.failureMode === "degraded-widget") {
                 degradedInputs.push(failure);
             }
             else {
@@ -202,7 +209,7 @@ export async function loadWidgetDataInputs(request) {
             if (!request.validatePayload) {
                 validation = {
                     valid: false,
-                    reason: 'the source declares a payload schema and the host supplied no validator',
+                    reason: "the source declares a payload schema and the host supplied no validator",
                 };
             }
             else {
@@ -219,8 +226,8 @@ export async function loadWidgetDataInputs(request) {
                 }
             }
             if (!validation.valid) {
-                const failure = runtimeFailure(input, 'payload-invalid', validation.reason ?? 'payload validation failed');
-                if (!input.required && failure.failureMode === 'degraded-widget') {
+                const failure = runtimeFailure(input, "payload-invalid", validation.reason ?? "payload validation failed");
+                if (!input.required && failure.failureMode === "degraded-widget") {
                     degradedInputs.push(failure);
                 }
                 else {
@@ -244,13 +251,13 @@ export async function loadWidgetDataInputs(request) {
     const diagnostics = requiredFailures.map((failure) => diagnosticForFailure(failure, request.site));
     if (failures.length > 0) {
         return {
-            status: 'unavailable',
+            status: "unavailable",
             failures,
             diagnostics,
         };
     }
     return {
-        status: 'ready',
+        status: "ready",
         data: Object.freeze(data),
         degradedInputs,
         diagnostics,
@@ -263,17 +270,17 @@ export async function loadWidgetDataInputs(request) {
  */
 export function createDocumentResourceDataSourceLoader(read) {
     return async (request) => {
-        if (request.descriptor.source.kind !== 'document-resource') {
+        if (request.descriptor.source.kind !== "document-resource") {
             return {
-                status: 'unavailable',
+                status: "unavailable",
                 reason: `unsupported source kind "${request.descriptor.source.kind}"`,
             };
         }
         const url = request.descriptor.source.runtime.provenance.source;
         if (!/^https?:\/\//u.test(url)) {
             return {
-                status: 'unavailable',
-                reason: 'document-resource provenance is not an HTTP(S) URL',
+                status: "unavailable",
+                reason: "document-resource provenance is not an HTTP(S) URL",
             };
         }
         return read({ ...request, url });

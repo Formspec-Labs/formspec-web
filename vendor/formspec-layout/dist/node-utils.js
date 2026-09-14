@@ -1,5 +1,28 @@
 /** @filedesc Layout node IDs, classification, token/CSS helpers, and plan context prep. */
 import { resolveToken } from './tokens.js';
+const NEED_ANCHOR = /^need:[a-zA-Z][a-zA-Z0-9_-]*@[1-9][0-9]*$/;
+/** Copy only canonical Need anchors from authored generation metadata. */
+export function needGenerationAnchors(...values) {
+    const anchors = [];
+    for (const value of values) {
+        if (!value || typeof value !== 'object' || Array.isArray(value))
+            continue;
+        const generation = value['x-generation'];
+        if (!generation || typeof generation !== 'object' || Array.isArray(generation))
+            continue;
+        const candidates = generation.anchors;
+        if (!Array.isArray(candidates))
+            continue;
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string'
+                && NEED_ANCHOR.test(candidate)
+                && !anchors.includes(candidate)) {
+                anchors.push(candidate);
+            }
+        }
+    }
+    return anchors;
+}
 // ── Component category classification ────────────────────────────────
 const LAYOUT_COMPONENTS = new Set([
     'Section', 'Stack', 'Grid', 'Tabs', 'Accordion',
@@ -51,10 +74,33 @@ export function planContains(node, component) {
     return node.children.some(child => planContains(child, component));
 }
 const ACTION_MUST_BE_SIBLING_ROOTS = new Set(['Accordion', 'Tabs']);
+function planContainsActionRef(node, actionRef) {
+    if (node.component === 'ActionButton'
+        && node.props?.actionRef === actionRef) {
+        return true;
+    }
+    return node.children.some(child => planContainsActionRef(child, actionRef));
+}
+function finalWizardStep(node) {
+    if (node.component === 'Wizard') {
+        return [...node.children].reverse().find(child => child.component === 'Section');
+    }
+    for (const child of node.children) {
+        const step = finalWizardStep(child);
+        if (step)
+            return step;
+    }
+    return undefined;
+}
+function finalPageModeStep(root, pageMode) {
+    if (pageMode !== 'wizard')
+        return undefined;
+    return [...root.children].reverse().find(child => child.component === 'Section');
+}
 export function ensureActionButton(root, nextId = createNodeIdGenerator(), options = {}) {
     if (!options.actionRef)
         return;
-    if (planContains(root, 'Wizard') || planContains(root, 'ActionButton'))
+    if (planContainsActionRef(root, options.actionRef))
         return;
     const actionNode = {
         id: nextId('submit'),
@@ -64,6 +110,14 @@ export function ensureActionButton(root, nextId = createNodeIdGenerator(), optio
         cssClasses: [],
         children: [],
     };
+    const wizardStep = finalWizardStep(root)
+        ?? finalPageModeStep(root, options.pageMode);
+    if (wizardStep) {
+        wizardStep.children.push(actionNode);
+        return;
+    }
+    if (planContains(root, 'Wizard') || options.pageMode === 'wizard')
+        return;
     if (ACTION_MUST_BE_SIBLING_ROOTS.has(root.component)) {
         const inner = { ...root };
         root.id = nextId('root-stack');
@@ -85,9 +139,6 @@ export function ensureActionButton(root, nextId = createNodeIdGenerator(), optio
         delete root.repeatPath;
         delete root.isRepeatTemplate;
         delete root.scopeChange;
-        return;
-    }
-    if (options.pageMode === 'wizard' && root.children.some(c => c.component === 'Section')) {
         return;
     }
     root.children.push(actionNode);

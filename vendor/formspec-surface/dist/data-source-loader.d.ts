@@ -12,8 +12,8 @@
  * catalog by filename, a source by unqualified id, or a value from widget
  * configuration.
  */
-import type { DataSource, DataSourcesDocument, WidgetDataInput } from '@formspec-org/types';
-import { type SurfaceDiagnostic, type SurfaceDiagnosticSite } from './diagnostics.js';
+import type { DataSource, DataSourceFreshness, DataSourceLoadState, DataSourcesDocument, WidgetDataInput } from "@formspec-org/types";
+import { type SurfaceDiagnostic, type SurfaceDiagnosticSite } from "./diagnostics.js";
 /** A loaded catalog together with the exact App Manifest URL that admitted it. */
 export interface DataSourceCatalogHandle {
     catalogRef: string;
@@ -35,8 +35,12 @@ export interface DataSourceActiveContext {
     surfaceRef?: string | undefined;
     routeId: string;
     slotId: string;
-    moduleId: string;
-    widgetName: string;
+    /** Present for a `definition-form` consumer; exact loaded Definition URL. */
+    definitionRef?: string | undefined;
+    /** Present for a module-widget consumer. */
+    moduleId?: string | undefined;
+    /** Present for a module-widget consumer. */
+    widgetName?: string | undefined;
     params: Readonly<Record<string, string>>;
     sessionGeneration?: string | number | undefined;
 }
@@ -45,20 +49,27 @@ export interface DataSourceLoadRequest {
     context: DataSourceActiveContext;
 }
 export type DataSourceLoadResult = {
-    status: 'loaded';
+    status: Extract<DataSourceLoadState, "loaded">;
     value: unknown;
     /** Loaders must state staleness; the shell never infers it from time. */
-    freshness: 'fresh' | 'stale';
+    freshness: DataSourceFreshness;
+    /**
+     * Owner-produced identity of the selected record, when the source has
+     * record identity. A consumer must never infer this from its request.
+     */
+    recordId?: string | undefined;
+    /** Owner-produced record revision, kept separate from data and identity. */
+    revision?: string | number | undefined;
 } | {
-    status: 'unavailable';
+    status: Extract<DataSourceLoadState, "unavailable">;
     reason: string;
 };
 /** The sole payload-loading port. Authorization is deliberately not folded in. */
 export type DataSourceLoader = (request: DataSourceLoadRequest) => DataSourceLoadResult | Promise<DataSourceLoadResult>;
 export type DataSourceAuthorizationResult = {
-    status: 'authorized';
+    status: "authorized";
 } | {
-    status: 'refused';
+    status: "refused";
     reason?: string | undefined;
 };
 /**
@@ -86,32 +97,32 @@ export type DataSourcePayloadValidator = (request: DataSourceLoadRequest & {
 export type WidgetDataInputPlan = {
     name: string;
     required: boolean;
-    status: 'ready';
+    status: "ready";
     descriptor: DataSourceDescriptor;
 } | {
     name: string;
     required: boolean;
-    status: 'unbound' | 'unresolved' | 'unavailable';
+    status: "unbound" | "unresolved" | "unavailable";
     reason: string;
     descriptor?: DataSourceDescriptor | undefined;
 };
-export type WidgetDataFailureReason = 'unbound' | 'unresolved' | 'unavailable' | 'unauthorized' | 'load-failed' | 'stale-disallowed' | 'payload-invalid';
+export type WidgetDataFailureReason = "unbound" | "unresolved" | "unavailable" | "unauthorized" | "load-failed" | "stale-disallowed" | "payload-invalid";
 export interface WidgetDataInputFailure {
     inputName: string;
     required: boolean;
     reason: WidgetDataFailureReason;
     message: string;
-    failureMode?: DataSource['runtime']['failureMode'] | undefined;
+    failureMode?: DataSource["runtime"]["failureMode"] | undefined;
 }
 export type WidgetDataDelivery = {
-    status: 'ready';
+    status: "ready";
     /** Frozen, named input map. Unbound optional inputs are absent. */
     data: Readonly<Record<string, unknown>>;
     /** Optional `degraded-widget` failures omitted from `data`. */
     degradedInputs: readonly WidgetDataInputFailure[];
     diagnostics: readonly SurfaceDiagnostic[];
 } | {
-    status: 'unavailable';
+    status: "unavailable";
     failures: readonly WidgetDataInputFailure[];
     diagnostics: readonly SurfaceDiagnostic[];
 };

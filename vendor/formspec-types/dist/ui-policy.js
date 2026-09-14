@@ -471,7 +471,9 @@ export const UI_POLICY = {
                 ],
                 "drop": [
                     "allowMultiple",
-                    "defaultOpen"
+                    "defaultOpen",
+                    "allowAdd",
+                    "allowRemove"
                 ],
                 "translate": {
                     "labels": "collapsible-title"

@@ -17,6 +17,23 @@ export interface WidgetKey {
 export interface WidgetModule<TComponent> {
     moduleId: string;
     widgets: Readonly<Record<string, TComponent>>;
+    /**
+     * Renderer-owned delivery declarations keyed by widgetShape.widgetName.
+     *
+     * A Registry widget that publishes a deliveryContractId or rendered-node
+     * inventory is admitted only when the supplied component publishes the exact
+     * same declaration and Registry entry version.
+     */
+    contracts?: Readonly<Record<string, WidgetRuntimeContract>>;
+}
+export interface WidgetRenderedConfigNodeContract {
+    pointerPattern: string;
+    kind: string;
+}
+export interface WidgetRuntimeContract {
+    deliveryContractId: string;
+    registryEntryVersion: string;
+    renderedConfigNodes: readonly WidgetRenderedConfigNodeContract[];
 }
 /**
  * Two independent axes, never collapsed into one: **declared** is whether a
@@ -47,6 +64,12 @@ export type WidgetResolution<TComponent> = {
     status: 'unimplemented';
     contributionName?: string;
     entry?: RegistryEntry;
+} | {
+    /** Code exists, but it does not match the Registry contract it claims to implement. */
+    status: 'incompatible';
+    contributionName: string;
+    entry: RegistryEntry;
+    reasons: readonly string[];
 } | {
     /** No Registry in the bundle declares it, and nothing implements it. */
     status: 'undeclared';

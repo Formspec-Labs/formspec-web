@@ -2,7 +2,7 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useRef, useEffect } from 'react';
-export function SignatureControl({ field, node, supplementaryDescribedBy, }) {
+export function SignatureControl({ field, node, describedBy, }) {
     const showError = !!(field.error && field.touched);
     const canvasRef = useRef(null);
     const isDrawingRef = useRef(false);
@@ -82,5 +82,5 @@ export function SignatureControl({ field, node, supplementaryDescribedBy, }) {
     };
     return (_jsxs("div", { className: "formspec-signature", children: [_jsx("canvas", { ref: canvasRef, id: field.id, 
                 // Item 1: WCAG 2.1.1 / 4.1.2 — canvas needs role, label, and keyboard focus
-                role: "img", "aria-label": `Signature pad for ${field.label}`, "aria-invalid": showError, ...(supplementaryDescribedBy ? { 'aria-describedby': supplementaryDescribedBy } : {}), tabIndex: 0, className: "formspec-signature-canvas", style: { width: '100%', height, touchAction: 'none', cursor: 'crosshair', display: 'block' } }), _jsx("button", { type: "button", className: "formspec-signature-clear", "aria-label": `Clear ${field.label}`, onClick: handleClear, children: "Clear" })] }));
+                role: "img", "aria-label": `Signature pad for ${field.label}`, "aria-invalid": showError, ...(describedBy ? { 'aria-describedby': describedBy } : {}), tabIndex: 0, className: "formspec-signature-canvas", style: { width: '100%', height, touchAction: 'none', cursor: 'crosshair', display: 'block' } }), _jsx("button", { type: "button", className: "formspec-signature-clear", "aria-label": `Clear ${field.label}`, onClick: handleClear, children: "Clear" })] }));
 }

@@ -81,6 +81,10 @@
         "Compact mobile theme for clinic check-in kiosks."
       ]
     },
+    "x-generation": {
+      "$ref": "https://formspec.org/schemas/common/1.0#/$defs/Generation",
+      "description": "Generation provenance for this authored Theme. Strict data-only authoring profiles require a direct current adopted Need anchor."
+    },
     "targetDefinition": {
       "$ref": "#/$defs/TargetDefinition",
       "description": "OPTIONAL binding to the target Formspec Definition and compatible version range. PRESENT — the theme is Definition-scoped and will only be applied to Definitions matching this target; if compatibleVersions is present and the Definition version falls outside the range, the processor SHOULD warn and MAY fall back to Tier 1 hints only (null theme), and the processor MUST NOT fail on a version mismatch. ABSENT — the theme is bundle-scoped per the ADR 0150 §5.2 app envelope: it scopes to the bundle whose App Manifest theme slot names it, not to a single Definition, which is the only representable posture when definitions[] is empty (a pure non-form app). A bundle-scoped Theme is resolved through the App Manifest; a Definition-scoped processor handed a Theme with no targetDefinition MUST NOT infer a binding to the loaded Definition. A Theme carrying Definition-keyed content (items keys, pages[].regions[].key) SHOULD declare targetDefinition — those keys have no anchor without one.",
@@ -129,6 +133,28 @@
       "x-lm": {
         "critical": true,
         "intent": "Central design vocabulary referenced via $token.<key> in style and widgetConfig. Enables consistent theming and easy rebrand. RECOMMENDED token-map prefixes include color.*, spacing.*, typography.*, border.*, elevation.*, x-* (custom); graph-visible UI policy token-slot compatibility recognizes platform token-registry prefixes plus custom x-* evidence."
+      }
+    },
+    "contrastPairs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/ContrastPair"
+      },
+      "description": "Additional color-token pairs whose effective contrast tooling must check. The platform Token Registry already declares the pairs used by the default renderer, so a Theme only needs this property for custom x-* tokens or stricter product-specific checks. A processor evaluates a pair after platform defaults and Theme token overrides are merged. It MUST use the WCAG 2.2 contrast formula when both values can be reduced to opaque sRGB colors, MUST NOT report a ratio when either value is indeterminate, and SHOULD diagnose a declared pair that references a missing token. The usage sets a standards floor: normalText is 4.5:1; largeText and uiComponent are 3:1. minimumRatio may raise but never lower that floor.",
+      "examples": [
+        [
+          {
+            "id": "agency-badge-label",
+            "foregroundToken": "x-agency.badge-text",
+            "backgroundToken": "x-agency.badge-fill",
+            "usage": "normalText"
+          }
+        ]
+      ],
+      "x-lm": {
+        "critical": true,
+        "intent": "Declares custom or stricter color relationships as data so authoring tools can reject inaccessible effective token combinations before rendering."
       }
     },
     "defaults": {
@@ -316,6 +342,51 @@
     "Tokens": {
       "$ref": "https://formspec.org/schemas/common/1.0#/$defs/Tokens"
     },
+    "ContrastPair": {
+      "type": "object",
+      "required": [
+        "id",
+        "foregroundToken",
+        "backgroundToken",
+        "usage"
+      ],
+      "additionalProperties": false,
+      "description": "A pair of effective color tokens checked together. Token names are stored without the $token. reference prefix. Authors use separate pairs for separate color-scheme token keys, such as color.input and color.dark.input.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]*$",
+          "description": "Stable identifier for this contrast check within the Theme."
+        },
+        "foregroundToken": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$",
+          "description": "Token key for the text, icon, focus indicator, or control boundary color."
+        },
+        "backgroundToken": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$",
+          "description": "Token key for the adjacent background or surface color."
+        },
+        "usage": {
+          "type": "string",
+          "enum": [
+            "normalText",
+            "largeText",
+            "uiComponent"
+          ],
+          "description": "How the foreground is used. normalText requires at least 4.5:1; largeText and uiComponent require at least 3:1."
+        },
+        "minimumRatio": {
+          "type": "number",
+          "minimum": 3,
+          "maximum": 21,
+          "description": "Optional stricter contrast ratio. The effective minimum is the greater of this number and the floor implied by usage, so this value cannot weaken the standards floor."
+        }
+      }
+    },
     "Category": {
       "type": "object",
       "required": ["type", "tokens"],
@@ -444,14 +515,16 @@
         "widgetConfig": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Widget-specific configuration. Properties depend on the widget. Renderers MUST ignore unrecognized keys. Theme fallback resolution does NOT carry widgetConfig forward — each fallback widget uses its own default configuration. Component fallback carry/drop/translate policy is defined structurally in specs/ui-policy.json. Well-known configs by widget: TextInput (maxLength, inputMode, placeholder), Text (rows, maxRows, autoResize, placeholder), NumberInput (showStepper, locale, placeholder), DatePicker (format, minDate, maxDate, placeholder), Select (searchable, placeholder), CheckboxGroup (columns, maxVisible), FileUpload (accept, maxSizeMb, preview), MoneyInput (showCurrencySymbol, locale, placeholder), Slider (min, max, step, showTicks, showValue), Toggle (onLabel, offLabel), RadioGroup (direction, columns), Signature (strokeColor, height).",
+          "description": "Widget-specific configuration. Properties depend on the widget. Renderers MUST ignore unrecognized keys. Theme fallback resolution does NOT carry widgetConfig forward — each fallback widget uses its own default configuration. Component fallback carry/drop/translate policy is defined structurally in specs/ui-policy.json. Repeatable group items (any widget): allowAdd and allowRemove (booleans, default true) lock the add/remove affordances when no Component Document binds the group; presentation-only, they do not change minRepeat/maxRepeat cardinality and every instance supplied by data still renders. TextInput maxLength is a display-only character-count hint that never blocks submission; enforce limits with a Definition Bind constraint such as 'length($) <= 200'. Well-known configs by widget: TextInput (maxLength, inputMode, placeholder), Text (rows, maxRows, autoResize, placeholder), NumberInput (showStepper, locale, placeholder), DatePicker (format, minDate, maxDate, placeholder), Select (searchable, placeholder), CheckboxGroup (columns, maxVisible), FileUpload (accept, maxSizeMb, preview), MoneyInput (showCurrencySymbol, locale, placeholder), Slider (min, max, step, showTicks, showValue), Toggle (onLabel, offLabel), RadioGroup (direction, columns), Signature (strokeColor, height).",
           "examples": [
             { "showCurrencySymbol": true, "locale": "en-US" },
             { "min": 0, "max": 100, "step": 5, "showTicks": true },
             { "searchable": true, "placeholder": "Select an option..." },
             { "rows": 4, "autoResize": true },
             { "onLabel": "Yes", "offLabel": "No" },
-            { "direction": "horizontal", "columns": 3 }
+            { "direction": "horizontal", "columns": 3 },
+            { "maxLength": 200 },
+            { "allowAdd": false, "allowRemove": false }
           ]
         },
         "labelPosition": {

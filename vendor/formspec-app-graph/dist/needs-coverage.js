@@ -14,11 +14,12 @@ const CODE_COVERAGE_UNJUSTIFIED = 'NEED-COVERAGE-002';
 /** The assertor half of every EARL-framed row (needs-spec S9.3). */
 const ASSERTOR = 'formspec-needs-coverage-checker';
 /**
- * `need:<id>@<revision>` (needs-spec S8). The shared anchor regex in
+ * `need:<id>@<revision>` (needs-spec S8); revisions start at 1 with no leading
+ * zero, matching every runtime renderer. The shared anchor regex in
  * `common.schema.json` stays broad by convention; the per-prefix grammar is
  * this spec's, so it is enforced here rather than in the schema.
  */
-const NEED_ANCHOR = /^need:([a-zA-Z][a-zA-Z0-9_-]*)@([0-9]+)$/;
+export const NEED_ANCHOR = /^need:([a-zA-Z][a-zA-Z0-9_-]*)@([1-9][0-9]*)$/;
 /**
  * The in-document schema id every Needs Document carries: needs-spec
  * §Conventions defines a Needs Document as one "identified by
@@ -132,6 +133,86 @@ function experienceUnits(experience) {
             refs,
             declaredRefCount: Array.isArray(needRefs) ? needRefs.length : 0,
         };
+    });
+}
+function handleUrl(handle) {
+    return stringProp(record(handle.ref), 'url')
+        ?? stringProp(record(handle.identity), 'url')
+        ?? stringProp(record(handle.document), 'url');
+}
+function definitionItemPaths(items, prefix = '') {
+    const paths = new Set();
+    if (!Array.isArray(items))
+        return paths;
+    for (const rawItem of items) {
+        const item = record(rawItem);
+        const key = stringProp(item, 'key');
+        if (!item || !key)
+            continue;
+        const path = prefix ? `${prefix}.${key}` : key;
+        paths.add(path);
+        for (const child of definitionItemPaths(item.children, path))
+            paths.add(child);
+    }
+    return paths;
+}
+function mountedUnitIds(context, experience) {
+    const surfaces = handlesByKind(context.handles, 'surface');
+    if (surfaces.length === 0)
+        return undefined;
+    const experiences = handlesByKind(context.handles, 'experience');
+    const experienceUrl = handleUrl(experience);
+    const experienceId = stringProp(record(experience.identity), 'id')
+        ?? stringProp(record(experience.document), 'id');
+    const mounted = new Set();
+    for (const surface of surfaces) {
+        const routes = record(surface.document)?.routes;
+        if (!Array.isArray(routes))
+            continue;
+        for (const rawRoute of routes) {
+            const slots = record(rawRoute)?.slots;
+            if (!Array.isArray(slots))
+                continue;
+            for (const rawSlot of slots) {
+                const slot = record(rawSlot);
+                if (stringProp(slot, 'slotType') !== 'experience-unit')
+                    continue;
+                const binding = record(slot?.binding);
+                const unitRef = stringProp(binding, 'unitRef');
+                const experienceRef = stringProp(binding, 'experienceRef');
+                if (!unitRef)
+                    continue;
+                if (experienceRef === undefined
+                    ? experiences.length === 1
+                    : experienceRef === experienceUrl || experienceRef === experienceId) {
+                    mounted.add(unitRef);
+                }
+            }
+        }
+    }
+    return mounted;
+}
+function unitItemRefsResolve(context, experience, unitIndex) {
+    const document = record(experience.document);
+    const unit = Array.isArray(document?.units)
+        ? record(document.units[unitIndex])
+        : undefined;
+    const itemRefs = unit?.itemRefs;
+    if (!Array.isArray(itemRefs) || itemRefs.length === 0)
+        return true;
+    const targetUrl = stringProp(record(document?.targetDefinition), 'url');
+    // Experience 1.0 permits itemRefs without an explicit targetDefinition.
+    // Preserve that legacy coverage meaning when no target is declared; the
+    // stricter resolution check applies once an author names a Definition.
+    if (!targetUrl)
+        return true;
+    const definitions = handlesByKind(context.handles, 'definition').filter((handle) => handleUrl(handle) === targetUrl);
+    if (definitions.length !== 1)
+        return false;
+    const paths = definitionItemPaths(record(definitions[0]?.document)?.items);
+    return itemRefs.every((rawRef) => {
+        const path = stringProp(record(rawRef), 'path');
+        return path !== undefined && paths.has(path);
     });
 }
 function escapePointerSegment(segment) {
@@ -322,12 +403,17 @@ export function validateNeedsCoverage(context) {
     // Step 3 — resolve needRefs; and the citation half of the coverage predicate.
     const citedIds = new Set();
     for (const experience of experiences) {
+        const mounted = mountedUnitIds(context, experience);
         for (const unit of experienceUnits(experience)) {
+            const eligible = (mounted === undefined || (unit.id !== undefined && mounted.has(unit.id)))
+                && unitItemRefsResolve(context, experience, unit.index);
             for (const ref of unit.refs) {
-                if (knownIds.has(ref.id)) {
+                if (knownIds.has(ref.id) && eligible) {
                     citedIds.add(ref.id);
                     continue;
                 }
+                if (knownIds.has(ref.id))
+                    continue;
                 diagnostics.push(diagnostic(CODE_REF, 'error', `Experience unit '${unit.id ?? '<unknown>'}' needRefs[${ref.refIndex}].id '${ref.id}' does not resolve to any need.id in the paired Needs Document.`, diagnosticSourceForHandle(experience, `/units/${unit.index}/needRefs/${ref.refIndex}/id`), earl(ref.id, 'needs-spec S7 needRef resolution'), {
                     reason: 'need-id-unresolved',
                     unitId: unit.id,

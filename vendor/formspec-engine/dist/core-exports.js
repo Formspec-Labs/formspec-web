@@ -1,6 +1,7 @@
 /** @filedesc Render-safe public surface shared by `index.ts` and `engine-render-entry.ts` — no FEL tooling facade or tools bridge (ADR 0050 §8). */
 export { DefaultValidationProfileResolver, } from './validation/index.js';
-export { declaresHostEvent, findResponseActionByIntent, invokeResponseAction, InvalidValidationTupleError, missingSubmitActionFinding, resolveResponseAction, resolveResponseActionValidationTuple, validationProfileForAction, } from './response-actions.js';
+export { APP_ACTION_VALIDATION_TUPLE, classifyResponseActionEffect, declaresHostEvent, findResponseActionByIntent, invokeResponseAction, invokeResponseActionAsync, isAppActionValidationTuple, isDurableResponseActionEffect, InvalidValidationTupleError, missingSubmitActionFinding, planResponseActionEffects, planResponseActionInvocation, resolveResponseAction, resolveResponseActionValidationTuple, validationProfileForAction, } from './response-actions.js';
+export { extractServiceRequestOutputs, planServiceRequest, resolveRuntimeValueSelector, resolveServiceRequest, ServiceRequestRuntimeError, } from './service-request-runtime.js';
 export { createDemoSubmitResponseActions, } from './demo-submit-response-actions.js';
 // §10 prohibits implicit-default Actions and free-string fallbacks. Renderers
 // that need a submit-intent actionRef MUST call `findResponseActionByIntent`

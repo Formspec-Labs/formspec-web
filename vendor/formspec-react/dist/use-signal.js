@@ -1,6 +1,6 @@
 'use client';
 /** @filedesc Generic Preact-signal → React bridge via useSyncExternalStore. */
-import { useSyncExternalStore, useRef, useCallback } from 'react';
+import { useSyncExternalStore, useCallback } from 'react';
 import { effect } from '@preact/signals-core';
 /**
  * Subscribe to a Preact `ReadonlyEngineSignal` from React.
@@ -11,14 +11,12 @@ import { effect } from '@preact/signals-core';
  * signal's value changes.
  */
 export function useSignal(signal) {
-    const signalRef = useRef(signal);
-    signalRef.current = signal;
     const subscribe = useCallback((onStoreChange) => {
         return effect(() => {
-            signalRef.current.value; // track the signal
+            signal.value; // track this signal instance
             onStoreChange();
         });
-    }, []);
-    const getSnapshot = useCallback(() => signalRef.current.value, []);
+    }, [signal]);
+    const getSnapshot = useCallback(() => signal.value, [signal]);
     return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

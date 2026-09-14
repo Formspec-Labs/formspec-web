@@ -10,6 +10,53 @@ import { ResponseActionsPreconditionCatalog } from './precondition-catalog.js';
  */
 const DEFAULT_PRECONDITION_CATALOG = new ResponseActionsPreconditionCatalog();
 /**
+ * The only validation tuple an app-scoped Action may declare.
+ *
+ * App actions have no Response to validate or persist. Keeping this predicate
+ * next to the executor prevents build-time gates from restating a runtime
+ * invariant with subtly different defaults.
+ */
+export const APP_ACTION_VALIDATION_TUPLE = Object.freeze({
+    profile: 'off',
+    blocking: 'non-blocking',
+    persistence: 'none',
+});
+export function isAppActionValidationTuple(value) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value))
+        return false;
+    const tuple = value;
+    return tuple.profile === APP_ACTION_VALIDATION_TUPLE.profile
+        && tuple.blocking === APP_ACTION_VALIDATION_TUPLE.blocking
+        && tuple.persistence === APP_ACTION_VALIDATION_TUPLE.persistence;
+}
+/**
+ * Pure owner classification used by executors and admission gates.
+ *
+ * Unknown effect types are treated as durable. That fail-closed default means
+ * a schema-bypassing caller cannot obtain side effects merely by inventing a
+ * new transient-looking type.
+ */
+export function classifyResponseActionEffect(effect) {
+    const type = effect.type;
+    if (type === 'hostEvent')
+        return 'transient';
+    if (type === 'browserResource')
+        return 'browser-local';
+    return 'durable';
+}
+export function isDurableResponseActionEffect(effect) {
+    return classifyResponseActionEffect(effect) === 'durable';
+}
+/** Pure, ordered effect plan. It never evaluates, dispatches, or authorizes. */
+export function planResponseActionEffects(action) {
+    return (action.effects ?? []).map((effect, effectIndex) => ({
+        effectIndex,
+        effect,
+        effectClass: classifyResponseActionEffect(effect),
+        durable: isDurableResponseActionEffect(effect),
+    }));
+}
+/**
  * Validation tuple lookup keyed by StandardResponseActionIntent.
  * Built from the generated VM master-table const so the engine's intent
  * resolution is a projection of the closed-core VM fixture, not a parallel
@@ -64,15 +111,34 @@ export function resolveResponseAction(document, actionRef, nodeId) {
             finding: actionRefFinding(actionRef, nodeId, 'no-response-actions-document'),
         };
     }
-    const action = document.actions.find(candidate => candidate?.id === actionRef) ?? null;
-    if (!action) {
+    const actions = document.actions.filter(candidate => candidate?.id === actionRef);
+    if (actions.length === 0) {
         return {
             resolved: false,
             action: null,
             finding: actionRefFinding(actionRef, nodeId),
         };
     }
-    return { resolved: true, action };
+    if (actions.length > 1) {
+        return {
+            resolved: false,
+            action: null,
+            finding: actionRefFinding(actionRef, nodeId, 'ambiguous-actionRef'),
+        };
+    }
+    return { resolved: true, action: actions[0] };
+}
+/**
+ * Resolve an Action and expose its complete effect plan without executing it.
+ * Admission layers use this before activation so all possible durable effects
+ * can be authorized as one fail-closed decision.
+ */
+export function planResponseActionInvocation(document, actionRef, nodeId) {
+    const resolution = resolveResponseAction(document, actionRef, nodeId);
+    return {
+        resolution,
+        effects: resolution.action ? planResponseActionEffects(resolution.action) : [],
+    };
 }
 export function findResponseActionByIntent(document, intent) {
     if (!document || !Array.isArray(document.actions)) {
@@ -185,33 +251,99 @@ function preconditionReason(result) {
 function errorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
-function isDurableEffect(effect) {
-    return effect.type !== 'hostEvent';
-}
 function effectErrorPolicy(effect) {
     if ('onError' in effect && (effect.onError === 'fail' || effect.onError === 'defer')) {
         return effect.onError;
     }
     return effect.type === 'evidenceRequest' ? 'defer' : 'fail';
 }
-function normalizeEffectOutcome(effect, outcome, idempotencyKey) {
+function safeTransitionBindings(value) {
+    if (value === undefined)
+        return undefined;
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('effect transitionBindings must be an object');
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+        throw new Error('effect transitionBindings must be a plain object');
+    }
+    const bindings = Object.create(null);
+    for (const name of Object.keys(value)) {
+        if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(name)) {
+            throw new Error(`effect transition binding ${JSON.stringify(name)} has an unsafe name`);
+        }
+        const descriptor = Object.getOwnPropertyDescriptor(value, name);
+        if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+            throw new Error(`effect transition binding ${JSON.stringify(name)} is not an own data property`);
+        }
+        if (typeof descriptor.value !== 'string' || descriptor.value.length === 0) {
+            throw new Error(`effect transition binding ${JSON.stringify(name)} must be a non-empty string`);
+        }
+        bindings[name] = descriptor.value;
+    }
+    return Object.freeze(bindings);
+}
+function normalizeEffectDispatch(effect, value, idempotencyKey) {
     const fallback = { type: effect.type };
-    if (!outcome) {
+    if (!value) {
         return {
-            ...fallback,
-            status: 'succeeded',
-            ...(idempotencyKey ? { idempotencyKey } : {}),
+            outcome: {
+                ...fallback,
+                status: 'succeeded',
+                ...(idempotencyKey ? { idempotencyKey } : {}),
+            },
         };
     }
+    const wrapped = Object.prototype.hasOwnProperty.call(value, 'outcome');
+    const outcome = wrapped
+        ? value.outcome
+        : value;
+    if (!outcome || typeof outcome !== 'object') {
+        throw new Error('effect dispatcher returned no outcome');
+    }
+    if (!['succeeded', 'failed', 'deferred', 'replayed', 'not-invoked'].includes(outcome.status)) {
+        throw new Error('effect dispatcher returned an unsupported outcome status');
+    }
+    for (const member of ['outcomeRef', 'reason', 'replayToken']) {
+        if (outcome[member] !== undefined && typeof outcome[member] !== 'string') {
+            throw new Error(`effect dispatcher outcome ${member} must be a string`);
+        }
+    }
     return {
-        ...fallback,
-        ...outcome,
-        type: effect.type,
-        ...(idempotencyKey ? { idempotencyKey } : {}),
+        outcome: {
+            ...fallback,
+            status: outcome.status,
+            ...(idempotencyKey ? { idempotencyKey } : {}),
+            ...(outcome.outcomeRef !== undefined ? { outcomeRef: outcome.outcomeRef } : {}),
+            ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
+            ...(outcome.replayToken !== undefined ? { replayToken: outcome.replayToken } : {}),
+        },
+        ...(wrapped
+            ? {
+                transitionBindings: safeTransitionBindings(value.transitionBindings),
+            }
+            : {}),
     };
 }
+function mergeTransitionBindings(target, source) {
+    if (!source)
+        return;
+    for (const name of Object.keys(source)) {
+        if (Object.prototype.hasOwnProperty.call(target, name)) {
+            throw new Error(`duplicate transition binding ${JSON.stringify(name)}`);
+        }
+    }
+    for (const [name, value] of Object.entries(source)) {
+        target[name] = value;
+    }
+}
+function isPromiseLike(value) {
+    return value !== null
+        && (typeof value === 'object' || typeof value === 'function')
+        && typeof value.then === 'function';
+}
 function effectWithIdempotencyKey(effect, idempotencyKey) {
-    if (!idempotencyKey || !isDurableEffect(effect)) {
+    if (!idempotencyKey || !isDurableResponseActionEffect(effect)) {
         return effect;
     }
     return { ...effect, idempotencyKey };
@@ -242,7 +374,14 @@ function synthesizeInvocationId() {
     invocationCounter += 1;
     return `inv-${Date.now().toString(36)}-${invocationCounter.toString(36)}`;
 }
-export function invokeResponseAction(document, actionRef, ports, nodeId, invocationContext) {
+function notInvokedEffectTrace(effects, startIndex, reason) {
+    return effects.slice(startIndex).map((effect) => ({
+        type: effect.type,
+        status: 'not-invoked',
+        reason,
+    }));
+}
+function invokeResponseActionInternal(document, actionRef, ports, nodeId, invocationContext, asyncEffects = false) {
     const resolution = resolveResponseAction(document, actionRef, nodeId);
     if (!resolution.resolved || !resolution.action) {
         return {
@@ -257,6 +396,20 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
     const invocationId = invocationContext?.invocationId ?? synthesizeInvocationId();
     const priorInvocationRef = invocationContext?.priorInvocationRef;
     const actionId = resolution.action.id;
+    const effects = resolution.action.effects ?? [];
+    const invocationFacts = {
+        invocationId,
+        ...(invocationContext?.actionArtifact
+            ? {
+                actionOwner: {
+                    ...invocationContext.actionArtifact,
+                    subjectKind: 'response-action',
+                    subjectRef: actionId,
+                },
+            }
+            : {}),
+    };
+    const appScoped = document?.scope === 'app';
     const emitLifecycle = (kind, extra = {}) => {
         if (!ports.recordActionLifecycle)
             return;
@@ -277,6 +430,17 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
         emitLifecycle('action.invoked');
     }
     const validationTuple = resolveResponseActionValidationTuple(resolution.action);
+    if (appScoped && !isAppActionValidationTuple(validationTuple)) {
+        return {
+            status: 'failed',
+            ...invocationFacts,
+            resolution,
+            validationTuple,
+            detail: null,
+            effectTrace: notInvokedEffectTrace(effects, 0, 'action scope rejected before effects'),
+            failureReason: 'app actions require validation=(off, non-blocking, none)',
+        };
+    }
     for (const precondition of resolution.action.preconditions ?? []) {
         // §4.1 catalog gate: unregistered @name references are rejected
         // before host evaluation. Host evaluators MUST honor this catalog
@@ -287,10 +451,11 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
         if (!catalogCheck.ok) {
             return {
                 status: 'failed',
+                ...invocationFacts,
                 resolution,
                 validationTuple,
                 detail: null,
-                effectTrace: [],
+                effectTrace: notInvokedEffectTrace(effects, 0, 'precondition resolution failed before effects'),
                 failedPreconditionId: precondition.id,
                 failureReason: `unbound context reference: @${catalogCheck.unbound.join(', @')}`,
             };
@@ -298,10 +463,11 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
         if (!ports.evaluatePrecondition) {
             return {
                 status: 'failed',
+                ...invocationFacts,
                 resolution,
                 validationTuple,
                 detail: null,
-                effectTrace: [],
+                effectTrace: notInvokedEffectTrace(effects, 0, 'precondition evaluation unavailable before effects'),
                 failedPreconditionId: precondition.id,
                 failureReason: 'missing precondition evaluator',
             };
@@ -313,10 +479,11 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
         catch (error) {
             return {
                 status: 'failed',
+                ...invocationFacts,
                 resolution,
                 validationTuple,
                 detail: null,
-                effectTrace: [],
+                effectTrace: notInvokedEffectTrace(effects, 0, 'precondition evaluation failed before effects'),
                 failedPreconditionId: precondition.id,
                 failureReason: errorMessage(error),
             };
@@ -327,65 +494,79 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
         if (precondition.severity === 'defer') {
             return {
                 status: 'deferred',
+                ...invocationFacts,
                 resolution,
                 validationTuple,
                 detail: null,
-                effectTrace: [],
+                effectTrace: notInvokedEffectTrace(effects, 0, 'action deferred by precondition'),
                 deferredPreconditionId: precondition.id,
                 failureReason: preconditionReason(preconditionResult),
             };
         }
         return {
             status: 'blocked',
+            ...invocationFacts,
             resolution,
             validationTuple,
             detail: null,
-            effectTrace: [],
+            effectTrace: notInvokedEffectTrace(effects, 0, 'action blocked by precondition'),
             blockedCause: 'precondition',
             blockedPreconditionId: precondition.id,
             failureReason: preconditionReason(preconditionResult),
         };
     }
-    const detail = ports.submit({
-        profile: validationTuple.profile,
-        validationTuple,
-        emitEvent: false,
-    });
+    const detail = appScoped
+        ? ports.prepareAppAction?.(resolution.action) ?? null
+        : ports.submit?.({
+            profile: validationTuple.profile,
+            validationTuple,
+            emitEvent: false,
+        }) ?? null;
     if (!detail) {
         return {
             status: 'failed',
+            ...invocationFacts,
             resolution,
             validationTuple,
             detail: null,
-            effectTrace: [],
-            failureReason: 'submit adapter returned no detail',
+            effectTrace: notInvokedEffectTrace(effects, 0, 'action input unavailable before effects'),
+            failureReason: appScoped
+                ? 'app action adapter returned no detail'
+                : 'submit adapter returned no detail',
         };
     }
-    const validationValid = inferValidationReportValid(detail, ports);
-    if (validationTuple.profile !== 'off' && validationValid === null) {
-        return {
-            status: 'failed',
-            resolution,
-            validationTuple,
-            detail,
-            effectTrace: [],
-            failureReason: 'validation report missing valid flag',
-        };
+    if (!appScoped) {
+        const validationValid = inferValidationReportValid(detail, ports);
+        if (validationTuple.profile !== 'off' && validationValid === null) {
+            return {
+                status: 'failed',
+                ...invocationFacts,
+                resolution,
+                validationTuple,
+                detail,
+                effectTrace: notInvokedEffectTrace(effects, 0, 'validation evidence unavailable before effects'),
+                failureReason: 'validation report missing valid flag',
+            };
+        }
+        if (validationTuple.blocking === 'block-on-error' && validationValid === false) {
+            return {
+                status: 'blocked',
+                ...invocationFacts,
+                resolution,
+                validationTuple,
+                detail,
+                effectTrace: notInvokedEffectTrace(effects, 0, 'action blocked by validation'),
+                blockedCause: 'validation',
+            };
+        }
     }
-    if (validationTuple.blocking === 'block-on-error' && validationValid === false) {
-        return {
-            status: 'blocked',
-            resolution,
-            validationTuple,
-            detail,
-            effectTrace: [],
-            blockedCause: 'validation',
-        };
+    if (asyncEffects) {
+        return invokeResponseActionEffectsAsync(resolution.action, resolution, validationTuple, detail, invocationFacts, ports, emitLifecycle);
     }
     const effectTrace = [];
+    const transitionBindings = Object.create(null);
     const frozenIdempotencyKeys = new Map();
     const retriedEffects = new Set();
-    const effects = resolution.action.effects ?? [];
     for (let effectIndex = 0; effectIndex < effects.length; effectIndex += 1) {
         const effect = effects[effectIndex];
         let attempt = 0;
@@ -393,8 +574,9 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
             let idempotencyKey;
             let effectForDispatch = effect;
             let outcome;
+            let retryableFailure = true;
             try {
-                if (isDurableEffect(effect)) {
+                if (isDurableResponseActionEffect(effect)) {
                     idempotencyKey = frozenIdempotencyKeys.get(effectIndex);
                     if (!idempotencyKey) {
                         // Warn once per effect (only on first attempt) when the
@@ -414,7 +596,7 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
                 }
                 if (effect.type === 'hostEvent' && typeof effect.eventName === 'string') {
                     ports.dispatchHostEvent(effect.eventName, detail, resolution.action);
-                    outcome = normalizeEffectOutcome(effect, undefined);
+                    outcome = normalizeEffectDispatch(effect, undefined).outcome;
                 }
                 else if (!ports.dispatchEffect) {
                     outcome = {
@@ -425,11 +607,29 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
                     };
                 }
                 else {
-                    outcome = normalizeEffectOutcome(effect, ports.dispatchEffect(effectForDispatch, detail, resolution.action, {
+                    const dispatchValue = ports.dispatchEffect(effectForDispatch, detail, resolution.action, {
                         effectIndex,
                         attempt,
                         ...(idempotencyKey ? { idempotencyKey } : {}),
-                    }), idempotencyKey);
+                    });
+                    if (isPromiseLike(dispatchValue)) {
+                        retryableFailure = false;
+                        void Promise.resolve(dispatchValue).catch(() => undefined);
+                        throw new Error('async effect dispatcher returned a Promise; use invokeResponseActionAsync');
+                    }
+                    let normalized;
+                    try {
+                        normalized = normalizeEffectDispatch(effect, dispatchValue, idempotencyKey);
+                        if (normalized.outcome.status === 'succeeded'
+                            || normalized.outcome.status === 'replayed') {
+                            mergeTransitionBindings(transitionBindings, normalized.transitionBindings);
+                        }
+                    }
+                    catch (error) {
+                        retryableFailure = false;
+                        throw error;
+                    }
+                    outcome = normalized.outcome;
                 }
             }
             catch (error) {
@@ -440,11 +640,16 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
                     reason: errorMessage(error),
                 };
             }
-            effectTrace.push(outcome);
+            // One owner-produced record per declared effect. A retry replaces
+            // that effect's prior failed attempt; dispatch context and
+            // lifecycle events retain attempt detail without corrupting the
+            // declaration-order trace.
+            effectTrace[effectIndex] = outcome;
             if (outcome.status === 'succeeded' || outcome.status === 'replayed') {
                 break;
             }
-            const deferred = outcome.status === 'deferred' || effectErrorPolicy(effect) === 'defer';
+            const deferred = outcome.status === 'deferred'
+                || (retryableFailure && effectErrorPolicy(effect) === 'defer');
             if (deferred) {
                 emitLifecycle('action.deferred', {
                     terminal: 'deferred',
@@ -455,16 +660,22 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
                 });
                 return {
                     status: 'deferred',
+                    ...invocationFacts,
                     resolution,
                     validationTuple,
                     detail,
-                    effectTrace,
+                    effectTrace: [
+                        ...effectTrace,
+                        ...notInvokedEffectTrace(effects, effectIndex + 1, `action deferred at effect ${effectIndex}`),
+                    ],
                     deferredEffectIndex: effectIndex,
                     replayToken: outcome.replayToken,
                     failureReason: outcome.reason,
                 };
             }
-            if (resolution.action.onFailure === 'retry-once' && !retriedEffects.has(effectIndex)) {
+            if (retryableFailure
+                && resolution.action.onFailure === 'retry-once'
+                && !retriedEffects.has(effectIndex)) {
                 retriedEffects.add(effectIndex);
                 attempt += 1;
                 continue;
@@ -477,10 +688,14 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
             });
             return {
                 status: 'failed',
+                ...invocationFacts,
                 resolution,
                 validationTuple,
                 detail,
-                effectTrace,
+                effectTrace: [
+                    ...effectTrace,
+                    ...notInvokedEffectTrace(effects, effectIndex + 1, `action failed at effect ${effectIndex}`),
+                ],
                 failedEffectIndex: effectIndex,
                 failureReason: outcome.reason,
             };
@@ -488,9 +703,160 @@ export function invokeResponseAction(document, actionRef, ports, nodeId, invocat
     }
     return {
         status: 'completed',
+        ...invocationFacts,
         resolution,
         validationTuple,
         detail,
         effectTrace,
+        ...(Object.keys(transitionBindings).length > 0
+            ? { transitionBindings: Object.freeze(transitionBindings) }
+            : {}),
     };
+}
+async function invokeResponseActionEffectsAsync(action, resolution, validationTuple, detail, invocationFacts, ports, emitLifecycle) {
+    const effects = action.effects ?? [];
+    const effectTrace = [];
+    const transitionBindings = Object.create(null);
+    const frozenIdempotencyKeys = new Map();
+    const retriedEffects = new Set();
+    for (let effectIndex = 0; effectIndex < effects.length; effectIndex += 1) {
+        const effect = effects[effectIndex];
+        let attempt = 0;
+        while (true) {
+            let idempotencyKey;
+            let effectForDispatch = effect;
+            let outcome;
+            let retryableFailure = true;
+            try {
+                if (isDurableResponseActionEffect(effect)) {
+                    idempotencyKey = frozenIdempotencyKeys.get(effectIndex);
+                    if (!idempotencyKey) {
+                        maybeWarnAboutStaticIdempotencyKey(action.id, effectIndex, effect.idempotencyKey);
+                        if (!ports.resolveIdempotencyKey) {
+                            throw new Error('missing idempotency key resolver');
+                        }
+                        idempotencyKey = ports.resolveIdempotencyKey(effect, action, { effectIndex });
+                        if (!idempotencyKey) {
+                            throw new Error('idempotency key resolver returned an empty key');
+                        }
+                        frozenIdempotencyKeys.set(effectIndex, idempotencyKey);
+                    }
+                    effectForDispatch = effectWithIdempotencyKey(effect, idempotencyKey);
+                }
+                if (effect.type === 'hostEvent' && typeof effect.eventName === 'string') {
+                    ports.dispatchHostEvent(effect.eventName, detail, action);
+                    outcome = normalizeEffectDispatch(effect, undefined).outcome;
+                }
+                else if (!ports.dispatchEffect) {
+                    outcome = {
+                        type: effect.type,
+                        status: 'failed',
+                        ...(idempotencyKey ? { idempotencyKey } : {}),
+                        reason: 'missing effect dispatcher',
+                    };
+                }
+                else {
+                    const dispatchValue = await ports.dispatchEffect(effectForDispatch, detail, action, {
+                        effectIndex,
+                        attempt,
+                        ...(idempotencyKey ? { idempotencyKey } : {}),
+                    });
+                    let normalized;
+                    try {
+                        normalized = normalizeEffectDispatch(effect, dispatchValue, idempotencyKey);
+                        if (normalized.outcome.status === 'succeeded'
+                            || normalized.outcome.status === 'replayed') {
+                            mergeTransitionBindings(transitionBindings, normalized.transitionBindings);
+                        }
+                    }
+                    catch (error) {
+                        retryableFailure = false;
+                        throw error;
+                    }
+                    outcome = normalized.outcome;
+                }
+            }
+            catch (error) {
+                outcome = {
+                    type: effect.type,
+                    status: 'failed',
+                    ...(idempotencyKey ? { idempotencyKey } : {}),
+                    reason: errorMessage(error),
+                };
+            }
+            effectTrace[effectIndex] = outcome;
+            if (outcome.status === 'succeeded' || outcome.status === 'replayed')
+                break;
+            const deferred = outcome.status === 'deferred'
+                || (retryableFailure && effectErrorPolicy(effect) === 'defer');
+            if (deferred) {
+                emitLifecycle('action.deferred', {
+                    terminal: 'deferred',
+                    effectIndex,
+                    attempt: attempt + 1,
+                    ...(outcome.replayToken ? { replayTokenRef: outcome.replayToken } : {}),
+                    ...(outcome.reason ? { causeRef: outcome.reason } : {}),
+                });
+                return {
+                    status: 'deferred',
+                    ...invocationFacts,
+                    resolution,
+                    validationTuple,
+                    detail,
+                    effectTrace: [
+                        ...effectTrace,
+                        ...notInvokedEffectTrace(effects, effectIndex + 1, `action deferred at effect ${effectIndex}`),
+                    ],
+                    deferredEffectIndex: effectIndex,
+                    replayToken: outcome.replayToken,
+                    failureReason: outcome.reason,
+                };
+            }
+            if (retryableFailure
+                && action.onFailure === 'retry-once'
+                && !retriedEffects.has(effectIndex)) {
+                retriedEffects.add(effectIndex);
+                attempt += 1;
+                continue;
+            }
+            emitLifecycle('action.failed', {
+                terminal: 'failed',
+                effectIndex,
+                attempt: attempt + 1,
+                ...(outcome.reason ? { causeRef: outcome.reason } : {}),
+            });
+            return {
+                status: 'failed',
+                ...invocationFacts,
+                resolution,
+                validationTuple,
+                detail,
+                effectTrace: [
+                    ...effectTrace,
+                    ...notInvokedEffectTrace(effects, effectIndex + 1, `action failed at effect ${effectIndex}`),
+                ],
+                failedEffectIndex: effectIndex,
+                failureReason: outcome.reason,
+            };
+        }
+    }
+    return {
+        status: 'completed',
+        ...invocationFacts,
+        resolution,
+        validationTuple,
+        detail,
+        effectTrace,
+        ...(Object.keys(transitionBindings).length > 0
+            ? { transitionBindings: Object.freeze(transitionBindings) }
+            : {}),
+    };
+}
+/** Invoke an Action with synchronous effect adapters. Promise outcomes fail fast. */
+export function invokeResponseAction(document, actionRef, ports, nodeId, invocationContext) {
+    return invokeResponseActionInternal(document, actionRef, ports, nodeId, invocationContext, false);
+}
+/** Invoke an Action while awaiting effect adapters in strict declaration order. */
+export async function invokeResponseActionAsync(document, actionRef, ports, nodeId, invocationContext) {
+    return await invokeResponseActionInternal(document, actionRef, ports, nodeId, invocationContext, true);
 }

@@ -23,6 +23,20 @@ function focusFirstIn(container) {
     const el = container.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])');
     el?.focus();
 }
+function hasResolvedSubmitAction(node, resolveActionRef) {
+    if (!node)
+        return false;
+    if (node.component === 'ActionButton') {
+        const actionRef = node.props?.actionRef;
+        if (typeof actionRef === 'string') {
+            const resolution = resolveActionRef(actionRef, node.id);
+            if (resolution.resolved && resolution.action?.intent === 'submit') {
+                return true;
+            }
+        }
+    }
+    return node.children.some(child => hasResolvedSubmitAction(child, resolveActionRef));
+}
 function cx(...parts) {
     return parts.filter(Boolean).join(' ');
 }
@@ -36,7 +50,7 @@ function cx(...parts) {
  * (same as the web component).
  */
 export function Wizard({ node, children }) {
-    const { touchField, engine, onSubmit } = useFormspecContext();
+    const { touchField, engine, onSubmit, resolveActionRef } = useFormspecContext();
     const stepNodes = node.children; // LayoutNode[] — one per step
     const stepChildren = React.Children.toArray(children); // ReactNode[] — rendered steps
     const totalSteps = stepChildren.length;
@@ -101,8 +115,9 @@ export function Wizard({ node, children }) {
     const title = stepTitle(currentStep);
     const isFirst = currentStep === 0;
     const isLast = currentStep === totalSteps - 1;
+    const finalStepHasSubmitAction = hasResolvedSubmitAction(stepNodes[totalSteps - 1], resolveActionRef);
     const progressRow = showProgress && totalSteps > 1 ? (_jsx("div", { className: cx('formspec-wizard-steps', showSideNav && 'formspec-hidden'), "aria-hidden": "true", children: stepNodes.map((_, idx) => (_jsxs("div", { className: "formspec-wizard-step-wrapper", children: [_jsx("span", { className: cx('formspec-wizard-step', idx === currentStep && 'formspec-wizard-step--active', idx < currentStep && 'formspec-wizard-step--completed'), children: idx < currentStep ? '\u2713' : idx + 1 }), _jsx("span", { className: cx('formspec-wizard-step-label', idx === currentStep && 'formspec-wizard-step-label--active'), children: stepTitle(idx) })] }, stepNodes[idx]?.id ?? idx))) })) : null;
-    const stepBody = (_jsxs(_Fragment, { children: [progressRow, _jsxs("div", { className: "formspec-wizard-step-indicator", ref: announcerRef, children: [`Step ${currentStep + 1} of ${totalSteps}: ${title}`, isLast ? ' — final step' : ''] }), _jsx("div", { className: "formspec-wizard-panel", role: "region", "aria-label": title, ref: stepPanelRef, children: stepChildren[currentStep] }), _jsxs("div", { className: "formspec-wizard-nav", children: [_jsx("button", { type: "button", className: "formspec-wizard-prev formspec-button-secondary formspec-focus-ring", "aria-label": "Previous step", disabled: isFirst, "aria-disabled": isFirst, onClick: handlePrev, children: "Previous" }), allowSkip && !isLast && (_jsx("button", { type: "button", className: "formspec-wizard-skip formspec-button-secondary formspec-focus-ring", "aria-label": "Skip this step", onClick: handleSkip, children: "Skip" })), !isLast ? (_jsx("button", { type: "button", className: "formspec-wizard-next formspec-button-primary formspec-focus-ring", "aria-label": "Next step", onClick: handleNext, children: "Next" })) : (_jsx("button", { type: "button", className: "formspec-wizard-submit formspec-button-primary formspec-focus-ring", "aria-label": "Submit form", onClick: () => {
+    const stepBody = (_jsxs(_Fragment, { children: [progressRow, _jsxs("div", { className: "formspec-wizard-step-indicator", ref: announcerRef, children: [`Step ${currentStep + 1} of ${totalSteps}: ${title}`, isLast ? ' — final step' : ''] }), _jsx("div", { className: "formspec-wizard-panel", role: "region", "aria-label": title, ref: stepPanelRef, children: stepChildren[currentStep] }), _jsxs("div", { className: "formspec-wizard-nav", children: [_jsx("button", { type: "button", className: "formspec-wizard-prev formspec-button-secondary formspec-focus-ring", "aria-label": "Previous step", disabled: isFirst, "aria-disabled": isFirst, onClick: handlePrev, children: "Previous" }), allowSkip && !isLast && (_jsx("button", { type: "button", className: "formspec-wizard-skip formspec-button-secondary formspec-focus-ring", "aria-label": "Skip this step", onClick: handleSkip, children: "Skip" })), !isLast ? (_jsx("button", { type: "button", className: "formspec-wizard-next formspec-button-primary formspec-focus-ring", "aria-label": "Next step", onClick: handleNext, children: "Next" })) : finalStepHasSubmitAction ? null : (_jsx("button", { type: "button", className: "formspec-wizard-submit formspec-button-primary formspec-focus-ring", "aria-label": "Submit form", onClick: () => {
                             touchCurrentStep();
                             if (currentStepHasErrors())
                                 return;

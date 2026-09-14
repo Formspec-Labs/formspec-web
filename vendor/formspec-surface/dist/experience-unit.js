@@ -1,8 +1,16 @@
 export function planExperienceUnit(input) {
-    const candidates = input.experienceRef
-        ? input.experiences.filter((experience) => experience.url === input.experienceRef ||
-            experience.id === input.experienceRef)
-        : input.experiences;
+    let candidates;
+    if (input.experienceRef === undefined) {
+        candidates = input.experiences;
+    }
+    else {
+        const sourceMatches = (input.experienceHandles ?? []).filter((handle) => handle.experienceRef === input.experienceRef);
+        if (sourceMatches.length !== 1) {
+            return { unitRef: input.unitRef, status: 'unresolved', needs: [] };
+        }
+        const matched = sourceMatches[0];
+        candidates = matched === undefined ? [] : [matched.document];
+    }
     for (const experience of candidates) {
         const unit = experience.units?.find((candidate) => candidate.id === input.unitRef);
         if (!unit)

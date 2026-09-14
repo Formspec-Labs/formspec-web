@@ -1,13 +1,14 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 /** @filedesc Display-category LayoutNode rendering (Text, DataTable, Summary, etc.). */
-import { useCallback, useState } from 'react';
-import { signal as createSignal } from '@preact/signals-core';
+import { useCallback, useMemo, useState } from 'react';
+import { computed, signal as createSignal } from '@preact/signals-core';
 import { useFormspecContext, findItemByKey } from './context.js';
 import { useSignal } from './use-signal';
-import { useRepeatCount } from './use-repeat-count';
+import { useRepeatAffordances } from './use-repeat-affordances';
 import { ValidationSummary } from './validation-summary';
-import { projectionMetadataAttrs } from './projection-metadata.js';
+import { DividerLayout } from './defaults/layout/default-layout';
+import { generationNeedAnchors, needTraceAttrs, projectionMetadataAttrs, } from './projection-metadata.js';
 /**
  * Minimal markdown-to-HTML converter. Handles the subset required by the Text
  * component spec: bold, italic, links, inline code, and newlines.
@@ -33,10 +34,39 @@ function simpleMarkdown(text) {
 }
 const NO_VALUE = createSignal(null);
 const NO_READONLY = createSignal(false);
+const ALWAYS_RELEVANT = createSignal(true);
+const NO_TEXT = createSignal(null);
+/**
+ * Live text and Bind relevance for a node planned from a display Item. The planner links it by
+ * `bindPath` (an instance path once repeats are stamped) and drops the value `bind`; a Text with
+ * `bind` shows a field value instead. Text is `engine.getItemLabelSignal` (Locale `<key>.label@context`
+ * → `<key>.label` → `labels[context]` → inline, `{{}}` in the Item's instance scope). Same rule as
+ * webcomponent display-host `watchCompText` / `renderWithDisplayItemRelevance`.
+ */
+function useDisplayItem(node) {
+    const { engine } = useFormspecContext();
+    const path = !node.props?.bind && typeof node.bindPath === 'string' ? node.bindPath : null;
+    const found = path ? findItemByKey(engine.getDefinition().items ?? [], path) : null;
+    const item = found?.type === 'display' ? found : null;
+    const textSignal = useMemo(() => {
+        if (!item || !path)
+            return NO_TEXT;
+        const label = engine.getItemLabelSignal(path);
+        return label ?? computed(() => engine.getLabel(item));
+    }, [engine, item, path]);
+    const text = useSignal(textSignal);
+    const relevant = useSignal((item && path && engine.relevantSignals[path]) || ALWAYS_RELEVANT);
+    return { text, relevant };
+}
 /** Renders a display node — checks for user override before built-in rendering. */
 export function DisplayNode({ node }) {
     const { components } = useFormspecContext();
-    const text = node.props?.text || node.fieldItem?.label || '';
+    const displayItem = useDisplayItem(node);
+    if (!displayItem.relevant)
+        return null;
+    // A Divider's text prop is `label` (component §5.15); every other display component's is `text`.
+    const textProp = node.component === 'Divider' ? 'label' : 'text';
+    const text = displayItem.text ?? (node.props?.[textProp] || node.fieldItem?.label || '');
     const Override = components.display?.[node.component];
     if (Override) {
         return _jsx(Override, { node: node, text: text });
@@ -48,10 +78,10 @@ export function DisplayNode({ node }) {
         case 'Heading': {
             const level = node.props?.level || 2;
             const Tag = `h${Math.min(6, Math.max(1, level))}`;
-            return _jsx(Tag, { className: cssClass || 'formspec-heading', style: style, ...graphAttrs, children: text });
+            return _jsx(Tag, { className: `formspec-heading${cssClass ? ` ${cssClass}` : ''}`, style: style, ...graphAttrs, children: text });
         }
         case 'Divider':
-            return _jsx("hr", { className: cssClass || 'formspec-divider', style: style, ...graphAttrs });
+            return _jsx(DividerLayout, { node: node, themeClass: cssClass ?? '', style: style, label: text });
         case 'Alert': {
             const severity = node.props?.severity || 'info';
             const alertRole = severity === 'error' || severity === 'warning' ? 'alert' : 'status';
@@ -95,7 +125,7 @@ export function DisplayNode({ node }) {
     }
 }
 function SummaryDisplay({ node: _node, items, cssClass, style, metadataAttrs, }) {
-    return (_jsx("dl", { className: `formspec-summary${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: items.map((item, i) => (_jsx(SummaryItem, { label: item.label, bind: item.bind }, item.bind || i))) }));
+    return (_jsx("dl", { className: `formspec-summary${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: items.map((item, i) => (_jsx(SummaryItem, { label: item.label, bind: item.bind, metadataAttrs: needTraceAttrs(generationNeedAnchors(item)) }, item.bind || i))) }));
 }
 function BoundText({ bind }) {
     const { engine } = useFormspecContext();
@@ -134,7 +164,7 @@ function formatMoney(value, locale = 'en-US') {
     }
     return String(value);
 }
-function SummaryItem({ label, bind }) {
+function SummaryItem({ label, bind, metadataAttrs, }) {
     const { engine } = useFormspecContext();
     const rawValue = useSignal(bind ? (engine.signals[bind] ?? NO_VALUE) : NO_VALUE);
     const displayValue = rawValue != null
@@ -142,9 +172,9 @@ function SummaryItem({ label, bind }) {
             ? formatMoney(rawValue)
             : String(rawValue))
         : '\u2014';
-    return (_jsxs(_Fragment, { children: [_jsx("dt", { children: label }), _jsx("dd", { children: displayValue })] }));
+    return (_jsxs(_Fragment, { children: [_jsx("dt", { ...metadataAttrs, children: label }), _jsx("dd", { ...metadataAttrs, children: displayValue })] }));
 }
-function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, }) {
+function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, metadataAttrs, }) {
     const { engine } = useFormspecContext();
     const rawValue = useSignal(engine.signals[signalPath] ?? NO_VALUE);
     const readonly = useSignal(engine.readonlySignals[signalPath] ?? NO_READONLY);
@@ -183,20 +213,20 @@ function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, }) {
             if (match)
                 displayValue = match.label;
         }
-        return _jsx("td", { children: displayValue });
+        return _jsx("td", { ...metadataAttrs, children: displayValue });
     }
     if (dataType === 'boolean') {
-        return (_jsx("td", { children: _jsx("input", { className: "formspec-datatable-input", type: "checkbox", checked: !!rawValue, "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.checked) }) }));
+        return (_jsx("td", { ...metadataAttrs, children: _jsx("input", { className: "formspec-datatable-input", type: "checkbox", checked: !!rawValue, "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.checked) }) }));
     }
     if ((dataType === 'choice' || dataType === 'select') && choices.length > 0) {
-        return (_jsx("td", { children: wrapControl(_jsxs("select", { className: "formspec-datatable-input", name: signalPath, value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value || null), children: [_jsx("option", { value: "" }), choices.map((c) => (_jsx("option", { value: c.value, children: c.label ?? c.value }, c.value)))] })) }));
+        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsxs("select", { className: "formspec-datatable-input", name: signalPath, value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value || null), children: [_jsx("option", { value: "" }), choices.map((c) => (_jsx("option", { value: c.value, children: c.label ?? c.value }, c.value)))] })) }));
     }
     if (dataType === 'number' || dataType === 'integer' || dataType === 'decimal' || dataType === 'money') {
         const moneyValue = rawValue != null && typeof rawValue === 'object' && 'amount' in rawValue
             ? rawValue.amount
             : undefined;
         const numericDisplay = moneyValue ?? (typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : '');
-        return (_jsx("td", { children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "number", step: column.step != null ? String(column.step) : (dataType === 'integer' ? '1' : 'any'), min: column.min != null ? String(column.min) : undefined, max: column.max != null ? String(column.max) : undefined, value: numericDisplay, "aria-label": column.header, disabled: readonly, onChange: (e) => {
+        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "number", step: column.step != null ? String(column.step) : (dataType === 'integer' ? '1' : 'any'), min: column.min != null ? String(column.min) : undefined, max: column.max != null ? String(column.max) : undefined, value: numericDisplay, "aria-label": column.header, disabled: readonly, onChange: (e) => {
                     const value = e.target.value.trim();
                     if (!value) {
                         engine.setValue(signalPath, null);
@@ -222,9 +252,9 @@ function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, }) {
                 } })) }));
     }
     if (dataType === 'date') {
-        return (_jsx("td", { children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "date", value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value) })) }));
+        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "date", value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value) })) }));
     }
-    return (_jsx("td", { children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "text", value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value) })) }));
+    return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "text", value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value) })) }));
 }
 function DataTableDisplay({ node, cssClass, style, metadataAttrs, }) {
     const { engine } = useFormspecContext();
@@ -243,19 +273,21 @@ function DataTableDisplay({ node, cssClass, style, metadataAttrs, }) {
     }
     const defaultCurrency = engine.getDefinition()?.formPresentation?.defaultCurrency || 'USD';
     const repeatPath = bindKey || '';
-    const count = useRepeatCount(repeatPath);
+    const { count, relevant, canAdd, canRemove } = useRepeatAffordances(repeatPath);
     const handleAdd = useCallback(() => {
-        if (repeatPath)
+        if (repeatPath && canAdd)
             engine.addRepeatInstance(repeatPath);
-    }, [engine, repeatPath]);
+    }, [canAdd, engine, repeatPath]);
     const handleRemove = useCallback((idx) => {
         if (repeatPath)
             engine.removeRepeatInstance(repeatPath, idx);
     }, [engine, repeatPath]);
+    if (!relevant)
+        return null;
     if (!bindKey || columns.length === 0) {
         return (_jsx("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: _jsx("table", { className: "formspec-data-table" }) }));
     }
-    return (_jsxs("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [_jsxs("table", { className: "formspec-data-table", children: [node.props?.title && (_jsx("caption", { children: node.props?.title })), _jsx("thead", { children: _jsxs("tr", { children: [showRowNumbers && _jsx("th", { scope: "col", children: "#" }), columns.map((col, ci) => (_jsx("th", { scope: "col", children: col.header }, ci))), allowRemove && (_jsx("th", { scope: "col", children: _jsx("span", { className: "formspec-sr-only", children: "Actions" }) }))] }) }), _jsx("tbody", { children: Array.from({ length: count }, (_, i) => (_jsxs("tr", { children: [showRowNumbers && _jsx("td", { className: "formspec-row-number", children: i + 1 }), columns.map((col, ci) => (_jsx(DataTableCell, { signalPath: `${bindKey}[${i}].${col.bind}`, column: col, fieldDef: fieldByKey.get(col.bind), defaultCurrency: defaultCurrency }, ci))), allowRemove && (_jsx("td", { children: _jsx("button", { type: "button", className: "formspec-datatable-remove formspec-button-danger formspec-focus-ring", "aria-label": `Remove row ${i + 1}`, onClick: () => handleRemove(i), children: "Remove" }) }))] }, i))) })] }), allowAdd && (_jsx("button", { type: "button", className: "formspec-datatable-add formspec-focus-ring", onClick: handleAdd, children: "Add Row" }))] }));
+    return (_jsxs("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [_jsxs("table", { className: "formspec-data-table", children: [node.props?.title && (_jsx("caption", { children: node.props?.title })), _jsx("thead", { children: _jsxs("tr", { children: [showRowNumbers && _jsx("th", { scope: "col", children: "#" }), columns.map((col, ci) => (_jsx("th", { scope: "col", ...needTraceAttrs(generationNeedAnchors(col)), children: col.header }, ci))), allowRemove && (_jsx("th", { scope: "col", children: _jsx("span", { className: "formspec-sr-only", children: "Actions" }) }))] }) }), _jsx("tbody", { children: Array.from({ length: count }, (_, i) => (_jsxs("tr", { children: [showRowNumbers && _jsx("td", { className: "formspec-row-number", children: i + 1 }), columns.map((col, ci) => (_jsx(DataTableCell, { signalPath: `${bindKey}[${i}].${col.bind}`, column: col, fieldDef: fieldByKey.get(col.bind), defaultCurrency: defaultCurrency, metadataAttrs: needTraceAttrs(generationNeedAnchors(col)) }, ci))), allowRemove && (_jsx("td", { children: canRemove && (_jsx("button", { type: "button", className: "formspec-datatable-remove formspec-button-danger formspec-focus-ring", "aria-label": `Remove row ${i + 1}`, onClick: () => handleRemove(i), children: "Remove" })) }))] }, i))) })] }), allowAdd && canAdd && (_jsx("button", { type: "button", className: "formspec-datatable-add formspec-focus-ring", onClick: handleAdd, children: "Add Row" }))] }));
 }
 function ValidationSummaryDisplay() {
     const { engine, touchedVersion } = useFormspecContext();

@@ -9,8 +9,11 @@ export interface FieldViewModel {
     readonly itemKey: string;
     readonly dataType: string;
     readonly label: ReadonlyEngineSignal<string>;
+    readonly labelNeedAnchors: ReadonlyEngineSignal<string[]>;
     readonly hint: ReadonlyEngineSignal<string | null>;
+    readonly hintNeedAnchors: ReadonlyEngineSignal<string[]>;
     readonly description: ReadonlyEngineSignal<string | null>;
+    readonly descriptionNeedAnchors: ReadonlyEngineSignal<string[]>;
     readonly value: ReadonlyEngineSignal<any>;
     readonly required: ReadonlyEngineSignal<boolean>;
     readonly visible: ReadonlyEngineSignal<boolean>;
@@ -37,6 +40,8 @@ export interface ResolvedOption {
     label: string;
     /** Abbreviations / alternate names for combobox type-ahead (from definition option.keywords). */
     keywords?: string[];
+    /** Canonical Need anchors copied from the exact authored option label. */
+    needAnchors?: string[];
 }
 export interface FieldViewModelDeps {
     rx: EngineReactiveRuntime;
@@ -66,4 +71,23 @@ export interface FieldViewModelDeps {
     setFieldValue: (value: any) => void;
     evalFEL: (expr: string) => import('./wasm-bridge-runtime.js').FelEvalResult | unknown;
 }
+interface ResolvedPresentationString<T extends string | null> {
+    value: T;
+    needAnchors: string[];
+}
+/** Inputs to the Item label cascade; read inside a computed so every getter is a dependency. */
+export interface ItemLabelSource {
+    localeStore: LocaleStore;
+    itemKey: string;
+    inlineLabel: string | undefined;
+    labels: Record<string, string> | undefined;
+    context: string | null;
+    evalFEL: (expr: string) => import('./wasm-bridge-runtime.js').FelEvalResult | unknown;
+}
+/**
+ * Label a respondent sees for any Item (Locale §3.1–3.3): Locale `<key>.label@context` → Locale
+ * `<key>.label` → Definition `labels[context]` → inline `label`, `{{}}` interpolated through `evalFEL`.
+ */
+export declare function resolveItemLabel(source: ItemLabelSource): ResolvedPresentationString<string>;
 export declare function createFieldViewModel(deps: FieldViewModelDeps): FieldViewModel;
+export {};

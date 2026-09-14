@@ -1,6 +1,6 @@
 /** @filedesc formspec-react — React hooks, auto-renderer, and default components for Formspec. */
-export { FormspecProvider, useFormspecContext, emitThemeTokens } from './context';
-export type { ActionRefFinding, ActionResolution, FormspecProviderProps, FormspecContextValue, ResponseAction, ResponseActionInvocationResult, ResponseActionInvoker, ResponseActionInvokerInput, ResponseActionInvokerResult, ResponseActionsDocument, SubmitResult, } from './context';
+export { FormspecProvider, admitDefaultFieldHelpUri, useFormspecContext, emitThemeTokens, } from './context';
+export type { ActionRefFinding, ActionResolution, FormspecProviderProps, FormspecContextValue, FormspecFieldHelpResolver, FormspecFieldHelpUriAdmission, FormspecHumanReference, ResponseAction, ResponseActionInvocationResult, ResponseActionInvoker, ResponseActionInvokerInput, ResponseActionInvokerResult, ResponseActionsDocument, SubmitResult, } from './context';
 export { useSignal } from './use-signal';
 export { useField } from './use-field';
 export type { UseFieldResult } from './use-field';
@@ -25,6 +25,7 @@ export { useFocusField } from './use-focus-field';
 export type { UseFocusFieldResult } from './use-focus-field';
 export { useRuntimeContext } from './use-runtime-context';
 export type { UseRuntimeContextResult, RuntimeContext } from './use-runtime-context';
+export { useSemanticFieldControl } from './use-semantic-field-control';
 export type { FieldComponentProps, LayoutComponentProps, DisplayComponentProps, ComponentMap } from './component-map';
 export { FormspecForm } from './renderer';
 export type { FormspecFormProps } from './renderer';
@@ -33,6 +34,8 @@ export { IssuerChromeSlot, parseQueryIssuerOverride } from './issuer';
 export type { IssuerChromeSlotProps } from './issuer';
 export { componentGraphIdentityAttrs, projectionMetadataAttrs, uiGraphRoutePolicyAttrs, } from './projection-metadata';
 export type { ProjectionMetadataAttrs } from './projection-metadata';
+export { createSemanticControlRegistry } from './semantic-controls';
+export type { QualifiedSemanticSubjectRef, SemanticActivateControlContext, SemanticActivateControlResult, SemanticActivateControlSuccess, SemanticArtifactIdentity, SemanticControlActivation, SemanticControlRefusal, SemanticControlRefusalReason, SemanticControlRegistration, SemanticControlRegistry, SemanticControlScope, SemanticControlTarget, SemanticResponseBinding, SemanticSetItemControlRegistration, SemanticSetItemResult, SemanticSetItemSuccess, } from './semantic-controls';
 export { FormspecScreener, useScreener } from './screener';
 export type { FormspecScreenerProps, UseScreenerResult, UseScreenerOptions, ScreenerRoute, ScreenerRouteType, ScreenerStateSnapshot, } from './screener';
 export { DefaultField } from './defaults/fields/default-field';

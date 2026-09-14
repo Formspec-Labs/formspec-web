@@ -153,10 +153,10 @@ function CardLayout({ node, children, themeClass, style }) {
     return (_jsxs("section", { className: mergeClasses('formspec-card', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [label && _jsx(Heading, { className: "formspec-card-title", children: label }), subtitle && _jsx("p", { className: "formspec-card-subtitle", children: subtitle }), children] }));
 }
 // ── Divider ───────────────────────────────────────────────────────
-function DividerLayout({ node, themeClass, style }) {
-    const label = node.props?.label;
+/** Divider (component §5.15): a rule, or `label` centered between two rules. `label` overrides `node.props.label`. */
+export function DividerLayout({ node, themeClass, style, label = node.props?.label, }) {
     if (label) {
-        return (_jsxs("div", { className: mergeClasses('formspec-divider formspec-divider--labeled', themeClass), style: style, ...projectionMetadataAttrs(node), children: [_jsx("hr", {}), _jsx("span", { children: label }), _jsx("hr", {})] }));
+        return (_jsxs("div", { className: mergeClasses('formspec-divider formspec-divider--labeled', themeClass), style: style, ...projectionMetadataAttrs(node), children: [_jsx("hr", { className: "formspec-divider-line" }), _jsx("span", { className: "formspec-divider-label", children: label }), _jsx("hr", { className: "formspec-divider-line" })] }));
     }
     return _jsx("hr", { className: mergeClasses('formspec-divider', themeClass), style: style, ...projectionMetadataAttrs(node) });
 }

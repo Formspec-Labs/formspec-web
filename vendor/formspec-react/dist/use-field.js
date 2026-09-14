@@ -9,7 +9,7 @@ import { useSignal } from './use-signal';
  * For finer-grained subscriptions, use useFieldValue/useFieldError.
  */
 export function useField(path) {
-    const { engine, touchField, touchedVersion, isTouched } = useFormspecContext();
+    const { engine, touchField, touchedVersion, isTouched, advanceSemanticResponseRevision, } = useFormspecContext();
     const vm = useMemo(() => {
         const fieldVM = engine.getFieldVM(path);
         if (!fieldVM)
@@ -17,8 +17,11 @@ export function useField(path) {
         return fieldVM;
     }, [engine, path]);
     const label = useSignal(vm.label);
+    const labelNeedAnchors = useSignal(vm.labelNeedAnchors);
     const hint = useSignal(vm.hint);
+    const hintNeedAnchors = useSignal(vm.hintNeedAnchors);
     const description = useSignal(vm.description);
+    const descriptionNeedAnchors = useSignal(vm.descriptionNeedAnchors);
     const value = useSignal(vm.value);
     const required = useSignal(vm.required);
     const visible = useSignal(vm.visible);
@@ -31,25 +34,32 @@ export function useField(path) {
     const _touchedVersion = useSignal(touchedVersion);
     const touched = isTouched(vm.instancePath);
     const touch = useMemo(() => () => touchField(vm.instancePath), [touchField, vm]);
+    const setValue = useMemo(() => (nextValue) => {
+        vm.setValue(nextValue);
+        advanceSemanticResponseRevision();
+    }, [advanceSemanticResponseRevision, vm]);
     const inputProps = useMemo(() => ({
         id: vm.id,
         name: vm.instancePath,
         value: value ?? '',
-        onChange: (e) => vm.setValue(e.target.value),
+        onChange: (e) => setValue(e.target.value),
         onBlur: () => touchField(vm.instancePath),
         required,
         readOnly: readonly,
         'aria-invalid': !!firstError,
         'aria-required': required,
-    }), [vm, value, required, readonly, firstError, touchField]);
+    }), [vm, value, required, readonly, firstError, touchField, setValue]);
     return {
         id: vm.id,
         path: vm.instancePath,
         itemKey: vm.itemKey,
         dataType: vm.dataType,
         label,
+        labelNeedAnchors,
         hint,
+        hintNeedAnchors,
         description,
+        descriptionNeedAnchors,
         value,
         required,
         visible,
@@ -60,7 +70,7 @@ export function useField(path) {
         options,
         optionsState,
         disabledDisplay: vm.disabledDisplay,
-        setValue: vm.setValue,
+        setValue,
         touch,
         inputProps,
     };

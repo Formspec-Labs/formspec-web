@@ -4,7 +4,7 @@
  * Generated from schemas/*.schema.json by scripts/generate-types.mjs.
  * Re-run: npm run types:generate
  */
-import type { ModuleRef, Extensions, TargetDefinition, Tokens, AccessibilityBlock, Breakpoints, ThemeWidgetName } from './common.js';
+import type { ModuleRef, Generation, Extensions, TargetDefinition, Tokens, AccessibilityBlock, Breakpoints, ThemeWidgetName } from './common.js';
 /**
  * Cascade level 1 (lowest theme specificity): baseline PresentationBlock applied to every item before selectors or per-item overrides. Sets the form-wide visual baseline. Overrides Tier 1 inline presentation hints (level 0) and formPresentation globals (level -1). Overridden by selectors (level 2) and items (level 3). Merge is shallow per-property — nested objects (widgetConfig, style, accessibility) are replaced as a whole, not deep-merged. Exception: cssClass uses union semantics across all levels.
  */
@@ -16,7 +16,7 @@ export type PresentationBlock = {
      */
     widget?: ThemeWidgetName;
     /**
-     * Widget-specific configuration. Properties depend on the widget. Renderers MUST ignore unrecognized keys. Theme fallback resolution does NOT carry widgetConfig forward — each fallback widget uses its own default configuration. Component fallback carry/drop/translate policy is defined structurally in specs/ui-policy.json. Well-known configs by widget: TextInput (maxLength, inputMode, placeholder), Text (rows, maxRows, autoResize, placeholder), NumberInput (showStepper, locale, placeholder), DatePicker (format, minDate, maxDate, placeholder), Select (searchable, placeholder), CheckboxGroup (columns, maxVisible), FileUpload (accept, maxSizeMb, preview), MoneyInput (showCurrencySymbol, locale, placeholder), Slider (min, max, step, showTicks, showValue), Toggle (onLabel, offLabel), RadioGroup (direction, columns), Signature (strokeColor, height).
+     * Widget-specific configuration. Properties depend on the widget. Renderers MUST ignore unrecognized keys. Theme fallback resolution does NOT carry widgetConfig forward — each fallback widget uses its own default configuration. Component fallback carry/drop/translate policy is defined structurally in specs/ui-policy.json. Repeatable group items (any widget): allowAdd and allowRemove (booleans, default true) lock the add/remove affordances when no Component Document binds the group; presentation-only, they do not change minRepeat/maxRepeat cardinality and every instance supplied by data still renders. TextInput maxLength is a display-only character-count hint that never blocks submission; enforce limits with a Definition Bind constraint such as 'length($) <= 200'. Well-known configs by widget: TextInput (maxLength, inputMode, placeholder), Text (rows, maxRows, autoResize, placeholder), NumberInput (showStepper, locale, placeholder), DatePicker (format, minDate, maxDate, placeholder), Select (searchable, placeholder), CheckboxGroup (columns, maxVisible), FileUpload (accept, maxSizeMb, preview), MoneyInput (showCurrencySymbol, locale, placeholder), Slider (min, max, step, showTicks, showValue), Toggle (onLabel, offLabel), RadioGroup (direction, columns), Signature (strokeColor, height).
      */
     widgetConfig?: {
         [k: string]: unknown;
@@ -95,12 +95,19 @@ export interface ThemeDocument {
      * Human-readable description of the theme's purpose and target audience.
      */
     description?: string;
+    'x-generation'?: Generation;
     targetDefinition?: TargetDefinition;
     /**
      * Target rendering platform. Informational — processors that do not recognize a platform value SHOULD apply the theme regardless. Well-known values: 'web' (desktop/mobile browsers), 'mobile' (native apps), 'pdf' (PDF rendering), 'print' (print-optimized), 'kiosk' (public terminals), 'universal' (no platform assumptions, implicit default).
      */
     platform?: string;
     tokens?: Tokens;
+    /**
+     * Additional color-token pairs whose effective contrast tooling must check. The platform Token Registry already declares the pairs used by the default renderer, so a Theme only needs this property for custom x-* tokens or stricter product-specific checks. A processor evaluates a pair after platform defaults and Theme token overrides are merged. It MUST use the WCAG 2.2 contrast formula when both values can be reduced to opaque sRGB colors, MUST NOT report a ratio when either value is indeterminate, and SHOULD diagnose a declared pair that references a missing token. The usage sets a standards floor: normalText is 4.5:1; largeText and uiComponent are 3:1. minimumRatio may raise but never lower that floor.
+     *
+     * @minItems 1
+     */
+    contrastPairs?: [ContrastPair, ...ContrastPair[]];
     defaults?: PresentationBlock;
     /**
      * Cascade level 2: type/dataType-based presentation overrides. Each selector has a 'match' (criteria) and 'apply' (PresentationBlock). Selectors are evaluated in document order — all matching selectors apply, with later matches overriding earlier ones per-property. Overrides defaults (level 1); overridden by items (level 3).
@@ -138,6 +145,108 @@ export interface ThemeDocument {
      * via the `patternProperty` "^x-".
      */
     [k: `x-${string}`]: unknown;
+}
+/**
+ * Authoring identity per ADR 0150 §5.4. Distinct from `respondent-ledger-event.Actor` (respondent-identity) and `experience.Actor` (workflow-role) — three Actor $defs by design. `kind` and `actChannel` are terminal-closed enums; product nuance (e.g. discriminating Wireframes-MCP from Forms-MCP, both `actChannel: 'mcp'`) rides URN-encoded into `id`, not via new enum values.
+ */
+export interface AuthorActor {
+    /**
+     * Stable actor URN (urn:formspec:actor:... scheme). Product nuance rides URN-encoded (e.g. urn:formspec:actor:mcp:wireframes:agent-7).
+     */
+    id: string;
+    /**
+     * Terminal-closed per §5.4 (NOT §4.5-extensible). Answers 'what kind of authoring entity'.
+     */
+    kind: 'human' | 'ai-agent' | 'service';
+    /**
+     * Terminal-closed per §5.4. Orthogonal to kind. Answers 'through what channel'. An ai-agent MAY have actChannel:'mcp' (mediated via MCP) OR 'agent' (autonomous). A human MAY have actChannel:'human' (direct editor) OR 'mcp' (CLI-driven MCP).
+     */
+    actChannel: 'human' | 'mcp' | 'agent' | 'service';
+    /**
+     * Optional human-readable label for timeline/support views.
+     */
+    display?: string;
+    extensions?: Extensions;
+}
+/**
+ * Graph-wide Component node identity for x-generation movedFrom/copiedFrom provenance. Mirrors the app-graph Component node identity tuple: Component membership, Surface sibling identity, route, absolute route-scoped nodePath, and optional public/structural node ids. This is provenance metadata only; it does not authorize, execute, or resolve runtime behavior.
+ */
+export interface ComponentNodeIdentityRef {
+    component: {
+        /**
+         * App Manifest components[] membership handle.
+         */
+        handle: string;
+        /**
+         * Canonical URL of the Component document when available.
+         */
+        url?: string;
+        /**
+         * Component document version evidence when available.
+         */
+        version?: string;
+    };
+    surface: {
+        /**
+         * Canonical URL of the Surface document.
+         */
+        url: string;
+        /**
+         * Surface document version evidence when available.
+         */
+        version?: string;
+    };
+    /**
+     * Surface routes[].id for the route-scoped node.
+     */
+    route: string;
+    /**
+     * Absolute route-scoped Component node path built from stable node segments.
+     */
+    nodePath: string;
+    /**
+     * Optional ComponentBase.id evidence for the node.
+     */
+    id?: string;
+    /**
+     * Optional structural authoring identity for the node.
+     */
+    nodeId?: string;
+}
+/**
+ * Legacy same-runtime route + intra-document node path. Retained for Studio/kernel compatibility; it is not sufficient graph-wide Component provenance once multiple Surfaces or Component documents are loaded.
+ */
+export interface CrossComponentRef {
+    route: string;
+    nodePath: string;
+}
+/**
+ * A pair of effective color tokens checked together. Token names are stored without the $token. reference prefix. Authors use separate pairs for separate color-scheme token keys, such as color.input and color.dark.input.
+ *
+ * This interface was referenced by `ThemeDocument`'s JSON-Schema
+ * via the `definition` "ContrastPair".
+ */
+export interface ContrastPair {
+    /**
+     * Stable identifier for this contrast check within the Theme.
+     */
+    id: string;
+    /**
+     * Token key for the text, icon, focus indicator, or control boundary color.
+     */
+    foregroundToken: string;
+    /**
+     * Token key for the adjacent background or surface color.
+     */
+    backgroundToken: string;
+    /**
+     * How the foreground is used. normalText requires at least 4.5:1; largeText and uiComponent require at least 3:1.
+     */
+    usage: 'normalText' | 'largeText' | 'uiComponent';
+    /**
+     * Optional stricter contrast ratio. The effective minimum is the greater of this number and the floor implied by usage, so this value cannot weaken the standards floor.
+     */
+    minimumRatio?: number;
 }
 /**
  * A cascade level 2 rule: matches items by type and/or dataType and applies a PresentationBlock. Selectors are evaluated in document order. All matching selectors apply — later matches override earlier ones per-property (shallow merge). This enables layered styling: a broad type selector can set a baseline, and a narrower dataType selector can refine it.

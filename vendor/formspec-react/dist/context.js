@@ -3,14 +3,147 @@ import { jsx as _jsx } from "react/jsx-runtime";
 /** @filedesc FormspecProvider — React context wrapping a FormEngine + optional layout plan. */
 import { createContext, useContext, useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import { signal } from '@preact/signals-core';
-import { createFormEngine, findResponseActionByIntent, missingSubmitActionFinding, resolveResponseAction } from '@formspec-org/engine';
+import { createFormEngine, findResponseActionByIntent, missingSubmitActionFinding, resolveResponseAction, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
 import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, preparePlanContext, ensureActionButton, mergeFormPresentationForPlanning, } from '@formspec-org/layout';
 const platformTheme = buildPlatformTheme();
+const ABSOLUTE_URI_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+const FIELD_HELP_URI_BASE = 'https://formspec.invalid/';
+/** Fail-closed browser policy for human Reference links. */
+export function admitDefaultFieldHelpUri(uri) {
+    if (uri.length === 0
+        || uri.trim() !== uri
+        || uri.includes('\\')
+        || uri.startsWith('//')) {
+        return undefined;
+    }
+    try {
+        const absolute = ABSOLUTE_URI_SCHEME.test(uri);
+        const destination = absolute
+            ? new URL(uri)
+            : new URL(uri, FIELD_HELP_URI_BASE);
+        if (destination.protocol !== 'https:'
+            || destination.username.length > 0
+            || destination.password.length > 0
+            || (!absolute && destination.origin !== 'https://formspec.invalid')) {
+            return undefined;
+        }
+        return uri;
+    }
+    catch {
+        return undefined;
+    }
+}
 const FormspecContext = createContext(null);
 function pageModeFromPresentation(presentation) {
     return presentation?.pageMode === 'wizard' || presentation?.pageMode === 'tabs'
         ? presentation.pageMode
         : undefined;
+}
+const RESPONSE_ACTION_ID = /^[A-Za-z][A-Za-z0-9-]*$/;
+function record(value) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+        ? value
+        : null;
+}
+function hasNonEmptyString(value) {
+    return typeof value === 'string' && value.trim().length > 0;
+}
+function hasValidResponseActionEffectShape(value) {
+    const effect = record(value);
+    if (!effect || typeof effect.type !== 'string')
+        return false;
+    if (effect.onError !== undefined
+        && effect.onError !== 'fail'
+        && effect.onError !== 'defer') {
+        return false;
+    }
+    switch (effect.type) {
+        case 'mappingExecution':
+            return hasNonEmptyString(effect.mappingRef)
+                && hasNonEmptyString(effect.idempotencyKey);
+        case 'ledgerAppend':
+            return hasNonEmptyString(effect.eventKind)
+                && hasNonEmptyString(effect.idempotencyKey);
+        case 'handoffAssembly':
+            return hasNonEmptyString(effect.handoffProfileRef)
+                && hasNonEmptyString(effect.recipientRef)
+                && hasNonEmptyString(effect.idempotencyKey);
+        case 'evidenceRequest':
+        case 'serviceRequest':
+            return hasNonEmptyString(effect.requestRef)
+                && hasNonEmptyString(effect.idempotencyKey);
+        case 'hostEvent':
+            return hasNonEmptyString(effect.eventName)
+                && effect.idempotencyKey === undefined;
+        case 'browserResource':
+            return (effect.operation === 'open' || effect.operation === 'download')
+                && hasNonEmptyString(effect.resourceRef)
+                && effect.idempotencyKey === undefined;
+        default:
+            return false;
+    }
+}
+function hasValidResponseActionShape(value) {
+    const action = record(value);
+    if (!action
+        || !hasNonEmptyString(action.id)
+        || !RESPONSE_ACTION_ID.test(action.id)
+        || !hasNonEmptyString(action.intent)
+        || !Array.isArray(action.effects)
+        || action.effects.length === 0
+        || !action.effects.every(hasValidResponseActionEffectShape)) {
+        return false;
+    }
+    const label = action.label;
+    if (label !== undefined) {
+        const candidate = record(label);
+        const hasLiteral = candidate ? hasNonEmptyString(candidate.literal) : false;
+        const hasRef = candidate ? hasNonEmptyString(candidate.ref) : false;
+        if (!candidate || hasLiteral === hasRef)
+            return false;
+    }
+    try {
+        resolveResponseActionValidationTuple(value);
+    }
+    catch {
+        return false;
+    }
+    return true;
+}
+function hasLiteralActionLabel(action) {
+    const label = record(action.label);
+    return label ? hasNonEmptyString(label.literal) : false;
+}
+/**
+ * Select actions that the Definition auto-renderer can place without
+ * inventing a control label. The document itself must be a matching,
+ * response-scoped document with unique, structurally usable actions; one bad
+ * action closes the whole auto-placement seam.
+ */
+function autoPlacedDefinitionActions(document, definition) {
+    const candidate = record(document);
+    const target = record(candidate?.targetDefinition);
+    if (!candidate
+        || candidate.$formspecResponseActions !== '1.0'
+        || !hasNonEmptyString(candidate.version)
+        || (candidate.scope !== undefined && candidate.scope !== 'response')
+        || !target
+        || !hasNonEmptyString(target.url)
+        || target.url !== definition.url
+        || (target.compatibleVersions !== undefined
+            && !hasNonEmptyString(target.compatibleVersions))
+        || !Array.isArray(candidate.actions)
+        || candidate.actions.length === 0
+        || !candidate.actions.every(hasValidResponseActionShape)) {
+        return [];
+    }
+    const ids = new Set();
+    for (const action of candidate.actions) {
+        if (ids.has(action.id))
+            return [];
+        ids.add(action.id);
+    }
+    return candidate.actions.filter(hasLiteralActionLabel);
 }
 /**
  * Provides FormEngine and layout plan to descendant hooks and renderers.
@@ -18,8 +151,31 @@ function pageModeFromPresentation(presentation) {
  * Accepts either a pre-built `engine` or a raw `definition` (creates engine internally).
  */
 export function FormspecProvider(props) {
-    const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, initialData, registryEntries, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
+    const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, semanticControlScope, initialData, registryEntries, resolveFieldHelp, admitFieldHelpUri = admitDefaultFieldHelpUri, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
+    const fieldHelpLabel = props.fieldHelpLabel ?? 'Help and guidance';
     const shouldEmitThemeTokens = props.emitThemeTokens ?? true;
+    const semanticResponseState = useMemo(() => ({
+        responseRevision: semanticControlScope?.initialResponseRevision ?? 0,
+    }), [
+        semanticControlScope?.renderInstanceId,
+        semanticControlScope?.responseId,
+        semanticControlScope?.initialResponseRevision,
+    ]);
+    const currentSemanticResponseBinding = useCallback(() => semanticControlScope
+        ? {
+            responseId: semanticControlScope.responseId,
+            responseRevision: semanticResponseState.responseRevision,
+        }
+        : null, [semanticControlScope, semanticResponseState]);
+    const advanceSemanticResponseRevision = useCallback(() => {
+        if (!semanticControlScope)
+            return null;
+        semanticResponseState.responseRevision += 1;
+        return {
+            responseId: semanticControlScope.responseId,
+            responseRevision: semanticResponseState.responseRevision,
+        };
+    }, [semanticControlScope, semanticResponseState]);
     const hasIssuerOverrideProp = Object.prototype.hasOwnProperty.call(props, 'issuerOverride');
     const effectiveThemeDocument = useMemo(() => themeDocument
         ? mergePlatformAndTenantTheme(platformTheme, themeDocument)
@@ -55,7 +211,7 @@ export function FormspecProvider(props) {
             issuerOverride,
         });
         if (initialData) {
-            applyInitialData(eng, initialData);
+            eng.loadResponseData(initialData);
         }
         return eng;
     }, [externalEngine, definition, registryEntries, runtimeContext, initialData, issuerFetcher]);
@@ -146,14 +302,13 @@ export function FormspecProvider(props) {
                     : undefined,
             };
         }
-        // §10: only inject an ActionButton when a submit-intent Action
-        // actually exists in the loaded Response Actions document. §10
-        // forbids implicit-default Actions and free-string fallbacks, so
-        // auto-injection MUST be a no-op when no submit Action is published.
+        // The host opts into Definition action controls by wiring onSubmit.
+        // Place each usable response-scoped Action in document order. Exact
+        // actionRef deduplication preserves explicitly authored controls, and
+        // literal labels keep all visible copy in the structured document.
         if (onSubmit) {
-            const submitAction = findResponseActionByIntent(responseActionsDocument, 'submit');
-            if (submitAction) {
-                ensureActionButton(root, planCtx.nextId, { pageMode, actionRef: submitAction.id });
+            for (const action of autoPlacedDefinitionActions(responseActionsDocument, def)) {
+                ensureActionButton(root, planCtx.nextId, { pageMode, actionRef: action.id });
             }
         }
         return root;
@@ -176,19 +331,19 @@ export function FormspecProvider(props) {
             touchedVersionSignal.value += 1;
         }
     }, [touchedVersionSignal]);
+    // Every rendered instance path the engine validates (repeat rows included, e.g. `rows[1].name`),
+    // not Definition template paths. Same key set as webcomponent submit touchAllFields.
     const touchAllFields = useCallback(() => {
-        const def = engine.getDefinition();
-        const walk = (items, prefix) => {
-            for (const item of items) {
-                const path = prefix ? `${prefix}.${item.key}` : item.key;
-                if (item.type === 'field')
-                    touchField(path);
-                if (item.children)
-                    walk(item.children, path);
-            }
-        };
-        walk(def.items || [], '');
-    }, [engine, touchField]);
+        let touchedAny = false;
+        for (const path of [...Object.keys(engine.errorSignals), ...Object.keys(engine.validationResults)]) {
+            if (touchedFieldsRef.current.has(path))
+                continue;
+            touchedFieldsRef.current.add(path);
+            touchedAny = true;
+        }
+        if (touchedAny)
+            touchedVersionSignal.value += 1;
+    }, [engine, touchedVersionSignal]);
     const isTouched = useCallback((path) => {
         return touchedFieldsRef.current.has(path);
     }, []);
@@ -229,6 +384,7 @@ export function FormspecProvider(props) {
         componentGraph,
         hostEvidence,
         responseActionsDocument,
+        semanticControlScope,
         onSubmit,
         onHostEvent,
         onActionFinding,
@@ -238,13 +394,18 @@ export function FormspecProvider(props) {
         dispatchActionEffect,
         resolveActionIdempotencyKey,
         resolveActionRef,
+        currentSemanticResponseBinding,
+        advanceSemanticResponseRevision,
         touchField,
         touchAllFields,
         touchedVersion: touchedVersionSignal,
         isTouched,
         registryEntries: registryMap,
+        resolveFieldHelp,
+        admitFieldHelpUri,
+        fieldHelpLabel,
         formPresentation: mergedFormPresentation,
-    }), [engine, layoutPlan, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, responseActionsDocument, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, touchField, touchAllFields, touchedVersionSignal, isTouched, registryMap, mergedFormPresentation]);
+    }), [engine, layoutPlan, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, responseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation]);
     return (_jsx(FormspecContext.Provider, { value: value, children: _jsx("div", { ref: themeScopeRef, className: "formspec-theme-scope", style: THEME_SCOPE_STYLE, children: children }) }));
 }
 /** See `themeScopeRef` — the scope element must not generate a box. */
@@ -291,30 +452,6 @@ export function emitThemeTokens(tokens, target) {
     const el = target ?? document.documentElement;
     for (const [key, value] of Object.entries(tokens)) {
         el.style.setProperty(`--formspec-${key.replace(/\./g, '-')}`, String(value));
-    }
-}
-/** Walk nested initial data and set leaf values on the engine with dotted paths. */
-function applyInitialData(engine, data, prefix = '') {
-    for (const [key, value] of Object.entries(data)) {
-        const path = prefix ? `${prefix}.${key}` : key;
-        if (Array.isArray(value)) {
-            // Repeat group: ensure instances exist, then recurse into each
-            const currentCount = engine.repeats[path]?.value ?? 0;
-            for (let i = currentCount; i < value.length; i++) {
-                engine.addRepeatInstance(path);
-            }
-            for (let i = 0; i < value.length; i++) {
-                if (value[i] != null && typeof value[i] === 'object') {
-                    applyInitialData(engine, value[i], `${path}[${i}]`);
-                }
-            }
-        }
-        else if (value !== null && typeof value === 'object') {
-            applyInitialData(engine, value, path);
-        }
-        else {
-            engine.setValue(path, value);
-        }
     }
 }
 import { Path } from '@formspec-org/types';

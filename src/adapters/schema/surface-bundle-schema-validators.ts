@@ -24,11 +24,14 @@ import mappingSchemaJson from '../../../vendor/formspec-schemas/mapping.schema.j
 import ontologySchemaJson from '../../../vendor/formspec-schemas/ontology.schema.json';
 import referencesSchemaJson from '../../../vendor/formspec-schemas/references.schema.json';
 import registrySchemaJson from '../../../vendor/formspec-schemas/registry.schema.json';
+import responseSchemaJson from '../../../vendor/formspec-schemas/response.schema.json';
 import responseActionsSchemaJson from '../../../vendor/formspec-schemas/response-actions.schema.json';
 import screenerSchemaJson from '../../../vendor/formspec-schemas/screener.schema.json';
 import surfaceSchemaJson from '../../../vendor/formspec-schemas/surface.schema.json';
 import themeSchemaJson from '../../../vendor/formspec-schemas/theme.schema.json';
 import validationMappingSchemaJson from '../../../vendor/formspec-schemas/validation-mapping.schema.json';
+import validationResultSchemaJson from '../../../vendor/formspec-schemas/validation-result.schema.json';
+import verificationReceiptSchemaJson from '../../../vendor/formspec-schemas/verification-receipt.schema.json';
 
 type CanonicalSchema = AnySchemaObject & { readonly $id: string };
 
@@ -58,6 +61,10 @@ const dependencySchemas = Object.freeze([
   commonSchema,
   issuerSchema,
   validationMappingSchema,
+  // Data Sources filters reference Response's ResponseStatus.
+  canonicalSchema(responseSchemaJson),
+  canonicalSchema(validationResultSchemaJson),
+  canonicalSchema(verificationReceiptSchemaJson),
 ]);
 
 /**

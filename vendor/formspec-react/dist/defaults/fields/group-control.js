@@ -1,9 +1,33 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-/** Renders radio/checkbox group options (ARIA matches default web component adapter). */
-export function GroupControl({ field, node, isReadonly, labelId, groupSupplementaryDescribedBy, }) {
+import { needTraceAttrs } from '../../projection-metadata.js';
+/**
+ * `readonly` has no effect on radios or checkboxes. While read-only, cancel the click that would change an option
+ * (label clicks and keyboard selection dispatch one too) so the DOM keeps its state, and each onChange (which React
+ * fires from that click) ignores it: options stay enabled, focusable, and announced read-only, but the value cannot
+ * change (core §4.3 Bind `readonly`). Same guard as webcomponent bindSharedFieldEffects.
+ */
+function blockReadonlyChange(event) {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && (target.type === 'radio' || target.type === 'checkbox')) {
+        event.preventDefault();
+    }
+}
+/**
+ * Renders radio/checkbox group options (ARIA matches the webcomponent adapters). A radiogroup carries required,
+ * invalid, and read-only state (WAI-ARIA radiogroup supports all three). A checkbox `group` supports neither
+ * aria-required nor aria-readonly: it carries aria-invalid, each checkbox aria-readonly, and DefaultField's legend
+ * says "required".
+ */
+export function GroupControl({ field, node, isReadonly, invalid, labelId, describedBy, }) {
+    const onClickCapture = isReadonly ? blockReadonlyChange : undefined;
     if (node.component === 'RadioGroup') {
         const orientation = node.props?.orientation;
-        return (_jsx("div", { className: "formspec-radio-group", role: "radiogroup", "aria-labelledby": labelId, ...(groupSupplementaryDescribedBy ? { 'aria-describedby': groupSupplementaryDescribedBy } : {}), ...(orientation === 'horizontal' ? { 'data-orientation': 'horizontal' } : {}), children: field.options.map((opt) => (_jsxs("label", { children: [_jsx("input", { type: "radio", name: field.path, value: opt.value, checked: field.value === opt.value, disabled: isReadonly, onChange: isReadonly ? undefined : () => { field.setValue(opt.value); field.touch(); } }), ' ', opt.label] }, opt.value))) }));
+        return (_jsx("div", { className: "formspec-radio-group", role: "radiogroup", "aria-labelledby": labelId, "aria-required": field.required, "aria-invalid": invalid, "aria-readonly": isReadonly, ...(describedBy ? { 'aria-describedby': describedBy } : {}), ...(orientation === 'horizontal' ? { 'data-orientation': 'horizontal' } : {}), onClickCapture: onClickCapture, children: field.options.map((opt) => (_jsxs("label", { ...needTraceAttrs(opt.needAnchors), children: [_jsx("input", { type: "radio", name: field.path, value: opt.value, checked: field.value === opt.value, onChange: () => {
+                            if (isReadonly)
+                                return;
+                            field.setValue(opt.value);
+                            field.touch();
+                        } }), ' ', opt.label] }, opt.value))) }));
     }
     const current = Array.isArray(field.value) ? field.value : [];
     const columns = node.props?.columns;
@@ -12,10 +36,14 @@ export function GroupControl({ field, node, isReadonly, labelId, groupSupplement
     const allSelected = allValues.length > 0 && allValues.every(v => current.includes(v));
     const columnStyle = typeof columns === 'string' ? { display: 'grid', gridTemplateColumns: columns } : undefined;
     const dataColumns = typeof columns === 'number' && columns > 1 ? { 'data-columns': String(columns) } : {};
-    return (_jsxs("div", { className: "formspec-checkbox-group", role: "group", "aria-labelledby": labelId, ...(groupSupplementaryDescribedBy ? { 'aria-describedby': groupSupplementaryDescribedBy } : {}), style: columnStyle, ...dataColumns, children: [selectAll && (_jsxs("label", { className: "formspec-select-all", "data-select-all": true, children: [_jsx("input", { type: "checkbox", "aria-label": "Select all", checked: allSelected, disabled: isReadonly, onChange: isReadonly ? undefined : (e) => {
+    return (_jsxs("div", { className: "formspec-checkbox-group", role: "group", "aria-labelledby": labelId, "aria-invalid": invalid, ...(describedBy ? { 'aria-describedby': describedBy } : {}), style: columnStyle, ...dataColumns, onClickCapture: onClickCapture, children: [selectAll && (_jsxs("label", { className: "formspec-select-all", "data-select-all": true, children: [_jsx("input", { type: "checkbox", "aria-label": "Select all", "aria-readonly": isReadonly, checked: allSelected, onChange: (e) => {
+                            if (isReadonly)
+                                return;
                             field.setValue(e.target.checked ? [...allValues] : []);
                             field.touch();
-                        } }), "Select all"] })), field.options.map((opt) => (_jsxs("label", { children: [_jsx("input", { type: "checkbox", name: field.path, value: opt.value, checked: current.includes(opt.value), disabled: isReadonly, onChange: isReadonly ? undefined : (e) => {
+                        } }), "Select all"] })), field.options.map((opt) => (_jsxs("label", { ...needTraceAttrs(opt.needAnchors), children: [_jsx("input", { type: "checkbox", name: field.path, value: opt.value, "aria-readonly": isReadonly, checked: current.includes(opt.value), onChange: (e) => {
+                            if (isReadonly)
+                                return;
                             const next = e.target.checked
                                 ? [...current, opt.value]
                                 : current.filter((v) => v !== opt.value);

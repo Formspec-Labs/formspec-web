@@ -429,6 +429,7 @@ function signedPayload(): SurfaceBundleSignedPayloadV1 {
         actions: [{
           id: 'submit-intake',
           intent: 'submit',
+          label: { literal: 'Submit' },
           effects: [{ type: 'hostEvent', eventName: 'formspec-submit' }],
         }],
       },

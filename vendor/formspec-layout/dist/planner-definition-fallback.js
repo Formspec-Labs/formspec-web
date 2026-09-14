@@ -2,7 +2,7 @@
 import { widgetTokenToComponent } from '@formspec-org/types';
 import { resolvePresentation, resolveWidget } from './theme-resolver.js';
 import { getDefaultComponent } from './defaults.js';
-import { gridPlacementStyleFromLayout, normalizeCssClass, preparePlanContext } from './node-utils.js';
+import { gridPlacementStyleFromLayout, needGenerationAnchors, normalizeCssClass, preparePlanContext, } from './node-utils.js';
 import { findItemAtPath, findItemPathByKey, getParentPath, } from './planner-path-utils.js';
 import { applyDefinitionPageMode, emitPageModePages, } from './planner-page-mode.js';
 import { buildThemePageNodes, collectAssignedTopLevelKeys } from './planner-theme-pages.js';
@@ -44,6 +44,7 @@ export function planDefinitionItem(item, ctx, prefix = '') {
             style: gridPlacementStyleFromLayout(item.presentation?.layout),
             cssClasses: normalizeCssClass(presentation.cssClass),
             children: [],
+            needAnchors: needGenerationAnchors(item),
             bindPath: fullPath,
             scopeChange: true,
         };
@@ -51,6 +52,12 @@ export function planDefinitionItem(item, ctx, prefix = '') {
             groupNode.repeatGroup = key;
             groupNode.repeatPath = fullPath;
             groupNode.isRepeatTemplate = true;
+            // Theme §4.2: with no Component Document binding the group, widgetConfig may lock Add/Remove.
+            for (const lock of ['allowAdd', 'allowRemove']) {
+                const value = presentation.widgetConfig?.[lock];
+                if (typeof value === 'boolean')
+                    groupNode.props[lock] = value;
+            }
         }
         const childPrefix = isRepeat ? `${fullPath}[0]` : fullPath;
         if (Array.isArray(item.children)) {
@@ -66,8 +73,8 @@ export function planDefinitionItem(item, ctx, prefix = '') {
         const widget = themeWidget || tier1Widget || getDefaultComponent(fieldItem);
         const { widgetHint: _, cssClass: _c, labelPosition: _l, ...presentationProps } = fieldItem.presentation ?? {};
         const fieldProps = { bind: key, ...presentationProps };
-        if (widget === 'TextInput' && fieldItem.dataType === 'text' && !fieldProps.maxLines) {
-            fieldProps.maxLines = 3;
+        if (widget === 'TextInput' && fieldItem.dataType === 'text') {
+            fieldProps.maxLines ?? (fieldProps.maxLines = presentation.widgetConfig?.rows ?? 3);
         }
         return {
             id: planCtx.nextId('field'),
@@ -77,6 +84,7 @@ export function planDefinitionItem(item, ctx, prefix = '') {
             style: gridPlacementStyleFromLayout(fieldItem.presentation?.layout),
             cssClasses: normalizeCssClass(presentation.cssClass),
             children: [],
+            needAnchors: needGenerationAnchors(item),
             bindPath: fullPath,
             fieldItem: {
                 key: key,
@@ -91,23 +99,23 @@ export function planDefinitionItem(item, ctx, prefix = '') {
             labelPosition: presentation.labelPosition ?? 'top',
         };
     }
-    const displayItem = item;
-    const displayWidget = widgetTokenToComponent(displayItem.presentation?.widgetHint) ?? 'Text';
-    const { widgetHint: _wh, cssClass: _dc, labelPosition: _dl, ...displayPresentationProps } = displayItem.presentation ?? {};
-    const displayNode = {
+    const displayPresentation = item.presentation;
+    const displayWidget = widgetTokenToComponent(displayPresentation?.widgetHint) ?? 'Text';
+    const { widgetHint: _wh, cssClass: _dc, labelPosition: _dl, ...displayPresentationProps } = displayPresentation ?? {};
+    // The static inline label goes in the component's text prop (Divider's is `label`, component §5.15);
+    // `bindPath` lets renderers resolve the live label (Locale, FEL `{{}}`) and Bind relevance for this Item.
+    const textProp = displayWidget === 'Divider' ? 'label' : 'text';
+    return {
         id: planCtx.nextId('display'),
         component: displayWidget,
         category: 'display',
-        props: { text: item.label || '', ...displayPresentationProps },
-        style: gridPlacementStyleFromLayout(displayItem.presentation?.layout),
+        props: { [textProp]: item.label || '', ...displayPresentationProps },
+        style: gridPlacementStyleFromLayout(displayPresentation?.layout),
         cssClasses: normalizeCssClass(presentation.cssClass),
         children: [],
+        needAnchors: needGenerationAnchors(item),
+        bindPath: fullPath,
     };
-    if (displayItem.relevant) {
-        displayNode.when = displayItem.relevant;
-        displayNode.whenPrefix = prefix;
-    }
-    return displayNode;
 }
 function planThemePagesFromDefinitionItems(items, ctx) {
     const pageNodes = buildThemePageNodes((regionPath) => {

@@ -47,29 +47,9 @@ export function hydrateEngineFromResponse(engine: IFormEngine, response?: FormRe
   hydrateEngineFromData(engine, response.data);
 }
 
-export function hydrateEngineFromData(engine: IFormEngine, data: Record<string, unknown>, prefix = ''): void {
-  for (const [key, value] of Object.entries(data)) {
-    const path = prefix ? `${prefix}.${key}` : key;
-    if (Array.isArray(value)) {
-      const currentCount = engine.repeats[path]?.value ?? 0;
-      for (let index = currentCount; index < value.length; index += 1) {
-        engine.addRepeatInstance(path);
-      }
-      value.forEach((entry, index) => {
-        if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
-          hydrateEngineFromData(engine, entry as Record<string, unknown>, `${path}[${index}]`);
-        }
-      });
-      continue;
-    }
-
-    if (value && typeof value === 'object') {
-      hydrateEngineFromData(engine, value as Record<string, unknown>, path);
-      continue;
-    }
-
-    engine.setValue(path, value as Parameters<IFormEngine['setValue']>[1]);
-  }
+/** The engine owns hydration: one row per saved repeat entry, even past maxRepeat. */
+export function hydrateEngineFromData(engine: IFormEngine, data: Record<string, unknown>): void {
+  engine.loadResponseData(data as Parameters<IFormEngine['loadResponseData']>[0]);
 }
 
 export function selectBootIdentityOption(

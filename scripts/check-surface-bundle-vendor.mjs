@@ -138,11 +138,14 @@ const schemaFiles = [
   'ontology.schema.json',
   'references.schema.json',
   'registry.schema.json',
+  'response.schema.json',
   'response-actions.schema.json',
   'screener.schema.json',
   'surface.schema.json',
   'theme.schema.json',
   'validation-mapping.schema.json',
+  'validation-result.schema.json',
+  'verification-receipt.schema.json',
 ];
 
 if (!existsSync(formspecRoot) || !existsSync(integrityRoot)) {

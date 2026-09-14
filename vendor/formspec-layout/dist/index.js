@@ -27,6 +27,8 @@ export { planComponentTree, planDefinitionFallback, planContains, ensureActionBu
 export { resolvePageSequence } from './page-sequence.js';
 // Anchored overlays (Modal / Popover positioning)
 export { positionPopupNearTrigger, clearPopupFixedPosition, POPUP_EDGE_PADDING, POPUP_TRIGGER_GAP, MODAL_FIRST_FOCUSABLE_SELECTOR, } from './popup-position.js';
+// TextInput character count copy (theme widgetConfig.maxLength)
+export { characterCountLimitMessage, characterCountStatus, CHARACTER_COUNT_ANNOUNCE_DELAY_MS, } from './character-count.js';
 // Platform defaults & theme generation
 export { platformDefaults, platformSelectors, buildPlatformTheme, mergePlatformAndTenantTheme, } from './platform-defaults.js';
 // UI Graph Policy route-landmark projection (shared by React + webcomponent)

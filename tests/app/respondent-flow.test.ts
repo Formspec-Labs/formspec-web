@@ -72,8 +72,6 @@ describe('respondent flow helpers', () => {
     engine.dispose();
   });
 
-  // The vendored engine predates addRepeatInstance refusing rows past maxRepeat; once the vendor is refreshed
-  // this fails until hydrateEngineFromData delegates to engine.loadResponseData.
   it('keeps saved repeat rows past maxRepeat and reports MAX_REPEAT', () => {
     const engine = createFormEngine({
       $formspec: '1.0',

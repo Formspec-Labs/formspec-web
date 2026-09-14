@@ -13,6 +13,10 @@
     "./hooks": {
       "types": "./dist/hooks.d.ts",
       "default": "./dist/hooks.js"
+    },
+    "./semantic-controls": {
+      "types": "./dist/semantic-controls.d.ts",
+      "default": "./dist/semantic-controls.js"
     }
   },
   "files": [

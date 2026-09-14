@@ -41,8 +41,11 @@ function makeFieldHarness({
     itemKey: 'lease',
     dataType: 'attachment',
     label: 'Lease',
+    labelNeedAnchors: [],
     hint: null,
+    hintNeedAnchors: [],
     description: null,
+    descriptionNeedAnchors: [],
     get value() {
       return value;
     },

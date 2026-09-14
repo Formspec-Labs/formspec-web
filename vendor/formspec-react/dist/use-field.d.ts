@@ -5,8 +5,11 @@ export interface UseFieldResult {
     itemKey: string;
     dataType: string;
     label: string;
+    labelNeedAnchors: string[];
     hint: string | null;
+    hintNeedAnchors: string[];
     description: string | null;
+    descriptionNeedAnchors: string[];
     value: any;
     required: boolean;
     visible: boolean;

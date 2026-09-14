@@ -2,6 +2,33 @@
 import { diagnosticSourceForHandle } from './report.js';
 import { resolvedActionIds, responseActionReferences, } from './response-action-resolution.js';
 import { escapeJsonPointerToken, handlesByKind, moduleIsAdmitted, ownProp, record, recordArray, registryWidgetEntries, resolvedWidgetContributionFromEntries, stringProp, surfaceWidgetSlots, widgetShape, } from './surface-widgets.js';
+const MODULE_WIDGET_STATE_NAMES = new Set([
+    'loading',
+    'empty',
+    'unavailable',
+    'error',
+]);
+function configuredStateOutputs(widget) {
+    const config = record(ownProp(widget.binding, 'config'));
+    const stateViews = record(ownProp(config, 'stateViews'));
+    return Object.entries(stateViews ?? {}).flatMap(([state, candidate]) => {
+        if (!MODULE_WIDGET_STATE_NAMES.has(state))
+            return [];
+        return recordArray(ownProp(record(candidate), 'actions')).flatMap((action, actionIndex) => {
+            if (stringProp(action, 'kind') !== 'output')
+                return [];
+            const outputName = stringProp(action, 'outputName');
+            return outputName
+                ? [{
+                        outputName,
+                        pointer: `/routes/${widget.routeIndex}/slots/${widget.slotIndex}` +
+                            `/binding/config/stateViews/${escapeJsonPointerToken(state)}` +
+                            `/actions/${actionIndex}/outputName`,
+                    }]
+                : [];
+        });
+    });
+}
 function declaredActionOutputs(contribution) {
     const counts = new Map();
     for (const output of recordArray(ownProp(widgetShape(contribution), 'actionOutputs'))) {
@@ -15,7 +42,7 @@ function actionBindingPointer(widget, outputName) {
     return `/routes/${widget.routeIndex}/slots/${widget.slotIndex}/binding/actionBindings/${escapeJsonPointerToken(outputName)}`;
 }
 function actionMatches(references, actionRef) {
-    return references.actions.filter((action) => action.id === actionRef).length;
+    return references.actions.filter((action) => action.id === actionRef);
 }
 function validActionsForWidget(context, widget, entries, references) {
     if (context.moduleResolution && !moduleIsAdmitted(context, widget.moduleId))
@@ -27,9 +54,11 @@ function validActionsForWidget(context, widget, entries, references) {
     const bindings = record(ownProp(widget.binding, 'actionBindings'));
     return Object.entries(bindings ?? {}).flatMap(([outputName, value]) => {
         const actionRef = stringProp(record(value), 'actionRef');
+        const matches = actionRef ? actionMatches(references, actionRef) : [];
         return (outputs.get(outputName) === 1
             && actionRef
-            && actionMatches(references, actionRef) === 1)
+            && matches.length === 1
+            && matches[0]?.scope === 'app')
             ? [{ widget, outputName, actionRef }]
             : [];
     });
@@ -72,8 +101,8 @@ function widgetActionBindingDiagnostics(context, entries, references) {
                         },
                     });
                 }
-                const matches = actionRef ? actionMatches(references, actionRef) : 0;
-                if (matches !== 1) {
+                const matches = actionRef ? actionMatches(references, actionRef) : [];
+                if (matches.length !== 1) {
                     diagnostics.push({
                         code: 'E612',
                         severity: 'error',
@@ -83,7 +112,9 @@ function widgetActionBindingDiagnostics(context, entries, references) {
                         primarySource: diagnosticSourceForHandle(widget.surface, `${actionBindingPointer(widget, outputName)}/actionRef`),
                         relatedSources: handlesByKind(context.handles, 'responseActions').map((handle) => diagnosticSourceForHandle(handle, '/actions')),
                         details: {
-                            reason: 'widget-action-ref-unresolved',
+                            reason: matches.length > 1
+                                ? 'widget-action-ref-ambiguous'
+                                : 'widget-action-ref-unresolved',
                             surfaceRef: widget.surfaceRef,
                             routeId: widget.routeId,
                             slotId: widget.slotId,
@@ -91,10 +122,107 @@ function widgetActionBindingDiagnostics(context, entries, references) {
                             widgetName: widget.widgetName,
                             outputName,
                             actionRef,
-                            actionMatches: matches,
+                            actionMatches: matches.length,
                         },
                     });
                 }
+                else if (matches[0].scope !== 'app') {
+                    diagnostics.push({
+                        code: 'E612',
+                        severity: 'error',
+                        phase: 'cross-artifact',
+                        origin: 'app-graph-validator',
+                        message: `Surface widget output '${outputName}' actionRef '${actionRef}' resolves to a ${matches[0].scope}-scoped Response Actions document; module-widget bindings require scope 'app'.`,
+                        primarySource: diagnosticSourceForHandle(widget.surface, `${actionBindingPointer(widget, outputName)}/actionRef`),
+                        relatedSources: [diagnosticSourceForHandle(matches[0].handle, `/actions/${matches[0].actionIndex}`)],
+                        details: {
+                            reason: 'widget-action-scope-mismatch',
+                            surfaceRef: widget.surfaceRef,
+                            routeId: widget.routeId,
+                            slotId: widget.slotId,
+                            moduleId: widget.moduleId,
+                            widgetName: widget.widgetName,
+                            outputName,
+                            actionRef,
+                            actualScope: matches[0].scope,
+                            requiredScope: 'app',
+                        },
+                    });
+                }
+            }
+            for (const use of configuredStateOutputs(widget)) {
+                const outputMatches = outputs.get(use.outputName) ?? 0;
+                if (outputMatches !== 1) {
+                    diagnostics.push({
+                        code: 'E612',
+                        severity: 'error',
+                        phase: 'cross-artifact',
+                        origin: 'app-graph-validator',
+                        message: `Module-widget state action output '${use.outputName}' is not declared exactly once by Registry widget '${widget.widgetName}'.`,
+                        primarySource: diagnosticSourceForHandle(widget.surface, use.pointer),
+                        relatedSources: [diagnosticSourceForHandle(contribution.registry, `/entries/${contribution.entryIndex}/widgetShape/actionOutputs`)],
+                        details: {
+                            reason: 'state-action-output-undeclared',
+                            surfaceRef: widget.surfaceRef,
+                            routeId: widget.routeId,
+                            slotId: widget.slotId,
+                            moduleId: widget.moduleId,
+                            widgetName: widget.widgetName,
+                            outputName: use.outputName,
+                            outputMatches,
+                        },
+                    });
+                    continue;
+                }
+                const binding = record(ownProp(bindings, use.outputName));
+                if (!binding) {
+                    diagnostics.push({
+                        code: 'E612',
+                        severity: 'error',
+                        phase: 'cross-artifact',
+                        origin: 'app-graph-validator',
+                        message: `Module-widget state action output '${use.outputName}' has no Surface action binding.`,
+                        primarySource: diagnosticSourceForHandle(widget.surface, use.pointer),
+                        details: {
+                            reason: 'state-action-output-unmapped',
+                            surfaceRef: widget.surfaceRef,
+                            routeId: widget.routeId,
+                            slotId: widget.slotId,
+                            moduleId: widget.moduleId,
+                            widgetName: widget.widgetName,
+                            outputName: use.outputName,
+                        },
+                    });
+                    continue;
+                }
+                const actionRef = stringProp(binding, 'actionRef');
+                const matches = actionRef ? actionMatches(references, actionRef) : [];
+                if (matches.length !== 1 || matches[0].scope !== 'app')
+                    continue;
+                const match = matches[0];
+                const action = recordArray(ownProp(record(match.handle.document), 'actions'))[match.actionIndex];
+                const literal = stringProp(record(ownProp(action, 'label')), 'literal');
+                if (literal && literal.length > 0)
+                    continue;
+                diagnostics.push({
+                    code: 'E612',
+                    severity: 'error',
+                    phase: 'cross-artifact',
+                    origin: 'app-graph-validator',
+                    message: `Module-widget state action output '${use.outputName}' resolves to action '${actionRef}', but that action has no non-empty literal label.`,
+                    primarySource: diagnosticSourceForHandle(widget.surface, use.pointer),
+                    relatedSources: [diagnosticSourceForHandle(match.handle, `/actions/${match.actionIndex}/label`)],
+                    details: {
+                        reason: 'state-action-label-not-renderable',
+                        surfaceRef: widget.surfaceRef,
+                        routeId: widget.routeId,
+                        slotId: widget.slotId,
+                        moduleId: widget.moduleId,
+                        widgetName: widget.widgetName,
+                        outputName: use.outputName,
+                        actionRef,
+                    },
+                });
             }
         }
     }

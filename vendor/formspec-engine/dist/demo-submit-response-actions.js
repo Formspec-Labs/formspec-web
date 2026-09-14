@@ -10,6 +10,7 @@ export function createDemoSubmitResponseActions(options) {
             {
                 id: actionId,
                 intent: 'submit',
+                label: { literal: 'Submit' },
                 ...(emitOnValidationError
                     ? {
                         validation: {

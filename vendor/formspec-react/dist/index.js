@@ -1,6 +1,6 @@
 /** @filedesc formspec-react — React hooks, auto-renderer, and default components for Formspec. */
 // ── Hooks (re-exported from hooks barrel) ──
-export { FormspecProvider, useFormspecContext, emitThemeTokens } from './context';
+export { FormspecProvider, admitDefaultFieldHelpUri, useFormspecContext, emitThemeTokens, } from './context';
 export { useSignal } from './use-signal';
 export { useField } from './use-field';
 export { useFieldValue } from './use-field-value';
@@ -16,11 +16,13 @@ export { useDiagnostics } from './use-diagnostics';
 export { useReplay } from './use-replay';
 export { useFocusField } from './use-focus-field';
 export { useRuntimeContext } from './use-runtime-context';
+export { useSemanticFieldControl } from './use-semantic-field-control';
 // ── Auto-renderer ──
 export { FormspecForm } from './renderer';
 export { FormspecNode } from './node-renderer';
 export { IssuerChromeSlot, parseQueryIssuerOverride } from './issuer';
 export { componentGraphIdentityAttrs, projectionMetadataAttrs, uiGraphRoutePolicyAttrs, } from './projection-metadata';
+export { createSemanticControlRegistry } from './semantic-controls';
 // ── Screener ──
 export { FormspecScreener, useScreener } from './screener';
 // ── Default components (for composition / override bases) ──

@@ -12,6 +12,7 @@ export type EngineBindConfig = FormBind & {
 type RuntimeNowInput = Date | string | number;
 export declare function normalizeRemoteOptions(payload: unknown): OptionEntry[];
 export declare function makeValidationResult(result: Pick<ValidationResult, 'path' | 'severity' | 'constraintKind' | 'code' | 'message' | 'source'> & Partial<Pick<ValidationResult, 'shapeId' | 'context'>>): ValidationResult;
+/** Paths stay resolved instance paths with 0-based indexes (Core §4.3.3), exactly as WASM emits them. */
 export declare function toValidationResult(result: EvalValidation): ValidationResult;
 export declare function toValidationResults(results: EvalValidation[]): ValidationResult[];
 export declare function toRuntimeMappingResult(result: {
@@ -27,7 +28,14 @@ export declare function validateDataType(value: FormFieldValue, dataType: string
 export declare function cloneValue<T>(value: T): T;
 export declare function isJsonRecord(value: unknown): value is JsonRecord;
 export declare function normalizeWasmValue<T>(value: T): T;
-export declare function tagMoneyByPath(path: string, value: FormFieldValue, bindConfigs: Record<string, EngineBindConfig>, fieldDataTypes?: Record<string, string | undefined>): FormFieldValue;
+/**
+ * Encode a field value in the FEL type envelope its `dataType` declares (Core §2.1.3).
+ *
+ * `money` objects become `{ $type: 'money', amount, currency }`; `date` and
+ * `dateTime` strings become `{ $type: 'date', value }`. WASM (fel-core) decodes
+ * both, including the ISO date parse; this only tags the declared type.
+ */
+export declare function tagFelValueByPath(path: string, value: FormFieldValue, fieldDataTypes: Record<string, string | undefined>): FormFieldValue;
 export declare function toWasmContextValue<T>(value: T): T;
 export declare function deepEqual(left: unknown, right: unknown): boolean;
 export declare function resolveNowProvider(now: FormEngineRuntimeContext['now']): () => Date;
@@ -48,8 +56,10 @@ export declare function setExpressionContextValue(target: JsonRecord, path: stri
 export declare function setResponsePathValue(target: JsonRecord, path: string, value: FormFieldValue): void;
 export declare function replaceBareCurrentFieldRefs(expression: string, currentFieldName: string): string;
 export declare function flattenObject(value: JsonValue, prefix?: string, output?: JsonRecord): JsonRecord;
-export declare function buildGroupSnapshotForPath(prefix: string, signals: Record<string, EngineSignal<FormFieldValue>>): JsonRecord;
-export declare function buildRepeatCollection(groupPath: string, count: number, signals: Record<string, EngineSignal<FormFieldValue>>): JsonValue[];
+/** FEL context snapshot of the non-repeat fields under `prefix`, leaves tagged by `dataType`. */
+export declare function buildGroupSnapshotForPath(prefix: string, signals: Record<string, EngineSignal<FormFieldValue>>, fieldDataTypes: Record<string, string | undefined>): JsonRecord;
+/** FEL context rows of repeat group `groupPath`, leaves tagged by `dataType`. One pass over signals: O(signals). */
+export declare function buildRepeatCollection(groupPath: string, count: number, signals: Record<string, EngineSignal<FormFieldValue>>, fieldDataTypes: Record<string, string | undefined>): JsonValue[];
 export declare function getRepeatAncestors(currentItemPath: string, repeats: Record<string, EngineSignal<number>>): Array<{
     groupPath: string;
     index: number;
@@ -63,6 +73,7 @@ export declare function topoSortKeys<T extends {
     key: string;
 }>(nodes: T[], graph: Map<string, Set<string>>): T[];
 export declare function snapshotSignals(signals: Record<string, EngineSignal<FormFieldValue>>): JsonRecord;
+/** FEL expression addressing only (`$repeat[n]` is 1-based, Core §4.3.3); never for ValidationResult paths. */
 export declare function toFelIndexedPath(path: string): string;
 export declare function buildRepeatValueAliases(valuesByPath: JsonRecord): Array<[string, FormFieldValue[]]>;
 export declare function toRepeatWildcardPath(alias: string): string;

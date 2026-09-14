@@ -66,16 +66,22 @@ export const SURFACE_DIAGNOSTIC_CODES = [
     'SLOT-TYPE-UNKNOWN',
     /** A slot binding is missing the field its slotType requires. */
     'SLOT-BINDING-INCOMPLETE',
+    /** A definition-form's exact initial Data Source cannot be resolved or delivered. */
+    'DEFINITION-FORM-DATA-UNAVAILABLE',
     /** An `experience-unit` binding names no unit in the resolved Experience. */
     'EXPERIENCE-UNIT-UNRESOLVED',
     /** A `module-widget` binding names a widget no Registry in the bundle declares. */
     'WIDGET-UNDECLARED',
     /** The Registry declares the widget; nothing the host registered implements it. */
     'WIDGET-UNIMPLEMENTED',
+    /** Delivered widget code disagrees with the Registry version, id, or rendered-node inventory. */
+    'WIDGET-DELIVERY-CONTRACT-MISMATCH',
     /** A required Registry input is unbound or its exact Data Sources value cannot be delivered. */
     'WIDGET-DATA-REQUIRED-UNAVAILABLE',
     /** A widget emitted a name absent from its Registry actionOutputs declaration. */
     'WIDGET-ACTION-OUTPUT-UNDECLARED',
+    /** A widget emitted action data that is not safe finite JSON object data. */
+    'WIDGET-ACTION-INPUT-INVALID',
     /** A declared widget output has no exact Surface action binding. */
     'WIDGET-ACTION-OUTPUT-UNMAPPED',
     /** A mapped widget output names no unique loaded Response Actions action. */
@@ -124,11 +130,14 @@ export const SURFACE_DIAGNOSTIC_SEVERITY = {
     'EMBED-ROUTE-CYCLE': 'error',
     'SLOT-TYPE-UNKNOWN': 'error',
     'SLOT-BINDING-INCOMPLETE': 'error',
+    'DEFINITION-FORM-DATA-UNAVAILABLE': 'error',
     'EXPERIENCE-UNIT-UNRESOLVED': 'error',
     'WIDGET-UNDECLARED': 'error',
     'WIDGET-UNIMPLEMENTED': 'error',
+    'WIDGET-DELIVERY-CONTRACT-MISMATCH': 'error',
     'WIDGET-DATA-REQUIRED-UNAVAILABLE': 'error',
     'WIDGET-ACTION-OUTPUT-UNDECLARED': 'error',
+    'WIDGET-ACTION-INPUT-INVALID': 'error',
     'WIDGET-ACTION-OUTPUT-UNMAPPED': 'error',
     'WIDGET-ACTION-REF-UNRESOLVED': 'error',
     'WIDGET-ACTION-TRANSITION-AMBIGUOUS': 'error',

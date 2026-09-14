@@ -18,6 +18,7 @@ import type { FormViewModel } from './form-view-model.js';
 import type { IssuerFetcher } from './issuer/IssuerFetcher.js';
 import type { IssuerSource, ResolvedIssuer } from './issuer/types.js';
 import type { FelTraceStep } from './fel/fel-api-runtime.js';
+import type { EvalDiagnostic } from './diff.js';
 export interface FELBuiltinFunctionCatalogEntry {
     name: string;
     category: string;
@@ -271,6 +272,8 @@ export interface FormEngineDiagnosticsSnapshot {
         error: string | null;
     }>;
     validation: ValidationReport | null;
+    /** Expression errors from the evaluation behind `validation` (the latest live evaluation when `profile: 'off'`). */
+    evaluationDiagnostics: EvalDiagnostic[];
     runtimeContext: {
         now: string;
         locale?: string;
@@ -349,8 +352,11 @@ export interface IFormEngine {
     getInstanceData(name: string, path?: string): FormFieldValue;
     getDisabledDisplay(path: string): 'hidden' | 'protected';
     getVariableValue(name: string, scopePath: string): FormFieldValue;
+    /** Appends a row; `undefined` when not repeatable or already at `maxRepeat`. */
     addRepeatInstance(itemName: string): number | undefined;
     removeRepeatInstance(itemName: string, index: number): void;
+    /** Loads Response `data` in one evaluation, one row per loaded array entry regardless of min/maxRepeat. */
+    loadResponseData(data: JsonRecord): void;
     compileExpression(expression: string, currentItemName?: string): () => FormFieldValue;
     setValue(name: string, value: FormFieldValue): void;
     getValidationReport(): ValidationReport;
@@ -389,6 +395,8 @@ export interface IFormEngine {
     getDefinition(): FormDefinition;
     setLabelContext(context: string | null): void;
     getLabel(item: FormItem): string;
+    /** Reactive Locale-resolved, `{{}}`-interpolated label of the field, display, or group Item at `path`. */
+    getItemLabelSignal(path: string): ReadonlyEngineSignal<string> | undefined;
     loadLocale(doc: LocaleDocument): void;
     setLocale(code: string): void;
     getActiveLocale(): string;
@@ -408,8 +416,11 @@ export interface IFormEngine {
     readonly localeSignal: ReadonlyEngineSignal<number>;
     getFieldVM(path: string): FieldViewModel | undefined;
     getFormVM(): FormViewModel;
-    /** Resolve a locale string key with fallback. For component-tier `$component.` keys. */
-    resolveLocaleString(key: string, fallback: string): string;
+    /**
+     * Resolve a Locale string key with fallback. `{{}}` interpolates in the binding scope
+     * of `itemPath` (an instance path, e.g. `rows[1].note`); form scope when omitted.
+     */
+    resolveLocaleString(key: string, fallback: string, itemPath?: string): string;
     dispose(): void;
     injectExternalValidation?(results: Array<{
         path: string;

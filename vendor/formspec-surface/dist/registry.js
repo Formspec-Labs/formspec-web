@@ -53,10 +53,20 @@ export function createWidgetRegistry(input = {}) {
         moduleIds: [...modules.keys()],
         resolve(key) {
             const entry = widgetContributionFor(key, entries);
-            const component = modules.get(key.moduleId)?.widgets[key.widgetName];
+            const module = modules.get(key.moduleId);
+            const component = module?.widgets[key.widgetName];
             if (component !== undefined) {
-                return entry === undefined
-                    ? { status: 'resolved', declared: false, component }
+                if (entry === undefined) {
+                    return { status: 'resolved', declared: false, component };
+                }
+                const reasons = widgetContractMismatchReasons(entry, module?.contracts?.[key.widgetName]);
+                return reasons.length > 0
+                    ? {
+                        status: 'incompatible',
+                        contributionName: entry.name,
+                        entry,
+                        reasons,
+                    }
                     : { status: 'resolved', declared: true, component, contributionName: entry.name, entry };
             }
             if (entry !== undefined) {
@@ -74,9 +84,62 @@ export function createWidgetRegistry(input = {}) {
             if (resolution.status === 'unimplemented') {
                 return surfaceDiagnostic('WIDGET-UNIMPLEMENTED', `Module "${key.moduleId}" declares widget "${key.widgetName}" and no registered module supplies a component for it.`, site, { moduleId: key.moduleId, widgetName: key.widgetName, contributionName: resolution.contributionName });
             }
+            if (resolution.status === 'incompatible') {
+                return surfaceDiagnostic('WIDGET-DELIVERY-CONTRACT-MISMATCH', `Module "${key.moduleId}" supplies widget "${key.widgetName}", but its runtime delivery contract does not match Registry contribution "${resolution.contributionName}".`, site, {
+                    moduleId: key.moduleId,
+                    widgetName: key.widgetName,
+                    contributionName: resolution.contributionName,
+                    reasons: [...resolution.reasons],
+                });
+            }
             return surfaceDiagnostic('WIDGET-UNDECLARED', `Nothing in this bundle declares a widget "${key.widgetName}" on module "${key.moduleId}", and nothing the host registered supplies one.`, site, { moduleId: key.moduleId, widgetName: key.widgetName, hostComponentRendered: false });
         },
     };
+}
+function objectRecord(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? value
+        : undefined;
+}
+function normalizedRenderedConfigNodes(value) {
+    if (!Array.isArray(value))
+        return undefined;
+    const normalized = [];
+    for (const rawNode of value) {
+        const node = objectRecord(rawNode);
+        if (typeof node?.pointerPattern !== 'string' || typeof node.kind !== 'string') {
+            return undefined;
+        }
+        normalized.push(`${node.pointerPattern}\u0000${node.kind}`);
+    }
+    return normalized.sort();
+}
+function widgetContractMismatchReasons(entry, contract) {
+    const shape = objectRecord(entry.widgetShape);
+    const deliveryContractId = shape?.deliveryContractId;
+    const renderedConfigNodes = shape?.renderedConfigNodes;
+    const declaresRuntimeContract = deliveryContractId !== undefined || renderedConfigNodes !== undefined;
+    if (!declaresRuntimeContract)
+        return [];
+    if (!contract)
+        return ['runtime-contract-missing'];
+    const reasons = [];
+    if (entry.version !== contract.registryEntryVersion) {
+        reasons.push('registry-entry-version-mismatch');
+    }
+    if (typeof deliveryContractId !== 'string'
+        || deliveryContractId !== contract.deliveryContractId) {
+        reasons.push('delivery-contract-id-mismatch');
+    }
+    const declaredNodes = normalizedRenderedConfigNodes(renderedConfigNodes);
+    const deliveredNodes = normalizedRenderedConfigNodes(contract.renderedConfigNodes);
+    if (declaredNodes === undefined
+        || deliveredNodes === undefined
+        || declaredNodes.length !== deliveredNodes.length
+        || declaredNodes.some((node, index) => node !== deliveredNodes[index])) {
+        reasons.push('rendered-config-inventory-mismatch');
+    }
+    return reasons;
 }
 /**
  * Registry documents → the flat entry list renderers take as a prop.
