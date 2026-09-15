@@ -6,6 +6,7 @@ import { gridPlacementStyleFromLayout, needGenerationAnchors, normalizeCssClass,
 import { findItemAtPath, findItemPathByKey, getParentPath, } from './planner-path-utils.js';
 import { applyDefinitionPageMode, emitPageModePages, } from './planner-page-mode.js';
 import { buildThemePageNodes, collectAssignedTopLevelKeys } from './planner-theme-pages.js';
+import { carryWidthStop } from './planner-width-stops.js';
 export function planDefinitionFallback(items, ctx, prefix = '', applyThemePages = prefix === '') {
     const planCtx = preparePlanContext(ctx);
     if (applyThemePages && !prefix && planCtx.theme?.pages?.length) {
@@ -40,8 +41,6 @@ function wrapGridFlow(children, item, ctx) {
             children: columns === CANVAS_COLUMNS ? children.map(spanWholeCanvasRow) : children,
         }];
 }
-/** Widgets whose control an adapter can size to the expected answer (theme §4.2 Width Stops). */
-const WIDTH_STOP_WIDGETS = new Set(['TextInput', 'NumberInput', 'MoneyInput', 'DatePicker', 'Select']);
 /** The 12-column canvas: `columns: 12` is a placement grid, not a request for twelve equal columns. */
 const CANVAS_COLUMNS = 12;
 /**
@@ -123,9 +122,7 @@ export function planDefinitionItem(item, ctx, prefix = '') {
         if (widget === 'TextInput' && fieldItem.dataType === 'text') {
             fieldProps.maxLines ?? (fieldProps.maxLines = presentation.widgetConfig?.rows ?? 3);
         }
-        if (WIDTH_STOP_WIDGETS.has(widget) && presentation.widgetConfig?.width !== undefined) {
-            fieldProps.width ?? (fieldProps.width = presentation.widgetConfig.width);
-        }
+        carryWidthStop(widget, presentation.widgetConfig, fieldProps);
         return {
             id: planCtx.nextId('field'),
             component: widget,

@@ -5,6 +5,7 @@ import { resolveResponsiveProps } from './responsive.js';
 import { interpolateParams } from './params.js';
 import { classifyComponent, extractProps, gridPlacementStyleFromLayout, needGenerationAnchors, normalizeCssClass, preparePlanContext, resolveCssClasses, resolveGridTracks, resolveStyleTokens, resolveTokenInContext, } from './node-utils.js';
 import { planDefinitionItem } from './planner-definition-fallback.js';
+import { carryWidthStop } from './planner-width-stops.js';
 import { componentTreeOwnsPages, findComponentNodeByPath, findNodeByBindPath, } from './planner-path-utils.js';
 import { applyGeneratedPageMode } from './planner-page-mode.js';
 import { buildThemePageNodes, collectAssignedTopLevelKeys, withoutThemePages, } from './planner-theme-pages.js';
@@ -110,6 +111,7 @@ export function planComponentTree(tree, ctx, prefix = '', customComponentStack, 
         if (componentType === 'TextInput' && fieldItem.dataType === 'text') {
             props.maxLines ?? (props.maxLines = presentation.widgetConfig?.rows ?? 3);
         }
+        carryWidthStop(componentType, presentation.widgetConfig, props);
         const presClasses = normalizeCssClass(presentation.cssClass);
         if (presClasses.length > 0) {
             const union = new Set([...node.cssClasses, ...presClasses]);

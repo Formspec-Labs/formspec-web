@@ -12,6 +12,8 @@ export * from './generated/index.js';
 export { KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT, COMPONENT_TO_HINT, COMPATIBILITY_MATRIX, PRESENTATION_WIDGETS, REPEAT_PRESENTATION_WIDGETS, isRepeatPresentationWidget, widgetTokenToComponent, } from './widget-vocabulary.js';
 export { UI_POLICY } from './ui-policy.js';
 export type { UiPolicy } from './ui-policy.js';
+export { WIDTH_STOPS } from './width-stops.js';
+export type { WidthStop } from './width-stops.js';
 export { Path, PathSegmentKind } from './path-utils.js';
 export type { PathSegment } from './path-utils.js';
 export { resolveFieldReferences, targetDefinitionMatches, unresolvedReferenceRefs, } from './references.js';
