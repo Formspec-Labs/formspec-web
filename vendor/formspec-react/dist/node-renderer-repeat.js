@@ -2,12 +2,22 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc Repeat-group and accordion-repeat layout rendering for FormspecNode. */
 import React, { useMemo, useRef, useCallback, useState } from 'react';
+import { UI_STRINGS, fillUiParams } from '@formspec-org/layout';
 import { signal } from '@preact/signals-core';
 import { useFormspecContext } from './context.js';
 import { useSignal } from './use-signal';
 import { useRepeatAffordances } from './use-repeat-affordances';
 import { RepeatInstanceContext } from './use-localized-node';
 const NO_LABEL = signal('');
+/**
+ * Locale §3.1.10 $ui.<ChromeStringKey>: an authored override wins, else the shared English default
+ * (packages/formspec-layout/src/ui-strings.ts — same inventory the webcomponent renderer uses).
+ * Callers subscribe to `engine.localeSignal` (useSignal) so a switch re-renders.
+ */
+function chromeText(engine, key, params) {
+    const authored = engine.lookupLocaleString(`$ui.${key}`);
+    return fillUiParams(authored ?? UI_STRINGS[key], params);
+}
 /** A repeat node's `allowAdd` / `allowRemove` props (Accordion §6.3, or theme widgetConfig on a repeat template). */
 function repeatLocks(node) {
     const { allowAdd, allowRemove } = node.props ?? {};
@@ -19,6 +29,7 @@ function repeatLocks(node) {
 /** Renders a repeat group: stamps template children per instance. */
 export function RepeatGroup({ node, renderChild }) {
     const { engine } = useFormspecContext();
+    useSignal(engine.localeSignal); // re-render add/remove/row text on a locale switch
     const repeatPath = node.repeatPath;
     // Theme widgetConfig Add/Remove locks, planned onto the template's props (theme §4.2).
     const { count, relevant, canAdd, canRemove } = useRepeatAffordances(repeatPath, repeatLocks(node));
@@ -67,10 +78,11 @@ export function RepeatGroup({ node, renderChild }) {
     }, [count, engine, findRepeatInstanceFocusTarget, repeatPath, title]);
     if (!relevant)
         return null;
-    return (_jsxs("div", { className: "formspec-repeat", "data-bind": node.repeatGroup, ref: containerRef, children: [_jsx("div", { className: "formspec-repeat-list", children: instances.map((children, idx) => (_jsxs("div", { className: "formspec-repeat-instance", role: "group", "aria-label": `${title} ${idx + 1} of ${count}`, children: [_jsxs("div", { className: "formspec-repeat-instance-header", children: [_jsx("p", { className: "formspec-repeat-instance-label", children: `${title} ${idx + 1}` }), canRemove && (_jsx("button", { type: "button", className: "formspec-repeat-remove formspec-button-danger formspec-focus-ring", "aria-label": `Remove ${title} ${idx + 1}`, onClick: () => handleRemove(idx), children: `Remove ${title}` }))] }), _jsx(RepeatInstanceContext.Provider, { value: `${repeatPath}[${idx}]`, children: children.map((child) => (_jsx(React.Fragment, { children: renderChild(child) }, child.id))) })] }, idx))) }), canAdd && (_jsx("button", { type: "button", className: "formspec-repeat-add formspec-focus-ring", onClick: handleAdd, ref: addBtnRef, children: `Add ${title}` })), _jsx("div", { "aria-live": "polite", className: "formspec-sr-only", children: announcement })] }));
+    return (_jsxs("div", { className: "formspec-repeat", "data-bind": node.repeatGroup, ref: containerRef, children: [_jsx("div", { className: "formspec-repeat-list", children: instances.map((children, idx) => (_jsxs("div", { className: "formspec-repeat-instance", role: "group", "aria-label": chromeText(engine, 'repeat.rowOf', { label: title, index: idx + 1, total: count }), children: [_jsxs("div", { className: "formspec-repeat-instance-header", children: [_jsx("p", { className: "formspec-repeat-instance-label", children: chromeText(engine, 'repeat.row', { label: title, index: idx + 1 }) }), canRemove && (_jsx("button", { type: "button", className: "formspec-repeat-remove formspec-button-danger formspec-focus-ring", "aria-label": chromeText(engine, 'repeat.remove', { label: `${title} ${idx + 1}` }), onClick: () => handleRemove(idx), children: chromeText(engine, 'repeat.remove', { label: title }) }))] }), _jsx(RepeatInstanceContext.Provider, { value: `${repeatPath}[${idx}]`, children: children.map((child) => (_jsx(React.Fragment, { children: renderChild(child) }, child.id))) })] }, idx))) }), canAdd && (_jsx("button", { type: "button", className: "formspec-repeat-add formspec-focus-ring", onClick: handleAdd, ref: addBtnRef, children: chromeText(engine, 'repeat.add', { label: title }) })), _jsx("div", { "aria-live": "polite", className: "formspec-sr-only", children: announcement })] }));
 }
 export function RepeatAccordion({ node, renderChild }) {
     const { engine } = useFormspecContext();
+    useSignal(engine.localeSignal); // re-render add/remove text on a locale switch
     const bindKey = node.props?.bind;
     const { count, relevant, canAdd, canRemove } = useRepeatAffordances(bindKey, repeatLocks(node));
     const labels = node.props?.labels ?? [];
@@ -158,8 +170,8 @@ export function RepeatAccordion({ node, renderChild }) {
                     return (_jsxs("details", { className: "formspec-accordion-item", open: isOpen, children: [_jsx("summary", { className: "formspec-focus-ring", onClick: (event) => {
                                     event.preventDefault();
                                     handleToggle(i, !isOpen);
-                                }, children: labels[i] || `Section ${i + 1}` }), _jsxs("div", { className: "formspec-accordion-content formspec-accordion-content--repeat", children: [_jsx(RepeatInstanceContext.Provider, { value: `${bindKey}[${i}]`, children: rows[i].map((child) => (_jsx(React.Fragment, { children: renderChild(child) }, child.id))) }), canRemove && (_jsx("button", { type: "button", className: "formspec-repeat-remove formspec-focus-ring", "aria-label": `Remove ${groupTitle} ${i + 1}`, onClick: () => handleRemove(i), children: `Remove ${groupTitle}` }))] })] }, i));
-                }) }), canAdd && (_jsx("button", { type: "button", className: "formspec-repeat-add formspec-focus-ring", onClick: handleAdd, ref: addBtnRef, children: `Add ${groupTitle}` })), _jsx("div", { "aria-live": "polite", className: "formspec-sr-only", children: announcement })] }));
+                                }, children: labels[i] || `Section ${i + 1}` }), _jsxs("div", { className: "formspec-accordion-content formspec-accordion-content--repeat", children: [_jsx(RepeatInstanceContext.Provider, { value: `${bindKey}[${i}]`, children: rows[i].map((child) => (_jsx(React.Fragment, { children: renderChild(child) }, child.id))) }), canRemove && (_jsx("button", { type: "button", className: "formspec-repeat-remove formspec-focus-ring", "aria-label": chromeText(engine, 'repeat.remove', { label: `${groupTitle} ${i + 1}` }), onClick: () => handleRemove(i), children: chromeText(engine, 'repeat.remove', { label: groupTitle }) }))] })] }, i));
+                }) }), canAdd && (_jsx("button", { type: "button", className: "formspec-repeat-add formspec-focus-ring", onClick: handleAdd, ref: addBtnRef, children: chromeText(engine, 'repeat.add', { label: groupTitle }) })), _jsx("div", { "aria-live": "polite", className: "formspec-sr-only", children: announcement })] }));
 }
 /**
  * Deep-clone a LayoutNode tree, rewriting `bindPath` onto instance `[instanceIdx]`.

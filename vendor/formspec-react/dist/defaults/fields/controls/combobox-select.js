@@ -2,6 +2,7 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { optionMatchesComboboxQuery } from '@formspec-org/engine';
+import { UI_STRINGS } from '@formspec-org/layout';
 import { useMemo, useRef, useEffect, useState } from 'react';
 import { needTraceAttrs } from '../../../projection-metadata.js';
 function comboboxValuePresent(v) {
@@ -11,7 +12,7 @@ export function ComboboxSelect({ field, node, common, isReadonly }) {
     const multiple = !!node.props?.multiple;
     const searchableFilter = !!node.props?.searchable;
     const clearable = !!node.props?.clearable;
-    const placeholderText = (common.placeholder || node.props?.placeholder || 'Select…');
+    const placeholderText = (common.placeholder || node.props?.placeholder || UI_STRINGS['select.placeholder']);
     const blurTimerRef = useRef(undefined);
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -157,7 +158,7 @@ export function ComboboxSelect({ field, node, common, isReadonly }) {
         setQuery(e.target.value);
         setHighlightedIndex(0);
     };
-    return (_jsxs("div", { className: "formspec-combobox formspec-select-searchable", ...(multiple ? { 'data-multiple': 'true' } : {}), children: [multiple && selectedValues.length > 0 && (_jsx("div", { className: "formspec-combobox-chips", "aria-label": "Selected values", children: selectedValues.map((v) => {
+    return (_jsxs("div", { className: "formspec-combobox formspec-select-searchable", ...(multiple ? { 'data-multiple': 'true' } : {}), children: [multiple && selectedValues.length > 0 && (_jsx("div", { className: "formspec-combobox-chips", "aria-label": UI_STRINGS['select.selectedValues'], children: selectedValues.map((v) => {
                     const selectedOption = field.options.find((o) => o.value === v);
                     const label = selectedOption?.label ?? v;
                     return (_jsxs("span", { className: "formspec-combobox-chip", ...needTraceAttrs(selectedOption?.needAnchors), children: [label, _jsx("button", { type: "button", className: "formspec-combobox-chip-remove", "aria-label": `Remove ${label}`, onMouseDown: (e) => e.preventDefault(), onClick: () => {
@@ -175,7 +176,7 @@ export function ComboboxSelect({ field, node, common, isReadonly }) {
                                 }, onBlur: () => {
                                     commonTouchBlur?.();
                                     blurTimerRef.current = setTimeout(closeList, 120);
-                                }, onChange: onInputChange, onKeyDown: handleKeyDown, ...needTraceAttrs(selectedSingleOption?.needAnchors) }), showClear && (_jsx("button", { type: "button", className: "formspec-combobox-clear", "aria-label": "Clear selection", onMouseDown: (e) => e.preventDefault(), onClick: clearAll, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), _jsx("span", { className: "formspec-combobox-chevron", "aria-hidden": "true", children: "\u25BE" })] }), _jsx("ul", { role: "listbox", id: listboxId, className: "formspec-combobox-list", hidden: !open, "aria-multiselectable": multiple || undefined, children: filtered.map((opt, index) => {
+                                }, onChange: onInputChange, onKeyDown: handleKeyDown, ...needTraceAttrs(selectedSingleOption?.needAnchors) }), showClear && (_jsx("button", { type: "button", className: "formspec-combobox-clear", "aria-label": UI_STRINGS['select.clearSelection'], onMouseDown: (e) => e.preventDefault(), onClick: clearAll, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), _jsx("span", { className: "formspec-combobox-chevron", "aria-hidden": "true", children: "\u25BE" })] }), _jsx("ul", { role: "listbox", id: listboxId, className: "formspec-combobox-list", hidden: !open, "aria-multiselectable": multiple || undefined, children: filtered.map((opt, index) => {
                             const optId = `${common.id ?? 'formspec'}-option-${index}`;
                             const isHighlighted = index === highlightedIndex;
                             const isChosen = multiple

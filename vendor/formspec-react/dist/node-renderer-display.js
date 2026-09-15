@@ -3,6 +3,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 /** @filedesc Display-category LayoutNode rendering (Text, DataTable, Summary, etc.). */
 import { useCallback, useMemo, useState } from 'react';
 import { computed, signal as createSignal } from '@preact/signals-core';
+import { UI_STRINGS } from '@formspec-org/layout';
 import { useFormspecContext, findItemByKey } from './context.js';
 import { useSignal } from './use-signal';
 import { useRepeatAffordances } from './use-repeat-affordances';
@@ -145,7 +146,7 @@ function DismissibleAlert({ severity, alertRole, dismissible, text, cssClass, st
     const [dismissed, setDismissed] = useState(false);
     if (dismissed)
         return null;
-    return (_jsxs("div", { role: alertRole, className: `formspec-alert formspec-alert--${severity}${dismissible ? ' formspec-alert--dismissible' : ''}${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [text, dismissible && (_jsx("button", { type: "button", className: "formspec-alert-close", "aria-label": "Dismiss", onClick: () => setDismissed(true), children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) }))] }));
+    return (_jsxs("div", { role: alertRole, className: `formspec-alert formspec-alert--${severity}${dismissible ? ' formspec-alert--dismissible' : ''}${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [text, dismissible && (_jsx("button", { type: "button", className: "formspec-alert-close", "aria-label": UI_STRINGS['alert.dismiss'], onClick: () => setDismissed(true), children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) }))] }));
 }
 function formatMoney(value, locale = 'en-US') {
     if (value == null)

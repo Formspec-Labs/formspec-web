@@ -1,5 +1,6 @@
 'use client';
 import { Fragment as _Fragment, jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { UI_STRINGS } from '@formspec-org/layout';
 import { useScreener, itemDataType, itemOptions, isItemRequired } from './use-screener';
 export function FormspecScreener({ screenerDocument, renderExternalRoute, renderNoMatch, className, ...options }) {
     const screener = useScreener({ ...options, screenerDocument });
@@ -32,7 +33,7 @@ function ScreenerField({ item, screener, answers, value, error, onChange, }) {
             case 'boolean':
                 return (_jsxs("div", { className: "formspec-field--inline", children: [_jsx("input", { id: id, type: "checkbox", checked: !!value, onChange: (e) => onChange(e.target.checked), "aria-invalid": showError }), _jsx("label", { htmlFor: id, children: item.label })] }));
             case 'choice':
-                return (_jsxs(_Fragment, { children: [_jsxs("label", { htmlFor: id, children: [item.label, required && _jsx("span", { className: "formspec-required", "aria-hidden": "true", children: "*" })] }), _jsxs("select", { id: id, value: typeof value === 'string' || typeof value === 'number' ? String(value) : '', onChange: (e) => onChange(e.target.value), "aria-invalid": showError, children: [_jsx("option", { value: "", disabled: true, hidden: true, children: "Select\u2026" }), itemOptions(item).map((c) => (_jsx("option", { value: String(c.value ?? c), children: c.label ?? String(c.value ?? c) }, String(c.value ?? c))))] })] }));
+                return (_jsxs(_Fragment, { children: [_jsxs("label", { htmlFor: id, children: [item.label, required && _jsx("span", { className: "formspec-required", "aria-hidden": "true", children: "*" })] }), _jsxs("select", { id: id, value: typeof value === 'string' || typeof value === 'number' ? String(value) : '', onChange: (e) => onChange(e.target.value), "aria-invalid": showError, children: [_jsx("option", { value: "", disabled: true, hidden: true, children: UI_STRINGS['select.placeholder'] }), itemOptions(item).map((c) => (_jsx("option", { value: String(c.value ?? c), children: c.label ?? String(c.value ?? c) }, String(c.value ?? c))))] })] }));
             case 'integer':
             case 'decimal':
                 return (_jsxs(_Fragment, { children: [_jsxs("label", { htmlFor: id, children: [item.label, required && _jsx("span", { className: "formspec-required", "aria-hidden": "true", children: "*" })] }), _jsx("input", { id: id, type: "number", step: dt === 'decimal' ? 'any' : '1', value: value === null || value === undefined ? '' : Number(value), onChange: (e) => onChange(e.target.value === '' ? null : Number(e.target.value)), "aria-invalid": showError })] }));

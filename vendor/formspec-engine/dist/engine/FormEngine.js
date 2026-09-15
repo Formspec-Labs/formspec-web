@@ -772,6 +772,15 @@ export class FormEngine {
         }
         return fallback;
     }
+    /**
+     * Raw Locale string for `key`, or `null` when no loaded document (through the fallback cascade, §4)
+     * carries it. Unlike {@link resolveLocaleString}, this never runs `{{}}` through FEL — for chrome
+     * strings (Locale §3.1.10 `$ui.<ChromeStringKey>`), whose `{{$param}}` placeholders are renderer-
+     * supplied literals (`$label`, `$index`, ...), not form-scope FEL.
+     */
+    lookupLocaleString(key) {
+        return this._localeStore.lookupKey(key);
+    }
     injectExternalValidation(results) {
         this._externalValidation.splice(0, this._externalValidation.length, ...results.map((result) => makeValidationResult({
             path: result.path,
