@@ -4,8 +4,8 @@ import type {
   SchemaValidationOutcome,
 } from '@formspec-org/app-graph';
 import {
-  createSurfaceBundleSchemaValidators,
   createSurfaceDataSourcePayloadValidator,
+  loadSurfaceBundleSchemaValidators,
 } from '../../../src/adapters/schema/index.ts';
 
 const DEFINITION_URL = 'https://example.gov/forms/intake';
@@ -199,9 +199,9 @@ const validArtifacts = Object.freeze([
   },
 ] as const);
 
-describe('createSurfaceBundleSchemaValidators', () => {
-  it('accepts a canonical valid document for every AppGraph artifact kind', () => {
-    const validate = schemaValidator();
+describe('loadSurfaceBundleSchemaValidators', () => {
+  it('accepts a canonical valid document for every AppGraph artifact kind', async () => {
+    const validate = await schemaValidator();
 
     for (const fixture of validArtifacts) {
       const outcome = validateArtifact(validate, fixture);
@@ -209,8 +209,8 @@ describe('createSurfaceBundleSchemaValidators', () => {
     }
   });
 
-  it('routes every supported artifact kind to a real validator', () => {
-    const validate = schemaValidator();
+  it('routes every supported artifact kind to a real validator', async () => {
+    const validate = await schemaValidator();
 
     for (const fixture of validArtifacts) {
       const outcome = validateArtifact(validate, {
@@ -224,8 +224,8 @@ describe('createSurfaceBundleSchemaValidators', () => {
     }
   });
 
-  it('validates Data Sources 1.0 instead of treating it as an unknown document', () => {
-    const validate = schemaValidator();
+  it('validates Data Sources 1.0 instead of treating it as an unknown document', async () => {
+    const validate = await schemaValidator();
     const fixture = validArtifacts.find(
       (candidate) => candidate.artifactKind === 'dataSources',
     );
@@ -256,8 +256,8 @@ describe('createSurfaceBundleSchemaValidators', () => {
     ]));
   });
 
-  it('fails closed for unknown artifact kinds and unexpected schema ids', () => {
-    const validate = schemaValidator();
+  it('fails closed for unknown artifact kinds and unexpected schema ids', async () => {
+    const validate = await schemaValidator();
     const unknown = validateArtifact(validate, {
       artifactKind: 'futureArtifact',
       document: {},
@@ -360,8 +360,8 @@ describe('createSurfaceDataSourcePayloadValidator', () => {
   });
 });
 
-function schemaValidator(): AppGraphSchemaValidator {
-  const validators = createSurfaceBundleSchemaValidators();
+async function schemaValidator(): Promise<AppGraphSchemaValidator> {
+  const validators = await loadSurfaceBundleSchemaValidators();
   if (typeof validators !== 'function') {
     throw new Error('Surface bundle schema adapter must return one closed validator.');
   }

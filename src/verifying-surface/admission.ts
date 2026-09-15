@@ -73,11 +73,24 @@ export type SurfaceBundleValidationConfig = Omit<
   'manifest' | 'documents' | 'source' | 'digest'
 >;
 
+/**
+ * Supplies the checks one admission run will apply.
+ *
+ * A provider rather than a config so a host can keep check payloads — canonical
+ * JSON Schemas above all — out of the bytes that gate its first paint. It is
+ * called once per admission, started alongside acquisition, and awaited only
+ * when the report is produced; a rejection is an adapter error, never a
+ * verdict.
+ */
+export type SurfaceBundleValidationProvider = () =>
+  | SurfaceBundleValidationConfig
+  | Promise<SurfaceBundleValidationConfig>;
+
 export interface SurfaceAdmissionInput {
   readonly source: SurfaceBundleSource;
   readonly verifier: SurfaceBundleVerifier;
   readonly request: SurfaceBundleAcquisitionRequest;
-  readonly validation: SurfaceBundleValidationConfig;
+  readonly validation: SurfaceBundleValidationProvider;
   /** Host generation check used with AbortSignal to retire replaced work. */
   readonly isCurrentAdmission?: () => boolean;
   readonly onValidationReport?: (result: AppGraphReportProducerResult) => void;
@@ -94,6 +107,10 @@ export async function admitSurfaceBundle(
   input: SurfaceAdmissionInput,
 ): Promise<SurfaceAdmissionState> {
   if (!admissionIsCurrent(input)) return cancelledAdmission();
+
+  // The checks load alongside acquisition. Nothing reads them until the report
+  // step, so a lazily loaded schema payload never serializes behind the fetch.
+  const pendingValidation = beginValidationLoad(input);
 
   let snapshot: SurfaceBundleSnapshot;
   try {
@@ -159,10 +176,19 @@ export async function admitSurfaceBundle(
     });
   }
 
+  const loadedValidation = await pendingValidation;
+  if (!admissionIsCurrent(input)) return cancelledAdmission();
+  if (!loadedValidation.ok) {
+    return Object.freeze({
+      status: 'adapter-error',
+      code: 'validation-unavailable',
+    });
+  }
+
   let validation: AppGraphReportProducerResult;
   try {
     validation = await produceBundleExportAppGraphValidationReport({
-      ...input.validation,
+      ...loadedValidation.config,
       manifest: verification.payload.manifest,
       documents: verification.payload.documents,
       source: `surface-bundle:${snapshot.identity}`,
@@ -318,6 +344,24 @@ function addRefUrl(urls: Set<string>, value: unknown): void {
   ) {
     urls.add(ref.url);
   }
+}
+
+type LoadedValidation =
+  | { readonly ok: true; readonly config: SurfaceBundleValidationConfig }
+  | { readonly ok: false };
+
+/**
+ * Start the check load without ever rejecting, so an early return from
+ * admission cannot leave an unobserved rejection behind.
+ */
+function beginValidationLoad(input: SurfaceAdmissionInput): Promise<LoadedValidation> {
+  return (async (): Promise<LoadedValidation> => {
+    try {
+      return { ok: true, config: await input.validation() };
+    } catch {
+      return { ok: false };
+    }
+  })();
 }
 
 function admissionIsCurrent(input: SurfaceAdmissionInput): boolean {

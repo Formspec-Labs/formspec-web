@@ -34,7 +34,7 @@ import {
   VerifyingSurfaceHost,
   admitSurfaceBundle,
   type SurfaceAdmissionState,
-  type SurfaceBundleValidationConfig,
+  type SurfaceBundleValidationProvider,
 } from '../../src/verifying-surface/index.ts';
 
 const APP_ID = 'https://example.gov/apps/signed-intake';
@@ -48,9 +48,9 @@ const SOURCE_SIDECAR_SENTINEL = 'unsigned-sidecar.example';
 const MISATTRIBUTED_SOURCE_SENTINEL = 'misattributed-verifier-source.example';
 const CHECKED_AT = '2026-07-28T16:00:00.000Z';
 
-const validation: SurfaceBundleValidationConfig = {
+const validation: SurfaceBundleValidationProvider = () => ({
   schemaValidators: () => ({ ok: true }),
-};
+});
 
 afterEach(() => {
   cleanup();
@@ -71,12 +71,12 @@ describe('admitSurfaceBundle', () => {
       source: fixture.source,
       verifier: fixture.verifier,
       request: { locator: 'https://host.example/apps/intake.bundle' },
-      validation: {
+      validation: () => ({
         schemaValidators: () => {
           events.push('validate');
           return { ok: true };
         },
-      },
+      }),
     });
 
     expect(state.status).toBe('admitted');
@@ -87,6 +87,45 @@ describe('admitSurfaceBundle', () => {
     expect(events.indexOf('validate')).toBeLessThan(events.indexOf('commit'));
     expect(fixture.commitRequests).toHaveLength(1);
     expect(fixture.commitRequests[0]?.snapshot).toBe(fixture.snapshot);
+  });
+
+  it('starts the check provider before acquisition so a lazily loaded check payload never queues behind the fetch', async () => {
+    const events: string[] = [];
+    const fixture = await createFixture({
+      onAcquire: () => events.push('acquire'),
+      onVerify: () => events.push('verify'),
+    });
+
+    const state = await admitSurfaceBundle({
+      source: fixture.source,
+      verifier: fixture.verifier,
+      request: { locator: 'https://host.example/apps/intake.bundle' },
+      validation: () => {
+        events.push('load-checks');
+        return { schemaValidators: () => ({ ok: true }) };
+      },
+    });
+
+    expect(state.status).toBe('admitted');
+    expect(events).toEqual(['load-checks', 'acquire', 'verify']);
+  });
+
+  it('treats an unloadable check payload as an adapter error, never as a verdict', async () => {
+    const fixture = await createFixture();
+
+    const state = await admitSurfaceBundle({
+      source: fixture.source,
+      verifier: fixture.verifier,
+      request: { locator: 'https://host.example/apps/intake.bundle' },
+      validation: () => Promise.reject(new Error(RAW_FAILURE_SENTINEL)),
+    });
+
+    expect(state).toEqual({
+      status: 'adapter-error',
+      code: 'validation-unavailable',
+    });
+    expect(JSON.stringify(state)).not.toContain(RAW_FAILURE_SENTINEL);
+    expect(fixture.commitRequests).toHaveLength(0);
   });
 
   it('does not commit when a graph-valid candidate becomes non-renderable before release commit', async () => {
@@ -197,12 +236,12 @@ describe('admitSurfaceBundle', () => {
       source: fixture.source,
       verifier: fixture.verifier,
       request: { locator: 'https://host.example/apps/intake.bundle' },
-      validation: {
+      validation: () => ({
         schemaValidators: () => ({
           ok: false,
           issues: [{ message: RAW_FAILURE_SENTINEL }],
         }),
-      },
+      }),
       onValidationReport: (report) => reports.push(report),
     });
 
@@ -570,12 +609,12 @@ describe('VerifyingSurfaceHost', () => {
     const states: SurfaceAdmissionState[] = [];
 
     renderHost(fixture, {
-      validation: {
+      validation: () => ({
         schemaValidators: () => ({
           ok: false,
           issues: [{ message: RAW_FAILURE_SENTINEL }],
         }),
-      },
+      }),
       onValidationReport: (report) => reports.push(report),
       onAdmissionState: (state) => states.push(state),
     });
@@ -840,7 +879,7 @@ function committed(
 interface RenderOptions {
   readonly locator?: string;
   readonly location?: string;
-  readonly validation?: SurfaceBundleValidationConfig;
+  readonly validation?: SurfaceBundleValidationProvider;
   readonly onValidationReport?: (result: AppGraphReportProducerResult) => void;
   readonly onAdmissionState?: (state: SurfaceAdmissionState) => void;
 }

@@ -6,6 +6,7 @@ export {
   type SurfaceAdmissionState,
   type SurfaceAdmissionUnsupportedCode,
   type SurfaceBundleValidationConfig,
+  type SurfaceBundleValidationProvider,
 } from './admission.ts';
 export {
   SurfaceVerificationStatus,

@@ -17,7 +17,7 @@ import type { FormspecWebConfig, RespondentSurfaceBundleConfig } from '../../con
 import type { Composition } from '../../composition/types.ts';
 import type { SubmitConfirmation } from '../../ports/submit-transport.ts';
 import {
-  createSurfaceBundleSchemaValidators,
+  loadSurfaceBundleSchemaValidators,
 } from '../../adapters/schema/index.ts';
 import {
   RespondentDefinitionController,
@@ -26,7 +26,7 @@ import {
   VerifyingSurfaceHost,
   type AdmittedSurfaceRenderInput,
 } from '../VerifyingSurfaceHost.tsx';
-import type { SurfaceBundleValidationConfig } from '../admission.ts';
+import type { SurfaceBundleValidationProvider } from '../admission.ts';
 import { SurfaceVerificationStatus } from '../SurfaceVerificationStatus.tsx';
 import { createRespondentDataSourceRuntime, proofRouteAddresses } from './data-sources.ts';
 import { localeDocumentsForTarget, useRespondentSurfaceLocale } from './locale.ts';
@@ -62,9 +62,9 @@ export function VerifiedRespondentSurface({
     () => suppliedSessionStore ?? createBrowserRespondentReceiptSessionStore(),
     [suppliedSessionStore],
   );
-  const validation = useMemo<SurfaceBundleValidationConfig>(
-    () => withRespondentPublicAppValidation(
-      { schemaValidators: createSurfaceBundleSchemaValidators() },
+  const validation = useMemo<SurfaceBundleValidationProvider>(
+    () => async () => withRespondentPublicAppValidation(
+      { schemaValidators: await loadSurfaceBundleSchemaValidators() },
       {
         appId: bundleConfig.verification.expectedAppId,
         starterModuleId: bundleConfig.starterModuleId,

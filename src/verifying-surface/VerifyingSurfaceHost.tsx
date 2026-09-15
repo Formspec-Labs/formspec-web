@@ -12,7 +12,7 @@ import type {
 import {
   admitSurfaceBundle,
   type SurfaceAdmissionState,
-  type SurfaceBundleValidationConfig,
+  type SurfaceBundleValidationProvider,
 } from './admission.ts';
 import { SurfaceVerificationStatus } from './SurfaceVerificationStatus.tsx';
 import './verifying-surface.css';
@@ -24,7 +24,7 @@ export interface VerifyingSurfaceHostProps
     'surfaceBundleSource' | 'surfaceBundleVerifier'
   >;
   readonly request: SurfaceBundleAcquisitionRequest;
-  readonly validation: SurfaceBundleValidationConfig;
+  readonly validation: SurfaceBundleValidationProvider;
   readonly onAdmissionState?: (state: SurfaceAdmissionState) => void;
   readonly onValidationReport?: (result: AppGraphReportProducerResult) => void;
   /**
@@ -159,7 +159,7 @@ interface AdmissionInputIdentity {
   readonly verifier: Composition['surfaceBundleVerifier'];
   readonly locator: string;
   readonly signal: AbortSignal | undefined;
-  readonly validation: SurfaceBundleValidationConfig;
+  readonly validation: SurfaceBundleValidationProvider;
 }
 
 interface AdmissionRecord {

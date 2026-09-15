@@ -28,7 +28,7 @@ import { createStubComposition } from '../../src/composition/stub.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import { stubDraftStore } from '../../src/adapters/stub/draft-store.ts';
 import {
-  createSurfaceBundleSchemaValidators,
+  loadSurfaceBundleSchemaValidators,
 } from '../../src/adapters/schema/index.ts';
 import {
   createSurfaceBundleSnapshot,
@@ -88,8 +88,8 @@ describe('verified respondent Surface integration', () => {
       source: fixture.source,
       verifier: fixture.verifier,
       request: { locator: bundleConfig.locator },
-      validation: withRespondentPublicAppValidation(
-        { schemaValidators: createSurfaceBundleSchemaValidators() },
+      validation: async () => withRespondentPublicAppValidation(
+        { schemaValidators: await loadSurfaceBundleSchemaValidators() },
         {
           appId: APP,
           starterModuleId: MODULE,

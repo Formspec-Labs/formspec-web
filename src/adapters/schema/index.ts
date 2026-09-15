@@ -1,5 +1,5 @@
 export {
-  createSurfaceBundleSchemaValidators,
   createSurfaceDataSourcePayloadValidator,
+  loadSurfaceBundleSchemaValidators,
   type SurfaceBundleSchemaValidators,
 } from './surface-bundle-schema-validators.ts';

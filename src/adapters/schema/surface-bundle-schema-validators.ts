@@ -12,26 +12,7 @@ import type { DataSourcePayloadValidator } from '@formspec-org/surface';
 import type {
   SurfaceBundleValidationConfig,
 } from '../../verifying-surface/admission.ts';
-import bundleManifestSchemaJson from '../../../vendor/formspec-schemas/bundle-manifest.schema.json';
-import commonSchemaJson from '../../../vendor/formspec-schemas/common.schema.json';
-import componentSchemaJson from '../../../vendor/formspec-schemas/component.schema.json';
-import dataSourcesSchemaJson from '../../../vendor/formspec-schemas/data-sources.schema.json';
-import definitionSchemaJson from '../../../vendor/formspec-schemas/definition.schema.json';
-import experienceSchemaJson from '../../../vendor/formspec-schemas/experience.schema.json';
-import issuerSchemaJson from '../../../vendor/formspec-schemas/issuer.schema.json';
-import localeSchemaJson from '../../../vendor/formspec-schemas/locale.schema.json';
-import mappingSchemaJson from '../../../vendor/formspec-schemas/mapping.schema.json';
-import ontologySchemaJson from '../../../vendor/formspec-schemas/ontology.schema.json';
-import referencesSchemaJson from '../../../vendor/formspec-schemas/references.schema.json';
-import registrySchemaJson from '../../../vendor/formspec-schemas/registry.schema.json';
-import responseSchemaJson from '../../../vendor/formspec-schemas/response.schema.json';
-import responseActionsSchemaJson from '../../../vendor/formspec-schemas/response-actions.schema.json';
-import screenerSchemaJson from '../../../vendor/formspec-schemas/screener.schema.json';
-import surfaceSchemaJson from '../../../vendor/formspec-schemas/surface.schema.json';
-import themeSchemaJson from '../../../vendor/formspec-schemas/theme.schema.json';
-import validationMappingSchemaJson from '../../../vendor/formspec-schemas/validation-mapping.schema.json';
-import validationResultSchemaJson from '../../../vendor/formspec-schemas/validation-result.schema.json';
-import verificationReceiptSchemaJson from '../../../vendor/formspec-schemas/verification-receipt.schema.json';
+import type { SupportedArtifactKind } from './canonical-schemas.ts';
 
 type CanonicalSchema = AnySchemaObject & { readonly $id: string };
 
@@ -39,58 +20,6 @@ export type SurfaceBundleSchemaValidators = NonNullable<
   SurfaceBundleValidationConfig['schemaValidators']
 >;
 
-const bundleManifestSchema = canonicalSchema(bundleManifestSchemaJson);
-const commonSchema = canonicalSchema(commonSchemaJson);
-const componentSchema = canonicalSchema(componentSchemaJson);
-const dataSourcesSchema = canonicalSchema(dataSourcesSchemaJson);
-const definitionSchema = canonicalSchema(definitionSchemaJson);
-const experienceSchema = canonicalSchema(experienceSchemaJson);
-const issuerSchema = canonicalSchema(issuerSchemaJson);
-const localeSchema = canonicalSchema(localeSchemaJson);
-const mappingSchema = canonicalSchema(mappingSchemaJson);
-const ontologySchema = canonicalSchema(ontologySchemaJson);
-const referencesSchema = canonicalSchema(referencesSchemaJson);
-const registrySchema = canonicalSchema(registrySchemaJson);
-const responseActionsSchema = canonicalSchema(responseActionsSchemaJson);
-const screenerSchema = canonicalSchema(screenerSchemaJson);
-const surfaceSchema = canonicalSchema(surfaceSchemaJson);
-const themeSchema = canonicalSchema(themeSchemaJson);
-const validationMappingSchema = canonicalSchema(validationMappingSchemaJson);
-
-const dependencySchemas = Object.freeze([
-  commonSchema,
-  issuerSchema,
-  validationMappingSchema,
-  // Data Sources filters reference Response's ResponseStatus.
-  canonicalSchema(responseSchemaJson),
-  canonicalSchema(validationResultSchemaJson),
-  canonicalSchema(verificationReceiptSchemaJson),
-]);
-
-/**
- * Exact artifact kinds emitted by the vendored AppGraph ArtifactResolver.
- *
- * This is deliberately a closed map. A future artifact kind must bring its
- * canonical schema into this adapter before a signed bundle can be admitted.
- */
-const artifactSchemas = Object.freeze({
-  appManifest: bundleManifestSchema,
-  definition: definitionSchema,
-  experience: experienceSchema,
-  responseActions: responseActionsSchema,
-  component: componentSchema,
-  theme: themeSchema,
-  references: referencesSchema,
-  ontology: ontologySchema,
-  registry: registrySchema,
-  surface: surfaceSchema,
-  screener: screenerSchema,
-  dataSources: dataSourcesSchema,
-  locale: localeSchema,
-  mapping: mappingSchema,
-});
-
-type SupportedArtifactKind = keyof typeof artifactSchemas;
 type CompiledArtifactValidators = Readonly<
   Record<SupportedArtifactKind, {
     readonly schemaId: string;
@@ -98,19 +27,22 @@ type CompiledArtifactValidators = Readonly<
   }>
 >;
 
-let compiledArtifactValidators: CompiledArtifactValidators | undefined;
+let pendingArtifactValidators: Promise<CompiledArtifactValidators> | undefined;
 
 /**
- * Build the synchronous schema callback required by Surface bundle admission.
+ * Load the canonical schemas and build the synchronous callback Surface bundle
+ * admission requires.
  *
- * Every AppGraph artifact kind resolves to one vendored canonical schema.
- * Unknown kinds and unexpected schema ids fail closed; no document can fall
- * through to an implicit or always-successful validator.
+ * The schemas themselves live behind an `import()` (see `canonical-schemas.ts`)
+ * because admission is the only thing that reads them and admission already
+ * awaits a network fetch. Every AppGraph artifact kind resolves to one vendored
+ * canonical schema; unknown kinds and unexpected schema ids fail closed, so no
+ * document can fall through to an implicit or always-successful validator.
  */
-export function createSurfaceBundleSchemaValidators(): SurfaceBundleSchemaValidators {
-  const validators = getCompiledArtifactValidators();
+export async function loadSurfaceBundleSchemaValidators(): Promise<SurfaceBundleSchemaValidators> {
+  const validators = await getCompiledArtifactValidators();
   const validate: AppGraphSchemaValidator = (input) => {
-    if (!isSupportedArtifactKind(input.artifactKind)) {
+    if (!isSupportedArtifactKind(validators, input.artifactKind)) {
       return invalidOutcome({
         code: 'SURFACE-BUNDLE-SCHEMA-UNKNOWN-ARTIFACT',
         message: `No canonical schema is registered for artifact kind '${input.artifactKind}'.`,
@@ -187,18 +119,32 @@ export function createSurfaceDataSourcePayloadValidator(): DataSourcePayloadVali
   };
 }
 
-function getCompiledArtifactValidators(): CompiledArtifactValidators {
-  if (compiledArtifactValidators) return compiledArtifactValidators;
+function getCompiledArtifactValidators(): Promise<CompiledArtifactValidators> {
+  // A failed load or compile must not poison every later admission, so the
+  // memo only survives success.
+  pendingArtifactValidators ??= compileArtifactValidators().catch((error: unknown) => {
+    pendingArtifactValidators = undefined;
+    throw error;
+  });
+  return pendingArtifactValidators;
+}
+
+async function compileArtifactValidators(): Promise<CompiledArtifactValidators> {
+  const { ARTIFACT_SCHEMA_DOCUMENTS, DEPENDENCY_SCHEMA_DOCUMENTS } = await import(
+    './canonical-schemas.ts'
+  );
 
   const ajv = createCanonicalAjv();
-  for (const schema of dependencySchemas) {
-    ajv.addSchema(schema);
+  for (const document of DEPENDENCY_SCHEMA_DOCUMENTS) {
+    ajv.addSchema(canonicalSchema(document));
   }
-  for (const schema of Object.values(artifactSchemas)) {
+  const artifactSchemas = Object.entries(ARTIFACT_SCHEMA_DOCUMENTS)
+    .map(([artifactKind, document]) => [artifactKind, canonicalSchema(document)] as const);
+  for (const [, schema] of artifactSchemas) {
     ajv.addSchema(schema);
   }
 
-  const entries = Object.entries(artifactSchemas).map(([artifactKind, schema]) => {
+  const entries = artifactSchemas.map(([artifactKind, schema]) => {
     const validate = ajv.getSchema(schema.$id);
     if (!validate) {
       throw new Error(`Canonical schema '${schema.$id}' did not compile.`);
@@ -212,10 +158,7 @@ function getCompiledArtifactValidators(): CompiledArtifactValidators {
     ] as const;
   });
 
-  compiledArtifactValidators = Object.freeze(
-    Object.fromEntries(entries),
-  ) as CompiledArtifactValidators;
-  return compiledArtifactValidators;
+  return Object.freeze(Object.fromEntries(entries)) as CompiledArtifactValidators;
 }
 
 function createCanonicalAjv(): Ajv2020 {
@@ -258,8 +201,11 @@ function canonicalSchema(value: unknown): CanonicalSchema {
   return value as CanonicalSchema;
 }
 
-function isSupportedArtifactKind(value: string): value is SupportedArtifactKind {
-  return Object.prototype.hasOwnProperty.call(artifactSchemas, value);
+function isSupportedArtifactKind(
+  validators: CompiledArtifactValidators,
+  value: string,
+): value is SupportedArtifactKind {
+  return Object.prototype.hasOwnProperty.call(validators, value);
 }
 
 function isSchemaObject(value: unknown): value is AnySchemaObject {
