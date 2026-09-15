@@ -29,9 +29,10 @@ export class FelContext {
      */
     evaluateTrace(expression: string, item_path: string, replace_self_ref: boolean, now_iso?: string | null, extensions?: FelExtensionHost | null): string;
     /**
-     * Resolves every `{{expression}}` in `template` in the scope of `item_path` (Locale §3.3.1).
+     * Resolves every `{{expression}}` in `template` in the scope of `item_path` (Locale §3.3.1);
+     * `replace_self_ref` binds bare `$` to the item, as a validation message needs.
      */
-    interpolate(template: string, item_path: string, now_iso?: string | null, extensions?: FelExtensionHost | null): string;
+    interpolate(template: string, item_path: string, replace_self_ref: boolean, now_iso?: string | null, extensions?: FelExtensionHost | null): string;
     /**
      * Replaces the form-scope snapshot:
      * `{ values, mips, repeatCounts, variables, instances, locale, dateFormats, meta }`.
@@ -319,7 +320,7 @@ export interface InitOutput {
     readonly felcontext_prepare: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly felcontext_evaluate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly felcontext_evaluateTrace: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
-    readonly felcontext_interpolate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
+    readonly felcontext_interpolate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly executeMappingRules: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly executeMappingDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly parseRegistry: (a: number, b: number, c: number) => void;

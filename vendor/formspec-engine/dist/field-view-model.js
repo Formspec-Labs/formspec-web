@@ -61,7 +61,7 @@ export function resolveItemLabel(source) {
 export function createFieldViewModel(deps) {
     // Locale §3.1: item strings are keyed `<itemKey>.<property>` by the Item's
     // definition-unique `key` — never by group path or repeat instance path.
-    const { rx, localeStore, itemKey, interpolate } = deps;
+    const { rx, localeStore, itemKey, interpolate, interpolateMessage } = deps;
     const helpText = (property, inlineText) => resolveItemHelpText({
         localeStore,
         itemKey,
@@ -97,23 +97,18 @@ export function createFieldViewModel(deps) {
     const visible = rx.computed(() => deps.getVisible().value);
     const readonly_ = rx.computed(() => deps.getReadonly().value);
     // ── Validation: locale-resolved messages with code synthesis ──
-    const errors = rx.computed(() => {
+    const codeOf = (err) => err.code ?? CODE_SYNTHESIS[err.constraintKind] ?? 'UNKNOWN';
+    function resolveMessage(err) {
         localeStore.version.value;
-        const rawErrors = deps.getErrors().value;
-        if (!rawErrors.length)
-            return [];
-        return rawErrors.map((err) => {
-            const code = err.code ?? CODE_SYNTHESIS[err.constraintKind] ?? 'UNKNOWN';
-            const resolvedMessage = resolveValidationMessage(err, code);
-            return {
-                path: err.path,
-                severity: err.severity,
-                constraintKind: err.constraintKind ?? 'unknown',
-                code,
-                message: resolvedMessage,
-            };
-        });
-    });
+        return resolveValidationMessage(err, codeOf(err));
+    }
+    const errors = rx.computed(() => deps.getErrors().value.map((err) => ({
+        path: err.path,
+        severity: err.severity,
+        constraintKind: err.constraintKind ?? 'unknown',
+        code: codeOf(err),
+        message: resolveMessage(err),
+    })));
     const firstError = rx.computed(() => {
         const errs = errors.value;
         const firstErr = errs.find(e => e.severity === 'error');
@@ -154,14 +149,14 @@ export function createFieldViewModel(deps) {
         const codeKey = `${itemKey}.errors.${code}`;
         const fromCode = localeStore.lookupKey(codeKey);
         if (fromCode !== null) {
-            return interpolate(fromCode);
+            return interpolateMessage(fromCode);
         }
         // Step 2: Per-bind key — itemKey.requiredMessage or itemKey.constraintMessage
         if (err.constraintKind === 'required') {
             const reqKey = `${itemKey}.requiredMessage`;
             const fromReq = localeStore.lookupKey(reqKey);
             if (fromReq !== null)
-                return interpolate(fromReq);
+                return interpolateMessage(fromReq);
         }
         else if (code === 'CONSTRAINT_FAILED') {
             // Core Phase 3 step 1a: `constraintMessage` labels a `false` result only; a
@@ -169,12 +164,12 @@ export function createFieldViewModel(deps) {
             const constKey = `${itemKey}.constraintMessage`;
             const fromConst = localeStore.lookupKey(constKey);
             if (fromConst !== null)
-                return interpolate(fromConst);
-            // Step 3: the Bind's inline template, resolved in this scope like the Item's label, so a date
-            // in it takes the active Locale's formats (the processor resolved it with none).
+                return interpolateMessage(fromConst);
+            // Step 3: the Bind's inline template, resolved here rather than taken from the processor, so a
+            // date in it takes the active Locale's formats; `$` is the field either way.
             const inline = deps.getConstraintMessage();
             if (inline !== null)
-                return interpolate(inline);
+                return interpolateMessage(inline);
         }
         // Step 4: Processor default
         return err.message ?? 'Validation error';
@@ -227,6 +222,7 @@ export function createFieldViewModel(deps) {
         readonly: readonly_,
         errors,
         firstError,
+        resolveMessage,
         options,
         optionsState,
         setValue: deps.setFieldValue,

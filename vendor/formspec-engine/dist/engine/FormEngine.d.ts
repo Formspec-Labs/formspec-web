@@ -168,6 +168,7 @@ export declare class FormEngine implements IFormEngine {
     getAvailableLocales(): string[];
     getLocaleDirection(): 'ltr' | 'rtl';
     getFieldVM(path: string): FieldViewModel | undefined;
+    resolveValidationMessage(result: ValidationResult): string;
     getFormVM(): FormViewModel;
     resolveLocaleString(key: string, fallback: string, itemPath?: string): string;
     /**
@@ -248,6 +249,7 @@ export declare class FormEngine implements IFormEngine {
     /**
      * Locale §3.3.2: resolve `{{}}` in `template` in the binding scope of `itemPath` (form scope when empty),
      * one WASM call per template. Plain text skips the FEL context, so it tracks no evaluation signals.
+     * `bindScope` binds bare `$` to the item, as its Bind does — the scope a validation message resolves in.
      */
     private _interpolate;
     private getDisplayedIssuerPin;

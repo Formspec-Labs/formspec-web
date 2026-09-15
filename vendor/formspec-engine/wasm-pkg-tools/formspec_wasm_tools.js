@@ -96,14 +96,16 @@ export class FelContext {
         }
     }
     /**
-     * Resolves every `{{expression}}` in `template` in the scope of `item_path` (Locale §3.3.1).
+     * Resolves every `{{expression}}` in `template` in the scope of `item_path` (Locale §3.3.1);
+     * `replace_self_ref` binds bare `$` to the item, as a validation message needs.
      * @param {string} template
      * @param {string} item_path
+     * @param {boolean} replace_self_ref
      * @param {string | null} [now_iso]
      * @param {FelExtensionHost | null} [extensions]
      * @returns {string}
      */
-    interpolate(template, item_path, now_iso, extensions) {
+    interpolate(template, item_path, replace_self_ref, now_iso, extensions) {
         let deferred5_0;
         let deferred5_1;
         try {
@@ -114,7 +116,7 @@ export class FelContext {
             const len1 = WASM_VECTOR_LEN;
             var ptr2 = isLikeNone(now_iso) ? 0 : passStringToWasm0(now_iso, wasm.__wbindgen_export, wasm.__wbindgen_export2);
             var len2 = WASM_VECTOR_LEN;
-            wasm.felcontext_interpolate(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(extensions) ? 0 : addHeapObject(extensions));
+            wasm.felcontext_interpolate(retptr, this.__wbg_ptr, ptr0, len0, ptr1, len1, replace_self_ref, ptr2, len2, isLikeNone(extensions) ? 0 : addHeapObject(extensions));
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);

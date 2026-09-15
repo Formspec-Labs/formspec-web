@@ -26,6 +26,15 @@ export interface FieldViewModel {
     readonly disabledDisplay: 'hidden' | 'protected';
     readonly errors: ReadonlyEngineSignal<ResolvedValidationResult[]>;
     readonly firstError: ReadonlyEngineSignal<string | null>;
+    /**
+     * The message a respondent reads for one of this field's validation results, through the Locale
+     * validation-message cascade — what `errors` shows, for a result from any report (a submit, a summary).
+     */
+    resolveMessage(result: {
+        code?: string;
+        constraintKind?: string;
+        message?: string;
+    }): string;
     readonly options: ReadonlyEngineSignal<ResolvedOption[]>;
     readonly optionsState: ReadonlyEngineSignal<{
         loading: boolean;
@@ -78,6 +87,8 @@ export interface FieldViewModelDeps {
     setFieldValue: (value: any) => void;
     /** Resolves `{{expression}}` in the field's binding scope (Locale §3.3.1). */
     interpolate: (template: string) => string;
+    /** {@link FieldViewModelDeps.interpolate} with bare `$` bound to the field, as in its Bind: validation messages. */
+    interpolateMessage: (template: string) => string;
 }
 export interface ResolvedPresentationString<T extends string | null> {
     value: T;
