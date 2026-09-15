@@ -33,3 +33,7 @@ export { characterCountLimitMessage, characterCountStatus, CHARACTER_COUNT_ANNOU
 export { platformDefaults, platformSelectors, buildPlatformTheme, mergePlatformAndTenantTheme, } from './platform-defaults.js';
 // UI Graph Policy route-landmark projection (shared by React + webcomponent)
 export { resolveRouteLandmark } from './route-landmark-projection.js';
+// Field help: which References qualify, which URIs are admitted (References spec §7)
+export { admitFieldHelpUri, resolveFieldHelp } from './field-help.js';
+// Rich-text subset for label / hint / display text (core §4.2.1)
+export { parseRichText, isRichText, richTextToPlain } from './rich-text.js';

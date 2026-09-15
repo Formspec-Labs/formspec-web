@@ -14,6 +14,11 @@ export interface FieldViewModel {
     readonly hintNeedAnchors: ReadonlyEngineSignal<string[]>;
     readonly description: ReadonlyEngineSignal<string | null>;
     readonly descriptionNeedAnchors: ReadonlyEngineSignal<string[]>;
+    readonly labelTemplate: ReadonlyEngineSignal<string>;
+    readonly hintTemplate: ReadonlyEngineSignal<string | null>;
+    readonly descriptionTemplate: ReadonlyEngineSignal<string | null>;
+    /** Resolve `{{expression}}` in this field's binding scope (Locale §3.3.1). */
+    interpolate(template: string): string;
     readonly value: ReadonlyEngineSignal<any>;
     readonly required: ReadonlyEngineSignal<boolean>;
     readonly visible: ReadonlyEngineSignal<boolean>;
@@ -74,6 +79,8 @@ export interface FieldViewModelDeps {
 }
 export interface ResolvedPresentationString<T extends string | null> {
     value: T;
+    /** The winning string before `{{}}` interpolation — what the author wrote. */
+    template: T;
     needAnchors: string[];
 }
 /** Inputs to the Item label cascade; read inside a computed so every getter is a dependency. */

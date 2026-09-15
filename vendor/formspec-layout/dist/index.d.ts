@@ -25,4 +25,8 @@ export { characterCountLimitMessage, characterCountStatus, CHARACTER_COUNT_ANNOU
 export { platformDefaults, platformSelectors, buildPlatformTheme, mergePlatformAndTenantTheme, } from './platform-defaults.js';
 export { resolveRouteLandmark } from './route-landmark-projection.js';
 export type { ResolvedRouteLandmark, ResolvedRouteLandmarkRole } from './route-landmark-projection.js';
+export { admitFieldHelpUri, resolveFieldHelp } from './field-help.js';
+export type { FieldHelpReference, FieldHelpUriAdmission, ReferencesDocumentLike } from './field-help.js';
+export { parseRichText, isRichText, richTextToPlain } from './rich-text.js';
+export type { RichBlock, RichInline } from './rich-text.js';
 export type { ComponentGraphProjectionContext, LayoutHostEvidence, LayoutNode, PlanContext, UiGraphPolicyProjectionEvidence, UiGraphRoutePolicyProjection, } from './types.js';

@@ -20,6 +20,7 @@ function resolveLocaleItemString(localeStore, itemKey, property, context, interp
         if (fromLocale.value !== null) {
             return {
                 value: interpolate(fromLocale.value),
+                template: fromLocale.value,
                 needAnchors: [...(fromLocale.needAnchors ?? [])],
             };
         }
@@ -39,9 +40,9 @@ export function resolveItemHelpText(source) {
         return fromLocale;
     }
     if (inlineText === null || inlineText === undefined) {
-        return { value: null, needAnchors: [] };
+        return { value: null, template: null, needAnchors: [] };
     }
-    return { value: interpolate(inlineText), needAnchors: [] };
+    return { value: interpolate(inlineText), template: inlineText, needAnchors: [] };
 }
 /**
  * Label a respondent sees for any Item (Locale §3.1–3.3): Locale `<key>.label@context` → Locale
@@ -54,7 +55,7 @@ export function resolveItemLabel(source) {
         return fromLocale;
     }
     const definitionLabel = (context ? labels?.[context] : undefined) || source.inlineLabel || '';
-    return { value: interpolate(definitionLabel), needAnchors: [] };
+    return { value: interpolate(definitionLabel), template: definitionLabel, needAnchors: [] };
 }
 // ── Factory ─────────────────────────────────────────────────────────
 export function createFieldViewModel(deps) {
@@ -79,13 +80,16 @@ export function createFieldViewModel(deps) {
         interpolate,
     }));
     const label = rx.computed(() => labelResolution.value.value);
+    const labelTemplate = rx.computed(() => labelResolution.value.template);
     const labelNeedAnchors = rx.computed(() => labelResolution.value.needAnchors);
     // ── Hint / description: Locale @context → Locale → inline ──
     const hintResolution = rx.computed(() => helpText('hint', deps.getItemHint()));
     const hint = rx.computed(() => hintResolution.value.value);
+    const hintTemplate = rx.computed(() => hintResolution.value.template);
     const hintNeedAnchors = rx.computed(() => hintResolution.value.needAnchors);
     const descriptionResolution = rx.computed(() => helpText('description', deps.getItemDescription()));
     const description = rx.computed(() => descriptionResolution.value.value);
+    const descriptionTemplate = rx.computed(() => descriptionResolution.value.template);
     const descriptionNeedAnchors = rx.computed(() => descriptionResolution.value.needAnchors);
     // ── State signals: wrap existing engine signals ──
     const value = rx.computed(() => deps.getFieldValue().value);
@@ -211,6 +215,10 @@ export function createFieldViewModel(deps) {
         hintNeedAnchors,
         description,
         descriptionNeedAnchors,
+        labelTemplate,
+        hintTemplate,
+        descriptionTemplate,
+        interpolate,
         value,
         required,
         visible,
