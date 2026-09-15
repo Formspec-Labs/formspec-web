@@ -33,7 +33,8 @@ export class FelContext {
      */
     interpolate(template: string, item_path: string, now_iso?: string | null, extensions?: FelExtensionHost | null): string;
     /**
-     * Replaces the form-scope snapshot: `{ values, mips, repeatCounts, variables, instances, locale, meta }`.
+     * Replaces the form-scope snapshot:
+     * `{ values, mips, repeatCounts, variables, instances, locale, dateFormats, meta }`.
      */
     load(snapshot_json: string): void;
     /**

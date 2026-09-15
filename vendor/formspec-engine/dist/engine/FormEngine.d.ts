@@ -202,6 +202,12 @@ export declare class FormEngine implements IFormEngine {
     private evaluateExpression;
     private felContextInput;
     /**
+     * The locale FEL formats and reports: the host's runtime locale when it set one, else the Locale
+     * document currently selected — so `setLocale('fr')` alone renders French dates, and the patterns
+     * `dateFormats` carries always belong to the same locale the built-in rendering falls back to.
+     */
+    private felLocale;
+    /**
      * WASM-resident FEL context for ad-hoc reads (compileExpression, Locale `{{}}`, derivation trace).
      *
      * The form-scope snapshot is loaded once per engine state: values, MIPs, and results change only through

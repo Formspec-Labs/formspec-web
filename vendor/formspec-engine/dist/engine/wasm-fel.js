@@ -205,6 +205,7 @@ export function buildWasmFelExpressionContext(options) {
         instances: base.instances,
         nowIso: options.nowIso,
         locale: options.locale,
+        dateFormats: options.dateFormats,
         meta: options.meta,
     };
 }

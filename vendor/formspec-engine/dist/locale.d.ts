@@ -41,6 +41,11 @@ export declare class LocaleStore {
     lookupKey(key: string): string | null;
     lookupKeyWithMeta(key: string): LookupResult;
     lookupKeyForTarget(key: string, target: LocaleTargetIdentity, localeCode?: string): LookupResult;
+    /**
+     * The active locale's `formats.date` (Locale §2.4): the first document on the same cascade
+     * strings use — regional, explicit fallback, implicit language — that authored one. Null when none did.
+     */
+    dateFormats(): Record<string, string> | null;
     private _cascadeLookup;
     /**
      * Normalize BCP 47: lowercase language, title-case script (4 chars),

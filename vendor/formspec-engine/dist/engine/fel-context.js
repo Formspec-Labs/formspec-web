@@ -60,6 +60,7 @@ export function felContextSnapshot(options) {
         variables,
         instances: options.instanceData,
         locale: options.locale,
+        dateFormats: options.dateFormats,
         meta: options.meta,
     };
 }

@@ -1185,9 +1185,18 @@ export class FormEngine {
             variableSignals: this.variableSignals,
             instanceData: this.instanceData,
             nowIso: this.nowISO(),
-            locale: this._runtimeContext.locale,
+            locale: this.felLocale(),
+            dateFormats: this._localeStore.dateFormats() ?? undefined,
             meta: this._runtimeContext.meta,
         };
+    }
+    /**
+     * The locale FEL formats and reports: the host's runtime locale when it set one, else the Locale
+     * document currently selected — so `setLocale('fr')` alone renders French dates, and the patterns
+     * `dateFormats` carries always belong to the same locale the built-in rendering falls back to.
+     */
+    felLocale() {
+        return this._runtimeContext.locale ?? (this._localeStore.activeLocale.value || undefined);
     }
     /**
      * WASM-resident FEL context for ad-hoc reads (compileExpression, Locale `{{}}`, derivation trace).
@@ -1200,7 +1209,8 @@ export class FormEngine {
      * one-shot context from the partial state it is midway through producing.
      */
     felContext() {
-        const key = `${this._evaluationVersion.value}:${this.structureVersion.value}:${this.instanceVersion.value}`;
+        // The Locale version is part of the key: a switch changes the date patterns the snapshot carries.
+        const key = `${this._evaluationVersion.value}:${this.structureVersion.value}:${this.instanceVersion.value}:${this._localeStore.version.value}`;
         if (!this._felContext) {
             this._felContext = {
                 key: '',
@@ -1220,7 +1230,8 @@ export class FormEngine {
                 variableDefs: this._variableDefs,
                 variableSignals: this.variableSignals,
                 instanceData: this.instanceData,
-                locale: this._runtimeContext.locale,
+                locale: this.felLocale(),
+                dateFormats: this._localeStore.dateFormats() ?? undefined,
                 meta: this._runtimeContext.meta,
             })));
             this._felContext.key = key;

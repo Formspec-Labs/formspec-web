@@ -134,7 +134,8 @@ export class FelContext {
         }
     }
     /**
-     * Replaces the form-scope snapshot: `{ values, mips, repeatCounts, variables, instances, locale, meta }`.
+     * Replaces the form-scope snapshot:
+     * `{ values, mips, repeatCounts, variables, instances, locale, dateFormats, meta }`.
      * @param {string} snapshot_json
      */
     load(snapshot_json) {
