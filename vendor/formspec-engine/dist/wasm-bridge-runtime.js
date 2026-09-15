@@ -76,13 +76,17 @@ export function wasmEvalFEL(expression, fields = {}) {
     return parseFelEvalEnvelope(wasm().evalFEL(expression, JSON.stringify(fields))).value;
 }
 /** Evaluate a FEL expression with full FormspecEnvironment context (value + diagnostics flag). */
-export function wasmEvalFELWithContextEnvelope(expression, context) {
-    const resultJson = wasm().evalFELWithContext(expression, JSON.stringify(context));
+export function wasmEvalFELWithContextEnvelope(expression, context, extensions) {
+    const resultJson = wasm().evalFELWithContext(expression, JSON.stringify(context), extensions);
     return parseFelEvalEnvelope(resultJson);
 }
 /** Evaluate a FEL expression with full FormspecEnvironment context. Returns the value only. */
-export function wasmEvalFELWithContext(expression, context) {
-    return wasmEvalFELWithContextEnvelope(expression, context).value;
+export function wasmEvalFELWithContext(expression, context, extensions) {
+    return wasmEvalFELWithContextEnvelope(expression, context, extensions).value;
+}
+/** Throws when `name` may not be an extension function: a FEL built-in or reserved word (Core §3.12). */
+export function wasmCheckFELExtensionName(name) {
+    wasm().checkFELExtensionName(name);
 }
 /**
  * Evaluate a FEL expression with a structured trace of evaluation steps.
@@ -96,17 +100,28 @@ export function wasmEvalFELWithTrace(expression, fields = {}) {
     return JSON.parse(resultJson);
 }
 /** Evaluate a FEL expression against full FormspecEnvironment context and trace each step. */
-export function wasmEvalFELWithContextTrace(expression, context) {
-    const resultJson = wasm().evalFELWithContextTrace(expression, JSON.stringify(context));
+export function wasmEvalFELWithContextTrace(expression, context, extensions) {
+    const resultJson = wasm().evalFELWithContextTrace(expression, JSON.stringify(context), extensions);
     return JSON.parse(resultJson);
 }
-/** Locale §3.3.1 — true if the expression AST is only literals and unary `not` / `!` / `-`. */
-export function wasmFelExprIsInterpolationStaticLiteral(expression) {
-    return wasm().felExprIsInterpolationStaticLiteral(expression);
+/** Locale §3.3.1: resolve every `{{expression}}` in `template` against a FEL context, in one call. */
+export function wasmInterpolateFELTemplate(template, context, extensions) {
+    return JSON.parse(wasm().interpolateFELTemplate(template, JSON.stringify(context), extensions));
+}
+/**
+ * Locale §3.3.1 with a host evaluator: Rust scans the template and applies the escape, failure,
+ * and coercion rules; `evaluate(expression)` returns JSON `{ value, hasErrorDiagnostics? }` or throws.
+ */
+export function wasmInterpolateTemplate(template, evaluate) {
+    return JSON.parse(wasm().interpolateTemplate(template, evaluate));
 }
 /** Normalize FEL source before evaluation (bare `$`, repeat qualifiers, repeat aliases). */
 export function wasmPrepareFelExpression(optionsJson) {
     return wasm().prepareFelExpression(optionsJson);
+}
+/** Creates a resident FEL context from a Definition's leaf typing and `excludedValue: "null"` binds. */
+export function wasmCreateFelContext(schema) {
+    return new (wasm().FelContext)(JSON.stringify(schema));
 }
 /** Inline `optionSet` references from `optionSets` on a definition JSON document. */
 export function wasmResolveOptionSetsOnDefinition(definitionJson) {
@@ -142,14 +157,19 @@ export function wasmItemLocationAtPath(items, path) {
     return result === null ? undefined : result;
 }
 /** Evaluate a Formspec definition against provided data. */
-export function wasmEvaluateDefinition(definition, data, context) {
-    const resultJson = wasm().evaluateDefinition(JSON.stringify(definition), JSON.stringify(data), context ? JSON.stringify(context) : undefined);
+export function wasmEvaluateDefinition(definition, data, context, extensions) {
+    const resultJson = wasm().evaluateDefinition(JSON.stringify(definition), JSON.stringify(data), context ? JSON.stringify(context) : undefined, extensions);
     return JSON.parse(resultJson);
 }
-/** Evaluate a standalone Screener Document against respondent inputs.
- *  Returns a Determination Record (always non-null). */
-export function wasmEvaluateScreenerDocument(screener, answers, context) {
-    const resultJson = wasm().evaluateScreenerDocument(JSON.stringify(screener), JSON.stringify(answers), context ? JSON.stringify(context) : undefined);
+/**
+ * Evaluate a standalone Screener Document against respondent inputs.
+ * Returns a Determination Record (always non-null).
+ *
+ * `extensions` resolves host extension functions (Core §3.12) in route `condition` / `score` and
+ * phase `activeWhen`; without them such a call is a definition error and the route is eliminated.
+ */
+export function wasmEvaluateScreenerDocument(screener, answers, context, extensions) {
+    const resultJson = wasm().evaluateScreenerDocument(JSON.stringify(screener), JSON.stringify(answers), context ? JSON.stringify(context) : undefined, extensions);
     return JSON.parse(resultJson);
 }
 /** Analyze a FEL expression and return structural info. */

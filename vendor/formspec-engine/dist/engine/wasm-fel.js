@@ -126,7 +126,7 @@ function tagMoneyVariableValue(value) {
     }
     return value;
 }
-export function buildWasmFelContextBase(options) {
+function buildWasmFelContextBase(options) {
     const result = options.resultOverride ?? options.fullResult;
     const rawFields = {
         ...(options.dataOverride ?? options.data),
@@ -160,11 +160,13 @@ export function buildWasmFelContextBase(options) {
     };
 }
 /**
- * FEL context for `currentItemPath`: the form-scope base plus each enclosing lexical scope's names, outermost
- * first so the nearest scope shadows (Core §3.2.1). Pass a shared `base` to avoid rebuilding form-scope state
- * per call; the scope overlay costs O(fields × scope depth).
+ * One-shot FEL context for `currentItemPath`: the form-scope base plus each enclosing lexical scope's names,
+ * outermost first so the nearest scope shadows (Core §3.2.1). O(fields × scope depth), so it serves the
+ * in-flight evaluation reads that must see partial state. Ad-hoc reads go through the WASM-resident
+ * `FelContext` handle instead (`FormEngine.felContext`).
  */
-export function buildWasmFelExpressionContext(options, base = buildWasmFelContextBase(options)) {
+export function buildWasmFelExpressionContext(options) {
+    const base = buildWasmFelContextBase(options);
     const scopes = lexicalScopeChain(options.currentItemPath, options.fieldDataTypes);
     let fields = base.fields;
     let mipStates = base.mipStates;

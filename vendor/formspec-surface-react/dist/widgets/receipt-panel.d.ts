@@ -13,4 +13,4 @@ export interface ReceiptPanelData {
     /** Anything else worth keeping — one row each. */
     facts?: readonly ReceiptFact[];
 }
-export declare function ReceiptPanel({ data, route, headingLevel, slot, config }: SurfaceWidgetProps): import("react/jsx-runtime").JSX.Element;
+export declare function ReceiptPanel({ data, route, config }: SurfaceWidgetProps): import("react/jsx-runtime").JSX.Element;

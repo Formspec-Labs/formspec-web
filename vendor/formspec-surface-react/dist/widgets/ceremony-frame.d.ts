@@ -7,4 +7,4 @@ export interface CeremonyFrameConfig {
     /** The wording of the confirmation, when a host can actually take one. */
     acknowledgement?: string;
 }
-export declare function CeremonyFrame({ config, headingLevel, admitsTenantTheme, slot }: SurfaceWidgetProps): import("react/jsx-runtime").JSX.Element;
+export declare function CeremonyFrame({ config, headingLevel, admitsTenantTheme }: SurfaceWidgetProps): import("react/jsx-runtime").JSX.Element;

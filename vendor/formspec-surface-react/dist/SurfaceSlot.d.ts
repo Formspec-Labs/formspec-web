@@ -23,11 +23,11 @@
  * deeper. {@link SurfaceSlotFrame} is both paths now.
  */
 import { type ReactNode } from 'react';
-import type { ResponseAction, ResponseActionInvocationResult, ResponseActionsDocument as ReactResponseActionsDocument, SubmitResult } from '@formspec-org/react';
-import type { ResponseActionsDocument as GeneratedResponseActionsDocument } from '@formspec-org/types';
-import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type PlannedTransition, type SlotPlan, type SurfaceDiagnostic, type SurfaceStrings, type ThemeGrant } from '@formspec-org/surface';
+import type { ResponseAction, ResponseActionInvocationResult, ResponseActionInvoker, ResponseActionsDocument as ReactResponseActionsDocument, SemanticArtifactIdentity, SemanticControlRegistry, SemanticControlScope, SemanticResponseBinding, SubmitResult } from '@formspec-org/react';
+import { type FormDefinition, type OntologyDocument, type ReferencesDocument, type ResponseActionsDocument as GeneratedResponseActionsDocument } from '@formspec-org/types';
+import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type PlannedTransition, type SlotPlan, type SurfaceDiagnostic, type SurfaceSemanticOutputScope, type SurfaceStrings, type ThemeGrant } from '@formspec-org/surface';
 import { nextLevel } from './heading.js';
-import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetRouteContext } from './widget-api.js';
+import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionDetail, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetRouteContext } from './widget-api.js';
 import { type WidgetActionCoordinator } from './widget-action-runtime.js';
 export type ResolvedDefinitionFormPlan = Extract<SlotPlan<SurfaceWidget>, {
     slotType: 'definition-form';
@@ -42,10 +42,59 @@ export interface SurfaceDefinitionFormRenderInput {
     grant: ThemeGrant;
     route: SurfaceWidgetRouteContext;
     responseActionsDocument: ReactResponseActionsDocument | undefined;
+    referencesDocuments: readonly ReferencesDocument[];
+    ontologyDocuments: readonly OntologyDocument[];
+    /**
+     * Data Source payload admitted before mount. Record identity, route/session
+     * generation, and owner revision remain separate from Definition field data.
+     */
+    initialData?: SurfaceDefinitionFormInitialData | undefined;
+    /** Exact runtime identity for generic semantic-control lookup, when admitted. */
+    semanticControlScope?: SemanticControlScope | undefined;
+    /** Receives every terminal from the mounted Definition Action control. */
+    onDefinitionActionResult?: ((result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
+    /**
+     * Optional host executor for the selected Definition-scoped document. The
+     * renderer still owns action resolution and submission; this port lets a
+     * generic async Response Actions runtime perform declared durable effects.
+     */
+    responseActionInvoker?: ResponseActionInvoker<SubmitResult> | undefined;
     /** Preserve the shell's completed-action navigation boundary. */
-    onActionCompleted?: ((action: ResponseAction) => void) | undefined;
+    onActionCompleted?: ((action: ResponseAction, result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
+}
+export interface SurfaceDefinitionFormInitialData {
+    data: Readonly<Record<string, unknown>>;
+    freshness: 'fresh' | 'stale';
+    recordId?: string | undefined;
+    generation?: string | number | undefined;
+    revision?: string | number | undefined;
 }
 export type SurfaceDefinitionFormRenderer = (input: SurfaceDefinitionFormRenderInput) => ReactNode;
+export interface SurfaceSemanticControlScopeRequest {
+    plan: ResolvedDefinitionFormPlan;
+    route: SurfaceWidgetRouteContext;
+    responseActionsDocument: ReactResponseActionsDocument | undefined;
+    runtimeGeneration: string | undefined;
+}
+/**
+ * Host pairing for artifact digests and Response identity. The Surface shell
+ * passes exact loaded objects and invents none of these facts.
+ */
+export type SurfaceSemanticControlScopeResolver = (request: SurfaceSemanticControlScopeRequest) => SemanticControlScope | undefined;
+export interface SurfaceSemanticControlPairing {
+    registry: SemanticControlRegistry;
+    /** Exact loaded object identity to caller-computed canonical artifact facts. */
+    definitionArtifacts: ReadonlyMap<FormDefinition, SemanticArtifactIdentity>;
+    /** Exact loaded object identity to caller-computed canonical artifact facts. */
+    responseActionsArtifacts: ReadonlyMap<ReactResponseActionsDocument, SemanticArtifactIdentity>;
+    renderInstanceIdFor(request: SurfaceSemanticControlScopeRequest): string | undefined;
+    responseBindingFor(request: SurfaceSemanticControlScopeRequest): SemanticResponseBinding | undefined;
+}
+/**
+ * Build a fail-closed resolver from caller-paired object identities.
+ * Canonicalization and digest computation stay outside the Surface renderer.
+ */
+export declare function createSurfaceSemanticControlScopeResolver(pairing: SurfaceSemanticControlPairing): SurfaceSemanticControlScopeResolver;
 export interface SurfaceSlotProps {
     plan: SlotPlan<SurfaceWidget>;
     grant: ThemeGrant;
@@ -66,6 +115,10 @@ export interface SurfaceSlotProps {
      * makes a form-bearing route able to fire its own transition.
      */
     responseActionsDocuments?: readonly GeneratedResponseActionsDocument[] | undefined;
+    /** Manifested References documents; the default form shows human/both entries only. */
+    referencesDocuments?: readonly ReferencesDocument[] | undefined;
+    /** Manifested Ontology documents used for field semantics without exposing raw ids. */
+    ontologyDocuments?: readonly OntologyDocument[] | undefined;
     transitions?: readonly PlannedTransition[] | undefined;
     widgetActionExecutor?: SurfaceWidgetActionExecutor | undefined;
     widgetActionOutcomeStore?: SurfaceWidgetActionOutcomeStore | undefined;
@@ -75,12 +128,23 @@ export interface SurfaceSlotProps {
     onWidgetActionReport?: ((report: SurfaceWidgetActionReport) => void) | undefined;
     onRuntimeDiagnosticsChange?: ((scope: string, diagnostics: readonly SurfaceDiagnostic[]) => void) | undefined;
     renderDefinitionForm?: SurfaceDefinitionFormRenderer | undefined;
+    definitionActionInvoker?: ResponseActionInvoker<SubmitResult> | undefined;
+    resolveSemanticControlScope?: SurfaceSemanticControlScopeResolver | undefined;
+    /** Exact caller-paired identity used only by renderers that publish output. */
+    semanticOutputScope?: SurfaceSemanticOutputScope | undefined;
+    onDefinitionActionResult?: ((result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
     /** A published Action reached a successful terminal with a valid report. */
-    onActionCompleted?: ((action: ResponseAction) => void) | undefined;
-    onAdvance?: ((transition: PlannedTransition) => void) | undefined;
+    onActionCompleted?: ((action: ResponseAction, result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
+    onAdvance?: ((transition: PlannedTransition, result?: Pick<ResponseActionInvocationResult<SurfaceWidgetActionDetail>, 'transitionBindings'>) => 'advanced' | 'refused' | void) | undefined;
 }
 /** The action that is safe to use for route advancement, or no action. */
 export declare function completedFormAction(result: ResponseActionInvocationResult<SubmitResult>): ResponseAction | undefined;
+/**
+ * Widget app actions have no Response to validate. Response-scoped widget
+ * actions retain the form completion gate; app scope needs only the successful
+ * resolved action terminal because the engine already enforced app validation.
+ */
+export declare function completedWidgetAction(result: ResponseActionInvocationResult<SurfaceWidgetActionDetail>, document: GeneratedResponseActionsDocument): ResponseAction | undefined;
 /**
  * True when the slot's own binding already produces the heading for its
  * content, so a slot-level title on top of it would be two headings for one
@@ -102,7 +166,7 @@ export declare function rendersOwnHeading(plan: SlotPlan<SurfaceWidget>): boolea
  * announces, and a `<section>` with no accessible name is inert rather than a
  * landmark — which is the honest shape for a slot the author did not name.
  */
-export declare function SurfaceSlotFrame(props: SurfaceSlotProps): import("react/jsx-runtime").JSX.Element;
-export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, onActionCompleted, onAdvance, }: SurfaceSlotProps): ReactNode;
-export declare function renderDefaultDefinitionForm({ plan, grant, responseActionsDocument, onActionCompleted, }: SurfaceDefinitionFormRenderInput): ReactNode;
+export declare function SurfaceSlotFrame(props: SurfaceSlotProps): import("react/jsx-runtime").JSX.Element | null;
+export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, }: SurfaceSlotProps): ReactNode;
+export declare function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, }: SurfaceDefinitionFormRenderInput): ReactNode;
 export { nextLevel };

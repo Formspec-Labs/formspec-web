@@ -6,12 +6,24 @@
  * and uses this delivery controller to ensure one executor call for one logical
  * invocation. A host outcome store can replay an already-recorded terminal.
  */
-import type { ResponseActionInvocationResult, ResponseActionInvokerResult, SubmitResult } from '@formspec-org/react';
+import type { ResponseActionInvocationResult, ResponseActionInvokerResult } from '@formspec-org/react';
 import type { ResponseActionsDocument } from '@formspec-org/types';
-import type { SurfaceWidgetActionExecutor, SurfaceWidgetActionExecutorInput, SurfaceWidgetActionOutcomeStore, SurfaceWidgetStoredActionOutcome } from './widget-api.js';
+import type { SurfaceWidgetActionExecutor, SurfaceWidgetActionDetail, SurfaceWidgetActionExecutorInput, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionInput, SurfaceWidgetStoredActionOutcome } from './widget-api.js';
+export type SurfaceWidgetActionInputAdmission = {
+    accepted: true;
+    input?: SurfaceWidgetActionInput | undefined;
+} | {
+    accepted: false;
+    reason: string;
+};
+/**
+ * Admit detached JSON data without invoking getters or following prototypes.
+ * This is a data boundary, not a serializer: invalid values fail closed.
+ */
+export declare function admitSurfaceWidgetActionInput(candidate: unknown): SurfaceWidgetActionInputAdmission;
 /** Shell-owned identity. Widgets and executors cannot choose it. */
 export declare function allocateWidgetActionInvocationId(): string;
-export declare function normalizeWidgetActionResult(result: ResponseActionInvokerResult<SubmitResult>): ResponseActionInvocationResult<SubmitResult>;
+export declare function normalizeWidgetActionResult(result: ResponseActionInvokerResult<SurfaceWidgetActionDetail>): ResponseActionInvocationResult<SurfaceWidgetActionDetail>;
 /**
  * Select the document only when one exact loaded action declaration exists.
  * Repeated ids across or within documents are ambiguous and resolve to none.
@@ -22,7 +34,7 @@ export interface DeliverWidgetActionRequest extends SurfaceWidgetActionExecutorI
     executor: SurfaceWidgetActionExecutor;
 }
 export interface WidgetActionDelivery {
-    deliver(request: DeliverWidgetActionRequest): Promise<ResponseActionInvocationResult<SubmitResult>>;
+    deliver(request: DeliverWidgetActionRequest): Promise<ResponseActionInvocationResult<SurfaceWidgetActionDetail>>;
 }
 /**
  * One in-memory delivery domain, normally one mounted widget slot. Duplicate
@@ -36,6 +48,7 @@ export interface EmitWidgetActionRequest {
     document: ResponseActionsDocument;
     actionRef: string;
     source: SurfaceWidgetActionExecutorInput['source'];
+    input?: SurfaceWidgetActionInput | undefined;
     executor: SurfaceWidgetActionExecutor;
     outcomeStore?: SurfaceWidgetActionOutcomeStore | undefined;
 }

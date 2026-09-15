@@ -20,7 +20,8 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * the author who signed it.
  */
 import { useState } from 'react';
-import { resolveSurfaceStrings, } from '@formspec-org/surface';
+import { generationNeedAnchors, mergeNeedAnchors, resolveSurfaceStrings, } from '@formspec-org/surface';
+import { needTraceAttributes } from './need-trace.js';
 export function SurfaceTransitions({ from, transitions, strings, onFire, onAdvance, }) {
     // A `supplied-by-slot` transition already has its control on the page — the
     // form's own submit button. Drawing a second one beside it would give a person
@@ -38,16 +39,19 @@ function SurfaceTransition({ from, transition, strings, onFire, onAdvance, }) {
     if (transition.status !== 'fireable' || !onFire) {
         return (_jsx("p", { className: "fs-surface-transition fs-surface-transition--blocked", "data-transition-status": transition.status, ...(transition.status === 'unfireable'
                 ? { 'data-transition-unfireable-reason': transition.unfireableReason }
-                : {}), "data-probe": "transition-blocked", role: "status", children: transition.reason }));
+                : {}), "data-probe": "transition-blocked", role: "status", ...needTraceAttributes(transition.needAnchors), children: transition.reason }));
     }
     const label = transition.target?.route.title ?? transition.to;
-    return (_jsxs("div", { className: "fs-surface-transition", "data-transition-status": transition.status, "data-probe": "transition-fireable", children: [_jsx("button", { type: "button", className: "fs-surface-transition__button", disabled: pending, onClick: () => {
+    const renderedAnchors = mergeNeedAnchors(transition.needAnchors, transition.target
+        ? generationNeedAnchors(transition.target.route)
+        : []);
+    return (_jsxs("div", { className: "fs-surface-transition", "data-transition-status": transition.status, "data-probe": "transition-fireable", ...needTraceAttributes(renderedAnchors), children: [_jsx("button", { type: "button", className: "fs-surface-transition__button", disabled: pending, onClick: () => {
                     setPending(true);
                     setFailure(undefined);
                     void onFire(transition, from)
                         .then((outcome) => {
                         if (outcome.advanced)
-                            onAdvance?.(transition);
+                            onAdvance?.(transition, outcome);
                         else
                             setFailure(outcome.reason ?? strings('transitionFailed'));
                     })

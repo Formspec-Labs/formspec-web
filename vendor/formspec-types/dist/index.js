@@ -15,5 +15,7 @@ export { KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT, COMPONENT_TO_HINT, COM
 export { UI_POLICY } from './ui-policy.js';
 // Path utilities — shared dotted path parsing and normalization
 export { Path, PathSegmentKind } from './path-utils.js';
+// References sidecar processing — target matching and per-field resolution
+export { resolveFieldReferences, targetDefinitionMatches, unresolvedReferenceRefs, } from './references.js';
 export { CORE_FIELD_DATA_TYPES } from './field-data-types.js';
 export { mergeBreakpointNamespace, sortBreakpoints } from './breakpoints.js';

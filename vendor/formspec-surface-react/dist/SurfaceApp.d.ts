@@ -41,15 +41,28 @@
  * of the way of hosts that already have a router — which every host of any size
  * does. A shell that owned history would be a shell that could not be embedded.
  */
-import { type ReactNode } from 'react';
-import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type HeadingLevel, type PlannedTransition, type ResolvedBundle, type SurfaceApp as ComposedSurfaceApp, type SurfaceCompositionOptions, type SurfaceDiagnostic, type SurfaceRouteHandle, type SurfaceStringOverrides, type SurfaceStrings, type SurfaceStaticAssetResolver, type ThemeAuthority, type TransitionConditionEvaluator, type WidgetRegistry } from '@formspec-org/surface';
-import type { RegistryEntry } from '@formspec-org/types';
-import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetModule } from './widget-api.js';
-import type { SurfaceDefinitionFormRenderer } from './SurfaceSlot.js';
-export type FireTransition = (transition: PlannedTransition, from: SurfaceRouteHandle) => Promise<{
+import { type ReactNode } from "react";
+import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type HeadingLevel, type PlannedTransition, type ResolvedBundle, type SurfaceApp as ComposedSurfaceApp, type SurfaceCompositionOptions, type SurfaceDiagnostic, type SurfaceRouteHandle, type SurfaceStringOverrides, type SurfaceStrings, type SurfaceStaticAssetResolver, type ThemeAuthority, type TransitionConditionEvaluator, type WidgetRegistry } from "@formspec-org/surface";
+import type { RegistryEntry } from "@formspec-org/types";
+import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetModule } from "./widget-api.js";
+import type { SurfaceDefinitionFormRenderInput, SurfaceDefinitionFormRenderer, SurfaceSemanticControlScopeResolver } from "./SurfaceSlot.js";
+import type { SurfaceSemanticOutputScopeResolver } from "./semantic-output.js";
+export interface SurfaceTransitionOutcome {
     advanced: boolean;
     reason?: string;
+    /**
+     * Allowlisted strings admitted for authored transition parameters.
+     * Response Action runtimes supply declared transition outputs. A completed
+     * app-scoped widget action may also supply its already-admitted top-level
+     * string input; that merge remains private to the navigation handoff.
+     */
+    transitionBindings?: Readonly<Record<string, string>>;
+}
+/** Matched route identity plus the admitted values parsed from its address. */
+export type SurfaceTransitionSource = SurfaceRouteHandle & Readonly<{
+    params: Readonly<Record<string, string>>;
 }>;
+export type FireTransition = (transition: PlannedTransition, from: SurfaceTransitionSource) => Promise<SurfaceTransitionOutcome>;
 /**
  * Final navigation boundary after a Response Action reports completion.
  *
@@ -57,14 +70,27 @@ export type FireTransition = (transition: PlannedTransition, from: SurfaceRouteH
  * This rechecks the target so a future binding path, stale plan, or adversarial
  * completed-action report still cannot publish an unusable address.
  */
-export declare function navigateAfterCompletedAction(transition: PlannedTransition, routeParams: Readonly<Record<string, string>>, onNavigate: (href: string) => void): 'advanced' | 'refused';
+export declare function navigateAfterCompletedAction(transition: PlannedTransition, routeParams: Readonly<Record<string, string>>, onNavigate: (href: string) => void): "advanced" | "refused";
+export declare function navigateAfterCompletedAction(transition: PlannedTransition, routeParams: Readonly<Record<string, string>>, transitionBindings: Readonly<Record<string, string>> | undefined, onNavigate: (href: string) => void): "advanced" | "refused";
 export interface UseSurfaceAppInput {
     bundle: ResolvedBundle;
     widgetModules?: readonly SurfaceWidgetModule[] | undefined;
     /** Host-supplied navigation labels. See `composeSurfaceApp`. */
-    surfaceLabel?: SurfaceCompositionOptions['surfaceLabel'] | undefined;
+    surfaceLabel?: SurfaceCompositionOptions["surfaceLabel"] | undefined;
     /** Host-supplied token aliases. Not a platform rule — see `createThemeAuthority`. */
     tokenAliases?: Readonly<Record<string, readonly string[]>> | undefined;
+}
+/**
+ * Host/router-owned current route after a committed Surface render.
+ * The Surface object identity lets an evidence adapter pair its caller-owned
+ * canonical digest without asking the renderer to compute or attest one.
+ */
+export interface SurfaceCurrentRouteState {
+    surface: SurfaceRouteHandle["surface"];
+    surfaceId: string;
+    surfaceRef?: string | undefined;
+    routeId: string;
+    routeInstanceId: string;
 }
 export interface SurfaceAppModel {
     app: ComposedSurfaceApp;
@@ -102,6 +128,21 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
     onWidgetActionReport?: ((report: SurfaceWidgetActionReport) => void) | undefined;
     /** Host form runtime seam; the current `FormspecForm` remains the default. */
     renderDefinitionForm?: SurfaceDefinitionFormRenderer | undefined;
+    /** Generic async Response Actions executor used by mounted Definition forms. */
+    definitionActionInvoker?: SurfaceDefinitionFormRenderInput["responseActionInvoker"] | undefined;
+    /**
+     * Caller-paired canonical artifact and Response identity for semantic
+     * controls. Omission leaves ordinary rendering unchanged and publishes no
+     * executable semantic-control lookup.
+     */
+    resolveSemanticControlScope?: SurfaceSemanticControlScopeResolver | undefined;
+    /**
+     * Caller-paired canonical Surface identity for renderer-produced output.
+     * Omission publishes no semantic-output evidence.
+     */
+    resolveSemanticOutputScope?: SurfaceSemanticOutputScopeResolver | undefined;
+    /** Receives every terminal from the default mounted Definition renderer. */
+    onDefinitionActionResult?: SurfaceDefinitionFormRenderInput["onDefinitionActionResult"] | undefined;
     /**
      * Admits or refuses each authored static image source before rendering.
      * Without this host resolver, image slots remain unavailable.
@@ -154,6 +195,11 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
      * replay the list.
      */
     onDiagnostics?: ((diagnostics: readonly SurfaceDiagnostic[]) => void) | undefined;
+    /**
+     * Receives authoritative current-route state after commit and `undefined`
+     * when no route is current or the committed route unmounts.
+     */
+    onCurrentRouteStateChange?: ((state: SurfaceCurrentRouteState | undefined) => void) | undefined;
 }
 export declare function SurfaceApp(props: SurfaceAppProps): import("react/jsx-runtime").JSX.Element;
 export interface SurfaceNavProps {
@@ -166,8 +212,9 @@ export interface SurfaceNavProps {
      */
     onNavigate: (href: string) => void;
     label?: string | undefined;
+    menuLabel?: string | undefined;
 }
-export declare function SurfaceNav({ app, location, routeParams, onNavigate, label }: SurfaceNavProps): import("react/jsx-runtime").JSX.Element;
+export declare function SurfaceNav({ app, location, routeParams, onNavigate, label, menuLabel, }: SurfaceNavProps): import("react/jsx-runtime").JSX.Element | null;
 /**
  * Address-bar location plus a navigate function, for hosts with no router.
  *

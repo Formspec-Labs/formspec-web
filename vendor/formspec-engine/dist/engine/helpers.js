@@ -557,9 +557,9 @@ export function getRepeatAncestors(currentItemPath, repeats) {
 export function isEmptyValue(value) {
     return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
 }
-export function safeEvaluateExpression(expression, context) {
+export function safeEvaluateExpression(expression, context, extensions) {
     try {
-        return wasmEvalFELWithContext(expression, context);
+        return wasmEvalFELWithContext(expression, context, extensions);
     }
     catch {
         return null;

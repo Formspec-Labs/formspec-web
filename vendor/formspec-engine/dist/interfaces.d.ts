@@ -151,6 +151,8 @@ export interface FormEngineRuntimeContext {
 export interface FormEngineOptions {
     runtimeContext?: FormEngineRuntimeContext;
     registryEntries?: RegistryEntry[];
+    /** FEL extension functions by name (Core §3.12), registered before the first evaluation. */
+    extensionFunctions?: Record<string, import('./extension-functions.js').FelExtensionFunctionRegistration>;
     reactiveRuntime?: import('./reactivity/types.js').EngineReactiveRuntime;
     issuerFetcher?: IssuerFetcher;
     issuerOverride?: IssuerSource;
@@ -397,6 +399,10 @@ export interface IFormEngine {
     getLabel(item: FormItem): string;
     /** Reactive Locale-resolved, `{{}}`-interpolated label of the field, display, or group Item at `path`. */
     getItemLabelSignal(path: string): ReadonlyEngineSignal<string> | undefined;
+    /** The same for the Item's `hint`; `null` when neither Locale nor Definition has one. */
+    getItemHintSignal(path: string): ReadonlyEngineSignal<string | null> | undefined;
+    /** The same for the Item's `description`; `null` when neither Locale nor Definition has one. */
+    getItemDescriptionSignal(path: string): ReadonlyEngineSignal<string | null> | undefined;
     loadLocale(doc: LocaleDocument): void;
     setLocale(code: string): void;
     getActiveLocale(): string;
@@ -431,6 +437,11 @@ export interface IFormEngine {
     }>): void;
     clearExternalValidation?(path?: string): void;
     setRegistryEntries?(entries: RegistryEntry[]): void;
+    /**
+     * Register a FEL extension function (Core §3.12) and re-evaluate. Throws for a FEL built-in or
+     * reserved word. Unregistered calls stay definition errors (`CONSTRAINT_PARSE_ERROR` on binds).
+     */
+    registerExtensionFunction?(name: string, registration: import('./extension-functions.js').FelExtensionFunctionRegistration): void;
     migrateResponse(responseData: JsonRecord, fromVersion: string): JsonRecord;
 }
 export type MappingDirection = 'forward' | 'reverse';

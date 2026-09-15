@@ -62,9 +62,13 @@ export interface WasmFelContext {
     meta?: Record<string, string | number | boolean>;
 }
 /** Evaluate a FEL expression with full FormspecEnvironment context (value + diagnostics flag). */
-export declare function wasmEvalFELWithContextEnvelope(expression: string, context: WasmFelContext): FelEvalResult;
+export declare function wasmEvalFELWithContextEnvelope(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FelEvalResult;
 /** Evaluate a FEL expression with full FormspecEnvironment context. Returns the value only. */
-export declare function wasmEvalFELWithContext(expression: string, context: WasmFelContext): any;
+export declare function wasmEvalFELWithContext(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): any;
+/** Host extension functions (Core §3.12) handed to evaluating exports; Rust calls `arity` and `invoke`. */
+export type FelExtensionHost = import('../wasm-pkg-runtime/formspec_wasm_runtime.js').FelExtensionHost;
+/** Throws when `name` may not be an extension function: a FEL built-in or reserved word (Core §3.12). */
+export declare function wasmCheckFELExtensionName(name: string): void;
 /**
  * A single recorded event during FEL evaluation.
  *
@@ -134,11 +138,36 @@ export interface FelTraceResult {
  */
 export declare function wasmEvalFELWithTrace(expression: string, fields?: Record<string, unknown>): FelTraceResult;
 /** Evaluate a FEL expression against full FormspecEnvironment context and trace each step. */
-export declare function wasmEvalFELWithContextTrace(expression: string, context: WasmFelContext): FelTraceResult;
-/** Locale §3.3.1 — true if the expression AST is only literals and unary `not` / `!` / `-`. */
-export declare function wasmFelExprIsInterpolationStaticLiteral(expression: string): boolean;
+export declare function wasmEvalFELWithContextTrace(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FelTraceResult;
+/** Interpolation result from Rust: resolved text plus one warning per expression left literal. */
+export interface WasmInterpolated {
+    text: string;
+    warnings: Array<{
+        expression: string;
+        message: string;
+    }>;
+}
+/** Locale §3.3.1: resolve every `{{expression}}` in `template` against a FEL context, in one call. */
+export declare function wasmInterpolateFELTemplate(template: string, context: WasmFelContext, extensions?: FelExtensionHost): WasmInterpolated;
+/**
+ * Locale §3.3.1 with a host evaluator: Rust scans the template and applies the escape, failure,
+ * and coercion rules; `evaluate(expression)` returns JSON `{ value, hasErrorDiagnostics? }` or throws.
+ */
+export declare function wasmInterpolateTemplate(template: string, evaluate: (expression: string) => string): WasmInterpolated;
 /** Normalize FEL source before evaluation (bare `$`, repeat qualifiers, repeat aliases). */
 export declare function wasmPrepareFelExpression(optionsJson: string): string;
+/**
+ * One form's FEL state, resident in WASM across ad-hoc reads.
+ *
+ * `load` replaces the form-scope snapshot; each read names only its expression and Item path, so its cost is
+ * the scope it resolves against, not the size of the form. Call `free()` when the owning engine is disposed.
+ */
+export type WasmFelContextHandle = import('../wasm-pkg-runtime/formspec_wasm_runtime.js').FelContext;
+/** Creates a resident FEL context from a Definition's leaf typing and `excludedValue: "null"` binds. */
+export declare function wasmCreateFelContext(schema: {
+    dataTypes: Record<string, string>;
+    excludedValueNull: string[];
+}): WasmFelContextHandle;
 /** Inline `optionSet` references from `optionSets` on a definition JSON document. */
 export declare function wasmResolveOptionSetsOnDefinition(definitionJson: string): string;
 /** Apply `migrations` on a definition to flat response data (FEL transforms in Rust). */
@@ -176,7 +205,11 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
     registryDocuments?: unknown[];
     /** Repeat row counts by group base path (authoritative for min/max repeat cardinality). */
     repeatCounts?: Record<string, number>;
-}): {
+    /** Ask for resolved Item text (Core §4.2.1); `localeStrings` are cascade-resolved Locale strings. */
+    itemText?: {
+        localeStrings?: Record<string, string>;
+    };
+}, extensions?: FelExtensionHost): {
     values: any;
     validations: any[];
     diagnostics: Array<{
@@ -189,10 +222,29 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
     variables: any;
     required: Record<string, boolean>;
     readonly: Record<string, boolean>;
+    /**
+     * Resolved Item text by instance path; present only when `context.itemText` asked for it.
+     *
+     * `label` / `description` / `hint` are the context-less resolutions; `labels` / `descriptions` /
+     * `hints` carry the per-display-context ones (Locale §3.1.2), each omitted when empty.
+     */
+    itemText?: Record<string, {
+        label: string;
+        labels?: Record<string, string>;
+        description?: string;
+        descriptions?: Record<string, string>;
+        hint?: string;
+        hints?: Record<string, string>;
+    }>;
 };
-/** Evaluate a standalone Screener Document against respondent inputs.
- *  Returns a Determination Record (always non-null). */
-export declare function wasmEvaluateScreenerDocument(screener: unknown, answers: Record<string, unknown>, context?: Record<string, unknown>): import('@formspec-org/types').DeterminationRecord;
+/**
+ * Evaluate a standalone Screener Document against respondent inputs.
+ * Returns a Determination Record (always non-null).
+ *
+ * `extensions` resolves host extension functions (Core §3.12) in route `condition` / `score` and
+ * phase `activeWhen`; without them such a call is a definition error and the route is eliminated.
+ */
+export declare function wasmEvaluateScreenerDocument(screener: unknown, answers: Record<string, unknown>, context?: Record<string, unknown>, extensions?: FelExtensionHost): import('@formspec-org/types').DeterminationRecord;
 /** Analyze a FEL expression and return structural info. */
 export declare function wasmAnalyzeFEL(expression: string): WasmFelAnalysisResultJson;
 /** Analyze a FEL expression with field data type context for type-mismatch warnings. */

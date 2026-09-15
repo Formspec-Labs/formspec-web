@@ -14,6 +14,8 @@ export { UI_POLICY } from './ui-policy.js';
 export type { UiPolicy } from './ui-policy.js';
 export { Path, PathSegmentKind } from './path-utils.js';
 export type { PathSegment } from './path-utils.js';
+export { resolveFieldReferences, targetDefinitionMatches, unresolvedReferenceRefs, } from './references.js';
+export type { ReferenceAudience, ReferenceBindings } from './references.js';
 export { CORE_FIELD_DATA_TYPES } from './field-data-types.js';
 export type { CoreFieldDataType } from './field-data-types.js';
 export { mergeBreakpointNamespace, sortBreakpoints } from './breakpoints.js';

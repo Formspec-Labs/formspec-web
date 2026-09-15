@@ -1,20 +1,21 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
 import { diffEvalResults } from '../diff.js';
-import { interpolateMessage } from '../interpolate-message.js';
-import { analyzeFEL, evalFELWithContextTrace, getFELDependencies, } from '../fel/fel-api-runtime.js';
+import { FelExtensionFunctions } from '../extension-functions.js';
+import { analyzeFEL, getFELDependencies, } from '../fel/fel-api-runtime.js';
 import { preactReactiveRuntime } from '../reactivity/preact-runtime.js';
 import { LocaleStore } from '../locale.js';
 import { FetchIssuerFetcher } from '../issuer/IssuerFetcher.js';
 import { IssuerStore } from '../issuer/IssuerStore.js';
-import { createFieldViewModel, resolveItemLabel } from '../field-view-model.js';
+import { createFieldViewModel, resolveItemHelpText, resolveItemLabel, } from '../field-view-model.js';
 import { createFormViewModel } from '../form-view-model.js';
-import { wasmEvaluateDefinition, wasmEvalFELWithContext, wasmEvalFELWithContextEnvelope, } from '../wasm-bridge-runtime.js';
+import { wasmCreateFelContext, wasmEvaluateDefinition, } from '../wasm-bridge-runtime.js';
 import { resolveOptionSetsOnDefinition, validateCalculateBindCycles, validateVariableDefinitionCycles, } from './definition-setup.js';
 import { validateInstanceDataAgainstSchema } from './instance-schema.js';
 import { patchDeltaSignalsFromWasm, patchErrorSignalsFromWasm, patchValueSignalsFromWasm, } from './reactive-patches.js';
 import { applyRepeatGroupTreeSnapshot, clearRepeatIndexedSubtree, snapshotRepeatGroupTree, } from './repeat-ops.js';
 import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
-import { buildWasmFelContextBase, buildWasmFelExpressionContext, mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
+import { buildWasmFelExpressionContext, mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
+import { felContextSchema, felContextSnapshot } from './fel-context.js';
 import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getAncestorBasePaths, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, safeEvaluateExpression, setNestedPathValue, setResponsePathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
 import { DefaultValidationProfileResolver, } from '../validation/index.js';
 export class FormEngine {
@@ -35,7 +36,8 @@ export class FormEngine {
         this._fieldItems = new Map();
         /** `dataType` of every field Item by base path, from the definition (FEL value tagging, scope checks). */
         this._fieldDataTypes = {};
-        this._felContextBase = null;
+        /** WASM-resident FEL context for ad-hoc reads, reloaded when `key` (the engine's state epoch) changes. */
+        this._felContext = null;
         this._groupItems = new Map();
         this._shapeTiming = new Map();
         this._instanceCalculateBinds = [];
@@ -43,6 +45,8 @@ export class FormEngine {
         this._prePopulateReadonly = new Set();
         this._calculatedFields = new Set();
         this._registryEntries = new Map();
+        /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
+        this._extensionFunctions = new FelExtensionFunctions();
         this._registryDocuments = [];
         this._remoteOptionsTasks = [];
         this._instanceSourceTasks = [];
@@ -51,6 +55,8 @@ export class FormEngine {
         this._externalValidation = [];
         this._fieldViewModels = {};
         this._itemLabelSignals = new Map();
+        /** Hint / description signals for Items with no field view model, keyed `<property>:<instance path>`. */
+        this._itemHelpTextSignals = new Map();
         this._data = {};
         this._previousEvalResult = null;
         this._fullResult = null;
@@ -60,7 +66,7 @@ export class FormEngine {
             nowProvider: () => new Date(),
         };
         const options = FormEngine.normalizeConstructorOptions(optionsOrRuntimeContext, legacyRegistryEntries);
-        const { runtimeContext, registryEntries, reactiveRuntime = preactReactiveRuntime, issuerFetcher, issuerOverride, } = options;
+        const { runtimeContext, registryEntries, reactiveRuntime = preactReactiveRuntime, issuerFetcher, issuerOverride, extensionFunctions, } = options;
         this._rx = reactiveRuntime;
         this._issuerStore = new IssuerStore(issuerFetcher ?? new FetchIssuerFetcher());
         this._validationProfileResolver = new DefaultValidationProfileResolver();
@@ -80,6 +86,9 @@ export class FormEngine {
         this._variableDefs = [...(this.definition.variables ?? [])];
         if (runtimeContext) {
             this.setRuntimeContext(runtimeContext);
+        }
+        for (const [name, registration] of Object.entries(extensionFunctions ?? {})) {
+            this._extensionFunctions.register(name, registration);
         }
         if (registryEntries) {
             for (const entry of registryEntries) {
@@ -108,7 +117,7 @@ export class FormEngine {
             getDefinitionDescription: () => this.definition.description ?? '',
             getPageTitle: () => undefined,
             getPageDescription: () => undefined,
-            evalFEL: (expr) => this._evalLocaleFEL(expr),
+            interpolate: (template) => this._interpolate(template),
             getValidationCounts: () => {
                 const report = this.getValidationReport();
                 return {
@@ -312,7 +321,7 @@ export class FormEngine {
             this.instanceVersion.value;
             this.structureVersion.value;
             // compileExpression is a public API — propagate errors (unlike internal evaluation).
-            return wasmEvalFELWithContext(this.normalizeExpressionForWasm(expression, currentItemName), this.felContext(currentItemName));
+            return JSON.parse(this.felContext().evaluate(expression, currentItemName, false, this.nowISO(), this._extensionFunctions)).value;
         };
     }
     setValue(name, value) {
@@ -446,7 +455,7 @@ export class FormEngine {
             return cached.trace.map((step) => cloneValue(step));
         }
         try {
-            const result = evalFELWithContextTrace(this.normalizeExpressionForWasm(calculate, basePath), this.felContext(basePath));
+            const result = JSON.parse(this.felContext().evaluateTrace(calculate, basePath, false, this.nowISO(), this._extensionFunctions));
             const trace = Array.isArray(result.trace) ? result.trace : [];
             this._derivationTraceCache.set(basePath, {
                 version,
@@ -692,10 +701,48 @@ export class FormEngine {
             inlineLabel: item.label,
             labels: item.labels,
             context: this._labelContextSignal.value,
-            evalFEL: (expression) => this._evalLocaleFEL(expression, path),
+            interpolate: (template) => this._interpolate(template, path),
         }).value);
         this._itemLabelSignals.set(path, label);
         return label;
+    }
+    /**
+     * Reactive hint a respondent sees for the Item at instance `path` — field, display, or group. Same
+     * cascade as `FieldViewModel.hint` (Locale `<key>.hint@context` → `<key>.hint` → inline `hint`; no
+     * Definition-side context step), `{{}}` interpolated in the Item's scope. `null` when no source has
+     * one; `undefined` when no Item has that path.
+     */
+    getItemHintSignal(path) {
+        return this.itemHelpTextSignal(path, 'hint');
+    }
+    /** {@link FormEngine.getItemHintSignal} for the Item's `description`. */
+    getItemDescriptionSignal(path) {
+        return this.itemHelpTextSignal(path, 'description');
+    }
+    itemHelpTextSignal(path, property) {
+        const fieldVM = this._fieldViewModels[path];
+        if (fieldVM) {
+            return property === 'hint' ? fieldVM.hint : fieldVM.description;
+        }
+        const key = `${property}:${path}`;
+        const cached = this._itemHelpTextSignals.get(key);
+        if (cached) {
+            return cached;
+        }
+        const item = path ? this._groupItems.get(path) ?? this._groupItems.get(toBasePath(path)) : undefined;
+        if (!item) {
+            return undefined;
+        }
+        const resolved = this._rx.computed(() => resolveItemHelpText({
+            localeStore: this._localeStore,
+            itemKey: item.key,
+            property,
+            inlineText: item[property],
+            context: this._labelContextSignal.value,
+            interpolate: (template) => this._interpolate(template, path),
+        }).value);
+        this._itemHelpTextSignals.set(key, resolved);
+        return resolved;
     }
     loadLocale(doc) {
         this._localeStore.loadLocale(doc);
@@ -721,7 +768,7 @@ export class FormEngine {
     resolveLocaleString(key, fallback, itemPath = '') {
         const localized = this._localeStore.lookupKey(key);
         if (localized !== null) {
-            return interpolateMessage(localized, (expr) => this._evalLocaleFEL(expr, itemPath)).text;
+            return this._interpolate(localized, itemPath);
         }
         return fallback;
     }
@@ -751,7 +798,13 @@ export class FormEngine {
         this._evaluate();
     }
     dispose() {
-        // No-op — WASM-backed engine has no subscriptions to teardown.
+        // The only owned WASM allocation is the resident FEL context; signals need no teardown.
+        this._felContext?.handle.free();
+        this._felContext = null;
+    }
+    registerExtensionFunction(name, registration) {
+        this._extensionFunctions.register(name, registration);
+        this._evaluate();
     }
     setRegistryEntries(entries) {
         this._registryEntries.clear();
@@ -777,7 +830,8 @@ export class FormEngine {
             || Object.prototype.hasOwnProperty.call(maybeOptions, 'registryEntries')
             || Object.prototype.hasOwnProperty.call(maybeOptions, 'reactiveRuntime')
             || Object.prototype.hasOwnProperty.call(maybeOptions, 'issuerFetcher')
-            || Object.prototype.hasOwnProperty.call(maybeOptions, 'issuerOverride'));
+            || Object.prototype.hasOwnProperty.call(maybeOptions, 'issuerOverride')
+            || Object.prototype.hasOwnProperty.call(maybeOptions, 'extensionFunctions'));
         if (hasOptionsShape) {
             return {
                 ...maybeOptions,
@@ -1111,7 +1165,7 @@ export class FormEngine {
             resultOverride,
             dataOverride,
             scopedVariableOverrides,
-        })));
+        })), this._extensionFunctions);
     }
     felContextInput(currentItemPath, overrides = {}) {
         return {
@@ -1136,19 +1190,42 @@ export class FormEngine {
         };
     }
     /**
-     * FEL context for ad-hoc reads (compileExpression, Locale `{{}}`, derivation trace). The form-scope base is
-     * built once per engine state: values, MIPs, and results change only through `_evaluate` (evaluation
-     * version), rows through structure changes, instances through the instance version. Reading those signals
-     * also re-runs a caller's computed whenever the base would change. In-flight evaluation reads use
-     * `evaluateExpression`, which always builds fresh.
+     * WASM-resident FEL context for ad-hoc reads (compileExpression, Locale `{{}}`, derivation trace).
+     *
+     * The form-scope snapshot is loaded once per engine state: values, MIPs, and results change only through
+     * `_evaluate` (evaluation version), rows through structure changes, instances through the instance
+     * version. Reading those signals also re-runs a caller's computed whenever the snapshot would change.
+     * Each read then names only its expression and Item path, so it costs the scope it resolves against
+     * rather than the size of the form. In-flight evaluation reads use `evaluateExpression`, which builds a
+     * one-shot context from the partial state it is midway through producing.
      */
-    felContext(currentItemPath) {
+    felContext() {
         const key = `${this._evaluationVersion.value}:${this.structureVersion.value}:${this.instanceVersion.value}`;
-        const input = this.felContextInput(currentItemPath);
-        if (this._felContextBase?.key !== key) {
-            this._felContextBase = { key, base: buildWasmFelContextBase(input) };
+        if (!this._felContext) {
+            this._felContext = {
+                key: '',
+                handle: wasmCreateFelContext(felContextSchema(this._fieldDataTypes, this._bindConfigs)),
+            };
         }
-        return buildWasmFelExpressionContext(input, this._felContextBase.base);
+        if (this._felContext.key !== key) {
+            this._felContext.handle.load(JSON.stringify(felContextSnapshot({
+                data: this._data,
+                fullResult: this._fullResult,
+                fieldSignals: this.signals,
+                validationResults: this.validationResults,
+                relevantSignals: this.relevantSignals,
+                readonlySignals: this.readonlySignals,
+                requiredSignals: this.requiredSignals,
+                repeats: this.repeats,
+                variableDefs: this._variableDefs,
+                variableSignals: this.variableSignals,
+                instanceData: this.instanceData,
+                locale: this._runtimeContext.locale,
+                meta: this._runtimeContext.meta,
+            })));
+            this._felContext.key = key;
+        }
+        return this._felContext.handle;
     }
     repeatCountsSnapshot() {
         return Object.fromEntries(Object.entries(this.repeats).map(([path, repeatSignal]) => [path, repeatSignal.value]));
@@ -1311,7 +1388,7 @@ export class FormEngine {
             instances: this.instanceData,
             registryDocuments: this._registryDocuments,
             repeatCounts: this.repeatCountsSnapshot(),
-        }));
+        }), this._extensionFunctions);
         const evalResult = this.shapedEvalResult(baseResult);
         // Apply TS-side fixups that WASM can't handle:
         // 1. Instance calculate write-back (binds targeting @instance(...) paths)
@@ -1357,7 +1434,7 @@ export class FormEngine {
             instances: this.instanceData,
             registryDocuments: this._registryDocuments,
             repeatCounts: this.repeatCountsSnapshot(),
-        })));
+        }), this._extensionFunctions));
     }
     applyInstanceCalculates(result) {
         let changed = false;
@@ -1413,6 +1490,11 @@ export class FormEngine {
                 this._itemLabelSignals.delete(path);
             }
         }
+        for (const key of this._itemHelpTextSignals.keys()) {
+            if (key.slice(key.indexOf(':') + 1).startsWith(repeatPrefix)) {
+                this._itemHelpTextSignals.delete(key);
+            }
+        }
         clearRepeatIndexedSubtree({
             rootRepeatPath,
             signals: this.signals,
@@ -1453,13 +1535,19 @@ export class FormEngine {
             getOptionsState: () => this.optionStateSignals[basePath] ?? this._rx.signal({ loading: false, error: null }),
             getOptionSetName: () => item.optionSet,
             setFieldValue: (value) => this.setValue(path, value),
-            evalFEL: (expr) => this._evalLocaleFEL(expr, path),
+            interpolate: (template) => this._interpolate(template, path),
         });
         this._fieldViewModels[path] = vm;
     }
-    /** Locale §3.3.2: evaluate a `{{}}` segment in the binding scope of `itemPath` (form scope when empty). */
-    _evalLocaleFEL(expression, itemPath = '') {
-        return wasmEvalFELWithContextEnvelope(expression, this.felContext(itemPath));
+    /**
+     * Locale §3.3.2: resolve `{{}}` in `template` in the binding scope of `itemPath` (form scope when empty),
+     * one WASM call per template. Plain text skips the FEL context, so it tracks no evaluation signals.
+     */
+    _interpolate(template, itemPath = '') {
+        if (!template.includes('{{')) {
+            return template;
+        }
+        return JSON.parse(this.felContext().interpolate(template, itemPath, this.nowISO(), this._extensionFunctions)).text;
     }
     getDisplayedIssuerPin() {
         if (this._resolvedIssuer

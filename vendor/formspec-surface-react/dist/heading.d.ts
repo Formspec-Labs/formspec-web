@@ -8,14 +8,12 @@
  * title. Heading levels are the document outline, and the outline is an
  * accessibility contract (WCAG 1.3.1), so the level is an input.
  */
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import type { HeadingLevel } from '@formspec-org/surface';
-export interface HeadingProps {
+export interface HeadingProps extends Omit<HTMLAttributes<HTMLHeadingElement>, 'children'> {
     level: HeadingLevel;
-    className?: string;
-    id?: string;
     children: ReactNode;
 }
-export declare function Heading({ level, className, id, children }: HeadingProps): import("react/jsx-runtime").JSX.Element;
+export declare function Heading({ level, children, ...attributes }: HeadingProps): import("react/jsx-runtime").JSX.Element;
 /** One level down, never past 6. */
 export declare function nextLevel(level: HeadingLevel): HeadingLevel;

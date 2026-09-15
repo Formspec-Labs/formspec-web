@@ -8,6 +8,17 @@ import { useSignal } from './use-signal';
 export const RepeatInstanceContext = createContext('');
 /** Top-level string props a `$component` key addresses (Locale §3.1.8); an ActionButton label may be `{ literal }`. */
 const LOCALIZABLE_PROPS = ['text', 'label', 'title', 'subtitle', 'description', 'triggerLabel', 'pendingLabel', 'placeholder'];
+/**
+ * Array props whose elements a `$component` key addresses by index (Locale §3.1.8): `<prop>[N]` for a string
+ * element, `<prop>[N].<subProp>` for an object element. Keyed by component: `columns` and `items` mean other
+ * things elsewhere (Grid tracks).
+ */
+const LOCALIZABLE_ARRAY_PROPS = {
+    Tabs: { prop: 'tabLabels' },
+    Accordion: { prop: 'labels' },
+    DataTable: { prop: 'columns', subProp: 'header' },
+    Summary: { prop: 'items', subProp: 'label' },
+};
 const UNCHANGED = signal(null);
 function literalOf(value) {
     if (typeof value === 'string')
@@ -17,7 +28,8 @@ function literalOf(value) {
 }
 /**
  * The node renderers see, live:
- * - an authored node's string props replaced by `$component.<id>.<prop>` Locale strings, `{{}}` evaluated in
+ * - an authored node's string props, and string elements of its array props (`tabLabels[0]`,
+ *   `columns[0].header`), replaced by `$component.<id>.<prop>` Locale strings, `{{}}` evaluated in
  *   form scope, or in the innermost repeat instance scope inside a repeat (Locale §3.3.2);
  * - a group node titled with its group's inline label titled with that group's live label instead
  *   (`engine.getItemLabelSignal`: Locale, label context, `{{}}`).
@@ -47,6 +59,25 @@ export function useLocalizedNode(node) {
                     if (resolved === inline)
                         continue;
                     set(prop, typeof props[prop] === 'string' ? resolved : { ...props[prop], literal: resolved });
+                }
+                const arrayProp = LOCALIZABLE_ARRAY_PROPS[node.component];
+                const elements = arrayProp ? props[arrayProp.prop] : undefined;
+                if (arrayProp && Array.isArray(elements)) {
+                    const { prop, subProp } = arrayProp;
+                    let changed = false;
+                    const localized = elements.map((element, index) => {
+                        const inline = subProp ? element?.[subProp] : element;
+                        if (typeof inline !== 'string')
+                            return element;
+                        const key = `$component.${id}.${prop}[${index}]${subProp ? `.${subProp}` : ''}`;
+                        const resolved = engine.resolveLocaleString(key, inline, scopePath);
+                        if (resolved === inline)
+                            return element;
+                        changed = true;
+                        return subProp ? { ...element, [subProp]: resolved } : resolved;
+                    });
+                    if (changed)
+                        set(prop, localized);
                 }
             }
             if (groupPath && group?.type === 'group' && (next ?? props).title === group.label) {

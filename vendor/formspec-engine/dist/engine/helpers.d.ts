@@ -3,7 +3,7 @@ import type { EngineSignal } from '../reactivity/types.js';
 import type { FormBind, FormDefinition, FormItem, OptionEntry, ValidationResult } from '@formspec-org/types';
 import type { EvalValidation } from '../diff.js';
 import type { FormEngineRuntimeContext, FormFieldValue, JsonRecord, JsonValue, MappingDiagnostic, RuntimeMappingResult } from '../interfaces.js';
-import { type WasmFelContext } from '../wasm-bridge-runtime.js';
+import { type FelExtensionHost, type WasmFelContext } from '../wasm-bridge-runtime.js';
 export type EngineBindConfig = FormBind & {
     remoteOptions?: string;
     precision?: number;
@@ -66,7 +66,7 @@ export declare function getRepeatAncestors(currentItemPath: string, repeats: Rec
     count: number;
 }>;
 export declare function isEmptyValue(value: unknown): boolean;
-export declare function safeEvaluateExpression(expression: string, context: WasmFelContext): FormFieldValue;
+export declare function safeEvaluateExpression(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FormFieldValue;
 export declare function extractInlineBind(item: FormItem, path: string): EngineBindConfig | null;
 export declare function detectNamedCycle(graph: Map<string, Set<string>>, message: string): void;
 export declare function topoSortKeys<T extends {

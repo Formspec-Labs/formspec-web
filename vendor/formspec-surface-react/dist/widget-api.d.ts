@@ -22,15 +22,18 @@
  *   A widget does not decide this and cannot change it; it is told, so a widget
  *   that would otherwise paint a tenant accent can render its unbranded form.
  *
- * - `emitAction` — the only action capability. The widget names a declared
- *   output. It never sees the mapped Response Actions id or a route.
+ * - `actions` — resolved, read-only presentation metadata for mapped Response
+ *   Actions. This lets a generic widget use the Action's authored label and
+ *   intent without duplicating them in widget configuration.
+ * - `emitAction` — the only action capability. The widget still names a
+ *   declared output; action ids are metadata and cannot be executed directly.
  *
  * A widget is NOT given navigation, an executor, or the route table. A
  * module-supplied widget navigating the app is a module deciding the app's
  * route graph, and transitions are the shell's (`transitions.ts`).
  */
 import type { ReactNode } from 'react';
-import type { HeadingLevel, RouteClass, WidgetModule } from '@formspec-org/surface';
+import type { HeadingLevel, RouteClass, SurfaceSemanticOutputPublisherScope, WidgetModule } from '@formspec-org/surface';
 import type { ResponseActionInvocationResult, ResponseActionInvokerResult, SubmitResult } from '@formspec-org/react';
 import type { ResponseActionsDocument } from '@formspec-org/types';
 export interface SurfaceWidgetRouteContext {
@@ -41,6 +44,43 @@ export interface SurfaceWidgetRouteContext {
     routeClass: RouteClass | undefined;
     /** Resolved route parameters for the current URL. */
     params: Readonly<Record<string, string>>;
+}
+export type SurfaceWidgetActionLabel = Readonly<{
+    literal: string;
+}> | Readonly<{
+    ref: string;
+}>;
+/**
+ * Read-only presentation metadata for one output whose Surface binding
+ * resolves to exactly one loaded Response Actions Action.
+ */
+export interface SurfaceWidgetAction {
+    outputName: string;
+    actionRef: string;
+    intent: string;
+    label?: SurfaceWidgetActionLabel | undefined;
+    /** Direct authored Need anchors on the resolved Response Actions Action. */
+    needAnchors?: readonly string[] | undefined;
+}
+export type SurfaceWidgetActionValue = null | boolean | number | string | readonly SurfaceWidgetActionValue[] | Readonly<{
+    [key: string]: SurfaceWidgetActionValue;
+}>;
+/**
+ * Selected structured data emitted with an output. The shell admits only
+ * finite, own-property JSON data and supplies a detached frozen copy.
+ */
+export type SurfaceWidgetActionInput = Readonly<{
+    [key: string]: SurfaceWidgetActionValue;
+}>;
+/** Response submission detail or structured input returned by an app action. */
+export type SurfaceWidgetActionDetail = SubmitResult | SurfaceWidgetActionInput;
+export type SurfaceWidgetActionFeedbackStatus = 'completed' | 'failed' | 'refused' | 'obsolete';
+export interface SurfaceWidgetActionEmission {
+    /** False when this call joins an already-running logical action or is refused. */
+    started: boolean;
+    completion: Promise<Readonly<{
+        status: SurfaceWidgetActionFeedbackStatus;
+    }>>;
 }
 export interface SurfaceWidgetProps {
     moduleId: string;
@@ -56,9 +96,23 @@ export interface SurfaceWidgetProps {
     config: Readonly<Record<string, unknown>>;
     /** Frozen object containing only successfully delivered declared inputs. */
     data: Readonly<Record<string, unknown>>;
-    /** The widget's sole action capability; the shell owns mapping and execution. */
-    emitAction: (outputName: string) => void;
+    /**
+     * Exact resolved action metadata. Optional for source compatibility with
+     * modules compiled against Surface React 0.1; the shell always supplies it.
+     */
+    actions?: readonly SurfaceWidgetAction[] | undefined;
+    /**
+     * The widget's sole action capability; the shell owns mapping and execution.
+     * The optional emission lets a generic control render pending and terminal
+     * feedback without gaining access to the executor.
+     */
+    emitAction: (outputName: string, input?: SurfaceWidgetActionInput | undefined) => SurfaceWidgetActionEmission | void;
     admitsTenantTheme: boolean;
+    /**
+     * Caller-paired output identity. A widget publishes nothing unless its own
+     * renderer explicitly commits semantic outputs through this scope.
+     */
+    semanticOutputScope?: SurfaceSemanticOutputPublisherScope | undefined;
 }
 export type SurfaceWidget = (props: SurfaceWidgetProps) => ReactNode;
 export type SurfaceWidgetModule = WidgetModule<SurfaceWidget>;
@@ -76,20 +130,23 @@ export interface SurfaceWidgetActionExecutorInput {
     /** Shell-generated and stable for this logical emission and its retries. */
     invocationId: string;
     source: SurfaceWidgetActionSource;
+    /** Frozen structured data selected by the widget configuration, when any. */
+    input?: SurfaceWidgetActionInput | undefined;
 }
 /**
  * Host adapter to the existing Response Actions executor. The shell supplies
  * identity and exact action resolution; this port owns preconditions,
  * validation, effects, retry, idempotency and durable execution.
  */
-export type SurfaceWidgetActionExecutor = (input: SurfaceWidgetActionExecutorInput) => ResponseActionInvokerResult<SubmitResult> | Promise<ResponseActionInvokerResult<SubmitResult>>;
+export type SurfaceWidgetActionExecutor = (input: SurfaceWidgetActionExecutorInput) => ResponseActionInvokerResult<SurfaceWidgetActionDetail> | Promise<ResponseActionInvokerResult<SurfaceWidgetActionDetail>>;
 export interface SurfaceWidgetActionOutcomeKey {
     generation: string;
     source: SurfaceWidgetActionSource;
+    input?: SurfaceWidgetActionInput | undefined;
 }
 export interface SurfaceWidgetStoredActionOutcome {
     invocationId: string;
-    result: ResponseActionInvocationResult<SubmitResult>;
+    result: ResponseActionInvocationResult<SurfaceWidgetActionDetail>;
 }
 /**
  * Optional host persistence for already-recorded terminals.
@@ -108,6 +165,6 @@ export interface SurfaceWidgetActionReport {
     invocationId: string;
     actionRef?: string | undefined;
     outputName: string;
-    result?: ResponseActionInvocationResult<SubmitResult> | undefined;
+    result?: ResponseActionInvocationResult<SurfaceWidgetActionDetail> | undefined;
     navigation: 'not-attempted' | 'none' | 'advanced' | 'ambiguous' | 'obsolete-generation';
 }

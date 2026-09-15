@@ -1,4 +1,5 @@
-/** @filedesc Template string interpolator for locale {{expr}} sequences (spec §3.3.1). */
+/** @filedesc Locale §3.3.1 `{{expression}}` interpolation — thin bridges to the Rust template rules. */
+import { type FelExtensionHost, type WasmFelContext } from './wasm-bridge-runtime.js';
 export interface InterpolationWarning {
     expression: string;
     error: string;
@@ -8,16 +9,13 @@ export interface InterpolateResult {
     warnings: InterpolationWarning[];
 }
 /**
- * Resolve `{{expr}}` sequences in a locale string.
+ * Resolve `{{expression}}` sequences with a host evaluator.
  *
- * Rules (§3.3.1):
- * 1. `{{{{` → literal `{{` (escape before scanning)
- * 2. Failed parse/eval → preserve literal `{{expr}}` + warning.
- *    Includes any eval where WASM records error-severity diagnostics (side-channel check).
- * 3–4. Coerce values; `null` → "" except rule 3a (no `$`/`@` and not a static literal → preserve)
- * 5. Replacement text is NOT re-scanned for `{{`
- *
- * @param template - String potentially containing `{{expr}}` placeholders
- * @param evaluator - Evaluates a FEL expression string, returns a value
+ * Rust owns the rules (Locale §3.3.1): `{{{{` escapes, a failed expression stays literal with a
+ * warning (a throw, error diagnostics on a {@link FelEvalResult}, or rule 3a's unexplained
+ * `null`), results coerce to strings, and replacement text is not re-scanned. `evaluator` returns
+ * a value or a `FelEvalResult` envelope. Requires the runtime WASM to be initialized.
  */
 export declare function interpolateMessage(template: string, evaluator: (expr: string) => unknown): InterpolateResult;
+/** Resolve `{{expression}}` sequences against a FEL context in one WASM call (Locale §3.3.1). */
+export declare function interpolateFELTemplate(template: string, context: WasmFelContext, extensions?: FelExtensionHost): InterpolateResult;

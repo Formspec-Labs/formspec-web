@@ -260,8 +260,9 @@ function DataTableDisplay({ node, cssClass, style, metadataAttrs, }) {
     const { engine } = useFormspecContext();
     const bindKey = node.props?.bind;
     const columns = node.props?.columns || [];
-    const allowAdd = node.props?.allowAdd === true;
-    const allowRemove = node.props?.allowRemove === true;
+    // Component §6.14: both default to true; false only hides the affordance (§4.4).
+    const allowAdd = node.props?.allowAdd !== false;
+    const allowRemove = node.props?.allowRemove !== false;
     const showRowNumbers = node.props?.showRowNumbers === true;
     const groupItem = bindKey ? findItemByKey(engine.getDefinition().items ?? [], bindKey) : null;
     const fieldByKey = new Map();
@@ -273,7 +274,7 @@ function DataTableDisplay({ node, cssClass, style, metadataAttrs, }) {
     }
     const defaultCurrency = engine.getDefinition()?.formPresentation?.defaultCurrency || 'USD';
     const repeatPath = bindKey || '';
-    const { count, relevant, canAdd, canRemove } = useRepeatAffordances(repeatPath);
+    const { count, relevant, canAdd, canRemove } = useRepeatAffordances(repeatPath, { allowAdd, allowRemove });
     const handleAdd = useCallback(() => {
         if (repeatPath && canAdd)
             engine.addRepeatInstance(repeatPath);
@@ -287,7 +288,7 @@ function DataTableDisplay({ node, cssClass, style, metadataAttrs, }) {
     if (!bindKey || columns.length === 0) {
         return (_jsx("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: _jsx("table", { className: "formspec-data-table" }) }));
     }
-    return (_jsxs("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [_jsxs("table", { className: "formspec-data-table", children: [node.props?.title && (_jsx("caption", { children: node.props?.title })), _jsx("thead", { children: _jsxs("tr", { children: [showRowNumbers && _jsx("th", { scope: "col", children: "#" }), columns.map((col, ci) => (_jsx("th", { scope: "col", ...needTraceAttrs(generationNeedAnchors(col)), children: col.header }, ci))), allowRemove && (_jsx("th", { scope: "col", children: _jsx("span", { className: "formspec-sr-only", children: "Actions" }) }))] }) }), _jsx("tbody", { children: Array.from({ length: count }, (_, i) => (_jsxs("tr", { children: [showRowNumbers && _jsx("td", { className: "formspec-row-number", children: i + 1 }), columns.map((col, ci) => (_jsx(DataTableCell, { signalPath: `${bindKey}[${i}].${col.bind}`, column: col, fieldDef: fieldByKey.get(col.bind), defaultCurrency: defaultCurrency, metadataAttrs: needTraceAttrs(generationNeedAnchors(col)) }, ci))), allowRemove && (_jsx("td", { children: canRemove && (_jsx("button", { type: "button", className: "formspec-datatable-remove formspec-button-danger formspec-focus-ring", "aria-label": `Remove row ${i + 1}`, onClick: () => handleRemove(i), children: "Remove" })) }))] }, i))) })] }), allowAdd && canAdd && (_jsx("button", { type: "button", className: "formspec-datatable-add formspec-focus-ring", onClick: handleAdd, children: "Add Row" }))] }));
+    return (_jsxs("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [_jsxs("table", { className: "formspec-data-table", children: [node.props?.title && (_jsx("caption", { children: node.props?.title })), _jsx("thead", { children: _jsxs("tr", { children: [showRowNumbers && _jsx("th", { scope: "col", children: "#" }), columns.map((col, ci) => (_jsx("th", { scope: "col", ...needTraceAttrs(generationNeedAnchors(col)), children: col.header }, ci))), allowRemove && (_jsx("th", { scope: "col", children: _jsx("span", { className: "formspec-sr-only", children: "Actions" }) }))] }) }), _jsx("tbody", { children: Array.from({ length: count }, (_, i) => (_jsxs("tr", { children: [showRowNumbers && _jsx("td", { className: "formspec-row-number", children: i + 1 }), columns.map((col, ci) => (_jsx(DataTableCell, { signalPath: `${bindKey}[${i}].${col.bind}`, column: col, fieldDef: fieldByKey.get(col.bind), defaultCurrency: defaultCurrency, metadataAttrs: needTraceAttrs(generationNeedAnchors(col)) }, ci))), allowRemove && (_jsx("td", { children: canRemove && (_jsx("button", { type: "button", className: "formspec-datatable-remove formspec-button-danger formspec-focus-ring", "aria-label": `Remove row ${i + 1}`, onClick: () => handleRemove(i), children: "Remove" })) }))] }, i))) })] }), canAdd && (_jsx("button", { type: "button", className: "formspec-datatable-add formspec-focus-ring", onClick: handleAdd, children: "Add Row" }))] }));
 }
 function ValidationSummaryDisplay() {
     const { engine, touchedVersion } = useFormspecContext();

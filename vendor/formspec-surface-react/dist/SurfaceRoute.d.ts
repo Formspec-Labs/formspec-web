@@ -1,7 +1,9 @@
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type PlannedTransition, type SurfaceDiagnostic, type SurfaceRoutePlan, type SurfaceStrings } from '@formspec-org/surface';
-import type { ResponseActionsDocument } from '@formspec-org/types';
-import { type SurfaceDefinitionFormRenderer } from './SurfaceSlot.js';
+import type { OntologyDocument, ReferencesDocument, ResponseActionsDocument } from '@formspec-org/types';
+import { type SurfaceDefinitionFormRenderInput, type SurfaceDefinitionFormRenderer, type SurfaceSemanticControlScopeResolver } from './SurfaceSlot.js';
+import type { FireTransition, SurfaceTransitionOutcome } from './SurfaceApp.js';
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport } from './widget-api.js';
+import type { SurfaceSemanticOutputScopeResolver } from './semantic-output.js';
 import type { WidgetActionCoordinator } from './widget-action-runtime.js';
 export interface SurfaceRouteViewProps {
     /** Everything the core decided for this route. Nothing here re-decides it. */
@@ -18,6 +20,10 @@ export interface SurfaceRouteViewProps {
     onWidgetActionReport?: ((report: SurfaceWidgetActionReport) => void) | undefined;
     onRuntimeDiagnosticsChange?: ((scope: string, diagnostics: readonly SurfaceDiagnostic[]) => void) | undefined;
     renderDefinitionForm?: SurfaceDefinitionFormRenderer | undefined;
+    definitionActionInvoker?: SurfaceDefinitionFormRenderInput['responseActionInvoker'] | undefined;
+    resolveSemanticControlScope?: SurfaceSemanticControlScopeResolver | undefined;
+    resolveSemanticOutputScope?: SurfaceSemanticOutputScopeResolver | undefined;
+    onDefinitionActionResult?: SurfaceDefinitionFormRenderInput['onDefinitionActionResult'] | undefined;
     showExperienceNeeds?: boolean | undefined;
     /**
      * Shows the theme-posture sentence on the page. **Default false** (§4.3.1):
@@ -29,16 +35,17 @@ export interface SurfaceRouteViewProps {
     showThemeNotice?: boolean | undefined;
     /** The Response Actions document a `definition-form` slot runs its actions under. */
     responseActionsDocuments?: readonly ResponseActionsDocument[] | undefined;
+    /** Manifested References documents available to matching Definition forms. */
+    referencesDocuments?: readonly ReferencesDocument[] | undefined;
+    /** Manifested Ontology documents available to matching Definition forms. */
+    ontologyDocuments?: readonly OntologyDocument[] | undefined;
     /** Runs a transition's action under Response Actions authority. */
-    onFireTransition?: ((transition: PlannedTransition, from: SurfaceRoutePlan<SurfaceWidget>['handle']) => Promise<{
-        advanced: boolean;
-        reason?: string;
-    }>) | undefined;
+    onFireTransition?: FireTransition | undefined;
     /**
      * Called when a transition has actually completed under Response Actions
      * authority — never on a click. The shell navigates; it does not decide that
      * the action succeeded.
      */
-    onAdvance?: ((transition: PlannedTransition) => void) | undefined;
+    onAdvance?: ((transition: PlannedTransition, outcome?: Pick<SurfaceTransitionOutcome, 'transitionBindings'>) => 'advanced' | 'refused' | void) | undefined;
 }
-export declare function SurfaceRouteView({ plan, strings, dataSourceLoader, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, showExperienceNeeds, showThemeNotice, responseActionsDocuments, onFireTransition, onAdvance, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;
+export declare function SurfaceRouteView({ plan, strings, dataSourceLoader, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;

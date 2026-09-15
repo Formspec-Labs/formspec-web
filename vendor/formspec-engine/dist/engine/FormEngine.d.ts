@@ -1,5 +1,6 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
 import type { FormDefinition, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
+import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
 import type { AuthoredSignatureInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
 import { type FelTraceStep } from '../fel/fel-api-runtime.js';
 import type { EngineSignal, ReadonlyEngineSignal } from '../reactivity/types.js';
@@ -32,7 +33,8 @@ export declare class FormEngine implements IFormEngine {
     private readonly _fieldItems;
     /** `dataType` of every field Item by base path, from the definition (FEL value tagging, scope checks). */
     private readonly _fieldDataTypes;
-    private _felContextBase;
+    /** WASM-resident FEL context for ad-hoc reads, reloaded when `key` (the engine's state epoch) changes. */
+    private _felContext;
     private readonly _groupItems;
     private readonly _shapeTiming;
     private readonly _instanceCalculateBinds;
@@ -40,6 +42,8 @@ export declare class FormEngine implements IFormEngine {
     private readonly _prePopulateReadonly;
     private readonly _calculatedFields;
     private readonly _registryEntries;
+    /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
+    private readonly _extensionFunctions;
     private _registryDocuments;
     private readonly _remoteOptionsTasks;
     private readonly _instanceSourceTasks;
@@ -52,6 +56,8 @@ export declare class FormEngine implements IFormEngine {
     private readonly _localeStore;
     private readonly _fieldViewModels;
     private readonly _itemLabelSignals;
+    /** Hint / description signals for Items with no field view model, keyed `<property>:<instance path>`. */
+    private readonly _itemHelpTextSignals;
     private _formViewModel;
     private readonly _labelContextSignal;
     private _data;
@@ -146,6 +152,16 @@ export declare class FormEngine implements IFormEngine {
      * scope. `undefined` when no Item has that path.
      */
     getItemLabelSignal(path: string): ReadonlyEngineSignal<string> | undefined;
+    /**
+     * Reactive hint a respondent sees for the Item at instance `path` — field, display, or group. Same
+     * cascade as `FieldViewModel.hint` (Locale `<key>.hint@context` → `<key>.hint` → inline `hint`; no
+     * Definition-side context step), `{{}}` interpolated in the Item's scope. `null` when no source has
+     * one; `undefined` when no Item has that path.
+     */
+    getItemHintSignal(path: string): ReadonlyEngineSignal<string | null> | undefined;
+    /** {@link FormEngine.getItemHintSignal} for the Item's `description`. */
+    getItemDescriptionSignal(path: string): ReadonlyEngineSignal<string | null> | undefined;
+    private itemHelpTextSignal;
     loadLocale(doc: LocaleDocument): void;
     setLocale(code: string): void;
     getActiveLocale(): string;
@@ -163,6 +179,7 @@ export declare class FormEngine implements IFormEngine {
     }>): void;
     clearExternalValidation(path?: string): void;
     dispose(): void;
+    registerExtensionFunction(name: string, registration: FelExtensionFunctionRegistration): void;
     setRegistryEntries(entries: RegistryEntry[]): void;
     migrateResponse(responseData: JsonRecord, fromVersion: string): JsonRecord;
     private nowISO;
@@ -185,11 +202,14 @@ export declare class FormEngine implements IFormEngine {
     private evaluateExpression;
     private felContextInput;
     /**
-     * FEL context for ad-hoc reads (compileExpression, Locale `{{}}`, derivation trace). The form-scope base is
-     * built once per engine state: values, MIPs, and results change only through `_evaluate` (evaluation
-     * version), rows through structure changes, instances through the instance version. Reading those signals
-     * also re-runs a caller's computed whenever the base would change. In-flight evaluation reads use
-     * `evaluateExpression`, which always builds fresh.
+     * WASM-resident FEL context for ad-hoc reads (compileExpression, Locale `{{}}`, derivation trace).
+     *
+     * The form-scope snapshot is loaded once per engine state: values, MIPs, and results change only through
+     * `_evaluate` (evaluation version), rows through structure changes, instances through the instance
+     * version. Reading those signals also re-runs a caller's computed whenever the snapshot would change.
+     * Each read then names only its expression and Item path, so it costs the scope it resolves against
+     * rather than the size of the form. In-flight evaluation reads use `evaluateExpression`, which builds a
+     * one-shot context from the partial state it is midway through producing.
      */
     private felContext;
     private repeatCountsSnapshot;
@@ -212,7 +232,10 @@ export declare class FormEngine implements IFormEngine {
     private resolveRepeatPath;
     private clearRepeatSubtree;
     private _createFieldVM;
-    /** Locale §3.3.2: evaluate a `{{}}` segment in the binding scope of `itemPath` (form scope when empty). */
-    private _evalLocaleFEL;
+    /**
+     * Locale §3.3.2: resolve `{{}}` in `template` in the binding scope of `itemPath` (form scope when empty),
+     * one WASM call per template. Plain text skips the FEL context, so it tracks no evaluation signals.
+     */
+    private _interpolate;
     private getDisplayedIssuerPin;
 }

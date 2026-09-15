@@ -21,7 +21,6 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * the fact: if the route is `/receipt/{caseRef}`, the reference in the address
  * bar IS the reference, and it is shown as such.
  */
-import { Heading } from '../heading.js';
 import { WidgetEmptyState } from './empty-state.js';
 function readReceiptInput(data) {
     if (typeof data !== 'object' || data === null)
@@ -60,7 +59,7 @@ function formatWhen(iso) {
     const at = new Date(iso);
     return Number.isNaN(at.getTime()) ? iso : at.toLocaleString();
 }
-export function ReceiptPanel({ data, route, headingLevel, slot, config }) {
+export function ReceiptPanel({ data, route, config }) {
     const parsed = readReceiptInput(data);
     // The address bar is a fact about this page, not invented content: a
     // `/receipt/{caseRef}` route IS addressed by the reference.
@@ -72,5 +71,5 @@ export function ReceiptPanel({ data, route, headingLevel, slot, config }) {
         ...(parsed.issuer ? [{ label: 'Issued by', value: parsed.issuer }] : []),
         ...(parsed.facts ?? []),
     ];
-    return (_jsxs("div", { className: "fs-surface-receipt", "data-widget": "receipt-panel", children: [slot.title && (_jsx(Heading, { level: headingLevel, className: "fs-surface-receipt__title", children: slot.title })), rows.length === 0 ? (_jsx(WidgetEmptyState, { children: "There is no receipt to show. Nothing has been submitted through this release yet." })) : (_jsx("dl", { className: "fs-surface-receipt__facts", "data-probe": "receipt-facts", children: rows.map((row) => (_jsxs("div", { className: "fs-surface-receipt__row", children: [_jsx("dt", { children: row.label }), _jsx("dd", { children: row.value })] }, `${row.label}:${row.value}`))) }))] }));
+    return (_jsx("div", { className: "fs-surface-receipt", "data-widget": "receipt-panel", children: rows.length === 0 ? (_jsx(WidgetEmptyState, { children: "There is no receipt to show. Nothing has been submitted through this release yet." })) : (_jsx("dl", { className: "fs-surface-receipt__facts", "data-probe": "receipt-facts", children: rows.map((row) => (_jsxs("div", { className: "fs-surface-receipt__row", children: [_jsx("dt", { children: row.label }), _jsx("dd", { children: row.value })] }, `${row.label}:${row.value}`))) })) }));
 }

@@ -268,9 +268,11 @@ export declare const UI_POLICY: {
             readonly Accordion: {
                 readonly fallback: "Stack";
                 readonly carry: readonly ["children"];
-                readonly drop: readonly ["allowMultiple", "defaultOpen", "allowAdd", "allowRemove"];
+                readonly drop: readonly ["allowMultiple", "defaultOpen"];
                 readonly translate: {
                     readonly labels: "collapsible-title";
+                    readonly allowAdd: "repeat-affordance-lock";
+                    readonly allowRemove: "repeat-affordance-lock";
                 };
             };
             readonly RadioGroup: {
@@ -352,9 +354,11 @@ export declare const UI_POLICY: {
             readonly DataTable: {
                 readonly fallback: "Stack";
                 readonly carry: readonly ["bind", "columns"];
-                readonly drop: readonly ["showRowNumbers", "allowAdd", "allowRemove"];
+                readonly drop: readonly ["showRowNumbers"];
                 readonly translate: {
                     readonly repeatRows: "card-per-repeat-instance";
+                    readonly allowAdd: "repeat-affordance-lock";
+                    readonly allowRemove: "repeat-affordance-lock";
                 };
             };
             readonly Panel: {

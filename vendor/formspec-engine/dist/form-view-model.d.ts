@@ -24,8 +24,8 @@ export interface FormViewModelDeps {
     getPageTitle: (pageId: string) => string | undefined;
     /** Returns page description from theme pages */
     getPageDescription: (pageId: string) => string | undefined;
-    /** Evaluates a FEL expression in the form-level (global) context */
-    evalFEL: (expr: string) => import('./wasm-bridge-runtime.js').FelEvalResult | unknown;
+    /** Resolves `{{expression}}` in the form-level (global) context (Locale §3.3.1) */
+    interpolate: (template: string) => string;
     /** Returns total validation error/warning/info counts */
     getValidationCounts: () => {
         errors: number;
