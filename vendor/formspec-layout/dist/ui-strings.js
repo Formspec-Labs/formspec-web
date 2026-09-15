@@ -8,7 +8,6 @@
  */
 export const UI_STRINGS = {
     'select.placeholder': 'Select…',
-    'select.clear': 'Clear',
     'select.clearSelection': 'Clear selection',
     'select.selectedValues': 'Selected values',
     'select.selectAll': 'Select All',

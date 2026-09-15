@@ -8,7 +8,6 @@
  */
 export declare const UI_STRINGS: {
     readonly 'select.placeholder': "Select…";
-    readonly 'select.clear': "Clear";
     readonly 'select.clearSelection': "Clear selection";
     readonly 'select.selectedValues': "Selected values";
     readonly 'select.selectAll': "Select All";
