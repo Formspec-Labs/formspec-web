@@ -16,6 +16,7 @@ export const UI_STRINGS = {
     'repeat.remove': 'Remove {{$label}}',
     'repeat.row': '{{$label}} {{$index}}',
     'repeat.rowOf': '{{$label}} {{$index}} of {{$total}}',
+    'repeat.rowNamed': '{{$label}} of {{$total}}',
     'wizard.next': 'Next',
     'wizard.nextStep': 'Next step',
     'wizard.previous': 'Previous',

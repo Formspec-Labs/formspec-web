@@ -16,6 +16,7 @@ export declare const UI_STRINGS: {
     readonly 'repeat.remove': "Remove {{$label}}";
     readonly 'repeat.row': "{{$label}} {{$index}}";
     readonly 'repeat.rowOf': "{{$label}} {{$index}} of {{$total}}";
+    readonly 'repeat.rowNamed': "{{$label}} of {{$total}}";
     readonly 'wizard.next': "Next";
     readonly 'wizard.nextStep': "Next step";
     readonly 'wizard.previous': "Previous";
