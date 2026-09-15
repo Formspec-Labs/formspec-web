@@ -101,6 +101,10 @@ export interface ThemeDocument {
      * Target rendering platform. Informational — processors that do not recognize a platform value SHOULD apply the theme regardless. Well-known values: 'web' (desktop/mobile browsers), 'mobile' (native apps), 'pdf' (PDF rendering), 'print' (print-optimized), 'kiosk' (public terminals), 'universal' (no platform assumptions, implicit default).
      */
     platform?: string;
+    /**
+     * Registered name of the render adapter this theme's selectors, widgetConfig, and cssClass are written for — the design system that owns the markup and the self-contained stylesheet those values assume. Absent means the renderer's default adapter. A renderer resolves the name in its adapter registry; an unregistered name is THEME-ADAPTER-MISSING (error) and falls back to the default adapter. See theme-spec.md §2.4.
+     */
+    adapter?: string;
     tokens?: Tokens;
     /**
      * Additional color-token pairs whose effective contrast tooling must check. The platform Token Registry already declares the pairs used by the default renderer, so a Theme only needs this property for custom x-* tokens or stricter product-specific checks. A processor evaluates a pair after platform defaults and Theme token overrides are merged. It MUST use the WCAG 2.2 contrast formula when both values can be reduced to opaque sRGB colors, MUST NOT report a ratio when either value is indeterminate, and SHOULD diagnose a declared pair that references a missing token. The usage sets a standards floor: normalText is 4.5:1; largeText and uiComponent are 3:1. minimumRatio may raise but never lower that floor.
