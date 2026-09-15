@@ -3,6 +3,7 @@ import { Fragment as _Fragment, jsx as _jsx, jsxs as _jsxs } from "react/jsx-run
 import { useChromeText } from '../use-chrome-text';
 import { useScreener, itemDataType, itemOptions, isItemRequired } from './use-screener';
 export function FormspecScreener({ screenerDocument, renderExternalRoute, renderNoMatch, className, ...options }) {
+    const chrome = useChromeText();
     const screener = useScreener({ ...options, screenerDocument });
     const items = screener.items;
     if (!screenerDocument)
@@ -21,7 +22,7 @@ export function FormspecScreener({ screenerDocument, renderExternalRoute, render
     if (screener.routeResult?.routeType === 'internal' || screener.skipped) {
         return null;
     }
-    return (_jsxs("div", { className: cls('formspec-screener', className), children: [_jsx("h2", { className: "formspec-screener-heading", children: screenerDocument.title || 'Eligibility Check' }), screenerDocument.description && (_jsx("p", { className: "formspec-screener-intro", children: screenerDocument.description })), _jsx("div", { className: "formspec-screener-fields", children: items.map((item) => (_jsx(ScreenerField, { item: item, screener: screenerDocument, answers: screener.answers, value: screener.answers[item.key], error: screener.errors[item.key], onChange: (val) => screener.setAnswer(item.key, val) }, item.key))) }), _jsx("button", { type: "button", className: "formspec-screener-continue", onClick: screener.submit, children: screenerDocument.submitLabel || 'Check Eligibility' })] }));
+    return (_jsxs("div", { className: cls('formspec-screener', className), children: [_jsx("h2", { className: "formspec-screener-heading", children: screenerDocument.title || 'Eligibility Check' }), screenerDocument.description && (_jsx("p", { className: "formspec-screener-intro", children: screenerDocument.description })), _jsx("div", { className: "formspec-screener-fields", children: items.map((item) => (_jsx(ScreenerField, { item: item, screener: screenerDocument, answers: screener.answers, value: screener.answers[item.key], error: screener.errors[item.key], onChange: (val) => screener.setAnswer(item.key, val) }, item.key))) }), _jsx("button", { type: "button", className: "formspec-screener-continue", onClick: screener.submit, children: screenerDocument.submitLabel || chrome('screener.submit') })] }));
 }
 function ScreenerField({ item, screener, answers, value, error, onChange, }) {
     const chrome = useChromeText();

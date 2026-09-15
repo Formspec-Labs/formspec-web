@@ -5,6 +5,7 @@ import { useMemo, useCallback, useEffect, useId, useRef, useState, } from 'react
 import { signal as createSignal } from '@preact/signals-core';
 import { invokeResponseAction, } from '@formspec-org/engine';
 import { useFormspecContext } from './context';
+import { useChromeText } from './use-chrome-text';
 import { useSignal } from './use-signal';
 import { useField } from './use-field';
 import { useForm } from './use-form';
@@ -100,6 +101,7 @@ function actionResultMessage(result) {
         : `${statusLabel}.`;
 }
 function ActionButtonNode({ node }) {
+    const chrome = useChromeText();
     const { onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
     const form = useForm();
     const actionRef = actionRefFor(node);
@@ -111,7 +113,7 @@ function ActionButtonNode({ node }) {
     // An explicitly authored Component label wins. Auto-injected controls have
     // no Component label, so use the resolved Response Action label before the
     // renderer's generic fallback. This keeps product copy in structured data.
-    const label = resolveActionButtonLabel(node.props?.label ?? resolution.action?.label, 'Submit');
+    const label = resolveActionButtonLabel(node.props?.label ?? resolution.action?.label, chrome('action.submit'));
     const actionNeedAnchors = generationNeedAnchors(resolution.action);
     const needAttrs = needTraceAttrs([...(node.needAnchors ?? []), ...actionNeedAnchors]);
     const statusId = useId();
@@ -214,7 +216,7 @@ function ActionButtonNode({ node }) {
         if (inFlightRef.current) {
             return inFlightRef.current;
         }
-        setFeedback({ phase: 'pending', message: 'In progress.' });
+        setFeedback({ phase: 'pending', message: chrome('action.inProgress') });
         const invocation = invoke(invocationContext);
         const tracked = invocation.then((result) => {
             setFeedback({ phase: 'settled', message: actionResultMessage(result) });

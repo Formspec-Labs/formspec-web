@@ -3,6 +3,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useEffect, useRef, useState } from 'react';
 import { formatBytes } from '../format-bytes';
+import { useChromeText } from '../../../use-chrome-text';
 function filesFromFieldValue(value, multiple) {
     if (value == null)
         return [];
@@ -38,6 +39,7 @@ function shouldPreserveLocalFiles(value, prev, next) {
 }
 /** Item 22: FileUpload with drag-drop zone and maxSize validation. */
 export function FileUploadControl({ field, node, common, isReadonly }) {
+    const chrome = useChromeText();
     const accept = node.props?.accept;
     const multiple = node.props?.multiple;
     const maxSize = node.props?.maxSize;
@@ -109,7 +111,7 @@ export function FileUploadControl({ field, node, common, isReadonly }) {
         // Siblings only — formspec-file-upload lives on the field root (parity with default web component adapter).
         return (_jsxs(_Fragment, { children: [hiddenInput, _jsxs("button", { type: "button", className: browseBtnClass, onClick: () => fileInputRef.current?.click(), disabled: isReadonly, children: ["Choose file", multiple ? 's' : ''] }), fileList, errorEl] }));
     }
-    return (_jsxs(_Fragment, { children: [_jsx("div", { className: `formspec-file-drop-zone formspec-focus-ring${isDragOver ? ' formspec-file-drop-zone--active' : ''}`, tabIndex: isReadonly ? -1 : 0, role: "button", "aria-label": "Drop files here or click to browse", onKeyDown: (e) => {
+    return (_jsxs(_Fragment, { children: [_jsx("div", { className: `formspec-file-drop-zone formspec-focus-ring${isDragOver ? ' formspec-file-drop-zone--active' : ''}`, tabIndex: isReadonly ? -1 : 0, role: "button", "aria-label": chrome('fileUpload.dropzone'), onKeyDown: (e) => {
                     if (isReadonly)
                         return;
                     if (e.key === 'Enter' || e.key === ' ') {

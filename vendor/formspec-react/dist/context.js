@@ -5,6 +5,8 @@ import { createContext, useContext, useMemo, useEffect, useRef, useCallback, use
 import { signal } from '@preact/signals-core';
 import { createFormEngine, findResponseActionByIntent, missingSubmitActionFinding, resolveResponseAction, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
 import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, preparePlanContext, ensureActionButton, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
+import { useSignal } from './use-signal';
+import { chromeText } from './use-chrome-text';
 const platformTheme = buildPlatformTheme();
 /**
  * Fail-closed browser policy for human Reference links — the shared rule, so React and the webcomponent admit
@@ -131,7 +133,6 @@ function autoPlacedDefinitionActions(document, definition) {
  */
 export function FormspecProvider(props) {
     const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, semanticControlScope, initialData, registryEntries, resolveFieldHelp, admitFieldHelpUri = admitDefaultFieldHelpUri, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
-    const fieldHelpLabel = props.fieldHelpLabel ?? 'Help and guidance';
     const shouldEmitThemeTokens = props.emitThemeTokens ?? true;
     const semanticResponseState = useMemo(() => ({
         responseRevision: semanticControlScope?.initialResponseRevision ?? 0,
@@ -199,6 +200,9 @@ export function FormspecProvider(props) {
             engine.setIssuerOverride(issuerOverride);
         }
     }, [engine, hasIssuerOverrideProp, issuerOverride]);
+    // Locale §3.1.10: the renderer's own words for the help link, unless the host names its own.
+    useSignal(engine.localeSignal);
+    const fieldHelpLabel = props.fieldHelpLabel ?? chromeText(engine, 'fieldHelp.label');
     // Build registry entry map for extension resolution
     const registryMap = useMemo(() => {
         const map = new Map();

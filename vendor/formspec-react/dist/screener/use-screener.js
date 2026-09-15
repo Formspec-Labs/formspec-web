@@ -2,6 +2,7 @@
 /** @filedesc useScreener — React hook for the Formspec screener gate. */
 import { useState, useCallback, useMemo } from 'react';
 import { evalFEL, wasmEvaluateScreenerDocument } from '@formspec-org/engine';
+import { chromeText } from '../use-chrome-text';
 /**
  * Read the item's data type, supporting both the canonical schema field
  * (`dataType`) and the simplified alias (`type`) from the user-facing API.
@@ -119,7 +120,9 @@ export function useScreener(options = {}) {
                 return v !== undefined && v !== null && v !== '';
             });
             if (!hasAny && items.length > 0) {
-                newErrors[items[0].key] = 'Please answer at least one question';
+                // No provider stands above a standalone screener, so this is the inventory's English default;
+                // rendered inside a form it follows that form's Locale like every other chrome string.
+                newErrors[items[0].key] = chromeText(undefined, 'screener.answerOne');
             }
         }
         if (Object.keys(newErrors).length > 0) {
