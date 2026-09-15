@@ -9,7 +9,7 @@
  * Re-run: npm run types:generate
  */
 export * from './generated/index.js';
-export { KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT, COMPONENT_TO_HINT, COMPATIBILITY_MATRIX, widgetTokenToComponent, } from './widget-vocabulary.js';
+export { KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT, COMPONENT_TO_HINT, COMPATIBILITY_MATRIX, PRESENTATION_WIDGETS, REPEAT_PRESENTATION_WIDGETS, isRepeatPresentationWidget, widgetTokenToComponent, } from './widget-vocabulary.js';
 export { UI_POLICY } from './ui-policy.js';
 export type { UiPolicy } from './ui-policy.js';
 export { Path, PathSegmentKind } from './path-utils.js';

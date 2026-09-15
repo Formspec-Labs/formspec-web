@@ -89,6 +89,8 @@ function mergeBlocks(lower, higher) {
         merged.labelPosition = higher.labelPosition;
     if (higher.fallback !== undefined)
         merged.fallback = higher.fallback;
+    if (higher.requiredIndicator !== undefined)
+        merged.requiredIndicator = higher.requiredIndicator;
     // cssClassReplace: higher level explicitly replaces matching lower classes
     const replaceClasses = normalizeCssClass(higher.cssClassReplace);
     if (replaceClasses.length > 0) {

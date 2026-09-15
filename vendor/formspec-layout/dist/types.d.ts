@@ -122,6 +122,12 @@ export interface LayoutNode {
     repeatPath?: string;
     /** If true, children are a template to stamp per instance. */
     isRepeatTemplate?: boolean;
+    /**
+     * Theme `widget` naming how the instances are presented (`RepeatCards`; theme §4.2 Item Presentation
+     * Widgets). Chrome only — the rows, their children, and the Add/Remove locks are unchanged. The
+     * renderer falls back to its default repeat presentation when its adapter has no render for the name.
+     */
+    repeatPresentation?: string;
     /** If true, this node's bind path creates a new scope (prefix) for child rendering.
      *  Used by definition-fallback groups where item keys are relative. */
     scopeChange?: boolean;

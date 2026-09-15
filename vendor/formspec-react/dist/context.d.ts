@@ -3,6 +3,7 @@ import React from 'react';
 import type { ActionRefFinding, ActionResolution, IFormEngine, IssuerFetcher, IssuerSource, ReadonlyEngineSignal, ResponseAction, ResponseActionEffectDispatchContext, ResponseActionEffectOutcome, ResponseActionIdempotencyKeyContext, ResponseActionInvocationPorts, ResponseActionInvocationContext, ResponseActionInvocationResult, ResponseActionPreconditionResult, ResponseActionsDocumentInput } from '@formspec-org/engine';
 import type { EffectRequest, FormResponse, Precondition, ThemeDocument as SchemaThemeDocument, ValidationReport } from '@formspec-org/types';
 import type { ComponentGraphProjectionContext, LayoutHostEvidence, LayoutNode, ThemeDocument as LayoutThemeDocument } from '@formspec-org/layout';
+import { admitFieldHelpUri } from '@formspec-org/layout';
 import type { ComponentMap } from './component-map';
 import type { SemanticControlScope, SemanticResponseBinding } from './semantic-controls';
 export type ResponseActionsDocument = ResponseActionsDocumentInput;
@@ -42,8 +43,11 @@ export type FormspecFieldHelpResolver = (path: string) => readonly FormspecHuman
  * internal route; the default admits only HTTPS and same-app relative URIs.
  */
 export type FormspecFieldHelpUriAdmission = (uri: string) => string | undefined;
-/** Fail-closed browser policy for human Reference links. */
-export declare function admitDefaultFieldHelpUri(uri: string): string | undefined;
+/**
+ * Fail-closed browser policy for human Reference links — the shared rule, so React and the webcomponent admit
+ * exactly the same URIs (`admitFieldHelpUri` in `@formspec-org/layout`).
+ */
+export declare const admitDefaultFieldHelpUri: typeof admitFieldHelpUri;
 export interface FormspecContextValue {
     engine: IFormEngine;
     layoutPlan: LayoutNode | null;
