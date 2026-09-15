@@ -170,11 +170,8 @@ export function createFieldViewModel(deps) {
             const fromConst = localeStore.lookupKey(constKey);
             if (fromConst !== null)
                 return interpolate(fromConst);
-            // Step 3: Inline bind constraintMessage
-            if (err.constraintMessage)
-                return interpolate(err.constraintMessage);
         }
-        // Step 4: Processor default
+        // Step 3: the processor's message — an inline constraintMessage arrives here already interpolated
         return err.message ?? 'Validation error';
     }
     function resolveOptionLabel(opt, optionSetName) {

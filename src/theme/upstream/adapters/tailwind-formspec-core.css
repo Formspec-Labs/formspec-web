@@ -6,9 +6,9 @@
  * Unlayered CSS always beats layered utilities; do not remove this layer when using Tailwind.
  */
 
-/* Presence marker: the renderer skips linking this stylesheet when a host already loaded it. */
+/* Presence marker (ADR 0063 D-4): the Tailwind adapter's layer probes for it, so a host that already loaded this stylesheet gets no second link. */
 .formspec-container {
-  --formspec-adapter: tailwind;
+  --formspec-tailwind-rules: 1;
 }
 
 :root {
@@ -184,5 +184,41 @@
     text-align: left;
     text-decoration: underline;
     cursor: pointer;
+  }
+}
+
+/*
+ * Layout rhythm. The structural sheet carries no gaps (ADR 0064 decision 3), and this adapter renders
+ * Section/Stack/Grid/Group/Repeat through the shared container builders, so their rhythm is declared here
+ * under the same spacing tokens the default skin uses.
+ */
+@layer components {
+  .formspec-container {
+    gap: var(--formspec-spacing-md, 1rem);
+  }
+
+  .formspec-stack:not(.grid-row),
+  .formspec-group,
+  .formspec-section,
+  .formspec-repeat-list {
+    gap: var(--formspec-spacing-field, 0.75rem);
+  }
+
+  .formspec-repeat-instance {
+    gap: var(--formspec-spacing-field, 0.75rem);
+    padding: 0.95rem 1rem 1rem;
+  }
+
+  .formspec-repeat-instance-header {
+    gap: 0.75rem;
+  }
+
+  .formspec-repeat-add,
+  .formspec-repeat-remove {
+    margin-top: var(--formspec-spacing-sm, 0.5rem);
+  }
+
+  .formspec-grid {
+    gap: var(--formspec-spacing-md, 1rem) var(--formspec-spacing-field, 0.75rem);
   }
 }
