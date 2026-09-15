@@ -157,7 +157,16 @@ export interface ResolvedRespondentFormInput {
   readonly responseActionsDocument: ResponseActionsDocument | undefined;
   readonly localeDocuments?: readonly LocaleDocument[];
   readonly activeLocale?: string;
-  readonly onActionCompleted?: (action: ResponseAction) => void;
+  /**
+   * Surface's completed-action navigation boundary. The invocation result is
+   * part of the report, not decoration: `SurfaceRoute` reads
+   * `result.transitionBindings` to carry the action's own bindings into the
+   * transition it supplies, so the host hands back the whole terminal.
+   */
+  readonly onActionCompleted?: (
+    action: ResponseAction,
+    result: ResponseActionInvocationResult<SubmitResult>,
+  ) => void;
 }
 
 export interface RespondentDefinitionControllerProps extends RespondentRuntimeProps {
@@ -305,7 +314,7 @@ function RespondentController({
     status: 'idle',
   });
   const [multiPartyState, setMultiPartyState] = useState<MultiPartyPersistedState | null>(null);
-  const [completedAction, setCompletedAction] = useState<ResponseAction | null>(null);
+  const [completedAction, setCompletedAction] = useState<CompletedRespondentAction | null>(null);
   const terminalClearRequestedRef = useRef(false);
   const onSubmitConfirmedRef = useRef(onSubmitConfirmed);
   const onActionCompletedRef = useRef(form?.onActionCompleted);
@@ -557,9 +566,10 @@ function RespondentController({
 
   // Response Actions complete synchronously after they dispatch the submit
   // host event, while SubmitTransport is intentionally asynchronous. Hold the
-  // authored completed action until the real confirmation has updated the
+  // authored completed terminal until the real confirmation has updated the
   // parent's `routeParams.caseRef`; the post-render effect then hands the
-  // action back to Surface's existing navigation boundary.
+  // action and its invocation result back to Surface's existing navigation
+  // boundary.
   useEffect(() => {
     if (
       renderMode !== 'surface-slot'
@@ -569,7 +579,7 @@ function RespondentController({
       return;
     }
     setCompletedAction(null);
-    onActionCompletedRef.current?.(completedAction);
+    onActionCompletedRef.current?.(completedAction.action, completedAction.result);
   }, [completedAction, renderMode, submitState.status]);
 
   const handleSignIn = async (option: IdpOption): Promise<void> => {
@@ -931,7 +941,7 @@ function RespondentController({
               if (!action) return;
               if (renderMode === 'surface-slot') {
                 const completed = completedRespondentAction(result);
-                if (completed) setCompletedAction(completed);
+                if (completed) setCompletedAction({ action: completed, result });
                 return;
               }
               composition.surfaceRouter?.transitionAfterResponseAction({
@@ -981,6 +991,16 @@ function RespondentController({
       </RuntimeProfileProvider>
     </AppErrorBoundary>
   );
+}
+
+/**
+ * A completed terminal held across the confirmation wait. Surface's boundary
+ * takes the action and its invocation result together, so the host cannot
+ * reduce the terminal to its action and rebuild the rest later.
+ */
+interface CompletedRespondentAction {
+  readonly action: ResponseAction;
+  readonly result: ResponseActionInvocationResult<SubmitResult>;
 }
 
 /**
