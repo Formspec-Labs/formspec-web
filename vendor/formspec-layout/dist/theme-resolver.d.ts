@@ -42,6 +42,12 @@ export interface PresentationBlock {
      * after the final union any exact matches from lower levels are removed.
      */
     cssClassReplace?: string | string[];
+    /**
+     * Whether a required item shows the visible required marker. `'none'` suppresses the asterisk and nothing
+     * else — the programmatic required state (`aria-required`) stays (theme spec §5.2). Absent means
+     * `'marker'`.
+     */
+    requiredIndicator?: 'marker' | 'none';
 }
 /** Criteria for a theme selector rule: matches items by type, dataType, or both. */
 export interface SelectorMatch {

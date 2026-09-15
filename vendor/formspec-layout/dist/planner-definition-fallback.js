@@ -1,5 +1,5 @@
 /** @filedesc Definition-items fallback planner when no component document is provided. */
-import { widgetTokenToComponent } from '@formspec-org/types';
+import { isRepeatPresentationWidget, widgetTokenToComponent } from '@formspec-org/types';
 import { resolvePresentation, resolveWidget } from './theme-resolver.js';
 import { getDefaultComponent } from './defaults.js';
 import { gridPlacementStyleFromLayout, needGenerationAnchors, normalizeCssClass, preparePlanContext, } from './node-utils.js';
@@ -19,6 +19,38 @@ export function planDefinitionFallback(items, ctx, prefix = '', applyThemePages 
         nodes.push(planDefinitionItem(item, planCtx, prefix));
     }
     return !prefix ? applyDefinitionPageMode(nodes, planCtx) : nodes;
+}
+/**
+ * Core §4.2.5 `layout.flow: 'grid'`: the group arranges its children on a grid, and each child's
+ * `layout.grid.span` places it there. A span needs a grid context to mean anything, so the children go
+ * inside one `Grid` node — the group keeps its own scope, legend and identity around it. `columns`
+ * defaults to 12, the grid a `span` is authored against (core §4.2.5).
+ */
+function wrapGridFlow(children, item, ctx) {
+    const layout = item.presentation?.layout;
+    if (layout?.flow !== 'grid' || children.length === 0)
+        return children;
+    const columns = layout.columns ?? 12;
+    return [{
+            id: ctx.nextId('grid'),
+            component: 'Grid',
+            category: 'layout',
+            props: { columns },
+            cssClasses: [],
+            children: columns === CANVAS_COLUMNS ? children.map(spanWholeCanvasRow) : children,
+        }];
+}
+/** The 12-column canvas: `columns: 12` is a placement grid, not a request for twelve equal columns. */
+const CANVAS_COLUMNS = 12;
+/**
+ * On that canvas, a child that declares no `layout.grid.span` takes the whole row. One twelfth of a row
+ * is never a usable field, and leaving the span off would otherwise hand the child to the renderer's
+ * equal-column arrangement, which squeezes every unspanned sibling onto one line.
+ */
+function spanWholeCanvasRow(child) {
+    if (child.style?.gridColumn !== undefined)
+        return child;
+    return { ...child, style: { ...child.style, gridColumn: `span ${CANVAS_COLUMNS}` } };
 }
 export function planDefinitionItem(item, ctx, prefix = '') {
     const planCtx = preparePlanContext(ctx);
@@ -40,7 +72,9 @@ export function planDefinitionItem(item, ctx, prefix = '') {
             id: planCtx.nextId('group'),
             component: 'Stack',
             category: 'layout',
-            props: { title: item.label || key, bind: key },
+            // An authored empty label is a decision — a group that titles itself through its children —
+            // so only a missing label falls back to the key.
+            props: { title: item.label ?? key, bind: key },
             style: gridPlacementStyleFromLayout(item.presentation?.layout),
             cssClasses: normalizeCssClass(presentation.cssClass),
             children: [],
@@ -48,6 +82,10 @@ export function planDefinitionItem(item, ctx, prefix = '') {
             bindPath: fullPath,
             scopeChange: true,
         };
+        // Core §4.2.5 `labelPosition: 'hidden'` on a group: the legend stays in the accessible markup and
+        // leaves the page (theme §5.2). Renderers read it off the node, as they do for a field.
+        if (presentation.labelPosition)
+            groupNode.labelPosition = presentation.labelPosition;
         if (isRepeat) {
             groupNode.repeatGroup = key;
             groupNode.repeatPath = fullPath;
@@ -58,10 +96,17 @@ export function planDefinitionItem(item, ctx, prefix = '') {
                 if (typeof value === 'boolean')
                     groupNode.props[lock] = value;
             }
+            // Theme §4.2 Item Presentation Widgets: the theme may name how the rows are presented.
+            // Availability is the renderer's call — an adapter owns the card render, not the component
+            // registry — so the planner records the name and leaves the fallback to the renderer.
+            if (isRepeatPresentationWidget(presentation.widget)) {
+                groupNode.repeatPresentation = presentation.widget;
+            }
         }
         const childPrefix = isRepeat ? `${fullPath}[0]` : fullPath;
         if (Array.isArray(item.children)) {
-            groupNode.children = planDefinitionFallback(item.children, planCtx, childPrefix, false);
+            const children = planDefinitionFallback(item.children, planCtx, childPrefix, false);
+            groupNode.children = wrapGridFlow(children, item, planCtx);
         }
         return groupNode;
     }
