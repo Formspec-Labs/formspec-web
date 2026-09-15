@@ -767,6 +767,14 @@ h6.formspec-heading {
  * the full form column — a ZIP field shouldn't stretch as wide as a name field. `ex` units match the
  * spec's definition, so a given stop renders the same size under every adapter. Applies to any control
  * carrying the modifier (input, textarea, select, or a compound control's wrapper), not only `.formspec-input`.
+ * An author's explicit width stop is an override, and it must win over every `max-width` a wrapper
+ * already carries (e.g. `.formspec-select-wrapper`'s own 100%, `.formspec-combobox
+ * .formspec-select-searchable`'s two-class 100%). Rather than force that with a specificity-defeating
+ * flag — which would also beat a brand's own later-loaded override and void theme §2.6's promise that a
+ * `stylesheets` entry wins by source order — those two wrapper ceilings are declared through `:where()`
+ * (default.inputs.css), which always contributes zero specificity. A plain single-class selector like
+ * `.formspec-input--sm` then beats them on ordinary cascade rules alone, no specificity escape hatch
+ * needed on either side.
  */
 .formspec-input--2xs { max-width: 5ex; }
 .formspec-input--xs { max-width: 9ex; }
@@ -1150,11 +1158,18 @@ h6.formspec-heading {
   position: relative;
   display: flex;
   align-items: stretch;
-  max-width: 100%;
   border: 1px solid var(--formspec-default-border-input);
   border-radius: var(--formspec-default-radius-sm);
   background: color-mix(in srgb, var(--formspec-default-surface) 92%, white);
   transition: var(--formspec-default-transition-fast);
+}
+
+/* Zero-specificity ceiling (`:where()` always contributes 0 specificity): a `.formspec-input--<stop>`
+ * class (default.base.css, theme §4.2 Width Stops) must win by being *more* specific, not by
+ * `!important` — that would also beat a brand's own later-loaded override (theme §2.6's promise that a
+ * `stylesheets` entry wins by source order). */
+:where(.formspec-select-wrapper) {
+  max-width: 100%;
 }
 
 /* Match standalone inputs: crisp outline + border tint; skip the extra focus glow (reads too soft on wrappers). */
@@ -1235,6 +1250,10 @@ h6.formspec-heading {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
+}
+
+/* Zero-specificity ceiling — see .formspec-select-wrapper's :where() above for why. */
+:where(.formspec-combobox.formspec-select-searchable) {
   max-width: 100%;
 }
 
