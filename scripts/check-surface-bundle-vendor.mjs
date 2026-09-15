@@ -100,8 +100,9 @@ const packages = [
     copiedFiles: [
       { source: 'src/default-theme.json', target: 'default-theme.json' },
       { source: 'src/token-registry.json', target: 'token-registry.json' },
-      { source: 'src/formspec-layout.css', target: 'formspec-layout.css' },
-      { source: 'src/formspec-default.css', target: 'formspec-default.css' },
+      // The built files are flattened (no @import, no external url()); the src files are wrappers.
+      { source: 'dist/formspec-layout.css', target: 'formspec-layout.css' },
+      { source: 'dist/formspec-default.css', target: 'formspec-default.css' },
       { source: 'src/styles', target: 'styles' },
     ],
   },
