@@ -11,7 +11,8 @@ const platformTheme = buildPlatformTheme();
  * exactly the same URIs (`admitFieldHelpUri` in `@formspec-org/layout`).
  */
 export const admitDefaultFieldHelpUri = admitFieldHelpUri;
-const FormspecContext = createContext(null);
+/** @internal The provider's value, or `null` outside one — read it through {@link useFormspecContext}. */
+export const FormspecContext = createContext(null);
 function pageModeFromPresentation(presentation) {
     return presentation?.pageMode === 'wizard' || presentation?.pageMode === 'tabs'
         ? presentation.pageMode

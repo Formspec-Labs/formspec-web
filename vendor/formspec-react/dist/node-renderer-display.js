@@ -3,7 +3,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 /** @filedesc Display-category LayoutNode rendering (Text, DataTable, Summary, etc.). */
 import { useCallback, useMemo, useState } from 'react';
 import { computed, signal as createSignal } from '@preact/signals-core';
-import { UI_STRINGS } from '@formspec-org/layout';
+import { useChromeText } from './use-chrome-text';
 import { useFormspecContext, findItemByKey } from './context.js';
 import { useSignal } from './use-signal';
 import { useRepeatAffordances } from './use-repeat-affordances';
@@ -143,10 +143,11 @@ function BoundProgressBar({ bind, max, showPercent, progressLabel, cssClass, sty
     return (_jsxs("div", { className: `formspec-progress-bar${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [_jsx("progress", { value: value, max: max, "aria-label": progressLabel }), showPercent && (_jsxs("span", { className: "formspec-progress-percent", children: [pct, "%"] }))] }));
 }
 function DismissibleAlert({ severity, alertRole, dismissible, text, cssClass, style, metadataAttrs }) {
+    const chrome = useChromeText();
     const [dismissed, setDismissed] = useState(false);
     if (dismissed)
         return null;
-    return (_jsxs("div", { role: alertRole, className: `formspec-alert formspec-alert--${severity}${dismissible ? ' formspec-alert--dismissible' : ''}${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [text, dismissible && (_jsx("button", { type: "button", className: "formspec-alert-close", "aria-label": UI_STRINGS['alert.dismiss'], onClick: () => setDismissed(true), children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) }))] }));
+    return (_jsxs("div", { role: alertRole, className: `formspec-alert formspec-alert--${severity}${dismissible ? ' formspec-alert--dismissible' : ''}${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [text, dismissible && (_jsx("button", { type: "button", className: "formspec-alert-close", "aria-label": chrome('alert.dismiss'), onClick: () => setDismissed(true), children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) }))] }));
 }
 function formatMoney(value, locale = 'en-US') {
     if (value == null)

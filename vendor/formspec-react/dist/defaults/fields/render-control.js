@@ -1,7 +1,7 @@
 /** @filedesc Standard (non-group) field control switch — dispatches by component type. */
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { UI_STRINGS } from '@formspec-org/layout';
+import { useChromeText } from '../../use-chrome-text';
 import { ComboboxSelect } from './controls/combobox-select';
 import { MoneyInputControl } from './controls/money-input';
 import { SliderControl } from './controls/slider';
@@ -48,11 +48,10 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
             const clearable = node.props?.clearable;
             const searchable = node.props?.searchable;
             const multiple = node.props?.multiple;
-            const placeholderOpt = resolvePlaceholder(node.props?.placeholder) || UI_STRINGS['select.placeholder'];
             if (searchable || multiple) {
                 return (_jsx(ComboboxSelect, { field: field, node: node, common: { ...common, placeholder: resolvePlaceholder(node.props?.placeholder) }, isReadonly: isReadonly }));
             }
-            return (_jsxs("div", { className: "formspec-select-wrapper", children: [_jsxs("select", { ...common, className: "formspec-input formspec-select-native", value: value ?? '', onChange: isReadonly ? undefined : (e) => field.setValue(e.target.value), disabled: isReadonly, children: [_jsx("option", { value: "", disabled: true, hidden: true, children: placeholderOpt }), field.options.map((opt) => (_jsx("option", { value: opt.value, ...needTraceAttrs(opt.needAnchors), children: opt.label }, opt.value)))] }), clearable && value && !isReadonly && (_jsx("button", { type: "button", className: "formspec-select-clear", "aria-label": UI_STRINGS['select.clearSelection'], onClick: () => { field.setValue(null); field.touch(); }, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) }))] }));
+            return (_jsx(NativeSelect, { field: field, common: common, value: value, isReadonly: isReadonly, clearable: !!clearable, placeholder: resolvePlaceholder(node.props?.placeholder) }));
         }
         case 'DatePicker': {
             const variant = node.props?.variant;
@@ -122,4 +121,12 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
             return (_jsxs(_Fragment, { children: [adorned, _jsx(CharacterCount, { fieldId: id, length: length, maxLength: countLimit })] }));
         }
     }
+}
+/**
+ * The plain `<select>` — a component, not a branch, so it reads the form's own chrome strings
+ * (Locale §3.1.10) and follows a locale switch like every other control.
+ */
+function NativeSelect({ field, common, value, isReadonly, clearable, placeholder }) {
+    const chrome = useChromeText();
+    return (_jsxs("div", { className: "formspec-select-wrapper", children: [_jsxs("select", { ...common, className: "formspec-input formspec-select-native", value: value ?? '', onChange: isReadonly ? undefined : (e) => field.setValue(e.target.value), disabled: isReadonly, children: [_jsx("option", { value: "", disabled: true, hidden: true, children: placeholder || chrome('select.placeholder') }), field.options.map((opt) => (_jsx("option", { value: opt.value, ...needTraceAttrs(opt.needAnchors), children: opt.label }, opt.value)))] }), clearable && value != null && value !== '' && !isReadonly && (_jsx("button", { type: "button", className: "formspec-select-clear", "aria-label": chrome('select.clearSelection'), onClick: () => { field.setValue(null); field.touch(); }, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) }))] }));
 }

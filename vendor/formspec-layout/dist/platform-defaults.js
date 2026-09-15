@@ -49,13 +49,16 @@ export const platformSelectors = [
  * reach its second arm and a tenant setting only the brand token would keep the
  * platform focus ring. Its `default` still reaches the skin as the innermost
  * CSS fallback.
+ *
+ * **Tokens carrying `adapterDefault` are skipped for the same reason** (token-registry-spec §2.5): emitted,
+ * the default skin's `spacing.field` would override USWDS's own field margin in every USWDS form.
  */
 function extractTokens(registry) {
     const tokens = {};
     for (const category of Object.values(registry.categories)) {
         const { darkPrefix } = category;
         for (const [tokenName, entry] of Object.entries(category.tokens)) {
-            if (entry.derivedFrom !== undefined)
+            if (entry.derivedFrom !== undefined || entry.adapterDefault)
                 continue;
             tokens[tokenName] = entry.default;
             if (darkPrefix && entry.dark) {

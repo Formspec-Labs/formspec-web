@@ -51,6 +51,7 @@ export const PLATFORM_TOKEN_KEYS = new Set([
     'spacing.field',
     'spacing.lg',
     'spacing.md',
+    'spacing.section',
     'spacing.sm',
     'spacing.xl',
     'spacing.xs',

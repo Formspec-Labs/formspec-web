@@ -105,6 +105,8 @@ export interface FormspecContextValue {
     /** Effective formPresentation (definition merged with component document). */
     formPresentation?: Record<string, unknown>;
 }
+/** @internal The provider's value, or `null` outside one — read it through {@link useFormspecContext}. */
+export declare const FormspecContext: React.Context<FormspecContextValue | null>;
 export interface FormspecProviderProps {
     /** Pre-built FormEngine instance. Mutually exclusive with `definition`. */
     engine?: IFormEngine;
