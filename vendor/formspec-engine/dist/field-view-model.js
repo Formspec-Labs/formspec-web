@@ -170,8 +170,13 @@ export function createFieldViewModel(deps) {
             const fromConst = localeStore.lookupKey(constKey);
             if (fromConst !== null)
                 return interpolate(fromConst);
+            // Step 3: the Bind's inline template, resolved in this scope like the Item's label, so a date
+            // in it takes the active Locale's formats (the processor resolved it with none).
+            const inline = deps.getConstraintMessage();
+            if (inline !== null)
+                return interpolate(inline);
         }
-        // Step 3: the processor's message — an inline constraintMessage arrives here already interpolated
+        // Step 4: Processor default
         return err.message ?? 'Validation error';
     }
     function resolveOptionLabel(opt, optionSetName) {

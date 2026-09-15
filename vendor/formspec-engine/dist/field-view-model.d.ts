@@ -67,6 +67,8 @@ export interface FieldViewModelDeps {
     getReadonly: () => EngineSignal<boolean>;
     getDisabledDisplay: () => 'hidden' | 'protected';
     getErrors: () => EngineSignal<any[]>;
+    /** The Bind's inline `constraintMessage` template for this field, before `{{}}` resolution. */
+    getConstraintMessage: () => string | null;
     getOptions: () => EngineSignal<OptionEntry[]>;
     getOptionsState: () => EngineSignal<{
         loading: boolean;

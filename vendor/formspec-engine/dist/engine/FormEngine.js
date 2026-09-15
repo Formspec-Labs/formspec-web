@@ -1551,6 +1551,7 @@ export class FormEngine {
             getDisabledDisplay: () => this.getDisabledDisplay(path),
             // Validation results are per instance; options are per template.
             getErrors: () => this.validationResults[path] ?? this._rx.signal([]),
+            getConstraintMessage: () => this._bindConfigs[basePath]?.constraintMessage ?? null,
             getOptions: () => this.optionSignals[basePath] ?? this._rx.signal([]),
             getOptionsState: () => this.optionStateSignals[basePath] ?? this._rx.signal({ loading: false, error: null }),
             getOptionSetName: () => item.optionSet,
