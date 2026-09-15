@@ -6,6 +6,8 @@ import { positionPopupNearTrigger, clearPopupFixedPosition, MODAL_FIRST_FOCUSABL
 import { useWhen } from '../../use-when';
 import { projectionMetadataAttrs } from '../../projection-metadata.js';
 import { routeLandmarkAttrs } from '../../route-landmark.js';
+import { HeadingLevelContext, useHeadingLevel } from '../../heading-level';
+import { useChromeText } from '../../use-chrome-text';
 /**
  * Default layout renderer — dispatches to the correct container component
  * based on node.component, applying formspec CSS classes and theme styles.
@@ -86,6 +88,7 @@ function stackJustifyContent(value) {
 // ── Stack ─────────────────────────────────────────────────────────
 function StackLayout({ node, children, themeClass, style }) {
     const props = node.props ?? {};
+    const headingLevel = useHeadingLevel();
     const direction = props.direction;
     const alignment = props.align;
     const justify = props.justify;
@@ -106,7 +109,7 @@ function StackLayout({ node, children, themeClass, style }) {
     // the planner emits Stack for definition groups, Card for explicit cards)
     const title = props.title;
     if (title && node.bindPath) {
-        return (_jsxs("section", { className: mergeClasses('formspec-group', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...accessibilityAttrs(node), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [_jsx("h3", { className: "formspec-group-title", children: title }), children] }));
+        return (_jsxs("section", { className: mergeClasses('formspec-group', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...accessibilityAttrs(node), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [React.createElement(`h${headingLevel}`, { className: 'formspec-group-title' }, title), _jsx(HeadingLevelContext.Provider, { value: headingLevel + 1, children: children })] }));
     }
     return (_jsx("div", { className: mergeClasses('formspec-stack', themeClass), style: stackStyle, ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: children }));
 }
@@ -267,6 +270,7 @@ function parseModalPlacement(raw) {
     return undefined;
 }
 function ModalLayout({ node, children, themeClass, style }) {
+    const chrome = useChromeText();
     const props = node.props ?? {};
     const title = props.title;
     const triggerLabel = props.triggerLabel ?? 'Open';
@@ -353,7 +357,7 @@ function ModalLayout({ node, children, themeClass, style }) {
         dialog.addEventListener('close', onClose);
         return () => dialog.removeEventListener('close', onClose);
     }, []);
-    return (_jsxs(_Fragment, { children: [triggerMode === 'button' && (_jsx("button", { type: "button", className: "formspec-modal-trigger formspec-focus-ring", ref: triggerRef, onClick: openModal, children: triggerLabel })), _jsxs("dialog", { ref: dialogRef, className: mergeClasses('formspec-modal', themeClass), style: style, "aria-labelledby": title ? titleId : undefined, "aria-label": title ? undefined : triggerLabel, ...(size ? { 'data-size': size } : {}), onClick: handleDialogClick, ...projectionMetadataAttrs(node), children: [closable && (_jsx("button", { type: "button", className: "formspec-modal-close formspec-focus-ring", "aria-label": "Close", onClick: closeModal, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), title && (_jsx(Heading, { className: "formspec-modal-title", id: titleId, children: title })), _jsx("div", { className: "formspec-modal-content", children: children })] })] }));
+    return (_jsxs(_Fragment, { children: [triggerMode === 'button' && (_jsx("button", { type: "button", className: "formspec-modal-trigger formspec-focus-ring", ref: triggerRef, onClick: openModal, children: triggerLabel })), _jsxs("dialog", { ref: dialogRef, className: mergeClasses('formspec-modal', themeClass), style: style, "aria-labelledby": title ? titleId : undefined, "aria-label": title ? undefined : triggerLabel, ...(size ? { 'data-size': size } : {}), onClick: handleDialogClick, ...projectionMetadataAttrs(node), children: [closable && (_jsx("button", { type: "button", className: "formspec-modal-close formspec-focus-ring", "aria-label": chrome('modal.close'), onClick: closeModal, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), title && (_jsx(Heading, { className: "formspec-modal-title", id: titleId, children: title })), _jsx("div", { className: "formspec-modal-content", children: children })] })] }));
 }
 // ── Popover ───────────────────────────────────────────────────────
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +

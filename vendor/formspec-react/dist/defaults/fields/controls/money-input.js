@@ -57,5 +57,5 @@ export function MoneyInputControl({ field, node, common, isReadonly, placeholder
     const moneyDescribedBy = [common['aria-describedby'], currencyId]
         .filter(Boolean)
         .join(' ') || undefined;
-    return (_jsxs("div", { className: "formspec-money", children: [_jsx("span", { id: currencyId, className: "formspec-money-currency", "aria-label": `Currency: ${currency}`, children: currency }), _jsx("input", { ...common, type: "text", inputMode: "decimal", pattern: '[0-9]*\\.?[0-9]*', className: "formspec-input formspec-money-amount", name: `${field.path}__amount`, placeholder: placeholder, "aria-describedby": moneyDescribedBy, value: amountStr, readOnly: isReadonly, min: min, max: max, step: step, onChange: isReadonly ? undefined : handleChange })] }));
+    return (_jsxs("div", { className: "formspec-money", children: [_jsx("span", { id: currencyId, className: "formspec-money-currency", children: currency }), _jsx("input", { ...common, type: "text", inputMode: "decimal", pattern: '[0-9]*\\.?[0-9]*', className: "formspec-input formspec-money-amount", name: `${field.path}__amount`, placeholder: placeholder, "aria-describedby": moneyDescribedBy, value: amountStr, readOnly: isReadonly, min: min, max: max, step: step, onChange: isReadonly ? undefined : handleChange })] }));
 }
