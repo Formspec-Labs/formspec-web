@@ -173,7 +173,7 @@ function SectionLayout({ node, children, themeClass, style }) {
     const description = props.description;
     const headingLevel = useHeadingLevel();
     const Heading = `h${headingLevel}`;
-    return (_jsxs("section", { className: mergeClasses('formspec-section', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [title && _jsx(Heading, { children: title }), description && _jsx("p", { className: "formspec-section-description", children: description }), _jsx(HeadingLevelContext.Provider, { value: title ? headingLevel + 1 : headingLevel, children: children })] }));
+    return (_jsxs("section", { className: mergeClasses('formspec-section', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [title && _jsx(Heading, { className: "formspec-section-title", children: title }), description && _jsx("p", { className: "formspec-section-description", children: description }), _jsx(HeadingLevelContext.Provider, { value: title ? headingLevel + 1 : headingLevel, children: children })] }));
 }
 // ── Collapsible ───────────────────────────────────────────────────
 function CollapsibleLayout({ node, children, themeClass, style }) {

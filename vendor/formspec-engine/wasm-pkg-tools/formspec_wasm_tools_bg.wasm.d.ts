@@ -47,6 +47,7 @@ export const felcontext_evaluateTrace: (a: number, b: number, c: number, d: numb
 export const felcontext_interpolate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
 export const executeMappingRules: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const executeMappingDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+export const deriveJsonLdContext: (a: number, b: number, c: number, d: number, e: number) => void;
 export const parseRegistry: (a: number, b: number, c: number) => void;
 export const findRegistryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const validateLifecycleTransition: (a: number, b: number, c: number, d: number) => number;

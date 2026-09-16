@@ -14,6 +14,11 @@ export declare function buildFormspecResponseEnvelope(options: {
         url: string;
         version: string;
     };
+    displayedLocale?: {
+        url?: string;
+        version: string;
+        locale: string;
+    };
     meta?: {
         id?: string;
         author?: {

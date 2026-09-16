@@ -28,6 +28,7 @@ export declare const UI_STRINGS: {
     readonly 'wizard.progress': "Form progress";
     readonly 'wizard.step': "Step";
     readonly 'wizard.collapseNavigation': "Collapse navigation";
+    readonly 'wizard.otherItems': "Additional items";
     readonly 'modal.close': "Close";
     readonly 'alert.dismiss': "Dismiss";
     readonly 'validationSummary.heading': "Please correct the following";

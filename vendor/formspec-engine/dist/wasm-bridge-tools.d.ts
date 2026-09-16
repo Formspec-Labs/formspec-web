@@ -171,6 +171,23 @@ export declare function wasmParseRegistry(registry: unknown): {
 };
 /** Find the highest-version registry entry matching a name and version constraint. */
 export declare function wasmFindRegistryEntry(registry: unknown, name: string, versionConstraint?: string): any | null;
+/** One thing the JSON-LD context derivation could not honor (Ontology spec §6.2). */
+export interface JsonLdContextDiagnostic {
+    kind: 'collision' | 'unbound-repeatable' | 'unsupported-type';
+    /** Dotted Definition path of the item that could not be honored. */
+    path: string;
+    /** The item's JSON key. */
+    key: string;
+    /** Term definition that stays in the context (collisions only). */
+    existingId?: string;
+    /** Term definition the item needed. */
+    newId?: string;
+}
+/** Derive the JSON-LD `@context` for a definition from an ontology document's concept bindings (Ontology §6.2). */
+export declare function wasmDeriveJsonLdContext(definition: unknown, ontology: unknown): {
+    context: Record<string, unknown>;
+    diagnostics: JsonLdContextDiagnostic[];
+};
 /** Validate a lifecycle transition between two registry statuses. */
 export declare function wasmValidateLifecycleTransition(from: string, to: string): boolean;
 /** Construct a well-known registry URL from a base URL. */

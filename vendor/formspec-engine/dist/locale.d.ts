@@ -42,6 +42,15 @@ export declare class LocaleStore {
     lookupKeyWithMeta(key: string): LookupResult;
     lookupKeyForTarget(key: string, target: LocaleTargetIdentity, localeCode?: string): LookupResult;
     /**
+     * The Locale document actually resolved for the active locale tag — BCP 47 implicit
+     * (region-stripping) resolution of the requested tag to a *loaded* document, not the
+     * raw requested tag itself. Backs `Response.displayedLocale`: the document identity
+     * (target kind, target url, normalized locale) whose strings the respondent saw.
+     * Null when no target is set or no document answers the active tag or any of its
+     * implicit ancestors.
+     */
+    getActiveDocument(): LocaleDocument | null;
+    /**
      * The active locale's `formats.date` (Locale §2.4): the first document on the same cascade
      * strings use — regional, explicit fallback, implicit language — that authored one. Null when none did.
      */

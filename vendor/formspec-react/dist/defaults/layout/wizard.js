@@ -4,6 +4,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useFormspecContext } from '../../context';
 import { useChromeText } from '../../use-chrome-text';
+import { plannedTitle } from '../../use-localized-node';
 import { projectionMetadataAttrs } from '../../projection-metadata.js';
 import { routeLandmarkAttrs } from '../../route-landmark.js';
 // ---- helpers ----------------------------------------------------------------
@@ -63,7 +64,11 @@ export function Wizard({ node, children }) {
     const showProgress = node.props?.showProgress !== false;
     const allowSkip = !!node.props?.allowSkip;
     const showSideNav = !!node.props?.sidenav;
-    const stepTitle = (idx) => stepNodes[idx]?.props?.title ||
+    // A step's planned title (its group's live label, its chrome key), else its authored title. `useChromeText`
+    // above subscribes to the locale signal, so a switch re-renders every title; a group label that
+    // interpolates is read at that moment, not tracked.
+    const stepTitle = (idx) => plannedTitle(engine, stepNodes[idx]?.props) ||
+        stepNodes[idx]?.props?.title ||
         stepNodes[idx]?.fieldItem?.label ||
         chrome('wizard.stepTitle', { index: idx + 1 });
     // Soft-touch all fields in the current step to reveal validation errors.

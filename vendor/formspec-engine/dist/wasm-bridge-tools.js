@@ -219,6 +219,12 @@ export function wasmFindRegistryEntry(registry, name, versionConstraint = '') {
     const resultJson = wasmTools().findRegistryEntry(JSON.stringify(registry), name, versionConstraint);
     return JSON.parse(resultJson);
 }
+/** Derive the JSON-LD `@context` for a definition from an ontology document's concept bindings (Ontology §6.2). */
+export function wasmDeriveJsonLdContext(definition, ontology) {
+    assertWasmToolsReadySync();
+    const resultJson = wasmTools().deriveJsonLdContext(JSON.stringify(definition), JSON.stringify(ontology));
+    return JSON.parse(resultJson);
+}
 /** Validate a lifecycle transition between two registry statuses. */
 export function wasmValidateLifecycleTransition(from, to) {
     assertWasmToolsReadySync();

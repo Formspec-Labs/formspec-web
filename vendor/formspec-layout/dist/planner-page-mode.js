@@ -11,6 +11,8 @@ export function emitPageModePages(orphans, pages, nextId = createNodeIdGenerator
         props: {
             ...(page.id ? { id: page.id } : {}),
             title: page.title || `Page ${index + 1}`,
+            ...(page.titleBind ? { titleBind: page.titleBind } : {}),
+            ...(page.titleKey ? { titleKey: page.titleKey } : {}),
         },
         cssClasses: [],
         children: page.children,
@@ -25,7 +27,7 @@ function buildFallbackSections(orphans, nextId) {
             id: nextId('fallback-section'),
             component: 'Section',
             category: 'layout',
-            props: { title: 'Additional Items' },
+            props: { title: 'Additional items', titleKey: 'wizard.otherItems' },
             cssClasses: [],
             children: orphans,
         }];
@@ -45,6 +47,7 @@ export function buildDefinitionPages(nodes, items) {
         const title = String(item.label || node.props.title || node.props.bind || item.key || `Page ${pages.length + 1}`);
         pages.push({
             title,
+            titleBind: node.bindPath ?? item.key,
             children: [stripTitleFromGroupNode(node)],
         });
     }
@@ -111,6 +114,7 @@ export function applyGeneratedPageMode(rootNode, componentType, ctx) {
             const title = String(item.label || node.props.title || node.props.bind || item.key || `Page ${pages.length + 1}`);
             pages.push({
                 title,
+                titleBind: node.bindPath ?? item.key,
                 children: [stripTitleFromGroupNode(node)],
             });
         }

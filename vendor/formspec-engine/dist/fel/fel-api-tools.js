@@ -1,5 +1,5 @@
 /** @filedesc FEL/registry/lint/changelog helpers backed by tools WASM (`wasm-bridge-tools` only; ADR 0050). */
-import { wasmCollectFELRewriteTargets, wasmFindRegistryEntry, wasmGenerateChangelog, wasmLintDocument, wasmListBuiltinFunctions, wasmParseRegistry, wasmPrintFEL, wasmRewriteFelForAssembly, wasmRewriteFELReferences, wasmRewriteMessageTemplate, wasmTokenizeFEL, wasmTryLiftConditionGroup, wasmValidateExtensionUsage, wasmValidateLifecycleTransition, wasmWellKnownRegistryUrl, } from '../wasm-bridge-tools.js';
+import { wasmCollectFELRewriteTargets, wasmDeriveJsonLdContext, wasmFindRegistryEntry, wasmGenerateChangelog, wasmLintDocument, wasmListBuiltinFunctions, wasmParseRegistry, wasmPrintFEL, wasmRewriteFelForAssembly, wasmRewriteFELReferences, wasmRewriteMessageTemplate, wasmTokenizeFEL, wasmTryLiftConditionGroup, wasmValidateExtensionUsage, wasmValidateLifecycleTransition, wasmWellKnownRegistryUrl, } from '../wasm-bridge-tools.js';
 export const tokenizeFEL = wasmTokenizeFEL;
 function mapRewriteEntries(entries, rewrite) {
     if (!rewrite || entries.length === 0)
@@ -46,6 +46,7 @@ export const parseRegistry = wasmParseRegistry;
 export const findRegistryEntry = wasmFindRegistryEntry;
 export const validateLifecycleTransition = wasmValidateLifecycleTransition;
 export const wellKnownRegistryUrl = wasmWellKnownRegistryUrl;
+export const deriveJsonLdContext = wasmDeriveJsonLdContext;
 export const generateChangelog = wasmGenerateChangelog;
 export const printFEL = wasmPrintFEL;
 export const tryLiftConditionGroup = wasmTryLiftConditionGroup;

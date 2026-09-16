@@ -578,6 +578,7 @@ export class FormEngine {
             completionEligible: trigger === 'submit',
             timestamp: this.nowISO(),
             displayedIssuer: this.getDisplayedIssuerPin(),
+            displayedLocale: this.getDisplayedLocalePin(),
             meta,
         });
     }
@@ -1632,6 +1633,21 @@ export class FormEngine {
             throw new Error('Issuer URL must be resolved with getResolvedIssuer() before getResponse() can emit displayedIssuer');
         }
         return undefined;
+    }
+    /**
+     * Submit-time pin of the Locale document whose strings the respondent saw — mirrors
+     * {@link getDisplayedIssuerPin}. Reads the document {@link LocaleStore.getActiveDocument}
+     * resolves for the active locale tag. A Locale document's identity is its target plus its
+     * normalized locale (Locale spec), so the pin is `locale` + `version`, with the document's own
+     * `url` when it declares one (Locale §url is OPTIONAL, unlike Issuer's). Undefined only when no
+     * Locale document is active — the Definition's inline wording was shown.
+     */
+    getDisplayedLocalePin() {
+        const doc = this._localeStore.getActiveDocument();
+        if (!doc) {
+            return undefined;
+        }
+        return { ...(doc.url ? { url: doc.url } : {}), version: doc.version, locale: doc.locale };
     }
 }
 FormEngine.instanceSourceCache = new Map();

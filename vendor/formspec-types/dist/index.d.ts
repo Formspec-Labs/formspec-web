@@ -85,6 +85,9 @@ import type { MappingDocument } from './generated/mapping.js';
 import type { ScreenerDocument } from './generated/screener.js';
 import type { ExperienceDocument } from './generated/experience.js';
 import type { ResponseActionsDocument } from './generated/response-actions.js';
+import type { OntologyDocument } from './generated/ontology.js';
+import type { RegistryDocument } from './generated/registry.js';
+import type { ReferencesDocument } from './generated/references.js';
 export interface ProjectBundle {
     /**
      * The form definition artifacts. Plural per ADR 0150 §5.2 App Manifest reframe;
@@ -112,4 +115,18 @@ export interface ProjectBundle {
     experience?: ExperienceDocument;
     /** Standalone Response Actions Document (present only when response-actions are loaded). */
     responseActions?: ResponseActionsDocument;
+    /** The one authored Ontology Document (present only when authored). */
+    ontology?: OntologyDocument;
+    /**
+     * Authored Registry Documents keyed by id, like `mappings`: `default` is the bundle's own
+     * (`<stem>.registry.json`), any other id is a foreign stem (`<id>.registry.json`). Present
+     * only when at least one is authored. Registries a host loads for resolution are not here.
+     */
+    registries?: Record<string, RegistryDocument>;
+    /**
+     * The one authored References Document (present only when authored) — external resources
+     * (docs, regulations, knowledge bases) bound to Definition paths (References spec).
+     * Single emission, like `ontology`: one per bundle, never keyed.
+     */
+    references?: ReferencesDocument;
 }

@@ -88,6 +88,14 @@ export function collectFELRewriteTargets(expression: string): string;
 export function computeDependencyGroups(entries_json: string): string;
 
 /**
+ * Derive the JSON-LD `@context` for a Definition from an Ontology document's bindings.
+ *
+ * Returns JSON `{ "context": {...}, "diagnostics": [{ kind, path, key, existingId?, newId? }] }`
+ * (Ontology spec §6.2). Errors when either argument is not JSON.
+ */
+export function deriveJsonLdContext(definition_json: string, ontology_json: string): string;
+
+/**
  * Detect the document type of a Formspec JSON document.
  * Returns the document type string or null.
  */
@@ -323,6 +331,7 @@ export interface InitOutput {
     readonly felcontext_interpolate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly executeMappingRules: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly executeMappingDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly deriveJsonLdContext: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly parseRegistry: (a: number, b: number, c: number) => void;
     readonly findRegistryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly validateLifecycleTransition: (a: number, b: number, c: number, d: number) => number;

@@ -169,6 +169,9 @@ export function buildFormspecResponseEnvelope(options) {
     if (options.displayedIssuer) {
         response.displayedIssuer = options.displayedIssuer;
     }
+    if (options.displayedLocale) {
+        response.displayedLocale = options.displayedLocale;
+    }
     if (authoredSignatures) {
         response.authoredSignatures = authoredSignatures;
     }

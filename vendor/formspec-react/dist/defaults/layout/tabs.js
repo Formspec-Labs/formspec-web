@@ -4,6 +4,9 @@ import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-run
 import React, { useState, useRef, useCallback } from 'react';
 import { needTraceAttrs, projectionMetadataAttrs, } from '../../projection-metadata.js';
 import { routeLandmarkAttrs } from '../../route-landmark.js';
+import { useFormspecContext } from '../../context';
+import { useChromeText } from '../../use-chrome-text';
+import { plannedTitle } from '../../use-localized-node';
 /**
  * Tabs layout component.
  *
@@ -54,11 +57,15 @@ export function Tabs({ node, children }) {
             setActiveTab(nextIndex);
         }
     }, [activeTab, tabCount, setActiveTab]);
-    // Spec: tabLabels prop takes precedence, then derive from child metadata
+    // Spec: tabLabels prop takes precedence, then derive from child metadata. `useChromeText` subscribes to
+    // the locale signal, so a planned title (a group's live label) re-renders on a switch.
+    const { engine } = useFormspecContext();
+    useChromeText();
     const explicitLabels = node.props?.tabLabels;
     const explicitLabelGeneration = node.props?.tabLabelGeneration;
     const tabLabels = node.children.map((child, idx) => explicitLabels?.[idx]
         || child.fieldItem?.label
+        || plannedTitle(engine, child.props)
         || child.props?.title
         || child.props?.label
         || `Tab ${idx + 1}`);

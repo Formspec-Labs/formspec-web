@@ -4,6 +4,10 @@ import type { FormItem, LayoutNode, NodeIdGenerator, PlanContext } from './types
 export type PlannedPage = {
     id?: string;
     title: string;
+    /** Path of the group item whose live label titles the page, so a Locale's `<key>.label` renames the step. */
+    titleBind?: string;
+    /** The `$ui` chrome key the title comes from, for a page nobody authored. */
+    titleKey?: string;
     children: LayoutNode[];
 };
 export declare function emitPageModePages(orphans: LayoutNode[], pages: PlannedPage[], nextId?: NodeIdGenerator): LayoutNode[];

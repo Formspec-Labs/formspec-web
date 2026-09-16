@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo } from 'react';
 import { computed, signal } from '@preact/signals-core';
 import { useFormspecContext, findItemByKey } from './context';
+import { chromeText } from './use-chrome-text';
 import { useSignal } from './use-signal';
 /** The innermost repeat instance (`jobs[1]`) around the node being rendered; '' outside repeats. */
 export const RepeatInstanceContext = createContext('');
@@ -20,6 +21,18 @@ const LOCALIZABLE_ARRAY_PROPS = {
     Summary: { prop: 'items', subProp: 'label' },
 };
 const UNCHANGED = signal(null);
+/**
+ * The live title of a node the planner titled (same rule as the web component's `plannedTitle`): a page
+ * made from a group is titled by that group's label (`titleBind`), a page nobody authored by its `$ui`
+ * chrome key (`titleKey`); undefined for any other node. Read inside a locale-signal subscription.
+ */
+export function plannedTitle(engine, props) {
+    const titleBind = typeof props?.titleBind === 'string' ? props.titleBind : undefined;
+    const titleKey = typeof props?.titleKey === 'string' ? props.titleKey : undefined;
+    return (titleBind && engine.getItemLabelSignal(titleBind)?.value)
+        || (titleKey && chromeText(engine, titleKey))
+        || undefined;
+}
 function literalOf(value) {
     if (typeof value === 'string')
         return value;
@@ -42,7 +55,8 @@ export function useLocalizedNode(node) {
         const props = node.props ?? {};
         const id = typeof props.id === 'string' ? props.id : null;
         const groupPath = node.scopeChange && node.bindPath && typeof props.title === 'string' ? node.bindPath : null;
-        if (!id && !groupPath)
+        const planned = typeof props.titleBind === 'string' || typeof props.titleKey === 'string';
+        if (!id && !groupPath && !planned)
             return UNCHANGED;
         const group = groupPath ? findItemByKey(engine.getDefinition().items ?? [], groupPath) : null;
         return computed(() => {
@@ -85,6 +99,9 @@ export function useLocalizedNode(node) {
                 if (label && label !== group.label)
                     set('title', label);
             }
+            const planned = plannedTitle(engine, props);
+            if (planned && planned !== (next ?? props).title)
+                set('title', planned);
             return next;
         });
     }, [engine, instance, node]);
