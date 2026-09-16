@@ -91,7 +91,7 @@ Per stack-root [ADR-0128](../../../thoughts/adr/0128-frontend-surface-architectu
 
 ## Verifier distribution
 
-Per stack-root [ADR-0131](../../../thoughts/adr/0131-verifier-distribution.md), the browser verifier in formspec-web is one of four distribution modes. The other three (CLI `integrity-verify-cli`, embedded-library `@integrity-stack/signature-*`, reproducible bundle) are sibling deliverables; formspec-web does not own the verifier exclusively.
+Per stack-root [ADR-0131](../../../thoughts/adr/0131-verifier-distribution.md), the browser verifier in formspec-web is one of four distribution modes. The other three (CLI `integrity-verify-cli`, embedded-library `@formspec-org/integrity-signature-*`, reproducible bundle) are sibling deliverables; formspec-web does not own the verifier exclusively.
 
 ## Consequences
 
