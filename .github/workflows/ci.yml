@@ -28,7 +28,7 @@ jobs:
       - run: npm run check:vendor-leaks
       - uses: actions/checkout@v4
         with:
-          repository: Formspec-org/formspec
+          repository: Formspec-Labs/formspec
           path: formspec-source
       - run: npm run check:upstream-theme
         env:
