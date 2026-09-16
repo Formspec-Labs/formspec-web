@@ -40,7 +40,7 @@ The threat model is the load-bearing input. Stated explicitly so the design's su
 **The respondent's browser is the trust anchor.** This is the load-bearing posture inherited from the W3C Permissions API / WebExtensions model / accessibility-API tradition.
 
 - The **form** trusts the **respondent**. The respondent picks their tools.
-- The **form** trusts the **browser** to mediate consent (WebMCP `consequentialHint` per Assist §7.2 — the browser or agent gates every write tool behind its own confirmation — plus the form's provider-side confirm gate per Assist §7.1(4); postMessage isolation per Assist §7.4; OAuth-style flows for HTTP transports per Assist §7.5).
+- The **form** trusts the **browser** to mediate consent (WebMCP `consequentialHint` per Assist §7.2 — advisory; it lets the browser or agent gate write tools behind its own confirmation — plus the form's provider-side confirm gate per Assist §7.1(4), which is the guaranteed one; postMessage isolation per Assist §7.4; OAuth-style flows for HTTP transports per Assist §7.5).
 - The **form** does NOT trust any specific assistant. Per Assist §11.1 "MUST treat all tool input as untrusted." The Assist Provider validates every path + value before acting.
 - The **assistant** runs in the respondent's tools — locally (browser extension, in-page widget, local MCP server) OR remotely (the respondent's choice of cloud AI). The form has no visibility into nor control over the assistant beyond the Assist tool surface.
 
