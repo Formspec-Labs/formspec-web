@@ -3,6 +3,6 @@ export { planComponentTree, findNodeByBindPath, } from './planner-component-tree
 export { planDefinitionFallback, planDefinitionItem, findItemAtPath, findItemPathByKey, } from './planner-definition-fallback.js';
 export { buildThemePageNodes, collectAssignedTopLevelKeys, withoutThemePages, wrapRegionNode, } from './planner-theme-pages.js';
 export { applyDefinitionPageMode, applyGeneratedPageMode, buildDefinitionPages, emitPageModePages, isStudioGeneratedComponentDoc, stripTitleFromGroupNode, } from './planner-page-mode.js';
-export { classifyComponent, createNodeIdGenerator, ensureActionButton, extractProps, normalizeCssClass, planContains, preparePlanContext, resolveCssClasses, resolveStyleTokens, resolveTokenInContext, } from './node-utils.js';
+export { classifyComponent, createNodeIdGenerator, ensureActionButton, ensureValidationSummary, extractProps, normalizeCssClass, planContains, preparePlanContext, resolveCssClasses, resolveStyleTokens, resolveTokenInContext, } from './node-utils.js';
 export type { EnsureActionButtonOptions } from './node-utils.js';
 export type { NodeIdGenerator } from './types.js';

@@ -1,29 +1,33 @@
+import { type ValidationSummaryComp } from '@formspec-org/layout';
 export interface ValidationSummaryProps {
-    /** Validation results for 'submit' source mode (from engine.getValidationReport()). */
+    /**
+     * The component's own props (component spec `ValidationSummary`: `source`, `mode`, `showFieldErrors`,
+     * `jumpLinks`, `dedupe`), as the planner carries them. This is how a placed ValidationSummary renders.
+     */
+    comp?: ValidationSummaryComp;
+    /** Findings to list when `source` is `submit` and no form submit is being read — a host's own results. */
     results?: Array<{
         path: string;
         message: string;
         severity: string;
     }>;
     /**
-     * 'live' — subscribe to engine validation signals and re-render on every change.
-     * 'submit' — show results from the `results` prop only (existing behavior).
-     * Default: 'submit'.
+     * `live` reads the engine's validation as it changes; `submit` reads the latest submit through the
+     * provider, or the `results` prop. Default: `submit`. `comp.source` outranks this.
      */
     source?: 'live' | 'submit';
     /** Which severities to render. Default: ['error', 'warning']. */
     severityFilter?: string[];
-    /** Whether to auto-focus the summary when results appear. Default: true. */
+    /** Whether to auto-focus the summary when errors appear. Default: true. */
     autoFocus?: boolean;
     /** Optional className override for the container. */
     className?: string;
 }
 /**
- * Renders a validation error/warning summary with clickable jump links.
- * Resolves field paths to human-readable labels and field element IDs
- * via the FormEngine's FieldViewModels.
- *
- * When source='live', subscribes to engine.structureVersion so the summary
- * re-renders on any form state change without requiring a submit.
+ * The validation summary in the default look: a heading with the count, then every finding as a link to
+ * its field. Which findings, in what words, and where each links are the shared reader's
+ * (`@formspec-org/layout`) — the same rows the web component's adapters draw — fed from this provider's
+ * engine, its latest submit and its touch gate. Jumping lands the focus the way the renderer's own field
+ * focus does: disclosures opened, hidden tab or wizard step revealed.
  */
-export declare function ValidationSummary({ results: resultsProp, source, severityFilter, autoFocus, className, }: ValidationSummaryProps): import("react/jsx-runtime").JSX.Element | null;
+export declare function ValidationSummary({ comp, results: resultsProp, source: sourceProp, severityFilter, autoFocus, className, }: ValidationSummaryProps): import("react/jsx-runtime").JSX.Element | null;

@@ -6,7 +6,7 @@ import { positionPopupNearTrigger, clearPopupFixedPosition, MODAL_FIRST_FOCUSABL
 import { useWhen } from '../../use-when';
 import { projectionMetadataAttrs } from '../../projection-metadata.js';
 import { routeLandmarkAttrs } from '../../route-landmark.js';
-import { HeadingLevelContext, useHeadingLevel } from '../../heading-level';
+import { HeadingLevelContext, useHeadingLevel, useIsSection } from '../../heading-level';
 import { useChromeText } from '../../use-chrome-text';
 /**
  * Default layout renderer — dispatches to the correct container component
@@ -89,6 +89,7 @@ function stackJustifyContent(value) {
 function StackLayout({ node, children, themeClass, style }) {
     const props = node.props ?? {};
     const headingLevel = useHeadingLevel();
+    const section = useIsSection();
     const direction = props.direction;
     const alignment = props.align;
     const justify = props.justify;
@@ -109,7 +110,7 @@ function StackLayout({ node, children, themeClass, style }) {
     // the planner emits Stack for definition groups, Card for explicit cards)
     const title = props.title;
     if (title && node.bindPath) {
-        return (_jsxs("section", { className: mergeClasses('formspec-group', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...accessibilityAttrs(node), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [React.createElement(`h${headingLevel}`, { className: 'formspec-group-title' }, title), _jsx(HeadingLevelContext.Provider, { value: headingLevel + 1, children: children })] }));
+        return (_jsxs("section", { className: mergeClasses(section ? 'formspec-group formspec-group--section' : 'formspec-group', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...accessibilityAttrs(node), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [React.createElement(`h${headingLevel}`, { className: 'formspec-group-title' }, title), _jsx(HeadingLevelContext.Provider, { value: headingLevel + 1, children: children })] }));
     }
     return (_jsx("div", { className: mergeClasses('formspec-stack', themeClass), style: stackStyle, ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: children }));
 }
@@ -147,13 +148,14 @@ function GridLayout({ node, children, themeClass, style }) {
     return (_jsx("div", { className: mergeClasses('formspec-grid', themeClass), style: gridStyle, ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: children }));
 }
 // ── Card / Section ────────────────────────────────────────────────
+/** Card (component §5.16): its title is a heading at the card's depth, and heads the children one deeper. */
 function CardLayout({ node, children, themeClass, style }) {
     const props = node.props ?? {};
     const label = node.fieldItem?.label || props.title;
     const subtitle = props.subtitle;
-    const headingLevel = Math.min(6, Math.max(1, props.headingLevel ?? 3));
+    const headingLevel = useHeadingLevel();
     const Heading = `h${headingLevel}`;
-    return (_jsxs("section", { className: mergeClasses('formspec-card', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [label && _jsx(Heading, { className: "formspec-card-title", children: label }), subtitle && _jsx("p", { className: "formspec-card-subtitle", children: subtitle }), children] }));
+    return (_jsxs("section", { className: mergeClasses('formspec-card', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [label && _jsx(Heading, { className: "formspec-card-title", children: label }), subtitle && _jsx("p", { className: "formspec-card-subtitle", children: subtitle }), _jsx(HeadingLevelContext.Provider, { value: label ? headingLevel + 1 : headingLevel, children: children })] }));
 }
 // ── Divider ───────────────────────────────────────────────────────
 /** Divider (component §5.15): a rule, or `label` centered between two rules. `label` overrides `node.props.label`. */
@@ -164,13 +166,14 @@ export function DividerLayout({ node, themeClass, style, label = node.props?.lab
     return _jsx("hr", { className: mergeClasses('formspec-divider', themeClass), style: style, ...projectionMetadataAttrs(node) });
 }
 // ── Section ──────────────────────────────────────────────────────
+/** Section (component §5.1): its title is a heading at the section's depth, and heads the children one deeper. */
 function SectionLayout({ node, children, themeClass, style }) {
     const props = node.props ?? {};
     const title = props.title;
     const description = props.description;
-    const headingLevel = Math.min(6, Math.max(1, props.headingLevel ?? 2));
+    const headingLevel = useHeadingLevel();
     const Heading = `h${headingLevel}`;
-    return (_jsxs("section", { className: mergeClasses('formspec-section', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [title && _jsx(Heading, { children: title }), description && _jsx("p", { className: "formspec-section-description", children: description }), children] }));
+    return (_jsxs("section", { className: mergeClasses('formspec-section', themeClass), style: surfaceStyle(props, style), ...elevationAttrs(props), ...routeLandmarkAttrs(node), ...projectionMetadataAttrs(node), children: [title && _jsx(Heading, { children: title }), description && _jsx("p", { className: "formspec-section-description", children: description }), _jsx(HeadingLevelContext.Provider, { value: title ? headingLevel + 1 : headingLevel, children: children })] }));
 }
 // ── Collapsible ───────────────────────────────────────────────────
 function CollapsibleLayout({ node, children, themeClass, style }) {

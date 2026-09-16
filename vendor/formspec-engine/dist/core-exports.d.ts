@@ -1,6 +1,6 @@
 /** @filedesc Render-safe public surface shared by `index.ts` and `engine-render-entry.ts` — no FEL tooling facade or tools bridge (ADR 0050 §8). */
 import type { FormBind, FormDefinition, FormInstance, FormItem, FormShape, FormVariable, OptionEntry, ValidationReport as FormspecValidationReport, ValidationResult as FormspecValidationResult } from '@formspec-org/types';
-export type { AssemblyProvenance, AssemblyResult, ComponentDocument, ComponentObject, DefinitionResolver, DocumentType, EngineNowInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, ExtensionUsageIssue, FELAnalysis, FELAnalysisError, FELBuiltinFunctionCatalogEntry, FELRewriteOptions, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, IFormEngine, IRuntimeMappingEngine, MappingDiagnostic, MappingDirection, PinnedResponseReference, RegistryEntry, RemoteOptionsState, RewriteMap, RuntimeMappingResult, SchemaValidationError, SchemaValidationResult, SchemaValidator, SchemaValidatorSchemas, } from './interfaces.js';
+export type { AssemblyProvenance, AssemblyResult, ComponentDocument, ComponentObject, DefinitionResolver, DocumentType, EngineNowInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, ExtensionUsageIssue, FELAnalysis, FELAnalysisError, FELBuiltinFunctionCatalogEntry, FELRewriteOptions, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, IFormEngine, IRuntimeMappingEngine, MappingDiagnostic, MappingDirection, PinnedResponseReference, RegistryEntry, RemoteOptionsState, RewriteMap, RuntimeMappingResult, SchemaValidationError, SchemaValidationResult, SchemaValidator, SchemaValidatorSchemas, SetValueOptions, WriteSource, } from './interfaces.js';
 export type { EvalDiagnostic } from './diff.js';
 export type { FelExtensionFunctionRegistration } from './extension-functions.js';
 export type { ValidationProfile } from '@formspec-org/types';
@@ -36,7 +36,7 @@ export type { EngineReactiveRuntime, EngineSignal } from './reactivity/types.js'
 export { preactReactiveRuntime } from './reactivity/preact-runtime.js';
 export { initFormspecEngine, initFormspecEngine as initEngine, initFormspecEngineTools, isFormspecEngineInitialized, isFormspecEngineToolsInitialized, } from './init-formspec-engine.js';
 export { buildValidationReportEnvelope } from './engine/response-assembly.js';
-export { toValidationResults } from './engine/helpers.js';
+export { deepEqual, toValidationResults } from './engine/helpers.js';
 export type { LocaleDocument } from './locale.js';
 export { normalizeBcp47 } from './locale.js';
 export * from './issuer/index.js';

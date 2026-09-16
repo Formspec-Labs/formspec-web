@@ -11,7 +11,7 @@ export { RESPONSE_ACTIONS_EFFECT_TIME_BINDINGS, RESPONSE_ACTIONS_PRECONDITION_BI
 export { preactReactiveRuntime } from './reactivity/preact-runtime.js';
 export { initFormspecEngine, initFormspecEngine as initEngine, initFormspecEngineTools, isFormspecEngineInitialized, isFormspecEngineToolsInitialized, } from './init-formspec-engine.js';
 export { buildValidationReportEnvelope } from './engine/response-assembly.js';
-export { toValidationResults } from './engine/helpers.js';
+export { deepEqual, toValidationResults } from './engine/helpers.js';
 export { normalizeBcp47 } from './locale.js';
 export * from './issuer/index.js';
 export { FormEngine } from './engine/FormEngine.js';

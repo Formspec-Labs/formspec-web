@@ -15,7 +15,7 @@ export { interpolateParams } from './params.js';
 export { getDefaultComponent } from './defaults.js';
 export { widgetTokenToComponent, KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT, COMPONENT_TO_HINT, COMPATIBILITY_MATRIX, } from '@formspec-org/types';
 export { mergeFormPresentationForPlanning } from './form-presentation.js';
-export { planComponentTree, planDefinitionFallback, planContains, ensureActionButton, createNodeIdGenerator, preparePlanContext, } from './planner.js';
+export { planComponentTree, planDefinitionFallback, planContains, ensureActionButton, ensureValidationSummary, createNodeIdGenerator, preparePlanContext, } from './planner.js';
 export type { EnsureActionButtonOptions, NodeIdGenerator } from './planner.js';
 export { resolvePageSequence } from './page-sequence.js';
 export type { PageSequenceEntry } from './page-sequence.js';
@@ -25,6 +25,8 @@ export { characterCountLimitMessage, characterCountStatus, CHARACTER_COUNT_ANNOU
 export type { UiStringLookup } from './character-count.js';
 export { UI_STRINGS, fillUiParams } from './ui-strings.js';
 export type { ChromeStringKey } from './ui-strings.js';
+export { readValidationSummaryRows, validationResultPath } from './validation-summary.js';
+export type { ValidationSummaryComp, ValidationSummaryRow, ValidationSummarySource } from './validation-summary.js';
 export { platformDefaults, platformSelectors, buildPlatformTheme, mergePlatformAndTenantTheme, } from './platform-defaults.js';
 export { resolveRouteLandmark } from './route-landmark-projection.js';
 export type { ResolvedRouteLandmark, ResolvedRouteLandmarkRole } from './route-landmark-projection.js';

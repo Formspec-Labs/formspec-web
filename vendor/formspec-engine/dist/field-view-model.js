@@ -226,6 +226,7 @@ export function createFieldViewModel(deps) {
         options,
         optionsState,
         setValue: deps.setFieldValue,
+        writeSource: deps.getWriteSource(),
     };
 }
 /** Escape dots and backslashes in option values per §3.1.3. */

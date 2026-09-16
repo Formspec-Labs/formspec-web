@@ -1009,10 +1009,11 @@ h6.formspec-heading {
   cursor: default;
 }
 
-/* A section — a group this skin titles at section depth (h1–h3) — opens further from what precedes it than
- * two questions sit apart. The stack's gap is already the field rhythm, so the margin carries the rest; the
- * Theme retunes either through `spacing.field` / `spacing.section` (Theme spec §3.2). */
-.formspec-group:has(> :is(h1, h2, h3).formspec-group-title:not(.formspec-sr-only)) {
+/* A section — a titled group at the form's root depth (`formspec-group--section`, whatever heading level the
+ * host started the form at) — opens further from what precedes it than two questions sit apart. The stack's
+ * gap is already the field rhythm, so the margin carries the rest; the Theme retunes either through
+ * `spacing.field` / `spacing.section` (Theme spec §3.2). A hidden title keeps the gap a question takes. */
+.formspec-group--section:has(> .formspec-group-title:not(.formspec-sr-only)) {
   margin-top: max(0px, calc(var(--formspec-spacing-section, 1.5rem) - var(--formspec-spacing-field, 0.75rem)));
 }
 
@@ -1852,6 +1853,17 @@ hr.formspec-divider {
   letter-spacing: 0.02em;
 }
 
+/* A field the assistant wrote (assist-spec §8): the renderer sets `data-formspec-agent-filled` on the field root
+   until the respondent edits it, and a live region says so — the attribute carries the meaning, this is the sighted
+   cue: the read-only field's left rule in the primary color over a faint tint of the surface, so text contrast
+   is the surface's own. */
+[data-formspec-agent-filled] {
+  padding-left: 0.875rem;
+  border-left: 2px solid var(--formspec-default-primary);
+  border-radius: var(--formspec-default-radius-sm);
+  background: color-mix(in srgb, var(--formspec-default-primary) 6%, var(--formspec-default-surface));
+}
+
 .formspec-group,
 .formspec-section {
   position: relative;
@@ -2285,6 +2297,35 @@ hr.formspec-divider {
 .formspec-accordion-content--repeat {
   border-top: none;
   padding-top: 10px;
+}
+
+/* Issuer chrome (Issuer spec): who is asking, at the top of the form — logo, display name, organization
+   breadcrumb, support address. One row; it opens the form with the field gap above it and adds none below,
+   the first section brings its own. */
+.fs-issuer-chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.fs-issuer-logo {
+  max-height: 3rem;
+  width: auto;
+}
+
+.fs-issuer-name {
+  font-weight: 600;
+}
+
+.fs-issuer-org-breadcrumb,
+.fs-issuer-query-indicator {
+  color: var(--formspec-default-text-subtle);
+  font-size: 0.875rem;
+}
+
+.fs-issuer-query-indicator {
+  margin-left: auto;
 }
 
 /* @filedesc Navigation, overlay, and workflow components for the default Formspec skin. */

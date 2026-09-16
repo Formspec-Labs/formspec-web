@@ -87,22 +87,25 @@ function normalizeInvokerResult(result) {
 function errorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
-function actionResultMessage(result) {
-    const statusLabel = {
-        completed: 'Completed',
-        blocked: 'Blocked',
-        failed: 'Failed',
-        deferred: 'Deferred',
-        unresolved: 'Unresolved',
-    }[result.status];
-    const failureReason = result.failureReason?.trim();
-    return failureReason
-        ? `${statusLabel}: ${failureReason}`
-        : `${statusLabel}.`;
+/** One chrome key per invocation status — the word the renderer says, authorable like every other. */
+const ACTION_STATUS_KEYS = {
+    completed: 'action.completed',
+    blocked: 'action.blocked',
+    failed: 'action.failed',
+    deferred: 'action.deferred',
+    unresolved: 'action.unresolved',
+};
+function actionResultMessage(chrome, result) {
+    const status = chrome(ACTION_STATUS_KEYS[result.status]);
+    const reason = result.failureReason?.trim();
+    // The sentence is a template too: a locale decides its own punctuation and word order.
+    return reason
+        ? chrome('action.statusReason', { status, reason })
+        : chrome('action.status', { status });
 }
 function ActionButtonNode({ node }) {
     const chrome = useChromeText();
-    const { onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
+    const { onSubmit, recordSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
     const form = useForm();
     const actionRef = actionRefFor(node);
     const resolution = resolveActionRef(actionRef, node.id);
@@ -135,6 +138,7 @@ function ActionButtonNode({ node }) {
                         ? { id: semanticControlScope.responseId }
                         : {}),
                 });
+                recordSubmit(result);
                 // Move focus to the first invalid field in this provider's form, as the webcomponent submit does.
                 const report = result.validationReport;
                 const scope = controlRef.current?.closest('.formspec-theme-scope');
@@ -207,6 +211,7 @@ function ActionButtonNode({ node }) {
         onActionResult,
         onHostEvent,
         onSubmit,
+        recordSubmit,
         responseActionInvoker,
         resolveActionIdempotencyKey,
         responseActionsDocument,
@@ -219,12 +224,12 @@ function ActionButtonNode({ node }) {
         setFeedback({ phase: 'pending', message: chrome('action.inProgress') });
         const invocation = invoke(invocationContext);
         const tracked = invocation.then((result) => {
-            setFeedback({ phase: 'settled', message: actionResultMessage(result) });
+            setFeedback({ phase: 'settled', message: actionResultMessage(chrome, result) });
             return result;
         }, (error) => {
             setFeedback({
                 phase: 'settled',
-                message: actionResultMessage({
+                message: actionResultMessage(chrome, {
                     status: 'failed',
                     failureReason: errorMessage(error),
                 }),
@@ -242,7 +247,7 @@ function ActionButtonNode({ node }) {
             }
         });
         return tracked;
-    }, [invoke]);
+    }, [chrome, invoke]);
     useEffect(() => {
         if (!semanticControlScope?.responseActionsArtifact
             || !resolution.resolved) {

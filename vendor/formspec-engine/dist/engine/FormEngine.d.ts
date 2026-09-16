@@ -1,7 +1,7 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
 import type { FormDefinition, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
 import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
-import type { AuthoredSignatureInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
+import type { SetValueOptions, WriteSource, AuthoredSignatureInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
 import { type FelTraceStep } from '../fel/fel-api-runtime.js';
 import type { EngineSignal, ReadonlyEngineSignal } from '../reactivity/types.js';
 import { type LocaleDocument } from '../locale.js';
@@ -18,6 +18,8 @@ export declare class FormEngine implements IFormEngine {
     readonly readonlySignals: Record<string, EngineSignal<boolean>>;
     readonly errorSignals: Record<string, EngineSignal<string | null>>;
     readonly validationResults: Record<string, EngineSignal<ValidationResult[]>>;
+    /** Who last wrote each field (`'user'` by default, `'assist'` for Assist-driven writes); null until written. */
+    readonly writeSources: Record<string, EngineSignal<WriteSource | null>>;
     readonly shapeResults: Record<string, EngineSignal<ValidationResult[]>>;
     readonly repeats: Record<string, EngineSignal<number>>;
     readonly optionSignals: Record<string, EngineSignal<OptionEntry[]>>;
@@ -103,7 +105,7 @@ export declare class FormEngine implements IFormEngine {
     /** Re-keys repeat `path` to the rows `select` keeps from a snapshot of every current row. O(rows). */
     private rebuildRepeatRows;
     compileExpression(expression: string, currentItemName?: string): () => FormFieldValue;
-    setValue(name: string, value: FormFieldValue): void;
+    setValue(name: string, value: FormFieldValue, options?: SetValueOptions): void;
     /** Coerces and stores a field value without evaluating; false for calculated or undeclared fields. */
     private writeFieldData;
     getValidationReport(): ValidationReport;
@@ -194,8 +196,14 @@ export declare class FormEngine implements IFormEngine {
     private static normalizeConstructorOptions;
     private initializeOptionSignals;
     private initializeInstances;
-    /** Returns true if the source string is fetchable (HTTP(S) or absolute path). */
-    private static isFetchableSource;
+    /**
+     * The HTTP(S) URL an instance `source` names, or null when it names something the engine does not fetch —
+     * a host-provided scheme such as `formspec-fn:`, or a relative reference with no page to resolve it.
+     * On a page, a relative reference resolves against `document.baseURI` like any other relative reference,
+     * so `./data/claimant.json` beside a Definition works under whatever path the site is served from.
+     * Elsewhere (a server, a test) an absolute URL or a root path is passed through as written.
+     */
+    private static resolveInstanceSource;
     private initializeInstanceSource;
     private initializeBindConfigs;
     private collectInstanceCalculateBinds;

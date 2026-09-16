@@ -26,6 +26,8 @@ export class FormEngine {
         this.readonlySignals = {};
         this.errorSignals = {};
         this.validationResults = {};
+        /** Who last wrote each field (`'user'` by default, `'assist'` for Assist-driven writes); null until written. */
+        this.writeSources = {};
         this.shapeResults = {};
         this.repeats = {};
         this.optionSignals = {};
@@ -295,9 +297,13 @@ export class FormEngine {
     /** Re-keys repeat `path` to the rows `select` keeps from a snapshot of every current row. O(rows). */
     rebuildRepeatRows(path, item, select) {
         const snapshots = [];
+        const sourceSnapshots = [];
         for (let current = 0; current < this.repeats[path].value; current += 1) {
             snapshots.push(snapshotRepeatGroupTree(item.children ?? [], `${path}[${current}]`, (fieldPath) => cloneValue(this.signals[fieldPath]?.value), (repeatPath) => this.repeats[repeatPath]?.value ?? 0));
+            // Provenance moves with its row: a respondent's typing must not inherit an assist tag from the row above.
+            sourceSnapshots.push(snapshotRepeatGroupTree(item.children ?? [], `${path}[${current}]`, (fieldPath) => this.writeSources[fieldPath]?.value ?? null, (repeatPath) => this.repeats[repeatPath]?.value ?? 0));
         }
+        const kept = new Map(snapshots.map((row, index) => [row, sourceSnapshots[index]]));
         const rows = select(snapshots);
         this._rx.batch(() => {
             this.clearRepeatSubtree(path);
@@ -311,6 +317,14 @@ export class FormEngine {
                         this.signals[fieldPath].value = v;
                     }
                 });
+                const sources = kept.get(rows[current]);
+                if (sources) {
+                    applyRepeatGroupTreeSnapshot(item.children ?? [], `${path}[${current}]`, sources, (fieldPath, source) => {
+                        var _a;
+                        ((_a = this.writeSources)[fieldPath] ?? (_a[fieldPath] = this._rx.signal(null))).value =
+                            source ?? null;
+                    });
+                }
             }
             this.structureVersion.value += 1;
         });
@@ -324,7 +338,8 @@ export class FormEngine {
             return JSON.parse(this.felContext().evaluate(expression, currentItemName, false, this.nowISO(), this._extensionFunctions)).value;
         };
     }
-    setValue(name, value) {
+    setValue(name, value, options = {}) {
+        var _a;
         if (typeof name !== 'string') {
             throw new TypeError('setValue path cannot be null');
         }
@@ -335,6 +350,7 @@ export class FormEngine {
             return;
         }
         if (this.writeFieldData(name, value)) {
+            ((_a = this.writeSources)[name] ?? (_a[name] = this._rx.signal(null))).value = options.source ?? 'user';
             this._evaluate();
         }
     }
@@ -903,22 +919,39 @@ export class FormEngine {
             this.initializeInstanceSource(name, instance);
         }
     }
-    /** Returns true if the source string is fetchable (HTTP(S) or absolute path). */
-    static isFetchableSource(source) {
-        return /^https?:\/\//i.test(source) || source.startsWith('/');
+    /**
+     * The HTTP(S) URL an instance `source` names, or null when it names something the engine does not fetch —
+     * a host-provided scheme such as `formspec-fn:`, or a relative reference with no page to resolve it.
+     * On a page, a relative reference resolves against `document.baseURI` like any other relative reference,
+     * so `./data/claimant.json` beside a Definition works under whatever path the site is served from.
+     * Elsewhere (a server, a test) an absolute URL or a root path is passed through as written.
+     */
+    static resolveInstanceSource(source) {
+        const base = typeof document !== 'undefined' ? document.baseURI : undefined;
+        if (base) {
+            try {
+                const url = new URL(source, base);
+                return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+            }
+            catch {
+                return null;
+            }
+        }
+        return /^https?:\/\//i.test(source) || source.startsWith('/') ? source : null;
     }
     initializeInstanceSource(name, instance) {
-        if (!instance.source || !FormEngine.isFetchableSource(instance.source)) {
+        const source = instance.source ? FormEngine.resolveInstanceSource(instance.source) : null;
+        if (!source) {
             return;
         }
-        if (instance.static && FormEngine.instanceSourceCache.has(instance.source)) {
-            const cached = FormEngine.instanceSourceCache.get(instance.source);
+        if (instance.static && FormEngine.instanceSourceCache.has(source)) {
+            const cached = FormEngine.instanceSourceCache.get(source);
             if (cached !== undefined) {
                 this.instanceData[name] = cloneValue(cached);
             }
             return;
         }
-        const task = fetch(instance.source)
+        const task = fetch(source)
             .then((response) => {
             if (!response.ok) {
                 throw new Error(`Instance source fetch failed (${response.status})`);
@@ -929,7 +962,7 @@ export class FormEngine {
             this.validateInstanceSchema(name, payload);
             const nextValue = cloneValue(payload);
             if (instance.static) {
-                FormEngine.instanceSourceCache.set(instance.source, cloneValue(nextValue));
+                FormEngine.instanceSourceCache.set(source, cloneValue(nextValue));
             }
             this.instanceData[name] = nextValue;
             this.instanceVersion.value += 1;
@@ -1005,7 +1038,7 @@ export class FormEngine {
         }
     }
     registerItems(items, prefix = '') {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f;
         for (const item of items) {
             const path = prefix ? `${prefix}.${item.key}` : item.key;
             this._groupItems.set(path, item);
@@ -1013,7 +1046,8 @@ export class FormEngine {
             (_b = this.requiredSignals)[path] ?? (_b[path] = this._rx.signal(false));
             (_c = this.readonlySignals)[path] ?? (_c[path] = this._rx.signal(false));
             (_d = this.validationResults)[path] ?? (_d[path] = this._rx.signal([]));
-            (_e = this.errorSignals)[path] ?? (_e[path] = this._rx.signal(null));
+            (_e = this.writeSources)[path] ?? (_e[path] = this._rx.signal(null));
+            (_f = this.errorSignals)[path] ?? (_f[path] = this._rx.signal(null));
             if (item.type === 'field') {
                 this._fieldItems.set(path, item);
                 this.initializeFieldSignal(path, item);
@@ -1043,7 +1077,7 @@ export class FormEngine {
         }
     }
     registerItemChildren(items, prefix) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g;
         for (const item of items) {
             const path = `${prefix}.${item.key}`;
             this._groupItems.set(path, item);
@@ -1051,7 +1085,8 @@ export class FormEngine {
             (_b = this.requiredSignals)[path] ?? (_b[path] = this._rx.signal(false));
             (_c = this.readonlySignals)[path] ?? (_c[path] = this._rx.signal(false));
             (_d = this.validationResults)[path] ?? (_d[path] = this._rx.signal([]));
-            (_e = this.errorSignals)[path] ?? (_e[path] = this._rx.signal(null));
+            (_e = this.writeSources)[path] ?? (_e[path] = this._rx.signal(null));
+            (_f = this.errorSignals)[path] ?? (_f[path] = this._rx.signal(null));
             if (item.type === 'field') {
                 this._fieldItems.set(toBasePath(path), item);
                 this.initializeFieldSignal(path, item);
@@ -1064,7 +1099,7 @@ export class FormEngine {
             if (item.type === 'display') {
                 this._displaySignalPaths.add(path);
                 if (this._bindConfigs[toBasePath(path)]?.calculate) {
-                    (_f = this.signals)[path] ?? (_f[path] = this._rx.signal(null));
+                    (_g = this.signals)[path] ?? (_g[path] = this._rx.signal(null));
                 }
                 continue;
             }
@@ -1526,6 +1561,7 @@ export class FormEngine {
             readonlySignals: this.readonlySignals,
             errorSignals: this.errorSignals,
             validationResults: this.validationResults,
+            writeSources: this.writeSources,
             optionSignals: this.optionSignals,
             optionStateSignals: this.optionStateSignals,
             repeats: this.repeats,
@@ -1558,7 +1594,8 @@ export class FormEngine {
             getOptions: () => this.optionSignals[basePath] ?? this._rx.signal([]),
             getOptionsState: () => this.optionStateSignals[basePath] ?? this._rx.signal({ loading: false, error: null }),
             getOptionSetName: () => item.optionSet,
-            setFieldValue: (value) => this.setValue(path, value),
+            setFieldValue: (value, options) => this.setValue(path, value, options),
+            getWriteSource: () => { var _a; return ((_a = this.writeSources)[path] ?? (_a[path] = this._rx.signal(null))); },
             interpolate: (template) => this._interpolate(template, path),
             interpolateMessage: (template) => this._interpolate(template, path, true),
         });

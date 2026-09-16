@@ -112,7 +112,7 @@ export function DisplayNode({ node }) {
         case 'DataTable':
             return _jsx(DataTableDisplay, { node: node, cssClass: cssClass, style: style, metadataAttrs: graphAttrs });
         case 'ValidationSummary':
-            return _jsx(ValidationSummaryDisplay, {});
+            return _jsx(ValidationSummaryDisplay, { node: node });
         case 'Text':
         default: {
             const format = node.props?.format;
@@ -293,19 +293,7 @@ function DataTableDisplay({ node, cssClass, style, metadataAttrs, }) {
     }
     return (_jsxs("div", { className: `formspec-data-table-wrapper${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [_jsxs("table", { className: "formspec-data-table", children: [node.props?.title && (_jsx("caption", { children: node.props?.title })), _jsx("thead", { children: _jsxs("tr", { children: [showRowNumbers && _jsx("th", { scope: "col", children: "#" }), columns.map((col, ci) => (_jsx("th", { scope: "col", ...needTraceAttrs(generationNeedAnchors(col)), children: col.header }, ci))), allowRemove && (_jsx("th", { scope: "col", children: _jsx("span", { className: "formspec-sr-only", children: "Actions" }) }))] }) }), _jsx("tbody", { children: Array.from({ length: count }, (_, i) => (_jsxs("tr", { children: [showRowNumbers && _jsx("td", { className: "formspec-row-number", children: i + 1 }), columns.map((col, ci) => (_jsx(DataTableCell, { signalPath: `${bindKey}[${i}].${col.bind}`, column: col, fieldDef: fieldByKey.get(col.bind), defaultCurrency: defaultCurrency, metadataAttrs: needTraceAttrs(generationNeedAnchors(col)) }, ci))), allowRemove && (_jsx("td", { children: canRemove && (_jsx("button", { type: "button", className: "formspec-datatable-remove formspec-button-danger formspec-focus-ring", "aria-label": chrome('dataTable.removeRow', { index: i + 1 }), onClick: () => handleRemove(i), children: chrome('dataTable.remove') })) }))] }, i))) })] }), canAdd && (_jsx("button", { type: "button", className: "formspec-datatable-add formspec-focus-ring", onClick: handleAdd, children: chrome('dataTable.addRow') }))] }));
 }
-function ValidationSummaryDisplay() {
-    const { engine, touchedVersion } = useFormspecContext();
-    const touched = useSignal(touchedVersion);
-    useSignal(engine.structureVersion);
-    if (touched === 0) {
-        return null;
-    }
-    const report = engine.getValidationReport({ profile: 'live' });
-    const results = report.results.map((r) => ({
-        path: r.path || '',
-        // The words the field itself shows (Locale validation-message cascade), not the processor's.
-        message: engine.resolveValidationMessage(r) || 'Validation error',
-        severity: r.severity || 'error',
-    }));
-    return _jsx(ValidationSummary, { results: results, autoFocus: false });
+/** A placed ValidationSummary: its own props (source, mode, showFieldErrors, jumpLinks, dedupe) decide what shows. */
+function ValidationSummaryDisplay({ node }) {
+    return _jsx(ValidationSummary, { comp: (node.props ?? {}), autoFocus: false });
 }

@@ -4,7 +4,7 @@ import { jsx as _jsx } from "react/jsx-runtime";
 import { createContext, useContext, useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import { signal } from '@preact/signals-core';
 import { createFormEngine, findResponseActionByIntent, missingSubmitActionFinding, resolveResponseAction, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
-import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, preparePlanContext, ensureActionButton, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
+import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, preparePlanContext, ensureActionButton, ensureValidationSummary, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
 import { useSignal } from './use-signal';
 import { chromeText } from './use-chrome-text';
 const platformTheme = buildPlatformTheme();
@@ -132,7 +132,7 @@ function autoPlacedDefinitionActions(document, definition) {
  * Accepts either a pre-built `engine` or a raw `definition` (creates engine internally).
  */
 export function FormspecProvider(props) {
-    const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, semanticControlScope, initialData, registryEntries, resolveFieldHelp, admitFieldHelpUri = admitDefaultFieldHelpUri, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
+    const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, semanticControlScope, initialData, registryEntries, resolveFieldHelp, admitFieldHelpUri = admitDefaultFieldHelpUri, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, showValidationSummary = false, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
     const shouldEmitThemeTokens = props.emitThemeTokens ?? true;
     const semanticResponseState = useMemo(() => ({
         responseRevision: semanticControlScope?.initialResponseRevision ?? 0,
@@ -294,8 +294,10 @@ export function FormspecProvider(props) {
                 ensureActionButton(root, planCtx.nextId, { pageMode, actionRef: action.id });
             }
         }
+        if (showValidationSummary)
+            ensureValidationSummary(root, planCtx.nextId);
         return root;
-    }, [engine, componentDocument, componentGraph, hostEvidence, effectiveThemeDocument, activeBreakpoint, onSubmit, responseActionsDocument, mergedFormPresentation]);
+    }, [engine, componentDocument, componentGraph, hostEvidence, effectiveThemeDocument, activeBreakpoint, onSubmit, showValidationSummary, responseActionsDocument, mergedFormPresentation]);
     // §10: surface a finding when the host wires onSubmit but no submit Action
     // is published — otherwise auto-inject silently no-ops.
     useEffect(() => {
@@ -308,6 +310,8 @@ export function FormspecProvider(props) {
     // Touched tracking — stable across re-renders
     const touchedFieldsRef = useRef(new Set());
     const touchedVersionSignal = useMemo(() => signal(0), []);
+    const latestSubmitSignal = useMemo(() => signal(null), []);
+    const recordSubmit = useCallback((result) => { latestSubmitSignal.value = result; }, [latestSubmitSignal]);
     const touchField = useCallback((path) => {
         if (!touchedFieldsRef.current.has(path)) {
             touchedFieldsRef.current.add(path);
@@ -383,12 +387,14 @@ export function FormspecProvider(props) {
         touchAllFields,
         touchedVersion: touchedVersionSignal,
         isTouched,
+        latestSubmit: latestSubmitSignal,
+        recordSubmit,
         registryEntries: registryMap,
         resolveFieldHelp,
         admitFieldHelpUri,
         fieldHelpLabel,
         formPresentation: mergedFormPresentation,
-    }), [engine, layoutPlan, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, responseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation]);
+    }), [engine, layoutPlan, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, responseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, latestSubmitSignal, recordSubmit, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation]);
     return (_jsx(FormspecContext.Provider, { value: value, children: _jsx("div", { ref: themeScopeRef, className: "formspec-theme-scope", style: THEME_SCOPE_STYLE, children: children }) }));
 }
 /** See `themeScopeRef` — the scope element must not generate a box. */

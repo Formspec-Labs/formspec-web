@@ -9,6 +9,7 @@ export function clearRepeatIndexedSubtree(options) {
         options.readonlySignals,
         options.errorSignals,
         options.validationResults,
+        options.writeSources,
         options.optionSignals,
         options.optionStateSignals,
         options.repeats,

@@ -325,6 +325,12 @@ export interface RelevanceExplanation {
     dependsOn: string[];
     evaluatedAs: boolean;
 }
+/** Who wrote a field: the respondent (`'user'`, the default) or an Assist tool (`'assist'`). */
+export type WriteSource = 'user' | 'assist';
+export interface SetValueOptions {
+    /** Recorded on the field's `writeSource` signal; Assist uses it to refuse overwriting a respondent's own typing. */
+    source?: WriteSource;
+}
 export interface IFormEngine {
     readonly signals: Record<string, EngineSignal<FormFieldValue>>;
     readonly relevantSignals: Record<string, EngineSignal<boolean>>;
@@ -360,7 +366,7 @@ export interface IFormEngine {
     /** Loads Response `data` in one evaluation, one row per loaded array entry regardless of min/maxRepeat. */
     loadResponseData(data: JsonRecord): void;
     compileExpression(expression: string, currentItemName?: string): () => FormFieldValue;
-    setValue(name: string, value: FormFieldValue): void;
+    setValue(name: string, value: FormFieldValue, options?: SetValueOptions): void;
     getValidationReport(): ValidationReport;
     getValidationReport(options: {
         profile?: EnabledValidationProfile;

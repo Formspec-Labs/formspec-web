@@ -4,7 +4,7 @@
  * key the schema's `ChromeStringKey` enum admits — kept one-for-one by
  * `packages/formspec-layout/tests/ui-strings.test.ts`, which reads `schemas/locale.schema.json` directly.
  * A template's `{{$name}}` placeholders are renderer-supplied literal parameters (label, index, total,
- * count, max) filled by {@link fillUiParams} — never FEL, never the form scope.
+ * count, max, status, reason, message) filled by {@link fillUiParams} — never FEL, never the form scope.
  */
 export declare const UI_STRINGS: {
     readonly 'select.placeholder': "Select…";
@@ -72,10 +72,19 @@ export declare const UI_STRINGS: {
     readonly 'validationSummary.errorCount': "There are {{$count}} errors on this form.";
     readonly 'validationSummary.issueCountOne': "There is 1 issue to review on this form.";
     readonly 'validationSummary.issueCount': "There are {{$count}} issues to review on this form.";
+    readonly 'validationSummary.row': "{{$label}}: {{$message}}";
     readonly 'action.submit': "Submit";
     readonly 'action.inProgress': "In progress.";
+    readonly 'action.completed': "Completed";
+    readonly 'action.blocked': "Blocked";
+    readonly 'action.failed': "Failed";
+    readonly 'action.deferred': "Deferred";
+    readonly 'action.unresolved': "Unresolved";
+    readonly 'action.status': "{{$status}}.";
+    readonly 'action.statusReason': "{{$status}}: {{$reason}}";
     readonly 'screener.submit': "Check Eligibility";
     readonly 'screener.answerOne': "Please answer at least one question";
+    readonly 'assist.filled': "{{$label}} filled by your assistant";
 };
 /** Closed suffix set for `$ui.<ChromeStringKey>` (Locale spec §3.1.10), one-for-one with the schema enum. */
 export type ChromeStringKey = keyof typeof UI_STRINGS;

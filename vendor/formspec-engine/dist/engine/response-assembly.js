@@ -216,7 +216,8 @@ export function buildValidationReportEnvelope(results, timestamp, definitionUrl,
     return report;
 }
 export function migrateResponseData(definition, responseData, fromVersion, options) {
-    if (!Array.isArray(definition.migrations)) {
+    // Core §6.7: `migrations.from[<version>]` names the descriptor; no descriptor, no change.
+    if (!definition.migrations?.from?.[fromVersion]) {
         return responseData;
     }
     return JSON.parse(wasmApplyMigrationsToResponseData(JSON.stringify(definition), JSON.stringify(responseData), fromVersion, options.nowIso));

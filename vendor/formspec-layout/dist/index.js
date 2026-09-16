@@ -23,7 +23,7 @@ export { widgetTokenToComponent, KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT
 // Form presentation merge (definition + component document)
 export { mergeFormPresentationForPlanning } from './form-presentation.js';
 // Layout planner
-export { planComponentTree, planDefinitionFallback, planContains, ensureActionButton, createNodeIdGenerator, preparePlanContext, } from './planner.js';
+export { planComponentTree, planDefinitionFallback, planContains, ensureActionButton, ensureValidationSummary, createNodeIdGenerator, preparePlanContext, } from './planner.js';
 export { resolvePageSequence } from './page-sequence.js';
 // Anchored overlays (Modal / Popover positioning)
 export { positionPopupNearTrigger, clearPopupFixedPosition, POPUP_EDGE_PADDING, POPUP_TRIGGER_GAP, MODAL_FIRST_FOCUSABLE_SELECTOR, } from './popup-position.js';
@@ -31,6 +31,7 @@ export { positionPopupNearTrigger, clearPopupFixedPosition, POPUP_EDGE_PADDING, 
 export { characterCountLimitMessage, characterCountStatus, CHARACTER_COUNT_ANNOUNCE_DELAY_MS, } from './character-count.js';
 // Closed renderer-chrome string inventory (Locale spec §3.1.10 `$ui.<ChromeStringKey>`)
 export { UI_STRINGS, fillUiParams } from './ui-strings.js';
+export { readValidationSummaryRows, validationResultPath } from './validation-summary.js';
 // Platform defaults & theme generation
 export { platformDefaults, platformSelectors, buildPlatformTheme, mergePlatformAndTenantTheme, } from './platform-defaults.js';
 // UI Graph Policy route-landmark projection (shared by React + webcomponent)

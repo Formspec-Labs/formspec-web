@@ -94,6 +94,10 @@ export interface FormspecContextValue {
     touchedVersion: ReadonlyEngineSignal<number>;
     /** Check if a field has been touched. Read touchedVersion.value first for reactivity. */
     isTouched: (path: string) => boolean;
+    /** The latest submit through this provider's form — null before the first. A `submit`-sourced ValidationSummary reads it. */
+    latestSubmit: ReadonlyEngineSignal<SubmitResult | null>;
+    /** Record a submit's result, so `latestSubmit` follows it. The submit port calls this. */
+    recordSubmit: (result: SubmitResult) => void;
     /** Registry entries for extension resolution. */
     registryEntries: Map<string, any>;
     /** Human References for a field path. Agent-only context never enters this seam. */
@@ -152,6 +156,11 @@ export interface FormspecProviderProps {
     components?: ComponentMap;
     /** Callback for form submission. If provided, a submit button is rendered. */
     onSubmit?: (result: SubmitResult) => void;
+    /**
+     * Open the form with a validation summary — the latest submit's findings, each a link to its field —
+     * when the documents place none. Off by default: a Component document decides where a summary goes.
+     */
+    showValidationSummary?: boolean;
     /** Callback invoked for every declared hostEvent effect. */
     onHostEvent?: (eventName: string, result: SubmitResult, action: ResponseAction) => void;
     /** Callback for ActionButton actionRef resolution findings. */
