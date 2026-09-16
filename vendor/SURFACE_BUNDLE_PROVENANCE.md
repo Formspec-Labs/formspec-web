@@ -14,9 +14,9 @@ reimplementing it.
 | `@formspec-org/layout` | `../formspec/packages/formspec-layout` |
 | `@formspec-org/surface` | `../formspec/packages/formspec-surface` |
 | `@formspec-org/surface-react` | `../formspec/packages/formspec-surface-react` |
-| `@integrity-stack/cose` | `../integrity-stack/packages/integrity-cose` |
-| `@integrity-stack/signature-port` | `../integrity-stack/packages/integrity-signature-port` |
-| `@integrity-stack/signature-adapter-webcrypto` | `../integrity-stack/packages/integrity-signature-adapter-webcrypto` |
+| `@formspec-org/integrity-cose` | `../integrity-stack/packages/integrity-cose` |
+| `@formspec-org/integrity-signature-port` | `../integrity-stack/packages/integrity-signature-port` |
+| `@formspec-org/integrity-signature-adapter-webcrypto` | `../integrity-stack/packages/integrity-signature-adapter-webcrypto` |
 
 The Formspec package declares `Apache-2.0`. The integrity-stack Rust workspace
 also declares `Apache-2.0`; the copied `LICENSE` files contain that license

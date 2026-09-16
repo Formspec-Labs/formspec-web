@@ -1,6 +1,6 @@
 /** @filedesc WebCrypto adapter implementing the Verifier interface for Ed25519 COSE_Sign1 verification. */
-import { decodeCoseSign1WithMethodUri, resolvePayload, sigStructureBytes, } from '@integrity-stack/cose';
-import { VerifierError, StaticKeyResolver, KeyResolverError, resolveRegistryEntry, sanitizeReason, semVer, uri, kidOrThumbprint, } from '@integrity-stack/signature-port';
+import { decodeCoseSign1WithMethodUri, resolvePayload, sigStructureBytes, } from '@formspec-org/integrity-cose';
+import { VerifierError, StaticKeyResolver, KeyResolverError, resolveRegistryEntry, sanitizeReason, semVer, uri, kidOrThumbprint, } from '@formspec-org/integrity-signature-port';
 const DEFAULT_ADAPTER_ID = 'urn:integrity-stack:adapter:webcrypto@1';
 const DEFAULT_ADAPTER_VERSION = '0.1.0';
 const DEFAULT_METHOD_URI_PREFIX = 'urn:integrity-stack:sig-method:';
@@ -459,4 +459,4 @@ function derLengthBytes(length) {
     }
     return new Uint8Array([0x80 | bytes.length, ...bytes]);
 }
-export { decodeCoseSign1 } from '@integrity-stack/cose';
+export { decodeCoseSign1 } from '@formspec-org/integrity-cose';

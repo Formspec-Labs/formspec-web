@@ -1,6 +1,6 @@
 import canonicalize from 'canonicalize';
-import { decodeCoseSign1 } from '@integrity-stack/cose';
-import { uri, } from '@integrity-stack/signature-port';
+import { decodeCoseSign1 } from '@formspec-org/integrity-cose';
+import { uri, } from '@formspec-org/integrity-signature-port';
 import { printParseErrorCode, visit, } from 'jsonc-parser';
 export const SURFACE_BUNDLE_PROFILE = 'formspec-surface-bundle-signing-v1';
 export const SURFACE_BUNDLE_SIGNING_DOMAIN = 'formspec.surface-bundle.signed-payload.v1';

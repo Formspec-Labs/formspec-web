@@ -11,7 +11,7 @@ import {
   kidOrThumbprint,
   semVer,
   uri,
-} from '@integrity-stack/signature-port';
+} from '@formspec-org/integrity-signature-port';
 import {
   SURFACE_LOCALE_KEY_PREFIX,
   SURFACE_STRING_KEYS,

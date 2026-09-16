@@ -10,13 +10,13 @@ import {
   detachedSignatureProtectedHeader,
   encodeCoseSign1,
   sigStructureBytes,
-} from '@integrity-stack/cose';
+} from '@formspec-org/integrity-cose';
 import {
   StaticKeyResolver,
   semVer,
   uri,
   type SignatureMethodRegistry,
-} from '@integrity-stack/signature-port';
+} from '@formspec-org/integrity-signature-port';
 import { IntegritySurfaceBundleVerifier } from '../../../src/adapters/integrity/index.ts';
 import type { IntegritySurfaceBundleVerifierConfig } from '../../../src/adapters/integrity/index.ts';
 import {

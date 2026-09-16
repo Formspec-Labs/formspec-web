@@ -1,12 +1,12 @@
 {
   "name": "@formspec-org/surface-bundle-signing",
   "description": "Signed Surface-bundle preimage, verification, publisher trust, and release admission policy",
-  "version": "0.1.0",
+  "version": "2.0.1",
   "type": "module",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Formspec-org/formspec.git",
+    "url": "git+https://github.com/Formspec-Labs/formspec.git",
     "directory": "packages/formspec-surface-bundle-signing"
   },
   "main": "dist/index.js",
@@ -19,8 +19,8 @@
   },
   "sideEffects": false,
   "dependencies": {
-    "@integrity-stack/cose": "file:../integrity-cose",
-    "@integrity-stack/signature-port": "file:../integrity-signature-port",
+    "@formspec-org/integrity-cose": "file:../integrity-cose",
+    "@formspec-org/integrity-signature-port": "file:../integrity-signature-port",
     "canonicalize": "^3.0.0",
     "jsonc-parser": "^3.3.1"
   }

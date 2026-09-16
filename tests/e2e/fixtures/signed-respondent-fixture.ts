@@ -11,7 +11,7 @@ import {
   detachedSignatureProtectedHeader,
   encodeCoseSign1,
   sigStructureBytes,
-} from '@integrity-stack/cose';
+} from '@formspec-org/integrity-cose';
 import sampleForm from '../../../src/demo/sample-form.json' with { type: 'json' };
 import type { FormDefinition } from '@formspec-org/types';
 import type {

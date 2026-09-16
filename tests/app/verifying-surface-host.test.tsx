@@ -11,7 +11,7 @@ import {
   kidOrThumbprint,
   semVer,
   uri,
-} from '@integrity-stack/signature-port';
+} from '@formspec-org/integrity-signature-port';
 import type { AppGraphReportProducerResult } from '@formspec-org/app-graph';
 import type {
   SurfaceBundleSignedPayloadV1,

@@ -7,7 +7,7 @@ import {
   type SurfaceBundleReleasePolicy,
   type SurfaceBundleVerifiedResult as UpstreamVerifiedResult,
 } from '@formspec-org/surface-bundle-signing';
-import { WebCryptoVerifier } from '@integrity-stack/signature-adapter-webcrypto';
+import { WebCryptoVerifier } from '@formspec-org/integrity-signature-adapter-webcrypto';
 import type {
   SurfaceBundleFailedVerificationResult,
   SurfaceBundleReleaseBinding,

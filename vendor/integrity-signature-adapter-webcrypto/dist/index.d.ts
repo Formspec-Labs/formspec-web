@@ -1,4 +1,4 @@
-import { Verifier, VerificationReceipt, VerifyRequest, SignatureMethodRegistry, KeyResolver } from '@integrity-stack/signature-port';
+import { Verifier, VerificationReceipt, VerifyRequest, SignatureMethodRegistry, KeyResolver } from '@formspec-org/integrity-signature-port';
 export interface WebCryptoVerifierOptions {
     /**
      * Resolves `KeyRef.kid` to public-key bytes. Defaults to an empty
@@ -23,4 +23,4 @@ export declare class WebCryptoVerifier implements Verifier {
     private verifyRsaPssSha256;
     private unsupportedReceipt;
 }
-export { decodeCoseSign1 } from '@integrity-stack/cose';
+export { decodeCoseSign1 } from '@formspec-org/integrity-cose';

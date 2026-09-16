@@ -77,7 +77,7 @@ Per web ADR-0009 §"Not in the constitutional inventory" (b), the `BundleSource`
 
 Per web ADR-0009 §"Not in the constitutional inventory" (b), the `Verifier` port shape will be ratified as its own ADR when consumer code (FW-0003) lands. Output is expected to conform to `stack-common-proof::ProofReportVerdict` — the TS mirror of this Rust type is tracked in the upstream extension queue (EXT-11).
 
-- **Intended reference adapter:** `WebCryptoVerifierAdapter` wrapping `@formspec/signature-adapter-webcrypto` + `@integrity-stack/cose`. Pure-TS, no WASM, COSE_Sign1 + ed25519 / P-256 / RSA-PSS.
+- **Intended reference adapter:** `WebCryptoVerifierAdapter` wrapping `@formspec/signature-adapter-webcrypto` + `@formspec-org/integrity-cose`. Pure-TS, no WASM, COSE_Sign1 + ed25519 / P-256 / RSA-PSS.
 - **Talks to:** browser's native Web Crypto API. No service.
 - **Alternate compositions:** WASM-bundled `trellis-verify-wos` (post-Phase-2, when BBS+ / SD-JWT selective-disclosure ships); `ServerProjectedAdapter` against `formspec-server-verifier-integrity` for heavy bundles.
 

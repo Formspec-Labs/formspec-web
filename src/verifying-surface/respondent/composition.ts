@@ -3,7 +3,7 @@ import {
   semVer,
   uri,
   type SignatureMethodRegistry,
-} from '@integrity-stack/signature-port';
+} from '@formspec-org/integrity-signature-port';
 import type {
   PublisherTrustPolicy,
   SurfaceBundleReleasePolicy,
