@@ -99,6 +99,87 @@ function fixture(change: Partial<ResponseActionControllerConfig> = {}) {
 }
 
 describe('generic admitted Response Action controller', () => {
+  it('returns the known Submit outcome for the same exact delivery without another transport call or phase change', async () => {
+    const test = fixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    const result = await test.widget('submit', signed, 'confirmed-submit');
+    const terminal = test.controller.getSnapshot(); const changed = vi.fn(); const unsubscribe = test.controller.subscribe(changed);
+    const replay = await test.widget('submit', signed, 'confirmed-submit');
+    expect(replay).toEqual(result);
+    expect(test.submit).toHaveBeenCalledOnce(); expect(test.buildHandoff).toHaveBeenCalledOnce();
+    expect(test.controller.getSnapshot()).toEqual(terminal); expect(changed).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it('refuses a new Submit act after confirmation before transport, handoff construction or replacing terminal state', async () => {
+    const test = fixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!; await test.widget('submit', signed, 'confirmed-submit');
+    const terminal = test.controller.getSnapshot(); const changed = vi.fn(); const unsubscribe = test.controller.subscribe(changed);
+    expect(terminal).toMatchObject({ phase: 'submitted', confirmation: { status: 'accepted', referenceNumber: 'actual-reference' } });
+    const refused = await test.widget('submit', signed, 'new-submit-act');
+    expect('invocation' in refused ? refused.invocation.status : refused.status).toBe('failed');
+    expect(test.submit).toHaveBeenCalledOnce(); expect(test.buildHandoff).toHaveBeenCalledOnce();
+    expect(test.controller.getSnapshot()).toEqual(terminal); expect(changed).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it('refuses a changed confirmed delivery and erases its completed replay when invalidated', async () => {
+    const test = fixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    await test.widget('submit', signed, 'confirmed-submit');
+    const terminal = test.controller.getSnapshot(); const changed = vi.fn(); const unsubscribe = test.controller.subscribe(changed);
+    const altered = await test.widget('submit', signed, 'confirmed-submit', { input: { draftId: signed.draft.id, draftVersion: signed.draft.version + 1, canonical_response: signed.response } as unknown as SurfaceWidgetActionExecutorInput['input'] });
+    expect('invocation' in altered ? altered.invocation.status : altered.status).toBe('failed');
+    expect(test.controller.getSnapshot()).toEqual(terminal); expect(changed).not.toHaveBeenCalled();
+    test.controller.invalidate();
+    const replay = await test.widget('submit', signed, 'confirmed-submit');
+    expect('invocation' in replay ? replay.invocation.status : replay.status).toBe('failed');
+    expect(test.controller.getSnapshot()).toEqual({ phase: 'refused', owned: false, reason: 'context-obsolete' });
+    expect(test.submit).toHaveBeenCalledOnce(); expect(test.buildHandoff).toHaveBeenCalledOnce(); unsubscribe();
+  });
+
+  it('joins pending exact Submit deliveries and preserves one physical operation and signed object', async () => {
+    const test = fixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    let finish!: (value: Awaited<ReturnType<typeof test.submit>>) => void;
+    test.submit.mockImplementation(async () => new Promise(resolve => { finish = resolve; }));
+    const first = test.widget('submit', signed, 'pending-submit'); const joined = test.widget('submit', signed, 'pending-submit');
+    await vi.waitFor(() => expect(test.submit).toHaveBeenCalledOnce());
+    expect(test.submit.mock.calls[0][0].extensions?.['x-formspec-response']).toEqual(signed.response);
+    finish({ status: 'accepted', referenceNumber: 'actual-reference' });
+    expect(await joined).toEqual(await first); expect(test.buildHandoff).toHaveBeenCalledOnce(); expect(test.submit).toHaveBeenCalledOnce();
+    expect(test.controller.getSnapshot()).toMatchObject({ phase: 'submitted', confirmation: { referenceNumber: 'actual-reference' } });
+  });
+
+  it('retries an uncertain Submit with its original operation and handoff until confirmation, then caches the outcome', async () => {
+    const test = fixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    test.submit.mockRejectedValueOnce(new Error('reply lost'));
+    await test.widget('submit', signed, 'uncertain-submit');
+    expect(test.controller.getSnapshot().confirmation).toBeUndefined();
+    const operation = test.submit.mock.calls[0][1]; const handoff = test.submit.mock.calls[0][0];
+    expect(isUuidV7IdempotencyKey(operation)).toBe(true);
+    const result = await test.widget('submit', signed, 'uncertain-submit');
+    expect(test.submit.mock.calls[1]).toEqual([handoff, operation]); expect(test.buildHandoff).toHaveBeenCalledOnce();
+    expect(test.controller.getSnapshot().phase).toBe('submitted');
+    expect(await test.widget('submit', signed, 'uncertain-submit')).toEqual(result);
+    expect(test.submit).toHaveBeenCalledTimes(2);
+  });
+
+  it('fences late Submit completion and future activations after the owner clears or disposes the controller', async () => {
+    const test = fixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    let finish!: (value: Awaited<ReturnType<typeof test.submit>>) => void;
+    test.submit.mockImplementation(async () => new Promise(resolve => { finish = resolve; }));
+    const pending = test.widget('submit', signed, 'retired-submit');
+    await vi.waitFor(() => expect(test.submit).toHaveBeenCalledOnce());
+    test.controller.invalidate(); finish({ status: 'accepted', referenceNumber: 'late-result' }); await pending;
+    expect(test.controller.getSnapshot()).toEqual({ phase: 'refused', owned: false, reason: 'context-obsolete' });
+    await test.widget('submit', signed, 'fresh-after-clear');
+    expect(test.submit).toHaveBeenCalledOnce(); expect(test.buildHandoff).toHaveBeenCalledOnce();
+    expect(test.controller.getSnapshot().confirmation).toBeUndefined();
+  });
+
   it('uses server actor/evidence, original preparation identity, separate UUID and exact signed Submit', async () => {
     const test = fixture();
     const prepared = await test.ready();

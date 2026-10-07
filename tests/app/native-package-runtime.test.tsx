@@ -21,9 +21,9 @@ const bundle = dereferenceBundleExport(exported);
 const componentDocument = JSON.parse(readFileSync(resolve(fixtureRoot, 'passport-renewal.component.json'), 'utf8')) as ComponentDocument;
 const localeDocuments = Object.values(exported.documents).filter(document => typeof document === 'object' && document !== null && '$formspecLocale' in document) as LocaleDocument[];
 afterEach(() => { cleanup(); observed.props = undefined; observed.choose.mockReset(); window.history.replaceState(null, '', '/'); });
-function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
+function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; }); return { promise, resolve, reject }; }
 function fixture() {
-  let state = { generation: 1, locale: 'en', cleared: false, controller: {}, runtime: undefined };
+  let state: Partial<ReturnType<NativePackageSigningHost['getSnapshot']>> = { generation: 1, locale: 'en', cleared: false, controller: {} as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']>, runtime: undefined };
   const listeners = new Set<() => void>();
   const emit = () => { for (const listener of listeners) listener(); };
   const host = {
@@ -36,9 +36,56 @@ function fixture() {
   const boot: NativePackageBoot = { composition, host, componentDocument, localeDocuments, moduleId: host.moduleId, initialLocale: 'en' };
   const load = vi.fn(async () => boot);
   composition.nativePackageRespondent = { load };
-  return { composition, boot, host, load };
+  return { composition, boot, host, load, publish: (next: Partial<typeof state>) => { state = { ...state, ...next }; emit(); } };
 }
 describe('native package boot and scoped recovery', () => {
+  it('awaits owner recovery on the widget-only route and renders a focused qualified receipt without ceremony', async () => {
+    window.history.replaceState(null, '', '/review-sign?form=public-form&package=%2Fpackage.json');
+    const test = fixture(); const gate = deferred<void>();
+    test.boot.resumeSubmitted = vi.fn(async () => {
+      await gate.promise;
+      test.publish({ locale: 'es-US', submitted: { recordKind: 'response', referenceNumber: 'actual-response-id' } });
+    });
+    const print = vi.fn(); Object.defineProperty(window, 'print', { configurable: true, value: print });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    expect(screen.queryByTestId('native-route')).toBeNull();
+    await act(async () => gate.resolve());
+    await screen.findByText('actual-response-id');
+    const receipt = document.querySelector('.confirmation-panel');
+    expect(document.activeElement).toBe(receipt);
+    expect(screen.queryByTestId('native-route')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Submit|Enviar/ })).toBeNull();
+    const locale = localeDocuments.find(document => document.locale === 'es-US')!;
+    expect(screen.getByRole('heading', { name: locale.strings['$ui.receipt.answersReceived'] })).toBeTruthy();
+    expect(screen.queryByText(locale.strings['$ui.receipt.pendingFilingAndSigning'])).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: locale.strings['$ui.receipt.print'] }));
+    expect(print).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: locale.strings['$ui.receipt.clear'] }));
+    await screen.findByRole('heading', { name: locale.strings['$ui.receipt.clearedTitle'] });
+    expect(test.host.clearDraftAccess).toHaveBeenCalledOnce();
+  });
+  it('refuses failed terminal qualification and disposes a cancelled preflight before mounting', async () => {
+    const test = fixture(); test.boot.resumeSubmitted = async () => { throw new Error('private-state-mismatch'); };
+    const mounted = render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByRole('alert'); expect(test.host.dispose).toHaveBeenCalled();
+    expect(screen.queryByTestId('native-route')).toBeNull(); expect(screen.queryByText('private-state-mismatch')).toBeNull();
+    mounted.unmount();
+    const cancelled = fixture(); const gate = deferred<void>(); cancelled.boot.resumeSubmitted = () => gate.promise;
+    const pending = render(<NativePackageRuntime composition={cancelled.composition} config={departmentAppProfile} />);
+    await waitFor(() => expect(cancelled.load).toHaveBeenCalled()); pending.unmount();
+    await act(async () => gate.resolve()); expect(cancelled.host.dispose).toHaveBeenCalled();
+    expect(screen.queryByTestId('native-route')).toBeNull();
+  });
+  it('does not dispose a current cached owner when an obsolete StrictMode preflight rejects', async () => {
+    const test = fixture(); const first = deferred<void>(); const second = deferred<void>();
+    test.boot.resumeSubmitted = vi.fn().mockImplementationOnce(() => first.promise).mockImplementationOnce(() => second.promise);
+    render(<StrictMode><NativePackageRuntime composition={test.composition} config={departmentAppProfile} /></StrictMode>);
+    await waitFor(() => expect(test.boot.resumeSubmitted).toHaveBeenCalledTimes(2));
+    await act(async () => first.reject(new Error('obsolete')));
+    expect(test.host.dispose).not.toHaveBeenCalled();
+    await act(async () => second.resolve());
+    await screen.findByTestId('native-route'); expect(test.host.dispose).not.toHaveBeenCalled();
+  });
   it('keeps one package owner and selection query through authored navigation and browser history', async () => {
     window.history.replaceState(null, '', '/?form=public-form&package=%2Fpackage.json');
     const test = fixture(); render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);

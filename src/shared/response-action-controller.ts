@@ -62,6 +62,7 @@ interface Delivery {
   handoff?: IntakeHandoff;
   baselineDraft: SavedResponseDraft['draft'] | null;
   retired?: boolean;
+  completed?: Record<string, string>;
 }
 class ControllerRefusal extends Error {
   constructor(readonly code: ResponseActionControllerReason) { super(code); }
@@ -81,6 +82,8 @@ export function createResponseActionController(config: ResponseActionControllerC
   let prepared: PreparedResponseSigning | undefined;
   let signed: SignedResponseSigning | undefined;
   let busy: string | undefined;
+  let confirmedDelivery: string | undefined;
+  let completedSubmit: { identity: string; result: ResponseActionInvocationResult<SubmitResult> } | undefined;
   let snapshot: ResponseActionControllerSnapshot = freeze({ phase: 'idle', owned });
   const listeners = new Set<() => void>();
   const deliveries = new Map<string, Delivery>();
@@ -175,6 +178,8 @@ export function createResponseActionController(config: ResponseActionControllerC
     delivery = deliveries.get(deliveryId);
     if (delivery && delivery.identity !== identity) throw new ControllerRefusal('operation-conflict');
     if (delivery?.pending) return delivery.pending;
+    if (delivery?.completed) return delivery.completed;
+    if (snapshot.confirmation) throw new ControllerRefusal('operation-conflict');
     if (delivery?.retired) throw new ControllerRefusal('operation-conflict');
     if (busy) throw new ControllerRefusal('operation-pending');
     if (!delivery) {
@@ -238,8 +243,10 @@ export function createResponseActionController(config: ResponseActionControllerC
         const confirmation = await config.submitTransport.submit(operation.handoff, operation.operationId);
         current(generation);
         const outputs = extractServiceRequestOutputs(request!, { response_id: confirmation.referenceNumber, status: confirmation.status });
+        confirmedDelivery = deliveryId;
+        operation.completed = freeze({ ...outputs.transitionBindings });
         publish('submitted', undefined, confirmation);
-        return { ...outputs.transitionBindings };
+        return operation.completed;
       }
       const outputs = extractServiceRequestOutputs(request!, result.evidence);
       if (role === 'saveInitial' || role === 'saveOwned' || role === 'prepare') operation.retired = true;
@@ -252,13 +259,15 @@ export function createResponseActionController(config: ResponseActionControllerC
   function fail(error: unknown, generation: number) {
     if (generation !== epoch) return 'context-obsolete';
     const reason = error instanceof ControllerRefusal ? error.code : 'port-failed';
-    if (reason !== 'context-obsolete') publish(error instanceof ControllerRefusal ? 'refused' : 'failed', reason);
+    if (reason !== 'context-obsolete' && !snapshot.confirmation) publish(error instanceof ControllerRefusal ? 'refused' : 'failed', reason);
     return reason;
   }
   const definitionInvoker: ResponseActionInvoker<SubmitResult> = async input => {
     const generation = epoch;
     const deliveryId = input.invocationContext?.invocationId ?? generateIdempotencyKey();
     try {
+      current(generation);
+      if (snapshot.confirmation) throw new ControllerRefusal('operation-conflict');
       const [role, admission] = roleFor(input.document, input.actionRef);
       if (!['saveInitial', 'saveOwned', 'prepare', 'paper'].includes(role)) throw new ControllerRefusal('action-unadmitted');
       requestFor(role, admission);
@@ -280,6 +289,16 @@ export function createResponseActionController(config: ResponseActionControllerC
   const widgetExecutor: SurfaceWidgetActionExecutor = async input => {
     const generation = epoch;
     try {
+      current(generation);
+      const identity = canonicalize({ document: input.document, actionRef: input.actionRef, source: input.source,
+        responseContext: input.responseContext, input: input.input ?? {} })!;
+      if (snapshot.confirmation) {
+        if (input.invocationId !== confirmedDelivery) throw new ControllerRefusal('operation-conflict');
+        if (completedSubmit) {
+          if (identity !== completedSubmit.identity) throw new ControllerRefusal('operation-conflict');
+          return completedSubmit.result;
+        }
+      }
       const [role, admission] = roleFor(input.document, input.actionRef);
       if (!['sign', 'submit', 'paper'].includes(role) || !same(admission.widgetSource, input.source)
         || !input.responseContext || !admission.responseSource
@@ -308,7 +327,11 @@ export function createResponseActionController(config: ResponseActionControllerC
           } catch (error) { return { type: 'serviceRequest', status: 'failed', reason: fail(error, generation) }; }
         },
       }, undefined, { invocationId: input.invocationId, actionArtifact: { artifactRef: admission.artifactRef, artifactDigest: admission.artifactDigest } });
-      if (invocation.status === 'blocked' && generation === epoch && !invalidated) publish('refused', 'response-invalid');
+      if (role === 'submit' && invocation.status === 'completed' && snapshot.confirmation) {
+        current(generation);
+        completedSubmit = { identity, result: freeze(structuredClone(invocation)) };
+      }
+      if (invocation.status === 'blocked' && generation === epoch && !invalidated && !snapshot.confirmation) publish('refused', 'response-invalid');
       return invocation;
     } catch (error) { return failure(input.document, input.actionRef, input.invocationId, fail(error, generation)); }
   };
@@ -317,7 +340,7 @@ export function createResponseActionController(config: ResponseActionControllerC
     getSnapshot: () => snapshot,
     subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
     invalidate() {
-      epoch++; invalidated = true; owned = false; saved = undefined; prepared = undefined; signed = undefined;
+      epoch++; invalidated = true; confirmedDelivery = undefined; completedSubmit = undefined; deliveries.clear(); owned = false; saved = undefined; prepared = undefined; signed = undefined;
       publish('refused', 'context-obsolete');
     },
   };

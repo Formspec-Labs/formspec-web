@@ -38,7 +38,7 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
       entry = { completed: slot.onActionCompleted, form: { definition: slot.plan.definition, themeDocument: slot.grant.themeDocument,
         registryEntries: slot.plan.registryEntries, responseActionsDocument: slot.responseActionsDocument,
         localeDocuments: locales, activeLocale: state.locale || undefined, componentDocument: props.componentDocument,
-        configureRuntime: props.host.configureRuntime, onActionCompleted: (action, result) => entry!.completed?.(action, result) } };
+        configureRuntime: props.host.configureRuntime, configureSubmittedRuntime: props.composition.draftStore.readState ? props.host.configureSubmittedRuntime : undefined, onActionCompleted: (action, result) => entry!.completed?.(action, result) } };
       forms.set(key, entry);
     }
     entry.completed = slot.onActionCompleted;

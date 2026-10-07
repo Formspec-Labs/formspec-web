@@ -49,7 +49,7 @@ function saveAction(method: 'POST' | 'PATCH') {
 }
 const prepareAction = saveAction('PATCH');
 
-async function fixture() {
+async function fixture(stateReading = false) {
   const values = new Map<string, string>();
   const storage = { getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
@@ -99,10 +99,14 @@ async function fixture() {
   const now = vi.fn(() => '2026-10-07T03:00:00.000Z');
   const policy = { validateResponse: validateCanonicalFormResponse,
     validateContent: await loadCanonicalSigningContentValidator(), signingProfileDigest: vi.fn(profileDigest), keyId: 'test-key', now };
+  const statePolicy = { definition: structuredClone(definition), formVersionId: 'publication-1', localeDocuments: [{
+    $formspecLocale: '2.0' as const, url: response.displayedLocale!.url, version: response.displayedLocale!.version,
+    locale: response.displayedLocale!.locale, target: { kind: 'definition' as const, url: definition.url }, strings: {},
+  }] };
   const metadata = createBrowserDraftResumeMetadataStore(context, storage);
   const build = () => {
     const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
-    return createHttpAdapterCohort({ ...config, responseSigning: policy, anonymousSessions: new AnonymousSessionBridge(config) });
+    return createHttpAdapterCohort({ ...config, responseSigning: policy, ...(stateReading ? { qualifiedDraftState: statePolicy } : {}), anonymousSessions: new AnonymousSessionBridge(config) });
   };
   const cohort = build();
   const prepare = () => cohort.responseSigning!.prepare({ draftKey: key, definition, formVersionId: 'publication-1', response, source, locale: 'en-US', action: prepareAction });
@@ -112,7 +116,7 @@ async function fixture() {
   const save = (draftAction = saveAction('POST'), savedResponse = response, operationId = generateIdempotencyKey()) => cohort.responseSigning!.saveDraft({
     formId: 'conformance', draftKey: key, definition, formVersionId: 'publication-1', response: savedResponse, operationId, action: draftAction,
   });
-  return { save, cohort, state, requests, prepare, sign, now, values, build, metadata, policy };
+  return { save, cohort, state, requests, prepare, sign, now, values, build, metadata, policy, statePolicy };
 }
 
 async function signedResponse(unsigned: FormResponse): Promise<FormResponse> {
@@ -137,6 +141,124 @@ async function profileDigest(response: FormResponse): Promise<string> {
 }
 
 describe('cohort-owned Response Prepare and Sign', () => {
+  it('exposes state-aware loading only under explicit qualification and resumes a fresh owner instance from submitted GET', async () => {
+    const ordinary = await fixture(); expect(ordinary.cohort.draftStore.readState).toBeUndefined();
+    const test = await fixture(true);
+    await expect(test.cohort.draftStore.readState!(key)).resolves.toBeUndefined(); expect(test.requests).toHaveLength(0);
+    await test.cohort.draftStore.save(key, response); const prepared = await test.prepare(); const signed = await test.sign(prepared);
+    const signedRevision = signed.draft.version;
+    test.state.status = 'submitted'; test.state.version++;
+    const fresh = test.build(); const state = await fresh.draftStore.readState!(key);
+    expect(state).toEqual({ kind: 'submitted', response: signed.response, draft: { id: 'owned-draft', version: signedRevision + 1 },
+      subjectRef: 'anon:owner', formVersionId: 'publication-1' });
+    expect(Object.isFrozen(state!.response.data)).toBe(true);
+    expect(test.requests.at(-1)?.headers.get('authorization')).toBe('Bearer owner-token');
+    for (const name of ['tenant', 'workspace', 'environment', 'cell']) expect(test.requests.at(-1)?.headers.get(`x-formspec-${name}-id`)).toBe(name === 'environment' ? 'test' : name);
+    expect(test.requests.filter(request => request.url.endsWith('/sessions/anonymous'))).toHaveLength(1);
+    expect(test.state.signCount).toBe(1); expect(test.state.patchCount).toBe(2);
+  });
+
+  it('retains legacy active load and returns an active variant under the qualified reader', async () => {
+    const test = await fixture(true); await test.cohort.draftStore.save(key, response);
+    await expect(test.cohort.draftStore.readState!(key)).resolves.toEqual({ kind: 'active', response });
+    await expect(test.cohort.draftStore.load(key)).resolves.toEqual(response);
+    test.state.status = 'unknown'; await expect(test.cohort.draftStore.readState!(key)).rejects.toThrow();
+  });
+
+  it('refuses a retained owner handle returning 404 without treating it as a fresh draft', async () => {
+    const test = await fixture(true); await test.cohort.draftStore.save(key, response);
+    const retained = structuredClone(test.metadata.read('draft-handles')); test.state.getStatus = 404;
+    await expect(test.build().draftStore.readState!(key)).rejects.toThrow();
+    expect(test.metadata.read('draft-handles')).toEqual(retained);
+    expect(test.state.createCount).toBe(1);
+  });
+
+  it.each(['actor', 'publication', 'data', 'definition', 'id', 'locale-url', 'locale-version', 'locale-code', 'commitment-owner', 'commitment-draft', 'revision', 'signature', 'digest', 'content', 'key'] as const)(
+    'refuses submitted %s mismatch without mutating the retained handle or sending writes', async mismatch => {
+      const test = await fixture(true); await test.cohort.draftStore.save(key, response);
+      const prepared = await test.prepare(); await test.sign(prepared); test.state.status = 'submitted'; test.state.version++;
+      const retained = structuredClone(test.metadata.read('draft-handles')); const requests = test.requests.length;
+      const value = test.state.response;
+      if (mismatch === 'actor') test.state.actor = 'anon:other';
+      if (mismatch === 'publication') test.state.formVersionId = 'other-publication';
+      if (mismatch === 'data') value.data = { fullName: 'changed after signing' };
+      if (mismatch === 'definition') value.definitionVersion = 'other';
+      if (mismatch === 'id') value.id = '';
+      if (mismatch === 'locale-url') value.displayedLocale!.url = 'https://other.example.test/locale';
+      if (mismatch === 'locale-version') value.displayedLocale!.version = 'other';
+      if (mismatch === 'locale-code') value.displayedLocale!.locale = 'fr-FR';
+      if (mismatch === 'commitment-owner') value.extensions!['x-formspec-signing-content']!.actorRef = 'anon:other';
+      if (mismatch === 'commitment-draft') value.extensions!['x-formspec-signing-content']!.draftId = 'other';
+      if (mismatch === 'revision') test.state.version++;
+      if (mismatch === 'signature') delete value.authoredSignatures;
+      if (mismatch === 'digest') value.authoredSignatures![0].signedPayload!.digest = '0'.repeat(64);
+      if (mismatch === 'content') value.extensions!['x-formspec-signing-content']!.content.declaration = 'unqualified wording';
+      if (mismatch === 'key') test.policy.keyId = 'different-key';
+      await expect(test.build().draftStore.readState!(key)).rejects.toThrow();
+      expect(test.metadata.read('draft-handles')).toEqual(retained);
+      expect(test.requests.slice(requests).every(request => request.method === 'GET')).toBe(true);
+    });
+
+  it('refuses missing or expired retained grants before owner GET without issuing a replacement', async () => {
+    const test = await fixture(true); await test.cohort.draftStore.save(key, response);
+    const retained = test.metadata.read('grant:conformance');
+    test.metadata.remove('grant:conformance'); const count = test.requests.length;
+    await expect(test.build().draftStore.readState!(key)).rejects.toThrow(/no anonymous owner grant/);
+    expect(test.requests).toHaveLength(count);
+    test.metadata.write('grant:conformance', { ...retained as object, expiresAt: '2000-01-01T00:00:00Z' });
+    await expect(test.build().draftStore.readState!(key)).rejects.toThrow(/expiration/); expect(test.requests).toHaveLength(count);
+  });
+
+  it('fences a late submitted owner GET before returning terminal authority or replacing metadata', async () => {
+    const test = await fixture(true); await test.cohort.draftStore.save(key, response);
+    const prepared = await test.prepare(); await test.sign(prepared); test.state.status = 'submitted'; test.state.version++;
+    let finish!: () => void; test.state.getGate = new Promise(resolve => { finish = resolve; });
+    const fresh = test.build(); const retained = structuredClone(test.metadata.read('draft-handles')); const count = test.requests.length;
+    const reading = fresh.draftStore.readState!(key); await vi.waitFor(() => expect(test.requests.length).toBe(count + 1));
+    fresh.invalidateResponseSigningScope!(key); finish();
+    await expect(reading).rejects.toThrow(/invalidated/); expect(test.metadata.read('draft-handles')).toEqual(retained);
+  });
+
+  it('keeps its admitted publication and copied scope when callers mutate them during a read', async () => {
+    const test = await fixture(true); await test.cohort.draftStore.save(key, response);
+    const prepared = await test.prepare(); await test.sign(prepared); test.state.status = 'submitted'; test.state.version++;
+    const supplied = { ...key }; let finish!: () => void;
+    test.state.getGate = new Promise(resolve => { finish = resolve; });
+    const count = test.requests.length; const reading = test.cohort.draftStore.readState!(supplied);
+    supplied.formUrl = 'https://different.example.test/form';
+    await vi.waitFor(() => expect(test.requests).toHaveLength(count + 1));
+    test.statePolicy.definition.url = 'https://different.example.test/form'; test.statePolicy.formVersionId = 'different';
+    test.statePolicy.localeDocuments[0].version = 'different'; test.policy.keyId = 'different';
+    finish(); await expect(reading).resolves.toMatchObject({ kind: 'submitted', formVersionId: 'publication-1', subjectRef: 'anon:owner' });
+  });
+
+  it('fences digest completion during scoped Clear and does not restore a removed handle', async () => {
+    const test = await fixture(true); await test.cohort.draftStore.save(key, response);
+    const prepared = await test.prepare(); await test.sign(prepared); test.state.status = 'submitted'; test.state.version++;
+    let finish!: (value: string) => void; const digest = await profileDigest(test.state.response);
+    test.policy.signingProfileDigest.mockImplementation(async () => new Promise(resolve => { finish = resolve; }));
+    const fresh = test.build(); const reading = fresh.draftStore.readState!(key);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    const clear = fresh.draftStore.delete(key); finish(digest);
+    await expect(reading).rejects.toThrow(/cleared or invalidated/); await clear;
+    expect(test.metadata.read('draft-handles')).toBeUndefined(); expect(test.metadata.read('grant:conformance')).toBeUndefined();
+  });
+
+  it('requires complete deployment scope and a configured signing policy for terminal recovery', async () => {
+    const test = await fixture(true);
+    expect(() => createHttpAdapterCohort({ baseUrl: 'https://server.example.test', qualifiedDraftState: test.statePolicy }))
+      .toThrow(/signing policy/);
+    expect(() => createHttpAdapterCohort({ baseUrl: 'https://server.example.test', responseSigning: test.policy,
+      resumeMetadata: test.metadata, qualifiedDraftState: test.statePolicy })).toThrow(/four tenant scope/);
+  });
+
+  it('refuses a non-200 owner read without discarding the retained handle', async () => {
+    const test = await fixture(true); await test.cohort.draftStore.save(key, response);
+    const retained = structuredClone(test.metadata.read('draft-handles')); test.state.getStatus = 201;
+    await expect(test.build().draftStore.readState!(key)).rejects.toThrow();
+    expect(test.metadata.read('draft-handles')).toEqual(retained);
+  });
+
   it('requires unresolved-operation metadata only when signing is enabled', async () => {
     const test = await fixture();
     const config = { baseUrl: 'https://server.example.test' };

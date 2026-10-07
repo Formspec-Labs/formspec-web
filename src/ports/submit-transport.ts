@@ -34,6 +34,9 @@ export interface SubmitConfirmation {
   caseUrn?: WosResourceUrn;
 }
 
+/** Reference fields rendered by a receipt; recovery need not invent transport status. */
+export type SubmitReceiptReference = Pick<SubmitConfirmation, 'referenceNumber' | 'recordKind' | 'trackingUri' | 'caseUrn'> & Partial<Pick<SubmitConfirmation, 'status'>>;
+
 export interface SubmitTransport {
   /**
    * Submit one validated response.

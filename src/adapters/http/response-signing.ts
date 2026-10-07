@@ -392,28 +392,11 @@ export class HttpResponseSigning implements ResponseSigning {
     const response = view.canonical_response;
     const unsigned = structuredClone(response);
     delete unsigned.authoredSignatures;
-    const signatures = response.authoredSignatures;
-    const signature = signatures?.[0];
-    const commitment = candidate.extensions?.['x-formspec-signing-content'];
-    const payload = signature?.signedPayload;
-    const digest = await this.config.signingProfileDigest(candidate);
-    if (view.draft_version !== act.version + 1 || !same(unsigned, candidate) || signatures?.length !== 1
-      || !signature || !commitment || signature.signatureProvider !== 'urn:formspec:provider:delegated-response@1'
-      || !signature.signatureValue || signature.signerId !== commitment.actorRef || signature.signerName !== commitment.signerName
-      || signature.consentAccepted !== true || signature.documentId !== commitment.content.documentId
-      || signature.signingIntent !== commitment.content.signingIntent || signature.documentHash !== commitment.documentHash
-      || signature.documentHashAlgorithm !== 'sha-256' || signature.consentTextRef !== commitment.content.electronicConsent.textRef
-      || signature.consentVersion !== commitment.content.electronicConsent.version || signature.affirmationText !== commitment.content.affirmationText
-      || payload?.canonicalization !== 'formspec-response-signing-v1' || payload.digestAlgorithm !== 'sha-256'
-      || payload.digest !== digest || payload.responseId !== candidate.id || payload.definitionUrl !== candidate.definitionUrl
-      || payload.definitionVersion !== candidate.definitionVersion || payload.signedAt !== commitment.signedAt
-      || payload.signingIntent !== commitment.content.signingIntent) throw new Error('Delegated signing evidence differs from the frozen candidate');
-    const decoded = decodeCoseSign1WithMethodUri(base64Bytes(signature.signatureValue), 'urn:formspec:sig-method:');
-    if (decoded.methodUri !== 'urn:formspec:sig-method:ed25519-cose-sign1@1' || decoded.cose.alg !== -8
-      || decoded.cose.payload !== null || decoded.cose.signature.length !== 64
-      || !decoded.cose.kid || new TextDecoder('utf-8', { fatal: true }).decode(decoded.cose.kid) !== this.config.keyId) {
-      throw new Error('Delegated signing envelope differs from its configured method or key pin');
+    if (view.draft_version !== act.version + 1 || !same(unsigned, candidate)) {
+      throw new Error('Delegated signing evidence differs from the frozen candidate');
     }
+    await assertDelegatedSignedResponseConsistency(response, this.config);
+    const signature = response.authoredSignatures![0];
     this.current(context);
     const result = freeze({ ...act.input.preparation, ...await this.savedResult(context.input.draftKey, view), response,
       verification: { mode: 'delegated-service-key' as const, provider: signature.signatureProvider, keyId: this.config.keyId } });
@@ -463,6 +446,34 @@ export class HttpResponseSigning implements ResponseSigning {
       operationId: act.input.operationId, draftId: act.input.preparation.draft.id, version: act.version }]);
   }
   private unmark(act: FrozenAct): void { this.writeMarkers(this.markers().filter(marker => marker.operationId !== act.input.operationId)); }
+}
+
+/** Checks maintained digest/content/mirrors and key metadata, not independent cryptographic verification. */
+export async function assertDelegatedSignedResponseConsistency(response: FormResponse, policy: HttpResponseSigningPolicy): Promise<void> {
+  const candidate = structuredClone(response); delete candidate.authoredSignatures;
+  const commitment = candidate.extensions?.['x-formspec-signing-content'];
+  const signatures = response.authoredSignatures; const signature = signatures?.[0]; const payload = signature?.signedPayload;
+  if (!commitment || !policy.validateContent(commitment.content)
+    || await hashSigningContent(commitment.content, policy.validateContent) !== commitment.documentHash) {
+    throw new Error('Delegated signing content differs from its maintained digest');
+  }
+  const digest = await policy.signingProfileDigest(candidate);
+  if (signatures?.length !== 1 || !signature || signature.signatureProvider !== 'urn:formspec:provider:delegated-response@1'
+    || !signature.signatureValue || signature.signerId !== commitment.actorRef || signature.signerName !== commitment.signerName
+    || signature.consentAccepted !== true || signature.documentId !== commitment.content.documentId
+    || signature.signingIntent !== commitment.content.signingIntent || signature.documentHash !== commitment.documentHash
+    || signature.documentHashAlgorithm !== 'sha-256' || signature.consentTextRef !== commitment.content.electronicConsent.textRef
+    || signature.consentVersion !== commitment.content.electronicConsent.version || signature.affirmationText !== commitment.content.affirmationText
+    || payload?.canonicalization !== 'formspec-response-signing-v1' || payload.digestAlgorithm !== 'sha-256'
+    || payload.digest !== digest || payload.responseId !== candidate.id || payload.definitionUrl !== candidate.definitionUrl
+    || payload.definitionVersion !== candidate.definitionVersion || payload.signedAt !== commitment.signedAt
+    || payload.signingIntent !== commitment.content.signingIntent) throw new Error('Delegated signing evidence differs from the frozen candidate');
+  const decoded = decodeCoseSign1WithMethodUri(base64Bytes(signature.signatureValue), 'urn:formspec:sig-method:');
+  if (decoded.methodUri !== 'urn:formspec:sig-method:ed25519-cose-sign1@1' || decoded.cose.alg !== -8
+    || decoded.cose.payload !== null || decoded.cose.signature.length !== 64
+    || !decoded.cose.kid || new TextDecoder('utf-8', { fatal: true }).decode(decoded.cose.kid) !== policy.keyId) {
+    throw new Error('Delegated signing envelope differs from its configured method or key pin');
+  }
 }
 
 function same(left: unknown, right: unknown): boolean { return canonicalize(left) === canonicalize(right); }

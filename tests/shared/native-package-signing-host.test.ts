@@ -82,6 +82,28 @@ function fixture(attachment = false) {
 }
 
 describe('generic native package signing session', () => {
+  it('initializes qualified submitted state without creating an engine or controller and clears only its draft key', async () => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const locale: LocaleDocument = { $formspecLocale: '2.0', url: 'urn:test:locale:en', version: '1', locale: 'en',
+      target: { kind: 'definition', url: test.policy.definition.url }, strings: {} };
+    const createEngine = vi.fn(createFormEngine);
+    const policy = { ...test.policy, createEngine, locales: [locale], bundle: { ...test.policy.bundle,
+      documents: { ...test.policy.bundle.documents, [locale.url!]: locale } } };
+    const host = createNativePackageSigningHost(policy);
+    const response = { ...test.response, displayedLocale: { url: locale.url, version: locale.version, locale: locale.locale } };
+    const draftKey = { formUrl: response.definitionUrl, formVersion: response.definitionVersion };
+    const state = { kind: 'submitted' as const, response, draft: { id: 'actual-owned-draft', version: 6 }, subjectRef: 'anon:owner', formVersionId: 'publication' };
+    await host.configureSubmittedRuntime({ definition: policy.definition, draftKey, claim: null, state });
+    expect(createEngine).not.toHaveBeenCalled(); expect(host.getSnapshot().controller).toBeUndefined();
+    expect(host.getSnapshot().runtime).toBeUndefined();
+    expect(host.getSnapshot().submitted).toEqual({ recordKind: 'response', referenceNumber: response.id });
+    await expect(host.selectLocale('en')).rejects.toThrow();
+    await expect(host.configureSubmittedRuntime({ definition: policy.definition, draftKey, claim: null,
+      state: { ...state, formVersionId: 'wrong' } })).rejects.toThrow();
+    await host.clearDraftAccess(); expect(policy.clearDraftAccess).toHaveBeenCalledWith(draftKey);
+    expect(host.getSnapshot().submitted).toBeUndefined(); host.dispose();
+    await expect(host.configureSubmittedRuntime({ definition: policy.definition, draftKey, claim: null, state })).rejects.toThrow();
+  });
   it.each([false, true])('retains verified ownership through edits and attachment upload with captured-data reload=%s, then owned PATCH and Prepare', async reload => {
     const test = fixture(); test.host.dispose();
     const source = { ref: `${test.policy.definition.url}#/extensions/x-formspec-signing-content/entries/en`, version: '1' };

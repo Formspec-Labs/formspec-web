@@ -92,6 +92,7 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
   const anonymousSessions = new AnonymousSessionBridge({ ...base, resumeMetadata, formIdResolver,
     validateFormContext: async (url, version) => { formIdResolver(url, version); } });
   const cohort = createHttpAdapterCohort({ ...base, resumeMetadata, formIdResolver, anonymousSessions,
+    qualifiedDraftState: { definition, formVersionId: publication.form_version_id, localeDocuments },
     responseSigning: { keyId: pins.keyId, validateResponse: validateCanonicalFormResponse,
       validateContent, signingProfileDigest: responseSigningDigest } });
   let owner: { key: DraftKey; actor: string } | undefined;
@@ -128,7 +129,17 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
     invalidateAuthority: (_reason, key) => { if (key) cohort.invalidateResponseSigningScope!(key); },
     reviewResponseDigest: handoffHash, canonicalResponseHandoffBytes: handoffBytes,
   });
-  return { composition, host, componentDocument, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale };
+  let resuming: Promise<void> | undefined;
+  return { composition, host, componentDocument, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale,
+    resumeSubmitted: () => resuming ??= (async () => {
+      // Validate retained credentials through the bridge; recovery never issues an owner.
+      if (resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {
+        await anonymousSessions.sessionForForm(definition.url, definition.version, true);
+      }
+      const draftKey = { formUrl: definition.url, formVersion: definition.version };
+      const state = await cohort.draftStore.readState!(draftKey);
+      if (state?.kind === 'submitted') await host.configureSubmittedRuntime({ definition, draftKey, claim: null, state });
+    })() };
 }
 async function qualifyRoles(bundle: BundleExport, pins: NativePackageSigningConfig): Promise<Record<ResponseActionRole, QualifiedResponseActionRole>> {
   const resolved = dereferenceBundleExport(bundle);

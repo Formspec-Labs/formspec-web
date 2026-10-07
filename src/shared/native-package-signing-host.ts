@@ -6,7 +6,7 @@ import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, responseRe
 import type { FormDefinition, FormResponse, LocaleDocument, ValidationReport } from '@formspec-org/types';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
-import type { RespondentOwnedRuntimeInput, RespondentOwnedRuntime } from '../app/RespondentRuntime.tsx';
+import type { RespondentOwnedRuntimeInput, RespondentOwnedRuntime, RespondentSubmittedRuntimeInput } from '../app/RespondentRuntime.tsx';
 import { createResponseActionController, type ResponseActionControllerConfig, type ResponseActionControllerSnapshot } from './response-action-controller.ts';
 import { createFrozenHostStateDataSourceRuntime } from './frozen-host-state-data.ts';
 import { generateIdempotencyKey } from './idempotency-key.ts';
@@ -112,12 +112,14 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   // snapshot selects the owned branch only; the cohort requalifies its handle.
   let ownedResponseSeed: FormResponse | undefined;
   let deliveryIdentity: string | undefined;
+  let submitted: { referenceNumber: string; recordKind: 'response' } | undefined;
+  let submittedKey: DraftKey | undefined;
   const listeners = new Set<() => void>();
   const reads = new Set<AbortController>();
   const sourceRevisions = new Map<string, { value: string; revision: number }>();
   const engineFactory = policy.createEngine ?? createFormEngine;
-  let hostSnapshot = { generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime };
-  const emit = () => { hostSnapshot = Object.freeze({ generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime }); for (const listener of listeners) listener(); };
+  let hostSnapshot = { generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted };
+  const emit = () => { hostSnapshot = Object.freeze({ generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
   function fence() {
     generation++; runtime = undefined; review = undefined; expectedReviewIdentity = undefined; reviewState = undefined;
     for (const read of reads) read.abort();
@@ -125,9 +127,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function current(expected: number) { if (disposed || generation !== expected) throw new Error('native-context-obsolete'); }
   function stop(reason: Parameters<NativePackageSigningHostPolicy['invalidateAuthority']>[0]) {
-    if (reason === 'clear' || reason === 'dispose') ownedResponseSeed = undefined;
+    if (reason === 'clear' || reason === 'dispose') { ownedResponseSeed = undefined; submitted = undefined; }
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
-    authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? structuredClone(input.draftKey) : undefined);
+    authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? structuredClone(input.draftKey) : submittedKey ? structuredClone(submittedKey) : undefined);
   }
   async function isolated(response: FormResponse, activeLocale: string, run: (engine: IFormEngine) => unknown) {
     const engine = engineFactory(policy.definition, { registryEntries: [...policy.registryEntries], runtimeContext: { locale: activeLocale } });
@@ -247,7 +249,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     },
   };
   async function selectLocale(value: string) {
-    if (publicSnapshot?.signed || publicSnapshot?.confirmation) throw new Error('native-locale-frozen');
+    if (submitted || publicSnapshot?.signed || publicSnapshot?.confirmation) throw new Error('native-locale-frozen');
     const selected = policy.locales.find(document => document.locale.toLowerCase() === value.toLowerCase());
     if (disposed || cleared || !input || !selected) throw new Error('native-locale-unavailable');
     value = selected.locale;
@@ -311,8 +313,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     },
     async clearDraftAccess() {
       if (clearing) return clearing;
-      if (disposed || !input) throw new Error('native-runtime-unavailable');
-      const key = structuredClone(input.draftKey);
+      const selectedKey = input?.draftKey ?? submittedKey;
+      if (disposed || !selectedKey) throw new Error('native-runtime-unavailable');
+      const key = structuredClone(selectedKey);
       if (!cleared) { stop('clear'); cleared = true; emit(); }
       clearing = policy.clearDraftAccess(key);
       try { await clearing; } finally { clearing = undefined; }
@@ -322,8 +325,27 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     widgetExecutor: ((action: Parameters<NonNullable<typeof controller>['widgetExecutor']>[0]) => {
       if (!controller || disposed || cleared) throw new Error('native-runtime-unavailable'); return controller.widgetExecutor(action);
     }),
+    async configureSubmittedRuntime(next: RespondentSubmittedRuntimeInput): Promise<Pick<RespondentOwnedRuntime, 'invalidate' | 'dispose'>> {
+      const response = next.state.response;
+      const responseLocale = response.displayedLocale;
+      const selectedLocale = policy.locales.find(document => document.url === responseLocale?.url
+        && document.version === responseLocale?.version && document.locale.toLowerCase() === responseLocale?.locale.toLowerCase());
+      if (disposed || cleared || controller || input || next.state.kind !== 'submitted'
+        || !same(next.definition, policy.definition) || next.state.formVersionId !== policy.publication.formVersionId
+        || next.draftKey.formUrl !== policy.definition.url || next.draftKey.formVersion !== policy.definition.version
+        || (next.draftKey.subjectRef !== undefined && next.draftKey.subjectRef !== next.state.subjectRef)
+        || (next.claim && next.claim.subjectRef !== next.state.subjectRef) || !selectedLocale || !response.id
+        || response.definitionUrl !== policy.definition.url || response.definitionVersion !== policy.definition.version) {
+        throw new Error('native-submitted-context-refused');
+      }
+      submittedKey = structuredClone(next.draftKey); freezeMetadata(submittedKey);
+      responseId = response.id; locale = selectedLocale.locale;
+      submitted = Object.freeze({ referenceNumber: response.id, recordKind: 'response' });
+      fence(); emit();
+      return { invalidate: () => { if (!disposed) { stop('clear'); emit(); } }, dispose: () => {} };
+    },
     async configureRuntime(next: RespondentOwnedRuntimeInput): Promise<RespondentOwnedRuntime> {
-      if (disposed || cleared || !same(next.definition, policy.definition) || (responseId && next.restoredResponse && next.restoredResponse.id !== responseId)
+      if (disposed || cleared || submitted || !same(next.definition, policy.definition) || (responseId && next.restoredResponse && next.restoredResponse.id !== responseId)
         || (input && !same(input.draftKey, next.draftKey))) throw new Error('native-runtime-context-refused');
       responseId ??= next.restoredResponse?.id ?? generateIdempotencyKey();
       // A returning form lease keeps the session's selected language. The first

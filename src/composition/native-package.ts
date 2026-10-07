@@ -15,6 +15,7 @@ export interface NativePackageBoot {
   localeDocuments: readonly LocaleDocument[];
   moduleId: string;
   initialLocale: string;
+  resumeSubmitted?: () => Promise<void>;
 }
 
 export interface NativePackageCompositionOptions {

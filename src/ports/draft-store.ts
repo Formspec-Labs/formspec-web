@@ -26,6 +26,12 @@ export interface DraftKey {
   partyRef?: string;
 }
 
+/** State qualified from the same owned draft read; submitted is the actual server draft status. */
+export type DraftReadState = { kind: 'active'; response: FormResponse } | {
+  kind: 'submitted'; response: FormResponse; draft: { id: string; version: number };
+  subjectRef: string; formVersionId: string;
+};
+
 /** A retained draft cannot be resumed against a different immutable form version. */
 export class DraftVersionConflictError extends Error {
   readonly currentDraftKey: Readonly<DraftKey>;
@@ -46,6 +52,8 @@ export class DraftVersionConflictError extends Error {
 
 export interface DraftStore {
   load(key: DraftKey): Promise<FormResponse | undefined>;
+  /** Optional owner-qualified terminal recovery; omission preserves legacy loading. */
+  readState?(key: DraftKey): Promise<DraftReadState | undefined>;
   save(key: DraftKey, response: FormResponse): Promise<void>;
   list(subjectRef: string): Promise<DraftKey[]>;
   delete(key: DraftKey): Promise<void>;

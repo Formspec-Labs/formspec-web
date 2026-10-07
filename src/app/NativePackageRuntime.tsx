@@ -5,6 +5,7 @@ import { localeOptionsForDefinition } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
 import type { NativePackageBoot } from '../composition/native-package.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
+import { ConfirmationPanel } from './RespondentRuntime.tsx';
 import { NativePackageRespondentHost } from './NativePackageRespondentHost.tsx';
 import { chooseComposition } from './main-helpers.ts';
 
@@ -52,11 +53,12 @@ export function NativePackageRuntime({ composition, config }: { composition: Com
     setState({ owner: composition });
     const loading = composition.nativePackageRespondent?.load();
     if (!loading) setState({ owner: composition, failed: true });
-    void loading?.then(value => {
+    void loading?.then(async value => {
       boot = value;
+      await value.resumeSubmitted?.();
       if (active) setState({ owner: composition, boot: value });
       else if (lifetime.generation === generation) value.host.dispose();
-    }).catch(() => { if (active) setState({ owner: composition, failed: true }); });
+    }).catch(() => { if (lifetime.generation === generation) boot?.host.dispose(); if (active) setState({ owner: composition, failed: true }); });
     return () => {
       active = false;
       queueMicrotask(() => {
@@ -90,7 +92,9 @@ function NativePackageFrame({ boot, selection, children }: { boot: NativePackage
   const text = (key: ChromeStringKey) => locale?.strings[`$ui.${key}`] ?? UI_STRINGS[key];
   const definition = locale?.target.kind === 'definition' ? boot.host.bundle.definitions.get(locale.target.url) : undefined;
   const options = definition ? localeOptionsForDefinition(definition, boot.localeDocuments) : [];
-  const localeLocked = !!state.controller?.signed || !!state.controller?.confirmation
+  const confirmation = state.submitted ?? (state.controller?.phase === 'submitted'
+    && state.controller.confirmation?.recordKind === 'response' ? state.controller.confirmation : undefined);
+  const localeLocked = !!confirmation || !!state.controller?.signed || !!state.controller?.confirmation
     || state.controller?.phase === 'sign' || state.controller?.phase === 'submit';
   useEffect(() => { if (operation === 'cleared') heading.current?.focus(); }, [operation]);
   async function changeLocale(code: string) {
@@ -114,7 +118,7 @@ function NativePackageFrame({ boot, selection, children }: { boot: NativePackage
           disabled={!state.controller || localeLocked || state.cleared || operation === 'locale' || operation === 'clearing'}
           aria-pressed={state.locale.toLowerCase() === option.code.toLowerCase()} onClick={() => void changeLocale(option.code)}>{option.label}</button>)}
       </div>
-      {(state.controller || operation === 'clear-error') && operation !== 'cleared' ? <button type="button" className="locale-button"
+      {(!confirmation && state.controller || operation === 'clear-error') && operation !== 'cleared' ? <button type="button" className="locale-button"
         disabled={operation === 'locale' || operation === 'clearing'} onClick={() => void clear()}>
         {text(operation === 'clearing' ? 'receipt.clearing' : 'receipt.clear')}
       </button> : null}
@@ -125,6 +129,9 @@ function NativePackageFrame({ boot, selection, children }: { boot: NativePackage
       <h1 tabIndex={-1} ref={heading}>{text('receipt.clearedTitle')}</h1>
       <p>{text('receipt.clearedDetail')}</p>
       <a className="locale-button" href={`/${selection}`}>{text('draft.startCurrent')}</a>
-    </main> : state.cleared ? null : children}
+    </main> : state.cleared ? null : confirmation ? <main className="shell__status">
+      <ConfirmationPanel confirmation={confirmation} resolveChromeText={text} pendingFilingAndSigning={false}
+        focusOnMount onClearTerminal={clear} terminalClearState={{ status: operation === 'clearing' ? 'clearing' : 'idle' }} />
+    </main> : children}
   </>;
 }

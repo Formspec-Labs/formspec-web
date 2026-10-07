@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dereferenceBundleExport, type BundleExport } from '@formspec-org/surface';
 import { SIGNING_CEREMONY_WIDGET_SHAPE, RESPONSE_REVIEW_WIDGET_SHAPE } from '@formspec-org/surface-react';
 import type { FormResponse, LocaleDocument } from '@formspec-org/types';
+import type { SigningContent } from '@formspec-org/types';
+import { createFormEngine } from '@formspec-org/engine/render';
+import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
+import { delegatedSignedResponseFixture } from '../adapters/http/delegated-signed-response-fixture.ts';
 import * as nativeHostModule from '../../src/shared/native-package-signing-host.ts';
 import { createDefaultComposition } from '../../src/composition/default.ts';
 import { resolveActiveConfig } from '../../src/config/runtime.ts';
@@ -54,12 +58,13 @@ async function fixture() {
     nativeBundle: await rawPin('native.json'), component: { ...await rawPin('component.json'), ref: (JSON.parse(nativeBytes).manifest.components)[0] } };
   const publication = { form_id: 'actual-form', form_version_id: 'actual-publication', definition_url: definition.url,
     definition_version: definition.version, definition_hash: await computeJcsSha256Digest(definition), definition: structuredClone(definition) };
-  const requests: { url: string; method: string; body?: unknown }[] = [];
+  const requests: { url: string; method: string; body?: unknown; headers: Headers }[] = [];
   let saved: FormResponse | undefined;
+  let draftStatus = 'in_progress'; let draftVersion = 1;
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input)); const method = init?.method ?? 'GET';
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
-    requests.push({ url: url.href, method, body });
+    requests.push({ url: url.href, method, body, headers: new Headers(init?.headers) });
     if (url.origin !== 'https://server.example.test') {
       const name = url.pathname.split('/').at(-1)!;
       return new Response(name === 'package.json' ? JSON.stringify({ files }) : texts[name]);
@@ -69,15 +74,45 @@ async function fixture() {
     if (url.pathname === '/runtime/forms/actual-form' && method === 'GET') return Response.json(publication);
     if (url.pathname === '/runtime/forms/actual-form/drafts' && method === 'POST') saved = structuredClone(body.canonical_response);
     if (url.pathname === '/drafts/fixture-draft' || (url.pathname.endsWith('/drafts') && method === 'POST')) return Response.json({
-      draft_id: 'fixture-draft', draft_version: 1, form_version_id: 'actual-publication', subject_ref: 'anon:fixture',
-      canonical_response: saved, draft_state: saved?.data, status: 'in_progress' });
+      draft_id: 'fixture-draft', draft_version: draftVersion, form_version_id: 'actual-publication', subject_ref: 'anon:fixture',
+      canonical_response: saved, draft_state: saved?.data, status: draftStatus });
     throw new Error(`Unexpected test request ${method} ${url.href}`);
   });
   vi.stubGlobal('fetch', fetch);
-  return { config, signing, bundle, definition, document, component, files, texts, publication, requests, fetch };
+  return { config, signing, bundle, definition, document, component, files, texts, publication, requests, fetch, values,
+    setDraft: (response: FormResponse, status: string, version: number) => { saved = structuredClone(response); draftStatus = status; draftVersion = version; } };
 }
 
 describe('explicit native package composition', () => {
+  it('preflights a submitted owned draft on fresh package boot without mounting an engine or issuing another credential/write', async () => {
+    const test = await fixture(); await initFormspecEngine();
+    const first = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    await first.resumeSubmitted!(); expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
+    const key = { formUrl: test.definition.url, formVersion: test.definition.version };
+    const engine = createFormEngine(test.definition); first.localeDocuments.forEach(locale => engine.loadLocale(locale)); engine.setLocale('es-US');
+    engine.setValue('declarationAcknowledged', true);
+    engine.setValue('photo', { kind: 'attachment-ref', uri: 'attachment:fixture', filename: 'fixture.png', mimeType: 'image/png', contentType: 'image/png', size: 1, hash: `sha256:${'c'.repeat(64)}` });
+    const response = engine.getResponse({ profile: 'on-submit', id: generateIdempotencyKey() }); engine.dispose();
+    await first.composition.draftStore.save(key, response);
+    const content = Object.values((test.definition.extensions!['x-formspec-signing-content'] as { entries: Record<string, SigningContent> }).entries).find(content => content.locale === 'es-US')!;
+    const signed = await delegatedSignedResponseFixture({ response, content, actor: 'anon:fixture', draftId: 'fixture-draft', candidateVersion: 4, keyId: test.signing.keyId });
+    test.setDraft(signed, 'submitted', 6); first.host.dispose();
+    const count = test.requests.length;
+    const fresh = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    const configureForm = vi.spyOn(fresh.host, 'configureRuntime'); const configureSubmitted = vi.spyOn(fresh.host, 'configureSubmittedRuntime');
+    await Promise.all([fresh.resumeSubmitted!(), fresh.resumeSubmitted!()]);
+    expect(configureForm).not.toHaveBeenCalled(); expect(configureSubmitted).toHaveBeenCalledOnce();
+    expect(configureSubmitted.mock.calls[0][0].state).toEqual({ kind: 'submitted', response: signed, draft: { id: 'fixture-draft', version: 6 },
+      subjectRef: 'anon:fixture', formVersionId: 'actual-publication' });
+    expect(fresh.host.getSnapshot().submitted).toEqual({ referenceNumber: signed.id, recordKind: 'response' });
+    expect(fresh.host.getSnapshot().runtime).toBeUndefined(); expect(fresh.host.getSnapshot().controller).toBeUndefined();
+    expect(fresh.host.getSnapshot().locale).toBe('es-US');
+    const recovered = test.requests.slice(count); expect(recovered.every(request => request.method === 'GET')).toBe(true);
+    const ownedRead = recovered.filter(request => request.url.endsWith('/drafts/fixture-draft')); expect(ownedRead).toHaveLength(1);
+    expect(ownedRead[0].headers.get('authorization')).toBe('Bearer fixture-token');
+    for (const name of ['tenant', 'workspace', 'cell']) expect(ownedRead[0].headers.get(`x-formspec-${name}-id`)).toBe('fixture');
+    expect(ownedRead[0].headers.get('x-formspec-environment-id')).toBe('test'); fresh.host.dispose();
+  });
   it('requires config and explicit package URL, leaving ordinary preview unsigned', async () => {
     const test = await fixture();
     expect(() => createDefaultComposition(test.config)).toThrow('explicit package URL');

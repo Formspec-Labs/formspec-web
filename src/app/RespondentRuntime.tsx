@@ -31,7 +31,7 @@ import {
   type ResponseActionsDocument,
   type SubmitResult,
 } from '@formspec-org/react';
-import type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
+import type { ChromeStringKey, ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
 import type { SurfaceDefinitionFormRenderInput } from '@formspec-org/surface-react';
 import type {
   ComponentDocument,
@@ -48,7 +48,7 @@ import {
   localeOptionsForDefinition,
 } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
-import { DraftVersionConflictError, type DraftKey } from '../ports/draft-store.ts';
+import { DraftVersionConflictError, type DraftReadState, type DraftKey } from '../ports/draft-store.ts';
 import type { ReviewerShare } from '../ports/reviewer-session.ts';
 import { respondentSessionToken } from '../ports/reviewer-session.ts';
 import type {
@@ -66,7 +66,7 @@ import { ObligationItem } from './obligations-view.tsx';
 import { DocumentItem } from './documents-view.tsx';
 import { AttachmentStoreProvider } from './AttachmentStoreProvider.tsx';
 import { FormspecWebAttachmentControl } from './attachment-upload-control.tsx';
-import type { SubmitConfirmation } from '../ports/submit-transport.ts';
+import type { SubmitReceiptReference, SubmitConfirmation } from '../ports/submit-transport.ts';
 import type { NotificationDelivery } from '../ports/notification-delivery.ts';
 import type {
   Authorization,
@@ -163,6 +163,7 @@ export interface ResolvedRespondentFormInput {
   readonly componentDocument?: ComponentDocument;
   /** Establish ownership after restore and before controls mount; release resources if setup throws. */
   readonly configureRuntime?: (input: RespondentOwnedRuntimeInput) => Promise<RespondentOwnedRuntime>;
+  readonly configureSubmittedRuntime?: (input: RespondentSubmittedRuntimeInput) => Promise<Pick<RespondentOwnedRuntime, 'invalidate' | 'dispose'>>;
   readonly responseActionInvoker?: SurfaceDefinitionFormRenderInput['responseActionInvoker'];
   readonly semanticControlScope?: SurfaceDefinitionFormRenderInput['semanticControlScope'];
   /**
@@ -184,6 +185,13 @@ export interface RespondentOwnedRuntimeInput {
   readonly claim: IdentityClaim | null;
   readonly restoredResponse?: FormResponse;
   readonly activeLocale: string;
+}
+
+export interface RespondentSubmittedRuntimeInput {
+  readonly definition: FormDefinition;
+  readonly draftKey: DraftKey;
+  readonly claim: IdentityClaim | null;
+  readonly state: Extract<DraftReadState, { kind: 'submitted' }>;
 }
 
 export interface RespondentOwnedRuntime {
@@ -249,6 +257,7 @@ type RespondentState =
       localeDocuments: readonly LocaleDocument[];
       activeLocale: string;
     }
+  | { status: 'submitted'; terminalRuntime: Pick<RespondentOwnedRuntime, 'invalidate' | 'dispose'> }
   | { status: 'terminal-cleared'; title: string; detail: string }
   | { status: 'error'; error: unknown };
 
@@ -384,7 +393,7 @@ function RespondentController({
   useEffect(() => {
     let cancelled = false;
     let engine: IFormEngine | undefined;
-    let ownedRuntime: RespondentOwnedRuntime | undefined;
+    let ownedRuntime: Pick<RespondentOwnedRuntime, 'invalidate' | 'dispose'> | undefined;
     const disposeOwnedRuntime = () => { const active = ownedRuntime; ownedRuntime = undefined; active?.dispose(); };
     let unsubscribe: (() => void) | undefined;
     let activeClaim: IdentityClaim | null = null;
@@ -419,6 +428,7 @@ function RespondentController({
 
         if (cancelled || sequence !== reloadSequence) {
           if (readyState.status === 'ready') readyState.ownedRuntime?.dispose();
+          if (readyState.status === 'submitted') readyState.terminalRuntime.dispose();
           if ('engine' in readyState) {
             readyState.engine.dispose();
           }
@@ -435,6 +445,7 @@ function RespondentController({
         } else {
           disposeOwnedRuntime();
           engine = 'engine' in readyState ? readyState.engine : undefined;
+          if (readyState.status === 'submitted') ownedRuntime = readyState.terminalRuntime;
           pendingAssuranceFloor = readyState.status === 'auth-required' ? readyState.assuranceFloor : undefined;
           setMultiPartyState(null);
         }
@@ -530,6 +541,7 @@ function RespondentController({
     form?.activeLocale,
     form?.componentDocument,
     form?.configureRuntime,
+    form?.configureSubmittedRuntime,
     form?.definition,
     form?.localeDocuments,
     form?.registryEntries,
@@ -769,6 +781,8 @@ function RespondentController({
       />
     );
   }
+
+  if (respondentState.status === 'submitted') return null;
 
   if (respondentState.status === 'terminal-cleared') {
     return (
@@ -1315,7 +1329,7 @@ async function createReadyState(
   claim: IdentityClaim | null,
   options: { locale?: string } = {},
   form?: ResolvedRespondentFormInput,
-): Promise<ReadyRespondentState | Extract<RespondentState, { status: 'auth-required' | 'draft-conflict' }>> {
+): Promise<ReadyRespondentState | Extract<RespondentState, { status: 'auth-required' | 'draft-conflict' | 'submitted' }>> {
   assertIdentityPolicySatisfied({
     claim,
     identityMode: config.identity.mode,
@@ -1447,6 +1461,25 @@ async function createReadyState(
     formVersion: definition.version,
     subjectRef: claim?.subjectRef,
   };
+  let recoveredDraft: FormResponse | undefined;
+  if (form?.configureSubmittedRuntime) {
+    if (!composition.draftStore.readState || !form.configureRuntime || runtimeProfile.multiParty) {
+      throw new Error('Submitted recovery requires its complete qualified runtime');
+    }
+    const state = await composition.draftStore.readState(draftKey);
+    if (state !== undefined && state.kind !== 'active' && state.kind !== 'submitted') {
+      throw new Error('Submitted recovery returned an unknown draft state');
+    }
+    if (state?.kind === 'submitted') {
+      const terminalRuntime = await form.configureSubmittedRuntime({ definition, draftKey, claim, state });
+      if (!terminalRuntime || typeof terminalRuntime.invalidate !== 'function' || typeof terminalRuntime.dispose !== 'function') {
+        terminalRuntime?.dispose?.();
+        throw new Error('Submitted recovery requires lifecycle hooks');
+      }
+      return { status: 'submitted', terminalRuntime };
+    }
+    recoveredDraft = state?.response;
+  }
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
     ...(form ? { registryEntries: [...form.registryEntries] } : {}),
@@ -1464,7 +1497,7 @@ async function createReadyState(
           runtimeProfile.multiParty,
         )
       : null;
-    draft = await composition.draftStore.load(
+    draft = form?.configureSubmittedRuntime ? recoveredDraft : await composition.draftStore.load(
       multiPartyState
         ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef)
         : draftKey,
@@ -2864,8 +2897,14 @@ export function ConfirmationPanel({
   notificationDelivery,
   terminalClearState = { status: 'idle' },
   onClearTerminal,
+  resolveChromeText,
+  pendingFilingAndSigning = true,
+  focusOnMount = false,
 }: {
-  confirmation: SubmitConfirmation;
+  confirmation: SubmitReceiptReference;
+  resolveChromeText?: (key: ChromeStringKey) => string;
+  pendingFilingAndSigning?: boolean;
+  focusOnMount?: boolean;
   captureReceipt?: CaptureReceipt;
   notificationDelivery?: NotificationDelivery;
   terminalClearState?: TerminalClearState;
@@ -2873,7 +2912,10 @@ export function ConfirmationPanel({
 }) {
   const smsInputId = useId();
   const actionsHeadingId = useId();
-  const chrome = useChromeText();
+  const defaultChrome = useChromeText();
+  const chrome = resolveChromeText ?? defaultChrome;
+  const receipt = useRef<HTMLElement>(null);
+  useEffect(() => { if (focusOnMount) receipt.current?.focus(); }, [focusOnMount]);
   const [smsTo, setSmsTo] = useState('');
   const [smsState, setSmsState] = useState<
     { status: 'idle' } | { status: 'sending' } | { status: 'sent' } | { status: 'error'; error: string }
@@ -2906,12 +2948,12 @@ export function ConfirmationPanel({
   };
 
   return (
-    <section className="confirmation-panel" aria-labelledby="confirmation-title" tabIndex={-1}>
+    <section className="confirmation-panel" ref={receipt} aria-labelledby="confirmation-title" tabIndex={-1}>
       <h2 id="confirmation-title">{responseOnly ? chrome('receipt.answersReceived') : 'Submission received'}</h2>
       <p>{responseOnly ? chrome('receipt.submissionId') : 'Reference number'}</p>
       <strong className={responseOnly ? 'confirmation-panel__submission-id' : undefined}>{confirmation.referenceNumber}</strong>
       {responseOnly ? (
-        <p>{chrome('receipt.pendingFilingAndSigning')}</p>
+        pendingFilingAndSigning ? <p>{chrome('receipt.pendingFilingAndSigning')}</p> : null
       ) : (
         <p>Verifier code <strong>{verifierCode}</strong></p>
       )}

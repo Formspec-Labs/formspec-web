@@ -1,5 +1,5 @@
 import canonicalize from 'canonicalize';
-import type { DraftKey, DraftStore, FormResponse } from '../../ports/draft-store.ts';
+import type { DraftKey, DraftReadState, DraftStore, FormResponse } from '../../ports/draft-store.ts';
 import { createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
 import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
@@ -16,6 +16,7 @@ export interface HttpDraftStoreConfig extends HttpClientConfig {
    */
   bindingRegistry?: DraftBindingRegistry;
   clearAnonymousSession?: (key: DraftKey) => Promise<void>;
+  qualifyReadState?: (key: DraftKey, view: OwnedDraftView, current: () => void) => Promise<DraftReadState>;
 }
 
 interface DraftView {
@@ -24,8 +25,13 @@ interface DraftView {
   draft_state?: Record<string, unknown>;
   canonical_response?: FormResponse;
 }
+export interface OwnedDraftView {
+  draft_id: string; draft_version: number; draft_state: Record<string, unknown>; canonical_response: FormResponse;
+  form_version_id?: string; subject_ref?: string; status?: string;
+}
 
 export class HttpDraftStore implements DraftStore {
+  readonly readState?: (key: DraftKey, assertCurrent?: () => void) => Promise<DraftReadState | undefined>;
   private readonly client: HttpClient;
   private readonly formIdResolver: FormIdResolver;
   private readonly anonymousSessionToken?: HttpDraftStoreConfig['anonymousSessionToken'];
@@ -41,19 +47,34 @@ export class HttpDraftStore implements DraftStore {
     this.anonymousSessionToken = config.anonymousSessionToken;
     this.bindings = config.bindingRegistry ?? createDraftBindingRegistry();
     this.clearAnonymousSession = config.clearAnonymousSession;
+    const qualify = config.qualifyReadState;
+    if (qualify) this.readState = (suppliedKey, current = () => {}) => {
+      const key = structuredClone(suppliedKey);
+      return this.read(key, async view => freeze(structuredClone(await qualify(key, view, current))), current, false);
+    };
   }
 
   async load(key: DraftKey): Promise<FormResponse | undefined> {
+    return this.read(key, view => Promise.resolve(view.canonical_response));
+  }
+
+  private async read<T>(key: DraftKey, qualify: (view: OwnedDraftView) => Promise<T>, assertCurrent: () => void = () => {}, missingIsAbsent = true): Promise<T | undefined> {
+    key = structuredClone(key);
     const generation = this.generation;
+    const current = () => { assertCurrent(); if (generation !== this.generation) throw new Error('Draft state was cleared while loading'); };
+    current();
     const binding = this.bindings.get(key);
     if (!binding) {
       return undefined;
     }
     try {
       const token = await this.resolveAnonymousSessionToken(key);
-      const view = await this.client.getJson<DraftView>(`/drafts/${encodeURIComponent(binding.draftId)}`, {
+      current();
+      const view = await this.client.getJson<OwnedDraftView>(`/drafts/${encodeURIComponent(binding.draftId)}`, {
         headers: bearerHeaders(token),
+        ...(!missingIsAbsent ? { successStatuses: [200] } : {}),
       });
+      current();
       const response = view.canonical_response;
       const { validateCanonicalFormResponse } = await import('../schema/surface-bundle-schema-validators.ts');
       if (view.draft_id !== binding.draftId || !response || !await validateCanonicalFormResponse(response)
@@ -63,12 +84,19 @@ export class HttpDraftStore implements DraftStore {
         || canonicalize(response.data) !== canonicalize(view.draft_state)) {
         throw new Error('Server draft has no matching canonical Response snapshot');
       }
-      if (generation !== this.generation) throw new Error('Draft state was cleared while loading');
+      if (!missingIsAbsent && ((binding.draftVersion !== undefined && view.draft_version < binding.draftVersion)
+        || (binding.response?.id !== undefined && response.id !== binding.response.id))) {
+        throw new Error('Owned draft state regressed from its retained identity or revision');
+      }
+      current();
+      const result = await qualify(structuredClone(view));
+      current();
       this.bindings.put(key, { draftId: view.draft_id, draftVersion: view.draft_version, response });
-      return response;
+      return result;
     } catch (error) {
+      current();
       if (error instanceof HttpAdapterError && error.status === 404) {
-        if (generation !== this.generation) throw new Error('Draft state was cleared while loading');
+        if (!missingIsAbsent) throw error;
         this.bindings.delete(key);
         return undefined;
       }
@@ -195,4 +223,8 @@ function respondentSubjectRef(key: DraftKey): string | undefined {
 
 function bearerHeaders(token: string | undefined): HeadersInit {
   return token ? { authorization: `Bearer ${token}` } : {};
+}
+function freeze<T>(value: T): T {
+  if (value && typeof value === 'object') { for (const child of Object.values(value)) freeze(child); Object.freeze(value); }
+  return value;
 }

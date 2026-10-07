@@ -18,6 +18,10 @@
  * reference deployment.
  */
 
+import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
+import { resolveAuthoredSigningContent } from '@formspec-org/engine/render';
+import canonicalize from 'canonicalize';
+import { formspecTenantHeaderNames, tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import type { DraftKey, DraftStore } from '../../ports/draft-store.ts';
 import type { ResponseSigning } from '../../ports/response-signing.ts';
 import type { IntakeHandoff, SubmitTransport } from '../../ports/submit-transport.ts';
@@ -28,7 +32,7 @@ import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import { HttpSubmitTransport } from './submit-transport.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
-import { HttpResponseSigning, ResponseSigningScopeFence, type HttpResponseSigningPolicy } from './response-signing.ts';
+import { assertDelegatedSignedResponseConsistency, HttpResponseSigning, ResponseSigningScopeFence, type HttpResponseSigningPolicy } from './response-signing.ts';
 
 export type { DraftBindingRegistry, DraftBindingSnapshot } from './draft-binding-registry.ts';
 
@@ -47,6 +51,8 @@ export interface HttpAdapterCohortConfig extends HttpClientConfig {
   resumeMetadata?: DraftResumeMetadataStore;
   /** Explicitly injected signing policy; omission preserves the existing unsigned cohort. */
   responseSigning?: HttpResponseSigningPolicy;
+  /** Exact admitted package publication; only this opt-in exposes state-aware terminal recovery. */
+  qualifiedDraftState?: { definition: FormDefinition; formVersionId: string; localeDocuments: readonly LocaleDocument[] };
 }
 
 export interface HttpAdapterCohort {
@@ -61,13 +67,52 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
   if (config.responseSigning && !config.resumeMetadata) {
     throw new Error('Response signing requires injected draft resume metadata for unresolved operation recovery');
   }
+  if (config.qualifiedDraftState && !config.responseSigning) throw new Error('Qualified draft state requires the maintained signing policy');
+  if (config.qualifiedDraftState) {
+    const headers = config.tenantBinding ? tenantScopeHeaders(config.tenantBinding) : {};
+    if (Object.values(formspecTenantHeaderNames).some(name => !headers[name]?.trim())) throw new Error('Qualified draft state requires all four tenant scope headers');
+  }
   const resolveFormId = config.formIdResolver ?? defaultFormIdResolver;
   const registry = createDraftBindingRegistry({ resumeMetadata: config.resumeMetadata, formIdResolver: config.formIdResolver });
   const { anonymousSessions, responseIdResolver, responseDataResolver, signingRequested,
-    resumeMetadata: _resumeMetadata, responseSigning: signingPolicy, ...httpConfig } = config;
+    resumeMetadata: _resumeMetadata, responseSigning: signingPolicyInput, qualifiedDraftState: statePolicyInput, ...httpConfig } = config;
+  const signingPolicy = signingPolicyInput ? Object.freeze({ ...signingPolicyInput }) : undefined;
+  const statePolicy = statePolicyInput ? structuredClone(statePolicyInput) : undefined;
+  const ownerFor = async (key: DraftKey) => {
+    if (key.subjectRef && !key.subjectRef.startsWith('anon:')) return { subjectRef: key.subjectRef };
+    if (!anonymousSessions) throw new Error('Signing requires an owned anonymous session');
+    const session = await anonymousSessions.sessionForForm(key.formUrl, key.formVersion, true);
+    if (key.subjectRef && key.subjectRef !== session.subjectRef) throw new Error('Signing actor differs from the server owner');
+    return { token: session.sessionToken, subjectRef: session.subjectRef };
+  };
   const draftStore = new HttpDraftStore({
     ...httpConfig,
     bindingRegistry: registry,
+    qualifyReadState: statePolicy ? async (key, view, current) => {
+      const owner = await ownerFor(key); current();
+      const response = view.canonical_response;
+      if (key.formUrl !== statePolicy.definition.url || key.formVersion !== statePolicy.definition.version
+        || view.form_version_id !== statePolicy.formVersionId || !statePolicy.formVersionId.trim()
+        || view.subject_ref !== owner.subjectRef || !response.id?.trim()
+        || !Number.isSafeInteger(view.draft_version) || view.draft_version < 1
+        || !['in_progress', 'submitted'].includes(view.status ?? '')) throw new Error('Owned draft state differs from its qualified publication');
+      if (view.status === 'in_progress') return { kind: 'active', response };
+      const displayed = response.displayedLocale;
+      const locale = displayed && statePolicy.localeDocuments.filter(document => document.url === displayed.url && document.version === displayed.version
+        && document.locale.toLowerCase() === displayed.locale.toLowerCase() && document.target.kind === 'definition'
+        && document.target.url === statePolicy.definition.url);
+      const commitment = response.extensions?.['x-formspec-signing-content'];
+      if (response.status !== 'completed' || !locale || locale.length !== 1 || !commitment
+        || commitment.actorRef !== owner.subjectRef || commitment.draftId !== view.draft_id
+        || !Number.isSafeInteger(commitment.draftVersion) || view.draft_version !== commitment.draftVersion + 2
+        || commitment.content.locale.toLowerCase() !== displayed!.locale.toLowerCase()) throw new Error('Submitted draft has no matching Locale or signing commitment');
+      const content = resolveAuthoredSigningContent({ definition: statePolicy.definition, response,
+        source: commitment.content.source, locale: commitment.content.locale, validateContent: signingPolicy!.validateContent });
+      if (canonicalize(content) !== canonicalize(commitment.content)) throw new Error('Submitted signing content differs from the authored package');
+      await assertDelegatedSignedResponseConsistency(response, signingPolicy!); current();
+      return { kind: 'submitted', response, draft: { id: view.draft_id, version: view.draft_version },
+        subjectRef: owner.subjectRef, formVersionId: view.form_version_id! };
+    } : undefined,
     anonymousSessionToken: anonymousSessions
       ? (key) => anonymousSessions.tokenForDraftKey(key, registry.get(key) !== undefined)
       : undefined,
@@ -96,16 +141,14 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     ...signingPolicy, client: new HttpClient(httpConfig), drafts: draftStore, bindings: registry, fence,
     formIdFor: key => resolveFormId(key.formUrl, key.formVersion),
     resumeMetadata: config.resumeMetadata,
-    async ownerFor(key) {
-      if (key.subjectRef && !key.subjectRef.startsWith('anon:')) return { subjectRef: key.subjectRef };
-      if (!anonymousSessions) throw new Error('Signing requires an owned anonymous session');
-      const session = await anonymousSessions.sessionForForm(key.formUrl, key.formVersion, true);
-      if (key.subjectRef && key.subjectRef !== session.subjectRef) throw new Error('Signing actor differs from the server owner');
-      return { token: session.sessionToken, subjectRef: session.subjectRef };
-    },
+    ownerFor,
   });
   const scopedDrafts: DraftStore = {
     load: key => fence.run(key, async () => draftStore.load(key)),
+    ...(draftStore.readState ? { readState: (suppliedKey: DraftKey) => {
+      const key = structuredClone(suppliedKey);
+      return fence.run(key, async generation => draftStore.readState!(key, () => fence.assertCurrent(key, generation)));
+    } } : {}),
     save: (key, response) => fence.run(key, async () => {
       responseSigning.assertEditable(key);
       await draftStore.save(key, response);

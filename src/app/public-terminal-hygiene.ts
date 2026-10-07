@@ -1,6 +1,6 @@
 import type { DraftKey, DraftStore } from '../ports/draft-store.ts';
 import type { NotificationDelivery } from '../ports/notification-delivery.ts';
-import type { SubmitConfirmation } from '../ports/submit-transport.ts';
+import type { SubmitReceiptReference } from '../ports/submit-transport.ts';
 import type { ResolvedMultiPartyPolicy } from '../policy/index.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import {
@@ -18,7 +18,7 @@ export const PUBLIC_TERMINAL_CLEARED_BODY =
 
 export interface SendPublicTerminalReceiptSmsInput {
   readonly notificationDelivery: NotificationDelivery;
-  readonly confirmation: SubmitConfirmation;
+  readonly confirmation: SubmitReceiptReference;
   readonly phone: string;
   readonly idempotencyKey?: string;
 }
@@ -54,20 +54,20 @@ export function canSendPublicTerminalReceiptSms(
   return notificationDelivery?.capabilities?.sms === 'real';
 }
 
-export function publicTerminalReceiptSmsBody(confirmation: SubmitConfirmation): string {
+export function publicTerminalReceiptSmsBody(confirmation: SubmitReceiptReference): string {
   const base = `Form submitted. Reference ${confirmation.referenceNumber}. Verifier code ${publicTerminalVerifierCode(confirmation)}.`;
   const trackingUrl = publicTerminalTrackingUrl(confirmation);
   return trackingUrl ? `${base} Track: ${trackingUrl}` : base;
 }
 
-export function publicTerminalVerifierCode(confirmation: SubmitConfirmation): string {
+export function publicTerminalVerifierCode(confirmation: SubmitReceiptReference): string {
   const normalized = confirmation.referenceNumber.replace(/[^a-z0-9]/gi, '').toUpperCase();
   if (!normalized) return 'RECEIVED';
   return normalized.length > 6 ? normalized.slice(-6) : normalized;
 }
 
 export function publicTerminalTrackingUrl(
-  confirmation: SubmitConfirmation,
+  confirmation: SubmitReceiptReference,
 ): string | undefined {
   const href = confirmation.trackingUri;
   if (!href) return undefined;
