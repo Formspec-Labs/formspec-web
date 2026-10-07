@@ -10,6 +10,7 @@ export {
   HttpDefinitionSource,
   createHttpDefinitionSource,
   type HttpDefinitionSourceConfig,
+  type HttpPublishedDefinition,
 } from './definition-source.ts';
 export {
   createHttpAdapterCohort,

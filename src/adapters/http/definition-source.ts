@@ -1,3 +1,5 @@
+import canonicalize from 'canonicalize';
+import { computeJcsSha256Digest } from './response-action-ledger.ts';
 import type {
   ComponentDocument,
   ComponentGraphProjectionContext,
@@ -13,7 +15,25 @@ export interface HttpDefinitionSourceConfig extends HttpClientConfig {
   formIdResolver?: FormIdResolver;
 }
 
+/** Server publication identity checked against one exact expected Definition.
+ * Scoped to this source instance's HTTP configuration and cached runtime generation;
+ * this value does not establish signed-release or policy admission.
+ */
+export interface HttpPublishedDefinition {
+  readonly form_id: string;
+  readonly form_version_id: string;
+  readonly definition_url: string;
+  readonly definition_version: string;
+  readonly definition_hash: string;
+  readonly definition: FormDefinition;
+}
+
 interface PublishedRuntimeView {
+  form_id?: unknown;
+  form_version_id?: unknown;
+  definition_url?: unknown;
+  definition_version?: unknown;
+  definition_hash?: unknown;
   definition?: unknown;
   component_document?: unknown;
   componentDocument?: unknown;
@@ -48,6 +68,36 @@ export class HttpDefinitionSource implements DefinitionSource {
   async getDefinition(url: string, version?: string): Promise<FormDefinition> {
     const payload = await this.getRuntimePayload(url, version);
     return extractDefinition(payload);
+  }
+
+  async getPublishedDefinition(
+    url: string,
+    expectedDefinition: FormDefinition,
+  ): Promise<HttpPublishedDefinition> {
+    const expected = structuredClone(expectedDefinition);
+    const payload: unknown = await this.getRuntimePayload(url);
+    if (!isRecord(payload) || isFormDefinition(payload)
+      || !nonblankString(payload.form_id) || !nonblankString(payload.form_version_id)
+      || payload.form_id !== this.formIdResolver(url)
+      || payload.definition_url !== expected.url || payload.definition_version !== expected.version
+      || typeof payload.definition_hash !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(payload.definition_hash)
+      || !isFormDefinition(payload.definition)) {
+      throw new Error('HTTP published Definition metadata does not match the expected publication');
+    }
+    const definition = structuredClone(payload.definition);
+    if (definition.url !== expected.url || definition.version !== expected.version
+      || canonicalize(definition) !== canonicalize(expected)
+      || payload.definition_hash !== await computeJcsSha256Digest(definition)) {
+      throw new Error('HTTP published Definition content does not match its pins and hash');
+    }
+    return {
+      form_id: payload.form_id,
+      form_version_id: payload.form_version_id,
+      definition_url: expected.url,
+      definition_version: expected.version,
+      definition_hash: payload.definition_hash,
+      definition,
+    };
   }
 
   async getLocaleDocuments(url: string, version?: string): Promise<LocaleDocument[]> {
@@ -460,4 +510,8 @@ function uniqueLocaleDocuments(documents: LocaleDocument[]): LocaleDocument[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function nonblankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }

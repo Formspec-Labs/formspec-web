@@ -442,3 +442,95 @@ function componentGraphHostEvidence(
     }],
   };
 }
+
+async function publishedRuntime() {
+  const { computeJcsSha256Digest } = await import('../../../src/adapters/http/response-action-ledger.ts');
+  return {
+    form_id: 'conformance', form_version_id: 'publication-version-1',
+    definition_url: sampleFormDefinition.url, definition_version: sampleFormDefinition.version,
+    definition_hash: await computeJcsSha256Digest(sampleFormDefinition),
+    definition: structuredClone(sampleFormDefinition),
+  };
+}
+
+describe('HttpDefinitionSource published Definition identity', () => {
+  it('qualifies root publication metadata through the same cached scoped GET and returns defensive copies', async () => {
+    const payload = await publishedRuntime();
+    const { fetch, requests } = recordingFetch(() => jsonResponse(payload));
+    const source = new HttpDefinitionSource({ baseUrl: 'https://server.example.test', fetchImpl: fetch,
+      tenantBinding: { kind: 'bound', scope: { tenant: 'test-tenant', workspace: 'test-workspace', environment: 'test-environment', cell: 'test-cell' } } });
+    const [definition, published] = await Promise.all([
+      source.getDefinition(sampleFormDefinition.url),
+      source.getPublishedDefinition(sampleFormDefinition.url, sampleFormDefinition),
+    ]);
+    expect(definition).toEqual(sampleFormDefinition);
+    expect(published).toEqual(payload);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe('GET');
+    expect(requests[0].headers.get('authorization')).toBeNull();
+    expect(requests[0].headers.get('x-formspec-tenant-id')).toBe('test-tenant');
+    expect(requests[0].headers.get('x-formspec-workspace-id')).toBe('test-workspace');
+    expect(requests[0].headers.get('x-formspec-environment-id')).toBe('test-environment');
+    expect(requests[0].headers.get('x-formspec-cell-id')).toBe('test-cell');
+    published.definition.items[0].label = 'Changed by caller';
+    expect(await source.getPublishedDefinition(sampleFormDefinition.url, sampleFormDefinition)).toEqual(payload);
+    expect(requests).toHaveLength(1);
+  });
+
+  it.each([
+    ['missing form id', (p: Record<string, unknown>) => { delete p.form_id; }],
+    ['blank version id', (p: Record<string, unknown>) => { p.form_version_id = '  '; }],
+    ['wrong form id', (p: Record<string, unknown>) => { p.form_id = 'wrong'; }],
+    ['missing definition URL', (p: Record<string, unknown>) => { delete p.definition_url; }],
+    ['wrong definition URL', (p: Record<string, unknown>) => { p.definition_url = 'https://other.test/form'; }],
+    ['wrong definition version', (p: Record<string, unknown>) => { p.definition_version = '2.0.0'; }],
+    ['missing definition hash', (p: Record<string, unknown>) => { delete p.definition_hash; }],
+    ['wrong hash', (p: Record<string, unknown>) => { p.definition_hash = `sha256:${'0'.repeat(64)}`; }],
+    ['uppercase hash', (p: Record<string, unknown>) => { p.definition_hash = String(p.definition_hash).toUpperCase(); }],
+    ['changed Definition content', (p: Record<string, unknown>) => {
+      p.definition = { ...sampleFormDefinition, items: [{ ...sampleFormDefinition.items[0], label: 'Changed' }] };
+    }],
+  ])('refuses %s', async (_name, mutate) => {
+    const payload = await publishedRuntime(); mutate(payload);
+    const { fetch } = recordingFetch(() => jsonResponse(payload));
+    const source = new HttpDefinitionSource({ baseUrl: 'https://server.example.test', fetchImpl: fetch });
+    await expect(source.getPublishedDefinition(sampleFormDefinition.url, sampleFormDefinition)).rejects.toThrow('HTTP published Definition');
+  });
+
+  it('uses the configured resolver rather than deriving an id from the Definition URL', async () => {
+    const payload = { ...await publishedRuntime(), form_id: 'actual-server-form' };
+    const { fetch, requests } = recordingFetch(() => jsonResponse(payload));
+    const source = new HttpDefinitionSource({ baseUrl: 'https://server.example.test', fetchImpl: fetch,
+      formIdResolver: () => 'actual-server-form' });
+    expect((await source.getPublishedDefinition('https://local.test/alias', sampleFormDefinition)).form_id).toBe('actual-server-form');
+    expect(requests[0].url).toBe('https://server.example.test/runtime/forms/actual-server-form');
+  });
+
+  it('refuses raw Definition fallback and metadata hidden below the root', async () => {
+    const payload = await publishedRuntime();
+    for (const candidate of [sampleFormDefinition, { definition: sampleFormDefinition, runtime_config: payload }]) {
+      const { fetch } = recordingFetch(() => jsonResponse(candidate));
+      const source = new HttpDefinitionSource({ baseUrl: 'https://server.example.test', fetchImpl: fetch });
+      await expect(source.getPublishedDefinition(sampleFormDefinition.url, sampleFormDefinition)).rejects.toThrow('metadata');
+    }
+  });
+
+  it('refuses changed content even when the server hash matches the changed Definition', async () => {
+    const payload = await publishedRuntime();
+    payload.definition.title = 'Changed publication';
+    const { computeJcsSha256Digest } = await import('../../../src/adapters/http/response-action-ledger.ts');
+    payload.definition_hash = await computeJcsSha256Digest(payload.definition);
+    const { fetch } = recordingFetch(() => jsonResponse(payload));
+    await expect(new HttpDefinitionSource({ baseUrl: 'https://server.example.test', fetchImpl: fetch })
+      .getPublishedDefinition(sampleFormDefinition.url, sampleFormDefinition)).rejects.toThrow('content');
+  });
+});
+
+
+it('compares publication content as JCS rather than object insertion order', async () => {
+  const payload = await publishedRuntime();
+  payload.definition = Object.fromEntries(Object.entries(payload.definition).reverse()) as typeof payload.definition;
+  const { fetch } = recordingFetch(() => jsonResponse(payload));
+  const source = new HttpDefinitionSource({ baseUrl: 'https://server.example.test', fetchImpl: fetch });
+  expect(await source.getPublishedDefinition(sampleFormDefinition.url, sampleFormDefinition)).toEqual(payload);
+});
