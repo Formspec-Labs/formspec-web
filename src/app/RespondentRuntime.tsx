@@ -2584,8 +2584,9 @@ export function ConfirmationPanel({
     ? buildConfirmationTrackingUri(confirmation.caseUrn)
     : confirmation.trackingUri;
   const trackingLabel = confirmation.caseUrn ? 'Track this application' : 'Track this submission';
-  const verifierCode = publicTerminalVerifierCode(confirmation);
-  const canSendSmsReceipt = canSendPublicTerminalReceiptSms(notificationDelivery);
+  const responseOnly = confirmation.recordKind === 'response' && !confirmation.caseUrn;
+  const verifierCode = responseOnly ? null : publicTerminalVerifierCode(confirmation);
+  const canSendSmsReceipt = !responseOnly && canSendPublicTerminalReceiptSms(notificationDelivery);
 
   const handleSmsSend = async (): Promise<void> => {
     if (!canSendSmsReceipt) return;
@@ -2608,16 +2609,18 @@ export function ConfirmationPanel({
 
   return (
     <section className="confirmation-panel" aria-labelledby="confirmation-title" tabIndex={-1}>
-      <h2 id="confirmation-title">Submission received</h2>
-      <p>Reference number</p>
+      <h2 id="confirmation-title">{responseOnly ? 'Answers received' : 'Submission received'}</h2>
+      <p>{responseOnly ? 'Submission ID' : 'Reference number'}</p>
       <strong>{confirmation.referenceNumber}</strong>
-      <p>
-        Verifier code <strong>{verifierCode}</strong>
-      </p>
+      {responseOnly ? (
+        <p>Your answers were received. Case filing and signing are not yet confirmed.</p>
+      ) : (
+        <p>Verifier code <strong>{verifierCode}</strong></p>
+      )}
       {trackingHref ? <a href={trackingHref}>{trackingLabel}</a> : null}
       {captureReceipt ? <PaymentReceivedSubCard captureReceipt={captureReceipt} /> : null}
       <div className="public-terminal-actions" aria-label="Public terminal actions">
-        <h3>Keep your proof</h3>
+        <h3>{responseOnly ? 'Keep this record' : 'Keep your proof'}</h3>
         <p>
           {canSendSmsReceipt
             ? 'Print this confirmation, text it to a phone you control, then clear this computer before leaving.'

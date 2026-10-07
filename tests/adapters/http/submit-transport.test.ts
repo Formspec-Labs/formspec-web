@@ -23,6 +23,7 @@ describe('HttpSubmitTransport', () => {
     const key = generateIdempotencyKey();
 
     await expect(adapter.submit(sampleIntakeHandoff, key)).resolves.toMatchObject({
+      recordKind: 'response',
       referenceNumber: 'response-1',
       status: 'accepted',
     });
@@ -104,8 +105,8 @@ describe('HttpSubmitTransport', () => {
 
     releaseResponse?.();
     await expect(Promise.all([first, second])).resolves.toEqual([
-      { referenceNumber: 'response-concurrent', status: 'accepted' },
-      { referenceNumber: 'response-concurrent', status: 'accepted' },
+      { recordKind: 'response', referenceNumber: 'response-concurrent', status: 'accepted' },
+      { recordKind: 'response', referenceNumber: 'response-concurrent', status: 'accepted' },
     ]);
     expect(requests).toHaveLength(1);
   });

@@ -75,6 +75,7 @@ export class HttpSubmitTransport implements SubmitTransport {
       { idempotencyKey },
     );
     const confirmation: SubmitConfirmation = {
+      recordKind: 'response',
       referenceNumber: response.response_id,
       status: response.status,
     };

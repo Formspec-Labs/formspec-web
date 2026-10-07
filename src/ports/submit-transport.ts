@@ -14,6 +14,8 @@ import type { WosResourceUrn } from './status-reader.ts';
 export type { IntakeHandoff } from '@formspec-org/types';
 
 export interface SubmitConfirmation {
+  /** Distinguishes an accepted form Response from a governed case receipt. */
+  recordKind?: 'response' | 'case';
   /** Human-displayable reference number (per FW-0013 plain-language errors). */
   referenceNumber: string;
   /** Submission status as reported by the upstream service. */
