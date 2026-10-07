@@ -121,6 +121,7 @@ async function actualFixture() {
     };
     const configure = host.configureRuntime;
     const terminals: { status: string; valid: boolean | undefined }[] = [];
+    const invokerFailures: unknown[] = [];
     let mountedEngine!: Parameters<typeof configure>[0]['engine'];
     host.configureRuntime = async input => {
       mountedEngine = input.engine;
@@ -128,14 +129,15 @@ async function actualFixture() {
       input.engine.setValue('photo', { kind: 'attachment-ref', uri: 'attachment:owned', filename: 'saved.png', mimeType: 'image/png', contentType: 'image/png', size: photoBytes.length, hash: `sha256:${createHash('sha256').update(photoBytes).digest('hex')}` });
       const configured = await configure(input);
       return { ...configured, responseActionInvoker: async action => {
-        const result = await configured.responseActionInvoker(action);
+        let result: Awaited<ReturnType<typeof configured.responseActionInvoker>>;
+        try { result = await configured.responseActionInvoker(action); } catch (error) { invokerFailures.push(error); throw error; }
         const terminal = 'invocation' in result ? result.invocation : result;
         terminals.push({ status: terminal.status, valid: terminal.detail?.validationReport?.valid }); return result;
       } };
     };
     const composition = createStubComposition(); const navigate = vi.fn();
     const props = { host, composition, config: departmentAppProfile, componentDocument: component, localeDocuments: locales, location: '/', onNavigate: navigate };
-    return { policy, host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, submit };
+    return { policy, host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, invokerFailures, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, submit };
 }
 describe('maintained native package Surface host', () => {
   it('mounts a fresh owner-checked submitted revision 6 on the widget route as a receipt with no engine or writes', async () => {
@@ -429,5 +431,113 @@ describe('maintained native package Surface host', () => {
       expect(screen.queryByRole('button', { name: String(label) })).toBeNull();
     }
     cleanup(); engine.dispose();
+  });
+});
+
+function persistentFeedback(container: HTMLElement) {
+  return [...container.querySelectorAll('.formspec-action-status[role="status"]')].map(node => node.textContent).join('');
+}
+function pauseActualSave(test: Awaited<ReturnType<typeof actualFixture>>) {
+  let finish!: () => void;
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  const original = test.saveDraft.getMockImplementation()!;
+  test.saveDraft.mockImplementationOnce(async input => { await pending; return original(input); });
+  return finish;
+}
+
+describe('actual native initial Save persistent feedback', () => {
+  it('keeps one completion across Save branch replacement and localizes it within the same provider', async () => {
+    const test = await actualFixture();
+    // Model the maintained anonymous bridge's stable owner across Locale bootstrap.
+    const authenticate = test.props.composition.identityProvider.authenticate;
+    let owner: ReturnType<typeof authenticate> | undefined;
+    test.props.composition.identityProvider.authenticate = option => owner ??= authenticate(option);
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    const initial = await screen.findByRole('button', { name: 'Save draft' });
+    fireEvent.click(initial);
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    expect(initial.isConnected).toBe(false);
+    expect(screen.getAllByRole('button', { name: 'Save draft' })).toHaveLength(1);
+    expect(test.host.getSnapshot().controller).toMatchObject({ phase: 'saved', owned: true });
+    expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.terminals).toEqual([{ status: 'completed', valid: undefined }]);
+    const engine = test.getEngine();
+    await act(async () => { engine.setLocale('es-US'); });
+    await screen.findByRole('button', { name: 'Guardar borrador' });
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completado.'));
+    expect(test.getEngine()).toBe(engine);
+    expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.terminals).toHaveLength(1);
+    mounted.unmount(); test.host.dispose();
+  });
+
+
+  it('retires previous feedback and a late owned Save across actual native Locale bootstrap without reinvoking', async () => {
+    const test = await actualFixture();
+    const authenticate = test.props.composition.identityProvider.authenticate;
+    let owner: ReturnType<typeof authenticate> | undefined;
+    test.props.composition.identityProvider.authenticate = option => owner ??= authenticate(option);
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    const engine = test.getEngine(); const finish = pauseActualSave(test);
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledTimes(2));
+    await act(async () => { await test.host.selectLocale('es-US'); });
+    await screen.findByRole('button', { name: 'Guardar borrador' });
+    expect(test.getEngine()).not.toBe(engine); expect(persistentFeedback(mounted.container)).toBe('');
+    await act(async () => { finish(); });
+    await vi.waitFor(() => expect(test.invokerFailures).toHaveLength(1));
+    expect(test.terminals).toEqual([{ status: 'completed', valid: undefined }]);
+    expect(test.saveDraft).toHaveBeenCalledTimes(2); expect(persistentFeedback(mounted.container)).toBe('');
+    mounted.unmount(); test.host.dispose();
+  });
+  it('keeps the native pending control focusable and joins repeated activation before one callback', async () => {
+    const test = await actualFixture(); const finish = pauseActualSave(test);
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    const initial = await screen.findByRole('button', { name: 'Save draft' }); initial.focus();
+    fireEvent.keyDown(initial, { key: 'Enter' }); fireEvent.click(initial); fireEvent.keyUp(initial, { key: 'Enter' });
+    await vi.waitFor(() => expect(initial.getAttribute('aria-busy')).toBe('true'));
+    expect(initial.hasAttribute('disabled')).toBe(false); expect(initial.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(initial);
+    fireEvent.click(initial); await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledOnce());
+    await act(async () => { finish(); });
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    expect(test.terminals).toEqual([{ status: 'completed', valid: undefined }]); expect(test.saveDraft).toHaveBeenCalledOnce();
+    mounted.unmount(); test.host.dispose();
+  });
+
+  it('retires settled feedback on UI edits and public data replacement, and rejects late edited completion', async () => {
+    const test = await actualFixture(); const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    fireEvent.input(screen.getByRole('textbox', { name: 'Full legal name *' }), { target: { value: 'Edited name' } });
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe(''));
+    expect(test.getEngine().getResponse({ profile: 'off' }).data.fullName).toBe('Edited name');
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    const finish = pauseActualSave(test);
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledTimes(3));
+    await act(async () => { test.getEngine().loadResponseData({ ...test.getEngine().getResponse({ profile: 'off' }).data, fullName: 'Replacement name' }); });
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe(''));
+    await act(async () => { finish(); });
+    await vi.waitFor(() => expect(test.invokerFailures).toHaveLength(1));
+    expect(test.terminals).toHaveLength(2); expect(persistentFeedback(mounted.container)).toBe('');
+    expect(test.getEngine().getResponse({ profile: 'off' }).data.fullName).toBe('Replacement name');
+    mounted.unmount(); test.host.dispose();
+  });
+
+  it('withdraws pending feedback on actual scoped Clear and refuses late completion authority', async () => {
+    const test = await actualFixture(); const finish = pauseActualSave(test);
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
+    await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledOnce());
+    await act(async () => { await test.host.clearDraftAccess(); });
+    expect(test.clear).toHaveBeenCalledOnce(); expect(test.host.getSnapshot().cleared).toBe(true);
+    expect(persistentFeedback(mounted.container)).toBe('');
+    await act(async () => { finish(); });
+    await vi.waitFor(() => expect(test.invokerFailures).toHaveLength(1));
+    expect(test.terminals).toHaveLength(0); expect(test.host.getSnapshot().controller?.phase).not.toBe('saved');
+    expect(persistentFeedback(mounted.container)).toBe('');
+    mounted.unmount(); test.host.dispose();
   });
 });

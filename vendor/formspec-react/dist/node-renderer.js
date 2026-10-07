@@ -6,6 +6,7 @@ import { signal as createSignal } from '@preact/signals-core';
 import { invokeResponseAction, } from '@formspec-org/engine';
 import { useFormspecContext } from './context';
 import { useChromeText } from './use-chrome-text';
+import { actionResultMessage, useActionFeedbackOutlet } from './action-feedback.js';
 import { useSignal } from './use-signal';
 import { useField } from './use-field';
 import { useForm } from './use-form';
@@ -90,26 +91,6 @@ function normalizeInvokerResult(result) {
 function errorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
-/** One chrome key per invocation status — the word the renderer says, authorable like every other. */
-const ACTION_STATUS_KEYS = {
-    completed: 'action.completed',
-    blocked: 'action.blocked',
-    failed: 'action.failed',
-    deferred: 'action.deferred',
-    unresolved: 'action.unresolved',
-};
-function actionResultMessage(chrome, feedback) {
-    if (feedback.phase === 'idle')
-        return '';
-    if (feedback.phase === 'pending')
-        return chrome('action.inProgress');
-    if (feedback.intent === 'save-draft'
-        && (feedback.status === 'failed' || feedback.status === 'unresolved')) {
-        return chrome('draft.saveUnconfirmed');
-    }
-    // Diagnostic reasons remain in the original invocation result, never respondent copy.
-    return chrome('action.status', { status: chrome(ACTION_STATUS_KEYS[feedback.status]) });
-}
 function ActionButtonNode({ node }) {
     const chrome = useChromeText();
     const { engine, onSubmit, recordSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
@@ -124,9 +105,11 @@ function ActionButtonNode({ node }) {
     // no Component label, so use the resolved Response Action label before the
     // renderer's generic fallback. This keeps product copy in structured data.
     const label = resolveActionButtonLabel(node.props?.label ?? resolution.action?.label, chrome('action.submit'), (key, fallback) => engine.resolveLocaleString(key, fallback));
-    const actionNeedAnchors = generationNeedAnchors(resolution.action);
+    const actionNeedAnchors = useMemo(() => generationNeedAnchors(resolution.action), [resolution.action]);
     const needAttrs = needTraceAttrs([...(node.needAnchors ?? []), ...actionNeedAnchors]);
-    const statusId = useId();
+    const localStatusId = useId();
+    const outlet = useActionFeedbackOutlet();
+    const statusId = outlet?.id ?? localStatusId;
     const controlRef = useRef(null);
     const inFlightRef = useRef(null);
     const [feedback, setFeedback] = useState({ phase: 'idle' });
@@ -229,12 +212,15 @@ function ActionButtonNode({ node }) {
             return inFlightRef.current;
         }
         const intent = resolution.action?.intent;
+        const ticket = outlet?.store.start(outlet.id, intent, [...(node.needAnchors ?? []), ...actionNeedAnchors]);
         setFeedback({ phase: 'pending' });
         const invocation = invoke(invocationContext);
         const tracked = invocation.then((result) => {
+            outlet?.store.settle(ticket, result.status);
             setFeedback({ phase: 'settled', status: result.status, intent });
             return result;
         }, (error) => {
+            outlet?.store.settle(ticket, 'failed');
             setFeedback({
                 phase: 'settled',
                 status: 'failed',
@@ -253,7 +239,7 @@ function ActionButtonNode({ node }) {
             }
         });
         return tracked;
-    }, [invoke, resolution.action?.intent]);
+    }, [invoke, resolution.action?.intent, outlet, node.needAnchors, actionNeedAnchors]);
     useEffect(() => {
         if (!semanticControlScope?.responseActionsArtifact
             || !resolution.resolved) {
@@ -302,7 +288,7 @@ function ActionButtonNode({ node }) {
                 // type="submit" cascades to native form submission and bypasses
                 // Response Actions entirely. type="button" eliminates the
                 // foot-gun and keeps cross-renderer parity.
-                type: "button", className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved, "aria-disabled": !resolution.resolved || pending, "aria-busy": pending, "aria-describedby": statusId, onClick: handleClick, ...projectionMetadataAttrs(node), ...needAttrs, children: label }), _jsx("div", { id: statusId, className: "formspec-action-status", role: "status", "aria-live": "polite", "aria-atomic": "true", ...needAttrs, children: actionResultMessage(chrome, feedback) })] }));
+                type: "button", className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved, "aria-disabled": !resolution.resolved || pending, "aria-busy": pending, "aria-describedby": statusId, onClick: handleClick, ...projectionMetadataAttrs(node), ...needAttrs, children: label }), !outlet && _jsx("div", { id: statusId, className: "formspec-action-status", role: "status", "aria-live": "polite", "aria-atomic": "true", ...needAttrs, children: actionResultMessage(chrome, feedback) })] }));
 }
 function WhenGuard({ node }) {
     const visible = useWhen(node.when, node.whenPrefix);

@@ -7,6 +7,7 @@ const defaultThemeJson = buildPlatformTheme();
 import { FormspecProvider } from './context';
 import { useFormspecContext } from './context';
 import { FormspecNode } from './node-renderer';
+import { ActionFeedbackContent } from './action-feedback.js';
 import { IssuerChromeSlot, parseQueryIssuerOverride } from './issuer';
 import { FormspecScreener } from './screener/FormspecScreener';
 /** Match `<formspec-render>`: emit theme + component tokens on `.formspec-container` so CSS variables resolve the same as the web component (e.g. radio group border). */
@@ -121,7 +122,7 @@ export function FormspecFormContent({ className }) {
     const containerClass = className
         ? `formspec-container ${className}`
         : 'formspec-container';
-    return (_jsxs("div", { ref: containerRef, className: containerClass, children: [_jsx(IssuerChromeSlot, { engine: engine, hostOrigin: browserHostOrigin(), mode: issuerChromeModeFromClassName(className) }), _jsx(FormspecNode, { node: layoutPlan })] }));
+    return (_jsxs("div", { ref: containerRef, className: containerClass, children: [_jsx(IssuerChromeSlot, { engine: engine, hostOrigin: browserHostOrigin(), mode: issuerChromeModeFromClassName(className) }), _jsx(ActionFeedbackContent, { children: _jsx(FormspecNode, { node: layoutPlan }) })] }));
 }
 /** Check whether a standalone screener document is active. */
 function hasActiveScreenerDoc(screenerDocument) {

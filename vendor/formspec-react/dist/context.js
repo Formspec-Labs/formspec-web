@@ -3,6 +3,7 @@ import { jsx as _jsx } from "react/jsx-runtime";
 /** @filedesc FormspecProvider — React context wrapping a FormEngine + optional layout plan. */
 import { createContext, useContext, useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import { signal } from '@preact/signals-core';
+import { ActionFeedbackProvider } from './action-feedback.js';
 import { createFormEngine, findResponseActionByIntent, missingSubmitActionFinding, resolveResponseAction, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
 import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, preparePlanContext, ensureActionButton, ensureValidationSummary, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
 import { useSignal } from './use-signal';
@@ -395,7 +396,7 @@ export function FormspecProvider(props) {
         fieldHelpLabel,
         formPresentation: mergedFormPresentation,
     }), [engine, layoutPlan, components, effectiveThemeDocument, shouldEmitThemeTokens, componentDocument, componentGraph, hostEvidence, responseActionsDocument, semanticControlScope, onSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, resolveActionRef, currentSemanticResponseBinding, advanceSemanticResponseRevision, touchField, touchAllFields, touchedVersionSignal, isTouched, latestSubmitSignal, recordSubmit, registryMap, resolveFieldHelp, admitFieldHelpUri, fieldHelpLabel, mergedFormPresentation]);
-    return (_jsx(FormspecContext.Provider, { value: value, children: _jsx("div", { ref: themeScopeRef, className: "formspec-theme-scope", style: THEME_SCOPE_STYLE, children: children }) }));
+    return (_jsx(FormspecContext.Provider, { value: value, children: _jsx(ActionFeedbackProvider, { engine: engine, responseId: semanticControlScope?.responseId, renderInstanceId: semanticControlScope?.renderInstanceId, children: _jsx("div", { ref: themeScopeRef, className: "formspec-theme-scope", style: THEME_SCOPE_STYLE, children: children }) }) }));
 }
 /** See `themeScopeRef` — the scope element must not generate a box. */
 const THEME_SCOPE_STYLE = { display: 'contents' };
