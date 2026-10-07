@@ -194,7 +194,8 @@ export function createResponseActionController(config: ResponseActionControllerC
           frozenResponse: response }, route: {}, session: {} });
         if ((role === 'sign' || role === 'submit') && (planned.method !== 'POST'
           || planned.path !== `/drafts/${encodeURIComponent(subject!.draft.id)}/${role}`)) throw new ControllerRefusal('action-unadmitted');
-        if (role === 'submit' && (!same(planned.body, { canonical_response: response })
+        if (role === 'submit' && ((!same(planned.body, { canonical_response: response })
+          && !same(planned.body, { canonical_response: response, signing_requested: false }))
           || Object.keys(planned.headers).length)) throw new ControllerRefusal('action-unadmitted');
       }
       current(generation);

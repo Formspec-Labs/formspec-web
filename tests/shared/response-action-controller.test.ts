@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { dereferenceBundleExport, type BundleExport } from '@formspec-org/surface';
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
@@ -252,6 +255,28 @@ describe('generic admitted Response Action controller', () => {
     expect(test.buildHandoff).not.toHaveBeenCalled();
     expect(test.submit).not.toHaveBeenCalled();
   });
+
+  it('accepts the actual r5 signed Submit defaults while preserving the exact signed Response', async () => {
+    const exported = JSON.parse(readFileSync(resolve('tests/fixtures/native-signing-r5/native-bundle.json'), 'utf8')) as BundleExport;
+    const actual = dereferenceBundleExport(exported).responseActions[0]['x-formspec-runtime']!.requests.find(request => request.id === 'submit-draft')!;
+    expect(actual.request.bodyDefaults).toEqual({ signing_requested: false });
+    const roles = fixture().roles;
+    roles.submit.document['x-formspec-runtime']!.requests[0].request.bodyDefaults = structuredClone(actual.request.bodyDefaults);
+    const test = fixture({ roles }); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    await test.widget('submit', signed);
+    expect(test.controller.getSnapshot().phase).toBe('submitted'); expect(test.submit).toHaveBeenCalledOnce();
+    expect(test.submit.mock.calls[0][0].extensions?.['x-formspec-response']).toEqual(signed.response);
+  });
+
+  it.each([{ signing_requested: true }, { signing_requested: null }, { signing_requested: false, extra: true }])(
+    'refuses unqualified Submit defaults %j before constructing the handoff', async defaults => {
+      const roles = fixture().roles; roles.submit.document['x-formspec-runtime']!.requests[0].request.bodyDefaults = defaults;
+      const test = fixture({ roles }); const prepared = await test.ready(); await test.widget('sign', prepared);
+      await test.widget('submit', test.controller.getSnapshot().signed!);
+      expect(test.controller.getSnapshot().reason).toBe('action-unadmitted');
+      expect(test.buildHandoff).not.toHaveBeenCalled(); expect(test.submit).not.toHaveBeenCalled();
+    });
 
   it('joins double Sign activation using one UUID and refuses a changed assent under the same shell delivery', async () => {
     const test = fixture();
