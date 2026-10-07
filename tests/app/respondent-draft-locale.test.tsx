@@ -155,7 +155,7 @@ describe('canonical draft wording (ADR 0082 D16.2)', () => {
     screen.getByRole('button', { name: /español/i }).removeAttribute('disabled');
     fireEvent.click(screen.getByRole('button', { name: /español/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Clear this computer' }));
-    await screen.findByText('This computer is clear');
+    await screen.findByText('Saved access cleared');
     expect(events).toEqual(['language-save', 'submit', 'delete']);
     expect(save).toHaveBeenCalledTimes(savesBeforeClear);
     expect(deleteDraft).toHaveBeenCalledOnce();

@@ -12,12 +12,13 @@ import {
   RespondentRuntime,
 } from '../../src/app/RespondentRuntime.tsx';
 import {
-  PUBLIC_TERMINAL_CLEARED_TITLE,
   PUBLIC_TERMINAL_SMS_INVALID_COPY,
   PUBLIC_TERMINAL_SMS_SENT_COPY,
+  clearPublicTerminalDraftState,
   publicTerminalDraftKeysToClear,
 } from '../../src/app/public-terminal-hygiene.ts';
 import type { ResolvedMultiPartyPolicy } from '../../src/policy/index.ts';
+import { sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
 import { stubAttachmentStore } from '../../src/adapters/stub/attachment-store.ts';
 import { stubDefinitionSource } from '../../src/adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../../src/adapters/stub/draft-store.ts';
@@ -81,7 +82,7 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
     await act(async () => engine.setLocale(''));
     expect(screen.getByRole('heading', { name: 'Answers received' })).not.toBeNull();
     expect(screen.getByText('response-stable')).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Clear this computer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear saved access' }));
     expect(clear).toHaveBeenCalledOnce();
   });
 
@@ -202,6 +203,47 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
   });
 });
 
+describe('scoped draft cleanup', () => {
+  it('clears only the selected party while retaining other party, subject, form and version answers', async () => {
+    const draftStore = stubDraftStore();
+    const selected = { formUrl: 'https://forms.example.test/a', formVersion: '1', subjectRef: 'owner', partyRef: 'applicant' };
+    const retained = [
+      { ...selected, partyRef: 'preparer' },
+      { ...selected, subjectRef: 'other-owner' },
+      { ...selected, formUrl: 'https://forms.example.test/b' },
+      { ...selected, formVersion: '2' },
+    ];
+    for (const key of [selected, ...retained]) await draftStore.save(key, sampleFormResponse);
+    const invalidate = vi.spyOn(draftStore, 'invalidateSubject');
+    await clearPublicTerminalDraftState({ draftStore, draftKey: selected });
+    await expect(draftStore.load(selected)).resolves.toBeUndefined();
+    for (const key of retained) await expect(draftStore.load(key)).resolves.toEqual(sampleFormResponse);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('terminal cleanup preserves other forms and subjects instead of invalidating the subject', async () => {
+    const draftStore = stubDraftStore();
+    const selected = { formUrl: 'https://forms.example.test/a', formVersion: '1', subjectRef: 'owner' };
+    const retained = [{ ...selected, formUrl: 'https://forms.example.test/b' }, { ...selected, subjectRef: 'other-owner' }];
+    for (const key of [selected, ...retained]) await draftStore.save(key, sampleFormResponse);
+    const invalidate = vi.spyOn(draftStore, 'invalidateSubject');
+    await clearPublicTerminalDraftState({ draftStore, draftKey: selected, subjectRef: selected.subjectRef });
+    await expect(draftStore.load(selected)).resolves.toBeUndefined();
+    for (const key of retained) await expect(draftStore.load(key)).resolves.toEqual(sampleFormResponse);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('waits for deletion and exposes failure to the user-triggered recovery caller', async () => {
+    const draftStore = stubDraftStore();
+    let rejectDelete!: (error: Error) => void;
+    vi.spyOn(draftStore, 'delete').mockImplementation(() => new Promise<void>((_resolve, reject) => { rejectDelete = reject; }));
+    const cleared = clearPublicTerminalDraftState({ draftStore, draftKey: { formUrl: 'https://forms.example.test/a' } });
+    const failure = new Error('Clear unavailable');
+    rejectDelete(failure);
+    await expect(cleared).rejects.toBe(failure);
+  });
+});
+
 describe('RespondentRuntime public-terminal cleanup (FW-0041)', () => {
   let root: Root | undefined;
   let container: HTMLDivElement | undefined;
@@ -216,7 +258,7 @@ describe('RespondentRuntime public-terminal cleanup (FW-0041)', () => {
     vi.restoreAllMocks();
   });
 
-  it('deletes the local draft, revokes the identity session, and hides the receipt', async () => {
+  it('deletes the local draft without revoking shared anonymous access and hides the receipt', async () => {
     const composition = publicTerminalComposition();
     const deleteDraft = vi.spyOn(composition.draftStore, 'delete');
     const invalidateSubject = vi.spyOn(composition.draftStore, 'invalidateSubject');
@@ -230,15 +272,42 @@ describe('RespondentRuntime public-terminal cleanup (FW-0041)', () => {
     expect(text()).not.toContain(PUBLIC_TERMINAL_SMS_SENT_COPY);
 
     await clickButton('Clear this computer');
-    await waitForText(PUBLIC_TERMINAL_CLEARED_TITLE);
+    await waitForText('Saved access cleared');
 
     expect(deleteDraft).toHaveBeenCalledWith(expect.objectContaining({
       formUrl: PUBLIC_TERMINAL_FORM.url,
       formVersion: PUBLIC_TERMINAL_FORM.version,
     }));
-    expect(invalidateSubject).toHaveBeenCalledOnce();
-    expect(revoke).toHaveBeenCalledOnce();
+    expect(invalidateSubject).not.toHaveBeenCalled();
+    expect(revoke).not.toHaveBeenCalled();
     expect(text()).not.toContain('Submission received');
+  });
+
+  it.each([false, true])('revokes authenticated access only when no retained same-subject draft remains (retained=%s)', async retained => {
+    const composition = publicTerminalComposition();
+    const authenticate = composition.identityProvider.authenticate.bind(composition.identityProvider);
+    vi.spyOn(composition.identityProvider, 'authenticate').mockImplementation(async option => {
+      const claim = await authenticate(option);
+      claim.privacyTier = 'pseudonymous';
+      claim.subjectRef = 'authenticated:terminal';
+      return claim;
+    });
+    const otherDraft = { formUrl: 'https://forms.example.test/another', formVersion: '1', subjectRef: 'authenticated:terminal' };
+    if (retained) await composition.draftStore.save(otherDraft, sampleFormResponse);
+    const revoke = vi.spyOn(composition.identityProvider, 'revoke');
+    const invalidateSubject = vi.spyOn(composition.draftStore, 'invalidateSubject');
+    await renderRuntime(composition);
+    await waitForText('Public Terminal Form');
+    await clickButton('Submit');
+    await waitForText('Submission received');
+    await clickButton('Clear this computer');
+    await waitForText('Saved access cleared');
+    expect(revoke).toHaveBeenCalledTimes(retained ? 0 : 1);
+    expect(invalidateSubject).not.toHaveBeenCalled();
+    if (retained) await expect(composition.draftStore.load(otherDraft)).resolves.toEqual(sampleFormResponse);
+    await expect(composition.draftStore.load({
+      formUrl: PUBLIC_TERMINAL_FORM.url, formVersion: PUBLIC_TERMINAL_FORM.version, subjectRef: 'authenticated:terminal',
+    })).resolves.toBeUndefined();
   });
 
   async function renderRuntime(composition: Composition): Promise<void> {

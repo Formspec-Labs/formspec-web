@@ -22,6 +22,7 @@ import {
   DefaultField,
   useFormspecContext,
   useChromeText,
+  chromeText,
   projectionMetadataAttrs,
   type FieldComponentProps,
   type ResponseAction,
@@ -45,7 +46,7 @@ import {
   localeOptionsForDefinition,
 } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
-import type { DraftKey } from '../ports/draft-store.ts';
+import { DraftVersionConflictError, type DraftKey } from '../ports/draft-store.ts';
 import type { ReviewerShare } from '../ports/reviewer-session.ts';
 import { respondentSessionToken } from '../ports/reviewer-session.ts';
 import type {
@@ -120,8 +121,6 @@ import {
   type MultiPartySignerProgress,
 } from './respondent-flow.ts';
 import {
-  PUBLIC_TERMINAL_CLEARED_BODY,
-  PUBLIC_TERMINAL_CLEARED_TITLE,
   PUBLIC_TERMINAL_SMS_INVALID_COPY,
   PUBLIC_TERMINAL_SMS_SENT_COPY,
   canSendPublicTerminalReceiptSms,
@@ -214,7 +213,15 @@ type RespondentState =
       multiPartyState: MultiPartyPersistedState | null;
       runtimeProfile: ResolvedRuntimeProfile;
     }
-  | { status: 'terminal-cleared' }
+  | {
+      status: 'draft-conflict';
+      error: DraftVersionConflictError;
+      engine: IFormEngine;
+      definition: FormDefinition;
+      localeDocuments: readonly LocaleDocument[];
+      activeLocale: string;
+    }
+  | { status: 'terminal-cleared'; title: string; detail: string }
   | { status: 'error'; error: unknown };
 
 type ReadyRespondentState = Extract<RespondentState, { status: 'ready' }>;
@@ -326,6 +333,11 @@ function RespondentController({
   const [multiPartyState, setMultiPartyState] = useState<MultiPartyPersistedState | null>(null);
   const [completedAction, setCompletedAction] = useState<CompletedRespondentAction | null>(null);
   const [localeSaveError, setLocaleSaveError] = useState<unknown>(null);
+  const [bootRevision, setBootRevision] = useState(0);
+  const focusAfterRestart = useRef(false);
+  const readyRegion = useRef<HTMLDivElement>(null);
+  const restartLocale = useRef<string | undefined>(undefined);
+  const disposeActiveEngine = useRef<(() => void) | null>(null);
   const localeSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const submissionInProgressRef = useRef(false);
   const terminalClearRequestedRef = useRef(false);
@@ -367,10 +379,12 @@ function RespondentController({
       setSubmitState({ status: 'idle' });
       try {
         await engineReady;
-        const readyState = await createReadyState(composition, config, claim, options, form);
+        const readyState = await createReadyState(composition, config, claim,
+          restartLocale.current === undefined ? options : { ...options, locale: restartLocale.current }, form);
+        restartLocale.current = undefined;
 
         if (cancelled || sequence !== reloadSequence) {
-          if (readyState.status === 'ready') {
+          if ('engine' in readyState) {
             readyState.engine.dispose();
           }
           return;
@@ -384,8 +398,8 @@ function RespondentController({
           setMultiPartyState(readyState.multiPartyState);
         } else {
           engine?.dispose();
-          engine = undefined;
-          pendingAssuranceFloor = readyState.assuranceFloor;
+          engine = 'engine' in readyState ? readyState.engine : undefined;
+          pendingAssuranceFloor = readyState.status === 'auth-required' ? readyState.assuranceFloor : undefined;
           setMultiPartyState(null);
         }
         setRespondentState(readyState);
@@ -396,6 +410,7 @@ function RespondentController({
       }
     };
     applyReadyStateRef.current = applyReadyState;
+    disposeActiveEngine.current = () => { engine?.dispose(); engine = undefined; };
 
     void (async () => {
       const boot = await bootIdentity(composition.identityProvider, 'L1', {
@@ -469,8 +484,10 @@ function RespondentController({
       unsubscribe?.();
       engine?.dispose();
       applyReadyStateRef.current = null;
+      disposeActiveEngine.current = null;
     };
   }, [
+    bootRevision,
     composition,
     config,
     form?.activeLocale,
@@ -626,6 +643,51 @@ function RespondentController({
     }
   };
 
+  useEffect(() => {
+    if (respondentState.status === 'ready' && focusAfterRestart.current) {
+      focusAfterRestart.current = false;
+      const region = readyRegion.current;
+      (region?.querySelector<HTMLElement>('#respondent-title, .sr-only[tabindex]') ?? region)?.focus();
+    }
+  }, [respondentState]);
+
+  const handleStartCurrent = async (): Promise<void> => {
+    if (terminalClearRequestedRef.current || submissionInProgressRef.current) return;
+    if (respondentState.status !== 'ready' && respondentState.status !== 'draft-conflict') return;
+    terminalClearRequestedRef.current = true;
+    setTerminalClearState({ status: 'clearing' });
+    try {
+      await localeSaveQueue.current;
+      const key = respondentState.status === 'draft-conflict'
+        ? respondentState.error.currentDraftKey
+        : multiPartyState?.progress.activePartyRef
+          ? multiPartyDraftKey(respondentState.draftKey, multiPartyState.progress.activePartyRef)
+          : respondentState.draftKey;
+      await composition.draftStore.delete(key);
+      disposeActiveEngine.current?.();
+      setLocaleSaveError(null);
+      restartLocale.current = respondentState.activeLocale;
+      focusAfterRestart.current = true;
+      setBootRevision(value => value + 1);
+    } catch (error) {
+      terminalClearRequestedRef.current = false;
+      setTerminalClearState({ status: 'error', error });
+    }
+  };
+
+  if (respondentState.status === 'draft-conflict') {
+    return <FormspecProvider engine={respondentState.engine}>
+      <DraftRecoveryPanel state={respondentState} clearState={terminalClearState}
+        headingLevel={renderMode === 'surface-slot' ? 'h2' : 'h1'}
+        onStart={() => { void handleStartCurrent(); }}
+        onLocaleChange={locale => {
+          if (terminalClearRequestedRef.current) return;
+          respondentState.engine.setLocale(locale);
+          setRespondentState({ ...respondentState, activeLocale: locale });
+        }} />
+    </FormspecProvider>;
+  }
+
   if (respondentState.status === 'loading') {
     return (
       <div className="submit-notice" role="status">
@@ -670,6 +732,7 @@ function RespondentController({
   if (respondentState.status === 'terminal-cleared') {
     return (
       <TerminalClearedPanel
+        title={respondentState.title} detail={respondentState.detail}
         headingLevel={renderMode === 'surface-slot' ? 'h2' : 'h1'}
       />
     );
@@ -717,6 +780,7 @@ function RespondentController({
 
   const handleSubmit = async (result: SubmitResult): Promise<void> => {
     if (
+      terminalClearRequestedRef.current ||
       submitState.status === 'submitting' ||
       submitState.status === 'confirmed' ||
       submitState.status === 'queued' ||
@@ -920,8 +984,11 @@ function RespondentController({
   };
 
   const handleClearTerminal = async (): Promise<void> => {
+    if (terminalClearRequestedRef.current) return;
     terminalClearRequestedRef.current = true;
     setTerminalClearState({ status: 'clearing' });
+    const title = chromeText(respondentState.engine, 'receipt.clearedTitle');
+    const detail = chromeText(respondentState.engine, 'receipt.clearedDetail');
     try {
       // Finish existing writes before deleting bindings; the handler guard refuses new ones.
       await localeSaveQueue.current;
@@ -932,13 +999,15 @@ function RespondentController({
         multiPartyState,
         subjectRef: respondentState.claim?.subjectRef,
       });
-      if (respondentState.claim) {
+      if (respondentState.claim && respondentState.claim.privacyTier !== 'anonymous'
+        && (await composition.draftStore.list(respondentState.claim.subjectRef)).length === 0) {
         await composition.identityProvider.revoke(respondentState.claim);
       }
       setSubmitState({ status: 'idle' });
       setRespondentPlaceState({ status: 'disabled' });
       setTerminalClearState({ status: 'cleared' });
-      setRespondentState({ status: 'terminal-cleared' });
+      disposeActiveEngine.current?.();
+      setRespondentState({ status: 'terminal-cleared', title, detail });
     } catch (error) {
       terminalClearRequestedRef.current = false;
       setTerminalClearState({ status: 'error', error });
@@ -948,86 +1017,89 @@ function RespondentController({
 
   return (
     <AppErrorBoundary>
-      <RuntimeProfileProvider value={respondentState.runtimeProfile}>
-        <AttachmentStoreProvider value={composition.attachmentStore}>
-          <FormspecProvider
-            engine={respondentState.engine}
-            componentDocument={respondentState.componentDocument ?? undefined}
-            componentGraph={respondentState.componentGraph ?? undefined}
-            hostEvidence={respondentState.hostEvidence ?? undefined}
-            themeDocument={form?.themeDocument ?? respondentState.themeDocument ?? undefined}
-            registryEntries={form ? [...form.registryEntries] : undefined}
-            responseActionsDocument={responseActionsDocument}
-            responseActionInvoker={responseActionInvoker}
-            components={{
-              fields: {
-                Text: SafeAddressTextField,
-                TextInput: SafeAddressTextField,
-                DatePicker: SafeAddressTextField,
-                NumberInput: SafeAddressTextField,
-                FileUpload: FormspecWebAttachmentControl,
-              },
-            }}
-            onSubmit={(result) => {
-              void handleSubmit(result);
-            }}
-            onActionResult={(result) => {
-              const action = result.resolution.action;
-              if (!action) return;
-              if (renderMode === 'surface-slot') {
-                const completed = completedRespondentAction(result);
-                if (completed) setCompletedAction({ action: completed, result });
-                return;
-              }
-              composition.surfaceRouter?.transitionAfterResponseAction({
-                actionId: action.id,
-                status: result.status,
-                componentGraph: respondentState.componentGraph,
-              });
-            }}
-          >
-            {localeSaveError ? (
-              <LocaleSaveErrorNotice />
-            ) : null}
-            {renderMode === 'surface-slot' ? (
-              <RespondentFormContent
-                claim={respondentState.claim}
-                composition={composition}
-                definition={respondentState.definition}
-                draftKey={respondentState.draftKey}
-                multiPartyState={multiPartyState}
-                notificationDelivery={composition.notificationDelivery}
-                onClearTerminal={handleClearTerminal}
-                respondentPlaceState={respondentPlaceState}
-                runtimeProfile={respondentState.runtimeProfile}
-                submitState={submitState}
-                terminalClearState={terminalClearState}
-              />
-            ) : (
-              <RespondentSurface
-                localeDocuments={respondentState.localeDocuments}
-                activeLocale={respondentState.activeLocale}
-                brandName={config.brand.name}
-                claim={respondentState.claim}
-                composition={composition}
-                definition={respondentState.definition}
-                draftKey={respondentState.draftKey}
-                draftLoaded={respondentState.draftLoaded}
-                mode={composition.mode}
-                respondentPlaceState={respondentPlaceState}
-                resolvedIssuer={respondentState.resolvedIssuer}
-                runtimeProfile={respondentState.runtimeProfile}
-                multiPartyState={multiPartyState}
-                submitState={submitState}
-                terminalClearState={terminalClearState}
-                notificationDelivery={composition.notificationDelivery}
-                onClearTerminal={handleClearTerminal}
-                onLocaleChange={handleLocaleChange}
-              />
-            )}
-          </FormspecProvider>
-        </AttachmentStoreProvider>
-      </RuntimeProfileProvider>
+      <div ref={readyRegion} tabIndex={-1}>
+        <RuntimeProfileProvider value={respondentState.runtimeProfile}>
+          <AttachmentStoreProvider value={composition.attachmentStore}>
+            <FormspecProvider
+              engine={respondentState.engine}
+              componentDocument={respondentState.componentDocument ?? undefined}
+              componentGraph={respondentState.componentGraph ?? undefined}
+              hostEvidence={respondentState.hostEvidence ?? undefined}
+              themeDocument={form?.themeDocument ?? respondentState.themeDocument ?? undefined}
+              registryEntries={form ? [...form.registryEntries] : undefined}
+              responseActionsDocument={responseActionsDocument}
+              responseActionInvoker={responseActionInvoker}
+              components={{
+                fields: {
+                  Text: SafeAddressTextField,
+                  TextInput: SafeAddressTextField,
+                  DatePicker: SafeAddressTextField,
+                  NumberInput: SafeAddressTextField,
+                  FileUpload: FormspecWebAttachmentControl,
+                },
+              }}
+              onSubmit={(result) => {
+                void handleSubmit(result);
+              }}
+              onActionResult={(result) => {
+                const action = result.resolution.action;
+                if (!action) return;
+                if (renderMode === 'surface-slot') {
+                  const completed = completedRespondentAction(result);
+                  if (completed) setCompletedAction({ action: completed, result });
+                  return;
+                }
+                composition.surfaceRouter?.transitionAfterResponseAction({
+                  actionId: action.id,
+                  status: result.status,
+                  componentGraph: respondentState.componentGraph,
+                });
+              }}
+            >
+              {localeSaveError ? (
+                <LocaleSaveErrorNotice />
+              ) : null}
+              {renderMode === 'surface-slot' ? (
+                <RespondentFormContent
+                  claim={respondentState.claim}
+                  composition={composition}
+                  definition={respondentState.definition}
+                  draftKey={respondentState.draftKey}
+                  multiPartyState={multiPartyState}
+                  notificationDelivery={composition.notificationDelivery}
+                  onClearTerminal={handleClearTerminal}
+                  respondentPlaceState={respondentPlaceState}
+                  runtimeProfile={respondentState.runtimeProfile}
+                  submitState={submitState}
+                  terminalClearState={terminalClearState}
+                />
+              ) : (
+                <RespondentSurface
+                  localeDocuments={respondentState.localeDocuments}
+                  activeLocale={respondentState.activeLocale}
+                  brandName={config.brand.name}
+                  claim={respondentState.claim}
+                  composition={composition}
+                  definition={respondentState.definition}
+                  draftKey={respondentState.draftKey}
+                  draftLoaded={respondentState.draftLoaded}
+                  mode={composition.mode}
+                  respondentPlaceState={respondentPlaceState}
+                  resolvedIssuer={respondentState.resolvedIssuer}
+                  runtimeProfile={respondentState.runtimeProfile}
+                  multiPartyState={multiPartyState}
+                  submitState={submitState}
+                  terminalClearState={terminalClearState}
+                  notificationDelivery={composition.notificationDelivery}
+                  onClearTerminal={handleClearTerminal}
+                  onStartCurrent={handleStartCurrent}
+                  onLocaleChange={handleLocaleChange}
+                />
+              )}
+            </FormspecProvider>
+          </AttachmentStoreProvider>
+        </RuntimeProfileProvider>
+      </div>
     </AppErrorBoundary>
   );
 }
@@ -1182,7 +1254,7 @@ async function createReadyState(
   claim: IdentityClaim | null,
   options: { locale?: string } = {},
   form?: ResolvedRespondentFormInput,
-): Promise<ReadyRespondentState | Extract<RespondentState, { status: 'auth-required' }>> {
+): Promise<ReadyRespondentState | Extract<RespondentState, { status: 'auth-required' | 'draft-conflict' }>> {
   assertIdentityPolicySatisfied({
     claim,
     identityMode: config.identity.mode,
@@ -1314,51 +1386,70 @@ async function createReadyState(
     formVersion: definition.version,
     subjectRef: claim?.subjectRef,
   };
-  const multiPartyState = runtimeProfile.multiParty
-    ? multiPartyStateFromDraft(
-        await composition.draftStore.load(multiPartyProgressDraftKey(draftKey)),
-        runtimeProfile.multiParty,
-      )
-    : null;
-  const draft = await composition.draftStore.load(
-    multiPartyState
-      ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef)
-      : draftKey,
-  );
-
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
     ...(form ? { registryEntries: [...form.registryEntries] } : {}),
   });
-  for (const localeDocument of localeDocuments ?? []) {
-    engine.loadLocale(localeDocument);
-  }
-  if (draft && options.locale === undefined) {
-    activeLocale = restoreDraftLocale(engine, draft, definition, localeDocuments ?? []);
-  } else {
-    engine.setLocale(activeLocale);
-  }
-  hydrateEngineFromResponse(engine, draft);
-  const resolvedIssuer = await engine.getResolvedIssuer();
+  let multiPartyState: MultiPartyPersistedState | null;
+  let draft: FormResponse | undefined;
+  try {
+    for (const localeDocument of localeDocuments ?? []) {
+      engine.loadLocale(localeDocument);
+    }
+    multiPartyState = runtimeProfile.multiParty
+      ? multiPartyStateFromDraft(
+          await composition.draftStore.load(multiPartyProgressDraftKey(draftKey)),
+          runtimeProfile.multiParty,
+        )
+      : null;
+    draft = await composition.draftStore.load(
+      multiPartyState
+        ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef)
+        : draftKey,
+    );
 
-  return {
-    status: 'ready',
-    definition,
-    localeDocuments: localeDocuments ?? [],
-    themeDocument: themeDocument ?? null,
-    responseActionsDocument: authoredResponseActions ?? null,
-    componentDocument: componentDocument ?? null,
-    componentGraph: verifiedComponentGraph,
-    hostEvidence: hostEvidence ?? null,
-    engine,
-    draftKey,
-    claim,
-    resolvedIssuer,
-    activeLocale,
-    draftLoaded: draft !== undefined,
-    multiPartyState,
-    runtimeProfile,
-  };
+  } catch (error) {
+    if (error instanceof DraftVersionConflictError) {
+      engine.setLocale(activeLocale);
+      return {
+        status: 'draft-conflict', error, engine, definition,
+        localeDocuments: localeDocuments ?? [], activeLocale,
+      };
+    }
+    engine.dispose();
+    throw error;
+  }
+  try {
+    if (draft && options.locale === undefined) {
+      activeLocale = restoreDraftLocale(engine, draft, definition, localeDocuments ?? []);
+    } else {
+      engine.setLocale(activeLocale);
+    }
+    hydrateEngineFromResponse(engine, draft);
+    const resolvedIssuer = await engine.getResolvedIssuer();
+
+    return {
+      status: 'ready',
+      definition,
+      localeDocuments: localeDocuments ?? [],
+      themeDocument: themeDocument ?? null,
+      responseActionsDocument: authoredResponseActions ?? null,
+      componentDocument: componentDocument ?? null,
+      componentGraph: verifiedComponentGraph,
+      hostEvidence: hostEvidence ?? null,
+      engine,
+      draftKey,
+      claim,
+      resolvedIssuer,
+      activeLocale,
+      draftLoaded: draft !== undefined,
+      multiPartyState,
+      runtimeProfile,
+    };
+  } catch (error) {
+    engine.dispose();
+    throw error;
+  }
 }
 
 /** ADR 0082 D16.2: resume the saved wording before hydrating any answers. */
@@ -1787,6 +1878,36 @@ async function readSubmissionStatuses(
   )));
 }
 
+function DraftRecoveryPanel({ state, clearState, onStart, onLocaleChange, headingLevel }: {
+  state: Extract<RespondentState, { status: 'draft-conflict' }>;
+  headingLevel: 'h1' | 'h2';
+  clearState: TerminalClearState;
+  onStart: () => void;
+  onLocaleChange: (locale: string) => void;
+}) {
+  const chrome = useChromeText();
+  const Heading = headingLevel;
+  const errorHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (clearState.status === 'error') errorHeading.current?.focus();
+  }, [clearState.status]);
+  const options = localeOptionsForDefinition(state.definition, state.localeDocuments);
+  return <section className="shell__status" aria-labelledby="draft-recovery-title">
+    <Heading id="draft-recovery-title" tabIndex={-1} ref={errorHeading}>{chrome('draft.versionChangedTitle')}</Heading>
+    <p>{chrome('draft.versionChanged', { version: state.error.retainedVersion ?? '' })}</p>
+    <p>{chrome('draft.browserAccessNotice')}</p>
+    <div className="respondent-toolbar__group" role="group" aria-label={chrome('form.language')}>
+      {options.map(option => <button key={option.code} type="button" className="locale-button"
+        disabled={clearState.status === 'clearing'} aria-pressed={state.activeLocale.toLowerCase() === option.code.toLowerCase()}
+        onClick={() => onLocaleChange(option.code)}>{option.label}</button>)}
+    </div>
+    <button type="button" className="locale-button" disabled={clearState.status === 'clearing'} onClick={onStart}>
+      {chrome(clearState.status === 'clearing' ? 'draft.startingCurrent' : 'draft.startCurrent')}
+    </button>
+    {clearState.status === 'error' ? <p role="alert">{chrome('draft.startCurrentFailed')}</p> : null}
+  </section>;
+}
+
 function LocaleSaveErrorNotice() {
   const chrome = useChromeText();
   return <p role="alert">{chrome('form.languageSaveFailed')}</p>;
@@ -1811,6 +1932,7 @@ function RespondentSurface({
   notificationDelivery,
   onClearTerminal,
   onLocaleChange,
+  onStartCurrent,
 }: {
   localeDocuments: readonly LocaleDocument[];
   activeLocale: string;
@@ -1830,6 +1952,7 @@ function RespondentSurface({
   notificationDelivery?: NotificationDelivery;
   onClearTerminal: () => Promise<void>;
   onLocaleChange: (locale: string) => void;
+  onStartCurrent: () => Promise<void>;
 }) {
   const { engine } = useFormspecContext();
   const chrome = useChromeText();
@@ -1848,7 +1971,7 @@ function RespondentSurface({
           <p className="respondent-header__kicker respondent-header__kicker--runtime">
             {brandName}
           </p>
-          <h1 id="respondent-title">{title}</h1>
+          <h1 id="respondent-title" tabIndex={-1}>{title}</h1>
           {description ? <p>{description}</p> : null}
         </header>
       )}
@@ -1869,6 +1992,13 @@ function RespondentSurface({
             </button>
           ))}
         </div>
+        {!submissionLocksLocale(submitState) ? <div>
+          <button type="button" className="locale-button" disabled={terminalClearState.status === 'clearing'}
+            onClick={() => { void onStartCurrent(); }}>
+            {chrome(terminalClearState.status === 'clearing' ? 'draft.startingCurrent' : 'draft.startCurrent')}
+          </button>
+          {terminalClearState.status === 'error' ? <p role="alert">{chrome('draft.startCurrentFailed')}</p> : null}
+        </div> : null}
         <div className="respondent-toolbar__meta" aria-live="polite">
           {draftLoaded ? chrome('localPreview.draftRestored') : composition.localPackagePreview ? chrome('localPreview.preview') : mode}
         </div>
@@ -1922,6 +2052,7 @@ function RespondentFormContent({
   terminalClearState: TerminalClearState;
 }) {
   const { layoutPlan } = useFormspecContext();
+  const chrome = useChromeText();
   return (
     <>
       <SubmitNotice state={submitState} />
@@ -1950,7 +2081,7 @@ function RespondentFormContent({
         />
       ) : layoutPlan ? (
         <>
-          <h2 className="sr-only">Form fields</h2>
+          <h2 className="sr-only" tabIndex={-1}>{chrome('form.fields')}</h2>
           <FormspecNode node={layoutPlan} />
         </>
       ) : (
@@ -2405,7 +2536,7 @@ function UnbrandedCover({
   return (
     <header className="respondent-header respondent-header--unbranded">
       <p className="respondent-header__kicker">Formspec Web</p>
-      <h1 id="respondent-title">{title}</h1>
+      <h1 id="respondent-title" tabIndex={-1}>{title}</h1>
       {description ? <p>{description}</p> : null}
     </header>
   );
@@ -2773,15 +2904,17 @@ export function ConfirmationPanel({
 }
 
 function TerminalClearedPanel({
+  title, detail,
   headingLevel = 'h1',
 }: {
+  title: string; detail: string;
   headingLevel?: 'h1' | 'h2';
 }) {
   const Heading = headingLevel;
   return (
     <div className="shell__status" role="status">
-      <Heading>{PUBLIC_TERMINAL_CLEARED_TITLE}</Heading>
-      <p>{PUBLIC_TERMINAL_CLEARED_BODY}</p>
+      <Heading>{title}</Heading>
+      <p>{detail}</p>
     </div>
   );
 }

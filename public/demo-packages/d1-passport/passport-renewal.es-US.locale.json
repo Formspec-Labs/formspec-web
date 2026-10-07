@@ -133,10 +133,19 @@
     "$ui.receipt.submissionId": "ID de envío",
     "$ui.receipt.pendingFilingAndSigning": "La presentación del caso y la firma aún no se han confirmado.",
     "$ui.receipt.keepRecord": "Conserve este comprobante",
-    "$ui.receipt.printInstruction": "Imprima esta confirmación y luego borre los datos de esta computadora antes de irse.",
+    "$ui.receipt.printInstruction": "Imprima esta confirmación y luego borre el acceso guardado antes de irse.",
     "$ui.receipt.print": "Imprimir confirmación",
-    "$ui.receipt.clear": "Borrar los datos de esta computadora",
-    "$ui.receipt.clearing": "Borrando..."
+    "$ui.receipt.clear": "Borrar el acceso guardado",
+    "$ui.receipt.clearing": "Borrando...",
+    "$ui.form.fields": "Campos del formulario",
+    "$ui.draft.versionChangedTitle": "Este borrador guardado usa una versión diferente del formulario",
+    "$ui.draft.versionChanged": "Este borrador se guardó con la versión {{$version}} del formulario. Empiece de nuevo con el formulario actual para continuar.",
+    "$ui.draft.startCurrent": "Borrar el acceso guardado y empezar de nuevo",
+    "$ui.draft.startingCurrent": "Empezando de nuevo...",
+    "$ui.draft.startCurrentFailed": "No se pudo borrar el acceso guardado. Inténtelo de nuevo.",
+    "$ui.draft.browserAccessNotice": "Al empezar de nuevo, se borra de este navegador el acceso guardado a este borrador. Los demás borradores guardados siguen disponibles.",
+    "$ui.receipt.clearedTitle": "Acceso guardado borrado",
+    "$ui.receipt.clearedDetail": "Este navegador ya no tiene acceso guardado a este borrador."
   },
   "fallback": "en"
 }

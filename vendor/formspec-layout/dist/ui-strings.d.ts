@@ -134,10 +134,19 @@ export declare const UI_STRINGS: {
     readonly 'receipt.submissionId': "Submission ID";
     readonly 'receipt.pendingFilingAndSigning': "Case filing and signing are not yet confirmed.";
     readonly 'receipt.keepRecord': "Keep this record";
-    readonly 'receipt.printInstruction': "Print this confirmation, then clear this computer before leaving.";
+    readonly 'receipt.printInstruction': "Print this confirmation, then clear saved access before leaving.";
     readonly 'receipt.print': "Print confirmation";
-    readonly 'receipt.clear': "Clear this computer";
+    readonly 'receipt.clear': "Clear saved access";
     readonly 'receipt.clearing': "Clearing...";
+    readonly 'form.fields': "Form fields";
+    readonly 'draft.versionChangedTitle': "This saved draft uses a different form version";
+    readonly 'draft.versionChanged': "This draft was saved with form version {{$version}}. Start again with the current form to continue.";
+    readonly 'draft.startCurrent': "Clear saved access and start again";
+    readonly 'draft.startingCurrent': "Starting again...";
+    readonly 'draft.startCurrentFailed': "Saved access could not be cleared. Try again.";
+    readonly 'draft.browserAccessNotice': "Starting again removes saved access to this draft from this browser. Other saved drafts stay available.";
+    readonly 'receipt.clearedTitle': "Saved access cleared";
+    readonly 'receipt.clearedDetail': "This browser no longer has saved access to this draft.";
 };
 /** Closed suffix set for `$ui.<ChromeStringKey>` (Locale spec §3.1.10), one-for-one with the schema enum. */
 export type ChromeStringKey = keyof typeof UI_STRINGS;

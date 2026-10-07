@@ -106,7 +106,6 @@ export async function clearPublicTerminalDraftState({
   draftKey,
   multiPartyPolicy,
   multiPartyState,
-  subjectRef,
 }: ClearPublicTerminalDraftStateInput): Promise<void> {
   const keys = publicTerminalDraftKeysToClear({
     draftKey,
@@ -114,9 +113,6 @@ export async function clearPublicTerminalDraftState({
     multiPartyState,
   });
   await Promise.all(keys.map((key) => draftStore.delete(key)));
-  if (subjectRef) {
-    await draftStore.invalidateSubject(subjectRef);
-  }
 }
 
 function dedupeDraftKeys(keys: readonly DraftKey[]): DraftKey[] {

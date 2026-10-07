@@ -1,7 +1,7 @@
 {
   "$formspec": "1.0",
   "url": "urn:formspec:demo:d1:passport-renewal",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "status": "draft",
   "title": "Passport renewal",
   "items": [

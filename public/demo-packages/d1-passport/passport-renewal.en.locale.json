@@ -133,9 +133,18 @@
     "$ui.receipt.submissionId": "Submission ID",
     "$ui.receipt.pendingFilingAndSigning": "Case filing and signing are not yet confirmed.",
     "$ui.receipt.keepRecord": "Keep this record",
-    "$ui.receipt.printInstruction": "Print this confirmation, then clear this computer before leaving.",
+    "$ui.receipt.printInstruction": "Print this confirmation, then clear saved access before leaving.",
     "$ui.receipt.print": "Print confirmation",
-    "$ui.receipt.clear": "Clear this computer",
-    "$ui.receipt.clearing": "Clearing..."
+    "$ui.receipt.clear": "Clear saved access",
+    "$ui.receipt.clearing": "Clearing...",
+    "$ui.form.fields": "Form fields",
+    "$ui.draft.versionChangedTitle": "This saved draft uses a different form version",
+    "$ui.draft.versionChanged": "This draft was saved with form version {{$version}}. Start again with the current form to continue.",
+    "$ui.draft.startCurrent": "Clear saved access and start again",
+    "$ui.draft.startingCurrent": "Starting again...",
+    "$ui.draft.startCurrentFailed": "Saved access could not be cleared. Try again.",
+    "$ui.draft.browserAccessNotice": "Starting again removes saved access to this draft from this browser. Other saved drafts stay available.",
+    "$ui.receipt.clearedTitle": "Saved access cleared",
+    "$ui.receipt.clearedDetail": "This browser no longer has saved access to this draft."
   }
 }

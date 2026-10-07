@@ -28,5 +28,5 @@ export type { UseRuntimeContextResult, RuntimeContext } from './use-runtime-cont
 export { useSemanticFieldControl } from './use-semantic-field-control';
 export type { QualifiedSemanticSubjectRef, SemanticActivateControlContext, SemanticControlRegistry, SemanticControlScope, SemanticControlTarget, SemanticResponseBinding, } from './semantic-controls';
 export type { FieldComponentProps, LayoutComponentProps, DisplayComponentProps, ComponentMap } from './component-map';
-export { useChromeText } from './use-chrome-text';
+export { useChromeText, chromeText } from './use-chrome-text';
 export type { ChromeText } from './use-chrome-text';
