@@ -10,7 +10,7 @@ export { createDemoSubmitResponseActions, } from './demo-submit-response-actions
 export { RESPONSE_ACTIONS_EFFECT_TIME_BINDINGS, RESPONSE_ACTIONS_PRECONDITION_BINDINGS, ResponseActionsPreconditionCatalog, } from './precondition-catalog.js';
 export { preactReactiveRuntime } from './reactivity/preact-runtime.js';
 export { initFormspecEngine, initFormspecEngine as initEngine, initFormspecEngineTools, isFormspecEngineInitialized, isFormspecEngineToolsInitialized, } from './init-formspec-engine.js';
-export { buildValidationReportEnvelope } from './engine/response-assembly.js';
+export { attachAuthoredSignature, buildValidationReportEnvelope } from './engine/response-assembly.js';
 export { deepEqual, toValidationResults } from './engine/helpers.js';
 export { normalizeBcp47 } from './locale.js';
 export * from './issuer/index.js';

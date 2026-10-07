@@ -66,11 +66,14 @@ export function FormspecNode({ node: plannedNode }) {
     }
     return _jsx(LayoutNodeRenderer, { node: node });
 }
-function resolveActionButtonLabel(value, fallback) {
+function resolveActionButtonLabel(value, fallback, resolveLocaleString) {
     if (value && typeof value === 'object') {
         const label = value;
         if (typeof label.literal === 'string')
             return label.literal;
+        // Locale §4.1: a reference without an authored default resolves to empty.
+        if (typeof label.ref === 'string')
+            return resolveLocaleString(label.ref, '');
     }
     return typeof value === 'string' ? value : fallback;
 }
@@ -105,7 +108,7 @@ function actionResultMessage(chrome, result) {
 }
 function ActionButtonNode({ node }) {
     const chrome = useChromeText();
-    const { onSubmit, recordSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
+    const { engine, onSubmit, recordSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
     const form = useForm();
     const actionRef = actionRefFor(node);
     const resolution = resolveActionRef(actionRef, node.id);
@@ -116,7 +119,7 @@ function ActionButtonNode({ node }) {
     // An explicitly authored Component label wins. Auto-injected controls have
     // no Component label, so use the resolved Response Action label before the
     // renderer's generic fallback. This keeps product copy in structured data.
-    const label = resolveActionButtonLabel(node.props?.label ?? resolution.action?.label, chrome('action.submit'));
+    const label = resolveActionButtonLabel(node.props?.label ?? resolution.action?.label, chrome('action.submit'), (key, fallback) => engine.resolveLocaleString(key, fallback));
     const actionNeedAnchors = generationNeedAnchors(resolution.action);
     const needAttrs = needTraceAttrs([...(node.needAnchors ?? []), ...actionNeedAnchors]);
     const statusId = useId();

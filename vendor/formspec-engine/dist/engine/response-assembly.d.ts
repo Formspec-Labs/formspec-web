@@ -4,6 +4,16 @@ import type { ValidationReport, ValidationResult } from '@formspec-org/types';
 import type { EvalResult } from '../diff.js';
 import type { AuthoredSignatureInput, PinnedResponseReference } from '../interfaces.js';
 import type { EvalShapeTiming } from './wasm-fel.js';
+/**
+ * Append whole-response signing evidence to an already emitted, completed JSON Response.
+ * Preserves all other Response content and returns independent nested objects. Does not
+ * emit a Response, read a clock, or verify COSE bytes, digests, identity or receipt claims.
+ * Callers must provide a valid Response snapshot and provider evidence; validate the
+ * resulting document against the Response schema before transport when required.
+ */
+export declare function attachAuthoredSignature<T extends object>(response: T, signature: AuthoredSignatureInput): T & {
+    authoredSignatures: Record<string, unknown>[];
+};
 export declare function buildFormspecResponseEnvelope(options: {
     definition: FormDefinition;
     data: Record<string, unknown>;

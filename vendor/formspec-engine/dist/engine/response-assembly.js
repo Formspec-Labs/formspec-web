@@ -1,6 +1,6 @@
 /** @filedesc Response envelope, validation report, changelog migration, and pinned-definition resolution. */
 import { wasmApplyMigrationsToResponseData } from '../wasm-bridge-runtime.js';
-import { toValidationResult } from './helpers.js';
+import { cloneValue, toValidationResult } from './helpers.js';
 function resolveResponseId(explicitId, authoredSignatures) {
     if (explicitId) {
         return explicitId;
@@ -112,6 +112,9 @@ function toNormalizedAuthoredSignatureRecord(signature, index, responseId, defin
         signatureProvider: signature.signatureProvider,
         ceremonyId: signature.ceremonyId,
     };
+    if (signature.signerEvidence !== undefined) {
+        record.signerEvidence = { kind: signature.signerEvidence.kind, value: signature.signerEvidence.value };
+    }
     if (signerId !== undefined) {
         record.signerId = signerId;
     }
@@ -126,6 +129,74 @@ function toNormalizedAuthoredSignatureRecord(signature, index, responseId, defin
         record.identityBinding = identityBinding;
     }
     return record;
+}
+/**
+ * Append whole-response signing evidence to an already emitted, completed JSON Response.
+ * Preserves all other Response content and returns independent nested objects. Does not
+ * emit a Response, read a clock, or verify COSE bytes, digests, identity or receipt claims.
+ * Callers must provide a valid Response snapshot and provider evidence; validate the
+ * resulting document against the Response schema before transport when required.
+ */
+export function attachAuthoredSignature(response, signature) {
+    const snapshot = response;
+    if (!snapshot || snapshot.$formspecResponse !== '1.0' || snapshot.status !== 'completed') {
+        throw new Error('attachAuthoredSignature requires a completed Formspec Response');
+    }
+    const responseId = requireNonEmptyString(snapshot.id, 'Response.id');
+    const definitionUrl = requireNonEmptyString(snapshot.definitionUrl, 'Response.definitionUrl');
+    const definitionVersion = requireNonEmptyString(snapshot.definitionVersion, 'Response.definitionVersion');
+    if (!signature || 'partyRole' in signature || 'coveredPaths' in signature) {
+        throw new Error('attachAuthoredSignature accepts whole-response evidence only');
+    }
+    const prior = snapshot.authoredSignatures;
+    if (prior !== undefined && !Array.isArray(prior)) {
+        throw new Error('Response.authoredSignatures must be an array');
+    }
+    if (prior?.some((entry) => entry?.signatureId === signature.signatureId)) {
+        throw new Error('Duplicate authored signature ID');
+    }
+    // Admission checks supplement the maintained emission normalizer. They do not
+    // authenticate any claim; optional receipts remain provider-supplied evidence.
+    const requiredText = ['signatureId', 'documentId', 'signerName', 'signatureValue',
+        'consentTextRef', 'consentVersion', 'affirmationText', 'documentHash',
+        'documentHashAlgorithm', 'signatureProvider', 'ceremonyId'];
+    for (const field of requiredText)
+        requireNonEmptyString(signature[field], `signature.${field}`);
+    if (signature.consentAccepted !== true)
+        throw new Error('signature.consentAccepted must be true');
+    const requirePattern = (value, pattern, field) => {
+        if (!pattern.test(value))
+            throw new Error(`signature.${field} is invalid`);
+    };
+    const uri = /^[a-zA-Z][a-zA-Z0-9+.-]*:[^\s]+$/;
+    requirePattern(definitionUrl, uri, 'signedPayload.definitionUrl');
+    requirePattern(signature.signingIntent, uri, 'signingIntent');
+    requirePattern(signature.consentTextRef, uri, 'consentTextRef');
+    requirePattern(signature.documentId, /^[a-zA-Z][a-zA-Z0-9_-]*$/, 'documentId');
+    requirePattern(signature.signatureValue, /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/, 'signatureValue');
+    requirePattern(signature.documentHash, /^[A-Fa-f0-9]{64,128}$/, 'documentHash');
+    requirePattern(signature.documentHashAlgorithm, /^(sha-256|sha-384|sha-512|x-[a-z0-9][a-z0-9-]*)$/, 'documentHashAlgorithm');
+    if (!signature.signedPayload || !/^[A-Fa-f0-9]{64}$/.test(signature.signedPayload.digest)) {
+        throw new Error('signature.signedPayload.digest must be a SHA-256 hex digest');
+    }
+    requireNonEmptyString(signature.signedAt, 'signature.signedAt');
+    requirePattern(signature.signedAt, /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/, 'signedAt');
+    const calendarDate = typeof signature.signedAt === 'string' ? signature.signedAt.slice(0, 10) : '';
+    const parsedDate = new Date(`${calendarDate}T00:00:00Z`);
+    if (!Number.isFinite(Date.parse(signature.signedAt)) || !Number.isFinite(parsedDate.getTime())
+        || parsedDate.toISOString().slice(0, 10) !== calendarDate) {
+        throw new Error('signature.signedAt is invalid');
+    }
+    if (signature.signerEvidence !== undefined) {
+        if (!['drawn', 'typed', 'provider-receipt'].includes(signature.signerEvidence.kind)) {
+            throw new Error('signature.signerEvidence.kind is invalid');
+        }
+        requireNonEmptyString(signature.signerEvidence.value, 'signature.signerEvidence.value');
+    }
+    const normalized = toNormalizedAuthoredSignatureRecord(signature, (prior ?? []).length, responseId, definitionUrl, definitionVersion, undefined);
+    const result = cloneValue(response);
+    result.authoredSignatures = [...(result.authoredSignatures ?? []), cloneValue(normalized)];
+    return result;
 }
 function prepareAuthoredSignaturesSection(meta, responsePins) {
     const signatures = meta?.authoredSignatures;
