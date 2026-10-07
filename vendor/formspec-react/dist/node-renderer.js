@@ -292,6 +292,7 @@ function ActionButtonNode({ node }) {
             // callers still receive the rejected Promise from activate().
         });
     }, [activate]);
+    // The in-flight guard keeps pending activation inert without losing keyboard focus.
     const pending = feedback.phase === 'pending';
     return (_jsxs("div", { ref: controlRef, className: "formspec-action-control", ...needAttrs, children: [_jsx("button", { 
                 // type="button" mirrors the webcomponent's ActionButton renderer
@@ -301,7 +302,7 @@ function ActionButtonNode({ node }) {
                 // type="submit" cascades to native form submission and bypasses
                 // Response Actions entirely. type="button" eliminates the
                 // foot-gun and keeps cross-renderer parity.
-                type: "button", className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved || pending, "aria-busy": pending, "aria-describedby": statusId, onClick: handleClick, ...projectionMetadataAttrs(node), ...needAttrs, children: label }), _jsx("div", { id: statusId, className: "formspec-action-status", role: "status", "aria-live": "polite", "aria-atomic": "true", ...needAttrs, children: actionResultMessage(chrome, feedback) })] }));
+                type: "button", className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved, "aria-disabled": !resolution.resolved || pending, "aria-busy": pending, "aria-describedby": statusId, onClick: handleClick, ...projectionMetadataAttrs(node), ...needAttrs, children: label }), _jsx("div", { id: statusId, className: "formspec-action-status", role: "status", "aria-live": "polite", "aria-atomic": "true", ...needAttrs, children: actionResultMessage(chrome, feedback) })] }));
 }
 function WhenGuard({ node }) {
     const visible = useWhen(node.when, node.whenPrefix);

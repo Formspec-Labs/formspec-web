@@ -71,4 +71,48 @@ describe('maintained Response Action Save feedback', () => {
     await screen.findByText(english); expect(test.invoker).toHaveBeenCalledOnce();
     expect(test.onResult.mock.calls[0][0]).toBe(test.result);
   });
+
+  it.each(['failed', 'unresolved'] as const)('retains keyboard focus through pending and %s settlement', async status => {
+    const test = mount('save-draft', status, true);
+    const button = screen.getByRole('button', { name: 'Run action' }) as HTMLButtonElement;
+    button.focus(); fireEvent.click(button);
+    await screen.findByText('In progress.');
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(button);
+    await act(async () => test.settle());
+    await screen.findByText(english);
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('false');
+    expect(button.getAttribute('aria-busy')).toBe('false');
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('joins repeated pointer activations while pending without another invocation or terminal callback', async () => {
+    const test = mount('save-draft', 'failed', true);
+    const button = screen.getByRole('button', { name: 'Run action' });
+    fireEvent.click(button); await screen.findByText('In progress.');
+    fireEvent.click(button); fireEvent.click(button);
+    expect(test.invoker).toHaveBeenCalledOnce(); expect(test.onResult).not.toHaveBeenCalled();
+    await act(async () => test.settle());
+    await screen.findByText(english);
+    expect(test.invoker).toHaveBeenCalledOnce(); expect(test.onResult).toHaveBeenCalledExactlyOnceWith(test.result);
+  });
+
+  it('does not reclaim deliberate external focus on settlement or after the initiating control unmounts', async () => {
+    const outside = document.createElement('button'); outside.textContent = 'Other control'; document.body.append(outside);
+    try {
+      const test = mount('save-draft', 'failed', true);
+      const button = screen.getByRole('button', { name: 'Run action' }); button.focus(); fireEvent.click(button);
+      await screen.findByText('In progress.'); outside.focus();
+      await act(async () => test.settle()); await screen.findByText(english);
+      expect(document.activeElement).toBe(outside); test.mounted.unmount();
+      const removed = mount('save-draft', 'unresolved', true);
+      const removedButton = screen.getByRole('button', { name: 'Run action' }); removedButton.focus(); fireEvent.click(removedButton);
+      await screen.findByText('In progress.'); outside.focus(); removed.mounted.unmount();
+      await act(async () => removed.settle());
+      expect(removedButton.isConnected).toBe(false); expect(document.activeElement).toBe(outside);
+    } finally { outside.remove(); }
+  });
 });
