@@ -1078,7 +1078,7 @@ function RespondentController({
                   FileUpload: FormspecWebAttachmentControl,
                 },
               }}
-              onSubmit={(result) => {
+              onSubmit={respondentState.ownedRuntime ? undefined : (result) => {
                 void handleSubmit(result);
               }}
               onActionResult={(result) => {

@@ -104,7 +104,12 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     const form = resolvedForm();
     const configureRuntime = async () => runtime;
     render(<RespondentDefinitionController composition={composition} config={departmentAppProfile} form={{
-      ...form, configureRuntime, responseActionsDocument: { $formspecResponseActions: '1.0', version: '1.0',
+      ...form, configureRuntime, componentDocument: {
+        $formspecComponent: '1.2', url: 'urn:test:explicit-action', version: '1.0',
+        targetDefinition: { url: definition.url }, tree: { component: 'Stack', children: [
+          { component: 'TextInput', bind: 'name' }, { component: 'ActionButton', actionRef: 'legacy' },
+        ] },
+      }, responseActionsDocument: { $formspecResponseActions: '1.0', version: '1.0',
         scope: 'response', targetDefinition: { url: definition.url }, actions: [{
           id: 'legacy', intent: 'submit', label: { literal: 'Legacy submit event' },
           validation: { profile: 'off', blocking: 'non-blocking', persistence: 'draft-checkpoint' },
