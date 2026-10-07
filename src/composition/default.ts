@@ -144,6 +144,7 @@ export function createDefaultComposition(
       instanceCapabilities: { ...preview.instanceCapabilities, offlineSubmit: 'unavailable', fileUpload: 'available' },
       attachmentStore: new HttpAttachmentStore({
         ...baseHttpConfig,
+        maxUploadBytes: config.referenceAdapters?.formspecStack?.attachments?.maxUploadBytes,
         formId: defaultFormIdResolver(initialDefinitionUrl),
         accessToken: async () => (await anonymousSessions.sessionForForm(initialDefinitionUrl)).sessionToken,
       }),

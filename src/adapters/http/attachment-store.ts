@@ -2,17 +2,26 @@ import type { AttachmentRef, AttachmentStore, AttachmentUploadMetadata } from '.
 import { AttachmentUploadError } from '../../ports/attachment-store.ts';
 import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import { generateIdempotencyKey, IDEMPOTENCY_KEY_HEADER } from '../../shared/idempotency-key.ts';
+import { validatedAttachmentMaxUploadBytes } from '../../config/attachment-policy.ts';
 import type { HttpClientConfig } from './http-client.ts';
 
 export interface HttpAttachmentStoreConfig extends HttpClientConfig {
   formId: string;
+  maxUploadBytes?: number;
 }
 
 /** Transfer actual file bytes to the authenticated form attachment endpoint. */
 export class HttpAttachmentStore implements AttachmentStore {
-  constructor(private readonly config: HttpAttachmentStoreConfig) {}
+  readonly maxUploadBytes?: number;
+
+  constructor(private readonly config: HttpAttachmentStoreConfig) {
+    this.maxUploadBytes = validatedAttachmentMaxUploadBytes(config.maxUploadBytes);
+  }
 
   async upload(blob: Blob, metadata: AttachmentUploadMetadata): Promise<AttachmentRef> {
+    if (this.maxUploadBytes !== undefined && blob.size > this.maxUploadBytes) {
+      throw new AttachmentUploadError('File exceeds the configured upload limit', { code: 'file-too-large' });
+    }
     const token = typeof this.config.accessToken === 'function'
       ? await this.config.accessToken() : this.config.accessToken;
     if (!token) throw new AttachmentUploadError('An upload session is required', { code: 'unavailable' });

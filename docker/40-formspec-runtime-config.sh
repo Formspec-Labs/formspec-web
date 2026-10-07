@@ -23,6 +23,20 @@ else
   surface_bundle_json="null"
 fi
 
+attachment_max_upload_bytes="${FORMSPEC_WEB_ATTACHMENT_MAX_UPLOAD_BYTES:-}"
+if [ -n "$attachment_max_upload_bytes" ]; then
+  if ! attachment_max_upload_bytes="$(
+    printf '%s' "$attachment_max_upload_bytes" | jq -R -c -e '
+      tonumber | if . > 0 and . <= 9007199254740991 and . == floor
+      then . else error("expected positive safe integer") end' 2>/dev/null
+  )"; then
+    echo "FORMSPEC_WEB_ATTACHMENT_MAX_UPLOAD_BYTES must be a positive safe integer number of bytes." >&2
+    exit 1
+  fi
+else
+  attachment_max_upload_bytes="null"
+fi
+
 runtime_config="$(
   jq -c -n \
     --arg profile_name "${FORMSPEC_WEB_PROFILE:-}" \
@@ -33,6 +47,7 @@ runtime_config="$(
     --arg oidc_client_id "${FORMSPEC_WEB_OIDC_CLIENT_ID:-}" \
     --arg oidc_redirect_uri "${FORMSPEC_WEB_OIDC_REDIRECT_URI:-}" \
     --arg magic_link_callback_path "${FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH:-}" \
+    --argjson attachment_max_upload_bytes "$attachment_max_upload_bytes" \
     --argjson surface_bundle "$surface_bundle_json" \
     '{
       profileName: $profile_name,
@@ -46,6 +61,11 @@ runtime_config="$(
       if $surface_bundle == null
       then {}
       else {surfaceBundle: $surface_bundle}
+      end
+    ) + (
+      if $attachment_max_upload_bytes == null
+      then {}
+      else {attachmentMaxUploadBytes: $attachment_max_upload_bytes}
       end
     )'
 )"

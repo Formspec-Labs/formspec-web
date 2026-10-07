@@ -29,6 +29,26 @@ Run the conformance suite with:
 npm test -- tests/adapter-conformance/attachment-store
 ```
 
+## Final upload byte policy
+
+`AttachmentStore.maxUploadBytes` optionally advertises a deployment-owned limit
+on the final uploaded Blob. Omission means the limit is unknown, rather than
+unlimited. The server remains authoritative. The HTTP adapter accepts the same
+`maxUploadBytes` configuration, validates it as a positive safe integer, and
+rejects larger Blobs with `file-too-large` before acquiring a token or sending
+HTTP. Bytes exactly at the limit remain eligible.
+
+Reference profiles supply `referenceAdapters.formspecStack.attachments.maxUploadBytes`.
+Runtime JS can override it with numeric `attachmentMaxUploadBytes`; container
+and Vite deployments use `FORMSPEC_WEB_ATTACHMENT_MAX_UPLOAD_BYTES` and
+`VITE_FORMSPEC_WEB_ATTACHMENT_MAX_UPLOAD_BYTES`, respectively. Set this from
+the server-owned deployment policy; the web adapter has no hardcoded server
+limit. Invalid values fail configuration rather than silently disabling the bound.
+
+Original image size and processed output size can differ. Redaction and page
+cropping do not guarantee shrinkage. The control may apply a stricter original
+selection guard; the transport always measures the actual bytes being uploaded.
+
 ## Why upload is separate from `SubmitTransport`
 
 Storage and submission are orthogonal adopter concerns. The port is a

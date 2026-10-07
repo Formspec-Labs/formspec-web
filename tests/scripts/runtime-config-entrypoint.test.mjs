@@ -68,6 +68,23 @@ describe('container runtime-config entrypoint', () => {
     expect(statSync(target).mode & 0o777).toBe(0o644);
   });
 
+  it('emits a supplied attachment byte policy as a number and omits it when absent', () => {
+    const target = join(temporaryRoot(), 'formspec-runtime-config.js');
+    expect(runEntrypoint(target, { FORMSPEC_WEB_ATTACHMENT_MAX_UPLOAD_BYTES: '1234' }).status).toBe(0);
+    expect(evaluateRuntimeConfig(target).attachmentMaxUploadBytes).toBe(1234);
+    expect(runEntrypoint(target, {}).status).toBe(0);
+    expect(evaluateRuntimeConfig(target)).not.toHaveProperty('attachmentMaxUploadBytes');
+  });
+
+  it.each(['0', '-1', '1.5', 'NaN', 'Infinity', '9007199254740992', 'not-a-number'])('refuses invalid attachment byte limit %s without replacing the emitted file', value => {
+    const target = join(temporaryRoot(), 'formspec-runtime-config.js');
+    writeFileSync(target, 'previous-runtime-config\n');
+    const result = runEntrypoint(target, { FORMSPEC_WEB_ATTACHMENT_MAX_UPLOAD_BYTES: value });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('must be a positive safe integer');
+    expect(readFileSync(target, 'utf8')).toBe('previous-runtime-config\n');
+  });
+
   it('omits surfaceBundle when the JSON variable is empty', () => {
     const root = temporaryRoot();
     const target = join(root, 'formspec-runtime-config.js');

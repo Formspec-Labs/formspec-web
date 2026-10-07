@@ -84,8 +84,8 @@ function isAttachmentRefValue(value: unknown): value is AttachmentRef {
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
 export function FormspecWebAttachmentControl({ field, node }: FieldComponentProps) {
@@ -98,11 +98,12 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const multiple = config.multiple === true;
   const dragDrop = config.dragDrop !== false;
   // L-2: default tab-killer guard. Adopters override per-field via props.maxSize.
-  const maxSize = typeof config.maxSize === 'number'
+  const configuredMaxSize = typeof config.maxSize === 'number' && Number.isFinite(config.maxSize) && config.maxSize >= 0
     ? config.maxSize
-    : typeof config.maxSizeMb === 'number'
+    : typeof config.maxSizeMb === 'number' && Number.isFinite(config.maxSizeMb) && config.maxSizeMb >= 0
       ? config.maxSizeMb * 1024 * 1024
       : ATTACHMENT_DEFAULT_MAX_SIZE_BYTES;
+  const maxSize = Math.min(configuredMaxSize, attachmentStore.maxUploadBytes ?? Infinity);
 
   const showError = !!(field.error && field.touched);
   const describedBy = [
@@ -488,6 +489,14 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const uploadImageDraft = async (): Promise<void> => {
     if (!imageDraft) return;
     const draft = imageDraft;
+    // A changed policy must still reject an oversized original, even if an edit
+    // could produce fewer bytes. Validate the processed bytes separately below.
+    const originalFailure = validateFile(draft.file);
+    if (originalFailure) {
+      addFailedRows([{ file: draft.file, message: originalFailure }]);
+      advanceImageDraftQueue();
+      return;
+    }
     try {
       const file = draft.redactions.length > 0
         ? await redactImageFile(draft.file, draft.redactions)
@@ -520,8 +529,18 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 
   const deskewImageDraft = async (): Promise<void> => {
     if (!imageDraft) return;
+    const originalFailure = validateFile(imageDraft.file);
+    if (originalFailure) {
+      addFailedRows([{ file: imageDraft.file, message: originalFailure }]);
+      return;
+    }
     try {
       const file = await cropToDetectedPageEdges(imageDraft.file);
+      const processedFailure = validateFile(file);
+      if (processedFailure) {
+        addFailedRows([{ file, message: processedFailure }]);
+        return;
+      }
       const objectUrl = URL.createObjectURL(file);
       const imageChanged = file !== imageDraft.file;
       replaceImageDraft({

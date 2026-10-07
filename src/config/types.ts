@@ -122,6 +122,8 @@ export interface PortCompositionConfig {
 }
 
 export interface FormspecStackReferenceAdapterConfig {
+  /** Deployment-owned attachment transport limits, measured on final uploaded bytes. */
+  attachments?: { maxUploadBytes?: number };
   formspecServerUrl?: string;
   responseActionLedgerCapabilityUrl?: string;
   tenantHeaderDialect: 'formspec';
@@ -145,6 +147,8 @@ export interface FormspecWebConfig {
 }
 
 export interface RuntimeConfig {
+  /** Deployment-owned final attachment upload byte limit; omitted means unknown. */
+  attachmentMaxUploadBytes?: number;
   /** Explicit deployment scope supplied by runtime JS. */
   tenantBinding?: TenantBindingConfig;
   profileName?: string;

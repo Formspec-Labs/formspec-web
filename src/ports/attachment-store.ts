@@ -77,6 +77,8 @@ export class AttachmentUploadError extends Error {
 }
 
 export interface AttachmentStore {
+  /** Deployment-owned maximum final uploaded Blob size in bytes; omission means unknown. */
+  readonly maxUploadBytes?: number;
   upload(blob: Blob, metadata: AttachmentUploadMetadata): Promise<AttachmentRef>;
   /**
    * Optional: lifecycle hook the renderer calls when the respondent removes

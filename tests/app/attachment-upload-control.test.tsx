@@ -169,7 +169,7 @@ describe('FormspecWebAttachmentControl', () => {
       const camera = Array.from(container!.querySelectorAll('button')).find(button => button.textContent === 'Use camera')!;
       await act(async () => { camera.click(); await flush(); });
       const failure = container!.querySelector('.formspec-file-pending-status')!;
-      expect(failure.textContent).toBe('"{{$literal}}.pdf" is larger than the upload limit of 1.0 KB.');
+      expect(failure.textContent).toBe('"{{$literal}}.pdf" is larger than the upload limit of 1.0 KiB.');
       expect(container!.textContent).toContain(UI_STRINGS['fileUpload.cameraUnavailable']);
       act(() => {
         engine.loadLocale({ $formspecLocale: '2.0', locale: 'es', version: '1.0.0',
@@ -182,7 +182,7 @@ describe('FormspecWebAttachmentControl', () => {
           } });
         engine.setLocale('es');
       });
-      expect(failure.textContent).toBe('{{$literal}}.pdf supera el límite de 1.0 KB.');
+      expect(failure.textContent).toBe('{{$literal}}.pdf supera el límite de 1.0 KiB.');
       expect(container!.querySelector('.formspec-file-pending-dismiss')!.getAttribute('aria-label')).toBe('Descartar error de {{$literal}}.pdf');
       expect(container!.textContent).toContain('La cámara no está disponible.');
       expect(camera.textContent).toBe('Usar cámara');
@@ -485,6 +485,39 @@ describe('FormspecWebAttachmentControl', () => {
     expect(harness.readValue()).toBeNull();
   });
 
+  it('accepts the exact advertised store cap and rejects cap plus one before direct upload', async () => {
+    const upload = vi.fn(stubAttachmentStore().upload);
+    const harness = makeFieldHarness();
+    render(<AttachmentStoreProvider value={{ upload, maxUploadBytes: 1024 }}>
+      <FormspecWebAttachmentControl field={harness.field} node={makeNode()} />
+    </AttachmentStoreProvider>);
+    const input = container!.querySelector('input[type="file"]')!;
+    const exact = await fileFromBytes(new Uint8Array(1024), 'exact.pdf');
+    Object.defineProperty(input, 'files', { value: [exact], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(upload.mock.calls[0][0].size).toBe(1024);
+    Object.defineProperty(input, 'files', { value: [await fileFromBytes(new Uint8Array(1025), 'over.pdf')], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(container!.querySelector('[role="alert"]')?.textContent).toContain('1.0 KiB');
+  });
+
+  it('keeps a stricter Theme maximum below the advertised store cap', async () => {
+    const upload = vi.fn(stubAttachmentStore().upload);
+    const node = { ...makeNode(), presentation: { widgetConfig: { maxSizeMb: 1 } } } as LayoutNode;
+    render(<AttachmentStoreProvider value={{ upload, maxUploadBytes: 2 * 1024 * 1024 }}>
+      <FormspecWebAttachmentControl field={makeFieldHarness().field} node={node} />
+    </AttachmentStoreProvider>);
+    const input = container!.querySelector('input[type="file"]')!;
+    const file = await fileFromBytes(new Uint8Array(1), 'over-theme.pdf');
+    Object.defineProperty(file, 'size', { value: 1024 * 1024 + 1 });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    expect(upload).not.toHaveBeenCalled();
+    expect(container!.querySelector('[role="alert"]')?.textContent).toContain('1.0 MiB');
+  });
+
   it('applies a sane default maxSize so an over-limit file is rejected even without prop override (L-2)', async () => {
     // Default cap is 25 MiB. Build a File with size > default by stubbing size
     // (a real ArrayBuffer of that size would slow the test).
@@ -717,6 +750,75 @@ describe('FormspecWebAttachmentControl', () => {
     ]);
   });
 
+  it('refuses crop output that grows beyond the store cap and retains the original review image', async () => {
+    stubLoadedImage({ width: 10, height: 10 });
+    const pixels = new Uint8ClampedArray(10 * 10 * 4).fill(255);
+    for (const offset of [(2 * 10 + 2) * 4, (7 * 10 + 7) * 4]) pixels.fill(0, offset, offset + 3);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(), getImageData: () => ({ data: pixels }),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['big'], { type: 'image/png' })));
+    const upload = vi.fn(stubAttachmentStore().upload);
+    render(<AttachmentStoreProvider value={{ upload, maxUploadBytes: 2 }}>
+      <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode({ accept: 'image/*' })} />
+    </AttachmentStoreProvider>);
+    const input = container!.querySelector('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [await fileFromBytes(new Uint8Array(1), 'scan.png', 'image/png')], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    const originalSource = container!.querySelector('img')!.getAttribute('src');
+    const crop = Array.from(container!.querySelectorAll('button')).find(button => button.textContent === 'Detect page edges')!;
+    await act(async () => { crop.click(); await flush(); });
+    expect(container!.querySelector('.formspec-file-pending-status')!.textContent).toContain('upload limit of 2 B');
+    expect(container!.querySelector('img')!.getAttribute('src')).toBe(originalSource);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('rejects an original above a newly reduced store cap before a potentially smaller redaction', async () => {
+    stubLoadedImage();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
+    const toBlob = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['x'], { type: 'image/png' })));
+    const upload = vi.fn(stubAttachmentStore().upload);
+    const harness = makeFieldHarness();
+    const control = (cap: number) => <AttachmentStoreProvider value={{ upload, maxUploadBytes: cap }}>
+      <FormspecWebAttachmentControl field={harness.field} node={makeNode({ accept: 'image/*' })} />
+    </AttachmentStoreProvider>;
+    render(control(4));
+    const input = container!.querySelector('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [await fileFromBytes(new Uint8Array(3), 'scan.png', 'image/png')], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    act(() => root?.render(control(2)));
+    const button = (text: string) => Array.from(container!.querySelectorAll('button')).find(candidate => candidate.textContent === text)!;
+    act(() => button('Add redaction box').click());
+    await act(async () => { button('Upload image').click(); await flush(); });
+    expect(container!.querySelector('.formspec-file-pending-status')!.textContent).toContain('upload limit of 2 B');
+    expect(toBlob).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+    expect(harness.readValue()).toBeNull();
+  });
+
+  it('rejects final camera bytes above the advertised store cap before image review or upload', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(), getImageData: () => ({ data: new Uint8ClampedArray(96 * 96 * 4) }),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob([new Uint8Array(1025)], { type: 'image/jpeg' })));
+    const upload = vi.fn(stubAttachmentStore().upload);
+    try {
+      render(<AttachmentStoreProvider value={{ upload, maxUploadBytes: 1024 }}>
+        <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode({ accept: 'image/*' })} />
+      </AttachmentStoreProvider>);
+      const button = (text: string) => Array.from(container!.querySelectorAll('button')).find(candidate => candidate.textContent === text)!;
+      await act(async () => { button('Use camera').click(); await flush(); });
+      await act(async () => { button('Capture image').click(); await flush(); });
+      expect(container!.querySelector('.formspec-file-pending-status')!.textContent).toContain('upload limit of 1.0 KiB');
+      expect(container!.querySelector('.formspec-file-image-review')).toBeNull();
+      expect(upload).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(navigator, 'mediaDevices', { value: originalMediaDevices, configurable: true });
+    }
+  });
+
   it('revalidates the rendered image before upload after on-device redaction', async () => {
     vi.stubGlobal('Image', class {
       onload: (() => void) | null = null;
@@ -747,8 +849,8 @@ describe('FormspecWebAttachmentControl', () => {
     }));
     const harness = makeFieldHarness();
     render(
-      <AttachmentStoreProvider value={{ upload: uploadSpy }}>
-        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ accept: 'image/*', maxSize: 2 })} />
+      <AttachmentStoreProvider value={{ upload: uploadSpy, maxUploadBytes: 2 }}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ accept: 'image/*' })} />
       </AttachmentStoreProvider>,
     );
 

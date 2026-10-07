@@ -23,7 +23,7 @@ describe('local package preview with real submit', () => {
       if (url.endsWith('/runtime/forms/server-form-id')) return new Response(JSON.stringify({ definition: sampleFormDefinition }), { headers: { 'content-type': 'application/json' } });
       return new Response(JSON.stringify({ title: 'not-found', detail: 'active form version not found', status: 404 }), { status: 404, headers: { 'content-type': 'application/problem+json' } });
     });
-    const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'http://127.0.0.1:18080', tenantBinding });
+    const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'http://127.0.0.1:18080', tenantBinding, attachmentMaxUploadBytes: 1234 });
     expect(config.tenantBinding).toEqual(tenantBinding);
     const composition = createDefaultComposition(config, { initialDefinitionUrl: 'server-form-id', packageUrl: '/package.json' });
     expect(await composition.identityProvider.discover()).toEqual([]);
@@ -31,6 +31,7 @@ describe('local package preview with real submit', () => {
     expect(composition.instanceCapabilities.offlineSubmit).toBe('unavailable');
     expect(composition.instanceCapabilities.fileUpload).toBe('available');
     expect(composition.attachmentStore).toBeInstanceOf(HttpAttachmentStore);
+    expect(composition.attachmentStore.maxUploadBytes).toBe(1234);
     await expect(composition.draftStore.save({ formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version }, sampleFormResponse)).rejects.toMatchObject({ status: 404 });
     expect(requests[1]?.url).toBe('http://127.0.0.1:18080/runtime/forms/server-form-id/sessions/anonymous');
     expect(requests[0]?.headers.get('x-formspec-tenant-id')).toBe(tenantBinding.scope.tenant);

@@ -1,3 +1,4 @@
+import { validatedAttachmentMaxUploadBytes } from './attachment-policy.ts';
 import { getReferenceProfile } from '../profiles/profiles.ts';
 import type {
   FormspecWebConfig,
@@ -24,7 +25,7 @@ const runtimeEnvMap = {
     'VITE_FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
   ],
 } as const satisfies Record<
-  Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding'>,
+  Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding' | 'attachmentMaxUploadBytes'>,
   readonly string[]
 >;
 
@@ -42,12 +43,18 @@ export function readRuntimeConfig(): RuntimeConfig {
 export function runtimeConfigFromEnvRecord(env: RuntimeEnvRecord): RuntimeConfig {
   const config: RuntimeConfig = {};
   for (const [runtimeKey, envNames] of Object.entries(runtimeEnvMap) as Array<
-    [Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding'>, readonly string[]]
+    [Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding' | 'attachmentMaxUploadBytes'>, readonly string[]]
   >) {
     const value = firstPresent(env, envNames);
     if (value) {
       config[runtimeKey] = value;
     }
+  }
+  const attachmentLimit = firstPresent(env, [
+    'FORMSPEC_WEB_ATTACHMENT_MAX_UPLOAD_BYTES', 'VITE_FORMSPEC_WEB_ATTACHMENT_MAX_UPLOAD_BYTES',
+  ]);
+  if (attachmentLimit !== undefined) {
+    config.attachmentMaxUploadBytes = validatedAttachmentMaxUploadBytes(Number(attachmentLimit));
   }
   return config;
 }
@@ -68,6 +75,9 @@ function applyRuntimeOverrides(
   runtimeConfig: RuntimeConfig,
 ): FormspecWebConfig {
   const referenceAdapter = profileConfig.referenceAdapters?.formspecStack;
+  const runtimeMaxUploadBytes = validatedAttachmentMaxUploadBytes(runtimeConfig.attachmentMaxUploadBytes);
+  const maxUploadBytes = runtimeMaxUploadBytes
+    ?? validatedAttachmentMaxUploadBytes(referenceAdapter?.attachments?.maxUploadBytes);
   const oidc = applyOidcRuntimeOverrides(
     referenceAdapter?.oidc ?? profileConfig.identity.oidc,
     runtimeConfig,
@@ -83,12 +93,14 @@ function applyRuntimeOverrides(
     runtimeConfig.oidcIssuer ||
     runtimeConfig.oidcClientId ||
     runtimeConfig.oidcRedirectUri
-    || runtimeConfig.surfaceBundle;
+    || runtimeConfig.surfaceBundle
+    || maxUploadBytes !== undefined;
 
   const formspecStack =
     referenceAdapter || hasReferenceRuntimeOverride
       ? {
           ...referenceAdapter,
+          attachments: maxUploadBytes === undefined ? referenceAdapter?.attachments : { maxUploadBytes },
           tenantHeaderDialect: referenceAdapter?.tenantHeaderDialect ?? 'formspec',
           formspecServerUrl: runtimeConfig.formspecServerUrl ?? referenceAdapter?.formspecServerUrl,
           responseActionLedgerCapabilityUrl:
@@ -185,9 +197,10 @@ function identityMagicLink(identity: IdentityPolicyConfig): MagicLinkConfig | un
 }
 
 function compactRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
+  validatedAttachmentMaxUploadBytes(config.attachmentMaxUploadBytes);
   return Object.fromEntries(
     Object.entries(config).filter(([key, value]) => (
-      key === 'surfaceBundle' || key === 'tenantBinding'
+      key === 'attachmentMaxUploadBytes' ? value !== undefined : key === 'surfaceBundle' || key === 'tenantBinding'
         ? typeof value === 'object' && value !== null
         : typeof value === 'string' && value.length > 0
     )),
