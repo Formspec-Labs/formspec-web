@@ -5,6 +5,7 @@ import { createHttpAdapterCohort } from '../../../src/adapters/http/cohort.ts';
 import { createDraftBindingRegistry } from '../../../src/adapters/http/draft-binding-registry.ts';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../../src/adapter-conformance/fixtures.ts';
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
+import { DraftVersionConflictError } from '../../../src/ports/draft-store.ts';
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
 
 function tabStorage() {
@@ -21,6 +22,146 @@ const grant = { session_id: 'session', session_token: 'server-owner-token', subj
   form_id: 'conformance', expires_at: '2099-01-01T00:00:00Z' };
 
 describe('tab metadata anonymous draft resume', () => {
+  it('exposes only a copied immutable current key and retained version for recovery', () => {
+    const current = { ...key, formVersion: '0.1.3', partyRef: 'applicant' };
+    const registry = createDraftBindingRegistry();
+    registry.put({ ...current, formVersion: '0.1.2' }, { draftId: 'old', draftVersion: 1 });
+    let conflict: DraftVersionConflictError | undefined;
+    try { registry.get(current); } catch (error) {
+      expect(error).toBeInstanceOf(DraftVersionConflictError);
+      conflict = error as DraftVersionConflictError;
+    }
+    expect(conflict?.currentDraftKey).toEqual(current);
+    expect(conflict?.retainedVersion).toBe('0.1.2');
+    expect(Object.isFrozen(conflict?.currentDraftKey)).toBe(true);
+    current.partyRef = 'changed';
+    expect(conflict?.currentDraftKey.partyRef).toBe('applicant');
+  });
+
+  it('retains shared owner authority for another party through reload and clears it after the last scope', async () => {
+    const storage = tabStorage();
+    const applicant = { ...key, formVersion: '0.1.2', partyRef: 'applicant' };
+    const preparer = { ...applicant, partyRef: 'preparer' };
+    const response = { ...sampleFormResponse, definitionVersion: '0.1.2' };
+    let nextDraft = 0;
+    const { fetch, requests } = recordingFetch(request => {
+      if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
+      if (request.method === 'POST') return jsonResponse({ draft_id: `draft-${++nextDraft}`, draft_version: 1 });
+      return jsonResponse({ draft_id: request.url.split('/').at(-1), draft_version: 2,
+        draft_state: response.data, canonical_response: response });
+    });
+    const metadata = createBrowserDraftResumeMetadataStore(context, storage);
+    const build = () => {
+      const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
+      return createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
+    };
+    const initial = build();
+    await initial.draftStore.save(applicant, response);
+    await initial.draftStore.save(preparer, response);
+    const owner = metadata.read('grant:conformance');
+    await initial.draftStore.delete({ ...applicant, formVersion: '0.1.3' });
+    expect(metadata.read('grant:conformance')).toEqual(owner);
+    const reloaded = build();
+    await expect(reloaded.draftStore.load(applicant)).resolves.toBeUndefined();
+    await expect(reloaded.draftStore.load(preparer)).resolves.toEqual(response);
+    expect(requests.at(-1)?.headers.get('authorization')).toBe('Bearer server-owner-token');
+    expect(requests.filter(request => request.url.endsWith('/sessions/anonymous'))).toHaveLength(1);
+    await reloaded.draftStore.delete(preparer);
+    expect(storage.values.size).toBe(0);
+  });
+
+  it('drains late writes for the cleared party without losing another party or its shared grant', async () => {
+    const storage = tabStorage();
+    const applicant = { ...key, partyRef: 'applicant' };
+    const preparer = { ...key, partyRef: 'preparer' };
+    let release!: (response: Response) => void;
+    let delay = false;
+    const { fetch, requests } = recordingFetch(request => {
+      if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
+      if (delay && request.method === 'PATCH') return new Promise<Response>(resolve => { release = resolve; });
+      if (request.method === 'POST') return jsonResponse({ draft_id: `draft-${requests.length}`, draft_version: 1 });
+      return jsonResponse({ draft_id: request.url.split('/').at(-1), draft_version: 2,
+        draft_state: sampleFormResponse.data, canonical_response: sampleFormResponse });
+    });
+    const metadata = createBrowserDraftResumeMetadataStore(context, storage);
+    const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
+    const build = () => createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
+    const initial = build();
+    await initial.draftStore.save(applicant, sampleFormResponse);
+    await initial.draftStore.save(preparer, sampleFormResponse);
+    delay = true;
+    const save = initial.draftStore.save(applicant, sampleFormResponse);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const clear = initial.draftStore.delete(applicant);
+    release(jsonResponse({ draft_id: 'draft-2', draft_version: 2 }));
+    await save;
+    await clear;
+    const reloaded = build();
+    await expect(reloaded.draftStore.load(applicant)).resolves.toBeUndefined();
+    await expect(reloaded.draftStore.load(preparer)).resolves.toEqual(sampleFormResponse);
+    expect(metadata.read('grant:conformance')).toBeDefined();
+  });
+
+  it('preserves other subjects and forms through scoped clear and independent reload', async () => {
+    const storage = tabStorage();
+    const otherSubject = { ...key, subjectRef: 'authenticated:other' };
+    const otherForm = { ...key, formUrl: 'https://forms.example.test/other' };
+    const otherResponse = { ...sampleFormResponse, definitionUrl: otherForm.formUrl };
+    const responses = new Map<string, typeof sampleFormResponse>();
+    const { fetch } = recordingFetch(request => {
+      if (request.url.endsWith('/sessions/anonymous')) {
+        return jsonResponse(request.url.includes('/other/')
+          ? { ...grant, form_id: 'other', session_token: 'other-token' } : grant);
+      }
+      if (request.method === 'POST') {
+        const id = `draft-${responses.size}`;
+        responses.set(id, (request.body as { canonical_response: typeof sampleFormResponse }).canonical_response);
+        return jsonResponse({ draft_id: id, draft_version: 1 });
+      }
+      const id = request.url.split('/').at(-1)!;
+      const response = responses.get(id)!;
+      return jsonResponse({ draft_id: id, draft_version: 2,
+        draft_state: response.data, canonical_response: response });
+    });
+    const metadata = createBrowserDraftResumeMetadataStore(context, storage);
+    const build = () => {
+      const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
+      return createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
+    };
+    const initial = build();
+    await initial.draftStore.save(key, sampleFormResponse);
+    await initial.draftStore.save(otherSubject, sampleFormResponse);
+    await initial.draftStore.save(otherForm, otherResponse);
+    await initial.draftStore.delete(key);
+    expect(metadata.read('grant:conformance')).toBeDefined();
+    const resumed = build();
+    await expect(resumed.draftStore.load(otherSubject)).resolves.toEqual(sampleFormResponse);
+    await expect(resumed.draftStore.load(otherForm)).resolves.toEqual(otherResponse);
+    await resumed.draftStore.delete(otherSubject);
+    expect(metadata.read('grant:conformance')).toBeUndefined();
+    expect(metadata.read('grant:other')).toBeDefined();
+    await expect(build().draftStore.load(otherForm)).resolves.toEqual(otherResponse);
+  });
+
+  it('fences same-form issuance during preserving clear without cancelling another form issuance', async () => {
+    const storage = tabStorage();
+    const releases: Array<(response: Response) => void> = [];
+    const fetch = vi.fn(() => new Promise<Response>(resolve => { releases.push(resolve); }));
+    const metadata = createBrowserDraftResumeMetadataStore(context, storage);
+    const bridge = new AnonymousSessionBridge({ ...context, fetchImpl: fetch, resumeMetadata: metadata });
+    const first = bridge.sessionForForm(key.formUrl);
+    const other = bridge.sessionForForm('https://forms.example.test/other');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    const cleared = bridge.clearForForm(key.formUrl, key.formVersion, { preserveGrant: true });
+    releases[0](jsonResponse(grant));
+    releases[1](jsonResponse({ ...grant, form_id: 'other', session_token: 'other-owner' }));
+    await expect(first).rejects.toThrow(/cleared/);
+    await cleared;
+    await expect(other).resolves.toMatchObject({ formId: 'other', sessionToken: 'other-owner' });
+    expect(metadata.read('grant:conformance')).toBeUndefined();
+    expect(metadata.read('grant:other')).toBeDefined();
+  });
+
   it('refuses a newer package for a retained draft and restores the original version', async () => {
     const storage = tabStorage();
     const oldKey = { ...key, formVersion: '0.1.2' };
@@ -230,5 +371,33 @@ describe('tab metadata anonymous draft resume', () => {
       draft_state: sampleFormResponse.data, canonical_response: sampleFormResponse }));
     await expect(loaded).rejects.toThrow(/cleared while loading/);
     expect(storage.values.size).toBe(0);
+  });
+
+  it('refuses a late pre-clear 404 without deleting a replacement draft handle', async () => {
+    const storage = tabStorage();
+    let release!: (response: Response) => void;
+    let nextDraft = 0;
+    const { fetch, requests } = recordingFetch(request => {
+      if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
+      if (request.method === 'POST') return jsonResponse({ draft_id: `draft-${++nextDraft}`, draft_version: 1 });
+      if (request.url.endsWith('/draft-1')) return new Promise<Response>(resolve => { release = resolve; });
+      return jsonResponse({ draft_id: 'draft-2', draft_version: 2,
+        draft_state: sampleFormResponse.data, canonical_response: sampleFormResponse });
+    });
+    const metadata = createBrowserDraftResumeMetadataStore(context, storage);
+    const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
+    const build = () => createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
+    const cohort = build();
+    await cohort.draftStore.save(key, sampleFormResponse);
+    const staleLoad = cohort.draftStore.load(key);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    await cohort.draftStore.delete(key);
+    await cohort.draftStore.save(key, sampleFormResponse);
+    const retained = [...storage.values];
+    release(jsonResponse({ detail: 'gone' }, 404));
+    await expect(staleLoad).rejects.toThrow(/cleared while loading/);
+    expect([...storage.values]).toEqual(retained);
+    await expect(build().draftStore.load(key)).resolves.toEqual(sampleFormResponse);
+    expect(requests.at(-1)?.url).toContain('/draft-2');
   });
 });

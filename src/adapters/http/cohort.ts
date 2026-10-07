@@ -23,7 +23,7 @@ import type { IntakeHandoff } from '../../ports/submit-transport.ts';
 import type { AnonymousSessionBridge } from './anonymous-session.ts';
 import { createDraftBindingRegistry } from './draft-binding-registry.ts';
 import { HttpDraftStore } from './draft-store.ts';
-import type { FormIdResolver } from './form-id.ts';
+import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 import type { HttpClientConfig } from './http-client.ts';
 import { HttpSubmitTransport } from './submit-transport.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
@@ -51,6 +51,7 @@ export interface HttpAdapterCohort {
 }
 
 export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAdapterCohort {
+  const resolveFormId = config.formIdResolver ?? defaultFormIdResolver;
   const registry = createDraftBindingRegistry({ resumeMetadata: config.resumeMetadata, formIdResolver: config.formIdResolver });
   const { anonymousSessions, responseIdResolver, responseDataResolver, signingRequested, resumeMetadata: _resumeMetadata, ...httpConfig } = config;
   const draftStore = new HttpDraftStore({
@@ -60,7 +61,10 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       ? (key) => anonymousSessions.tokenForDraftKey(key, registry.get(key) !== undefined)
       : undefined,
     clearAnonymousSession: anonymousSessions
-      ? key => anonymousSessions.clearForForm(key.formUrl, key.formVersion)
+      ? key => anonymousSessions.clearForForm(key.formUrl, key.formVersion, {
+        preserveGrant: registry.entries().some(({ key: retained }) =>
+          resolveFormId(retained.formUrl, retained.formVersion) === resolveFormId(key.formUrl, key.formVersion)),
+      })
       : undefined,
   });
   const submitTransport = new HttpSubmitTransport({

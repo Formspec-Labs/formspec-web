@@ -26,6 +26,24 @@ export interface DraftKey {
   partyRef?: string;
 }
 
+/** A retained draft cannot be resumed against a different immutable form version. */
+export class DraftVersionConflictError extends Error {
+  readonly currentDraftKey: Readonly<DraftKey>;
+  readonly retainedVersion: string | undefined;
+
+  constructor(currentDraftKey: DraftKey, retainedVersion?: string) {
+    super('A saved draft belongs to another form version. Open its original package or explicitly clear the saved draft before starting this version.');
+    this.name = 'DraftVersionConflictError';
+    this.currentDraftKey = Object.freeze({
+      formUrl: currentDraftKey.formUrl,
+      ...(currentDraftKey.formVersion !== undefined ? { formVersion: currentDraftKey.formVersion } : {}),
+      ...(currentDraftKey.subjectRef !== undefined ? { subjectRef: currentDraftKey.subjectRef } : {}),
+      ...(currentDraftKey.partyRef !== undefined ? { partyRef: currentDraftKey.partyRef } : {}),
+    });
+    this.retainedVersion = retainedVersion;
+  }
+}
+
 export interface DraftStore {
   load(key: DraftKey): Promise<FormResponse | undefined>;
   save(key: DraftKey, response: FormResponse): Promise<void>;

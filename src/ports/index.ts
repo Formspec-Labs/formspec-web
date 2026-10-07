@@ -17,6 +17,7 @@ export type {
   LocaleDocument,
 } from './definition-source.ts';
 export type { DraftStore, DraftKey, FormResponse } from './draft-store.ts';
+export { DraftVersionConflictError } from './draft-store.ts';
 export type { SubmitTransport, IntakeHandoff, SubmitConfirmation } from './submit-transport.ts';
 export type {
   IdentityProvider,

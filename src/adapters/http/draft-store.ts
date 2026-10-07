@@ -68,6 +68,7 @@ export class HttpDraftStore implements DraftStore {
       return response;
     } catch (error) {
       if (error instanceof HttpAdapterError && error.status === 404) {
+        if (generation !== this.generation) throw new Error('Draft state was cleared while loading');
         this.bindings.delete(key);
         return undefined;
       }

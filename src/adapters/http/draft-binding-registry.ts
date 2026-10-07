@@ -8,6 +8,7 @@
  */
 
 import type { DraftKey, FormResponse } from '../../ports/draft-store.ts';
+import { DraftVersionConflictError } from '../../ports/draft-store.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 
@@ -76,7 +77,7 @@ export function createDraftBindingRegistry(options: {
       for (const retained of map.values()) {
         if (sameScope(retained.key, key)
           && (retained.key.formVersion ?? null) !== (key.formVersion ?? null)) {
-          throw new Error('A saved draft belongs to another form version. Open its original package or explicitly clear the saved draft before starting this version.');
+          throw new DraftVersionConflictError(key, retained.key.formVersion);
         }
       }
       return undefined;

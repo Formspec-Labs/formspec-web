@@ -47,7 +47,7 @@ export class AnonymousSessionBridge {
   private readonly sessions = new Map<string, SessionSlot>();
   private readonly resumeMetadata?: DraftResumeMetadataStore;
   private readonly validateFormContext?: AnonymousSessionBridgeConfig['validateFormContext'];
-  private generation = 0;
+  private readonly generations = new Map<string, number>();
 
   constructor(config: AnonymousSessionBridgeConfig) {
     this.client = new HttpClient(config);
@@ -57,10 +57,10 @@ export class AnonymousSessionBridge {
   }
 
   async sessionForForm(formUrl: string, version?: string, requireExisting = false): Promise<AnonymousSession> {
-    const generation = this.generation;
-    await this.validateFormContext?.(formUrl, version);
-    if (generation !== this.generation) throw new Error('Anonymous session context was cleared');
     const formId = this.formIdResolver(formUrl, version);
+    const generation = this.generations.get(formId) ?? 0;
+    await this.validateFormContext?.(formUrl, version);
+    if (generation !== (this.generations.get(formId) ?? 0)) throw new Error('Anonymous session context was cleared');
     let slot = this.sessions.get(formId);
     if (!slot) {
       const saved = this.resumeMetadata?.read(`grant:${formId}`);
@@ -80,7 +80,7 @@ export class AnonymousSessionBridge {
     if (requireExisting) throw new Error('The saved draft has no anonymous owner grant. Clear this computer before starting again.');
 
     slot.inFlight = this.issueSession(formId).then(session => {
-      if (generation !== this.generation) throw new Error('Anonymous session was cleared while it was being issued');
+      if (generation !== (this.generations.get(formId) ?? 0)) throw new Error('Anonymous session was cleared while it was being issued');
       this.resumeMetadata?.write(`grant:${formId}`, session);
       return session;
     });
@@ -101,11 +101,12 @@ export class AnonymousSessionBridge {
     return session.sessionToken;
   }
 
-  async clearForForm(formUrl: string, version?: string): Promise<void> {
-    this.generation += 1;
+  async clearForForm(formUrl: string, version?: string, options: { preserveGrant?: boolean } = {}): Promise<void> {
     const formId = this.formIdResolver(formUrl, version);
+    this.generations.set(formId, (this.generations.get(formId) ?? 0) + 1);
     const pending = this.sessions.get(formId)?.inFlight;
     if (pending) await pending.catch(() => {});
+    if (options.preserveGrant) return;
     this.resumeMetadata?.remove(`grant:${formId}`);
     this.sessions.delete(formId);
   }
