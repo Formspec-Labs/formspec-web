@@ -45,3 +45,5 @@ export { Tabs } from './defaults/layout/tabs';
 export { ValidationSummary } from './validation-summary';
 export type { ValidationSummaryProps } from './validation-summary';
 export declare const defaultTheme: import("@formspec-org/layout").ThemeDocument;
+export { useChromeText } from './use-chrome-text';
+export type { ChromeText } from './use-chrome-text';

@@ -4,7 +4,7 @@
  * key the schema's `ChromeStringKey` enum admits — kept one-for-one by
  * `packages/formspec-layout/tests/ui-strings.test.ts`, which reads `schemas/locale.schema.json` directly.
  * A template's `{{$name}}` placeholders are renderer-supplied literal parameters (label, index, total,
- * count, max, status, reason, message) filled by {@link fillUiParams} — never FEL, never the form scope.
+ * count, max, status, reason, message, filename, limit, percent) filled by {@link fillUiParams} — never FEL, never the form scope.
  */
 export declare const UI_STRINGS: {
     readonly 'select.placeholder': "Select…";
@@ -64,6 +64,45 @@ export declare const UI_STRINGS: {
     readonly 'fileUpload.dropzone': "Drop files here or click to browse";
     readonly 'fileUpload.dropzoneKeyboard': "Drop files here or press Enter to browse";
     readonly 'fileUpload.browse': "Upload a file";
+    readonly 'fileUpload.attachedList': "Files you have attached";
+    readonly 'fileUpload.pendingList': "Pending file activity";
+    readonly 'fileUpload.remove': "Remove {{$filename}}";
+    readonly 'fileUpload.dismissError': "Dismiss error for {{$filename}}";
+    readonly 'fileUpload.uploading': "Uploading...";
+    readonly 'fileUpload.uploadProgress': "Uploading {{$percent}}%";
+    readonly 'fileUpload.deferredLibrary': "Saving to your document library is not yet available here.";
+    readonly 'fileUpload.cameraCapture': "Camera capture";
+    readonly 'fileUpload.cameraPreview': "Camera preview";
+    readonly 'fileUpload.captureImage': "Capture image";
+    readonly 'fileUpload.closeCamera': "Close camera";
+    readonly 'fileUpload.useCamera': "Use camera";
+    readonly 'fileUpload.cameraUnavailable': "Camera capture is not available in this browser.";
+    readonly 'fileUpload.cameraOpenFailed': "We could not open the camera. Choose a file instead.";
+    readonly 'fileUpload.cameraCaptureFailed': "We could not capture an image. Choose a file instead.";
+    readonly 'fileUpload.imagesWaitingOne': "{{$count}} image waiting for review.";
+    readonly 'fileUpload.imagesWaitingMany': "{{$count}} images waiting for review.";
+    readonly 'fileUpload.imageReview': "Image review before upload";
+    readonly 'fileUpload.legibilityWarning': "This image may be hard to read. Check focus, lighting, and glare before uploading.";
+    readonly 'fileUpload.redactionSurface': "Draw boxes over information you want to redact";
+    readonly 'fileUpload.previewImage': "Preview before upload";
+    readonly 'fileUpload.addRedaction': "Add redaction box";
+    readonly 'fileUpload.detectPageEdges': "Detect page edges";
+    readonly 'fileUpload.clearRedactions': "Clear redactions";
+    readonly 'fileUpload.uploadImage': "Upload image";
+    readonly 'fileUpload.cancel': "Cancel";
+    readonly 'fileUpload.browseMultiple': "Upload files";
+    readonly 'fileUpload.dropzoneMultiple': "Drop files here or click to browse";
+    readonly 'fileUpload.attachedOne': "{{$count}} file attached";
+    readonly 'fileUpload.attachedMany': "{{$count}} files attached";
+    readonly 'fileUpload.fileTooLarge': "\"{{$filename}}\" is larger than the upload limit of {{$limit}}.";
+    readonly 'fileUpload.errorTooLarge': "That file is larger than the upload limit. Try a smaller file.";
+    readonly 'fileUpload.errorMimeRejected': "That file type is not accepted here.";
+    readonly 'fileUpload.errorNetwork': "We could not reach the upload service. Check your connection and try again.";
+    readonly 'fileUpload.errorUnavailable': "File upload is not available on this site.";
+    readonly 'fileUpload.errorUnknown': "We could not upload your file. Try again.";
+    readonly 'fileUpload.imagePrepareFailed': "We could not prepare that image. Choose the file again.";
+    readonly 'fileUpload.edgeCleanupFailed': "We could not clean up the image edges. You can still upload it.";
+    readonly 'fileUpload.singleFileOnly': "Only one file can be uploaded here.";
     readonly 'validationSummary.fixOne': "Please fix this error before continuing:";
     readonly 'validationSummary.fixMany': "Please fix these {{$count}} errors before continuing:";
     readonly 'validationSummary.reviewOne': "Please review this warning before continuing:";
@@ -86,6 +125,19 @@ export declare const UI_STRINGS: {
     readonly 'screener.submit': "Check Eligibility";
     readonly 'screener.answerOne': "Please answer at least one question";
     readonly 'assist.filled': "{{$label}} filled by your assistant";
+    readonly 'localPreview.preview': "Local preview";
+    readonly 'localPreview.draftRestored': "Draft restored";
+    readonly 'form.settings': "Form settings";
+    readonly 'form.language': "Language";
+    readonly 'form.languageSaveFailed': "The language change could not be saved. Try again.";
+    readonly 'receipt.answersReceived': "Answers received";
+    readonly 'receipt.submissionId': "Submission ID";
+    readonly 'receipt.pendingFilingAndSigning': "Case filing and signing are not yet confirmed.";
+    readonly 'receipt.keepRecord': "Keep this record";
+    readonly 'receipt.printInstruction': "Print this confirmation, then clear this computer before leaving.";
+    readonly 'receipt.print': "Print confirmation";
+    readonly 'receipt.clear': "Clear this computer";
+    readonly 'receipt.clearing': "Clearing...";
 };
 /** Closed suffix set for `$ui.<ChromeStringKey>` (Locale spec §3.1.10), one-for-one with the schema enum. */
 export type ChromeStringKey = keyof typeof UI_STRINGS;

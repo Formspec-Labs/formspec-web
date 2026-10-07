@@ -27,7 +27,8 @@ const maxVendoredDistBytes = 100 * 1024;
 
 // `--write` refreshes the vendored copies from fresh sibling builds, then runs
 // the same verification. Positional arguments narrow the run to those
-// `vendor/<package>` directories (`vendor/formspec-schemas` for the schemas).
+// `vendor/<package>` directories, `vendor/formspec-schemas` for all schemas,
+// or an allowlisted `vendor/formspec-schemas/<file>` for one schema.
 const args = process.argv.slice(2);
 const write = args.includes('--write');
 const only = args.filter((arg) => !arg.startsWith('--'));
@@ -161,8 +162,10 @@ if (!existsSync(formspecRoot) || !existsSync(integrityRoot)) {
   throw new Error('Surface bundle upstream sibling checkout is missing.');
 }
 const schemaRoot = join(root, 'vendor/formspec-schemas');
+const schemaSelectors = schemaFiles.map((file) => `vendor/formspec-schemas/${file}`);
 const unknownPackages = only.filter(
   (local) => local !== 'vendor/formspec-schemas'
+    && !schemaSelectors.includes(local)
     && !packages.some((pkg) => pkg.local === local),
 );
 if (unknownPackages.length > 0) {
@@ -180,17 +183,30 @@ if (!/\[workspace\.package\][\s\S]*?license\s*=\s*"Apache-2\.0"/u.test(integrity
   throw new Error('integrity-stack workspace does not declare Apache-2.0.');
 }
 
-const selectSchemas = only.length === 0 || only.includes('vendor/formspec-schemas');
-if (write && selectSchemas) {
-  const sums = schemaFiles.map((file) => {
-    copyPath(join(formspecRoot, 'schemas', file), join(schemaRoot, file));
-    return `${sha256(join(schemaRoot, file))}  ${file}\n`;
+const selectAllSchemas = only.length === 0 || only.includes('vendor/formspec-schemas');
+const selectedSchemaFiles = selectAllSchemas ? schemaFiles : schemaFiles.filter(
+  (file) => only.includes(`vendor/formspec-schemas/${file}`),
+);
+if (write && selectedSchemaFiles.length > 0) {
+  const sumLines = selectAllSchemas ? [] : readFileSync(join(schemaRoot, 'SHA256SUMS'), 'utf8').split('\n');
+  // Validate selected checksum slots before copying. Leave every unselected pin byte-for-byte intact.
+  const slots = selectedSchemaFiles.map((file) => {
+    if (selectAllSchemas) return -1;
+    const matches = sumLines.flatMap((line, index) => line.endsWith(`  ${file}`) ? [index] : []);
+    if (matches.length !== 1) throw new Error(`SHA256SUMS must contain one entry for ${file}.`);
+    return matches[0];
   });
-  writeFileSync(join(schemaRoot, 'SHA256SUMS'), sums.join(''));
+  for (const [index, file] of selectedSchemaFiles.entries()) {
+    copyPath(join(formspecRoot, 'schemas', file), join(schemaRoot, file));
+    const entry = `${sha256(join(schemaRoot, file))}  ${file}`;
+    if (selectAllSchemas) sumLines.push(entry);
+    else sumLines[slots[index]] = entry;
+  }
+  writeFileSync(join(schemaRoot, 'SHA256SUMS'), selectAllSchemas ? `${sumLines.join('\n')}\n` : sumLines.join('\n'));
 }
 const schemaSums = readFileSync(join(schemaRoot, 'SHA256SUMS'), 'utf8');
 let schemaBytes = 0;
-for (const file of selectSchemas ? schemaFiles : []) {
+for (const file of selectedSchemaFiles) {
   const local = join(schemaRoot, file);
   const source = join(formspecRoot, 'schemas', file);
   const localHash = sha256(local);
@@ -275,7 +291,7 @@ if (sourceBudgetBytes > maxVendoredDistBytes) {
 }
 
 console.log(
-  `surface bundle vendor ${write ? 'refresh' : 'check'} passed: ${selectedPackages.length} Apache-2.0 package(s), ${selectSchemas ? schemaFiles.length : 0} canonical schema(s), ${sourceBudgetBytes} verification bytes, ${schemaBytes} schema bytes, ${totalBytes} total built bytes`,
+  `surface bundle vendor ${write ? 'refresh' : 'check'} passed: ${selectedPackages.length} Apache-2.0 package(s), ${selectedSchemaFiles.length} canonical schema(s), ${sourceBudgetBytes} verification bytes, ${schemaBytes} schema bytes, ${totalBytes} total built bytes`,
 );
 
 function readJson(path) {

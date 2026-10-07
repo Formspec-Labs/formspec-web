@@ -15,3 +15,4 @@ export { useReplay } from './use-replay';
 export { useFocusField } from './use-focus-field';
 export { useRuntimeContext } from './use-runtime-context';
 export { useSemanticFieldControl } from './use-semantic-field-control';
+export { useChromeText } from './use-chrome-text';
