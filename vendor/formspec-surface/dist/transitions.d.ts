@@ -149,7 +149,7 @@ export declare function responseActionsDocumentForDefinition<TDocument extends R
  *    working page as dead.
  * 2. **The check follows the controls this binding actually places.**
  *    `FormspecForm` auto-places each uniquely identified Action with a literal
- *    structured label from the one response-scoped document targeting the
+ *    or Locale-reference label from the one response-scoped document targeting the
  *    rendered Definition. Action ids are always exact; a closed-core intent is
  *    credited only when exactly one loaded Action publishes it.
  *

@@ -23,6 +23,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * embedded title sat at the same rank as its host while its content sat one
  * deeper. {@link SurfaceSlotFrame} is both paths now.
  */
+import { selectDataSourceRevisions } from './data-source-revision.js';
 import { useCallback, useEffect, useMemo, useRef, useState, } from 'react';
 import { createFormEngine, createMappingEngine, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
 import { FormspecForm } from '@formspec-org/react';
@@ -166,7 +167,7 @@ export function SurfaceSlotFrame(props) {
         (plan.slotType !== 'experience-unit' || showExperienceNeeds);
     return (_jsxs("section", { className: "fs-surface-slot", "data-slot": plan.slotId, "data-slot-type": plan.slotType, ...needTraceAttributes(plan.needAnchors), ...(showsAuthoredTitle ? { 'aria-label': plan.title } : {}), children: [showsAuthoredTitle && !rendersOwnHeading(plan) && (_jsx(Heading, { level: plan.headingBaseLevel, className: "fs-surface-slot__title", children: plan.title })), _jsx(SurfaceSlot, { ...props })] }));
 }
-export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, }) {
+export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, }) {
     const subjectPrefix = surfaceSemanticOutputSubjectRef(route.routeId, plan.slotId);
     const slotSemanticOutputScope = semanticOutputScope && subjectPrefix
         ? { ...semanticOutputScope, subjectPrefix }
@@ -211,7 +212,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, aut
                 return (_jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') }));
             }
             if (plan.initialData?.status === 'ready') {
-                return (_jsx(DefinitionFormDataSlot, { input: renderInput, initialDataPlan: plan.initialData, strings: strings, dataSourceLoader: dataSourceLoader, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }));
+                return (_jsx(DefinitionFormDataSlot, { input: renderInput, initialDataPlan: plan.initialData, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }));
             }
             return renderDefinitionForm
                 ? renderDefinitionForm(renderInput)
@@ -236,7 +237,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, aut
             // A resolved-but-undeclared widget still renders — the host supplied a
             // component. `WIDGET-UNDECLARED` is already in the plan's diagnostics
             // (§3.3): a shell MAY render it, and MUST say it did.
-            return (_jsx(SurfaceWidgetSlot, { plan: plan, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, responseActionsDocuments: responseActionsDocuments ?? [], transitions: transitions ?? [], widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onAdvance: onAdvance, semanticOutputScope: slotSemanticOutputScope }));
+            return (_jsx(SurfaceWidgetSlot, { plan: plan, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, responseActionsDocuments: responseActionsDocuments ?? [], transitions: transitions ?? [], widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, onAdvance: onAdvance, semanticOutputScope: slotSemanticOutputScope }));
         }
         case 'static-content': {
             const { content } = plan;
@@ -255,7 +256,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, aut
             // the host's grant — an embedded route cannot restore branding the host
             // refuses. Headings step down a level, which `planRoute` already decided;
             // this renders the level it was handed and re-derives nothing.
-            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, onAdvance: onAdvance }, child.slotId))) }));
+            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, onAdvance: onAdvance }, child.slotId))) }));
         }
         case 'unknown':
             return _jsx(UnavailableSlot, { children: strings('slotUnavailableStaticContent') });
@@ -309,7 +310,7 @@ function executeDefinitionFormMapping({ mapping, value, }) {
  * Load before first mount. A later generation may refresh a clean form, but a
  * bubbled form edit permanently protects the mounted engine from late data.
  */
-function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoader, authorizeDataSource, validateDataSourcePayload, runtimeGeneration, onRuntimeDiagnosticsChange, renderDefinitionForm, semanticOutputScope, }) {
+function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, runtimeGeneration, onRuntimeDiagnosticsChange, renderDefinitionForm, semanticOutputScope, }) {
     const [delivery, setDelivery] = useState({
         status: 'loading',
     });
@@ -317,11 +318,26 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
     const activeGeneration = useRef(runtimeGeneration);
     activeGeneration.current = runtimeGeneration;
     const diagnosticScope = `definition-form-data:${runtimeGeneration}:${input.plan.slotId}`;
+    const sourceRevisions = selectDataSourceRevisions([{
+            descriptor: initialDataPlan.descriptor,
+            context: { surfaceId: input.route.surfaceId, surfaceRef: input.route.surfaceRef,
+                routeId: input.route.routeId, slotId: input.plan.slotId,
+                definitionRef: input.plan.definitionRef, params: input.route.params,
+                sessionGeneration: runtimeGeneration },
+        }], dataSourceRevision);
     useEffect(() => {
         let current = true;
         const requestedGeneration = runtimeGeneration;
         setDelivery((previous) => previous.status === 'ready' ? previous : { status: 'loading' });
         onRuntimeDiagnosticsChange?.(diagnosticScope, []);
+        if (sourceRevisions.failures[0]) {
+            const diagnostic = surfaceDiagnostic('DEFINITION-FORM-DATA-UNAVAILABLE', 'The host could not select an initial-data revision.', { surfaceId: input.route.surfaceId, routeId: input.route.routeId, slotId: input.plan.slotId }, { catalogRef: sourceRevisions.failures[0].descriptor.catalogRef,
+                sourceRef: sourceRevisions.failures[0].descriptor.sourceRef });
+            onRuntimeDiagnosticsChange?.(diagnosticScope, [diagnostic]);
+            setDelivery(previous => previous.status === 'ready' && dirty.current ? previous
+                : { status: 'unavailable', reason: 'unavailable', diagnostics: [diagnostic] });
+            return () => { current = false; onRuntimeDiagnosticsChange?.(diagnosticScope, []); };
+        }
         void loadDefinitionFormInitialData({
             plan: initialDataPlan,
             definition: input.plan.definition,
@@ -366,6 +382,7 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
     }, [
         authorizeDataSource,
         dataSourceLoader,
+        sourceRevisions.key,
         diagnosticScope,
         initialDataPlan,
         input.plan.definition,
@@ -473,7 +490,7 @@ const READY_WITH_NO_DATA = {
     degradedInputs: [],
     diagnostics: [],
 };
-function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, authorizeDataSource, validateDataSourcePayload, responseActionsDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, onAdvance, semanticOutputScope, }) {
+function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, responseActionsDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, onAdvance, semanticOutputScope, }) {
     const [delivery, setDelivery] = useState(plan.dataInputs.length === 0 ? READY_WITH_NO_DATA : { status: 'loading' });
     const [dataLoadAttempt, setDataLoadAttempt] = useState(0);
     const responseContexts = useRef(undefined);
@@ -491,6 +508,11 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, auth
     const actionCoordinator = widgetActionCoordinator ?? localActionCoordinator.current;
     const navigatedInvocations = useRef(new Set());
     const dataDiagnosticScope = `widget-data:${runtimeGeneration}:${plan.slotId}`;
+    const sourceRevisions = selectDataSourceRevisions(plan.dataInputs.flatMap(input => input.status === 'ready' ? [{ descriptor: input.descriptor,
+            context: { surfaceId: route.surfaceId, surfaceRef: route.surfaceRef,
+                routeId: route.routeId, slotId: plan.slotId, moduleId: plan.key.moduleId,
+                widgetName: plan.key.widgetName, params: route.params,
+                sessionGeneration: runtimeGeneration } }] : []), dataSourceRevision);
     useEffect(() => {
         let current = true;
         responseContexts.current = undefined;
@@ -498,7 +520,12 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, auth
             setDelivery({ status: 'loading' });
         onRuntimeDiagnosticsChange?.(dataDiagnosticScope, []);
         void loadWidgetDataInputs({
-            inputs: plan.dataInputs,
+            inputs: plan.dataInputs.map(input => input.status === 'ready'
+                && sourceRevisions.failures.some(failure => failure.descriptor.catalogRef === input.descriptor.catalogRef
+                    && failure.descriptor.sourceRef === input.descriptor.sourceRef)
+                ? { ...input, status: 'unavailable',
+                    reason: `The host could not select a revision for ${input.descriptor.catalogRef} ${input.descriptor.sourceRef}.` }
+                : input),
             context: {
                 surfaceId: route.surfaceId,
                 surfaceRef: route.surfaceRef,
@@ -568,6 +595,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, auth
         authorizeDataSource,
         dataDiagnosticScope,
         dataSourceLoader,
+        sourceRevisions.key,
         onRuntimeDiagnosticsChange,
         plan.dataInputs,
         plan.actionOutputs,

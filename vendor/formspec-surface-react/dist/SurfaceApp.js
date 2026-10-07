@@ -1,47 +1,4 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-/**
- * @filedesc `SurfaceApp` — a bundle's Surfaces, running.
- *
- * This is the piece that did not exist. Every `SurfaceDocument` consumer in the
- * stack was authoring-side (`studio-core`'s kernel, the MCP wireframe verbs) or
- * validation-side (the app-graph validator, `formspec-lint`); the one
- * rendering-adjacent consumer never opened a Surface document at all. So the
- * closed slot taxonomy, the route-class vocabulary, the route graph and the
- * transition triggers were authored, enforced, and read by nothing at render
- * time.
- *
- * ## Every diagnostic reaches the host, whatever stage produced it
- *
- * `surface-shell-spec.md` §7.1. This component previously aggregated only the
- * bundle, composition, registry and theme-construction diagnostics; the route
- * plan and the transition plan were computed inside a child and their
- * diagnostics **discarded**, so `SLOT-BINDING-INCOMPLETE`,
- * `STATIC-IMAGE-NO-ALT`, `EMBED-ROUTE-*`, `WIDGET-*`, per-slot
- * `BUNDLE-DOCUMENT-MISSING` and every `TRANSITION-UNFIREABLE` reached the
- * screen and never `onDiagnostics`. Per-route stages produce most of the code
- * set, so that delivered the minority of it.
- *
- * The fix is structural rather than an extra call: `planMatchedRoute` composes
- * the grant, the slot plan and the transition plan in the core and returns one
- * diagnostic list, and this component unions it with the app-construction list
- * and the route-resolution list in one memo. There is no second place a
- * diagnostic could be computed and dropped.
- *
- * ## Composition order, and why the theme authority is built first
- *
- * {@link useSurfaceApp} builds the theme authority **once, from the bundle**, and
- * hands back a `grantFor` that is the only route into the tenant Theme. The
- * tenant Theme is never a prop of anything below this line, so a slot renderer
- * cannot reach it by accident and a future prop cannot restore it by mistake.
- * That is the structural half of THEME-ROUTE-CLASS.
- *
- * ## Navigation is a port, not a router
- *
- * `location` and `onNavigate` are props. This package ships
- * {@link useBrowserLocation} for hosts that want the address bar, and stays out
- * of the way of hosts that already have a router — which every host of any size
- * does. A shell that owned history would be a shell that could not be embedded.
- */
 import { deriveSurfaceRuntimeGeneration } from "./runtime-generation.js";
 import { useCallback, useEffect, useMemo, useRef, useState, } from "react";
 import { composeSurfaceApp, createThemeAuthority, createWidgetRegistry, documentRootContaminationDiagnostic, flattenRegistryEntries, generationNeedAnchors, matchRoute, mergeNeedAnchors, planMatchedRoute, resolveSurfaceStrings, routeHref, } from "@formspec-org/surface";
@@ -285,7 +242,7 @@ export function SurfaceApp(props) {
             document.title = previous;
         };
     }, [bundle.title, setDocumentTitle]);
-    return (_jsxs("div", { className: "fs-surface-app", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: [(props.header !== undefined || bundle.title) && (_jsx("header", { className: "fs-surface-header", children: _jsx("div", { className: "fs-surface-header__inner", children: props.header ?? (_jsx("span", { className: "fs-surface-brand", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: bundle.title })) }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: props.routeParams, onNavigate: onNavigate, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel") }), _jsx("main", { className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, strings: strings, dataSourceLoader: props.dataSourceLoader, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, onAdvance: (transition, outcome) => {
+    return (_jsxs("div", { className: "fs-surface-app", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: [(props.header !== undefined || bundle.title) && (_jsx("header", { className: "fs-surface-header", children: _jsx("div", { className: "fs-surface-header__inner", children: props.header ?? (_jsx("span", { className: "fs-surface-brand", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: bundle.title })) }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: props.routeParams, onNavigate: onNavigate, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel") }), _jsx("main", { className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, strings: strings, dataSourceLoader: props.dataSourceLoader, dataSourceRevision: props.dataSourceRevision, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, onAdvance: (transition, outcome) => {
                                 // Reached only after the action reported success. The shell
                                 // navigates; it never decides that the action succeeded.
                                 // Defensive final boundary. Planning withholds collision-targeted

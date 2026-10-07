@@ -19,3 +19,4 @@ export { CeremonyFrame, CEREMONY_FRAME_DELIVERY_CONTRACT_ID, CEREMONY_FRAME_REND
 export { executeBrowserResourceEffect, resolveBrowserResourceCommand, type BrowserDownloadResource, type BrowserOpenResource, type BrowserResourceCommand, type BrowserResourceEffectInput, type BrowserResourcePorts, type BrowserResourceResolution, type BrowserServiceDownloadResource, type BrowserServiceResponse, } from './browser-resource.js';
 export * from './widgets/response-review.js';
 export { deriveSurfaceRuntimeGeneration, type SurfaceRuntimeGenerationInput } from "./runtime-generation.js";
+export type { DataSourceRevisionSelector } from './data-source-revision.js';

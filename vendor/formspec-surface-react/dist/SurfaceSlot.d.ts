@@ -22,6 +22,7 @@
  * embedded title sat at the same rank as its host while its content sat one
  * deeper. {@link SurfaceSlotFrame} is both paths now.
  */
+import { type DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from 'react';
 import type { ResponseAction, ResponseActionInvocationResult, ResponseActionInvoker, ResponseActionsDocument as ReactResponseActionsDocument, SemanticArtifactIdentity, SemanticControlRegistry, SemanticControlScope, SemanticResponseBinding, SubmitResult } from '@formspec-org/react';
 import { type FormDefinition, type OntologyDocument, type ReferencesDocument, type ResponseActionsDocument as GeneratedResponseActionsDocument } from '@formspec-org/types';
@@ -102,6 +103,8 @@ export interface SurfaceSlotProps {
     /** The shell's own person-facing strings, host-overridable (§3.0). */
     strings: SurfaceStrings;
     dataSourceLoader?: DataSourceLoader | undefined;
+    /** Pure per-source scheduling hints; evaluated on host renders, never authority. */
+    dataSourceRevision?: DataSourceRevisionSelector | undefined;
     authorizeDataSource?: DataSourceAuthorizer | undefined;
     validateDataSourcePayload?: DataSourcePayloadValidator | undefined;
     /** Shows the design rationale on `experience-unit` slots. Off for respondents. */
@@ -163,6 +166,6 @@ export declare function rendersOwnHeading(plan: SlotPlan<SurfaceWidget>): boolea
  * landmark — which is the honest shape for a slot the author did not name.
  */
 export declare function SurfaceSlotFrame(props: SurfaceSlotProps): import("react/jsx-runtime").JSX.Element | null;
-export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, }: SurfaceSlotProps): ReactNode;
+export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, }: SurfaceSlotProps): ReactNode;
 export declare function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, }: SurfaceDefinitionFormRenderInput): ReactNode;
 export { nextLevel };

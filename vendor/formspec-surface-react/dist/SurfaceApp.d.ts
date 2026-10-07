@@ -1,3 +1,47 @@
+/**
+ * @filedesc `SurfaceApp` — a bundle's Surfaces, running.
+ *
+ * This is the piece that did not exist. Every `SurfaceDocument` consumer in the
+ * stack was authoring-side (`studio-core`'s kernel, the MCP wireframe verbs) or
+ * validation-side (the app-graph validator, `formspec-lint`); the one
+ * rendering-adjacent consumer never opened a Surface document at all. So the
+ * closed slot taxonomy, the route-class vocabulary, the route graph and the
+ * transition triggers were authored, enforced, and read by nothing at render
+ * time.
+ *
+ * ## Every diagnostic reaches the host, whatever stage produced it
+ *
+ * `surface-shell-spec.md` §7.1. This component previously aggregated only the
+ * bundle, composition, registry and theme-construction diagnostics; the route
+ * plan and the transition plan were computed inside a child and their
+ * diagnostics **discarded**, so `SLOT-BINDING-INCOMPLETE`,
+ * `STATIC-IMAGE-NO-ALT`, `EMBED-ROUTE-*`, `WIDGET-*`, per-slot
+ * `BUNDLE-DOCUMENT-MISSING` and every `TRANSITION-UNFIREABLE` reached the
+ * screen and never `onDiagnostics`. Per-route stages produce most of the code
+ * set, so that delivered the minority of it.
+ *
+ * The fix is structural rather than an extra call: `planMatchedRoute` composes
+ * the grant, the slot plan and the transition plan in the core and returns one
+ * diagnostic list, and this component unions it with the app-construction list
+ * and the route-resolution list in one memo. There is no second place a
+ * diagnostic could be computed and dropped.
+ *
+ * ## Composition order, and why the theme authority is built first
+ *
+ * {@link useSurfaceApp} builds the theme authority **once, from the bundle**, and
+ * hands back a `grantFor` that is the only route into the tenant Theme. The
+ * tenant Theme is never a prop of anything below this line, so a slot renderer
+ * cannot reach it by accident and a future prop cannot restore it by mistake.
+ * That is the structural half of THEME-ROUTE-CLASS.
+ *
+ * ## Navigation is a port, not a router
+ *
+ * `location` and `onNavigate` are props. This package ships
+ * {@link useBrowserLocation} for hosts that want the address bar, and stays out
+ * of the way of hosts that already have a router — which every host of any size
+ * does. A shell that owned history would be a shell that could not be embedded.
+ */
+import type { DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from "react";
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type HeadingLevel, type PlannedTransition, type ResolvedBundle, type SurfaceApp as ComposedSurfaceApp, type SurfaceCompositionOptions, type SurfaceDiagnostic, type SurfaceRouteHandle, type SurfaceStringOverrides, type SurfaceStrings, type SurfaceStaticAssetResolver, type ThemeAuthority, type TransitionConditionEvaluator, type WidgetRegistry } from "@formspec-org/surface";
 import type { RegistryEntry } from "@formspec-org/types";
@@ -72,6 +116,8 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
     routeParams?: Readonly<Record<string, string>> | undefined;
     /** Canonical Data Sources payload port; receives exact resolved descriptors. */
     dataSourceLoader?: DataSourceLoader | undefined;
+    /** Pure per-source scheduling hints; evaluated on host renders, never authority. */
+    dataSourceRevision?: DataSourceRevisionSelector | undefined;
     /** Host admission verdict applied before every data load. */
     authorizeDataSource?: DataSourceAuthorizer | undefined;
     /** Required when a bound source declares a payload schema. */
