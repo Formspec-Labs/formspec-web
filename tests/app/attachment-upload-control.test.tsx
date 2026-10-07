@@ -918,6 +918,76 @@ describe('FormspecWebAttachmentControl', () => {
     expect(uploadedBytes).toEqual([4, 4, 4]);
   });
 
+  it.each([false, true])('returns focused error dismissal to the chooser and supports retry (dragDrop=%s)', async (dragDrop) => {
+    const upload = vi.fn(stubAttachmentStore().upload);
+    render(<AttachmentStoreProvider value={{ upload }}>
+      <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode({ dragDrop, maxSize: 1 })} />
+    </AttachmentStoreProvider>);
+    const chooser = container!.querySelector('.formspec-file-browse-btn') as HTMLButtonElement;
+    const input = container!.querySelector('input[type="file"]')!;
+    const file = await fileFromBytes(new Uint8Array(2), 'too-large.pdf');
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+      const dismiss = container!.querySelector('.formspec-file-pending-dismiss') as HTMLButtonElement;
+      dismiss.focus();
+      expect(document.activeElement).toBe(dismiss);
+      act(() => dismiss.click());
+      expect(dismiss.isConnected).toBe(false);
+      expect(document.activeElement).toBe(chooser);
+      expect(container!.querySelector('.formspec-file-pending')).toBeNull();
+    }
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('uses visible camera and named field fallbacks when the error chooser is unavailable', async () => {
+    const harness = makeFieldHarness();
+    const draw = () => {
+      const control = <AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ maxSize: 1 })} />
+      </AttachmentStoreProvider>;
+      if (root) act(() => root?.render(control));
+      else render(control);
+    };
+    draw();
+    const file = await fileFromBytes(new Uint8Array(2), 'too-large.pdf');
+    const input = container!.querySelector('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    (container!.querySelector('.formspec-file-browse-btn') as HTMLElement).style.display = 'none';
+    const camera = Array.from(container!.querySelectorAll('button')).find(button => button.textContent === 'Use camera')!;
+    let dismiss = container!.querySelector('.formspec-file-pending-dismiss') as HTMLButtonElement;
+    dismiss.focus();
+    act(() => dismiss.click());
+    expect(document.activeElement).toBe(camera);
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    harness.field.readonly = true;
+    draw();
+    dismiss = container!.querySelector('.formspec-file-pending-dismiss') as HTMLButtonElement;
+    dismiss.focus();
+    act(() => dismiss.click());
+    expect(document.activeElement).toBe(container!.querySelector('.formspec-field'));
+  });
+
+  it('does not move external focus when an error is dismissed without owning focus', async () => {
+    render(<AttachmentStoreProvider value={stubAttachmentStore()}>
+      <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode({ maxSize: 1 })} />
+    </AttachmentStoreProvider>);
+    const input = container!.querySelector('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [await fileFromBytes(new Uint8Array(2), 'too-large.pdf')], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    const elsewhere = document.createElement('button');
+    document.body.append(elsewhere);
+    try {
+      elsewhere.focus();
+      act(() => (container!.querySelector('.formspec-file-pending-dismiss') as HTMLButtonElement).click());
+      expect(container!.querySelector('.formspec-file-pending')).toBeNull();
+      expect(document.activeElement).toBe(elsewhere);
+    } finally {
+      elsewhere.remove();
+    }
+  });
+
   // DOM tests assert the focus lifecycle after native-button activation; the
   // browser checkpoint verifies actual Tab/Enter default activation separately.
   it.each([false, true])('returns focused camera cancellation to its trigger (dragDrop=%s)', async (dragDrop) => {

@@ -362,7 +362,8 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     }
   };
 
-  const dismissPending = (key: string): void => {
+  const dismissPending = (key: string, trigger: HTMLButtonElement): void => {
+    restoreFocusBeforeRemoval(trigger, [browseTriggerRef.current, cameraTriggerRef.current, fieldRootRef.current]);
     setPending((prev) => prev.filter((row) => row.key !== key));
   };
 
@@ -412,23 +413,9 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     cameraStreamRef.current = null;
     // Return focus before removing the focused control. Async capture completion
     // must leave focus alone if the respondent has already moved elsewhere.
-    if (cameraPanelRef.current?.contains(document.activeElement)) {
-      const targets = [cameraReturnTargetRef.current, cameraTriggerRef.current, browseTriggerRef.current, fieldRootRef.current];
-      for (const target of targets) {
-        if (!target?.isConnected || target.matches(':disabled') || target.closest('[hidden], [inert]')) continue;
-        let visible = true;
-        for (let ancestor: HTMLElement | null = target; ancestor; ancestor = ancestor.parentElement) {
-          const style = getComputedStyle(ancestor);
-          if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') {
-            visible = false;
-            break;
-          }
-        }
-        if (!visible) continue;
-        target.focus({ preventScroll: true });
-        if (document.activeElement === target) break;
-      }
-    }
+    restoreFocusBeforeRemoval(cameraPanelRef.current, [
+      cameraReturnTargetRef.current, cameraTriggerRef.current, browseTriggerRef.current, fieldRootRef.current,
+    ]);
     cameraReturnTargetRef.current = null;
     setCameraOpen(false);
   };
@@ -643,7 +630,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
                 type="button"
                 className="formspec-file-pending-dismiss"
                 aria-label={chrome('fileUpload.dismissError', { filename: row.filename })}
-                onClick={() => dismissPending(row.key)}
+                onClick={(event) => dismissPending(row.key, event.currentTarget)}
               >
                 <span aria-hidden="true">×</span>
               </button>
@@ -844,6 +831,25 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       {fieldError}
     </div>
   );
+}
+
+/** Restore focus only when the disappearing region currently owns it. */
+function restoreFocusBeforeRemoval(region: HTMLElement | null, targets: readonly (HTMLElement | null)[]): void {
+  if (!region?.contains(document.activeElement)) return;
+  for (const target of targets) {
+    if (!target?.isConnected || target.matches(':disabled') || target.closest('[hidden], [inert]')) continue;
+    let visible = true;
+    for (let ancestor: HTMLElement | null = target; ancestor; ancestor = ancestor.parentElement) {
+      const style = getComputedStyle(ancestor);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') {
+        visible = false;
+        break;
+      }
+    }
+    if (!visible) continue;
+    target.focus({ preventScroll: true });
+    if (document.activeElement === target) return;
+  }
 }
 
 async function uploadOne(
