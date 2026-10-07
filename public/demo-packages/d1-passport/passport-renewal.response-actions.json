@@ -9,7 +9,7 @@
       "id": "submit",
       "intent": "submit",
       "label": {
-        "literal": "Submit application"
+        "ref": "$action.submit.label"
       },
       "effects": [
         {

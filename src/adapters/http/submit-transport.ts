@@ -1,3 +1,4 @@
+import canonicalize from 'canonicalize';
 import type {
   IntakeHandoff,
   SubmitConfirmation,
@@ -26,6 +27,7 @@ export class HttpSubmitTransport implements SubmitTransport {
   private readonly responseDataResolver?: HttpSubmitTransportConfig['responseDataResolver'];
   private readonly anonymousSessionToken?: HttpSubmitTransportConfig['anonymousSessionToken'];
   private readonly signingRequested?: HttpSubmitTransportConfig['signingRequested'];
+  private readonly finalizedHandoffs = new Map<string, IntakeHandoff>();
   private readonly replay = new Map<string, Promise<SubmitConfirmation>>();
 
   constructor(config: HttpSubmitTransportConfig) {
@@ -39,11 +41,17 @@ export class HttpSubmitTransport implements SubmitTransport {
 
   async submit(handoff: IntakeHandoff, idempotencyKey: string): Promise<SubmitConfirmation> {
     assertUuidV7IdempotencyKey(idempotencyKey);
+    const finalized = this.finalizedHandoffs.get(idempotencyKey);
+    if (finalized && canonicalize(finalized) !== canonicalize(handoff)) {
+      throw new Error('A submission retry must preserve the finalized Response snapshot');
+    }
+    const snapshot = finalized ?? structuredClone(handoff);
+    this.finalizedHandoffs.set(idempotencyKey, snapshot);
     const existing = this.replay.get(idempotencyKey);
     if (existing) {
       return existing;
     }
-    const submission = this.submitOnce(handoff, idempotencyKey);
+    const submission = this.submitOnce(snapshot, idempotencyKey);
     this.replay.set(idempotencyKey, submission);
     try {
       return await submission;
@@ -62,18 +70,36 @@ export class HttpSubmitTransport implements SubmitTransport {
       throw new Error('HTTP SubmitTransport requires a draft id for formspec-server submission');
     }
 
+    const canonicalResponse = handoff.extensions?.['x-formspec-response'];
+    const snapshot = isRecord(canonicalResponse) && isRecord(canonicalResponse.data)
+      ? canonicalResponse : undefined;
+    if (canonicalResponse !== undefined && !snapshot) {
+      throw new Error('Submission has an invalid canonical Response snapshot');
+    }
+    const answers = this.responseDataResolver?.(handoff) ?? responseDataFromHandoff(handoff);
+    const configuredId = this.responseIdResolver?.(handoff);
+    const snapshotId = typeof snapshot?.id === 'string' ? snapshot.id : undefined;
+    if (snapshot && (canonicalize(answers) !== canonicalize(snapshot.data)
+      || (configuredId !== undefined && configuredId !== snapshotId))) {
+      throw new Error('Submission data or identity conflicts with the canonical Response');
+    }
+    const token = await this.resolveAnonymousSessionToken(handoff);
     const response = await this.client.postJson<ResponseView>(
       `/drafts/${encodeURIComponent(draftId)}/submit`,
       {
-        response_id: this.responseIdResolver?.(handoff),
-        response_data: this.responseDataResolver?.(handoff) ?? responseDataFromHandoff(handoff),
+        response_id: configuredId ?? snapshotId,
+        response_data: snapshot?.data ?? answers,
+        canonical_response: snapshot,
         subject_ref: handoff.subjectRef ?? null,
         party_ref: partyRefFromHandoff(handoff) ?? null,
-        anonymous_session_token: await this.resolveAnonymousSessionToken(handoff),
+        anonymous_session_token: token,
         signing_requested: this.resolveSigningRequested(handoff),
       },
-      { idempotencyKey },
+      { idempotencyKey, headers: token ? { authorization: `Bearer ${token}` } : {} },
     );
+    if (snapshotId && response.response_id !== snapshotId) {
+      throw new Error('Server response identity differs from the canonical Response');
+    }
     const confirmation: SubmitConfirmation = {
       recordKind: 'response',
       referenceNumber: response.response_id,

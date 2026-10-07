@@ -27,6 +27,8 @@ type CompiledArtifactValidators = Readonly<
   }>
 >;
 
+let compiledResponseValidator: ValidateFunction | undefined;
+
 let pendingArtifactValidators: Promise<CompiledArtifactValidators> | undefined;
 
 /**
@@ -71,6 +73,13 @@ export async function loadSurfaceBundleSchemaValidators(): Promise<SurfaceBundle
     });
   };
   return validate;
+}
+
+/** Validate a complete Response using the same maintained canonical schema compiler. */
+export async function validateCanonicalFormResponse(document: unknown): Promise<boolean> {
+  await getCompiledArtifactValidators();
+  if (!compiledResponseValidator) throw new Error('Canonical Response schema did not compile');
+  return compiledResponseValidator(document);
 }
 
 /**
@@ -130,7 +139,7 @@ function getCompiledArtifactValidators(): Promise<CompiledArtifactValidators> {
 }
 
 async function compileArtifactValidators(): Promise<CompiledArtifactValidators> {
-  const { ARTIFACT_SCHEMA_DOCUMENTS, DEPENDENCY_SCHEMA_DOCUMENTS } = await import(
+  const { ARTIFACT_SCHEMA_DOCUMENTS, DEPENDENCY_SCHEMA_DOCUMENTS, RESPONSE_SCHEMA_DOCUMENT } = await import(
     './canonical-schemas.ts'
   );
 
@@ -158,6 +167,7 @@ async function compileArtifactValidators(): Promise<CompiledArtifactValidators> 
     ] as const;
   });
 
+  compiledResponseValidator = ajv.getSchema(canonicalSchema(RESPONSE_SCHEMA_DOCUMENT).$id);
   return Object.freeze(Object.fromEntries(entries)) as CompiledArtifactValidators;
 }
 

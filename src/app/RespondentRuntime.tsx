@@ -32,6 +32,7 @@ import type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@forms
 import type {
   ComponentDocument,
   FormDefinition,
+  FormResponse,
   LocaleDocument,
   RegistryEntry,
   ThemeDocument,
@@ -251,6 +252,11 @@ type SubmitState =
   | { status: 'capture-failed'; confirmation: SubmitConfirmation; error: unknown }
   | { status: 'confirmed'; confirmation: SubmitConfirmation; captureReceipt?: CaptureReceipt };
 
+function submissionLocksLocale(state: SubmitState): boolean {
+  return state.status !== 'idle' && state.status !== 'invalid'
+    && state.status !== 'error' && state.status !== 'payment-voided-after-submit-failure';
+}
+
 export type TerminalClearState =
   | { status: 'idle' }
   | { status: 'clearing' }
@@ -318,6 +324,9 @@ function RespondentController({
   });
   const [multiPartyState, setMultiPartyState] = useState<MultiPartyPersistedState | null>(null);
   const [completedAction, setCompletedAction] = useState<CompletedRespondentAction | null>(null);
+  const [localeSaveError, setLocaleSaveError] = useState<unknown>(null);
+  const localeSaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const submissionInProgressRef = useRef(false);
   const terminalClearRequestedRef = useRef(false);
   const onSubmitConfirmedRef = useRef(onSubmitConfirmed);
   const onActionCompletedRef = useRef(form?.onActionCompleted);
@@ -678,6 +687,8 @@ function RespondentController({
   }) ?? null;
 
   const handleLocaleChange = (locale: string): void => {
+    if (submissionInProgressRef.current || submissionLocksLocale(submitState)
+      || terminalClearRequestedRef.current) return;
     if (anyEnabledFeatureIsLocaleConditional(respondentState.runtimeProfile.enabled)) {
       // A future feature ADR registered a locale-conditional key; the resolved
       // profile may differ under the new locale, so restart the form-load
@@ -687,6 +698,20 @@ function RespondentController({
     }
     respondentState.engine.setLocale(locale);
     setRespondentState({ ...respondentState, activeLocale: locale });
+    const snapshot = respondentState.engine.getResponse({ profile: 'off' });
+    const key = multiPartyDraftKey(
+      respondentState.draftKey,
+      respondentState.multiPartyState?.progress.activePartyRef,
+    );
+    // Serialize saves so a slower earlier language change cannot replace a later pin.
+    localeSaveQueue.current = localeSaveQueue.current.then(async () => {
+      try {
+        await composition.draftStore.save(key, snapshot);
+        setLocaleSaveError(null);
+      } catch (error) {
+        setLocaleSaveError(error);
+      }
+    });
   };
 
   const handleSubmit = async (result: SubmitResult): Promise<void> => {
@@ -702,8 +727,10 @@ function RespondentController({
       return;
     }
 
+    submissionInProgressRef.current = true;
     setSubmitState({ status: 'submitting' });
     try {
+      await localeSaveQueue.current;
       await respondentState.engine.getResolvedIssuer();
       const multiPartyPolicy = respondentState.runtimeProfile.multiParty;
       const currentMultiPartyState = multiPartyPolicy ? respondentState.multiPartyState : null;
@@ -886,6 +913,8 @@ function RespondentController({
       }
     } catch (error) {
       setSubmitState({ status: 'error', error });
+    } finally {
+      submissionInProgressRef.current = false;
     }
   };
 
@@ -893,6 +922,8 @@ function RespondentController({
     terminalClearRequestedRef.current = true;
     setTerminalClearState({ status: 'clearing' });
     try {
+      // Finish existing writes before deleting bindings; the handler guard refuses new ones.
+      await localeSaveQueue.current;
       await clearPublicTerminalDraftState({
         draftStore: composition.draftStore,
         draftKey: respondentState.draftKey,
@@ -954,6 +985,9 @@ function RespondentController({
               });
             }}
           >
+            {localeSaveError ? (
+              <p role="alert">Your language changed, but we could not save it. {localeSaveError instanceof Error ? localeSaveError.message : String(localeSaveError)}</p>
+            ) : null}
             {renderMode === 'surface-slot' ? (
               <RespondentFormContent
                 claim={respondentState.claim}
@@ -1238,7 +1272,7 @@ async function createReadyState(
     };
   }
 
-  const activeLocale =
+  let activeLocale =
     options.locale
     ?? form?.activeLocale
     ?? defaultLocaleForDefinition(definition);
@@ -1298,7 +1332,11 @@ async function createReadyState(
   for (const localeDocument of localeDocuments ?? []) {
     engine.loadLocale(localeDocument);
   }
-  engine.setLocale(activeLocale);
+  if (draft && options.locale === undefined) {
+    activeLocale = restoreDraftLocale(engine, draft, definition, localeDocuments ?? []);
+  } else {
+    engine.setLocale(activeLocale);
+  }
   hydrateEngineFromResponse(engine, draft);
   const resolvedIssuer = await engine.getResolvedIssuer();
 
@@ -1320,6 +1358,37 @@ async function createReadyState(
     multiPartyState,
     runtimeProfile,
   };
+}
+
+/** ADR 0082 D16.2: resume the saved wording before hydrating any answers. */
+function restoreDraftLocale(
+  engine: IFormEngine,
+  draft: FormResponse,
+  definition: FormDefinition,
+  documents: readonly LocaleDocument[],
+): string {
+  const pin = draft.displayedLocale;
+  if (!pin) {
+    engine.setLocale('');
+    return '';
+  }
+  const matches = documents.filter(document => (
+    document.target.kind === 'definition'
+    && document.target.url === definition.url
+    && document.locale.toLowerCase() === pin.locale.toLowerCase()
+    && document.version === pin.version
+    && document.url === pin.url
+  ));
+  if (matches.length !== 1) {
+    throw new Error('The saved draft language document is unavailable or no longer matches its saved version.');
+  }
+  engine.setLocale(matches[0].locale);
+  const resolved = engine.getResponse({ profile: 'off' }).displayedLocale;
+  if (!resolved || resolved.url !== pin.url || resolved.version !== pin.version
+    || resolved.locale.toLowerCase() !== pin.locale.toLowerCase()) {
+    throw new Error('The loaded language document does not match the saved draft language.');
+  }
+  return resolved.locale;
 }
 
 function componentGraphHasCompletedEvidence(input: {
@@ -1781,7 +1850,9 @@ function RespondentSurface({
         <div className="respondent-toolbar__group" role="group" aria-label="Language">
           {localeOptions.map((option) => (
             <button
-              aria-pressed={activeLocale === option.code}
+              aria-pressed={activeLocale.toLowerCase() === option.code.toLowerCase()}
+              disabled={submissionLocksLocale(submitState)
+                || terminalClearState.status === 'clearing' || terminalClearState.status === 'cleared'}
               className="locale-button"
               key={option.code}
               type="button"
@@ -1796,7 +1867,7 @@ function RespondentSurface({
         </div>
       </div>
 
-      {composition.localPackagePreview ? (
+      {composition.localPackagePreview && submitState.status !== 'confirmed' ? (
         <p className="respondent-preview-note" role="note">
           Filing and signing are not yet complete.
         </p>
@@ -2611,7 +2682,7 @@ export function ConfirmationPanel({
     <section className="confirmation-panel" aria-labelledby="confirmation-title" tabIndex={-1}>
       <h2 id="confirmation-title">{responseOnly ? 'Answers received' : 'Submission received'}</h2>
       <p>{responseOnly ? 'Submission ID' : 'Reference number'}</p>
-      <strong>{confirmation.referenceNumber}</strong>
+      <strong className={responseOnly ? 'confirmation-panel__submission-id' : undefined}>{confirmation.referenceNumber}</strong>
       {responseOnly ? (
         <p>Your answers were received. Case filing and signing are not yet confirmed.</p>
       ) : (
@@ -2633,6 +2704,7 @@ export function ConfirmationPanel({
           {onClearTerminal ? (
             <button
               type="button"
+              className="public-terminal-actions__secondary"
               disabled={terminalClearState.status === 'clearing' || terminalClearState.status === 'cleared'}
               onClick={() => {
                 void onClearTerminal();

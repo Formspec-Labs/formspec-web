@@ -1,6 +1,7 @@
 import { HttpAttachmentStore } from '../adapters/http/attachment-store.ts';
 import { publishedDefinitionDraftStore } from '../adapters/composing/published-definition-draft-store.ts';
 import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
+import { createBrowserDraftResumeMetadataStore } from '../adapters/browser/draft-resume-metadata.ts';
 import { PinnedPackageDefinitionSource } from '../adapters/http/pinned-package-definition-source.ts';
 import { defaultFormIdResolver } from '../adapters/http/form-id.ts';
 import { HttpDefinitionSource } from '../adapters/http/definition-source.ts';
@@ -89,11 +90,23 @@ export function createDefaultComposition(
     tenantBinding: config.tenantBinding,
   };
   const initialDefinitionUrl = options.initialDefinitionUrl ?? productionInitialDefinitionUrl(serverUrl);
+  const packageSource = options.packageUrl ? new PinnedPackageDefinitionSource(options.packageUrl) : undefined;
+  const resumeMetadata = options.packageUrl
+    ? createBrowserDraftResumeMetadataStore(baseHttpConfig)
+    : undefined;
   const packageFormIdResolver = options.packageUrl
     ? () => defaultFormIdResolver(initialDefinitionUrl)
     : undefined;
   const anonymousSessions = new AnonymousSessionBridge({
     ...baseHttpConfig,
+    resumeMetadata,
+    ...(packageSource ? { validateFormContext: async (formUrl: string, version?: string) => {
+      const definition = await packageSource.getDefinition();
+      if ((formUrl !== initialDefinitionUrl && formUrl !== definition.url)
+        || (version !== undefined && version !== definition.version)) {
+        throw new Error('Anonymous package session does not match its declared form URL and version');
+      }
+    } } : {}),
     ...(packageFormIdResolver ? { formIdResolver: packageFormIdResolver } : {}),
   });
   const identityBinding = identityProviderFor(config, notificationDelivery, {
@@ -106,6 +119,7 @@ export function createDefaultComposition(
   const { draftStore, submitTransport } = createHttpAdapterCohort({
     ...httpConfig,
     anonymousSessions,
+    resumeMetadata,
     ...(packageFormIdResolver ? { formIdResolver: packageFormIdResolver } : {}),
     ...(options.selectedResponseId
       ? { responseIdResolver: () => options.selectedResponseId }
@@ -115,7 +129,7 @@ export function createDefaultComposition(
     // Local authored-package preview uses shared host controls with real server
     // attachment custody, drafts, and submission.
     const preview = createDemoComposition();
-    const source = new PinnedPackageDefinitionSource(options.packageUrl);
+    const source = packageSource!;
     return freezeComposition({
       ...preview,
       localPackagePreview: true,

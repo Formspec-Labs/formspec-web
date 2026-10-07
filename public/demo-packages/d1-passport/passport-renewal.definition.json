@@ -1,7 +1,7 @@
 {
   "$formspec": "1.0",
   "url": "urn:formspec:demo:d1:passport-renewal",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "status": "draft",
   "title": "Passport renewal",
   "items": [
@@ -29,7 +29,7 @@
       "type": "display",
       "label": "Confirm your renewal details",
       "presentation": {
-        "widgetHint": "paragraph"
+        "widgetHint": "heading"
       }
     },
     {

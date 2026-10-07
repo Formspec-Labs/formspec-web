@@ -68,3 +68,6 @@ export const DEPENDENCY_SCHEMA_DOCUMENTS: readonly unknown[] = Object.freeze([
   validationResultSchemaJson,
   verificationReceiptSchemaJson,
 ]);
+
+/** Canonical Response schema shared by HTTP draft read validation. */
+export const RESPONSE_SCHEMA_DOCUMENT = responseSchemaJson;

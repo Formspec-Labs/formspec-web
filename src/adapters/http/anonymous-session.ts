@@ -10,9 +10,12 @@ import type { IntakeHandoff } from '../../ports/submit-transport.ts';
 import { IdentitySession, meetsAssurance } from '../identity/assurance.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
+import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 
 export interface AnonymousSessionBridgeConfig extends HttpClientConfig {
   formIdResolver?: FormIdResolver;
+  resumeMetadata?: DraftResumeMetadataStore;
+  validateFormContext?: (formUrl: string, version?: string) => Promise<void>;
 }
 
 export interface AnonymousSession {
@@ -42,17 +45,27 @@ export class AnonymousSessionBridge {
   private readonly client: HttpClient;
   private readonly formIdResolver: FormIdResolver;
   private readonly sessions = new Map<string, SessionSlot>();
+  private readonly resumeMetadata?: DraftResumeMetadataStore;
+  private readonly validateFormContext?: AnonymousSessionBridgeConfig['validateFormContext'];
+  private generation = 0;
 
   constructor(config: AnonymousSessionBridgeConfig) {
     this.client = new HttpClient(config);
     this.formIdResolver = config.formIdResolver ?? defaultFormIdResolver;
+    this.resumeMetadata = config.resumeMetadata;
+    this.validateFormContext = config.validateFormContext;
   }
 
-  async sessionForForm(formUrl: string, version?: string): Promise<AnonymousSession> {
+  async sessionForForm(formUrl: string, version?: string, requireExisting = false): Promise<AnonymousSession> {
+    const generation = this.generation;
+    await this.validateFormContext?.(formUrl, version);
+    if (generation !== this.generation) throw new Error('Anonymous session context was cleared');
     const formId = this.formIdResolver(formUrl, version);
     let slot = this.sessions.get(formId);
     if (!slot) {
-      slot = {};
+      const saved = this.resumeMetadata?.read(`grant:${formId}`);
+      if (saved !== undefined && !isSession(saved, formId)) throw new Error('Stored anonymous grant is invalid or bound to another form');
+      slot = { session: saved as AnonymousSession | undefined };
       this.sessions.set(formId, slot);
     }
     if (slot.session) {
@@ -64,8 +77,13 @@ export class AnonymousSessionBridge {
     if (slot.inFlight) {
       return slot.inFlight;
     }
+    if (requireExisting) throw new Error('The saved draft has no anonymous owner grant. Clear this computer before starting again.');
 
-    slot.inFlight = this.issueSession(formId);
+    slot.inFlight = this.issueSession(formId).then(session => {
+      if (generation !== this.generation) throw new Error('Anonymous session was cleared while it was being issued');
+      this.resumeMetadata?.write(`grant:${formId}`, session);
+      return session;
+    });
     try {
       slot.session = await slot.inFlight;
       return slot.session;
@@ -74,16 +92,25 @@ export class AnonymousSessionBridge {
     }
   }
 
-  async tokenForDraftKey(key: DraftKey): Promise<string | undefined> {
+  async tokenForDraftKey(key: DraftKey, requireExisting = false): Promise<string | undefined> {
     if (key.subjectRef && !key.subjectRef.startsWith('anon:')) {
       return undefined;
     }
-    const session = await this.sessionForForm(key.formUrl, key.formVersion);
+    const session = await this.sessionForForm(key.formUrl, key.formVersion, requireExisting);
     assertSubjectMatches(session.subjectRef, key.subjectRef);
     return session.sessionToken;
   }
 
-  async tokenForHandoff(handoff: IntakeHandoff): Promise<string | undefined> {
+  async clearForForm(formUrl: string, version?: string): Promise<void> {
+    this.generation += 1;
+    const formId = this.formIdResolver(formUrl, version);
+    const pending = this.sessions.get(formId)?.inFlight;
+    if (pending) await pending.catch(() => {});
+    this.resumeMetadata?.remove(`grant:${formId}`);
+    this.sessions.delete(formId);
+  }
+
+  async tokenForHandoff(handoff: IntakeHandoff, requireExisting = false): Promise<string | undefined> {
     const subjectRef = handoff.subjectRef ?? undefined;
     if (subjectRef && !subjectRef.startsWith('anon:')) {
       return undefined;
@@ -91,6 +118,7 @@ export class AnonymousSessionBridge {
     const session = await this.sessionForForm(
       handoff.definitionRef.url,
       handoff.definitionRef.version ?? undefined,
+      requireExisting,
     );
     assertSubjectMatches(session.subjectRef, subjectRef);
     return session.sessionToken;
@@ -171,6 +199,7 @@ export class HttpAnonymousIdentityProvider implements IdentityProvider {
   }
 
   async revoke(_claim: IdentityClaim): Promise<void> {
+    await this.bridge.clearForForm(this.formUrl, this.formVersion);
     this.session.set(null);
   }
 
@@ -194,4 +223,14 @@ function assertSubjectMatches(serverSubjectRef: string, requestedSubjectRef: str
   if (requestedSubjectRef && requestedSubjectRef !== serverSubjectRef) {
     throw new Error('Anonymous session subject does not match the active respondent subject');
   }
+}
+
+function isSession(value: unknown, formId: string): value is AnonymousSession {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as AnonymousSession;
+  return typeof candidate.sessionId === 'string' && candidate.sessionId.trim().length > 0
+    && typeof candidate.sessionToken === 'string' && candidate.sessionToken.trim().length > 0
+    && typeof candidate.subjectRef === 'string' && candidate.subjectRef.startsWith('anon:') && candidate.subjectRef.length > 5
+    && candidate.formId === formId && typeof candidate.expiresAt === 'string'
+    && Number.isFinite(Date.parse(candidate.expiresAt));
 }

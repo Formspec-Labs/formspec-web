@@ -65,6 +65,40 @@ describe('HttpSubmitTransport', () => {
     });
   });
 
+  it('preserves full canonical metadata and stable identity through a transport retry', async () => {
+    const snapshot = { ...sampleFormResponse, id: 'stable-response-id', displayedLocale: { locale: 'es-US', version: '1.0.0', url: 'urn:locale:spanish' }, issuer: { id: 'issuer-1' } };
+    const { fetch, requests } = recordingFetch(() => requests.length === 1
+      ? jsonResponse({ title: 'temporary failure' }, 503)
+      : jsonResponse({ response_id: snapshot.id, status: 'accepted' }));
+    const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver: () => 'draft-1', anonymousSessionToken: 'test-token' });
+    const handoff = { ...sampleIntakeHandoff, extensions: { 'x-formspec-response': snapshot } };
+    const key = generateIdempotencyKey();
+    await expect(adapter.submit(handoff, key)).rejects.toMatchObject({ status: 503 });
+    await expect(adapter.submit(handoff, key)).resolves.toMatchObject({ referenceNumber: snapshot.id });
+    expect(requests[0]?.body).toEqual(requests[1]?.body);
+    expect(requests[1]?.body).toMatchObject({ canonical_response: snapshot, response_id: snapshot.id, response_data: snapshot.data });
+    expect(requests[1]?.headers.get('authorization')).toBe('Bearer test-token');
+  });
+
+  it('refuses changed canonical lifecycle values under a failed operation retry key', async () => {
+    const { fetch, requests } = recordingFetch(() => jsonResponse({ title: 'failure' }, 503));
+    const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver: () => 'draft-1' });
+    const key = generateIdempotencyKey();
+    const handoff = { ...sampleIntakeHandoff, extensions: { 'x-formspec-response': { ...sampleFormResponse, id: 'stable-id' } } };
+    await expect(adapter.submit(handoff, key)).rejects.toMatchObject({ status: 503 });
+    await expect(adapter.submit({ ...handoff, extensions: { 'x-formspec-response': { ...handoff.extensions['x-formspec-response'], authored: '2026-05-23T00:00:00.000Z' } } }, key)).rejects.toThrow(/preserve the finalized/);
+    expect(requests).toHaveLength(1);
+  });
+
+  it.each(['answers', 'identity'])('refuses a conflicting %s override for the full Response', async conflict => {
+    const { fetch, requests } = recordingFetch(() => jsonResponse({ response_id: 'other', status: 'accepted' }));
+    const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver: () => 'draft-1',
+      ...(conflict === 'answers' ? { responseDataResolver: () => ({ fullName: 'Other' }) } : { responseIdResolver: () => 'other' }),
+    });
+    await expect(adapter.submit({ ...sampleIntakeHandoff, extensions: { 'x-formspec-response': { ...sampleFormResponse, id: 'stable-id' } } }, generateIdempotencyKey())).rejects.toThrow(/conflicts/);
+    expect(requests).toHaveLength(0);
+  });
+
   it('replays the same confirmation locally for retried idempotency keys', async () => {
     const { fetch, requests } = recordingFetch((request) =>
       jsonResponse({ response_id: `response-${idempotencyKey(request)}`, status: 'accepted' }),

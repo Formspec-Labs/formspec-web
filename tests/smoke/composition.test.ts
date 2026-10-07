@@ -197,7 +197,10 @@ describe('composition root smoke', () => {
         draftCounter += 1;
         return jsonResponse({ draft_id: `draft-http-${draftCounter}`, draft_version: 1 });
       }
-      if (request.method === 'POST' && path === '/drafts/draft-http-2/submit') {
+      if (request.method === 'PATCH' && path === '/drafts/draft-http-1') {
+        return jsonResponse({ draft_id: 'draft-http-1', draft_version: 2 });
+      }
+      if (request.method === 'POST' && path === '/drafts/draft-http-1/submit') {
         return jsonResponse({ response_id: 'response-http-1', status: 'accepted' });
       }
       return jsonResponse({ title: `unexpected ${request.method} ${path}` }, 500);
@@ -263,8 +266,8 @@ describe('composition root smoke', () => {
         'POST /runtime/forms/demo-intake/sessions/anonymous',
         'GET /runtime/forms/demo-intake',
         'POST /runtime/forms/demo-intake/drafts',
-        'POST /runtime/forms/demo-intake/drafts',
-        'POST /drafts/draft-http-2/submit',
+        'PATCH /drafts/draft-http-1',
+        'POST /drafts/draft-http-1/submit',
       ]);
     expect(requests[0]?.body).toEqual({});
     expect(requests[2]?.body).toMatchObject({
@@ -273,8 +276,8 @@ describe('composition root smoke', () => {
       draft_state: sampleFormResponse.data,
     });
     expect(requests[3]?.body).toMatchObject({
-      anonymous_session_token: 'anonymous-token-1',
-      anonymous_subject_ref: 'anon:server-subject',
+      canonical_response: completedResponse,
+      expected_draft_version: 1,
       draft_state: completedResponse.data,
     });
     expect(requests[4]?.body).toMatchObject({

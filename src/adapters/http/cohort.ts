@@ -26,6 +26,7 @@ import { HttpDraftStore } from './draft-store.ts';
 import type { FormIdResolver } from './form-id.ts';
 import type { HttpClientConfig } from './http-client.ts';
 import { HttpSubmitTransport } from './submit-transport.ts';
+import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 
 export type { DraftBindingRegistry, DraftBindingSnapshot } from './draft-binding-registry.ts';
 
@@ -41,6 +42,7 @@ export interface HttpAdapterCohortConfig extends HttpClientConfig {
   responseIdResolver?: (handoff: IntakeHandoff) => string | undefined;
   responseDataResolver?: (handoff: IntakeHandoff) => Record<string, unknown>;
   signingRequested?: boolean | ((handoff: IntakeHandoff) => boolean);
+  resumeMetadata?: DraftResumeMetadataStore;
 }
 
 export interface HttpAdapterCohort {
@@ -49,13 +51,16 @@ export interface HttpAdapterCohort {
 }
 
 export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAdapterCohort {
-  const registry = createDraftBindingRegistry();
-  const { anonymousSessions, responseIdResolver, responseDataResolver, signingRequested, ...httpConfig } = config;
+  const registry = createDraftBindingRegistry({ resumeMetadata: config.resumeMetadata, formIdResolver: config.formIdResolver });
+  const { anonymousSessions, responseIdResolver, responseDataResolver, signingRequested, resumeMetadata: _resumeMetadata, ...httpConfig } = config;
   const draftStore = new HttpDraftStore({
     ...httpConfig,
     bindingRegistry: registry,
     anonymousSessionToken: anonymousSessions
-      ? (key) => anonymousSessions.tokenForDraftKey(key)
+      ? (key) => anonymousSessions.tokenForDraftKey(key, registry.get(key) !== undefined)
+      : undefined,
+    clearAnonymousSession: anonymousSessions
+      ? key => anonymousSessions.clearForForm(key.formUrl, key.formVersion)
       : undefined,
   });
   const submitTransport = new HttpSubmitTransport({
@@ -65,7 +70,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     responseDataResolver,
     signingRequested,
     anonymousSessionToken: anonymousSessions
-      ? (handoff) => anonymousSessions.tokenForHandoff(handoff)
+      ? (handoff) => anonymousSessions.tokenForHandoff(handoff, true)
       : undefined,
   });
   return { draftStore, submitTransport };

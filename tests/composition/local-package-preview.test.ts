@@ -31,7 +31,7 @@ describe('local package preview with real submit', () => {
     expect(composition.instanceCapabilities.offlineSubmit).toBe('unavailable');
     expect(composition.instanceCapabilities.fileUpload).toBe('available');
     expect(composition.attachmentStore).toBeInstanceOf(HttpAttachmentStore);
-    await expect(composition.draftStore.save({ formUrl: 'urn:formspec:demo:test', formVersion: '1.0.0' }, sampleFormResponse)).rejects.toMatchObject({ status: 404 });
+    await expect(composition.draftStore.save({ formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version }, sampleFormResponse)).rejects.toMatchObject({ status: 404 });
     expect(requests[1]?.url).toBe('http://127.0.0.1:18080/runtime/forms/server-form-id/sessions/anonymous');
     expect(requests[0]?.headers.get('x-formspec-tenant-id')).toBe(tenantBinding.scope.tenant);
     expect(requests[0]?.headers.get('x-formspec-workspace-id')).toBe(tenantBinding.scope.workspace);
