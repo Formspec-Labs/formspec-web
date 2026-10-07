@@ -1,5 +1,6 @@
 import type { NativePackageBoot } from './native-package.ts';
 import type {
+  BrowserAuthSession,
   AttachmentStore,
   DefinitionSource,
   DraftStore,
@@ -69,6 +70,8 @@ export interface Composition {
   /** Optional owned Prepare/Sign capability; Submit retains its separate transport. */
   responseSigning?: ResponseSigning;
   identityProvider: IdentityProvider;
+  /** Composition-owned browser login lifecycle; server validation supplies grants. */
+  browserAuthSession?: BrowserAuthSession;
   /** Optional — only required when an adapter consumes it (e.g., MagicLinkAdapter). */
   notificationDelivery?: NotificationDelivery;
   /**

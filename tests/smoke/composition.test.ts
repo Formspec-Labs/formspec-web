@@ -1,6 +1,7 @@
+import type { BrowserAuthSession } from '../../src/ports/browser-auth-session.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStubComposition } from '../../src/composition/stub.ts';
-import { createDefaultComposition } from '../../src/composition/default.ts';
+import { createDefaultComposition as buildDefaultComposition } from '../../src/composition/default.ts';
 import { createDemoComposition } from '../../src/composition/demo.ts';
 import {
   createRouteNarrowedComposition,
@@ -11,7 +12,7 @@ import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts'
 import { STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
 import { applyBrandTheme, getUpstreamTokenRegistry } from '../../src/theme/theme.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
-import type { OidcClientDriver } from '../../src/adapters/identity/oidc.ts';
+import { OidcAdapter, type OidcClientDriver } from '../../src/adapters/identity/oidc.ts';
 import {
   sampleFormResponse,
   sampleIntakeHandoff,
@@ -23,7 +24,9 @@ import { demoSampleForm } from '../../src/demo/index.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
 
 describe('composition root smoke', () => {
-  afterEach(() => {
+  afterEach(async () => {
+    for (const session of authSessions.splice(0)) session.dispose();
+    await Promise.resolve();
     vi.unstubAllGlobals();
   });
 
@@ -134,6 +137,7 @@ describe('composition root smoke', () => {
         access_token: 'oidc-access-token',
         id_token: 'oidc-id-token',
         profile: {
+          iss: departmentAppProfile.identity.oidc!.issuer,
           sub: 'provider-native-subject',
           acr: 'urn:formspec:assurance:l3',
         },
@@ -148,16 +152,13 @@ describe('composition root smoke', () => {
       return jsonResponse({ title: `unexpected ${request.method} ${path}` }, 500);
     });
     vi.stubGlobal('fetch', fetch);
+    const provider = new OidcAdapter({
+      ...departmentAppProfile.identity.oidc!,
+      driver: oidcDriver,
+      subjectRefFactory: () => 'oidc:subject-hash',
+    });
     const c = createDefaultComposition({
       ...departmentAppProfile,
-      identity: {
-        ...departmentAppProfile.identity,
-        oidc: {
-          ...departmentAppProfile.identity.oidc,
-          driver: oidcDriver,
-          subjectRefFactory: () => 'oidc:subject-hash',
-        },
-      },
       ports: referenceHttpDataPorts(departmentAppProfile.ports),
       referenceAdapters: {
         formspecStack: {
@@ -166,7 +167,7 @@ describe('composition root smoke', () => {
           formspecServerUrl: 'https://formspec-server.example.test',
         },
       },
-    } as unknown as Parameters<typeof createDefaultComposition>[0]);
+    }, { identityBinding: { provider, accessToken: () => provider.currentAccessToken(), browserAuthSession: provider.browserSession } });
     const [option] = await c.identityProvider.discover('L2');
     if (!option) throw new Error('expected OIDC option');
 
@@ -415,4 +416,13 @@ function productionFromDeptProfile(): Parameters<typeof createDefaultComposition
       },
     },
   };
+}
+
+
+// Real factory instances own listeners and timers; release them between hosts.
+const authSessions: BrowserAuthSession[] = [];
+function createDefaultComposition(...args: Parameters<typeof buildDefaultComposition>) {
+  const composition = buildDefaultComposition(...args);
+  if (composition.browserAuthSession) authSessions.push(composition.browserAuthSession);
+  return composition;
 }

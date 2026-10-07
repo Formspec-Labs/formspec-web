@@ -1,3 +1,5 @@
+import { completeConfiguredAuthCallback } from './auth-callback.ts';
+import { createConfiguredBrowserAuthSession, createOidcIdentityBinding, type IdentityBinding } from '../composition/index.ts';
 import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import rootConfig from '../../formspec.config.ts';
@@ -36,11 +38,40 @@ if (signedRespondentRootConfigured || activeConfig.referenceAdapters?.formspecSt
   applyBrandTheme(document.documentElement, activeConfig.brand);
 }
 
-createRoot(rootEl).render(
-  <StrictMode>
-    <RoutedApp config={activeConfig} />
-  </StrictMode>,
-);
+let sharedIdentityBinding: IdentityBinding | undefined;
+const identityBindingFactory = activeConfig.ports.identityProvider === 'oidc'
+  && activeConfig.referenceAdapters?.formspecStack?.formspecServerUrl
+  ? () => {
+      if (!activeConfig.identity.oidc) throw new Error('OIDC provider is not configured');
+      if (!sharedIdentityBinding) {
+        sharedIdentityBinding = createOidcIdentityBinding(activeConfig.identity.oidc);
+        window.addEventListener('pagehide', (event) => {
+          if (!event.persisted) sharedIdentityBinding?.browserAuthSession?.dispose();
+        });
+      }
+      return sharedIdentityBinding;
+    }
+  : undefined;
+
+// Complete callbacks once before React StrictMode or any route composition.
+void completeConfiguredAuthCallback({
+  href: window.location.href, config: activeConfig,
+  createSession: createConfiguredBrowserAuthSession,
+  navigate: (href) => window.location.replace(href),
+}).then((handled) => {
+  if (handled) return;
+  createRoot(rootEl).render(
+    <StrictMode>
+      <RoutedApp config={activeConfig} />
+    </StrictMode>,
+  );
+}).catch(() => {
+  document.getElementById('formspec-static-shell')?.remove();
+  const message = document.createElement('main');
+  message.setAttribute('role', 'alert');
+  message.textContent = 'Sign-in could not be completed. Return to the home page and try again.';
+  rootEl.replaceChildren(message);
+});
 
 function RoutedApp({ config }: { config: FormspecWebConfig }) {
   if (config.referenceAdapters?.formspecStack?.nativePackageSigning) {
@@ -57,7 +88,7 @@ function RoutedApp({ config }: { config: FormspecWebConfig }) {
 }
 
 function LegacyRoutedApp({ config }: { config: FormspecWebConfig }) {
-  const routeState = useRoutedComposition(config);
+  const routeState = useRoutedComposition(config, identityBindingFactory);
   if (routeState.status === 'form-route-error') {
     return <FormRouteBootError error={routeState.error} />;
   }

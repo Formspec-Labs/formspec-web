@@ -1,4 +1,4 @@
-import { createDefaultComposition } from '../composition/default.ts';
+import { createDefaultComposition, type IdentityBinding } from '../composition/default.ts';
 import { createRouteNarrowedComposition } from '../composition/route-narrowing.ts';
 import type { Composition } from '../composition/types.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
@@ -29,9 +29,11 @@ import { parseRootFormRoute } from './form-route.ts';
 export function chooseComposition({
   href,
   config,
+  identityBindingFactory,
 }: {
   href: string;
   config: FormspecWebConfig;
+  identityBindingFactory?: () => IdentityBinding;
 }): Composition {
   if (parseStatusRoute(href)) {
     return createRouteNarrowedComposition({ mode: 'default', config, route: STATUS_ROUTE_NARROWING });
@@ -74,8 +76,11 @@ export function chooseComposition({
   const rootFormRoute = parseRootFormRoute(href);
   return createDefaultComposition(
     config,
-    rootFormRoute?.kind === 'selected'
-      ? {
+    {
+      ...(identityBindingFactory && !(rootFormRoute?.kind === 'selected' && rootFormRoute.packageUrl)
+        ? { identityBinding: identityBindingFactory() } : {}),
+      ...(rootFormRoute?.kind === 'selected'
+        ? {
           initialDefinitionUrl: rootFormRoute.initialDefinitionUrl,
           ...(rootFormRoute.packageUrl ? { packageUrl: rootFormRoute.packageUrl } : {}),
           ...(rootFormRoute.selectedResponseId
@@ -99,6 +104,7 @@ export function chooseComposition({
               }
             : {}),
         }
-      : undefined,
+        : {}),
+    },
   );
 }

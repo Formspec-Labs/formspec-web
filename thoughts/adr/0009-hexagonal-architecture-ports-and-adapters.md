@@ -80,6 +80,7 @@ export interface Composition {
 - **Distribution.** The React shell consumes `Composition` via a `<CompositionProvider value={composition}>` context. Components reach ports via `useComposition()` hooks, not via direct adapter imports.
 - **Statefulness.** Ports are stateless **except**:
   - `IdentityProvider` exposes `subscribe(listener: (claim: IdentityClaim | null) => void) => Unsubscribe` for session-lifecycle events (login, logout, revoke).
+  - `BrowserAuthSession` is an optional composition-owned browser login lifecycle with protected access-token retrieval, expiry and disposal (see amendment below).
   - `DraftStore` may maintain per-subject caches and listens for identity-change events forwarded by the shell.
 - **Cross-port coordination lives in the React shell, NOT in adapters.** When `IdentityProvider.revoke()` fires, the shell listens via `subscribe()` and orchestrates: clears `DraftStore` subject cache, navigates to anonymous state, resets in-flight `SubmitTransport` retries. Adapters MUST NOT reach across ports via the `Composition`.
 - **Cross-port composition in adapters is permitted but explicit and bounded.** Some reference adapters legitimately consume multiple ports — e.g., a `MagicLinkAdapter` (`IdentityProvider` adapter) needs `NotificationDelivery` to send the link. This is done via **constructor injection** (`new MagicLinkAdapter({ notificationDelivery })`), documented in the adapter's own contract, and bounded (no transitive `Composition` reference). The shell does not pass the entire Composition to adapters; only the specific dependencies they declare.
@@ -163,3 +164,37 @@ CI cannot promise to catch every service-name leak. The promise: directory-bound
 - web ADR-0013 — `SurfaceBundleVerifier` port for the narrow pre-render trust gate
 - stack-root [ADR-0072](../../../thoughts/adr/0072-stack-evidence-integrity-and-attachment-binding.md) — attachment handling as composed primitive (why no `AttachmentStore` port)
 - stack-root [ADR-0128](../../../thoughts/archive/adr/0128-frontend-surface-architecture.md) — frontend surface architecture (this ADR is the formspec-web-specific implementation of the three-app principle)
+
+
+### Browser authentication lifecycle (2026-10-07)
+
+`BrowserAuthSession` is an optional post-MVP stateful dependency alongside
+`IdentityProvider` and `DraftStore`. The composition owns one session for the
+application lifetime and disposes it when that lifetime ends. Route changes
+reuse it; routes with unavailable identity capabilities do not construct it.
+The session owns login, configured callbacks, renewal, logout, expiry and
+protected access-token retrieval. Its public state contains issuer, subject,
+expiry and a monotonic revision, with no tokens or application grants.
+
+`IdentityProvider` maps adapter-private evidence from the same admitted user to
+respondent assurance claims. HTTP adapters receive a credential function.
+Application grants and real actors come from server validation and introspection;
+issuer/subject, authentication assurance, or provider realm roles do not grant
+case access or signing authority. The shell still coordinates draft and navigation
+effects. No adapter receives the whole composition.
+
+The maintained `oidc-client-ts` adapter implements browser authorization code
+with PKCE. Keycloak development and Okta-compatible deployments use the same
+adapter with configured issuer, client, scopes and distinct callback URLs.
+Provider SDKs and raw tokens stay inside adapters. Callback completion runs once
+at host startup before form composition or React StrictMode; silent iframe
+callbacks notify the parent and do not mount or navigate the form.
+
+
+Callback URI matching and completion are maintained public helpers in
+`formspec-web/shared`, accepting only callback URIs and an injected session
+factory. Other hosts reuse these helpers with their own composition. They do
+not build a fake Web configuration or duplicate OAuth response processing.
+ACR and AMR remain private, uninterpreted provider attributes. A configured
+respondent assurance mapping does not establish server authorization, signature
+verification, signing assurance or NIST identity proofing.

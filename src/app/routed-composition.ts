@@ -1,3 +1,4 @@
+import type { IdentityBinding } from '../composition/default.ts';
 import { useEffect, useState } from 'react';
 import type { Composition } from '../composition/types.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
@@ -12,12 +13,13 @@ export type RoutedCompositionState =
 export function bootCompositionForHref(
   href: string,
   config: FormspecWebConfig,
+  identityBindingFactory?: () => IdentityBinding,
 ): RoutedCompositionState {
   try {
     return {
       status: 'ready',
       href,
-      composition: chooseComposition({ href, config }),
+      composition: chooseComposition({ href, config, identityBindingFactory }),
     };
   } catch (error) {
     if (isFormRouteError(error)) {
@@ -27,14 +29,14 @@ export function bootCompositionForHref(
   }
 }
 
-export function useRoutedComposition(config: FormspecWebConfig): RoutedCompositionState {
-  const [state, setState] = useState(() => bootCompositionForHref(window.location.href, config));
+export function useRoutedComposition(config: FormspecWebConfig, identityBindingFactory?: () => IdentityBinding): RoutedCompositionState {
+  const [state, setState] = useState(() => bootCompositionForHref(window.location.href, config, identityBindingFactory));
 
   useEffect(() => {
     return subscribeAppRouteTransitions(() => {
-      setState(bootCompositionForHref(window.location.href, config));
+      setState(bootCompositionForHref(window.location.href, config, identityBindingFactory));
     });
-  }, [config]);
+  }, [config, identityBindingFactory]);
 
   return state;
 }

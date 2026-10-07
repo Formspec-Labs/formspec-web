@@ -1,3 +1,6 @@
+import { OidcBrowserAuthSession } from '../adapters/identity/oidc-browser-session.ts';
+import type { BrowserAuthSession } from '../ports/browser-auth-session.ts';
+import type { OidcClientConfig } from '../config/types.ts';
 import { respondentSurfaceDeploymentIsConfigured } from '../config/respondent-surface.ts';
 import { readNativePackageSigningConfig } from '../config/native-package-signing.ts';
 import { createNativePackageComposition } from './native-package.ts';
@@ -75,6 +78,8 @@ export interface DefaultCompositionOptions {
   packageUrl?: string;
   selectedResponseId?: string;
   surfaceRoute?: SurfaceRouteState;
+  /** Application-owned identity and API credential dependencies. */
+  identityBinding?: IdentityBinding;
 }
 
 export function createDefaultComposition(
@@ -120,7 +125,17 @@ export function createDefaultComposition(
     } } : {}),
     ...(packageFormIdResolver ? { formIdResolver: packageFormIdResolver } : {}),
   });
-  const identityBinding = identityProviderFor(config, notificationDelivery, {
+  // Authored local preview is an explicit anonymous package capability.
+  // It has no sign-in lifecycle or external bearer, even under a managed profile.
+  const previewIdentityProvider: IdentityProvider = {
+    async discover() { return []; },
+    async authenticate() { throw new Error('Local package preview has no sign-in provider'); },
+    async revoke() {},
+    subscribe(listener) { listener(null); return () => {}; },
+  };
+  const identityBinding: IdentityBinding = options.packageUrl
+    ? { provider: previewIdentityProvider }
+    : options.identityBinding ?? identityProviderFor(config, notificationDelivery, {
     anonymousSessions,
     initialDefinitionUrl,
   });
@@ -145,12 +160,7 @@ export function createDefaultComposition(
       ...preview,
       localPackagePreview: true,
       // Preview has no sign-in claim; server sessions authorize uploads and saves.
-      identityProvider: {
-        async discover() { return []; },
-        async authenticate() { throw new Error('Local package preview has no sign-in provider'); },
-        async revoke() {},
-        subscribe(listener) { listener(null); return () => {}; },
-      },
+      identityProvider: previewIdentityProvider,
       offlineSubmitQueue: unavailableOfflineSubmitQueue(),
       instanceCapabilities: { ...preview.instanceCapabilities, offlineSubmit: 'unavailable', fileUpload: 'available' },
       attachmentStore: new HttpAttachmentStore({
@@ -193,6 +203,7 @@ export function createDefaultComposition(
     draftStore,
     submitTransport,
     identityProvider: identityBinding.provider,
+    browserAuthSession: identityBinding.browserAuthSession,
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
     statusReader: unavailableStatusReader(),
@@ -363,6 +374,7 @@ function assertReferenceHttpDataPorts(config: FormspecWebConfig): void {
 export interface IdentityBinding {
   provider: IdentityProvider;
   accessToken?: AccessTokenProvider;
+  browserAuthSession?: BrowserAuthSession;
 }
 
 function identityProviderFor(
@@ -373,6 +385,9 @@ function identityProviderFor(
     initialDefinitionUrl: string;
   },
 ): IdentityBinding {
+  if (config.identity.mode === 'oidc-required' && config.ports.identityProvider !== 'oidc') {
+    throw new Error('OIDC-required identity policy requires the OIDC provider');
+  }
   if (config.ports.identityProvider === 'anonymous') {
     if (productionContext) {
       return {
@@ -386,11 +401,7 @@ function identityProviderFor(
   }
 
   if (config.ports.identityProvider === 'oidc' && config.identity.oidc) {
-    const provider = new OidcAdapter(config.identity.oidc);
-    return {
-      provider,
-      accessToken: () => provider.currentAccessToken(),
-    };
+    return createOidcIdentityBinding(config.identity.oidc);
   }
 
   const magicLink =
@@ -415,7 +426,19 @@ function identityProviderFor(
     };
   }
 
-  return { provider: new AnonymousAdapter() };
+  throw new Error(`Selected identity provider is not configured: ${config.ports.identityProvider}`);
+}
+
+/** Concrete OIDC selection belongs to the composition root. */
+export function createOidcIdentityBinding(config: OidcClientConfig): IdentityBinding {
+  const browserAuthSession = new OidcBrowserAuthSession(config);
+  const provider = new OidcAdapter({ ...config, browserSession: browserAuthSession });
+  return { provider, browserAuthSession, accessToken: () => browserAuthSession.accessToken() };
+}
+
+/** Callback startup uses the same maintained lifecycle adapter as the form host. */
+export function createConfiguredBrowserAuthSession(config: OidcClientConfig): BrowserAuthSession {
+  return new OidcBrowserAuthSession(config);
 }
 
 function productionInitialDefinitionUrl(serverUrl: string): string {

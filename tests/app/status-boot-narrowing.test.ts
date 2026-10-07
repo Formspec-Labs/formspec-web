@@ -42,6 +42,7 @@ const spies = vi.hoisted(() => ({
   httpAnonProvider: vi.fn(function () {
     return { __mockHttpAnonymousIdentityProvider: true };
   }),
+  oidcSession: vi.fn(function () { return { accessToken: async () => undefined, dispose: () => undefined }; }),
   oidcAdapter: vi.fn(function () {
     return {
       __mockOidcAdapter: true,
@@ -69,6 +70,7 @@ vi.mock('../../src/adapters/http/anonymous-session.ts', () => ({
   AnonymousSessionBridge: spies.anonSession,
   HttpAnonymousIdentityProvider: spies.httpAnonProvider,
 }));
+vi.mock('../../src/adapters/identity/oidc-browser-session.ts', () => ({ OidcBrowserAuthSession: spies.oidcSession }));
 vi.mock('../../src/adapters/identity/oidc.ts', () => ({
   OidcAdapter: spies.oidcAdapter,
 }));
@@ -134,6 +136,7 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     spies.anonSession.mockClear();
     spies.httpAnonProvider.mockClear();
     spies.oidcAdapter.mockClear();
+    spies.oidcSession.mockClear();
     spies.magicLinkAdapter.mockClear();
     spies.anonymousAdapter.mockClear();
   });
@@ -251,6 +254,7 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     });
     expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
+    expect(spies.oidcSession).not.toHaveBeenCalled();
     expect(spies.magicLinkAdapter).not.toHaveBeenCalled();
     expect(spies.anonymousAdapter).not.toHaveBeenCalled();
     expect(spies.httpAnonProvider).not.toHaveBeenCalled();
@@ -288,6 +292,7 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     // "not shared" copy and never reads it.
     expect(spies.anonSession).not.toHaveBeenCalled();
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
+    expect(spies.oidcSession).not.toHaveBeenCalled();
   });
 
   it('documents-route narrowed composition does NOT construct HTTP / identity adapters when respondentPlace is unavailable (FW-0056 via FW-0070)', async () => {
@@ -306,6 +311,7 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.httpDraft).not.toHaveBeenCalled();
     expect(spies.httpSubmit).not.toHaveBeenCalled();
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
+    expect(spies.oidcSession).not.toHaveBeenCalled();
     expect(spies.magicLinkAdapter).not.toHaveBeenCalled();
     expect(spies.anonymousAdapter).not.toHaveBeenCalled();
     expect(spies.httpAnonProvider).not.toHaveBeenCalled();
@@ -324,6 +330,7 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.httpSubmit).not.toHaveBeenCalled();
     expect(spies.anonSession).not.toHaveBeenCalled();
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
+    expect(spies.oidcSession).not.toHaveBeenCalled();
   });
 
   it('chooseComposition picks the history-route factory when the URL is /history (FW-0057)', async () => {
@@ -337,6 +344,7 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.httpSubmit).not.toHaveBeenCalled();
     expect(spies.anonSession).not.toHaveBeenCalled();
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
+    expect(spies.oidcSession).not.toHaveBeenCalled();
     // Production posture is unavailable → readHistory throws via the sentinel.
     await expect(composition.respondentHistorySource.readHistory({})).rejects.toThrow(/not configured/);
   });
@@ -353,5 +361,6 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.httpSubmit).not.toHaveBeenCalled();
     expect(spies.anonSession).not.toHaveBeenCalled();
     expect(spies.oidcAdapter).not.toHaveBeenCalled();
+    expect(spies.oidcSession).not.toHaveBeenCalled();
   });
 });

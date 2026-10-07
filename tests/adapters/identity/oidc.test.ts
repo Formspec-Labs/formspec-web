@@ -11,7 +11,7 @@ describe('OidcAdapter', () => {
       getUser: vi.fn(async () => ({
         access_token: 'access-token',
         id_token: 'id-token',
-        profile: {
+        profile: { iss: 'https://idp.example.test',
           sub: 'provider-native-subject',
           acr: 'urn:formspec:assurance:l3',
           email: 'respondent@example.test',
@@ -53,7 +53,7 @@ describe('OidcAdapter', () => {
       getUser: vi.fn(async () => ({
         access_token: 'access-token',
         id_token: 'id-token',
-        profile: {
+        profile: { iss: 'https://idp.example.test',
           sub: 'provider-native-subject',
           acr: 'urn:formspec:assurance:l3',
         },
@@ -80,12 +80,12 @@ describe('OidcAdapter', () => {
     });
   });
 
-  it('uses non-interactive silent renewal for expired access tokens', async () => {
+  it('keeps expired token reads passive and renews explicitly', async () => {
     const signinRedirect = vi.fn(async () => undefined);
     const driver: OidcClientDriver = {
       getUser: vi.fn(async () => ({
         access_token: 'expired-token',
-        profile: {
+        profile: { iss: 'https://idp.example.test',
           sub: 'provider-native-subject',
           acr: 'urn:formspec:assurance:l3',
         },
@@ -93,7 +93,7 @@ describe('OidcAdapter', () => {
       })),
       signinSilent: vi.fn(async () => ({
         access_token: 'renewed-token',
-        profile: {
+        profile: { iss: 'https://idp.example.test',
           sub: 'provider-native-subject',
           acr: 'urn:formspec:assurance:l3',
         },
@@ -109,7 +109,10 @@ describe('OidcAdapter', () => {
       subjectRefFactory: () => 'oidc:subject-hash',
     });
 
-    await expect(adapter.currentAccessToken()).resolves.toBe('renewed-token');
+    await expect(adapter.currentAccessToken()).resolves.toBeUndefined();
+    expect(driver.signinSilent).not.toHaveBeenCalled();
+    await adapter.browserSession.renew();
+    expect(adapter.browserSession.admittedUser()?.access_token).toBe('renewed-token');
     expect(driver.signinSilent).toHaveBeenCalledOnce();
     expect(signinRedirect).not.toHaveBeenCalled();
   });
@@ -127,7 +130,7 @@ describe('OidcAdapter', () => {
     const [option] = await adapter.discover('L3');
     if (!option) throw new Error('expected OIDC option');
 
-    await expect(adapter.authenticate(option)).rejects.toThrow(/redirect is not configured/);
+    await expect(adapter.authenticate(option)).rejects.toThrow(/capability-unavailable/);
   });
 
   it('fails instead of silently downgrading unknown ACR values', () => {
@@ -148,7 +151,8 @@ describe('OidcAdapter', () => {
       driver: {
         getUser: async () => ({
           access_token: 'access-token',
-          profile: { sub: 'subject', acr },
+          expires_at: 4_100_000_000,
+          profile: { iss: 'https://idp.example.test', sub: 'subject', acr },
         }),
       },
     });
@@ -167,7 +171,8 @@ describe('OidcAdapter', () => {
       driver: {
         getUser: async () => ({
           access_token: 'access-token',
-          profile: { sub: 'subject', acr: 'urn:formspec:assurance:l2' },
+          expires_at: 4_100_000_000,
+          profile: { iss: 'https://idp.example.test', sub: 'subject', acr: 'urn:formspec:assurance:l2' },
         }),
       },
     });
@@ -187,7 +192,8 @@ describe('OidcAdapter', () => {
       driver: {
         getUser: async () => ({
           access_token: 'access-token',
-          profile: { sub: 'subject', acr: 'idp-high' },
+          expires_at: 4_100_000_000,
+          profile: { iss: 'https://idp.example.test', sub: 'subject', acr: 'idp-high' },
         }),
       },
     });

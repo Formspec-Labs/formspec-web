@@ -1,4 +1,4 @@
-import { UserManager, type User, type UserManagerSettings } from 'oidc-client-ts';
+import { OidcBrowserAuthSession, type OidcBrowserAuthSessionConfig } from './oidc-browser-session.ts';
 import type {
   AssuranceLevel,
   IdentityClaim,
@@ -8,34 +8,13 @@ import type {
 } from '../../ports/identity-provider.ts';
 import { IdentitySession, assuranceRank, meetsAssurance } from './assurance.ts';
 
-export interface OidcClientDriver {
-  getUser(): Promise<OidcUserLike | null>;
-  signinSilent?(): Promise<OidcUserLike | null>;
-  signinRedirect?(): Promise<void>;
-  removeUser?(): Promise<void>;
-}
-
-export interface OidcUserLike {
-  access_token?: string;
-  id_token?: string;
-  profile: {
-    sub?: unknown;
-    acr?: unknown;
-    email?: unknown;
-    name?: unknown;
-  } & Record<string, unknown>;
-  expires_at?: number;
-}
-
+export type { OidcClientDriver, OidcUserLike, OidcClock } from './oidc-browser-session.ts';
 export type AcrAssuranceMap = Record<string, AssuranceLevel>;
 
-export interface OidcAdapterConfig {
-  issuer: string;
-  clientId: string;
-  redirectUri?: string;
+export interface OidcAdapterConfig extends OidcBrowserAuthSessionConfig {
   displayName?: string;
   minAssurance: AssuranceLevel;
-  driver?: OidcClientDriver;
+  browserSession?: OidcBrowserAuthSession;
   acrAssuranceMap?: AcrAssuranceMap;
   subjectRefFactory?: (issuer: string, subject: string) => Promise<string> | string;
 }
@@ -68,12 +47,14 @@ class IdentityInteractionStartedError extends Error {
 
 export class OidcAdapter implements IdentityProvider {
   private readonly config: OidcAdapterConfig;
-  private readonly driver: OidcClientDriver;
+  readonly browserSession: OidcBrowserAuthSession;
   private readonly session = new IdentitySession();
+  private hasClaim = false;
 
   constructor(config: OidcAdapterConfig) {
     this.config = config;
-    this.driver = config.driver ?? createOidcClientTsDriver(config);
+    this.browserSession = config.browserSession ?? new OidcBrowserAuthSession(config);
+    this.browserSession.subscribe(() => this.clearClaim());
   }
 
   async discover(formAssuranceRequirements?: AssuranceLevel): Promise<IdpOption[]> {
@@ -87,10 +68,19 @@ export class OidcAdapter implements IdentityProvider {
   }
 
   async authenticate(option: IdpOption): Promise<IdentityClaim> {
-    if (option.kind !== 'oidc') {
+    if (option.kind !== 'oidc' || option.issuer !== this.config.issuer) {
       throw new Error('OidcAdapter can only authenticate oidc options');
     }
-    const user = await this.resolveUser();
+    const state = await this.browserSession.getSession();
+    if (!state) {
+      await this.browserSession.begin();
+      throw new IdentityInteractionStartedError('OIDC authentication redirect started');
+    }
+    const user = this.browserSession.admittedUser();
+    if (!user) throw new Error('OIDC session is unavailable');
+    if (state.issuer !== this.config.issuer || user.profile.iss !== this.config.issuer) {
+      throw new Error('OIDC session issuer does not match the identity adapter');
+    }
     const subject = user.profile.sub;
     if (typeof subject !== 'string' || !subject) {
       throw new Error('OIDC profile did not include a usable subject');
@@ -99,7 +89,7 @@ export class OidcAdapter implements IdentityProvider {
       user.profile.acr,
       this.config.acrAssuranceMap ?? defaultAcrAssuranceMap,
     );
-    if (assuranceRank(assuranceLevel) < assuranceRank(option.minAssurance)) {
+    if (assuranceRank(assuranceLevel) < Math.max(assuranceRank(option.minAssurance), assuranceRank(this.config.minAssurance))) {
       throw new Error(
         `OIDC ACR resolved to ${assuranceLevel}, below required ${option.minAssurance}`,
       );
@@ -108,6 +98,8 @@ export class OidcAdapter implements IdentityProvider {
       this.config.issuer,
       subject,
     );
+    const current = await this.browserSession.getSession();
+    if (!current || current.revision !== state.revision) throw new Error('OIDC session changed during identity normalization');
     const claim: IdentityClaim = {
       provider: this.config.issuer,
       adapter: 'oidc-client-ts',
@@ -119,47 +111,30 @@ export class OidcAdapter implements IdentityProvider {
       assuranceLevel,
       privacyTier: 'pseudonymous',
       evidenceRef: `oidc:${this.config.issuer}:acr`,
-      expiresAt: expiresAt(user),
+      expiresAt: state.expiresAt,
     };
+    this.hasClaim = true;
     this.session.set(claim);
     return claim;
   }
 
   async revoke(_claim: IdentityClaim): Promise<void> {
-    await this.driver.removeUser?.();
+    this.clearClaim();
+    await this.browserSession.logout();
+  }
+
+  private clearClaim(): void {
+    if (!this.hasClaim) return;
+    this.hasClaim = false;
     this.session.set(null);
   }
 
-  async currentAccessToken(): Promise<string | undefined> {
-    const current = await this.driver.getUser();
-    const token = accessTokenFromUser(current);
-    if (token || !this.driver.signinSilent || !tokenNeedsSilentRenewal(current)) {
-      return token;
-    }
-    try {
-      return accessTokenFromUser(await this.driver.signinSilent());
-    } catch {
-      return undefined;
-    }
+  currentAccessToken(): Promise<string | undefined> {
+    return this.browserSession.accessToken();
   }
 
   subscribe(listener: (claim: IdentityClaim | null) => void): Unsubscribe {
     return this.session.subscribe(listener);
-  }
-
-  private async resolveUser(): Promise<OidcUserLike> {
-    const silentUser = await this.driver.signinSilent?.();
-    const user = silentUser ?? (await this.driver.getUser());
-    if (user) {
-      return user;
-    }
-    if (!this.driver.signinRedirect) {
-      throw new Error('OIDC authentication redirect is not configured');
-    }
-    await this.driver.signinRedirect();
-    throw new IdentityInteractionStartedError(
-      'OIDC authentication redirect started before a user claim was available',
-    );
   }
 }
 
@@ -181,23 +156,6 @@ export function assuranceLevelFromAcr(acr: unknown, map: AcrAssuranceMap): Assur
   return highest;
 }
 
-function createOidcClientTsDriver(config: OidcAdapterConfig): OidcClientDriver {
-  const settings: UserManagerSettings = {
-    authority: config.issuer,
-    client_id: config.clientId,
-    redirect_uri: config.redirectUri ?? globalThis.location?.href,
-    response_type: 'code',
-    scope: 'openid profile email',
-  };
-  const manager = new UserManager(settings);
-  return {
-    getUser: () => manager.getUser() as Promise<User | null>,
-    signinSilent: () => manager.signinSilent() as Promise<User | null>,
-    signinRedirect: () => manager.signinRedirect(),
-    removeUser: () => manager.removeUser(),
-  };
-}
-
 async function defaultSubjectRefFactory(issuer: string, subject: string): Promise<string> {
   const payload = new TextEncoder().encode(`${issuer}\0${subject}`);
   const subtle = globalThis.crypto?.subtle;
@@ -205,36 +163,9 @@ async function defaultSubjectRefFactory(issuer: string, subject: string): Promis
     const digest = await subtle.digest('SHA-256', payload);
     return `oidc:${hex(new Uint8Array(digest)).slice(0, 32)}`;
   }
-  return `oidc:${fallbackHash(`${issuer}\0${subject}`)}`;
-}
-
-function expiresAt(user: OidcUserLike): string | undefined {
-  return user.expires_at ? new Date(user.expires_at * 1000).toISOString() : undefined;
-}
-
-function accessTokenFromUser(user: OidcUserLike | null | undefined): string | undefined {
-  if (!user?.access_token || tokenNeedsSilentRenewal(user)) {
-    return undefined;
-  }
-  return user.access_token;
-}
-
-function tokenNeedsSilentRenewal(user: OidcUserLike | null | undefined): boolean {
-  if (!user?.expires_at) {
-    return false;
-  }
-  return user.expires_at * 1000 <= Date.now();
+  throw new Error('SHA-256 is unavailable; configure a subject reference mapper');
 }
 
 function hex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function fallbackHash(input: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0');
 }

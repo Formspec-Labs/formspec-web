@@ -46,10 +46,14 @@ defineIdentityProviderConformance('HTTP anonymous IdentityProvider conformance',
 
 defineIdentityProviderConformance('OIDC IdentityProvider conformance', () => {
   const driver: OidcClientDriver = {
+    removeUser: async () => undefined,
+    signoutRedirect: async () => undefined,
     getUser: async () => ({
       access_token: 'access-token',
       id_token: 'id-token',
+      expires_at: 4_100_000_000,
       profile: {
+        iss: 'https://idp.example.test',
         sub: 'subject-1',
         acr: 'urn:formspec:assurance:l3',
       },
@@ -117,10 +121,14 @@ defineIdentityProviderConformance(
   'composite IdentityProvider conformance with OIDC arm',
   () => {
     const driver: OidcClientDriver = {
+      removeUser: async () => undefined,
+      signoutRedirect: async () => undefined,
       getUser: async () => ({
         access_token: 'composite-oidc-access',
         id_token: 'composite-oidc-id',
+        expires_at: 4_100_000_000,
         profile: {
+          iss: 'https://idp-composite.example.test',
           sub: 'composite-oidc-subject',
           acr: 'urn:formspec:assurance:l3',
         },

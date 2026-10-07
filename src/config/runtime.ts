@@ -21,6 +21,11 @@ const runtimeEnvMap = {
   oidcIssuer: ['FORMSPEC_WEB_OIDC_ISSUER', 'VITE_FORMSPEC_WEB_OIDC_ISSUER'],
   oidcClientId: ['FORMSPEC_WEB_OIDC_CLIENT_ID', 'VITE_FORMSPEC_WEB_OIDC_CLIENT_ID'],
   oidcRedirectUri: ['FORMSPEC_WEB_OIDC_REDIRECT_URI', 'VITE_FORMSPEC_WEB_OIDC_REDIRECT_URI'],
+  oidcScope: ['FORMSPEC_WEB_OIDC_SCOPE', 'VITE_FORMSPEC_WEB_OIDC_SCOPE'],
+  oidcSilentRedirectUri: ['FORMSPEC_WEB_OIDC_SILENT_REDIRECT_URI', 'VITE_FORMSPEC_WEB_OIDC_SILENT_REDIRECT_URI'],
+  oidcPostLogoutRedirectUri: ['FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI', 'VITE_FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI'],
+  oidcAcrValues: ['FORMSPEC_WEB_OIDC_ACR_VALUES', 'VITE_FORMSPEC_WEB_OIDC_ACR_VALUES'],
+  oidcResource: ['FORMSPEC_WEB_OIDC_RESOURCE', 'VITE_FORMSPEC_WEB_OIDC_RESOURCE'],
   magicLinkCallbackPath: [
     'FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
     'VITE_FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
@@ -97,7 +102,8 @@ function applyRuntimeOverrides(
     runtimeConfig.magicLinkCallbackPath ||
     runtimeConfig.oidcIssuer ||
     runtimeConfig.oidcClientId ||
-    runtimeConfig.oidcRedirectUri
+    runtimeConfig.oidcRedirectUri || runtimeConfig.oidcScope || runtimeConfig.oidcSilentRedirectUri
+    || runtimeConfig.oidcPostLogoutRedirectUri || runtimeConfig.oidcAcrValues || runtimeConfig.oidcResource
     || runtimeConfig.surfaceBundle
     || maxUploadBytes !== undefined
     || nativePackageSigning !== undefined;
@@ -173,14 +179,21 @@ function applyOidcRuntimeOverrides(
   oidc: OidcClientConfig | undefined,
   runtimeConfig: RuntimeConfig,
 ): OidcClientConfig | undefined {
-  if (!runtimeConfig.oidcIssuer && !runtimeConfig.oidcClientId && !runtimeConfig.oidcRedirectUri) {
+  if (!runtimeConfig.oidcIssuer && !runtimeConfig.oidcClientId && !runtimeConfig.oidcRedirectUri && !runtimeConfig.oidcScope && !runtimeConfig.oidcSilentRedirectUri
+    && !runtimeConfig.oidcPostLogoutRedirectUri && !runtimeConfig.oidcAcrValues && !runtimeConfig.oidcResource) {
     return oidc;
   }
 
   return {
+    ...oidc,
     issuer: runtimeConfig.oidcIssuer ?? oidc?.issuer ?? '',
     clientId: runtimeConfig.oidcClientId ?? oidc?.clientId ?? '',
     redirectUri: runtimeConfig.oidcRedirectUri ?? oidc?.redirectUri,
+    scope: runtimeConfig.oidcScope ?? oidc?.scope,
+    silentRedirectUri: runtimeConfig.oidcSilentRedirectUri ?? oidc?.silentRedirectUri,
+    postLogoutRedirectUri: runtimeConfig.oidcPostLogoutRedirectUri ?? oidc?.postLogoutRedirectUri,
+    acrValues: runtimeConfig.oidcAcrValues ?? oidc?.acrValues,
+    resource: runtimeConfig.oidcResource ?? oidc?.resource,
     minAssurance: oidc?.minAssurance ?? 'L2',
   };
 }

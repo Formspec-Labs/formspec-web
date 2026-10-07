@@ -1,4 +1,4 @@
-export { createDefaultComposition, buildRealIdentityProvider } from './default.ts';
+export { createDefaultComposition, buildRealIdentityProvider, createOidcIdentityBinding, createConfiguredBrowserAuthSession, type IdentityBinding, type DefaultCompositionOptions } from './default.ts';
 export { createDemoComposition } from './demo.ts';
 export { createStubComposition } from './stub.ts';
 export {

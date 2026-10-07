@@ -10,3 +10,11 @@ export {
   type OidcClientDriver,
   type OidcUserLike,
 } from './oidc.ts';
+
+export {
+  OidcBrowserAuthSession,
+  createOidcClientTsDriver,
+  type OidcBrowserAuthSessionConfig,
+  type OidcClock,
+  type OidcDriverEvent,
+} from './oidc-browser-session.ts';

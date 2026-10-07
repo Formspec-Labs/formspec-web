@@ -31,6 +31,14 @@ export interface OidcClientConfig {
   issuer: string;
   clientId: string;
   redirectUri?: string;
+  /** Space-separated OIDC and API scopes; must include openid. */
+  scope?: string;
+  silentRedirectUri?: string;
+  postLogoutRedirectUri?: string;
+  acrValues?: string;
+  /** Deployment mapping for respondent assurance, never application roles. */
+  acrAssuranceMap?: Record<string, AssuranceLevel>;
+  resource?: string;
   minAssurance: AssuranceLevel;
 }
 
@@ -163,6 +171,11 @@ export interface RuntimeConfig {
   oidcIssuer?: string;
   oidcClientId?: string;
   oidcRedirectUri?: string;
+  oidcScope?: string;
+  oidcSilentRedirectUri?: string;
+  oidcPostLogoutRedirectUri?: string;
+  oidcAcrValues?: string;
+  oidcResource?: string;
   magicLinkCallbackPath?: string;
   /** Complete object supplied by runtime JS; locator-only objects stay disabled. */
   surfaceBundle?: RespondentSurfaceBundleConfig;
