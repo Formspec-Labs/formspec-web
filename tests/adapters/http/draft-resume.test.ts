@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBrowserDraftResumeMetadataStore } from '../../../src/adapters/browser/draft-resume-metadata.ts';
 import { AnonymousSessionBridge } from '../../../src/adapters/http/anonymous-session.ts';
 import { createHttpAdapterCohort } from '../../../src/adapters/http/cohort.ts';
+import { createDraftBindingRegistry } from '../../../src/adapters/http/draft-binding-registry.ts';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../../src/adapter-conformance/fixtures.ts';
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
@@ -20,6 +21,72 @@ const grant = { session_id: 'session', session_token: 'server-owner-token', subj
   form_id: 'conformance', expires_at: '2099-01-01T00:00:00Z' };
 
 describe('tab metadata anonymous draft resume', () => {
+  it('refuses a newer package for a retained draft and restores the original version', async () => {
+    const storage = tabStorage();
+    const oldKey = { ...key, formVersion: '0.1.2' };
+    const currentKey = { ...key, formVersion: '0.1.3' };
+    const oldResponse = { ...sampleFormResponse, definitionVersion: oldKey.formVersion };
+    const { fetch, requests } = recordingFetch(request => {
+      if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
+      if (request.method === 'POST') return jsonResponse({ draft_id: 'old-version-draft', draft_version: 1 });
+      return jsonResponse({ draft_id: 'old-version-draft', draft_version: 2,
+        draft_state: oldResponse.data, canonical_response: oldResponse });
+    });
+    const build = () => {
+      const config = { ...context, fetchImpl: fetch,
+        resumeMetadata: createBrowserDraftResumeMetadataStore(context, storage) };
+      return createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
+    };
+    await build().draftStore.save(oldKey, oldResponse);
+    const retained = [...storage.values];
+    await expect(build().draftStore.load(currentKey)).rejects.toThrow(/another form version/);
+    await expect(build().draftStore.save(currentKey, { ...oldResponse, definitionVersion: '0.1.3' }))
+      .rejects.toThrow(/another form version/);
+    expect(requests).toHaveLength(2);
+    expect([...storage.values]).toEqual(retained);
+    await expect(build().draftStore.load(oldKey)).resolves.toEqual(oldResponse);
+    await build().draftStore.delete(currentKey);
+    expect(storage.values.size).toBe(0);
+    await expect(build().draftStore.load(currentKey)).resolves.toBeUndefined();
+  });
+
+  it('keeps conflicting-version checks separate for each subject and party', async () => {
+    const storage = tabStorage();
+    const oldKey = { ...key, formVersion: '0.1.2', subjectRef: 'anon:owner', partyRef: 'applicant' };
+    const oldResponse = { ...sampleFormResponse, definitionVersion: oldKey.formVersion };
+    const { fetch, requests } = recordingFetch(request => request.url.endsWith('/sessions/anonymous')
+      ? jsonResponse(grant) : jsonResponse({ draft_id: 'applicant-draft', draft_version: 1 }));
+    const config = { ...context, fetchImpl: fetch,
+      resumeMetadata: createBrowserDraftResumeMetadataStore(context, storage) };
+    await createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) })
+      .draftStore.save(oldKey, oldResponse);
+    const resumed = createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
+    await expect(resumed.draftStore.load({ ...oldKey, formVersion: '0.1.3', partyRef: 'preparer' }))
+      .resolves.toBeUndefined();
+    await expect(resumed.draftStore.load({ ...oldKey, formVersion: '0.1.3', subjectRef: 'anon:other' }))
+      .resolves.toBeUndefined();
+    await expect(resumed.draftStore.load({ ...oldKey, formVersion: '0.1.3' }))
+      .rejects.toThrow(/another form version/);
+    expect(requests).toHaveLength(2);
+  });
+
+  it('clears conflicting version handles only for the same resolved form, subject and party', () => {
+    const resumeMetadata = createBrowserDraftResumeMetadataStore(context, tabStorage());
+    const resolveFormId = () => 'server-form-id';
+    const first = createDraftBindingRegistry({ resumeMetadata, formIdResolver: resolveFormId });
+    const applicant = { formUrl: 'urn:package:old', formVersion: '0.1.2', partyRef: 'applicant' };
+    const preparer = { ...applicant, partyRef: 'preparer' };
+    first.put(applicant, { draftId: 'applicant-draft', draftVersion: 1 });
+    first.put(preparer, { draftId: 'preparer-draft', draftVersion: 2 });
+    const resumed = createDraftBindingRegistry({ resumeMetadata, formIdResolver: resolveFormId });
+    const current = { ...applicant, formUrl: 'urn:package:current', formVersion: '0.1.3' };
+    expect(() => resumed.get(current)).toThrow(/another form version/);
+    resumed.delete(current);
+    const fresh = createDraftBindingRegistry({ resumeMetadata, formIdResolver: resolveFormId });
+    expect(fresh.get(current)).toBeUndefined();
+    expect(fresh.get(preparer)).toEqual({ draftId: 'preparer-draft', draftVersion: 2 });
+  });
+
   it('restores a new bridge and cohort with the same owner token, while server GET supplies the answers', async () => {
     const storage = tabStorage();
     const { fetch, requests } = recordingFetch(request => {

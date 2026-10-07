@@ -63,10 +63,23 @@ export function createDraftBindingRegistry(options: {
     if (handles.length) options.resumeMetadata?.write('draft-handles', handles);
     else options.resumeMetadata?.remove('draft-handles');
   };
+  const sameScope = (left: DraftKey, right: DraftKey) => (
+    resolveFormId(left.formUrl, left.formVersion) === resolveFormId(right.formUrl, right.formVersion)
+    && (left.subjectRef ?? null) === (right.subjectRef ?? null)
+    && (left.partyRef ?? null) === (right.partyRef ?? null)
+  );
   return {
     get(key) {
       restore();
-      return map.get(serializeKey(key))?.snapshot;
+      const matching = map.get(serializeKey(key));
+      if (matching) return matching.snapshot;
+      for (const retained of map.values()) {
+        if (sameScope(retained.key, key)
+          && (retained.key.formVersion ?? null) !== (key.formVersion ?? null)) {
+          throw new Error('A saved draft belongs to another form version. Open its original package or explicitly clear the saved draft before starting this version.');
+        }
+      }
+      return undefined;
     },
     put(key, snapshot) {
       restore();
@@ -81,7 +94,10 @@ export function createDraftBindingRegistry(options: {
         restored = true;
         return;
       }
-      map.delete(serializeKey(key));
+      // Explicit clear also removes an older-version handle that refused resume.
+      for (const [serialized, entry] of map) {
+        if (sameScope(entry.key, key)) map.delete(serialized);
+      }
       persist();
     },
     entries() {
