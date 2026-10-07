@@ -1,6 +1,6 @@
 /** @filedesc Production-callable AppGraph report producer pipeline. */
 import { artifactResolutionGraphInput, resolveArtifacts, resolveBundleExportArtifacts, } from './artifact-resolver.js';
-import { moduleResolverInputFromAppGraph, resolveModules, } from './module-resolver.js';
+import { moduleResolverInputFromAppGraph, resolveModules, snapshotModulePayloadSchemaResources, } from './module-resolver.js';
 import { validateAppGraph } from './validator.js';
 function finishAppGraphValidationReport(request, artifactResolutionReport) {
     const graphInput = artifactResolutionGraphInput(artifactResolutionReport);
@@ -35,14 +35,18 @@ function finishAppGraphValidationReport(request, artifactResolutionReport) {
     };
 }
 export async function produceAppGraphValidationReport(request) {
-    return finishAppGraphValidationReport(request, await resolveArtifacts(request));
+    const prepared = { ...request, moduleSupport: snapshotModulePayloadSchemaResources(request.moduleSupport) };
+    return finishAppGraphValidationReport(prepared, await resolveArtifacts(prepared));
 }
 /**
  * Run the complete resolver, module, schema, and cross-artifact pipeline over a
  * verified inline export before any consumer dereferences typed Surface data.
  */
 export async function produceBundleExportAppGraphValidationReport(request) {
-    const { documents, ...pipelineRequest } = request;
+    const { documents, ...pipelineRequest } = {
+        ...request,
+        moduleSupport: snapshotModulePayloadSchemaResources(request.moduleSupport),
+    };
     const artifactResolutionReport = await resolveBundleExportArtifacts({
         manifest: request.manifest,
         documents,

@@ -1,3 +1,5 @@
+import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA } from '@formspec-org/surface-react';
+import { loadCanonicalModulePayloadSchemaResources } from '../../../src/adapters/schema/index.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
 import { PinnedPackageDefinitionSource } from '../../../src/adapters/http/pinned-package-definition-source.ts';
@@ -518,4 +520,73 @@ it('admits the exact reviewed Studio r3 Component through its explicit native re
   const source = new PinnedPackageDefinitionSource('/package.json');
   expect(await source.getComponentDocument()).toEqual(component);
   expect(await source.getNativeBundleExport()).toEqual(bundle);
+});
+
+function structuredEvidenceBundle(failure?: 'path' | 'generation' | 'reference') {
+  const bundle = widgetBundle();
+  const registry = bundle.documents['https://example.test/registries/widgets'] as { entries: { widgetShape?: { props: unknown } }[] };
+  registry.entries[1].widgetShape!.props = failure === 'reference'
+    ? { $ref: 'https://unknown.example/schema' }
+    : { type: 'object', required: ['blocks'], properties: { blocks: { type: 'array', items: STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA } } };
+  const surface = bundle.documents[surfaceUrl] as { routes: { slots: { binding: { config: unknown } }[] }[] };
+  surface.routes[0].slots[0].binding.config = { blocks: [{ type: 'json', id: 'evidence', emptyMessage: 'No evidence', unavailableMessage: 'Unavailable evidence', path: failure === 'path' ? 'bad..path' : 'evidence',
+    'x-generation': { anchors: failure === 'generation' ? [42] : ['need:inspect-evidence@1'] } }] };
+  return bundle;
+}
+
+describe('automatic Surface props validation with pinned canonical resources', () => {
+  it('admits exact published JSON props through hash-pinned fetch and graph extraction', async () => {
+    const candidate = structuredEvidenceBundle();
+    const fetch = await mockNativePackage(candidate);
+    const source = new PinnedPackageDefinitionSource('/package.json', {
+      moduleAdmission: { allowedModules: [{ id: 'x-example', version: '1.0.0' }] },
+      moduleSupport: { payloadSchemaResources: await loadCanonicalModulePayloadSchemaResources() },
+    });
+    expect(await source.getNativeBundleExport()).toEqual(candidate);
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it.each(['path', 'generation', 'reference', 'absent'] as const)('refuses %s before exposing pinned resources', async failure => {
+    await mockNativePackage(structuredEvidenceBundle(failure === 'absent' ? undefined : failure));
+    const source = new PinnedPackageDefinitionSource('/package.json', {
+      moduleAdmission: { allowedModules: [{ id: 'x-example', version: '1.0.0' }] },
+      moduleSupport: failure === 'absent' ? {} : { payloadSchemaResources: await loadCanonicalModulePayloadSchemaResources() },
+    });
+    await expect(source.getDefinition()).rejects.toThrow('MODULE-PAYLOAD-SCHEMA-MISMATCH');
+    await expect(source.getNativeBundleExport()).rejects.toThrow('MODULE-PAYLOAD-SCHEMA-MISMATCH');
+  });
+});
+
+
+describe('actual pinned package resource identity and isolation', () => {
+  it.each(['duplicate', 'mismatched-id'] as const)('refuses %s canonical resource identity before exposing a Definition', async failure => {
+    const canonical = await loadCanonicalModulePayloadSchemaResources();
+    const resources = failure === 'duplicate' ? [...canonical, canonical[0]]
+      : [{ ...canonical[0], uri: 'https://wrong.example/common' }];
+    await mockNativePackage(structuredEvidenceBundle());
+    const source = new PinnedPackageDefinitionSource('/package.json', {
+      moduleAdmission: { allowedModules: [{ id: 'x-example', version: '1.0.0' }] },
+      moduleSupport: { payloadSchemaResources: resources },
+    });
+    await expect(source.getDefinition()).rejects.toThrow('MODULE-PAYLOAD-SCHEMA-MISMATCH');
+    await expect(source.getNativeBundleExport()).rejects.toThrow('MODULE-PAYLOAD-SCHEMA-MISMATCH');
+  });
+
+  it('isolates a mutated caller copy and a refused graph from the next canonical admission and cached export', async () => {
+    const canonical = await loadCanonicalModulePayloadSchemaResources();
+    const callerCopy = structuredClone(canonical);
+    await mockNativePackage(structuredEvidenceBundle());
+    const options = { moduleAdmission: { allowedModules: [{ id: 'x-example', version: '1.0.0' }] },
+      moduleSupport: { payloadSchemaResources: callerCopy } };
+    const source = new PinnedPackageDefinitionSource('/package.json', options);
+    const admitted = await source.getNativeBundleExport();
+    callerCopy[0].uri = 'https://wrong.example/common';
+    expect(await source.getNativeBundleExport()).toEqual(admitted);
+    await expect(new PinnedPackageDefinitionSource('/package.json', options).getDefinition()).rejects.toThrow('MODULE-PAYLOAD-SCHEMA-MISMATCH');
+    expect(await new PinnedPackageDefinitionSource('/package.json', {
+      moduleAdmission: options.moduleAdmission,
+      moduleSupport: { payloadSchemaResources: await loadCanonicalModulePayloadSchemaResources() },
+    }).getNativeBundleExport()).toEqual(admitted);
+    expect(canonical[0].uri).toBe('https://formspec.org/schemas/common/1.0');
+  });
 });

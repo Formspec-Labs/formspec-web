@@ -18,6 +18,7 @@ import type { Composition } from '../../composition/types.ts';
 import type { SubmitConfirmation } from '../../ports/submit-transport.ts';
 import {
   loadSurfaceBundleSchemaValidators,
+  loadCanonicalModulePayloadSchemaResources,
 } from '../../adapters/schema/index.ts';
 import {
   RespondentDefinitionController,
@@ -63,14 +64,20 @@ export function VerifiedRespondentSurface({
     [suppliedSessionStore],
   );
   const validation = useMemo<SurfaceBundleValidationProvider>(
-    () => async () => withRespondentPublicAppValidation(
-      { schemaValidators: await loadSurfaceBundleSchemaValidators() },
-      {
-        appId: bundleConfig.verification.expectedAppId,
-        starterModuleId: bundleConfig.starterModuleId,
-        receiptResourceUrl: bundleConfig.receiptResourceUrl,
-      },
-    ),
+    () => async () => {
+      const [schemaValidators, payloadSchemaResources] = await Promise.all([
+        loadSurfaceBundleSchemaValidators(),
+        loadCanonicalModulePayloadSchemaResources(),
+      ]);
+      return withRespondentPublicAppValidation(
+        { schemaValidators, moduleSupport: { payloadSchemaResources } },
+        {
+          appId: bundleConfig.verification.expectedAppId,
+          starterModuleId: bundleConfig.starterModuleId,
+          receiptResourceUrl: bundleConfig.receiptResourceUrl,
+        },
+      );
+    },
     [bundleConfig],
   );
   const widgetModules = useMemo(

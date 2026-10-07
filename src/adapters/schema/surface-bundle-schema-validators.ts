@@ -6,6 +6,7 @@ import Ajv2020, {
 import addFormats from 'ajv-formats';
 import type {
   AppGraphSchemaValidator,
+  ModulePayloadSchemaResource,
   SchemaValidationIssue,
 } from '@formspec-org/app-graph';
 import type { DataSourcePayloadValidator } from '@formspec-org/surface';
@@ -31,6 +32,30 @@ let compiledResponseValidator: ValidateFunction | undefined;
 let compiledSigningContentValidator: ValidateFunction | undefined;
 
 let pendingArtifactValidators: Promise<CompiledArtifactValidators> | undefined;
+let pendingModulePayloadResources: Promise<readonly ModulePayloadSchemaResource[]> | undefined;
+
+/** Locally qualified canonical references for the maintained module props compiler. */
+export function loadCanonicalModulePayloadSchemaResources(): Promise<readonly ModulePayloadSchemaResource[]> {
+  pendingModulePayloadResources ??= import('./canonical-schemas.ts').then(({ DEPENDENCY_SCHEMA_DOCUMENTS }) => {
+    const uri = 'https://formspec.org/schemas/common/1.0';
+    const matches = DEPENDENCY_SCHEMA_DOCUMENTS.filter(document => isSchemaObject(document) && document.$id === uri);
+    if (matches.length !== 1) throw new Error('Canonical common schema resource is unavailable or ambiguous');
+    const schema = structuredClone(canonicalSchema(matches[0]));
+    freezeSchemaSnapshot(schema);
+    return Object.freeze([Object.freeze({ uri, schema })]);
+  }).catch((error: unknown) => {
+    pendingModulePayloadResources = undefined;
+    throw error;
+  });
+  return pendingModulePayloadResources;
+}
+
+// Only detached, locally loaded JSON schema documents reach this helper.
+function freezeSchemaSnapshot(value: unknown): void {
+  if (typeof value !== 'object' || value === null) return;
+  for (const child of Object.values(value)) freezeSchemaSnapshot(child);
+  Object.freeze(value);
+}
 
 /**
  * Load the canonical schemas and build the synchronous callback Surface bundle

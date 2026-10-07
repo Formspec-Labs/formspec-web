@@ -14,7 +14,7 @@ import { HttpAttachmentStore } from '../adapters/http/attachment-store.ts';
 import { createBrowserDraftResumeMetadataStore } from '../adapters/browser/draft-resume-metadata.ts';
 import { computeJcsSha256Digest } from '../adapters/http/response-action-ledger.ts';
 import { responseSigningDigest } from '../adapters/integrity/response-signing-digest.ts';
-import { createSigningDataSourcePayloadValidator, loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../adapters/schema/surface-bundle-schema-validators.ts';
+import { createSigningDataSourcePayloadValidator, loadCanonicalSigningContentValidator, loadCanonicalModulePayloadSchemaResources, validateCanonicalFormResponse } from '../adapters/schema/surface-bundle-schema-validators.ts';
 import { createNativePackageSigningHost } from '../shared/native-package-signing-host.ts';
 import type { QualifiedResponseActionRole, ResponseActionRole } from '../shared/response-action-controller.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
@@ -30,8 +30,9 @@ import type { NativePackageBoot, NativePackageCompositionOptions } from './nativ
 export async function loadNativePackage(config: FormspecWebConfig, options: NativePackageCompositionOptions, deferred: Composition): Promise<NativePackageBoot> {
   const adapter = config.referenceAdapters!.formspecStack!;
   const base = { baseUrl: adapter.formspecServerUrl!, tenantBinding: config.tenantBinding };
+  const payloadSchemaResources = await loadCanonicalModulePayloadSchemaResources();
   const source = new PinnedPackageDefinitionSource(options.packageUrl, {
-    moduleAdmission: { allowedModules: [options.signing.module] }, moduleSupport: {},
+    moduleAdmission: { allowedModules: [options.signing.module] }, moduleSupport: { payloadSchemaResources },
   });
   const [definition, bundle, componentDocument, localeDocuments] = await Promise.all([
     source.getDefinition(), source.getNativeBundleExport(), source.getComponentDocument(), source.getLocaleDocuments(),

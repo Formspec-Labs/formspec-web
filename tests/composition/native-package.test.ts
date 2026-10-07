@@ -17,6 +17,8 @@ import { publicPortalProfile } from '../../src/profiles/profiles.ts';
 import { computeJcsSha256Digest } from '../../src/adapters/http/response-action-ledger.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
+import * as appGraphModule from '@formspec-org/app-graph';
+import { loadCanonicalModulePayloadSchemaResources } from 'formspec-web/adapters/schema';
 
 const nativeBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/native-bundle.json'), 'utf8');
 const componentBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/passport-renewal.component.json'), 'utf8');
@@ -148,6 +150,8 @@ describe('explicit native package composition', () => {
 
   it('qualifies the actual r5 package before returning one owned HTTP cohort and caches boot', async () => {
     const test = await fixture();
+    // Observe the real production producer; keep its maintained props compiler intact.
+    const producer = vi.spyOn(appGraphModule, 'produceAppGraphValidationReport');
     const deferred = createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl });
     expect(test.requests).toEqual([]);
     await expect(deferred.draftStore.load({ formUrl: test.definition.url })).rejects.toThrow('admission has not completed');
@@ -158,6 +162,12 @@ describe('explicit native package composition', () => {
     expect(await boot.composition.definitionSource.getDefinition(initialDefinitionUrl)).toEqual(test.definition);
     expect(boot.moduleId).toBe(test.signing.module.id); expect(boot.initialLocale).toBe('en');
     expect(boot.host.getSnapshot().locale).toBe('en');
+    expect(producer).toHaveBeenCalledTimes(1);
+    const admission = producer.mock.calls[0][0];
+    expect(admission.moduleAdmission).toEqual({ allowedModules: [test.signing.module] });
+    expect(admission.moduleSupport?.payloadSchemaResources).toEqual(await loadCanonicalModulePayloadSchemaResources());
+    expect(admission.moduleSupport?.payloadValidators).toBeUndefined();
+    expect((await producer.mock.results[0].value).moduleResolutionReport.ok).toBe(true);
     expect(test.requests.every(request => request.method === 'GET')).toBe(true);
     expect(test.requests.some(request => request.url.includes('sessions/anonymous'))).toBe(false);
     const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version, status: 'in-progress' as const };

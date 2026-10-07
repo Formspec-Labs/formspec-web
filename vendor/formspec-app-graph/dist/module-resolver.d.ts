@@ -64,9 +64,16 @@ export interface ModulePayloadValidatorResult {
     schemaFragmentPath?: string;
 }
 export type ModulePayloadValidator = (input: ModulePayloadValidatorInput) => ModulePayloadValidatorResult;
+/** A caller-qualified, locally loaded JSON Schema document and its exact resource URI. */
+export interface ModulePayloadSchemaResource {
+    uri: string;
+    schema: unknown;
+}
 export interface ModuleResolverSupportInput extends ModuleResolutionSupportProfile {
     defaultModules?: ModuleResolverModuleInput[];
     payloadValidators?: Record<string, ModulePayloadValidator | undefined>;
+    /** Local reference documents; URI identifies a resource but does not authenticate its contents. */
+    payloadSchemaResources?: readonly ModulePayloadSchemaResource[];
 }
 export interface ModuleResolverInput {
     appModules: ModuleResolverModuleInput[];
@@ -84,5 +91,7 @@ export interface ModuleResolverGraphInput {
     support?: ModuleResolverSupportInput;
     source?: string;
 }
+/** Capture resources before asynchronous artifact loading can yield to a caller. @internal */
+export declare function snapshotModulePayloadSchemaResources(support: ModuleResolverSupportInput | undefined): ModuleResolverSupportInput | undefined;
 export declare function moduleResolverInputFromAppGraph(input: ModuleResolverGraphInput): ModuleResolverInput;
 export declare function resolveModules(input: ModuleResolverInput): ModuleResolutionReport;

@@ -17,10 +17,26 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  */
 import { useEffect, useId, useRef, useState } from 'react';
 import { structuredPanelConfirmationAdmission, } from '@formspec-org/app-graph';
+import { snapshotFiniteJson } from '@formspec-org/surface';
 import { Heading, nextLevel } from '../heading.js';
 import { admitSurfaceWidgetActionInput } from '../widget-action-runtime.js';
 import { WidgetEmptyState } from './empty-state.js';
 import { surfaceSemanticOutputSubjectRef, useSurfaceSemanticOutputs, } from '../semantic-output.js';
+/** Reusable branch for authored Registry widgetShape.props; not native admission. */
+export const STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['type', 'id', 'path', 'emptyMessage', 'unavailableMessage', 'x-generation'],
+    properties: {
+        type: { const: 'json' },
+        id: { type: 'string', pattern: '^[a-zA-Z][a-zA-Z0-9_-]*$' },
+        path: { type: 'string', pattern: '^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$' },
+        title: { type: 'string', minLength: 1 },
+        emptyMessage: { type: 'string', minLength: 1 },
+        unavailableMessage: { type: 'string', minLength: 1 },
+        'x-generation': { $ref: 'https://formspec.org/schemas/common/1.0#/$defs/Generation' },
+    },
+};
 const NEED_ANCHOR = /^need:([a-zA-Z][a-zA-Z0-9_-]*)@[1-9][0-9]*$/;
 const SAFE_PATH_PART = /^[a-zA-Z0-9_-]+$/;
 const UNSAFE_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);
@@ -99,6 +115,54 @@ function scalarValue(value) {
 function scalarText(value) {
     const scalar = scalarValue(value);
     return scalar === undefined ? undefined : String(scalar);
+}
+/** Own data properties only; refused access is different from absent evidence. */
+function selectJsonValue(root, path) {
+    if (typeof path !== 'string' || !path.length)
+        return { status: 'refused' };
+    const parts = path.split('.');
+    if (parts.some(part => !SAFE_PATH_PART.test(part) || UNSAFE_PATH_PARTS.has(part))) {
+        return { status: 'refused' };
+    }
+    try {
+        let current = root;
+        for (const part of parts) {
+            if (typeof current !== 'object' || current === null)
+                return { status: 'refused' };
+            const descriptor = Object.getOwnPropertyDescriptor(current, part);
+            if (!descriptor)
+                return { status: 'missing' };
+            if (!Object.prototype.hasOwnProperty.call(descriptor, 'value'))
+                return { status: 'refused' };
+            current = descriptor.value;
+        }
+        return { status: 'found', value: current };
+    }
+    catch {
+        return { status: 'refused' };
+    }
+}
+function renderJson(block, data, headingLevel) {
+    // Both states require authored copy; no untraced generic error or partial JSON.
+    if (!nonEmptyString(block.emptyMessage) || !nonEmptyString(block.unavailableMessage))
+        return null;
+    return blockFrame(block, headingLevel, anchors => {
+        const selected = selectJsonValue(data, block.path);
+        if (selected.status === 'missing')
+            return blockEmpty(block, anchors);
+        let serialized;
+        if (selected.status === 'found') {
+            try {
+                serialized = JSON.stringify(snapshotFiniteJson(selected.value), null, 2);
+            }
+            catch {
+                // Snapshot errors remain diagnostics, never authored product copy.
+            }
+        }
+        return serialized === undefined
+            ? _jsx("span", { ...traceAttributes(anchors), children: String(block.unavailableMessage) })
+            : _jsx("pre", { className: "fs-structured-panel__json", ...traceAttributes(anchors), children: serialized });
+    });
 }
 function selectedActionPayload(configured, root) {
     if (configured === undefined)
@@ -360,6 +424,8 @@ function renderBlock(candidate, data, routeParams, headingLevel, availableAction
     if (!block)
         return null;
     switch (block.type) {
+        case 'json':
+            return renderJson(block, data, headingLevel);
         case 'metric':
             return renderMetric(block, data, headingLevel);
         case 'key-value':

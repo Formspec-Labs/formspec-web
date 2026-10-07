@@ -1,3 +1,5 @@
+import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, starterWidgetModule, type SurfaceWidgetModule } from '@formspec-org/surface-react';
+import { loadCanonicalModulePayloadSchemaResources, loadSurfaceBundleSchemaValidators } from '../../src/adapters/schema/index.ts';
 import {
   act,
   cleanup,
@@ -877,6 +879,7 @@ function committed(
 }
 
 interface RenderOptions {
+  readonly widgetModules?: readonly SurfaceWidgetModule[];
   readonly locator?: string;
   readonly location?: string;
   readonly validation?: SurfaceBundleValidationProvider;
@@ -895,6 +898,7 @@ function hostElement(fixture: Fixture, options: RenderOptions = {}) {
         locator: options.locator ?? 'https://host.example/apps/intake.bundle',
       }}
       validation={options.validation ?? validation}
+      widgetModules={options.widgetModules}
       location={options.location ?? '/'}
       onNavigate={vi.fn()}
       onValidationReport={options.onValidationReport}
@@ -919,3 +923,67 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+function evidenceSignedPayload(failure?: 'path' | 'generation' | 'reference'): SurfaceBundleSignedPayloadV1 {
+  // This fixture models the exact public schema serialized into authored Registry bytes.
+  const publishedJsonSchema: SurfaceBundleSignedPayloadV1['documents'][string] = JSON.parse(JSON.stringify(STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA));
+  const payload = signedPayload();
+  const registryUrl = 'https://example.gov/registries/evidence';
+  const module = { id: 'x-evidence', version: '1.0.0' };
+  const metadata = { version: '1.0.0', status: 'stable', description: 'Retained evidence', compatibility: { formspecVersion: '>=1.0.0' } };
+  return { ...payload, manifest: { ...payload.manifest, modules: [module], registries: [{ url: registryUrl }] }, documents: {
+    ...payload.documents,
+    [registryUrl]: { $formspecRegistry: '1.1', publisher: { name: 'Test author' }, published: CHECKED_AT, entries: [
+      { ...metadata, name: module.id, category: 'module', contributes: ['x-structured-panel'] },
+      { ...metadata, name: 'x-structured-panel', category: 'widget', widgetShape: { widgetName: 'StructuredPanel', props: failure === 'reference'
+        ? { $ref: 'https://unknown.example/schema' }
+        : { type: 'object', required: ['blocks'], properties: { blocks: { type: 'array', items: publishedJsonSchema } } } } },
+    ] },
+    [SURFACE_URL]: { $formspecSurface: '0.2', id: 'main', entry: 'start', modules: [module], routes: [{ id: 'start', path: '/', slots: [
+      { id: 'welcome', slotType: 'static-content', binding: { kind: 'text', content: SIGNED_CONTENT } },
+      { id: 'evidence', slotType: 'module-widget', binding: { moduleId: module.id, widgetName: 'StructuredPanel', config: { blocks: [
+        { type: 'json', id: 'retained', emptyMessage: 'No evidence', unavailableMessage: 'Unavailable evidence', path: failure === 'path' ? 'bad..path' : 'evidence',
+          'x-generation': { anchors: failure === 'generation' ? [42] : ['need:inspect-evidence@1'] } },
+      ] } } },
+    ] }] },
+  } };
+}
+
+async function evidenceValidation(absent = false) {
+  return { schemaValidators: await loadSurfaceBundleSchemaValidators(),
+    moduleAdmission: { allowedModules: [{ id: 'x-evidence', version: '1.0.0' }] },
+    moduleSupport: absent ? {} : { payloadSchemaResources: await loadCanonicalModulePayloadSchemaResources() } };
+}
+
+describe('actual Surface host canonical module props admission', () => {
+  it('admits automatically extracted JSON props with pinned canonical resources before rendering', async () => {
+    const fixture = await createFixture({ verificationFactory: snapshot => ({ ...verifiedResult(snapshot), payload: evidenceSignedPayload() }) });
+    const reports: AppGraphReportProducerResult[] = [];
+    renderHost(fixture, { widgetModules: [starterWidgetModule('x-evidence')], validation: () => evidenceValidation(), onValidationReport: report => reports.push(report) });
+    await waitFor(() => expect(reports).toHaveLength(1));
+    expect(reports[0].report.ok, JSON.stringify(reports[0].moduleResolutionReport.diagnostics)).toBe(true);
+    expect(await screen.findByText(SIGNED_CONTENT)).toBeDefined();
+    expect(await screen.findByText('No evidence')).toBeDefined();
+    expect(reports[0].moduleResolutionReport.contributions.some(use => use.expectedCategory === 'widget')).toBe(true);
+    expect(fixture.commitRequests).toHaveLength(1);
+  });
+
+  it.each(['path', 'generation', 'reference', 'absent'] as const)('refuses %s in actual admission before commit or rendering', async failure => {
+    const fixture = await createFixture({ verificationFactory: snapshot => ({ ...verifiedResult(snapshot),
+      payload: evidenceSignedPayload(failure === 'absent' ? undefined : failure) }) });
+    const reports: AppGraphReportProducerResult[] = [];
+    const state = await admitSurfaceBundle({ source: fixture.source, verifier: fixture.verifier,
+      request: { locator: 'https://host.example/apps/intake.bundle' }, validation: () => evidenceValidation(failure === 'absent'),
+      onValidationReport: report => reports.push(report) });
+    expect(state).toEqual({ status: 'failure', code: 'app-graph-invalid' });
+    const diagnostic = reports[0].moduleResolutionReport.diagnostics.find(issue => issue.code === 'MODULE-PAYLOAD-SCHEMA-MISMATCH');
+    expect(diagnostic).toBeDefined();
+    expect(diagnostic?.details?.reason).toBe(failure === 'reference' || failure === 'absent' ? 'payload-schema-evaluation-failed' : 'payload-schema-mismatch');
+    expect(diagnostic?.primarySource?.jsonPointer).toContain('/routes/0/slots/1/binding/config');
+    expect(fixture.commitRequests).toHaveLength(0);
+    renderHost(fixture, { validation: () => evidenceValidation(failure === 'absent') });
+    expect(await screen.findByRole('alert')).toBeDefined();
+    expect(screen.queryByText(SIGNED_CONTENT)).toBeNull();
+    expect(fixture.commitRequests).toHaveLength(0);
+  });
+});

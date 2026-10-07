@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
+import { loadCanonicalModulePayloadSchemaResources } from 'formspec-web/adapters/schema';
 import { sampleFormResponse } from '../../../src/adapter-conformance/fixtures.ts';
 import type {
   AppGraphSchemaValidator,
@@ -14,6 +18,47 @@ import {
 const DEFINITION_URL = 'https://example.gov/forms/intake';
 const RESPONSE_REF = 'https://formspec.org/schemas/response/1.0';
 const CONTENT_REF = 'https://formspec.org/schemas/common/1.0#/$defs/SigningContent';
+
+describe('public canonical module payload resources', () => {
+  it('returns only the exact pinned common root through the public adapter entry', async () => {
+    const bytes = readFileSync(resolve(process.cwd(), 'vendor/formspec-schemas/common.schema.json'));
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe('e1a7634efc725a5257dc71945933eb8d640ceb8de93fb18dc9bc0464a8df44fb');
+    const resources = await loadCanonicalModulePayloadSchemaResources();
+    expect(resources).toEqual([{ uri: 'https://formspec.org/schemas/common/1.0', schema: JSON.parse(bytes.toString()) }]);
+    const ids = resources.map(resource => resource.uri);
+    expect(new Set(ids).size).toBe(resources.length);
+    const references: string[] = [];
+    function inspect(value: unknown): void {
+      if (!value || typeof value !== 'object') return;
+      for (const [key, child] of Object.entries(value)) {
+        if (key === '$ref' || key === '$dynamicRef') {
+          expect(typeof child).toBe('string');
+          references.push(String(child));
+        }
+        inspect(child);
+      }
+    }
+    inspect(resources[0].schema);
+    expect(references).toHaveLength(20);
+    expect(references.every(ref => ref.startsWith('#/'))).toBe(true);
+  });
+
+  it('deeply freezes the detached resource and isolates later consumers from caller copies', async () => {
+    const resources = await loadCanonicalModulePayloadSchemaResources();
+    const before = JSON.stringify(resources);
+    function checkFrozen(value: unknown): void {
+      if (!value || typeof value !== 'object') return;
+      expect(Object.isFrozen(value)).toBe(true);
+      for (const child of Object.values(value)) checkFrozen(child);
+    }
+    checkFrozen(resources);
+    expect(Reflect.set(resources, '0', { uri: 'https://invalid.example', schema: {} })).toBe(false);
+    expect(Reflect.set(resources[0], 'uri', 'https://invalid.example')).toBe(false);
+    const callerCopy = structuredClone(resources);
+    Reflect.set(callerCopy[0], 'schema', { $id: 'https://invalid.example', type: 'null' });
+    expect(JSON.stringify(await loadCanonicalModulePayloadSchemaResources())).toBe(before);
+  });
+});
 const signingContent = {
   source: { ref: `${DEFINITION_URL}#/extensions/x-formspec-signing-content/entries/en`, version: '1' },
   locale: 'en', documentId: 'demo', signingIntent: 'urn:example:sign', declaration: 'Declaration.',
