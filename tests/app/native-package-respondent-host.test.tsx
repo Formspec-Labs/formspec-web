@@ -492,6 +492,7 @@ describe('actual native initial Save persistent feedback', () => {
   });
   it('keeps the native pending control focusable and joins repeated activation before one callback', async () => {
     const test = await actualFixture(); const finish = pauseActualSave(test);
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
     const mounted = render(<NativePackageRespondentHost {...test.props} />);
     const initial = await screen.findByRole('button', { name: 'Save draft' }); initial.focus();
     fireEvent.keyDown(initial, { key: 'Enter' }); fireEvent.click(initial); fireEvent.keyUp(initial, { key: 'Enter' });
@@ -501,7 +502,15 @@ describe('actual native initial Save persistent feedback', () => {
     fireEvent.click(initial); await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledOnce());
     await act(async () => { finish(); });
     await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    const status = mounted.container.querySelector<HTMLElement>('.formspec-action-status[role="status"]')!;
+    expect(initial.isConnected).toBe(false); expect(status.isConnected).toBe(true);
+    expect(status.tabIndex).toBe(-1); expect(document.activeElement).toBe(status);
+    expect(focus.mock.instances.filter(target => target === status)).toHaveLength(1);
     expect(test.terminals).toEqual([{ status: 'completed', valid: undefined }]); expect(test.saveDraft).toHaveBeenCalledOnce();
+    await act(async () => { test.getEngine().setLocale('es-US'); });
+    await vi.waitFor(() => expect(status.textContent).toBe('Completado.'));
+    expect(document.activeElement).toBe(status); expect(focus.mock.instances.filter(target => target === status)).toHaveLength(1);
+    focus.mockRestore();
     mounted.unmount(); test.host.dispose();
   });
 
@@ -538,6 +547,77 @@ describe('actual native initial Save persistent feedback', () => {
     await vi.waitFor(() => expect(test.invokerFailures).toHaveLength(1));
     expect(test.terminals).toHaveLength(0); expect(test.host.getSnapshot().controller?.phase).not.toBe('saved');
     expect(persistentFeedback(mounted.container)).toBe('');
+    mounted.unmount(); test.host.dispose();
+  });
+});
+
+
+describe('actual native Save completion focus custody', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(['move', 'blur'] as const)('does not steal focus after deliberate user %s while initial Save is pending', async departure => {
+    const test = await actualFixture(); const finish = pauseActualSave(test);
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const mounted = render(<><button>Outside the form</button><NativePackageRespondentHost {...test.props} /></>);
+    const initial = await screen.findByRole('button', { name: 'Save draft' }); initial.focus(); fireEvent.click(initial);
+    await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledOnce());
+    const outside = screen.getByRole('button', { name: 'Outside the form' });
+    if (departure === 'move') outside.focus(); else initial.blur();
+    const expectedFocus = document.activeElement;
+    await act(async () => { finish(); });
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    const status = mounted.container.querySelector<HTMLElement>('.formspec-action-status[role="status"]')!;
+    expect(initial.isConnected).toBe(false); expect(status.isConnected).toBe(true);
+    expect(document.activeElement).toBe(expectedFocus);
+    expect(focus.mock.instances.filter(target => target === status)).toHaveLength(0);
+    expect(test.terminals).toHaveLength(1); expect(test.saveDraft).toHaveBeenCalledOnce();
+    mounted.unmount(); test.host.dispose();
+  });
+
+  it('keeps the surviving focused control on non-success and never focuses its status', async () => {
+    const test = await actualFixture(); test.saveDraft.mockRejectedValueOnce(new Error('test-port-refused'));
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    const initial = await screen.findByRole('button', { name: 'Save draft' }); initial.focus(); fireEvent.click(initial);
+    await vi.waitFor(() => expect(test.terminals).toHaveLength(1));
+    expect(test.terminals[0].status).not.toBe('completed'); expect(initial.isConnected).toBe(true);
+    expect(document.activeElement).toBe(initial);
+    const status = mounted.container.querySelector<HTMLElement>('.formspec-action-status[role="status"]')!;
+    expect(focus.mock.instances.filter(target => target === status)).toHaveLength(0);
+    mounted.unmount(); test.host.dispose();
+  });
+
+  it.each(['edit', 'clear'] as const)('never recovers focus for a late retired %s completion', async retirement => {
+    const test = await actualFixture(); const finish = pauseActualSave(test);
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const mounted = render(<><button>Outside the form</button><NativePackageRespondentHost {...test.props} /></>);
+    const initial = await screen.findByRole('button', { name: 'Save draft' }); initial.focus(); fireEvent.click(initial);
+    await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledOnce());
+    if (retirement === 'edit') await act(async () => { test.getEngine().setValue('fullName', 'Retired answer'); });
+    else await act(async () => { await test.host.clearDraftAccess(); });
+    const outside = screen.getByRole('button', { name: 'Outside the form' }); outside.focus();
+    const focusCallCount = focus.mock.calls.length;
+    await act(async () => { finish(); });
+    await vi.waitFor(() => expect(test.invokerFailures).toHaveLength(1));
+    expect(document.activeElement).toBe(outside); expect(focus.mock.calls).toHaveLength(focusCallCount);
+    expect(test.terminals).toHaveLength(0); expect(persistentFeedback(mounted.container)).toBe('');
+    mounted.unmount(); test.host.dispose();
+  });
+
+  it('does not recover focus when a surviving owned Save control is removed in a later readiness change', async () => {
+    const test = await actualFixture(); const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    const owned = screen.getByRole('button', { name: 'Save draft' }); owned.focus(); fireEvent.click(owned);
+    await vi.waitFor(() => expect(test.terminals).toHaveLength(2));
+    expect(owned.isConnected).toBe(true); expect(document.activeElement).toBe(owned);
+    const status = mounted.container.querySelector<HTMLElement>('.formspec-action-status[role="status"]')!;
+    const recoveryCount = focus.mock.instances.filter(target => target === status).length;
+    await act(async () => { test.getEngine().setInstanceValue('draftReadiness', 'ready', false); });
+    expect(owned.isConnected).toBe(false); expect(document.activeElement).not.toBe(status);
+    expect(focus.mock.instances.filter(target => target === status)).toHaveLength(recoveryCount);
+    expect(test.saveDraft).toHaveBeenCalledTimes(2); expect(test.terminals).toHaveLength(2);
     mounted.unmount(); test.host.dispose();
   });
 });

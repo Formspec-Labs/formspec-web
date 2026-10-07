@@ -30,7 +30,8 @@ export declare function createActionFeedbackStore(engine: IFormEngine): {
     state: import("@preact/signals-core").Signal<OwnedFeedback>;
     connect(): () => void;
     register(outlet: string): () => void;
-    start(outlet: string, intent: string | undefined, candidates: readonly string[]): Ticket | undefined;
+    start(outlet: string, intent: string | undefined, candidates: readonly string[], source?: HTMLElement | null): Ticket | undefined;
+    recoverFocus(ticket: Ticket, target: HTMLElement): void;
     settle(ticket: Ticket | undefined, status: Status): void;
 };
 type FeedbackStore = ReturnType<typeof createActionFeedbackStore>;

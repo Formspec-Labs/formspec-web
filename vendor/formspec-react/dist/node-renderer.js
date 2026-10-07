@@ -212,7 +212,7 @@ function ActionButtonNode({ node }) {
             return inFlightRef.current;
         }
         const intent = resolution.action?.intent;
-        const ticket = outlet?.store.start(outlet.id, intent, [...(node.needAnchors ?? []), ...actionNeedAnchors]);
+        const ticket = outlet?.store.start(outlet.id, intent, [...(node.needAnchors ?? []), ...actionNeedAnchors], controlRef.current?.querySelector('button'));
         setFeedback({ phase: 'pending' });
         const invocation = invoke(invocationContext);
         const tracked = invocation.then((result) => {
