@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import { createFormEngine, preactReactiveRuntime, type IFormEngine, type RegistryEntry } from '@formspec-org/engine/render';
 import type { SemanticControlScope } from '@formspec-org/react';
-import { composeSurfaceApp, matchRoute, routeHref, createThemeAuthority, createWidgetRegistry, dataSourceAvailableToWidget, dereferenceBundleExport, flattenRegistryEntries, planMatchedRoute, resolveDataSourceDescriptor, type BundleExport, type SlotPlan } from '@formspec-org/surface';
+import { captureResponseFieldMetadata, composeSurfaceApp, matchRoute, routeHref, createThemeAuthority, createWidgetRegistry, dataSourceAvailableToWidget, dereferenceBundleExport, flattenRegistryEntries, planMatchedRoute, resolveDataSourceDescriptor, type BundleExport, type SlotPlan } from '@formspec-org/surface';
 import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, responseReviewHash, starterWidgetModule, type ResponseReviewData, type ResponseReviewOptions, type ResponseReviewState } from '@formspec-org/surface-react';
 import type { FormDefinition, FormResponse, LocaleDocument, ValidationReport } from '@formspec-org/types';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
@@ -416,25 +416,18 @@ function* walkAdmittedSlots<T>(slots: readonly SlotPlan<T>[]): Generator<SlotPla
 }
 
 export function captureFields(engine: IFormEngine, response: FormResponse): ResponseReviewData['presentation']['fields'] {
-  const fields: Record<string, { label: string; options?: { value: string; label: string }[] }> = {};
-  function walk(items: FormDefinition['items'], values: Record<string, unknown>, prefix = '') {
-    for (const item of items) {
-      if (!Object.hasOwn(values, item.key)) continue;
-      const path = prefix ? `${prefix}.${item.key}` : item.key;
+  return captureResponseFieldMetadata(engine.definition, response, {
+    label(path) {
       const label = engine.getItemLabelSignal(path)?.value;
       if (typeof label !== 'string' || !label) throw new Error('native-review-label-unavailable');
-      const field = item.type === 'field' ? engine.getFieldVM(path) : undefined;
-      if (item.type === 'field' && !field) throw new Error('native-review-field-unavailable');
-      const options = field ? field.options.value.map(option => ({ value: option.value, label: option.label })) : [];
-      fields[path] = { label, ...(options.length ? { options } : {}) };
-      if (item.type === 'group' && item.children) {
-        const value = values[item.key];
-        if (Array.isArray(value)) value.forEach((row, index) => walk(item.children!, row as Record<string, unknown>, `${path}[${index}]`));
-        else if (value && typeof value === 'object') walk(item.children, value as Record<string, unknown>, path);
-      }
-    }
-  }
-  walk(engine.definition.items, response.data); return fields;
+      return label;
+    },
+    options(path) {
+      const field = engine.getFieldVM(path);
+      if (!field) throw new Error('native-review-field-unavailable');
+      return field.options.value;
+    },
+  });
 }
 function same(a: unknown, b: unknown) { return canonicalize(a) === canonicalize(b); }
 function atPath(data: unknown, path: string): unknown {

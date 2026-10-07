@@ -438,4 +438,30 @@ describe('generic native package signing session', () => {
     const fields = captureFields(engine, { ...sampleFormResponse, data: { rows: [{ choice: 'a' }, { choice: 'a' }] } });
     expect(fields['rows[1].choice']).toEqual({ label: 'Elección', options: [{ value: 'a', label: 'Opción A' }] }); expect(fields.rows.label).toBe('Filas'); engine.dispose();
   });
+  it('preserves native label and field refusal errors through the maintained capture helper', () => {
+    const engine = createFormEngine(sampleFormDefinition);
+    try {
+      const labels = vi.spyOn(engine, 'getItemLabelSignal').mockReturnValue(undefined);
+      expect(() => captureFields(engine, sampleFormResponse)).toThrow('native-review-label-unavailable');
+      labels.mockRestore();
+      vi.spyOn(engine, 'getFieldVM').mockReturnValue(undefined);
+      expect(() => captureFields(engine, sampleFormResponse)).toThrow('native-review-field-unavailable');
+    } finally { engine.dispose(); }
+  });
+  it('propagates engine reader failures without publishing replacement metadata', () => {
+    const engine = createFormEngine(sampleFormDefinition);
+    try {
+      const refusal = new Error('source-options-unavailable');
+      vi.spyOn(engine, 'getFieldVM').mockImplementation(() => { throw refusal; });
+      expect(() => captureFields(engine, sampleFormResponse)).toThrow(refusal);
+    } finally { engine.dispose(); }
+  });
+  it('refuses malformed retained repeat rows through the maintained traversal', () => {
+    const definition = { ...sampleFormDefinition, items: [{ key: 'rows', type: 'group' as const, label: 'Rows', repeatable: true,
+      children: [{ key: 'choice', type: 'field' as const, dataType: 'choice' as const, label: 'Choice' }] }] };
+    const engine = createFormEngine(definition);
+    try {
+      expect(() => captureFields(engine, { ...sampleFormResponse, data: { rows: [null] } })).toThrow('response-review-data-invalid');
+    } finally { engine.dispose(); }
+  });
 });
