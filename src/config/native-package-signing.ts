@@ -1,5 +1,5 @@
 import { snapshotFiniteJson } from '@formspec-org/surface';
-import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE } from '@formspec-org/surface-react';
+import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE } from '@formspec-org/surface-react/widget-metadata';
 import type { ResponseActionRole } from '../shared/response-action-controller.ts';
 
 export interface NativePackageSigningConfig {

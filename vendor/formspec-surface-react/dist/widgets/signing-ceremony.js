@@ -3,11 +3,11 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useId, useRef, useState } from 'react';
 import canonicalize from 'canonicalize';
 import { snapshotFiniteJson } from '@formspec-org/surface';
-import { RESPONSE_REVIEW_STATE_SCHEMA } from './response-review.js';
 import { Heading } from '../heading.js';
-import { SIGNING_CONTENT_SOURCE_PROPS_SCHEMA } from '../generated/signing-content-source-schema.js';
 import { WidgetEmptyState } from './empty-state.js';
-const COPY_KEYS = ['heading', 'readInstruction', 'readConfirmation', 'signerName', 'pending', 'signed', 'failed', 'unavailable'];
+import { SIGNING_CEREMONY_CONFIG_SCHEMA, } from './signing-ceremony-metadata.js';
+export * from './signing-ceremony-metadata.js';
+const COPY_KEYS = SIGNING_CEREMONY_CONFIG_SCHEMA.properties.copy.additionalProperties.required;
 const text = (value) => typeof value === 'string' && value.length > 0;
 const revision = (value) => Number.isSafeInteger(value) && Number(value) >= 0;
 function record(value) {
@@ -185,46 +185,3 @@ function SigningCeremonyAct({ props, data, copy, requireResponseReview }) {
     return _jsxs("section", { className: "fs-surface-ceremony", "data-widget": "signing-ceremony", "data-tenant-theme": "refused", children: [_jsx(Heading, { level: props.headingLevel, children: copy.heading }), _jsx("p", { id: `${id}-read`, children: copy.readInstruction }), _jsxs("div", { ref: scroll, className: "fs-surface-ceremony__full-text", tabIndex: 0, role: "region", "aria-label": copy.heading, "aria-describedby": `${id}-read`, onScroll: () => { const area = scroll.current; if (area && area.scrollTop + area.clientHeight >= area.scrollHeight - 1)
                     setAtEnd(true); }, children: [_jsx("p", { "data-probe": "signing-declaration", children: data.content.declaration }), _jsx("p", { "data-probe": "signing-electronic-consent", children: data.content.electronicConsent.text }), _jsx("p", { "data-probe": "signing-affirmation", children: data.content.affirmationText }), _jsx("p", { "data-probe": "signing-delegation", children: data.content.delegatedSigningNotice })] }), _jsx("p", { className: "fs-surface-ceremony__paper", "data-probe": "signing-paper-alternative", children: data.content.paperAlternative }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: read, disabled: !atEnd || pending || signed, onChange: (event) => setRead(event.currentTarget.checked) }), copy.readConfirmation] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: consent, disabled: !read || pending || signed, onChange: (event) => setConsent(event.currentTarget.checked) }), data.content.electronicConsent.controlLabel] }), _jsx("label", { htmlFor: `${id}-name`, children: copy.signerName }), _jsx("input", { id: `${id}-name`, autoComplete: "name", value: name, disabled: pending || signed, onChange: (event) => setName(event.currentTarget.value) }), _jsxs("div", { className: "fs-surface-ceremony__actions", children: [sign && _jsx("button", { type: "button", disabled: pending || !reviewed || signed || !atEnd || !read || !consent || !name.trim(), onClick: () => void emit('sign'), children: sign.label }), submit && _jsx("button", { type: "button", disabled: pending || !reviewed || !signed, onClick: () => void emit('submit'), children: submit.label }), paper && _jsx("button", { type: "button", disabled: pending, onClick: () => void emit('paper'), children: paper.label })] }), _jsx("p", { role: "status", "aria-live": "polite", children: pending ? copy.pending : failed ? copy.failed : !reviewed ? data.review?.state?.status === 'pending' ? copy.reviewPending : copy.reviewUnavailable : signed ? copy.signed : !sign || !submit ? copy.unavailable : '' })] });
 }
-/** Publish this exact config schema as the Registry entry's widgetShape.props. */
-export const SIGNING_CEREMONY_CONFIG_SCHEMA = {
-    type: 'object', additionalProperties: false, required: ['contentRefs', 'copy'],
-    properties: {
-        requireResponseReview: { type: 'boolean' },
-        contentRefs: {
-            type: 'object', minProperties: 1,
-            propertyNames: { pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$' },
-            additionalProperties: SIGNING_CONTENT_SOURCE_PROPS_SCHEMA,
-        },
-        copy: {
-            type: 'object', minProperties: 1,
-            propertyNames: { pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$' },
-            additionalProperties: {
-                type: 'object', additionalProperties: false, required: COPY_KEYS,
-                properties: { ...Object.fromEntries([...COPY_KEYS, 'reviewPending', 'reviewUnavailable'].map((key) => [key, { type: 'string', minLength: 1 }])),
-                    'x-generation': { type: 'object' } },
-            },
-        },
-        'x-generation': { type: 'object' },
-    },
-    allOf: [{ if: { required: ['requireResponseReview'], properties: { requireResponseReview: { const: true } } }, then: { properties: { copy: { additionalProperties: { required: ['reviewPending', 'reviewUnavailable'] } } } } }],
-};
-export const SIGNING_CEREMONY_DELIVERY_CONTRACT_ID = '@formspec-org/surface-react/SigningCeremony@0.1';
-export const SIGNING_CEREMONY_RENDERED_CONFIG_NODES = [
-    { pointerPattern: '', kind: 'signing-ceremony' },
-    { pointerPattern: '/copy/*', kind: 'signing-ceremony-copy' },
-];
-/** Exact authored Registry widgetShape; source payload schemas stay in the Data Sources catalog. */
-export const SIGNING_CEREMONY_WIDGET_SHAPE = {
-    widgetName: 'SigningCeremony',
-    props: SIGNING_CEREMONY_CONFIG_SCHEMA,
-    dataInputs: [...['content', 'response', 'draft', 'actor', 'signingResult', 'actionLabels'].map((name) => ({ name, required: true })), { name: 'review', required: false }],
-    actionOutputs: [{ name: 'sign' }, { name: 'submit' }, { name: 'paper' }],
-    childrenPolicy: 'none',
-    deliveryContractId: SIGNING_CEREMONY_DELIVERY_CONTRACT_ID,
-    renderedConfigNodes: SIGNING_CEREMONY_RENDERED_CONFIG_NODES,
-};
-/** Separately qualified opt-in source; expected identity is computed independently by the host. */
-export const SIGNING_CEREMONY_REVIEW_SCHEMA = {
-    type: 'object', additionalProperties: false, required: ['contextIdentity', 'state'],
-    properties: { contextIdentity: { type: 'string', pattern: '^[a-f0-9]{64}$' }, state: RESPONSE_REVIEW_STATE_SCHEMA },
-};
