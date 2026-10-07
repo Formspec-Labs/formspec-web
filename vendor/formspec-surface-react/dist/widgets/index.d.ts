@@ -23,6 +23,8 @@
  */
 import type { SurfaceWidget, SurfaceWidgetModule } from '../widget-api.js';
 export { IntakeBanner } from './intake-banner.js';
+export { SigningCeremony, SIGNING_CEREMONY_CONFIG_SCHEMA, SIGNING_CEREMONY_WIDGET_SHAPE, SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES } from './signing-ceremony.js';
+export type { SigningCeremonyConfig, SigningCeremonyCopy, SigningCeremonyData, SigningCeremonyDraft, SigningCeremonyResult } from './signing-ceremony.js';
 export { CeremonyFrame } from './ceremony-frame.js';
 export { ReceiptPanel } from './receipt-panel.js';
 export { QueueTable } from './queue-table.js';

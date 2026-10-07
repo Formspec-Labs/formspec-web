@@ -1,16 +1,3 @@
-/**
- * @filedesc In-memory Definition Response Data Source storage for previews and
- * tests.
- *
- * This is deliberately not durable persistence. It provides no restart
- * recovery, concurrency control, authorization, or cross-process delivery.
- * Demo hosts and outcome runners can use it to exercise the real, qualified
- * Data Source path without inventing product-specific state.
- *
- * The store admits targets only from exact `(catalogRef, sourceRef)` pairs in
- * the supplied Data Source catalog handles. It never derives a target from a
- * Definition URL, a filename, or an unqualified source id.
- */
 import type { FormResponse } from "@formspec-org/types";
 import type { DataSourceCatalogHandle, DataSourceLoader, DataSourceLoadResult } from "./data-source-loader.js";
 /** An exact source identity within one manifested Data Sources catalog. */

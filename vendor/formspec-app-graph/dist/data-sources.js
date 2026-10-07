@@ -100,7 +100,7 @@ function duplicateSourceDiagnostics(context) {
     }
     return diagnostics;
 }
-function exactDefinitionResolution(context, definitionRef) {
+export function exactDefinitionResolution(context, definitionRef) {
     const manifestMatches = manifestRefs(context, 'definitions')
         .filter((ref) => stringProp(ref, 'url') === definitionRef).length;
     const candidates = handlesByKind(context.handles, 'definition').filter((definition) => {
@@ -454,7 +454,7 @@ function bindingDiagnostic(widget, inputName, code, reason, details = {}) {
         },
     };
 }
-function bindingFailure(context, widget, binding) {
+export function bindingFailure(context, widget, binding) {
     const catalogRef = stringProp(binding, 'catalogRef');
     const sourceRef = stringProp(binding, 'sourceRef');
     const manifestedMatches = manifestRefs(context, 'dataSources')

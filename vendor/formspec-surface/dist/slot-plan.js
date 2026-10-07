@@ -1,3 +1,5 @@
+import { targetDefinitionMatches } from '@formspec-org/types';
+import { widgetActionScopeMatches } from '@formspec-org/app-graph';
 import { surfaceDiagnostic } from './diagnostics.js';
 import { planExperienceUnit, } from './experience-unit.js';
 import { planStaticContent, } from './static-content.js';
@@ -187,13 +189,16 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
             const actionOutputs = declaredOutputs.map((declared) => {
                 const authored = ownRecord(actionBindings, declared.name);
                 const actionRef = authored ? ownString(authored, 'actionRef') : undefined;
-                const action = actionRef === undefined
+                const responseInput = authored && Object.prototype.hasOwnProperty.call(authored, 'responseInput')
+                    ? authored.responseInput : undefined;
+                const resolved = actionRef === undefined
                     ? undefined
-                    : resolveWidgetAction(context.responseActions ?? [], actionRef);
+                    : resolveWidgetAction(context.responseActions ?? [], actionRef, responseInput, dataInputs, context.definitions);
                 return {
                     name: declared.name,
                     ...(actionRef !== undefined ? { actionRef } : {}),
-                    ...(action !== undefined ? { action } : {}),
+                    ...(resolved !== undefined ? { action: resolved.action } : {}),
+                    ...(resolved?.responseContext ? { responseContext: resolved.responseContext } : {}),
                 };
             });
             const plan = {
@@ -270,18 +275,31 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
 function exhaustive(value) {
     throw new Error(`Unhandled slot type: ${String(value)}`);
 }
-function resolveWidgetAction(documents, actionRef) {
+function resolveWidgetAction(documents, actionRef, responseInput, inputs, definitions) {
     const matches = documents.flatMap((document) => (document.actions ?? [])
         .filter((action) => action.id === actionRef)
         .map((action) => ({ document, action })));
     if (matches.length !== 1)
         return undefined;
     const match = matches[0];
-    if (!match
-        || match.document.scope !== 'app'
-        || match.document.targetDefinition !== undefined) {
+    if (!match)
         return undefined;
-    }
+    const selectedInputs = inputs.filter((input) => input.name === responseInput);
+    const selected = selectedInputs.length === 1 ? selectedInputs[0] : undefined;
+    const descriptor = selected?.status === 'ready' ? selected.descriptor : undefined;
+    const target = match.document.targetDefinition;
+    const targetPin = target && typeof target.url === 'string'
+        ? { url: target.url, ...(ownString(target, 'compatibleVersions') ? { compatibleVersions: ownString(target, 'compatibleVersions') } : {}) }
+        : undefined;
+    const candidates = [...definitions.values()].filter((definition) => targetDefinitionMatches(targetPin, definition));
+    const definition = candidates.length === 1 ? candidates[0] : undefined;
+    if (!widgetActionScopeMatches({ document: match.document, responseInput, inputs,
+        sourceSchema: descriptor?.source.schema, definition }))
+        return undefined;
+    const responseContext = match.document.scope === 'app' ? undefined
+        : descriptor && definition && typeof responseInput === 'string' ? { inputName: responseInput, descriptor, definition } : undefined;
+    if (match.document.scope !== 'app' && !responseContext)
+        return undefined;
     const { action } = match;
     if (!action || typeof action.intent !== 'string')
         return undefined;
@@ -296,12 +314,13 @@ function resolveWidgetAction(documents, actionRef) {
             ? { ref }
             : undefined;
     const needAnchors = generationNeedAnchors(action);
-    return {
+    const metadata = {
         actionRef,
         intent: action.intent,
         ...(label !== undefined ? { label } : {}),
         ...(needAnchors.length > 0 ? { needAnchors } : {}),
     };
+    return { action: metadata, ...(responseContext ? { responseContext } : {}) };
 }
 function ownRecord(value, key) {
     if (!value || !Object.prototype.hasOwnProperty.call(value, key))

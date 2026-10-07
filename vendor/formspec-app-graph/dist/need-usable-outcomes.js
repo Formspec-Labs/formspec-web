@@ -1,5 +1,6 @@
 /** @filedesc Advisory matching from Experience Need completion declarations to statically usable outputs. */
 import { diagnosticSourceForHandle } from './report.js';
+import { widgetActionOwnershipMatches } from './surface-widget-actions.js';
 import { collectRenderedNeedTraceNodes, } from './rendered-need-trace.js';
 import { resolvedActionIds, responseActionReferences, } from './response-action-resolution.js';
 import { handlesByKind, moduleIsAdmitted, ownProp, record, recordArray, registryWidgetEntries, resolvedWidgetContributionFromEntries, stringProp, surfaceWidgetSlots, widgetShape, } from './surface-widgets.js';
@@ -320,9 +321,12 @@ function uniqueAction(context, actionId) {
     const value = actionValue(action);
     return value ? { action, value } : undefined;
 }
-function uniqueWidgetAction(context, actionId) {
+function uniqueWidgetAction(context, actionId, widget, outputName) {
     const resolved = uniqueAction(context, actionId);
-    return resolved?.action.scope === 'app' ? resolved : undefined;
+    const contribution = resolvedWidgetContributionFromEntries(widget, registryWidgetEntries(context));
+    const binding = record(ownProp(record(ownProp(widget.binding, 'actionBindings')), outputName));
+    return resolved && contribution && widgetActionOwnershipMatches(context, widget, contribution, binding, resolved.action)
+        ? resolved : undefined;
 }
 function componentNodeBlocker(handle, pointer) {
     if (pointer !== '/tree' && !pointer.startsWith('/tree/')) {
@@ -411,7 +415,7 @@ function widgetControl(context, handle, pointer, value) {
     const actionRef = stringProp(record(ownProp(record(ownProp(widget.binding, 'actionBindings')), outputName)), 'actionRef');
     if (!actionRef)
         return { candidate: true, reason: 'widget-action-binding-missing' };
-    const resolved = uniqueWidgetAction(context, actionRef);
+    const resolved = uniqueWidgetAction(context, actionRef, widget, outputName);
     if (!resolved)
         return { candidate: true, reason: 'widget-action-ref-unresolved' };
     const literalLabel = stringProp(record(ownProp(resolved.value, 'label')), 'literal');
@@ -627,7 +631,7 @@ function routeHasResolvedWidgetActionSource(context, surface, route, actionIds) 
             const actionRef = stringProp(record(rawBinding), 'actionRef');
             return Boolean(actionRef
                 && actionIds.includes(actionRef)
-                && uniqueWidgetAction(context, actionRef)
+                && uniqueWidgetAction(context, actionRef, widget, outputName)
                 && declaredOutputCount(context, widget, outputName) === 1);
         });
     });

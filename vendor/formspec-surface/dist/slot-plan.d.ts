@@ -40,7 +40,7 @@ import { type ExperienceDocumentHandle, type ExperienceUnitPlan } from './experi
 import { type HeadingLevel, type StaticContentPlan, type SurfaceStaticAssetResolver } from './static-content.js';
 import type { WidgetKey, WidgetRegistry, WidgetResolution } from './registry.js';
 import type { ResponseActionsDocumentLike } from './transitions.js';
-import { type DataSourceCatalogHandle, type WidgetDataInputPlan } from './data-source-loader.js';
+import { type DataSourceCatalogHandle, type WidgetDataInputPlan, type DataSourceDescriptor } from './data-source-loader.js';
 import { type DefinitionFormInitialDataPlan, type MappingDocumentHandle } from './definition-form-initial-data.js';
 export type SurfaceSlot = SurfaceRoute['slots'][number];
 export interface SlotPlanBase {
@@ -132,6 +132,13 @@ export interface WidgetActionOutputPlan {
     actionRef?: string | undefined;
     /** Present only when `actionRef` resolves to exactly one loaded Action. */
     action?: WidgetActionMetadataPlan | undefined;
+    /** Explicit qualified subject; never derived from emitted widget input. */
+    responseContext?: WidgetActionResponsePlan | undefined;
+}
+export interface WidgetActionResponsePlan {
+    inputName: string;
+    definition: FormDefinition;
+    descriptor: DataSourceDescriptor;
 }
 export interface RoutePlan<TComponent> {
     handle: SurfaceRouteHandle;

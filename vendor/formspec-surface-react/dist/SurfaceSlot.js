@@ -24,12 +24,12 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * deeper. {@link SurfaceSlotFrame} is both paths now.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, } from 'react';
-import { createFormEngine, createMappingEngine, } from '@formspec-org/engine';
+import { createFormEngine, createMappingEngine, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
 import { FormspecForm } from '@formspec-org/react';
 import { resolveFieldReferences, targetDefinitionMatches, } from '@formspec-org/types';
 import { loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
 import { Heading, nextLevel } from './heading.js';
-import { allocateWidgetActionInvocationId, admitSurfaceWidgetActionInput, createWidgetActionCoordinator, responseActionsDocumentForAction, } from './widget-action-runtime.js';
+import { allocateWidgetActionInvocationId, admitSurfaceWidgetActionInput, createWidgetActionCoordinator, responseActionsDocumentForAction, snapshotWidgetResponseContext, } from './widget-action-runtime.js';
 import { WidgetEmptyState } from './widgets/empty-state.js';
 import { ModuleWidgetStateView, widgetDataMatchesEmptyWhen, } from './widget-state.js';
 import { needIdTraceAttributes, needTraceAttributes } from './need-trace.js';
@@ -62,21 +62,39 @@ export function createSurfaceSemanticControlScopeResolver(pairing) {
         };
     };
 }
-/** The action that is safe to use for route advancement, or no action. */
-export function completedFormAction(result) {
+/** Successful Response actions follow their resolved Validation Modes policy. */
+function completedResponseAction(result) {
     if (result.status !== 'completed')
         return undefined;
     if (!result.resolution.resolved || !result.resolution.action)
         return undefined;
-    if (result.detail?.validationReport?.valid !== true)
+    if (result.detail === null || result.detail === undefined)
         return undefined;
-    return result.resolution.action;
+    const action = result.resolution.action;
+    let tuple;
+    try {
+        tuple = resolveResponseActionValidationTuple(action);
+    }
+    catch {
+        return undefined;
+    }
+    const actual = result.validationTuple;
+    if (!actual || actual.profile !== tuple.profile || actual.blocking !== tuple.blocking
+        || actual.persistence !== tuple.persistence)
+        return undefined;
+    const report = result.detail.validationReport;
+    if (tuple.profile !== 'off' && typeof report?.valid !== 'boolean')
+        return undefined;
+    if ((tuple.persistence === 'complete-response' || tuple.blocking === 'block-on-error')
+        && report?.valid !== true)
+        return undefined;
+    return action;
 }
-/**
- * Widget app actions have no Response to validate. Response-scoped widget
- * actions retain the form completion gate; app scope needs only the successful
- * resolved action terminal because the engine already enforced app validation.
- */
+/** The completed action whose declared policy permits route advancement. */
+export function completedFormAction(result) {
+    return completedResponseAction(result);
+}
+/** App actions need no Response; Response actions follow their resolved policy. */
 export function completedWidgetAction(result, document) {
     if (document.scope === 'app') {
         if (result.status !== 'completed')
@@ -85,19 +103,7 @@ export function completedWidgetAction(result, document) {
             ? result.resolution.action ?? undefined
             : undefined;
     }
-    if (result.status !== 'completed')
-        return undefined;
-    if (!result.resolution.resolved || !result.resolution.action)
-        return undefined;
-    const detail = result.detail;
-    if (detail === null ||
-        !Object.prototype.hasOwnProperty.call(detail, 'validationReport')) {
-        return undefined;
-    }
-    const validationReport = detail.validationReport;
-    if (validationReport?.valid !== true)
-        return undefined;
-    return result.resolution.action;
+    return completedResponseAction(result);
 }
 /**
  * Build the private navigation handoff for one completed app-widget action.
@@ -470,6 +476,7 @@ const READY_WITH_NO_DATA = {
 function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, authorizeDataSource, validateDataSourcePayload, responseActionsDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, onAdvance, semanticOutputScope, }) {
     const [delivery, setDelivery] = useState(plan.dataInputs.length === 0 ? READY_WITH_NO_DATA : { status: 'loading' });
     const [dataLoadAttempt, setDataLoadAttempt] = useState(0);
+    const responseContexts = useRef(undefined);
     const activeGeneration = useRef(runtimeGeneration);
     activeGeneration.current = runtimeGeneration;
     const localActionCoordinator = useRef(createWidgetActionCoordinator());
@@ -478,6 +485,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, auth
     const dataDiagnosticScope = `widget-data:${runtimeGeneration}:${plan.slotId}`;
     useEffect(() => {
         let current = true;
+        responseContexts.current = undefined;
         if (plan.dataInputs.length > 0)
             setDelivery({ status: 'loading' });
         onRuntimeDiagnosticsChange?.(dataDiagnosticScope, []);
@@ -501,9 +509,46 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, auth
                 routeId: route.routeId,
                 slotId: plan.slotId,
             },
-        }).then((result) => {
+        }).then(async (result) => {
             if (!current)
                 return;
+            if (result.status === 'ready') {
+                const contexts = new Map();
+                try {
+                    for (const output of plan.actionOutputs) {
+                        const subject = output.responseContext;
+                        if (!subject)
+                            continue;
+                        const captured = snapshotWidgetResponseContext({
+                            inputName: subject.inputName,
+                            source: { catalogRef: subject.descriptor.catalogRef, sourceRef: subject.descriptor.sourceRef },
+                            definition: subject.definition,
+                            response: result.data[subject.inputName],
+                        });
+                        if (!validateDataSourcePayload || !(await validateDataSourcePayload({
+                            descriptor: subject.descriptor,
+                            context: { surfaceId: route.surfaceId, surfaceRef: route.surfaceRef,
+                                routeId: route.routeId, slotId: plan.slotId, moduleId: plan.key.moduleId,
+                                widgetName: plan.key.widgetName, params: route.params, sessionGeneration: runtimeGeneration },
+                            schema: subject.descriptor.source.schema, value: captured.response,
+                        })).valid)
+                            throw new TypeError('The immutable Response subject failed canonical validation');
+                        contexts.set(output.name, captured);
+                    }
+                    if (!current)
+                        return;
+                    responseContexts.current = { generation: runtimeGeneration, values: contexts };
+                }
+                catch {
+                    if (!current)
+                        return;
+                    const diagnostic = surfaceDiagnostic('WIDGET-DATA-REQUIRED-UNAVAILABLE', 'The qualified Response action subject could not be admitted.', { surfaceId: route.surfaceId, routeId: route.routeId, slotId: plan.slotId });
+                    setDelivery({ status: 'unavailable', failures: [{ inputName: 'responseInput', required: true,
+                                reason: 'payload-invalid', message: diagnostic.message }], diagnostics: [diagnostic] });
+                    onRuntimeDiagnosticsChange?.(dataDiagnosticScope, [diagnostic]);
+                    return;
+                }
+            }
             setDelivery(result);
             onRuntimeDiagnosticsChange?.(dataDiagnosticScope, result.diagnostics);
         });
@@ -517,6 +562,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, auth
         dataSourceLoader,
         onRuntimeDiagnosticsChange,
         plan.dataInputs,
+        plan.actionOutputs,
         plan.key.moduleId,
         plan.key.widgetName,
         plan.slotId,
@@ -588,7 +634,9 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, auth
             });
             return refused();
         }
-        const document = responseActionsDocumentForAction(responseActionsDocuments, actionRef);
+        const responseContext = responseContexts.current?.generation === runtimeGeneration
+            ? responseContexts.current.values.get(outputName) : undefined;
+        const document = declared[0]?.action ? responseActionsDocumentForAction(responseActionsDocuments, actionRef, responseContext) : undefined;
         if (!document) {
             const invocationId = allocateWidgetActionInvocationId();
             reportRefusal(invocationId, outputName, 'WIDGET-ACTION-REF-UNRESOLVED', `Widget output "${outputName}" maps to action "${actionRef}", which does not resolve exactly once.`, {
@@ -622,6 +670,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, auth
             document,
             actionRef,
             source,
+            ...(responseContext ? { responseContext } : {}),
             ...(inputAdmission.input === undefined
                 ? {}
                 : { input: inputAdmission.input }),

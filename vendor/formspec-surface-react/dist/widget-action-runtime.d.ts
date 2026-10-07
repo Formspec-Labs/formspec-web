@@ -8,7 +8,7 @@
  */
 import type { ResponseActionInvocationResult, ResponseActionInvokerResult } from '@formspec-org/react';
 import type { ResponseActionsDocument } from '@formspec-org/types';
-import type { SurfaceWidgetActionExecutor, SurfaceWidgetActionDetail, SurfaceWidgetActionExecutorInput, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionInput, SurfaceWidgetStoredActionOutcome } from './widget-api.js';
+import type { SurfaceWidgetActionExecutor, SurfaceWidgetActionDetail, SurfaceWidgetActionExecutorInput, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionInput, SurfaceWidgetStoredActionOutcome, SurfaceWidgetResponseContext } from './widget-api.js';
 export type SurfaceWidgetActionInputAdmission = {
     accepted: true;
     input?: SurfaceWidgetActionInput | undefined;
@@ -28,7 +28,9 @@ export declare function normalizeWidgetActionResult(result: ResponseActionInvoke
  * Select the document only when one exact loaded action declaration exists.
  * Repeated ids across or within documents are ambiguous and resolve to none.
  */
-export declare function responseActionsDocumentForAction(documents: readonly ResponseActionsDocument[], actionRef: string): ResponseActionsDocument | undefined;
+export declare function responseActionsDocumentForAction(documents: readonly ResponseActionsDocument[], actionRef: string, responseContext?: SurfaceWidgetResponseContext): ResponseActionsDocument | undefined;
+/** Detach before any widget access; payload schema validation remains the host validator's job. */
+export declare function snapshotWidgetResponseContext(context: SurfaceWidgetResponseContext): SurfaceWidgetResponseContext;
 export interface DeliverWidgetActionRequest extends SurfaceWidgetActionExecutorInput {
     generation: string;
     executor: SurfaceWidgetActionExecutor;
@@ -49,6 +51,7 @@ export interface EmitWidgetActionRequest {
     actionRef: string;
     source: SurfaceWidgetActionExecutorInput['source'];
     input?: SurfaceWidgetActionInput | undefined;
+    responseContext?: SurfaceWidgetResponseContext | undefined;
     executor: SurfaceWidgetActionExecutor;
     outcomeStore?: SurfaceWidgetActionOutcomeStore | undefined;
 }

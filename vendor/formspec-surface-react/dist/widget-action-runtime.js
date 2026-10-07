@@ -1,3 +1,5 @@
+import { snapshotFiniteJson, canonicalFiniteJson } from '@formspec-org/surface';
+import { widgetActionScopeMatches, CANONICAL_RESPONSE_SCHEMA_REF } from '@formspec-org/app-graph';
 let invocationSequence = 0;
 const UNSAFE_INPUT_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const MAX_INPUT_DEPTH = 64;
@@ -144,14 +146,33 @@ export function normalizeWidgetActionResult(result) {
  * Select the document only when one exact loaded action declaration exists.
  * Repeated ids across or within documents are ambiguous and resolve to none.
  */
-export function responseActionsDocumentForAction(documents, actionRef) {
+export function responseActionsDocumentForAction(documents, actionRef, responseContext) {
     const matches = documents.flatMap((document) => (document.actions ?? [])
         .filter((action) => action.id === actionRef)
         .map(() => document));
     const match = matches.length === 1 ? matches[0] : undefined;
-    return match?.scope === 'app' && match.targetDefinition === undefined
+    return match && widgetActionScopeMatches({ document: match,
+        responseInput: responseContext?.inputName,
+        inputs: responseContext ? [{ name: responseContext.inputName, required: true }] : [],
+        sourceSchema: responseContext ? { $ref: CANONICAL_RESPONSE_SCHEMA_REF } : undefined,
+        definition: responseContext?.definition,
+    })
         ? match
         : undefined;
+}
+/** Detach before any widget access; payload schema validation remains the host validator's job. */
+export function snapshotWidgetResponseContext(context) {
+    const snapshot = snapshotFiniteJson(context);
+    if (snapshot.response.definitionUrl !== snapshot.definition.url
+        || !snapshot.definition.version || snapshot.response.definitionVersion !== snapshot.definition.version) {
+        throw new TypeError('Response pins do not match the admitted Definition');
+    }
+    return snapshot;
+}
+function responseIdentity(request) {
+    return request.responseContext ? canonicalFiniteJson(snapshotFiniteJson({
+        document: request.document, actionRef: request.actionRef, responseContext: request.responseContext,
+    })) : undefined;
 }
 function keyFor(request) {
     const parts = [
@@ -173,9 +194,22 @@ function keyFor(request) {
 export function createWidgetActionDelivery() {
     const inFlight = new Map();
     const terminals = new Map();
+    const payloads = new Map();
     return {
         deliver(request) {
+            if (request.responseContext)
+                request = { ...request,
+                    document: snapshotFiniteJson(request.document),
+                    responseContext: snapshotWidgetResponseContext(request.responseContext) };
+            if (!responseActionsDocumentForAction([request.document], request.actionRef, request.responseContext)) {
+                return Promise.reject(new TypeError('Widget action has no admitted execution subject'));
+            }
             const key = keyFor(request);
+            const identity = responseIdentity(request);
+            if (payloads.has(key) && payloads.get(key) !== identity) {
+                return Promise.reject(new TypeError('A widget invocation cannot replace its Response subject'));
+            }
+            payloads.set(key, identity);
             const terminal = terminals.get(key);
             if (terminal)
                 return Promise.resolve(terminal);
@@ -189,6 +223,7 @@ export function createWidgetActionDelivery() {
                     invocationId: request.invocationId,
                     source: request.source,
                     ...(request.input === undefined ? {} : { input: request.input }),
+                    ...(request.responseContext ? { responseContext: request.responseContext } : {}),
                 }));
                 terminals.set(key, result);
                 return result;
@@ -199,7 +234,7 @@ export function createWidgetActionDelivery() {
         },
     };
 }
-function logicalKey(request) {
+function logicalKey(request, subjectIdentity) {
     const parts = [
         request.generation,
         request.source.route.surfaceId,
@@ -208,14 +243,16 @@ function logicalKey(request) {
         request.source.outputName,
         request.actionRef,
         canonicalInput(request.input),
+        subjectIdentity ?? '',
     ];
     return parts.map((part) => `${part.length}:${part}`).join('|');
 }
-function logicalOutcomeKey(request) {
+function logicalOutcomeKey(request, subjectIdentity) {
     return {
         generation: request.generation,
         source: request.source,
         ...(request.input === undefined ? {} : { input: request.input }),
+        ...(subjectIdentity === undefined ? {} : { responseIdentity: subjectIdentity }),
     };
 }
 /**
@@ -242,15 +279,21 @@ export function createWidgetActionCoordinator() {
             const admittedRequest = {
                 ...request,
                 ...(admission.input === undefined ? {} : { input: admission.input }),
+                ...(request.responseContext ? { responseContext: snapshotWidgetResponseContext(request.responseContext) } : {}),
+                ...(request.responseContext ? { document: snapshotFiniteJson(request.document) } : {}),
             };
-            const key = logicalKey(admittedRequest);
+            if (!responseActionsDocumentForAction([admittedRequest.document], admittedRequest.actionRef, admittedRequest.responseContext)) {
+                throw new TypeError('Widget action has no admitted execution subject');
+            }
+            const subjectIdentity = responseIdentity(admittedRequest);
+            const key = logicalKey(admittedRequest, subjectIdentity);
             const pending = inFlight.get(key);
             if (pending)
                 return { started: false, completion: pending };
             const completion = (async () => {
                 const observed = observedDurableIds.get(key) ?? new Set();
                 observedDurableIds.set(key, observed);
-                const persisted = await admittedRequest.outcomeStore?.read(logicalOutcomeKey(admittedRequest));
+                const persisted = await admittedRequest.outcomeStore?.read(logicalOutcomeKey(admittedRequest, subjectIdentity));
                 if (persisted && !observed.has(persisted.invocationId)) {
                     observed.add(persisted.invocationId);
                     return { ...persisted, replayed: true };
@@ -265,10 +308,11 @@ export function createWidgetActionCoordinator() {
                     ...(admittedRequest.input === undefined
                         ? {}
                         : { input: admittedRequest.input }),
+                    ...(admittedRequest.responseContext ? { responseContext: admittedRequest.responseContext } : {}),
                     executor: admittedRequest.executor,
                 });
                 observed.add(invocationId);
-                await admittedRequest.outcomeStore?.write(logicalOutcomeKey(admittedRequest), {
+                await admittedRequest.outcomeStore?.write(logicalOutcomeKey(admittedRequest, subjectIdentity), {
                     invocationId,
                     result,
                 });

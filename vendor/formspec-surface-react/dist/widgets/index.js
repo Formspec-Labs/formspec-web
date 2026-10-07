@@ -1,10 +1,12 @@
 import { MODULE_WIDGET_STATE_RENDERED_CONFIG_NODES } from '../widget-state.js';
 import { IntakeBanner } from './intake-banner.js';
+import { SigningCeremony, SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES } from './signing-ceremony.js';
 import { CeremonyFrame } from './ceremony-frame.js';
 import { ReceiptPanel } from './receipt-panel.js';
 import { QueueTable } from './queue-table.js';
 import { StructuredPanel } from './structured-panel.js';
 export { IntakeBanner } from './intake-banner.js';
+export { SigningCeremony, SIGNING_CEREMONY_CONFIG_SCHEMA, SIGNING_CEREMONY_WIDGET_SHAPE, SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES } from './signing-ceremony.js';
 export { CeremonyFrame } from './ceremony-frame.js';
 export { ReceiptPanel } from './receipt-panel.js';
 export { QueueTable } from './queue-table.js';
@@ -21,11 +23,13 @@ export { WidgetEmptyState } from './empty-state.js';
 export const STARTER_WIDGETS = {
     'x-intake-banner': IntakeBanner,
     'x-ceremony-frame': CeremonyFrame,
+    'x-signing-ceremony': SigningCeremony,
     'x-receipt-panel': ReceiptPanel,
     'x-queue-panel': QueueTable,
     'x-structured-panel': StructuredPanel,
     IntakeBanner,
     CeremonyFrame,
+    SigningCeremony,
     ReceiptPanel,
     QueueTable,
     StructuredPanel,
@@ -71,6 +75,7 @@ export function starterWidgetModule(moduleId) {
     const structuredPanelContract = contract(STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES);
     const queueTableContract = contract(QUEUE_TABLE_DELIVERY_CONTRACT_ID, QUEUE_TABLE_RENDERED_CONFIG_NODES);
     const receiptPanelContract = contract(RECEIPT_PANEL_DELIVERY_CONTRACT_ID, RECEIPT_PANEL_RENDERED_CONFIG_NODES);
+    const signingCeremonyContract = contract(SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES);
     const ceremonyFrameContract = contract(CEREMONY_FRAME_DELIVERY_CONTRACT_ID, CEREMONY_FRAME_RENDERED_CONFIG_NODES);
     return {
         moduleId,
@@ -82,6 +87,8 @@ export function starterWidgetModule(moduleId) {
             'x-queue-panel': queueTableContract,
             ReceiptPanel: receiptPanelContract,
             'x-receipt-panel': receiptPanelContract,
+            SigningCeremony: signingCeremonyContract,
+            'x-signing-ceremony': signingCeremonyContract,
             CeremonyFrame: ceremonyFrameContract,
             'x-ceremony-frame': ceremonyFrameContract,
         },

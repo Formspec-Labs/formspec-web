@@ -1,5 +1,7 @@
 /** @filedesc Surface module-widget action binding and transition checks. */
 import { diagnosticSourceForHandle } from './report.js';
+import { bindingFailure, exactDefinitionResolution } from './data-sources.js';
+import { widgetActionScopeMatches } from './widget-action-scope.js';
 import { resolvedActionIds, responseActionReferences, } from './response-action-resolution.js';
 import { escapeJsonPointerToken, handlesByKind, moduleIsAdmitted, ownProp, record, recordArray, registryWidgetEntries, resolvedWidgetContributionFromEntries, stringProp, surfaceWidgetSlots, widgetShape, } from './surface-widgets.js';
 const MODULE_WIDGET_STATE_NAMES = new Set([
@@ -44,6 +46,34 @@ function actionBindingPointer(widget, outputName) {
 function actionMatches(references, actionRef) {
     return references.actions.filter((action) => action.id === actionRef);
 }
+/** Reuse manifested Definition and qualified source ownership for every widget consumer. */
+export function widgetActionOwnershipMatches(context, widget, contribution, binding, action) {
+    const document = record(action.handle.document);
+    if (!document)
+        return false;
+    const responseInput = ownProp(binding, 'responseInput');
+    const inputs = recordArray(ownProp(widgetShape(contribution), 'dataInputs')).map((input) => ({
+        name: stringProp(input, 'name') ?? '', required: ownProp(input, 'required') === true,
+    }));
+    if (action.scope === 'app')
+        return widgetActionScopeMatches({ document, responseInput, inputs });
+    if (action.scope !== 'response' || typeof responseInput !== 'string')
+        return false;
+    const dataBinding = record(ownProp(record(ownProp(widget.binding, 'dataBindings')), responseInput));
+    if (!dataBinding || bindingFailure(context, widget, dataBinding))
+        return false;
+    const catalog = handlesByKind(context.handles, 'dataSources').find((candidate) => candidate.ref?.url === stringProp(dataBinding, 'catalogRef'));
+    const source = recordArray(ownProp(record(catalog?.document), 'sources')).find((candidate) => stringProp(candidate, 'id') === stringProp(dataBinding, 'sourceRef'));
+    const resolution = exactDefinitionResolution(context, action.targetDefinition ?? '');
+    const definition = record(resolution.definition?.document);
+    const url = stringProp(definition, 'url');
+    const version = stringProp(definition, 'version');
+    if (resolution.status !== 'resolved' || !url || !version)
+        return false;
+    return widgetActionScopeMatches({
+        document, responseInput, inputs, sourceSchema: ownProp(source, 'schema'), definition: { url, version },
+    });
+}
 function validActionsForWidget(context, widget, entries, references) {
     if (context.moduleResolution && !moduleIsAdmitted(context, widget.moduleId))
         return [];
@@ -58,7 +88,7 @@ function validActionsForWidget(context, widget, entries, references) {
         return (outputs.get(outputName) === 1
             && actionRef
             && matches.length === 1
-            && matches[0]?.scope === 'app')
+            && widgetActionOwnershipMatches(context, widget, contribution, record(value), matches[0]))
             ? [{ widget, outputName, actionRef }]
             : [];
     });
@@ -126,13 +156,13 @@ function widgetActionBindingDiagnostics(context, entries, references) {
                         },
                     });
                 }
-                else if (matches[0].scope !== 'app') {
+                else if (!widgetActionOwnershipMatches(context, widget, contribution, binding, matches[0])) {
                     diagnostics.push({
                         code: 'E612',
                         severity: 'error',
                         phase: 'cross-artifact',
                         origin: 'app-graph-validator',
-                        message: `Surface widget output '${outputName}' actionRef '${actionRef}' resolves to a ${matches[0].scope}-scoped Response Actions document; module-widget bindings require scope 'app'.`,
+                        message: `Surface widget output '${outputName}' actionRef '${actionRef}' has no admitted action scope: app actions omit responseInput; response actions require a qualified canonical Response input and loaded compatible Definition.`,
                         primarySource: diagnosticSourceForHandle(widget.surface, `${actionBindingPointer(widget, outputName)}/actionRef`),
                         relatedSources: [diagnosticSourceForHandle(matches[0].handle, `/actions/${matches[0].actionIndex}`)],
                         details: {
@@ -145,7 +175,7 @@ function widgetActionBindingDiagnostics(context, entries, references) {
                             outputName,
                             actionRef,
                             actualScope: matches[0].scope,
-                            requiredScope: 'app',
+                            responseInput: stringProp(binding, 'responseInput'),
                         },
                     });
                 }
@@ -197,7 +227,7 @@ function widgetActionBindingDiagnostics(context, entries, references) {
                 }
                 const actionRef = stringProp(binding, 'actionRef');
                 const matches = actionRef ? actionMatches(references, actionRef) : [];
-                if (matches.length !== 1 || matches[0].scope !== 'app')
+                if (matches.length !== 1 || !widgetActionOwnershipMatches(context, widget, contribution, record(ownProp(bindings, use.outputName)), matches[0]))
                     continue;
                 const match = matches[0];
                 const action = recordArray(ownProp(record(match.handle.document), 'actions'))[match.actionIndex];

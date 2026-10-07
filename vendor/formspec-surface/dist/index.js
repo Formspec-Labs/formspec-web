@@ -27,3 +27,4 @@ export { planTransitions, responseActionsDocumentForDefinition, slotSuppliedTrig
 export { planMatchedRoute, } from './route-plan.js';
 export { bundleIsRenderable, dereferenceBundleExport, } from './bundle.js';
 export { SURFACE_SCENARIO_DIAGNOSTIC_CODES, createSurfacePreviewRuntime, validateSurfacePreviewScenario, } from './preview-scenario.js';
+export { snapshotFiniteJson, canonicalFiniteJson } from "./finite-json.js";

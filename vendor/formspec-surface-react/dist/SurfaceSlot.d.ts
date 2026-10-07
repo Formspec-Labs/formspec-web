@@ -133,17 +133,13 @@ export interface SurfaceSlotProps {
     /** Exact caller-paired identity used only by renderers that publish output. */
     semanticOutputScope?: SurfaceSemanticOutputScope | undefined;
     onDefinitionActionResult?: ((result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
-    /** A published Action reached a successful terminal with a valid report. */
+    /** A published Action completed under its resolved validation policy. */
     onActionCompleted?: ((action: ResponseAction, result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
     onAdvance?: ((transition: PlannedTransition, result?: Pick<ResponseActionInvocationResult<SurfaceWidgetActionDetail>, 'transitionBindings'>) => 'advanced' | 'refused' | void) | undefined;
 }
-/** The action that is safe to use for route advancement, or no action. */
+/** The completed action whose declared policy permits route advancement. */
 export declare function completedFormAction(result: ResponseActionInvocationResult<SubmitResult>): ResponseAction | undefined;
-/**
- * Widget app actions have no Response to validate. Response-scoped widget
- * actions retain the form completion gate; app scope needs only the successful
- * resolved action terminal because the engine already enforced app validation.
- */
+/** App actions need no Response; Response actions follow their resolved policy. */
 export declare function completedWidgetAction(result: ResponseActionInvocationResult<SurfaceWidgetActionDetail>, document: GeneratedResponseActionsDocument): ResponseAction | undefined;
 /**
  * True when the slot's own binding already produces the heading for its
