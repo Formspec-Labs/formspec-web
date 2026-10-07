@@ -621,3 +621,52 @@ describe('actual native Save completion focus custody', () => {
     mounted.unmount(); test.host.dispose();
   });
 });
+
+
+describe('actual native Save modeled connected focusout ordering', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(['completion-commit', 'before-settlement'] as const)('recovers through modeled connected focusout during real renderer deletion: %s', async timing => {
+    const test = await actualFixture(); const finish = pauseActualSave(test);
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    const initial = await screen.findByRole('button', { name: 'Save draft' }); initial.focus(); fireEvent.click(initial);
+    await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledOnce());
+    const status = mounted.container.querySelector<HTMLElement>('.formspec-action-status[role="status"]')!;
+    const focus = vi.spyOn(status, 'focus');
+    const observedOrder: { connected: boolean; active: boolean }[] = [];
+    const nativeRemove = Node.prototype.removeChild;
+    // Model the reported event order inside actual React deletion and delegate real removal.
+    // This is a policy regression, not evidence of native browser event ordering.
+    vi.spyOn(Node.prototype, 'removeChild').mockImplementation(function <T extends Node>(this: Node, child: T): T {
+      if (child.contains(initial) && initial.isConnected && document.activeElement === initial) {
+        observedOrder.push({ connected: initial.isConnected, active: document.activeElement === initial });
+        initial.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+      }
+      return nativeRemove.call(this, child) as T;
+    });
+    if (timing === 'before-settlement') await act(async () => { test.getEngine().setInstanceValue('draftReadiness', 'owned', true); });
+    await act(async () => { finish(); });
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    expect(observedOrder).toEqual([{ connected: true, active: true }]); expect(initial.isConnected).toBe(false);
+    expect(status.isConnected).toBe(true); expect(status.tabIndex).toBe(-1); expect(document.activeElement).toBe(status);
+    expect(focus).toHaveBeenCalledExactlyOnceWith();
+    expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.terminals).toEqual([{ status: 'completed', valid: undefined }]);
+    mounted.unmount(); test.host.dispose();
+  });
+
+  it('permanently refuses recovery for connected focusout before renderer detachment', async () => {
+    const test = await actualFixture(); const finish = pauseActualSave(test);
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    const initial = await screen.findByRole('button', { name: 'Save draft' }); initial.focus(); fireEvent.click(initial);
+    await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledOnce());
+    const status = mounted.container.querySelector<HTMLElement>('.formspec-action-status[role="status"]')!;
+    const focus = vi.spyOn(status, 'focus');
+    expect(initial.isConnected).toBe(true);
+    initial.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+    await act(async () => { finish(); });
+    await vi.waitFor(() => expect(persistentFeedback(mounted.container)).toBe('Completed.'));
+    expect(initial.isConnected).toBe(false); expect(document.activeElement).not.toBe(status);
+    expect(focus).not.toHaveBeenCalled(); expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.terminals).toHaveLength(1);
+    mounted.unmount(); test.host.dispose();
+  });
+});

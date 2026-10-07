@@ -29,11 +29,12 @@ function captureFocusedOrigin(source, onCancel) {
     const document = source.ownerDocument;
     const window = document.defaultView;
     let eligible = true;
+    let removing = false;
     const cancel = () => { eligible = false; dispose(); onCancel(); };
     const focusIn = (event) => { if (event.target !== source)
         cancel(); };
-    // Removal can leave BODY focused without an explicit blur. A connected-source blur is intentional.
-    const focusOut = () => { if (source.isConnected)
+    // Native removal can emit focusout while still connected. Only our exact ref detachment admits it.
+    const focusOut = () => { if (source.isConnected && !removing)
         cancel(); };
     const keyDown = (event) => { if (event.key === 'Tab')
         cancel(); };
@@ -57,6 +58,16 @@ function captureFocusedOrigin(source, onCancel) {
     window?.addEventListener('blur', cancel);
     return {
         dispose,
+        willDetach(candidate) {
+            if (candidate === source && document.activeElement === source)
+                removing = true;
+        },
+        didAttach(candidate, previous) {
+            if (candidate === source)
+                removing = false;
+            else if (previous === source)
+                cancel();
+        },
         recover(target) {
             dispose(); // Retire before our own focusin; never repeat on Locale or later branch changes.
             if (!eligible || source.isConnected || !target.isConnected || target.ownerDocument !== document
@@ -72,7 +83,7 @@ function captureFocusedOrigin(source, onCancel) {
                     || style?.display === 'none' || style?.visibility === 'hidden' || style?.visibility === 'collapse')
                     return;
             }
-            target.focus({ preventScroll: true });
+            target.focus(); // Native focus reveals the qualified result when it is outside the viewport.
         },
     };
 }
@@ -133,6 +144,8 @@ export function createActionFeedbackStore(engine) {
             state.value = { ticket, anchors, feedback: { phase: 'pending', intent } };
             return ticket;
         },
+        focusSourceWillDetach(source) { focusOrigin?.willDetach(source); },
+        focusSourceDidAttach(source, previous) { focusOrigin?.didAttach(source, previous); },
         recoverFocus(ticket, target) {
             if (!active || !refresh())
                 return;

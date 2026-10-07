@@ -111,6 +111,18 @@ function ActionButtonNode({ node }) {
     const outlet = useActionFeedbackOutlet();
     const statusId = outlet?.id ?? localStatusId;
     const controlRef = useRef(null);
+    const buttonRef = useRef(null);
+    const lastButtonRef = useRef(null);
+    const setButtonRef = useCallback((source) => {
+        const previous = buttonRef.current;
+        if (previous && previous !== source)
+            outlet?.store.focusSourceWillDetach(previous);
+        buttonRef.current = source;
+        if (source) {
+            outlet?.store.focusSourceDidAttach(source, lastButtonRef.current);
+            lastButtonRef.current = source;
+        }
+    }, [outlet?.store]);
     const inFlightRef = useRef(null);
     const [feedback, setFeedback] = useState({ phase: 'idle' });
     useEffect(() => {
@@ -212,7 +224,7 @@ function ActionButtonNode({ node }) {
             return inFlightRef.current;
         }
         const intent = resolution.action?.intent;
-        const ticket = outlet?.store.start(outlet.id, intent, [...(node.needAnchors ?? []), ...actionNeedAnchors], controlRef.current?.querySelector('button'));
+        const ticket = outlet?.store.start(outlet.id, intent, [...(node.needAnchors ?? []), ...actionNeedAnchors], buttonRef.current);
         setFeedback({ phase: 'pending' });
         const invocation = invoke(invocationContext);
         const tracked = invocation.then((result) => {
@@ -280,7 +292,7 @@ function ActionButtonNode({ node }) {
     }, [activate]);
     // The in-flight guard keeps pending activation inert without losing keyboard focus.
     const pending = feedback.phase === 'pending';
-    return (_jsxs("div", { ref: controlRef, className: "formspec-action-control", ...needAttrs, children: [_jsx("button", { 
+    return (_jsxs("div", { ref: controlRef, className: "formspec-action-control", ...needAttrs, children: [_jsx("button", { ref: setButtonRef, 
                 // type="button" mirrors the webcomponent's ActionButton renderer
                 // (packages/formspec-webcomponent/src/components/interactive.ts):
                 // §10 is silent on the HTML type, but if an ActionButton lives

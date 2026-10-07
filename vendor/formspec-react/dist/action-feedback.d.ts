@@ -31,6 +31,8 @@ export declare function createActionFeedbackStore(engine: IFormEngine): {
     connect(): () => void;
     register(outlet: string): () => void;
     start(outlet: string, intent: string | undefined, candidates: readonly string[], source?: HTMLElement | null): Ticket | undefined;
+    focusSourceWillDetach(source: HTMLElement): void;
+    focusSourceDidAttach(source: HTMLElement, previous?: HTMLElement | null): void;
     recoverFocus(ticket: Ticket, target: HTMLElement): void;
     settle(ticket: Ticket | undefined, status: Status): void;
 };
