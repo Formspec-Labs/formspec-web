@@ -18,3 +18,97 @@ if (new URL(window.location.href).searchParams.has('package')) {
     attachmentMaxUploadBytes: 15728640,
   };
 }
+
+// Activate only the exact published native package selection.
+const nativeSelection = new URL(window.location.href).searchParams;
+if (nativeSelection.get('form') === 'form_d1_passport_001'
+  && nativeSelection.get('package') === '/demo-packages/d1-passport/v0.1.5/package.json') {
+  window.__FORMSPEC_RUNTIME_CONFIG__ = {
+    nativePackageSigning: {
+      "keyId": "formspec-d1-delegated-response-e1fae90b73e7",
+      "definition": {
+        "url": "urn:formspec:demo:d1:passport-renewal",
+        "version": "0.1.5"
+      },
+      "bundle": {
+        "id": "urn:formspec:demo:d1:signing-app",
+        "version": "0.1.5"
+      },
+      "module": {
+        "id": "x-demo-signing",
+        "version": "0.1.0"
+      },
+      "initialLocale": "en",
+      "roles": {
+        "saveInitial": {
+          "artifactRef": "urn:formspec:demo:d1:signing-app:response-actions",
+          "actionRef": "save-draft-initial"
+        },
+        "saveOwned": {
+          "artifactRef": "urn:formspec:demo:d1:signing-app:response-actions",
+          "actionRef": "save-draft-owned"
+        },
+        "prepare": {
+          "artifactRef": "urn:formspec:demo:d1:signing-app:response-actions",
+          "actionRef": "prepare"
+        },
+        "sign": {
+          "artifactRef": "urn:formspec:demo:d1:signing-app:response-actions",
+          "actionRef": "sign"
+        },
+        "submit": {
+          "artifactRef": "urn:formspec:demo:d1:signing-app:response-actions",
+          "actionRef": "submit"
+        },
+        "paper": {
+          "artifactRef": "urn:formspec:demo:d1:signing-app:response-actions",
+          "actionRef": "paper"
+        }
+      },
+      "bindings": {
+        "definition": {
+          "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+          "sourceRef": "host:review-definition"
+        },
+        "response": {
+          "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+          "sourceRef": "host:signing-response"
+        },
+        "presentation": {
+          "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+          "sourceRef": "host:review-presentation"
+        },
+        "review": {
+          "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+          "sourceRef": "host:signing-review"
+        },
+        "content": {
+          "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+          "sourceRef": "host:signing-content"
+        },
+        "draft": {
+          "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+          "sourceRef": "host:signing-draft"
+        },
+        "actor": {
+          "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+          "sourceRef": "host:signing-actor"
+        },
+        "signingResult": {
+          "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+          "sourceRef": "host:signing-result"
+        },
+        "actionLabels": {
+          "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+          "sourceRef": "host:signing-action-labels"
+        }
+      },
+      "readiness": {
+        "instance": "draftReadiness",
+        "readyPath": "ready",
+        "ownedPath": "owned"
+      }
+    },
+    ...window.__FORMSPEC_RUNTIME_CONFIG__,
+  };
+}
