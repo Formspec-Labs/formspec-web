@@ -170,10 +170,13 @@ export function App({ config, href = window.location.href }: AppProps) {
                     Runtime: module.ReviewerRuntime,
                     params: reviewerParams,
                   }))
-              : import('./RespondentRuntime.tsx').then((module) => ({
+              : (composition.nativePackageRespondent
+                  ? import('./NativePackageRuntime.tsx').then(module => ({ Native: module.NativePackageRuntime }))
+                  : import('./RespondentRuntime.tsx').then(module => ({ Native: module.RespondentRuntime })))
+                .then((module) => ({
                   status: 'ready' as const,
                   route: 'form' as const,
-                  Runtime: module.RespondentRuntime,
+                  Runtime: module.Native,
                 }));
     void loader
       .then((next) => {

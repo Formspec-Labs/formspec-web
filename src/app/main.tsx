@@ -17,6 +17,10 @@ const SignedRespondentRoot = lazy(async () => {
   const module = await import('../verifying-surface/respondent/SignedRespondentRoot.tsx');
   return { default: module.SignedRespondentRoot };
 });
+const NativePackageRoot = lazy(async () => {
+  const module = await import('./NativePackageRuntime.tsx');
+  return { default: module.NativePackageRoot };
+});
 
 const activeConfig = resolveActiveConfig(rootConfig, readRuntimeConfig());
 const rootEl = document.getElementById('root');
@@ -26,7 +30,7 @@ if (!rootEl) {
 
 const signedRespondentRootConfigured =
   respondentSurfaceDeploymentIsConfigured(activeConfig);
-if (signedRespondentRootConfigured) {
+if (signedRespondentRootConfigured || activeConfig.referenceAdapters?.formspecStack?.nativePackageSigning) {
   document.getElementById('formspec-static-shell')?.remove();
 } else {
   applyBrandTheme(document.documentElement, activeConfig.brand);
@@ -39,6 +43,9 @@ createRoot(rootEl).render(
 );
 
 function RoutedApp({ config }: { config: FormspecWebConfig }) {
+  if (config.referenceAdapters?.formspecStack?.nativePackageSigning) {
+    return <Suspense fallback={<main className="fs-surface-admission" role="status"><h1>Preparing this form</h1></main>}><NativePackageRoot config={config} /></Suspense>;
+  }
   if (respondentSurfaceDeploymentIsConfigured(config)) {
     return (
       <Suspense fallback={<SignedSurfaceBootPending />}>
