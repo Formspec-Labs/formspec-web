@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   renderSafeAddressProtectedText,
   safeAddressVerifierLine,
   validateSafeAddressResponseData,
 } from './safe-address.ts';
 import type { SafeAddressDirectory } from '../ports/safe-address-directory.ts';
+import type { SafeAddressRuntimeConfig } from '../policy/index.ts';
 
 describe('safe-address render helpers', () => {
   it('masks safe-* lifecycle text while leaving unclassified text visible', () => {
@@ -71,7 +72,42 @@ describe('safe-address render helpers', () => {
       },
     })).rejects.toThrow(/Protected home address: This is not a recognized substitute address/);
   });
+  it('refuses a non-string address before consulting the directory', async () => {
+    const directory = testSafeAddressDirectory();
+    const validate = vi.spyOn(directory, 'validateSubstituteAddress');
+    await expect(validateSafeAddressResponseData({ directory, config: boundaryConfig(),
+      data: { protectedHomeAddress: { address: 'PO Box 846' } },
+    })).rejects.toThrow('Protected home address must be a substitute address string.');
+    expect(validate).not.toHaveBeenCalled();
+  });
+
+  it('accepts a later accepted jurisdiction after an earlier refusal', async () => {
+    const directory = testSafeAddressDirectory();
+    const validate = vi.spyOn(directory, 'validateSubstituteAddress');
+    await expect(validateSafeAddressResponseData({ directory, config: boundaryConfig(['OTHER-ACP', 'CA-ACP', 'NEVER-ACP']),
+      data: { protectedHomeAddress: 'PO Box 846, Sacramento, CA 95812' },
+    })).resolves.toBeUndefined();
+    expect(validate.mock.calls.map(([request]) => request.jurisdictionKey)).toEqual(['OTHER-ACP', 'CA-ACP']);
+    expect(validate.mock.calls.every(([request]) => request.accessClass === 'safe-address')).toBe(true);
+  });
+
+  it('reports the last jurisdiction refusal when every accepted jurisdiction refuses', async () => {
+    const directory = testSafeAddressDirectory();
+    const validate = vi.spyOn(directory, 'validateSubstituteAddress').mockImplementation(async request => ({
+      valid: false, jurisdictionKey: request.jurisdictionKey, reason: 'not-recognized', message: `Refused by ${request.jurisdictionKey}`,
+    }));
+    await expect(validateSafeAddressResponseData({ directory, config: boundaryConfig(['FIRST-ACP', 'LAST-ACP']),
+      data: { protectedHomeAddress: 'unrecognized substitute' },
+    })).rejects.toThrow('Protected home address: Refused by LAST-ACP');
+    expect(validate.mock.calls.map(([request]) => request.jurisdictionKey)).toEqual(['FIRST-ACP', 'LAST-ACP']);
+  });
 });
+
+function boundaryConfig(jurisdictions = ['CA-ACP']): SafeAddressRuntimeConfig {
+  return { enabledClasses: ['safe-address'], receiptPostureTier: 'phase-1-fallback', substituteAddressDirectoryRef: 'composition:safeAddressDirectory',
+    acpJurisdictionsAccepted: jurisdictions, authorizedAudiences: ['issuer_verification'],
+    fields: [{ path: '/protectedHomeAddress', label: 'Protected home address', accessClass: 'safe-address' }] };
+}
 
 function testSafeAddressDirectory(): SafeAddressDirectory {
   return {

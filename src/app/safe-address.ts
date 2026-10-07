@@ -53,7 +53,7 @@ export async function validateSafeAddressResponseData({
       candidate,
       field,
     });
-    if (!validation.valid) {
+    if (validation.valid === false) {
       throw new Error(`${safeAddressFieldLabel(field)}: ${validation.message}`);
     }
   }
@@ -77,7 +77,7 @@ async function validateAgainstAcceptedJurisdictions({
       candidate,
       accessClass: field.accessClass,
     });
-    if (result.valid) {
+    if (result.valid === true) {
       return { valid: true };
     }
     lastMessage = result.message;

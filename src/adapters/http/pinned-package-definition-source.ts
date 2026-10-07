@@ -117,7 +117,7 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
         || !isRecord(external.document) || external.document.url !== ref.url || external.document.version !== ref.version
         || !isRecord(target) || typeof target.url !== 'string'
         || (target.compatibleVersions !== undefined && typeof target.compatibleVersions !== 'string')
-        || !targetDefinitionMatches({ url: target.url, compatibleVersions: target.compatibleVersions }, definition)) {
+        || !targetDefinitionMatches({ url: target.url, compatibleVersions: typeof target.compatibleVersions === 'string' ? target.compatibleVersions : undefined }, definition)) {
         throw new Error('Package Component identity or Definition target differs from its explicit pin');
       }
       if (Object.hasOwn(documents, ref.url)) throw new Error('Package Component has ambiguous inline and external sources');
