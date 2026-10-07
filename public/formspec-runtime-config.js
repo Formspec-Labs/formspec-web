@@ -15,5 +15,6 @@ if (new URL(window.location.href).searchParams.has('package')) {
       },
     },
     ...window.__FORMSPEC_RUNTIME_CONFIG__,
+    attachmentMaxUploadBytes: 15728640,
   };
 }
