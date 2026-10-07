@@ -1,3 +1,6 @@
+import { respondentSurfaceDeploymentIsConfigured } from '../config/respondent-surface.ts';
+import { readNativePackageSigningConfig } from '../config/native-package-signing.ts';
+import { createNativePackageComposition } from './native-package.ts';
 import { HttpAttachmentStore } from '../adapters/http/attachment-store.ts';
 import { publishedDefinitionDraftStore } from '../adapters/composing/published-definition-draft-store.ts';
 import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
@@ -79,6 +82,14 @@ export function createDefaultComposition(
   options: DefaultCompositionOptions = {},
 ): Composition {
   const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
+  const nativeSigning = readNativePackageSigningConfig(config.referenceAdapters?.formspecStack);
+  if (nativeSigning) {
+    if (respondentSurfaceDeploymentIsConfigured(config)) throw new Error('Native package and signed Surface deployments cannot both be active');
+    if (!serverUrl || !options.packageUrl) throw new Error('Native package signing requires an explicit package URL and server');
+    assertReferenceHttpDataPorts(config);
+    return createNativePackageComposition(config, { signing: nativeSigning, packageUrl: options.packageUrl,
+      initialDefinitionUrl: options.initialDefinitionUrl ?? productionInitialDefinitionUrl(serverUrl) });
+  }
   if (!serverUrl) {
     return createDemoComposition();
   }

@@ -1,3 +1,4 @@
+import type { NativePackageBoot } from './native-package.ts';
 import type {
   AttachmentStore,
   DefinitionSource,
@@ -45,6 +46,8 @@ import type {
  *      in the upstream extension queue.
  */
 export interface Composition {
+  /** Explicit local native-package opt-in; load qualifies resources before returning owned ports. */
+  nativePackageRespondent?: { load(): Promise<NativePackageBoot> };
   mode: 'demo' | 'production';
   /** Authored local package preview; submission still uses its configured service. */
   localPackagePreview?: boolean;
