@@ -1,3 +1,4 @@
+import { readNativePackageSigningConfig } from './native-package-signing.ts';
 import { validatedAttachmentMaxUploadBytes } from './attachment-policy.ts';
 import { getReferenceProfile } from '../profiles/profiles.ts';
 import type {
@@ -25,7 +26,7 @@ const runtimeEnvMap = {
     'VITE_FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
   ],
 } as const satisfies Record<
-  Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding' | 'attachmentMaxUploadBytes'>,
+  Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding' | 'attachmentMaxUploadBytes' | 'nativePackageSigning'>,
   readonly string[]
 >;
 
@@ -34,16 +35,18 @@ export function readRuntimeConfig(): RuntimeConfig {
   const windowConfig =
     typeof window === 'undefined' ? undefined : window.__FORMSPEC_RUNTIME_CONFIG__;
 
+  const nativePackageSigning = readNativePackageSigningConfig(windowConfig);
   return compactRuntimeConfig({
     ...viteConfig,
     ...windowConfig,
+    ...(nativePackageSigning ? { nativePackageSigning } : {}),
   });
 }
 
 export function runtimeConfigFromEnvRecord(env: RuntimeEnvRecord): RuntimeConfig {
   const config: RuntimeConfig = {};
   for (const [runtimeKey, envNames] of Object.entries(runtimeEnvMap) as Array<
-    [Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding' | 'attachmentMaxUploadBytes'>, readonly string[]]
+    [Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding' | 'attachmentMaxUploadBytes' | 'nativePackageSigning'>, readonly string[]]
   >) {
     const value = firstPresent(env, envNames);
     if (value) {
@@ -75,6 +78,8 @@ function applyRuntimeOverrides(
   runtimeConfig: RuntimeConfig,
 ): FormspecWebConfig {
   const referenceAdapter = profileConfig.referenceAdapters?.formspecStack;
+  const nativePackageSigning = readNativePackageSigningConfig(runtimeConfig)
+    ?? readNativePackageSigningConfig(referenceAdapter);
   const runtimeMaxUploadBytes = validatedAttachmentMaxUploadBytes(runtimeConfig.attachmentMaxUploadBytes);
   const maxUploadBytes = runtimeMaxUploadBytes
     ?? validatedAttachmentMaxUploadBytes(referenceAdapter?.attachments?.maxUploadBytes);
@@ -94,12 +99,14 @@ function applyRuntimeOverrides(
     runtimeConfig.oidcClientId ||
     runtimeConfig.oidcRedirectUri
     || runtimeConfig.surfaceBundle
-    || maxUploadBytes !== undefined;
+    || maxUploadBytes !== undefined
+    || nativePackageSigning !== undefined;
 
   const formspecStack =
     referenceAdapter || hasReferenceRuntimeOverride
       ? {
           ...referenceAdapter,
+          ...(nativePackageSigning ? { nativePackageSigning } : {}),
           attachments: maxUploadBytes === undefined ? referenceAdapter?.attachments : { maxUploadBytes },
           tenantHeaderDialect: referenceAdapter?.tenantHeaderDialect ?? 'formspec',
           formspecServerUrl: runtimeConfig.formspecServerUrl ?? referenceAdapter?.formspecServerUrl,
@@ -198,12 +205,13 @@ function identityMagicLink(identity: IdentityPolicyConfig): MagicLinkConfig | un
 
 function compactRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
   validatedAttachmentMaxUploadBytes(config.attachmentMaxUploadBytes);
+  const nativePackageSigning = readNativePackageSigningConfig(config);
   return Object.fromEntries(
     Object.entries(config).filter(([key, value]) => (
-      key === 'attachmentMaxUploadBytes' ? value !== undefined : key === 'surfaceBundle' || key === 'tenantBinding'
+      key === 'nativePackageSigning' ? nativePackageSigning !== undefined : key === 'attachmentMaxUploadBytes' ? value !== undefined : key === 'surfaceBundle' || key === 'tenantBinding'
         ? typeof value === 'object' && value !== null
         : typeof value === 'string' && value.length > 0
-    )),
+    )).map(([key, value]) => [key, key === 'nativePackageSigning' ? nativePackageSigning : value]),
   ) as RuntimeConfig;
 }
 

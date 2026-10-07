@@ -4,6 +4,7 @@ export type {
   FormspecWebConfig,
   IdentityPolicyConfig,
   MagicLinkConfig,
+  NativePackageSigningConfig,
   OidcClientConfig,
   PortAdapterKind,
   PortCompositionConfig,
@@ -18,6 +19,7 @@ export type {
   TenantScopeConfig,
   TokenValue,
 } from './types.ts';
+export { nativePackageSigningConfig, readNativePackageSigningConfig } from './native-package-signing.ts';
 export {
   readRuntimeConfig,
   resolveActiveConfig,

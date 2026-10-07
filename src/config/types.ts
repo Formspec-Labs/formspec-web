@@ -1,3 +1,5 @@
+import type { NativePackageSigningConfig } from './native-package-signing.ts';
+export type { NativePackageSigningConfig } from './native-package-signing.ts';
 import type { AssuranceLevel } from '../ports/identity-provider.ts';
 
 export type TokenValue = string | number;
@@ -122,6 +124,8 @@ export interface PortCompositionConfig {
 }
 
 export interface FormspecStackReferenceAdapterConfig {
+  /** Explicit closed native-package signing opt-in; qualified by the host before activation. */
+  nativePackageSigning?: NativePackageSigningConfig;
   /** Deployment-owned attachment transport limits, measured on final uploaded bytes. */
   attachments?: { maxUploadBytes?: number };
   formspecServerUrl?: string;
@@ -147,6 +151,8 @@ export interface FormspecWebConfig {
 }
 
 export interface RuntimeConfig {
+  /** Complete deployment object supplied only by runtime JS. */
+  nativePackageSigning?: NativePackageSigningConfig;
   /** Deployment-owned final attachment upload byte limit; omitted means unknown. */
   attachmentMaxUploadBytes?: number;
   /** Explicit deployment scope supplied by runtime JS. */
