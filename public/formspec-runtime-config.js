@@ -21,18 +21,21 @@ if (new URL(window.location.href).searchParams.has('package')) {
 
 // Activate only the exact published native package selection.
 const nativeSelection = new URL(window.location.href).searchParams;
-if (nativeSelection.get('form') === 'form_d1_passport_001'
-  && nativeSelection.get('package') === '/demo-packages/d1-passport/v0.1.5/package.json') {
+const nativePackageVersion = new Map([
+  ['/demo-packages/d1-passport/v0.1.5/package.json', '0.1.5'],
+  ['/demo-packages/d1-passport/v0.1.6/package.json', '0.1.6'],
+]).get(nativeSelection.get('package'));
+if (nativeSelection.get('form') === 'form_d1_passport_001' && nativePackageVersion) {
   window.__FORMSPEC_RUNTIME_CONFIG__ = {
     nativePackageSigning: {
       "keyId": "formspec-d1-delegated-response-e1fae90b73e7",
       "definition": {
         "url": "urn:formspec:demo:d1:passport-renewal",
-        "version": "0.1.5"
+        "version": nativePackageVersion
       },
       "bundle": {
         "id": "urn:formspec:demo:d1:signing-app",
-        "version": "0.1.5"
+        "version": nativePackageVersion
       },
       "module": {
         "id": "x-demo-signing",
