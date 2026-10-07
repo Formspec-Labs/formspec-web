@@ -1,5 +1,5 @@
 import { MODULE_WIDGET_STATE_RENDERED_CONFIG_NODES } from '../widget-state.js';
-import { ResponseReview, createResponseReviewWidget, RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES } from './response-review.js';
+import { ResponseReview, createResponseReviewWidget, RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, ACCEPTED_RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES } from './response-review.js';
 import { IntakeBanner } from './intake-banner.js';
 import { SigningCeremony, SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES } from './signing-ceremony.js';
 import { CeremonyFrame } from './ceremony-frame.js';
@@ -23,6 +23,8 @@ export { WidgetEmptyState } from './empty-state.js';
  * the schema permits both, since this field carries no pattern.
  */
 export const STARTER_WIDGETS = {
+    'x-accepted-response-review': ResponseReview,
+    AcceptedResponseReview: ResponseReview,
     'x-response-review': ResponseReview,
     ResponseReview,
     'x-intake-banner': IntakeBanner,
@@ -87,8 +89,12 @@ export function starterWidgetModule(moduleId, options = {}) {
             ...STARTER_WIDGETS,
             ResponseReview: createResponseReviewWidget(options.responseReview),
             'x-response-review': createResponseReviewWidget(options.responseReview),
+            AcceptedResponseReview: createResponseReviewWidget(options.responseReview),
+            'x-accepted-response-review': createResponseReviewWidget(options.responseReview),
         } : STARTER_WIDGETS,
         contracts: {
+            AcceptedResponseReview: contract(ACCEPTED_RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES),
+            'x-accepted-response-review': contract(ACCEPTED_RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES),
             ResponseReview: contract(RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES),
             'x-response-review': contract(RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES),
             StructuredPanel: structuredPanelContract,

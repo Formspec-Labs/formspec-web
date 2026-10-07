@@ -52,6 +52,25 @@ export const RESPONSE_REVIEW_CONFIG_SCHEMA = {
         "x-generation": { type: "object" },
     },
 };
+/** Separate authored delivery shape preserves immutable applicant Registry identity. */
+export const ACCEPTED_RESPONSE_REVIEW_CONFIG_SCHEMA = {
+    ...RESPONSE_REVIEW_CONFIG_SCHEMA,
+    properties: {
+        ...RESPONSE_REVIEW_CONFIG_SCHEMA.properties,
+        copy: {
+            ...RESPONSE_REVIEW_CONFIG_SCHEMA.properties.copy,
+            additionalProperties: {
+                ...RESPONSE_REVIEW_CONFIG_SCHEMA.properties.copy.additionalProperties,
+                required: [...RESPONSE_REVIEW_COPY_KEYS, "acceptedRecord"],
+                properties: {
+                    ...RESPONSE_REVIEW_CONFIG_SCHEMA.properties.copy.additionalProperties.properties,
+                    acceptedRecord: { type: "string", minLength: 1 },
+                },
+            },
+        },
+    },
+};
+export const ACCEPTED_RESPONSE_REVIEW_DELIVERY_CONTRACT_ID = "@formspec-org/surface-react/AcceptedResponseReview@0.1";
 export const RESPONSE_REVIEW_WIDGET_SHAPE = {
     widgetName: "ResponseReview",
     props: RESPONSE_REVIEW_CONFIG_SCHEMA,
@@ -62,6 +81,12 @@ export const RESPONSE_REVIEW_WIDGET_SHAPE = {
     childrenPolicy: "none",
     deliveryContractId: RESPONSE_REVIEW_DELIVERY_CONTRACT_ID,
     renderedConfigNodes: RESPONSE_REVIEW_RENDERED_CONFIG_NODES,
+};
+export const ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE = {
+    ...RESPONSE_REVIEW_WIDGET_SHAPE,
+    widgetName: "AcceptedResponseReview",
+    props: ACCEPTED_RESPONSE_REVIEW_CONFIG_SCHEMA,
+    deliveryContractId: ACCEPTED_RESPONSE_REVIEW_DELIVERY_CONTRACT_ID,
 };
 /** Schema for the separately qualified presentation input; not renderer-selected authority. */
 export const RESPONSE_REVIEW_PRESENTATION_SCHEMA = {
@@ -142,4 +167,47 @@ export const RESPONSE_REVIEW_STATE_SCHEMA = {
             then: { required: ["contextIdentity"] },
         },
     ],
+};
+/** Closed accepted presentation; existing named presentation schema stays signing-only. */
+export const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    required: [...RESPONSE_REVIEW_PRESENTATION_SCHEMA.required.filter(key => key !== "actorRef" && key !== "draft"), "handoffId"],
+    properties: {
+        ...Object.fromEntries(Object.entries(RESPONSE_REVIEW_PRESENTATION_SCHEMA.properties)
+            .filter(([key]) => key !== "actorRef" && key !== "draft")),
+        phase: { const: "accepted-record" },
+        handoffId: { type: "string", minLength: 1 },
+    },
+};
+/** Closed input wrapper; hosts register the maintained native schemas for admission.
+ * Shape admission does not establish custody, authorization, or integrity. */
+export const ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    required: ["definition", "response", "presentation"],
+    properties: {
+        definition: { $ref: "https://formspec.org/schemas/definition/1.0" },
+        response: { $ref: "https://formspec.org/schemas/response/1.0" },
+        presentation: ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA,
+    },
+};
+/** Closed accepted display state; this schema is not a SigningCeremony source. */
+export const ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    required: [...RESPONSE_REVIEW_STATE_SCHEMA.required.filter(key => key !== "actorRef" && key !== "draft"), "handoffId"],
+    properties: {
+        ...Object.fromEntries(Object.entries(RESPONSE_REVIEW_STATE_SCHEMA.properties)
+            .filter(([key]) => key !== "actorRef" && key !== "draft")),
+        phase: { const: "accepted-record" },
+        handoffId: { type: "string", minLength: 1 },
+    },
+    allOf: RESPONSE_REVIEW_STATE_SCHEMA.allOf,
+};
+export const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA = {
+    oneOf: [RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA],
+};
+export const RESPONSE_REVIEW_STATE_UNION_SCHEMA = {
+    oneOf: [RESPONSE_REVIEW_STATE_SCHEMA, ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA],
 };

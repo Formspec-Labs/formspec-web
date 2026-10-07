@@ -4,6 +4,9 @@ import type { FormDefinition, FormResponse } from '@formspec-org/types';
 import type { SurfaceWidgetProps } from '../widget-api.js';
 export declare const RESPONSE_REVIEW_COPY_KEYS: readonly ["heading", "pending", "beforeSign", "beforeSubmit", "responseId", "draftVersion", "locale", "signatures", "additionalAnswers", "emptyString", "nullValue", "trueValue", "falseValue", "emptyArray", "emptyObject", "attachmentPending", "attachmentUnavailable", "attachmentFailed", "attachmentPreview", "attachmentDetails", "retry", "unavailable"];
 export type ResponseReviewCopy = Readonly<Record<(typeof RESPONSE_REVIEW_COPY_KEYS)[number], string>>;
+export type AcceptedResponseReviewCopy = ResponseReviewCopy & Readonly<{
+    acceptedRecord: string;
+}>;
 export interface ResponseReviewPresentation {
     responseHash: string;
     definitionUrl: string;
@@ -42,6 +45,26 @@ export interface ResponseReviewState {
     locale: string;
     phase: ResponseReviewPresentation["phase"];
 }
+/** Frozen accepted-record presentation; no signing actor or draft authority. */
+export interface AcceptedResponseReviewPresentation extends Omit<ResponseReviewPresentation, "actorRef" | "draft" | "phase"> {
+    phase: "accepted-record";
+    /** Actual qualified IntakeHandoff.handoffId, never a synthesized record revision. */
+    handoffId: string;
+}
+export interface AcceptedResponseReviewData extends Omit<ResponseReviewData, "presentation"> {
+    presentation: AcceptedResponseReviewPresentation;
+}
+/** Display availability only; cannot authorize signing, submission, or case access. */
+export interface AcceptedResponseReviewState extends Omit<ResponseReviewState, "actorRef" | "draft" | "phase"> {
+    phase: "accepted-record";
+    handoffId: string;
+}
+export type ResponseReviewInput = ResponseReviewData | AcceptedResponseReviewData;
+export type ResponseReviewPresentationInput = ResponseReviewPresentation | AcceptedResponseReviewPresentation;
+export interface AcceptedResponseReviewAttachmentRequest extends AcceptedResponseReviewData {
+    path: string;
+    descriptor: FiniteJsonValue;
+}
 export interface ResponseReviewAttachmentRequest extends ResponseReviewData {
     path: string;
     descriptor: FiniteJsonValue;
@@ -53,6 +76,13 @@ export interface ResponseReviewOptions {
     readAttachment?: (request: ResponseReviewAttachmentRequest, options: {
         signal: AbortSignal;
     }) => Promise<Blob>;
+    /** Host authorizes this accepted case and qualifies its opaque attachment association.
+     * No fallback to the applicant reader. Host lifecycle replacement must revoke access. */
+    readAcceptedAttachment?: (request: AcceptedResponseReviewAttachmentRequest, options: {
+        signal: AbortSignal;
+    }) => Promise<Blob>;
+    /** Accepted-record display availability only; never delivered to signing callbacks. */
+    onAcceptedReviewState?: (state: AcceptedResponseReviewState) => void;
     /** Presentation availability only; does not establish human review or signing authority. */
     onReviewState?: (state: ResponseReviewState) => void;
 }
@@ -93,6 +123,39 @@ export declare const RESPONSE_REVIEW_CONFIG_SCHEMA: {
         };
     };
 };
+/** Separate authored delivery shape preserves immutable applicant Registry identity. */
+export declare const ACCEPTED_RESPONSE_REVIEW_CONFIG_SCHEMA: {
+    readonly properties: {
+        readonly copy: {
+            readonly additionalProperties: {
+                readonly required: readonly ["heading", "pending", "beforeSign", "beforeSubmit", "responseId", "draftVersion", "locale", "signatures", "additionalAnswers", "emptyString", "nullValue", "trueValue", "falseValue", "emptyArray", "emptyObject", "attachmentPending", "attachmentUnavailable", "attachmentFailed", "attachmentPreview", "attachmentDetails", "retry", "unavailable", "acceptedRecord"];
+                readonly properties: {
+                    readonly acceptedRecord: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly "x-generation": {
+                        readonly type: "object";
+                    };
+                };
+                readonly type: "object";
+                readonly additionalProperties: false;
+            };
+            readonly type: "object";
+            readonly minProperties: 1;
+            readonly propertyNames: {
+                readonly pattern: "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$";
+            };
+        };
+        readonly "x-generation": {
+            readonly type: "object";
+        };
+    };
+    readonly type: "object";
+    readonly additionalProperties: false;
+    readonly required: readonly ["copy"];
+};
+export declare const ACCEPTED_RESPONSE_REVIEW_DELIVERY_CONTRACT_ID = "@formspec-org/surface-react/AcceptedResponseReview@0.1";
 export declare const RESPONSE_REVIEW_WIDGET_SHAPE: {
     readonly widgetName: "ResponseReview";
     readonly props: {
@@ -128,6 +191,53 @@ export declare const RESPONSE_REVIEW_WIDGET_SHAPE: {
     }[];
     readonly childrenPolicy: "none";
     readonly deliveryContractId: "@formspec-org/surface-react/ResponseReview@0.1";
+    readonly renderedConfigNodes: readonly [{
+        readonly pointerPattern: "";
+        readonly kind: "response-review";
+    }, {
+        readonly pointerPattern: "/copy/*";
+        readonly kind: "response-review-copy";
+    }];
+};
+export declare const ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE: {
+    readonly widgetName: "AcceptedResponseReview";
+    readonly props: {
+        readonly properties: {
+            readonly copy: {
+                readonly additionalProperties: {
+                    readonly required: readonly ["heading", "pending", "beforeSign", "beforeSubmit", "responseId", "draftVersion", "locale", "signatures", "additionalAnswers", "emptyString", "nullValue", "trueValue", "falseValue", "emptyArray", "emptyObject", "attachmentPending", "attachmentUnavailable", "attachmentFailed", "attachmentPreview", "attachmentDetails", "retry", "unavailable", "acceptedRecord"];
+                    readonly properties: {
+                        readonly acceptedRecord: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly "x-generation": {
+                            readonly type: "object";
+                        };
+                    };
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                };
+                readonly type: "object";
+                readonly minProperties: 1;
+                readonly propertyNames: {
+                    readonly pattern: "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$";
+                };
+            };
+            readonly "x-generation": {
+                readonly type: "object";
+            };
+        };
+        readonly type: "object";
+        readonly additionalProperties: false;
+        readonly required: readonly ["copy"];
+    };
+    readonly deliveryContractId: "@formspec-org/surface-react/AcceptedResponseReview@0.1";
+    readonly dataInputs: {
+        name: string;
+        required: boolean;
+    }[];
+    readonly childrenPolicy: "none";
     readonly renderedConfigNodes: readonly [{
         readonly pointerPattern: "";
         readonly kind: "response-review";
@@ -272,5 +382,256 @@ export declare const RESPONSE_REVIEW_STATE_SCHEMA: {
         readonly then: {
             readonly required: readonly ["contextIdentity"];
         };
+    }];
+};
+/** Closed accepted presentation; existing named presentation schema stays signing-only. */
+export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA: {
+    readonly type: "object";
+    readonly additionalProperties: false;
+    readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "handoffId"];
+    readonly properties: {
+        readonly phase: {
+            readonly const: "accepted-record";
+        };
+        readonly handoffId: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+    };
+};
+/** Closed input wrapper; hosts register the maintained native schemas for admission.
+ * Shape admission does not establish custody, authorization, or integrity. */
+export declare const ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA: {
+    readonly type: "object";
+    readonly additionalProperties: false;
+    readonly required: readonly ["definition", "response", "presentation"];
+    readonly properties: {
+        readonly definition: {
+            readonly $ref: "https://formspec.org/schemas/definition/1.0";
+        };
+        readonly response: {
+            readonly $ref: "https://formspec.org/schemas/response/1.0";
+        };
+        readonly presentation: {
+            readonly type: "object";
+            readonly additionalProperties: false;
+            readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "handoffId"];
+            readonly properties: {
+                readonly phase: {
+                    readonly const: "accepted-record";
+                };
+                readonly handoffId: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+            };
+        };
+    };
+};
+/** Closed accepted display state; this schema is not a SigningCeremony source. */
+export declare const ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA: {
+    readonly type: "object";
+    readonly additionalProperties: false;
+    readonly required: readonly [...("status" | "locale" | "phase" | "responseHash")[], "handoffId"];
+    readonly properties: {
+        readonly phase: {
+            readonly const: "accepted-record";
+        };
+        readonly handoffId: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+    };
+    readonly allOf: readonly [{
+        readonly if: {
+            readonly properties: {
+                readonly status: {
+                    readonly const: "ready";
+                };
+            };
+            readonly required: readonly ["status"];
+        };
+        readonly then: {
+            readonly required: readonly ["contextIdentity"];
+        };
+    }];
+};
+export declare const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
+    readonly oneOf: readonly [{
+        readonly type: "object";
+        readonly additionalProperties: false;
+        readonly required: readonly ["responseHash", "definitionUrl", "definitionVersion", "locale", "actorRef", "draft", "phase", "fields"];
+        readonly properties: {
+            readonly responseHash: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
+            };
+            readonly definitionUrl: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionVersion: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly locale: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly actorRef: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly draft: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["id", "version"];
+                readonly properties: {
+                    readonly id: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly version: {
+                        readonly type: "integer";
+                        readonly minimum: 0;
+                        readonly maximum: number;
+                    };
+                };
+            };
+            readonly phase: {
+                readonly enum: readonly ["before-sign", "before-submit"];
+            };
+            readonly fields: {
+                readonly type: "object";
+                readonly additionalProperties: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["label"];
+                    readonly properties: {
+                        readonly label: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly options: {
+                            readonly type: "array";
+                            readonly items: {
+                                readonly type: "object";
+                                readonly additionalProperties: false;
+                                readonly required: readonly ["value", "label"];
+                                readonly properties: {
+                                    readonly value: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                    readonly label: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    }, {
+        readonly type: "object";
+        readonly additionalProperties: false;
+        readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "handoffId"];
+        readonly properties: {
+            readonly phase: {
+                readonly const: "accepted-record";
+            };
+            readonly handoffId: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+        };
+    }];
+};
+export declare const RESPONSE_REVIEW_STATE_UNION_SCHEMA: {
+    readonly oneOf: readonly [{
+        readonly type: "object";
+        readonly additionalProperties: false;
+        readonly required: readonly ["status", "responseHash", "actorRef", "draft", "locale", "phase"];
+        readonly properties: {
+            readonly status: {
+                readonly enum: readonly ["pending", "ready", "unavailable"];
+            };
+            readonly contextIdentity: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
+            };
+            readonly responseHash: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
+            };
+            readonly actorRef: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly draft: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["id", "version"];
+                readonly properties: {
+                    readonly id: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly version: {
+                        readonly type: "integer";
+                        readonly minimum: 0;
+                        readonly maximum: number;
+                    };
+                };
+            };
+            readonly locale: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly phase: {
+                readonly enum: readonly ["before-sign", "before-submit"];
+            };
+        };
+        readonly allOf: readonly [{
+            readonly if: {
+                readonly properties: {
+                    readonly status: {
+                        readonly const: "ready";
+                    };
+                };
+                readonly required: readonly ["status"];
+            };
+            readonly then: {
+                readonly required: readonly ["contextIdentity"];
+            };
+        }];
+    }, {
+        readonly type: "object";
+        readonly additionalProperties: false;
+        readonly required: readonly [...("status" | "locale" | "phase" | "responseHash")[], "handoffId"];
+        readonly properties: {
+            readonly phase: {
+                readonly const: "accepted-record";
+            };
+            readonly handoffId: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+        };
+        readonly allOf: readonly [{
+            readonly if: {
+                readonly properties: {
+                    readonly status: {
+                        readonly const: "ready";
+                    };
+                };
+                readonly required: readonly ["status"];
+            };
+            readonly then: {
+                readonly required: readonly ["contextIdentity"];
+            };
+        }];
     }];
 };

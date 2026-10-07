@@ -5,7 +5,7 @@ import canonicalize from "canonicalize";
 import { snapshotFiniteJson, } from "@formspec-org/surface";
 import { Heading, nextLevel } from "../heading.js";
 import { WidgetEmptyState } from "./empty-state.js";
-import { RESPONSE_REVIEW_COPY_KEYS, } from './response-review-metadata.js';
+import { RESPONSE_REVIEW_COPY_KEYS, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, } from './response-review-metadata.js';
 export * from './response-review-metadata.js';
 const object = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const text = (v) => typeof v === "string" && v.length > 0;
@@ -52,6 +52,9 @@ function capture(props) {
         const data = snapshotFiniteJson(props.data);
         const config = snapshotFiniteJson(props.config);
         const { definition: d, response: r, presentation: p } = data;
+        const acceptedAlias = props.widgetName === "AcceptedResponseReview" || props.widgetName === "x-accepted-response-review";
+        if (!object(p) || acceptedAlias !== (p.phase === "accepted-record"))
+            return undefined;
         if (!object(d) ||
             d.$formspec !== "1.0" ||
             !text(d.url) ||
@@ -69,18 +72,20 @@ function capture(props) {
             p.definitionVersion !== d.version ||
             !hash(p.responseHash) ||
             !text(p.locale) ||
-            !text(p.actorRef) ||
-            !object(p.draft) ||
-            !text(p.draft.id) ||
-            !Number.isSafeInteger(p.draft.version) ||
-            p.draft.version < 0 ||
             !object(p.fields) ||
-            !["before-sign", "before-submit"].includes(p.phase) ||
+            !["before-sign", "before-submit", "accepted-record"].includes(p.phase) ||
             !object(r.displayedLocale) ||
             r.displayedLocale.locale !== p.locale ||
             (p.phase === "before-submit" &&
                 (!Array.isArray(r.authoredSignatures) ||
                     r.authoredSignatures.length === 0)))
+            return undefined;
+        if (p.phase === "accepted-record") {
+            if (!text(p.handoffId) || Object.keys(p).some(key => !own(ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA.properties, key)))
+                return undefined;
+        }
+        else if (!text(p.actorRef) || !object(p.draft) || !text(p.draft.id) ||
+            !Number.isSafeInteger(p.draft.version) || p.draft.version < 0 || own(p, "handoffId"))
             return undefined;
         for (const m of Object.values(p.fields)) {
             if (!object(m) ||
@@ -97,6 +102,8 @@ function capture(props) {
             return undefined;
         const c = config.copy[locales[0]];
         if (!object(c) || !RESPONSE_REVIEW_COPY_KEYS.every((k) => text(c[k])))
+            return undefined;
+        if (p.phase === "accepted-record" && !text(c.acceptedRecord))
             return undefined;
         const copy = c;
         const attachments = [];
@@ -277,6 +284,9 @@ async function verifiedPreview(blob, descriptor) {
     if (`sha256:${hex}` !== descriptor.hash)
         throw Error("Digest mismatch");
 }
+function acceptedAttachment(request) {
+    return request.presentation.phase === "accepted-record";
+}
 function Attachment({ capture: c, node, read, onStatus, }) {
     const descriptors = Array.isArray(node.value) ? node.value : [node.value];
     useEffect(() => {
@@ -345,15 +355,26 @@ function ReviewBody({ capture: c, options, }) {
     const [identity, setIdentity] = useState();
     const [previews, setPreviews] = useState({});
     const { presentation: p, response: r } = c.data;
-    const report = useCallback((status, contextIdentity) => options.onReviewState?.({
-        status,
-        responseHash: p.responseHash,
-        actorRef: p.actorRef,
-        draft: p.draft,
-        locale: p.locale,
-        phase: p.phase,
-        ...(contextIdentity ? { contextIdentity } : {}),
-    }), [options.onReviewState, p]);
+    const report = useCallback((status, contextIdentity) => {
+        const common = { status, responseHash: p.responseHash, locale: p.locale,
+            ...(contextIdentity ? { contextIdentity } : {}) };
+        if (p.phase === "accepted-record") {
+            options.onAcceptedReviewState?.({ ...common, phase: p.phase, handoffId: p.handoffId });
+        }
+        else {
+            options.onReviewState?.({ ...common, phase: p.phase, actorRef: p.actorRef, draft: p.draft });
+        }
+    }, [options.onReviewState, options.onAcceptedReviewState, p]);
+    const readAttachment = useMemo(() => {
+        if (p.phase === "accepted-record") {
+            const read = options.readAcceptedAttachment;
+            return read ? (request, context) => acceptedAttachment(request)
+                ? read(request, context) : Promise.reject(Error("Review branch mismatch")) : undefined;
+        }
+        const read = options.readAttachment;
+        return read ? (request, context) => !acceptedAttachment(request)
+            ? read(request, context) : Promise.reject(Error("Review branch mismatch")) : undefined;
+    }, [p.phase, options.readAttachment, options.readAcceptedAttachment]);
     const onStatus = useCallback((path, status) => setPreviews((previous) => ({ ...previous, [path]: status })), []);
     useEffect(() => {
         let active = true;
@@ -396,8 +417,9 @@ function ReviewBody({ capture: c, options, }) {
     }, [admitted, identity, previews, report, c]);
     if (!admitted)
         return (_jsx(WidgetEmptyState, { children: failed ? c.copy.unavailable : c.copy.pending }));
-    const render = (nodes, level) => nodes.map((node) => node.kind === "group" ? (_jsxs("section", { className: "fs-response-review-group", children: [_jsx(Heading, { level: level, children: node.label }), render(node.children, nextLevel(level))] }, node.path)) : (_jsxs("dl", { className: "fs-response-review-row", "data-response-path": node.path, children: [_jsx("dt", { children: node.label }), _jsx("dd", { children: node.attachment ? (_jsx(Attachment, { capture: c, node: node, read: options.readAttachment, onStatus: onStatus })) : (_jsx(Value, { node: node, copy: c.copy })) })] }, node.path)));
-    return (_jsxs("section", { className: "fs-response-review", "aria-label": c.copy.heading, lang: p.locale, children: [_jsx(Heading, { level: c.headingLevel, children: c.copy.heading }), _jsx("p", { className: "fs-response-review-intro", children: p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), _jsxs("dl", { className: "fs-response-review-context", children: [_jsxs("div", { children: [_jsx("dt", { children: c.copy.responseId }), _jsx("dd", { children: r.id })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: r.authoredSignatures?.length ?? 0 })] })] }), render(c.nodes, nextLevel(c.headingLevel))] }));
+    const render = (nodes, level) => nodes.map((node) => node.kind === "group" ? (_jsxs("section", { className: "fs-response-review-group", children: [_jsx(Heading, { level: level, children: node.label }), render(node.children, nextLevel(level))] }, node.path)) : (_jsxs("dl", { className: "fs-response-review-row", "data-response-path": node.path, children: [_jsx("dt", { children: node.label }), _jsx("dd", { children: node.attachment ? (_jsx(Attachment, { capture: c, node: node, read: readAttachment, onStatus: onStatus })) : (_jsx(Value, { node: node, copy: c.copy })) })] }, node.path)));
+    return (_jsxs("section", { className: "fs-response-review", "aria-label": c.copy.heading, lang: p.locale, children: [_jsx(Heading, { level: c.headingLevel, children: c.copy.heading }), _jsx("p", { className: "fs-response-review-intro", children: p.phase === "accepted-record" ? c.copy.acceptedRecord
+                    : p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), _jsxs("dl", { className: "fs-response-review-context", children: [_jsxs("div", { children: [_jsx("dt", { children: c.copy.responseId }), _jsx("dd", { children: r.id })] }), p.phase !== "accepted-record" ? _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }) : null, _jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: r.authoredSignatures?.length ?? 0 })] })] }), render(c.nodes, nextLevel(c.headingLevel))] }));
 }
 function unavailableCopy(props) {
     try {
@@ -427,6 +449,8 @@ export function ResponseReview(props) {
     const generation = useMemo(() => ++nextReviewGeneration, [
         c?.identity,
         props.readAttachment,
+        props.readAcceptedAttachment,
+        props.onAcceptedReviewState,
         props.onReviewState,
         props.canonicalResponseHandoffBytes,
     ]);
@@ -442,6 +466,8 @@ export function ResponseReview(props) {
                 ? { readAttachment: props.readAttachment }
                 : {}),
             ...(props.onReviewState ? { onReviewState: props.onReviewState } : {}),
+            ...(props.readAcceptedAttachment ? { readAcceptedAttachment: props.readAcceptedAttachment } : {}),
+            ...(props.onAcceptedReviewState ? { onAcceptedReviewState: props.onAcceptedReviewState } : {}),
         } }, generation));
 }
 export function createResponseReviewWidget(options = {}) {
