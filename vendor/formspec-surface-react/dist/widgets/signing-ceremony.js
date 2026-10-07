@@ -2,6 +2,8 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc Read, consent, Sign, then Submit through qualified Surface data and mapped actions. */
 import { useEffect, useId, useRef, useState } from 'react';
 import canonicalize from 'canonicalize';
+import { snapshotFiniteJson } from '@formspec-org/surface';
+import { RESPONSE_REVIEW_STATE_SCHEMA } from './response-review.js';
 import { Heading } from '../heading.js';
 import { SIGNING_CONTENT_SOURCE_PROPS_SCHEMA } from '../generated/signing-content-source-schema.js';
 import { WidgetEmptyState } from './empty-state.js';
@@ -31,7 +33,9 @@ function localeEntry(value, locale) {
 }
 /** Defensive reading supplements the Registry and qualified Data Source schema admission. */
 function admit(props) {
-    const { content, response, draft, actor, signingResult, actionLabels } = props.data;
+    const { content, response, draft, actor, signingResult, actionLabels, review } = props.data;
+    if (props.config.requireResponseReview !== undefined && typeof props.config.requireResponseReview !== 'boolean')
+        return undefined;
     if (!record(content) || !record(content.source) || !text(content.source.ref) || !text(content.source.version)
         || !text(content.locale) || !text(content.documentId) || !text(content.signingIntent)
         || !['declaration', 'paperAlternative', 'affirmationText', 'delegatedSigningNotice'].every((key) => text(content[key]))
@@ -46,13 +50,14 @@ function admit(props) {
     const copy = localeEntry(props.config.copy, content.locale);
     if (!record(source) || source.ref !== content.source.ref || source.version !== content.source.version
         || !record(copy) || !COPY_KEYS.every((key) => text(copy[key]))
+        || (props.config.requireResponseReview === true && (!text(copy.reviewPending) || !text(copy.reviewUnavailable)))
         || !content.source.ref.startsWith(`${response.definitionUrl}#/extensions/x-formspec-signing-content/entries/`)
         || (record(response.displayedLocale) && String(response.displayedLocale.locale).toLowerCase() !== content.locale.toLowerCase()))
         return undefined;
     // The loader freezes its outer record, not every nested value. Capture what is actually displayed.
     try {
-        return { data: structuredClone({ content, response, draft, actor, signingResult, actionLabels }),
-            copy: structuredClone(copy) };
+        return { data: structuredClone({ content, response, draft, actor, signingResult, actionLabels, ...(review !== undefined ? { review: snapshotFiniteJson(review) } : {}) }),
+            copy: structuredClone(copy), requireResponseReview: props.config.requireResponseReview === true };
     }
     catch {
         return undefined;
@@ -88,16 +93,29 @@ function currentSigned(data) {
         && payload.definitionVersion === data.response.definitionVersion && payload.signedAt === commitment.signedAt
         && payload.signingIntent === data.content.signingIntent;
 }
+/** Presentation gate only: private host and server checks remain authoritative. */
+function reviewReady(required, data, signed) {
+    if (!required)
+        return true;
+    const review = data.review;
+    if (!record(review) || !record(review.state) || !record(review.state.draft))
+        return false;
+    const state = review.state;
+    return /^[a-f0-9]{64}$/.test(review.contextIdentity) && state.status === 'ready'
+        && state.contextIdentity === review.contextIdentity && state.responseHash === data.draft.responseHash
+        && state.actorRef === data.actor.id && state.draft.id === data.draft.id && state.draft.version === data.draft.version
+        && state.locale === data.content.locale && state.phase === (signed ? 'before-submit' : 'before-sign');
+}
 export function SigningCeremony(props) {
     const admitted = admit(props);
     if (!admitted || props.route.routeClass !== 'ceremony' || props.admitsTenantTheme) {
         return _jsx(WidgetEmptyState, { children: "Signing is unavailable because the required ceremony data is incomplete." });
     }
     // Remount local assent controls for any changed snapshot, actor, content, language, or saved revision.
-    const generation = canonicalize({ response: admitted.data.response, draft: admitted.data.draft, actor: admitted.data.actor, content: admitted.data.content });
+    const generation = canonicalize({ response: admitted.data.response, draft: admitted.data.draft, actor: admitted.data.actor, content: admitted.data.content, requireResponseReview: props.config.requireResponseReview === true, reviewIdentity: props.config.requireResponseReview === true ? admitted.data.review?.contextIdentity ?? null : null });
     return _jsx(SigningCeremonyAct, { props: props, ...admitted }, generation);
 }
-function SigningCeremonyAct({ props, data, copy }) {
+function SigningCeremonyAct({ props, data, copy, requireResponseReview }) {
     const id = useId();
     const scroll = useRef(null);
     const alive = useRef(true);
@@ -105,6 +123,7 @@ function SigningCeremonyAct({ props, data, copy }) {
     const [read, setRead] = useState(false);
     const [consent, setConsent] = useState(false);
     const signed = currentSigned(data);
+    const reviewed = reviewReady(requireResponseReview, data, signed);
     const [name, setName] = useState(() => signed ? data.response.extensions['x-formspec-signing-content'].signerName : '');
     const [pending, setPending] = useState(false);
     const [failed, setFailed] = useState(false);
@@ -130,9 +149,11 @@ function SigningCeremonyAct({ props, data, copy }) {
         if (pending || !mapped(output))
             return;
         const checked = admit(props);
-        if (!checked || !same(checked.data, data))
+        if (!checked || checked.requireResponseReview !== requireResponseReview || !same(checked.data, data))
             return;
         const isSigned = currentSigned(checked.data);
+        if (output !== 'paper' && !reviewReady(requireResponseReview, checked.data, isSigned))
+            return;
         if (output === 'sign' && (isSigned || !atEnd || !read || !consent || !name.trim()))
             return;
         if (output === 'submit' && !isSigned)
@@ -162,12 +183,13 @@ function SigningCeremonyAct({ props, data, copy }) {
         }
     }
     return _jsxs("section", { className: "fs-surface-ceremony", "data-widget": "signing-ceremony", "data-tenant-theme": "refused", children: [_jsx(Heading, { level: props.headingLevel, children: copy.heading }), _jsx("p", { id: `${id}-read`, children: copy.readInstruction }), _jsxs("div", { ref: scroll, className: "fs-surface-ceremony__full-text", tabIndex: 0, role: "region", "aria-label": copy.heading, "aria-describedby": `${id}-read`, onScroll: () => { const area = scroll.current; if (area && area.scrollTop + area.clientHeight >= area.scrollHeight - 1)
-                    setAtEnd(true); }, children: [_jsx("p", { "data-probe": "signing-declaration", children: data.content.declaration }), _jsx("p", { "data-probe": "signing-electronic-consent", children: data.content.electronicConsent.text }), _jsx("p", { "data-probe": "signing-affirmation", children: data.content.affirmationText }), _jsx("p", { "data-probe": "signing-delegation", children: data.content.delegatedSigningNotice })] }), _jsx("p", { className: "fs-surface-ceremony__paper", "data-probe": "signing-paper-alternative", children: data.content.paperAlternative }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: read, disabled: !atEnd || pending || signed, onChange: (event) => setRead(event.currentTarget.checked) }), copy.readConfirmation] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: consent, disabled: !read || pending || signed, onChange: (event) => setConsent(event.currentTarget.checked) }), data.content.electronicConsent.controlLabel] }), _jsx("label", { htmlFor: `${id}-name`, children: copy.signerName }), _jsx("input", { id: `${id}-name`, autoComplete: "name", value: name, disabled: pending || signed, onChange: (event) => setName(event.currentTarget.value) }), _jsxs("div", { className: "fs-surface-ceremony__actions", children: [sign && _jsx("button", { type: "button", disabled: pending || signed || !atEnd || !read || !consent || !name.trim(), onClick: () => void emit('sign'), children: sign.label }), submit && _jsx("button", { type: "button", disabled: pending || !signed, onClick: () => void emit('submit'), children: submit.label }), paper && _jsx("button", { type: "button", disabled: pending, onClick: () => void emit('paper'), children: paper.label })] }), _jsx("p", { role: "status", "aria-live": "polite", children: pending ? copy.pending : failed ? copy.failed : signed ? copy.signed : !sign || !submit ? copy.unavailable : '' })] });
+                    setAtEnd(true); }, children: [_jsx("p", { "data-probe": "signing-declaration", children: data.content.declaration }), _jsx("p", { "data-probe": "signing-electronic-consent", children: data.content.electronicConsent.text }), _jsx("p", { "data-probe": "signing-affirmation", children: data.content.affirmationText }), _jsx("p", { "data-probe": "signing-delegation", children: data.content.delegatedSigningNotice })] }), _jsx("p", { className: "fs-surface-ceremony__paper", "data-probe": "signing-paper-alternative", children: data.content.paperAlternative }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: read, disabled: !atEnd || pending || signed, onChange: (event) => setRead(event.currentTarget.checked) }), copy.readConfirmation] }), _jsxs("label", { children: [_jsx("input", { type: "checkbox", checked: consent, disabled: !read || pending || signed, onChange: (event) => setConsent(event.currentTarget.checked) }), data.content.electronicConsent.controlLabel] }), _jsx("label", { htmlFor: `${id}-name`, children: copy.signerName }), _jsx("input", { id: `${id}-name`, autoComplete: "name", value: name, disabled: pending || signed, onChange: (event) => setName(event.currentTarget.value) }), _jsxs("div", { className: "fs-surface-ceremony__actions", children: [sign && _jsx("button", { type: "button", disabled: pending || !reviewed || signed || !atEnd || !read || !consent || !name.trim(), onClick: () => void emit('sign'), children: sign.label }), submit && _jsx("button", { type: "button", disabled: pending || !reviewed || !signed, onClick: () => void emit('submit'), children: submit.label }), paper && _jsx("button", { type: "button", disabled: pending, onClick: () => void emit('paper'), children: paper.label })] }), _jsx("p", { role: "status", "aria-live": "polite", children: pending ? copy.pending : failed ? copy.failed : !reviewed ? data.review?.state?.status === 'pending' ? copy.reviewPending : copy.reviewUnavailable : signed ? copy.signed : !sign || !submit ? copy.unavailable : '' })] });
 }
 /** Publish this exact config schema as the Registry entry's widgetShape.props. */
 export const SIGNING_CEREMONY_CONFIG_SCHEMA = {
     type: 'object', additionalProperties: false, required: ['contentRefs', 'copy'],
     properties: {
+        requireResponseReview: { type: 'boolean' },
         contentRefs: {
             type: 'object', minProperties: 1,
             propertyNames: { pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$' },
@@ -178,12 +200,13 @@ export const SIGNING_CEREMONY_CONFIG_SCHEMA = {
             propertyNames: { pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$' },
             additionalProperties: {
                 type: 'object', additionalProperties: false, required: COPY_KEYS,
-                properties: { ...Object.fromEntries(COPY_KEYS.map((key) => [key, { type: 'string', minLength: 1 }])),
+                properties: { ...Object.fromEntries([...COPY_KEYS, 'reviewPending', 'reviewUnavailable'].map((key) => [key, { type: 'string', minLength: 1 }])),
                     'x-generation': { type: 'object' } },
             },
         },
         'x-generation': { type: 'object' },
     },
+    allOf: [{ if: { required: ['requireResponseReview'], properties: { requireResponseReview: { const: true } } }, then: { properties: { copy: { additionalProperties: { required: ['reviewPending', 'reviewUnavailable'] } } } } }],
 };
 export const SIGNING_CEREMONY_DELIVERY_CONTRACT_ID = '@formspec-org/surface-react/SigningCeremony@0.1';
 export const SIGNING_CEREMONY_RENDERED_CONFIG_NODES = [
@@ -194,9 +217,14 @@ export const SIGNING_CEREMONY_RENDERED_CONFIG_NODES = [
 export const SIGNING_CEREMONY_WIDGET_SHAPE = {
     widgetName: 'SigningCeremony',
     props: SIGNING_CEREMONY_CONFIG_SCHEMA,
-    dataInputs: ['content', 'response', 'draft', 'actor', 'signingResult', 'actionLabels'].map((name) => ({ name, required: true })),
+    dataInputs: [...['content', 'response', 'draft', 'actor', 'signingResult', 'actionLabels'].map((name) => ({ name, required: true })), { name: 'review', required: false }],
     actionOutputs: [{ name: 'sign' }, { name: 'submit' }, { name: 'paper' }],
     childrenPolicy: 'none',
     deliveryContractId: SIGNING_CEREMONY_DELIVERY_CONTRACT_ID,
     renderedConfigNodes: SIGNING_CEREMONY_RENDERED_CONFIG_NODES,
+};
+/** Separately qualified opt-in source; expected identity is computed independently by the host. */
+export const SIGNING_CEREMONY_REVIEW_SCHEMA = {
+    type: 'object', additionalProperties: false, required: ['contextIdentity', 'state'],
+    properties: { contextIdentity: { type: 'string', pattern: '^[a-f0-9]{64}$' }, state: RESPONSE_REVIEW_STATE_SCHEMA },
 };

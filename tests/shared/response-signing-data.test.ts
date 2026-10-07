@@ -13,7 +13,7 @@ function fixture() {
       runtime: { delivery: 'live', cache: { mode: 'subscribe' }, authorizationBoundary: 'host',
         failureMode: 'block-render', provenance: { kind: 'host-state', source: `admitted-signing-cohort:${name}` } },
       schema: { type: 'object' },
-    })) as DataSourcesDocument['sources'],
+    })) as unknown as DataSourcesDocument['sources'],
   };
   const bindings = Object.fromEntries(SIGNING_CEREMONY_WIDGET_SHAPE.dataInputs.map(({ name }) =>
     [name, { catalogRef: catalog.id, sourceRef: `host:${name}` }]));
@@ -41,6 +41,10 @@ describe('registered signing ceremony data producer', () => {
     input.snapshot.draft.version = 99;
     input.snapshot.response.data.answer = 'changed';
     for (const { name } of SIGNING_CEREMONY_WIDGET_SHAPE.dataInputs) {
+      if (!Object.hasOwn(input.snapshot, name)) {
+        expect(runtime.authorizeDataSource(request(name))).toMatchObject({ status: 'refused' });
+        continue;
+      }
       expect(runtime.authorizeDataSource(request(name))).toEqual({ status: 'authorized' });
       expect(runtime.dataSourceLoader(request(name))).toMatchObject({ status: 'loaded', recordId: 'owned-draft', revision: 7 });
     }

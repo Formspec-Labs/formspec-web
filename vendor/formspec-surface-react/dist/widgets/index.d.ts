@@ -22,9 +22,11 @@
  * platform's binds this one. Both go through the same seam.
  */
 import type { SurfaceWidget, SurfaceWidgetModule } from '../widget-api.js';
+import { type ResponseReviewOptions } from './response-review.js';
+export * from './response-review.js';
 export { IntakeBanner } from './intake-banner.js';
-export { SigningCeremony, SIGNING_CEREMONY_CONFIG_SCHEMA, SIGNING_CEREMONY_WIDGET_SHAPE, SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES } from './signing-ceremony.js';
-export type { SigningCeremonyConfig, SigningCeremonyCopy, SigningCeremonyData, SigningCeremonyDraft, SigningCeremonyResult } from './signing-ceremony.js';
+export { SigningCeremony, SIGNING_CEREMONY_CONFIG_SCHEMA, SIGNING_CEREMONY_REVIEW_SCHEMA, SIGNING_CEREMONY_WIDGET_SHAPE, SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES } from './signing-ceremony.js';
+export type { SigningCeremonyConfig, SigningCeremonyCopy, SigningCeremonyData, SigningCeremonyDraft, SigningCeremonyResult, SigningCeremonyReview } from './signing-ceremony.js';
 export { CeremonyFrame } from './ceremony-frame.js';
 export { ReceiptPanel } from './receipt-panel.js';
 export { QueueTable } from './queue-table.js';
@@ -97,4 +99,6 @@ export declare const CEREMONY_FRAME_RENDERED_CONFIG_NODES: readonly [{
     readonly pointerPattern: "";
     readonly kind: "ceremony-frame";
 }];
-export declare function starterWidgetModule(moduleId: string): SurfaceWidgetModule;
+export declare function starterWidgetModule(moduleId: string, options?: {
+    responseReview?: ResponseReviewOptions;
+}): SurfaceWidgetModule;

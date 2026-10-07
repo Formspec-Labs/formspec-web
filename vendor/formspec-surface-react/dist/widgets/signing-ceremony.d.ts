@@ -1,3 +1,4 @@
+import { type ResponseReviewState } from './response-review.js';
 import type { FormResponse, Generation, SigningContent, SigningContentSource } from '@formspec-org/types';
 import type { SurfaceWidgetProps } from '../widget-api.js';
 export interface SigningCeremonyCopy {
@@ -10,8 +11,11 @@ export interface SigningCeremonyCopy {
     signed: string;
     failed: string;
     unavailable: string;
+    reviewPending?: string;
+    reviewUnavailable?: string;
 }
 export interface SigningCeremonyConfig {
+    requireResponseReview?: boolean;
     contentRefs: Readonly<Record<string, SigningContentSource>>;
     copy: Readonly<Record<string, SigningCeremonyCopy>>;
 }
@@ -36,7 +40,13 @@ export type SigningCeremonyResult = {
         keyId: string;
     };
 };
+export interface SigningCeremonyReview {
+    /** Independently computed by the host for its current captured review inputs. */
+    contextIdentity: string;
+    state: ResponseReviewState;
+}
 export interface SigningCeremonyData {
+    review?: SigningCeremonyReview;
     content: SigningContent;
     response: FormResponse;
     draft: SigningCeremonyDraft;
@@ -54,6 +64,9 @@ export declare const SIGNING_CEREMONY_CONFIG_SCHEMA: {
     readonly additionalProperties: false;
     readonly required: readonly ["contentRefs", "copy"];
     readonly properties: {
+        readonly requireResponseReview: {
+            readonly type: "boolean";
+        };
         readonly contentRefs: {
             readonly type: "object";
             readonly minProperties: 1;
@@ -99,6 +112,25 @@ export declare const SIGNING_CEREMONY_CONFIG_SCHEMA: {
             readonly type: "object";
         };
     };
+    readonly allOf: readonly [{
+        readonly if: {
+            readonly required: readonly ["requireResponseReview"];
+            readonly properties: {
+                readonly requireResponseReview: {
+                    readonly const: true;
+                };
+            };
+        };
+        readonly then: {
+            readonly properties: {
+                readonly copy: {
+                    readonly additionalProperties: {
+                        readonly required: readonly ["reviewPending", "reviewUnavailable"];
+                    };
+                };
+            };
+        };
+    }];
 };
 export declare const SIGNING_CEREMONY_DELIVERY_CONTRACT_ID = "@formspec-org/surface-react/SigningCeremony@0.1";
 export declare const SIGNING_CEREMONY_RENDERED_CONFIG_NODES: readonly [{
@@ -116,6 +148,9 @@ export declare const SIGNING_CEREMONY_WIDGET_SHAPE: {
         readonly additionalProperties: false;
         readonly required: readonly ["contentRefs", "copy"];
         readonly properties: {
+            readonly requireResponseReview: {
+                readonly type: "boolean";
+            };
             readonly contentRefs: {
                 readonly type: "object";
                 readonly minProperties: 1;
@@ -161,11 +196,33 @@ export declare const SIGNING_CEREMONY_WIDGET_SHAPE: {
                 readonly type: "object";
             };
         };
+        readonly allOf: readonly [{
+            readonly if: {
+                readonly required: readonly ["requireResponseReview"];
+                readonly properties: {
+                    readonly requireResponseReview: {
+                        readonly const: true;
+                    };
+                };
+            };
+            readonly then: {
+                readonly properties: {
+                    readonly copy: {
+                        readonly additionalProperties: {
+                            readonly required: readonly ["reviewPending", "reviewUnavailable"];
+                        };
+                    };
+                };
+            };
+        }];
     };
-    readonly dataInputs: {
+    readonly dataInputs: readonly [...{
         name: string;
         required: boolean;
-    }[];
+    }[], {
+        readonly name: "review";
+        readonly required: false;
+    }];
     readonly actionOutputs: readonly [{
         readonly name: "sign";
     }, {
@@ -182,4 +239,74 @@ export declare const SIGNING_CEREMONY_WIDGET_SHAPE: {
         readonly pointerPattern: "/copy/*";
         readonly kind: "signing-ceremony-copy";
     }];
+};
+/** Separately qualified opt-in source; expected identity is computed independently by the host. */
+export declare const SIGNING_CEREMONY_REVIEW_SCHEMA: {
+    readonly type: "object";
+    readonly additionalProperties: false;
+    readonly required: readonly ["contextIdentity", "state"];
+    readonly properties: {
+        readonly contextIdentity: {
+            readonly type: "string";
+            readonly pattern: "^[a-f0-9]{64}$";
+        };
+        readonly state: {
+            readonly type: "object";
+            readonly additionalProperties: false;
+            readonly required: readonly ["status", "responseHash", "actorRef", "draft", "locale", "phase"];
+            readonly properties: {
+                readonly status: {
+                    readonly enum: readonly ["pending", "ready", "unavailable"];
+                };
+                readonly contextIdentity: {
+                    readonly type: "string";
+                    readonly pattern: "^[a-f0-9]{64}$";
+                };
+                readonly responseHash: {
+                    readonly type: "string";
+                    readonly pattern: "^[a-f0-9]{64}$";
+                };
+                readonly actorRef: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly draft: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["id", "version"];
+                    readonly properties: {
+                        readonly id: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly version: {
+                            readonly type: "integer";
+                            readonly minimum: 0;
+                            readonly maximum: number;
+                        };
+                    };
+                };
+                readonly locale: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly phase: {
+                    readonly enum: readonly ["before-sign", "before-submit"];
+                };
+            };
+            readonly allOf: readonly [{
+                readonly if: {
+                    readonly properties: {
+                        readonly status: {
+                            readonly const: "ready";
+                        };
+                    };
+                    readonly required: readonly ["status"];
+                };
+                readonly then: {
+                    readonly required: readonly ["contextIdentity"];
+                };
+            }];
+        };
+    };
 };
