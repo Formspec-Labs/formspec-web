@@ -63,6 +63,14 @@ const packages = [
     sourceBudget: true,
   },
   {
+    local: 'vendor/integrity-canonical',
+    source: resolve(integrityRoot, 'packages/integrity-canonical'),
+    workspace: integrityRoot,
+    files: ['index.d.ts', 'index.js'],
+    licenseSource: 'workspace',
+    sourceBudget: true,
+  },
+  {
     local: 'vendor/integrity-cose',
     source: resolve(integrityRoot, 'packages/integrity-cose'),
     workspace: integrityRoot,

@@ -1,3 +1,4 @@
+import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
 import type {
   FormDefinition,
   FormResponse,
@@ -571,11 +572,18 @@ function labelFromPartyRef(partyRef: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export async function responseHash(response: FormResponse): Promise<string> {
-  const encoded = new TextEncoder().encode(JSON.stringify(response));
-  if (!globalThis.crypto?.subtle) {
-    return `sha256:${fallbackHash(encoded)}`;
+export class ResponseHashUnavailableError extends Error {
+  readonly code = 'secure-hashing-unavailable';
+
+  constructor() {
+    super('Secure response hashing is unavailable in this browser. Try again in a supported secure browser.');
+    this.name = 'ResponseHashUnavailableError';
   }
+}
+
+export async function responseHash(response: FormResponse): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new ResponseHashUnavailableError();
+  const encoded = canonicalResponseHandoffBytes(response);
   const digest = await globalThis.crypto.subtle.digest('SHA-256', encoded);
   return `sha256:${hex(new Uint8Array(digest))}`;
 }
