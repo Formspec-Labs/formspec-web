@@ -159,6 +159,9 @@ export interface ResolvedRespondentFormInput {
   readonly responseActionsDocument: ResponseActionsDocument | undefined;
   readonly localeDocuments?: readonly LocaleDocument[];
   readonly activeLocale?: string;
+  readonly componentDocument?: ComponentDocument;
+  /** Establish ownership after restore and before controls mount; release resources if setup throws. */
+  readonly configureRuntime?: (input: RespondentOwnedRuntimeInput) => Promise<RespondentOwnedRuntime>;
   readonly responseActionInvoker?: SurfaceDefinitionFormRenderInput['responseActionInvoker'];
   readonly semanticControlScope?: SurfaceDefinitionFormRenderInput['semanticControlScope'];
   /**
@@ -171,6 +174,24 @@ export interface ResolvedRespondentFormInput {
     action: ResponseAction,
     result: ResponseActionInvocationResult<SubmitResult>,
   ) => void;
+}
+
+export interface RespondentOwnedRuntimeInput {
+  readonly engine: IFormEngine;
+  readonly definition: FormDefinition;
+  readonly draftKey: DraftKey;
+  readonly claim: IdentityClaim | null;
+  readonly restoredResponse?: FormResponse;
+  readonly activeLocale: string;
+}
+
+export interface RespondentOwnedRuntime {
+  readonly responseActionInvoker: NonNullable<SurfaceDefinitionFormRenderInput['responseActionInvoker']>;
+  readonly semanticControlScope: SurfaceDefinitionFormRenderInput['semanticControlScope'];
+  /** Refuse new actions immediately, before Clear drains any outstanding writes. */
+  readonly invalidate: () => void;
+  /** Retire this mounted form; its host may retain a frozen preparation across routes. */
+  readonly dispose: () => void;
 }
 
 export interface RespondentDefinitionControllerProps extends RespondentRuntimeProps {
@@ -215,6 +236,7 @@ type RespondentState =
       draftLoaded: boolean;
       multiPartyState: MultiPartyPersistedState | null;
       runtimeProfile: ResolvedRuntimeProfile;
+      ownedRuntime?: RespondentOwnedRuntime;
     }
   | {
       status: 'draft-conflict';
@@ -359,6 +381,8 @@ function RespondentController({
   useEffect(() => {
     let cancelled = false;
     let engine: IFormEngine | undefined;
+    let ownedRuntime: RespondentOwnedRuntime | undefined;
+    const disposeOwnedRuntime = () => { const active = ownedRuntime; ownedRuntime = undefined; active?.dispose(); };
     let unsubscribe: (() => void) | undefined;
     let activeClaim: IdentityClaim | null = null;
     let pendingAssuranceFloor: AssuranceLevel | undefined;
@@ -378,6 +402,10 @@ function RespondentController({
       // can restart this bootstrap when a locale-conditional feature key needs
       // a new ResolvedRuntimeProfile.
       const sequence = ++reloadSequence;
+      ownedRuntime?.invalidate();
+      disposeOwnedRuntime();
+      engine?.dispose();
+      engine = undefined;
       setRespondentState({ status: 'loading' });
       setSubmitState({ status: 'idle' });
       try {
@@ -387,6 +415,7 @@ function RespondentController({
         restartLocale.current = undefined;
 
         if (cancelled || sequence !== reloadSequence) {
+          if (readyState.status === 'ready') readyState.ownedRuntime?.dispose();
           if ('engine' in readyState) {
             readyState.engine.dispose();
           }
@@ -395,12 +424,13 @@ function RespondentController({
 
         activeClaim = claim;
         if (readyState.status === 'ready') {
-          engine?.dispose();
+          disposeOwnedRuntime();
           engine = readyState.engine;
+          ownedRuntime = readyState.ownedRuntime;
           pendingAssuranceFloor = undefined;
           setMultiPartyState(readyState.multiPartyState);
         } else {
-          engine?.dispose();
+          disposeOwnedRuntime();
           engine = 'engine' in readyState ? readyState.engine : undefined;
           pendingAssuranceFloor = readyState.status === 'auth-required' ? readyState.assuranceFloor : undefined;
           setMultiPartyState(null);
@@ -413,7 +443,7 @@ function RespondentController({
       }
     };
     applyReadyStateRef.current = applyReadyState;
-    disposeActiveEngine.current = () => { engine?.dispose(); engine = undefined; };
+    disposeActiveEngine.current = () => { disposeOwnedRuntime(); engine?.dispose(); engine = undefined; };
 
     void (async () => {
       const boot = await bootIdentity(composition.identityProvider, 'L1', {
@@ -485,6 +515,7 @@ function RespondentController({
     return () => {
       cancelled = true;
       unsubscribe?.();
+      disposeOwnedRuntime();
       engine?.dispose();
       applyReadyStateRef.current = null;
       disposeActiveEngine.current = null;
@@ -494,6 +525,8 @@ function RespondentController({
     composition,
     config,
     form?.activeLocale,
+    form?.componentDocument,
+    form?.configureRuntime,
     form?.definition,
     form?.localeDocuments,
     form?.registryEntries,
@@ -658,6 +691,7 @@ function RespondentController({
     if (terminalClearRequestedRef.current || submissionInProgressRef.current) return;
     if (respondentState.status !== 'ready' && respondentState.status !== 'draft-conflict') return;
     terminalClearRequestedRef.current = true;
+    if (respondentState.status === 'ready') respondentState.ownedRuntime?.invalidate();
     setTerminalClearState({ status: 'clearing' });
     try {
       await localeSaveQueue.current;
@@ -746,7 +780,7 @@ function RespondentController({
     : respondentState.responseActionsDocument ?? createDemoSubmitResponseActions({
         definitionUrl: respondentState.definition.url,
       });
-  const responseActionInvoker = form?.responseActionInvoker ?? composition.responseActionInvoker?.({
+  const responseActionInvoker = respondentState.ownedRuntime?.responseActionInvoker ?? form?.responseActionInvoker ?? composition.responseActionInvoker?.({
     runtimeDefinitionUrl: form?.definition.url ?? composition.initialDefinitionUrl,
     definition: respondentState.definition,
     draftKey: respondentState.draftKey,
@@ -782,6 +816,7 @@ function RespondentController({
   };
 
   const handleSubmit = async (result: SubmitResult): Promise<void> => {
+    if (respondentState.ownedRuntime) return;
     if (
       terminalClearRequestedRef.current ||
       submitState.status === 'submitting' ||
@@ -989,6 +1024,7 @@ function RespondentController({
   const handleClearTerminal = async (): Promise<void> => {
     if (terminalClearRequestedRef.current) return;
     terminalClearRequestedRef.current = true;
+    respondentState.ownedRuntime?.invalidate();
     setTerminalClearState({ status: 'clearing' });
     const title = chromeText(respondentState.engine, 'receipt.clearedTitle');
     const detail = chromeText(respondentState.engine, 'receipt.clearedDetail');
@@ -1032,7 +1068,7 @@ function RespondentController({
               registryEntries={form ? [...form.registryEntries] : undefined}
               responseActionsDocument={responseActionsDocument}
               responseActionInvoker={responseActionInvoker}
-              semanticControlScope={form?.semanticControlScope}
+              semanticControlScope={respondentState.ownedRuntime?.semanticControlScope ?? form?.semanticControlScope}
               components={{
                 fields: {
                   Text: SafeAddressTextField,
@@ -1363,7 +1399,7 @@ async function createReadyState(
   ] = form
     ? [
         form.localeDocuments,
-        undefined,
+        form.componentDocument,
         undefined,
         undefined,
         form.themeDocument,
@@ -1396,6 +1432,7 @@ async function createReadyState(
   });
   let multiPartyState: MultiPartyPersistedState | null;
   let draft: FormResponse | undefined;
+  let ownedRuntime: RespondentOwnedRuntime | undefined;
   try {
     for (const localeDocument of localeDocuments ?? []) {
       engine.loadLocale(localeDocument);
@@ -1431,6 +1468,26 @@ async function createReadyState(
     }
     hydrateEngineFromResponse(engine, draft);
     const resolvedIssuer = await engine.getResolvedIssuer();
+    if (form?.configureRuntime) {
+      if (runtimeProfile.enabled.has('trustedReviewer')) {
+        throw new Error('An owned action runtime cannot use the legacy reviewer draft writer');
+      }
+      const configured = await form.configureRuntime({ engine, definition,
+        draftKey: multiPartyState ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef) : draftKey, claim,
+        restoredResponse: draft ? structuredClone(draft) : undefined, activeLocale });
+      if (!configured || typeof configured.responseActionInvoker !== 'function'
+        || typeof configured.invalidate !== 'function'
+        || typeof configured.dispose !== 'function') {
+        configured?.dispose?.();
+        throw new Error('An owned action runtime must supply its complete execution and lifecycle hooks');
+      }
+      let disposed = false;
+      ownedRuntime = { ...configured, dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        configured.dispose();
+      } };
+    }
 
     return {
       status: 'ready',
@@ -1449,8 +1506,10 @@ async function createReadyState(
       draftLoaded: draft !== undefined,
       multiPartyState,
       runtimeProfile,
+      ...(ownedRuntime ? { ownedRuntime } : {}),
     };
   } catch (error) {
+    ownedRuntime?.dispose();
     engine.dispose();
     throw error;
   }

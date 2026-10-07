@@ -1,10 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { invokeResponseActionAsync } from '@formspec-org/engine';
 import { createSemanticControlRegistry, type ResponseActionInvoker, type SemanticControlScope, type SubmitResult } from '@formspec-org/react';
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
-import { RespondentDefinitionController } from '../../src/app/RespondentRuntime.tsx';
+import { RespondentDefinitionController, type RespondentOwnedRuntime, type RespondentOwnedRuntimeInput, type ResolvedRespondentFormInput } from '../../src/app/RespondentRuntime.tsx';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { DraftVersionConflictError, type DraftKey } from '../../src/ports/draft-store.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
@@ -28,6 +28,95 @@ beforeAll(() => initFormspecEngine());
 afterEach(cleanup);
 
 describe('draft recovery inside a definition-form Surface slot', () => {
+  it('configures owned execution after hydration and before mounting the authored Component', async () => {
+    const base = createStubComposition();
+    const restored: FormResponse = { $formspecResponse: '1.0', id: 'retained-response',
+      definitionUrl: definition.url, definitionVersion: definition.version, status: 'in-progress',
+      authored: '2026-10-06T00:00:00Z', data: { name: 'Retained answer' } };
+    let finish!: (runtime: RespondentOwnedRuntime) => void;
+    const configureRuntime = vi.fn(async (input: RespondentOwnedRuntimeInput) => {
+      expect(input.restoredResponse).toEqual(restored);
+      expect(input.engine.getResponse({ profile: 'off' }).data).toEqual(restored.data);
+      expect(input.draftKey).toEqual({ formUrl: definition.url, formVersion: definition.version, subjectRef: undefined });
+      return new Promise<RespondentOwnedRuntime>(resolve => { finish = resolve; });
+    });
+    const runtime = ownedRuntime();
+    const composition = anonymousComposition(base);
+    composition.draftStore.load = vi.fn(async () => structuredClone(restored));
+    const view = render(<RespondentDefinitionController composition={composition} config={departmentAppProfile}
+      form={{ ...resolvedForm(), configureRuntime, componentDocument: {
+        $formspecComponent: '1.2', url: 'urn:test:owned-component', version: '1.0',
+        targetDefinition: { url: definition.url }, tree: { component: 'Stack', children: [
+          { component: 'TextInput', bind: 'name', placeholder: 'Authored Component field' },
+        ] },
+      } }} />);
+    await waitFor(() => expect(configureRuntime).toHaveBeenCalledOnce());
+    expect(screen.queryByLabelText('Name')).toBeNull();
+    await act(async () => { finish(runtime); });
+    expect((await screen.findByPlaceholderText('Authored Component field') as HTMLInputElement).value).toBe('Retained answer');
+    view.unmount();
+    expect(runtime.dispose).toHaveBeenCalledOnce();
+    expect(runtime.invalidate).not.toHaveBeenCalled();
+  });
+
+  it('disposes a superseded asynchronous owned runtime before disposing its engine', async () => {
+    let finish!: (runtime: RespondentOwnedRuntime) => void;
+    let disposeEngine: ReturnType<typeof vi.spyOn> | undefined;
+    const calls: string[] = [];
+    const configureRuntime = vi.fn(async ({ engine }: RespondentOwnedRuntimeInput) => {
+      disposeEngine = vi.spyOn(engine, 'dispose').mockImplementation(() => { calls.push('engine'); });
+      return new Promise<RespondentOwnedRuntime>(resolve => { finish = resolve; });
+    });
+    const runtime = ownedRuntime();
+    runtime.dispose.mockImplementation(() => { calls.push('runtime'); });
+    const view = render(<RespondentDefinitionController composition={anonymousComposition(createStubComposition())}
+      config={departmentAppProfile} form={{ ...resolvedForm(), configureRuntime }} />);
+    await waitFor(() => expect(configureRuntime).toHaveBeenCalledOnce());
+    view.unmount();
+    await act(async () => { finish(runtime); });
+    expect(calls).toEqual(['runtime', 'engine']);
+    expect(runtime.dispose).toHaveBeenCalledOnce();
+    expect(disposeEngine).toHaveBeenCalledOnce();
+  });
+
+  it('refuses incomplete owned execution rather than falling back to the legacy factory', async () => {
+    const composition = anonymousComposition(createStubComposition());
+    const factory = vi.fn(() => null);
+    composition.responseActionInvoker = factory;
+    const runtime = ownedRuntime();
+    const configureRuntime = async () => ({ ...runtime, responseActionInvoker: null } as unknown as RespondentOwnedRuntime);
+    render(<RespondentDefinitionController composition={composition} config={departmentAppProfile}
+      form={{ ...resolvedForm(), configureRuntime }} />);
+    await screen.findByText('An owned action runtime must supply its complete execution and lifecycle hooks');
+    expect(factory).not.toHaveBeenCalled();
+    expect(runtime.dispose).toHaveBeenCalledOnce();
+    expect(screen.queryByLabelText('Name')).toBeNull();
+  });
+
+  it('refuses the legacy submit event when the configured runtime owns execution', async () => {
+    const composition = anonymousComposition(createStubComposition());
+    const save = vi.spyOn(composition.draftStore, 'save');
+    const submit = vi.spyOn(composition.submitTransport, 'submit');
+    const factory = vi.fn(() => null); composition.responseActionInvoker = factory;
+    const runtime = ownedRuntime();
+    runtime.responseActionInvoker.mockImplementation(input => invokeResponseActionAsync<SubmitResult>(
+      input.document, input.actionRef, input.ports, input.nodeId, input.invocationContext));
+    const form = resolvedForm();
+    const configureRuntime = async () => runtime;
+    render(<RespondentDefinitionController composition={composition} config={departmentAppProfile} form={{
+      ...form, configureRuntime, responseActionsDocument: { $formspecResponseActions: '1.0', version: '1.0',
+        scope: 'response', targetDefinition: { url: definition.url }, actions: [{
+          id: 'legacy', intent: 'submit', label: { literal: 'Legacy submit event' },
+          validation: { profile: 'off', blocking: 'non-blocking', persistence: 'draft-checkpoint' },
+          effects: [{ type: 'hostEvent', eventName: 'formspec-submit' }],
+        }] },
+    }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Legacy submit event' }));
+    await waitFor(() => expect(runtime.responseActionInvoker).toHaveBeenCalledOnce());
+    await screen.findByText('Completed.');
+    expect(save).not.toHaveBeenCalled(); expect(submit).not.toHaveBeenCalled();
+    expect(factory).not.toHaveBeenCalled();
+  });
   it('preserves the supplied Surface invoker and semantic scope without invoking the legacy submit transport', async () => {
     const base = createStubComposition();
     const factory = vi.fn(() => null);
@@ -114,3 +203,18 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     expect(save).not.toHaveBeenCalled();
   });
 });
+
+function resolvedForm(): ResolvedRespondentFormInput {
+  return { definition, themeDocument: { $formspecTheme: '1.0', url: 'urn:test:theme', version: '1.0',
+    targetDefinition: { url: definition.url } }, registryEntries: [], responseActionsDocument: undefined };
+}
+
+function anonymousComposition(base: ReturnType<typeof createStubComposition>) {
+  return { ...base, identityProvider: { ...base.identityProvider, discover: async () => [],
+    subscribe(listener: (claim: null) => void) { listener(null); return () => {}; } } };
+}
+
+function ownedRuntime() {
+  return { responseActionInvoker: vi.fn<ResponseActionInvoker<SubmitResult>>(),
+    semanticControlScope: undefined, invalidate: vi.fn(), dispose: vi.fn() };
+}
