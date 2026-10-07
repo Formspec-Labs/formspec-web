@@ -37,7 +37,7 @@ export type { CeremonyFrameConfig } from './ceremony-frame.js';
 export type { ReceiptFact, ReceiptPanelData } from './receipt-panel.js';
 export type { QueueColumn, QueueRow, QueueTableActionPayloadConfig, QueueTableActionPayloadSelector, QueueTableConfig, QueueTableData, QueueTableRowActionConfig, } from './queue-table.js';
 export type { StructuredJsonBlockConfig, StructuredKeyValueBlockConfig, StructuredKeyValueItemConfig, StructuredListBlockConfig, StructuredMetricBlockConfig, StructuredActionConfirmationConfig, StructuredActionPayloadConfig, StructuredActionPayloadSelector, StructuredPanelActionConfig, StructuredPanelBlockConfig, StructuredPanelConfig, StructuredProgressBlockConfig, StructuredTableBlockConfig, StructuredTableColumnConfig, StructuredTableRowActionConfig, } from './structured-panel.js';
-export { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA } from './structured-panel.js';
+export { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA } from './structured-panel-metadata.js';
 /**
  * `widgetShape.widgetName` → component, for the starter set.
  *

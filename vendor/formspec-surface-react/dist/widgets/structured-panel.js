@@ -22,21 +22,7 @@ import { Heading, nextLevel } from '../heading.js';
 import { admitSurfaceWidgetActionInput } from '../widget-action-runtime.js';
 import { WidgetEmptyState } from './empty-state.js';
 import { surfaceSemanticOutputSubjectRef, useSurfaceSemanticOutputs, } from '../semantic-output.js';
-/** Reusable branch for authored Registry widgetShape.props; not native admission. */
-export const STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA = {
-    type: 'object',
-    additionalProperties: false,
-    required: ['type', 'id', 'path', 'emptyMessage', 'unavailableMessage', 'x-generation'],
-    properties: {
-        type: { const: 'json' },
-        id: { type: 'string', pattern: '^[a-zA-Z][a-zA-Z0-9_-]*$' },
-        path: { type: 'string', pattern: '^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$' },
-        title: { type: 'string', minLength: 1 },
-        emptyMessage: { type: 'string', minLength: 1 },
-        unavailableMessage: { type: 'string', minLength: 1 },
-        'x-generation': { $ref: 'https://formspec.org/schemas/common/1.0#/$defs/Generation' },
-    },
-};
+export { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA } from './structured-panel-metadata.js';
 const NEED_ANCHOR = /^need:([a-zA-Z][a-zA-Z0-9_-]*)@[1-9][0-9]*$/;
 const SAFE_PATH_PART = /^[a-zA-Z0-9_-]+$/;
 const UNSAFE_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);

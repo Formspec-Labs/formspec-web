@@ -1,4 +1,4 @@
-import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA } from '@formspec-org/surface-react';
+import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA } from '@formspec-org/surface-react';
 import { loadCanonicalModulePayloadSchemaResources } from '../../../src/adapters/schema/index.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
@@ -588,5 +588,53 @@ describe('actual pinned package resource identity and isolation', () => {
       moduleSupport: { payloadSchemaResources: await loadCanonicalModulePayloadSchemaResources() },
     }).getNativeBundleExport()).toEqual(admitted);
     expect(canonical[0].uri).toBe('https://formspec.org/schemas/common/1.0');
+  });
+});
+
+function wholePanelConfig(failure?: 'action' | 'confirmation' | 'selector' | 'generation') {
+  const trace = { 'x-generation': { anchors: ['need:inspect-evidence@1'] } };
+  return { ...trace, title: 'Whole retained evidence', body: 'Authored panel content',
+    emptyWhen: { inputName: 'evidence', path: failure === 'selector' ? 'evidence.__proto__' : '' },
+    stateViews: { loading: { ...trace, heading: 'Loading evidence' }, error: { ...trace, heading: 'Evidence unavailable',
+      actions: [{ ...trace, kind: 'retry', label: 'Retry' }, { ...trace, kind: 'output', outputName: 'retry' }] } },
+    actions: [{ ...trace, outputName: failure === 'action' ? 42 : 'inspect', payload: { record: { path: '' } },
+      confirmation: { ...trace, heading: 'Inspect evidence?', body: 'Review retained evidence.', confirmLabel: 'Inspect',
+        ...(failure === 'confirmation' ? {} : { cancelLabel: 'Cancel' }) } }],
+    blocks: [
+      { ...trace, type: 'metric', id: 'count', path: 'evidence.count', label: 'Count', prefix: '', suffix: ' records' },
+      { ...trace, type: 'key-value', id: 'details', items: [{ ...trace, id: 'name', label: 'Name', path: 'evidence.name' }] },
+      { ...trace, type: 'list', id: 'items', path: 'evidence.items', itemPath: 'name', ordered: true },
+      { ...trace, type: 'table', id: 'rows', path: 'evidence.rows', responsiveMode: 'stack', columns: [
+        { ...trace, id: 'name', label: 'Name', path: 'name', 'x-generation': { anchors: failure === 'generation' ? [42] : trace['x-generation'].anchors } }],
+        rowAction: { ...trace, outputName: 'inspect', columnLabel: 'Inspect', payload: { record: { path: '' } } } },
+      { ...trace, type: 'progress', id: 'progress', path: 'evidence.progress', maxPath: 'evidence.total', max: 100 },
+      { ...trace, type: 'json', id: 'retained', path: 'evidence', emptyMessage: 'No evidence', unavailableMessage: 'Unavailable evidence' },
+    ] };
+}
+
+function wholePanelBundle(failure?: Parameters<typeof wholePanelConfig>[0]) {
+  const bundle = structuredEvidenceBundle();
+  const registry = bundle.documents['https://example.test/registries/widgets'] as { entries: { widgetShape?: { props: unknown } }[] };
+  registry.entries[1].widgetShape!.props = structuredClone(STRUCTURED_PANEL_CONFIG_SCHEMA);
+  const surface = bundle.documents[surfaceUrl] as { routes: { slots: { binding: { config: unknown } }[] }[] };
+  surface.routes[0].slots[0].binding.config = wholePanelConfig(failure);
+  return bundle;
+}
+
+describe('published whole-panel schema in actual hash-pinned admission', () => {
+  it('admits all six block types and nested action, confirmation and state configuration', async () => {
+    const candidate = wholePanelBundle(); await mockNativePackage(candidate);
+    const source = new PinnedPackageDefinitionSource('/package.json', {
+      moduleAdmission: { allowedModules: [{ id: 'x-example', version: '1.0.0' }] },
+      moduleSupport: { payloadSchemaResources: await loadCanonicalModulePayloadSchemaResources() },
+    });
+    expect(await source.getNativeBundleExport()).toEqual(candidate);
+  });
+  it.each(['action', 'confirmation', 'selector', 'generation'] as const)('refuses malformed nested %s before exposing the Definition', async failure => {
+    await mockNativePackage(wholePanelBundle(failure));
+    await expect(new PinnedPackageDefinitionSource('/package.json', {
+      moduleAdmission: { allowedModules: [{ id: 'x-example', version: '1.0.0' }] },
+      moduleSupport: { payloadSchemaResources: await loadCanonicalModulePayloadSchemaResources() },
+    }).getDefinition()).rejects.toThrow('MODULE-PAYLOAD-SCHEMA-MISMATCH');
   });
 });

@@ -14,7 +14,7 @@ export { ReceiptPanel } from './receipt-panel.js';
 export { QueueTable } from './queue-table.js';
 export { StructuredPanel, readStructuredPanelPath } from './structured-panel.js';
 export { WidgetEmptyState } from './empty-state.js';
-export { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA } from './structured-panel.js';
+export { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA } from './structured-panel-metadata.js';
 /**
  * `widgetShape.widgetName` → component, for the starter set.
  *

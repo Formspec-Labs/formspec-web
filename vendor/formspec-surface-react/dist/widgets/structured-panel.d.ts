@@ -62,40 +62,7 @@ export interface StructuredJsonBlockConfig extends StructuredBlockBase {
     emptyMessage: string;
     unavailableMessage: string;
 }
-/** Reusable branch for authored Registry widgetShape.props; not native admission. */
-export declare const STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA: {
-    readonly type: "object";
-    readonly additionalProperties: false;
-    readonly required: readonly ["type", "id", "path", "emptyMessage", "unavailableMessage", "x-generation"];
-    readonly properties: {
-        readonly type: {
-            readonly const: "json";
-        };
-        readonly id: {
-            readonly type: "string";
-            readonly pattern: "^[a-zA-Z][a-zA-Z0-9_-]*$";
-        };
-        readonly path: {
-            readonly type: "string";
-            readonly pattern: "^[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$";
-        };
-        readonly title: {
-            readonly type: "string";
-            readonly minLength: 1;
-        };
-        readonly emptyMessage: {
-            readonly type: "string";
-            readonly minLength: 1;
-        };
-        readonly unavailableMessage: {
-            readonly type: "string";
-            readonly minLength: 1;
-        };
-        readonly 'x-generation': {
-            readonly $ref: "https://formspec.org/schemas/common/1.0#/$defs/Generation";
-        };
-    };
-};
+export { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA } from './structured-panel-metadata.js';
 export type StructuredPanelBlockConfig = StructuredMetricBlockConfig | StructuredKeyValueBlockConfig | StructuredListBlockConfig | StructuredTableBlockConfig | StructuredProgressBlockConfig | StructuredJsonBlockConfig;
 export interface StructuredPanelActionConfig extends GeneratedFromNeeds {
     outputName: string;
@@ -148,4 +115,3 @@ export interface StructuredPanelConfig extends GeneratedFromNeeds {
  */
 export declare function readStructuredPanelPath(root: unknown, path: unknown): unknown;
 export declare function StructuredPanel({ actions, config, data, emitAction, headingLevel, route, slot, semanticOutputScope, }: SurfaceWidgetProps): import("react/jsx-runtime").JSX.Element | null;
-export {};

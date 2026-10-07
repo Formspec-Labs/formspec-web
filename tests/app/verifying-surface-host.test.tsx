@@ -1,5 +1,6 @@
-import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, starterWidgetModule, type SurfaceWidgetModule } from '@formspec-org/surface-react';
-import { loadCanonicalModulePayloadSchemaResources, loadSurfaceBundleSchemaValidators } from '../../src/adapters/schema/index.ts';
+import type { DataSourceLoader, DataSourcePayloadValidator, DataSourceAuthorizer } from '@formspec-org/surface';
+import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA, starterWidgetModule, type SurfaceWidgetModule } from '@formspec-org/surface-react';
+import { loadCanonicalModulePayloadSchemaResources, loadSurfaceBundleSchemaValidators, createSurfaceDataSourcePayloadValidator } from '../../src/adapters/schema/index.ts';
 import {
   act,
   cleanup,
@@ -880,6 +881,9 @@ function committed(
 
 interface RenderOptions {
   readonly widgetModules?: readonly SurfaceWidgetModule[];
+  readonly dataSourceLoader?: DataSourceLoader;
+  readonly authorizeDataSource?: DataSourceAuthorizer;
+  readonly validateDataSourcePayload?: DataSourcePayloadValidator;
   readonly locator?: string;
   readonly location?: string;
   readonly validation?: SurfaceBundleValidationProvider;
@@ -899,6 +903,9 @@ function hostElement(fixture: Fixture, options: RenderOptions = {}) {
       }}
       validation={options.validation ?? validation}
       widgetModules={options.widgetModules}
+      dataSourceLoader={options.dataSourceLoader}
+      authorizeDataSource={options.authorizeDataSource}
+      validateDataSourcePayload={options.validateDataSourcePayload}
       location={options.location ?? '/'}
       onNavigate={vi.fn()}
       onValidationReport={options.onValidationReport}
@@ -985,5 +992,89 @@ describe('actual Surface host canonical module props admission', () => {
     expect(await screen.findByRole('alert')).toBeDefined();
     expect(screen.queryByText(SIGNED_CONTENT)).toBeNull();
     expect(fixture.commitRequests).toHaveLength(0);
+  });
+});
+
+function wholePanelConfig(failure?: 'action' | 'confirmation' | 'selector' | 'generation') {
+  const trace = { 'x-generation': { anchors: ['need:inspect-evidence@1'] } };
+  return { ...trace, title: 'Whole retained evidence', body: 'Authored panel content',
+    emptyWhen: { inputName: 'evidence', path: failure === 'selector' ? 'evidence.__proto__' : '' },
+    stateViews: { loading: { ...trace, heading: 'Loading evidence' }, error: { ...trace, heading: 'Evidence unavailable',
+      actions: [{ ...trace, kind: 'retry', label: 'Retry' }, { ...trace, kind: 'output', outputName: 'retry' }] } },
+    actions: [{ ...trace, outputName: failure === 'action' ? 42 : 'inspect', payload: { record: { path: '' } },
+      confirmation: { ...trace, heading: 'Inspect evidence?', body: 'Review retained evidence.', confirmLabel: 'Inspect',
+        ...(failure === 'confirmation' ? {} : { cancelLabel: 'Cancel' }) } }],
+    blocks: [
+      { ...trace, type: 'metric', id: 'count', path: 'evidence.count', label: 'Count', prefix: '', suffix: ' records' },
+      { ...trace, type: 'key-value', id: 'details', items: [{ ...trace, id: 'name', label: 'Name', path: 'evidence.name' }] },
+      { ...trace, type: 'list', id: 'items', path: 'evidence.items', itemPath: 'name', ordered: true },
+      { ...trace, type: 'table', id: 'rows', path: 'evidence.rows', responsiveMode: 'stack', columns: [
+        { ...trace, id: 'name', label: 'Name', path: 'name', 'x-generation': { anchors: failure === 'generation' ? [42] : trace['x-generation'].anchors } }],
+        rowAction: { ...trace, outputName: 'inspect', columnLabel: 'Inspect', payload: { record: { path: '' } } } },
+      { ...trace, type: 'progress', id: 'progress', path: 'evidence.progress', maxPath: 'evidence.total', max: 100 },
+      { ...trace, type: 'json', id: 'retained', path: 'evidence', emptyMessage: 'No evidence', unavailableMessage: 'Unavailable evidence' },
+    ] };
+}
+
+function wholePanelSignedPayload(failure?: Parameters<typeof wholePanelConfig>[0]): SurfaceBundleSignedPayloadV1 {
+  const payload = evidenceSignedPayload();
+  const registry = payload.documents['https://example.gov/registries/evidence'];
+  const entries = registry.entries;
+  if (!Array.isArray(entries)) throw new Error('Missing fixture Registry entries');
+  const widget = entries[1];
+  if (typeof widget !== 'object' || widget === null || Array.isArray(widget)) throw new Error('Missing fixture widget');
+  widget.widgetShape = { widgetName: 'StructuredPanel', props: JSON.parse(JSON.stringify(structuredClone(STRUCTURED_PANEL_CONFIG_SCHEMA))),
+    dataInputs: [{ name: 'evidence', required: true }], actionOutputs: [{ name: 'inspect' }, { name: 'retry' }] };
+  const surface = payload.documents[SURFACE_URL];
+  const routes = surface.routes;
+  if (!Array.isArray(routes)) throw new Error('Missing fixture routes');
+  const route = routes[0];
+  if (typeof route !== 'object' || route === null || Array.isArray(route) || !Array.isArray(route.slots)) throw new Error('Missing fixture slots');
+  const slot = route.slots[1];
+  if (typeof slot !== 'object' || slot === null || Array.isArray(slot)) throw new Error('Missing fixture widget slot');
+  const catalogUrl = 'https://example.gov/data/evidence';
+  const actionsUrl = 'https://example.gov/actions/evidence';
+  slot.binding = { moduleId: 'x-evidence', widgetName: 'StructuredPanel', config: wholePanelConfig(failure),
+    dataBindings: { evidence: { catalogRef: catalogUrl, sourceRef: 'host:evidence' } },
+    actionBindings: { inspect: { actionRef: 'inspect' }, retry: { actionRef: 'retry' } } };
+  return { ...payload, manifest: { ...payload.manifest, dataSources: [{ url: catalogUrl, version: '1.0.0' }],
+    responseActions: { url: actionsUrl, version: '1.0.0' } }, documents: { ...payload.documents,
+    [actionsUrl]: { $formspecResponseActions: '1.0', version: '1.0.0', scope: 'app', actions: ['inspect', 'retry'].map(id => ({
+      id, intent: 'review', label: { literal: id === 'inspect' ? 'Inspect' : 'Retry' }, effects: [{ type: 'hostEvent', eventName: `test-${id}` }],
+      validation: { profile: 'off', blocking: 'non-blocking', persistence: 'none' },
+    })) },
+    [catalogUrl]: { $formspecDataSources: '1.0', id: catalogUrl, version: '1.0.0', sources: [{ id: 'host:evidence', kind: 'host-state',
+      owner: 'host', scope: 'route', availability: { level: 'slot', surfaceRef: SURFACE_URL, routeRef: 'start', slotId: 'evidence' },
+      runtime: { delivery: 'snapshot', cache: { mode: 'none' }, authorizationBoundary: 'host', failureMode: 'block-render',
+        provenance: { kind: 'host-state', source: 'fixture' } },
+      schema: { type: 'object', properties: { count: { type: 'number' }, name: { type: 'string' }, progress: { type: 'number' }, total: { type: 'number' },
+        items: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' } } } },
+        rows: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' } } } } } },
+    }] },
+  } };
+
+}
+
+describe('whole-panel props in the actual maintained Surface host', () => {
+  it('admits all six authored blocks and mounts the maintained panel', async () => {
+    const fixture = await createFixture({ verificationFactory: snapshot => ({ ...verifiedResult(snapshot), payload: wholePanelSignedPayload() }) });
+    const reports: AppGraphReportProducerResult[] = [];
+    renderHost(fixture, { widgetModules: [starterWidgetModule('x-evidence')], dataSourceLoader: () => ({ status: 'loaded', freshness: 'fresh',
+      value: { count: 0, name: 'Retained', progress: 50, total: 100, items: [{ name: 'One' }], rows: [{ name: 'Row' }] } }),
+      authorizeDataSource: () => ({ status: 'authorized' }), validateDataSourcePayload: createSurfaceDataSourcePayloadValidator(),
+      validation: () => evidenceValidation(), onValidationReport: report => reports.push(report) });
+    await waitFor(() => expect(reports).toHaveLength(1));
+    expect(reports[0].report.ok, JSON.stringify(reports[0].report.diagnostics)).toBe(true);
+    expect(await screen.findByText('Whole retained evidence')).toBeDefined(); expect(fixture.commitRequests).toHaveLength(1);
+  });
+  it.each(['action', 'confirmation', 'selector', 'generation'] as const)('refuses nested %s before release commit or rendering', async failure => {
+    const fixture = await createFixture({ verificationFactory: snapshot => ({ ...verifiedResult(snapshot), payload: wholePanelSignedPayload(failure) }) });
+    const reports: AppGraphReportProducerResult[] = [];
+    renderHost(fixture, { widgetModules: [starterWidgetModule('x-evidence')], validation: () => evidenceValidation(), onValidationReport: report => reports.push(report) });
+    expect(await screen.findByRole('alert')).toBeDefined();
+    const diagnostic = reports[0].moduleResolutionReport.diagnostics.find(issue => issue.code === 'MODULE-PAYLOAD-SCHEMA-MISMATCH');
+    expect(diagnostic?.details?.reason).toBe('payload-schema-mismatch');
+    expect(diagnostic?.primarySource?.jsonPointer).toContain('/routes/0/slots/1/binding/config');
+    expect(fixture.commitRequests).toHaveLength(0); expect(screen.queryByText('Whole retained evidence')).toBeNull();
   });
 });
