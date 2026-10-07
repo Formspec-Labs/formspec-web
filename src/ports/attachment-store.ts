@@ -80,6 +80,11 @@ export interface AttachmentStore {
   /** Deployment-owned maximum final uploaded Blob size in bytes; omission means unknown. */
   readonly maxUploadBytes?: number;
   upload(blob: Blob, metadata: AttachmentUploadMetadata): Promise<AttachmentRef>;
+  /** Optional owned read for review. Preserve the exact Response descriptor;
+   * adapters validate its reference and retained bytes before returning a Blob.
+   * The caller owns preview URLs and discards results from obsolete sessions.
+   */
+  read?(descriptor: unknown, options?: { signal?: AbortSignal }): Promise<Blob>;
   /**
    * Optional: lifecycle hook the renderer calls when the respondent removes
    * an AttachmentRef from the field value before submit. Adopters who back
