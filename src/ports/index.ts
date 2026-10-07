@@ -22,6 +22,7 @@ export { ResponseSigningUnresolvedError } from './response-signing.ts';
 export type {
   ResponseSigning, PrepareResponseSigningInput, PreparedResponseSigning,
   SignPreparedResponseInput, SignedResponseSigning,
+  AdmittedResponseAction, SaveResponseDraftInput, SavedResponseDraft, VerifiedDraftEvidence,
 } from './response-signing.ts';
 export type { SubmitTransport, IntakeHandoff, SubmitConfirmation } from './submit-transport.ts';
 export type {

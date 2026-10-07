@@ -1,6 +1,44 @@
 import type { FormDefinition, FormResponse, ResponseActionsDocument, SigningContent, SigningContentSource } from '@formspec-org/types';
 import type { DraftKey } from './draft-store.ts';
 
+export interface AdmittedResponseAction {
+  document: ResponseActionsDocument;
+  artifactRef: string;
+  artifactDigest: string;
+  actionRef: string;
+  requestRef: string;
+}
+
+export interface SaveResponseDraftInput {
+  /** Actual form_id from the qualified server publication. */
+  formId: string;
+  draftKey: DraftKey;
+  definition: FormDefinition;
+  formVersionId: string;
+  response: FormResponse;
+  operationId: string;
+  action: Readonly<AdmittedResponseAction>;
+}
+
+/** Only checked fields of the actual owned DraftView, never an arbitrary provider body. */
+export interface VerifiedDraftEvidence {
+  readonly draft_id: string;
+  readonly form_version_id: string;
+  readonly subject_ref: string;
+  readonly draft_version: number;
+  readonly draft_state: Record<string, unknown>;
+  readonly canonical_response: FormResponse;
+  readonly status: 'in_progress';
+}
+
+export interface SavedResponseDraft {
+  readonly draftKey: Readonly<DraftKey>;
+  readonly response: FormResponse;
+  readonly draft: Readonly<{ id: string; version: number; responseHash: string }>;
+  readonly actor: Readonly<{ id: string }>;
+  readonly evidence: VerifiedDraftEvidence;
+}
+
 export interface PrepareResponseSigningInput {
   draftKey: DraftKey;
   definition: FormDefinition;
@@ -9,13 +47,10 @@ export interface PrepareResponseSigningInput {
   response: FormResponse;
   source: SigningContentSource;
   locale: string;
+  action: Readonly<AdmittedResponseAction>;
 }
 
-export interface PreparedResponseSigning {
-  readonly draftKey: Readonly<DraftKey>;
-  readonly response: FormResponse;
-  readonly draft: Readonly<{ id: string; version: number; responseHash: string }>;
-  readonly actor: Readonly<{ id: string }>;
+export interface PreparedResponseSigning extends SavedResponseDraft {
   readonly content: SigningContent;
 }
 
@@ -25,7 +60,7 @@ export interface SignPreparedResponseInput {
   /** One host-generated UUIDv7 for this act; retries preserve it. */
   operationId: string;
   /** Exact admitted Response Actions artifact and mapped single-effect Action. */
-  action: Readonly<{ document: ResponseActionsDocument; artifactRef: string; artifactDigest: string; actionRef: string; requestRef: string }>;
+  action: Readonly<AdmittedResponseAction>;
 }
 
 export interface SignedResponseSigning extends PreparedResponseSigning {
@@ -34,6 +69,7 @@ export interface SignedResponseSigning extends PreparedResponseSigning {
 }
 
 export interface ResponseSigning {
+  saveDraft(input: SaveResponseDraftInput): Promise<SavedResponseDraft>;
   prepare(input: PrepareResponseSigningInput): Promise<PreparedResponseSigning>;
   sign(input: SignPreparedResponseInput): Promise<SignedResponseSigning>;
 }

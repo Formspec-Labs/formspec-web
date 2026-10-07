@@ -92,6 +92,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
   }));
   const responseSigning = new HttpResponseSigning({
     ...signingPolicy, client: new HttpClient(httpConfig), drafts: draftStore, bindings: registry, fence,
+    formIdFor: key => resolveFormId(key.formUrl, key.formVersion),
     resumeMetadata: config.resumeMetadata,
     async ownerFor(key) {
       if (key.subjectRef && !key.subjectRef.startsWith('anon:')) return { subjectRef: key.subjectRef };
