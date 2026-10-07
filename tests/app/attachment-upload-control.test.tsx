@@ -829,6 +829,149 @@ describe('FormspecWebAttachmentControl', () => {
     expect(uploadedBytes).toEqual([4, 4, 4]);
   });
 
+  // DOM tests assert the focus lifecycle after native-button activation; the
+  // browser checkpoint verifies actual Tab/Enter default activation separately.
+  it.each([false, true])('returns focused camera cancellation to its trigger (dragDrop=%s)', async (dragDrop) => {
+    const originalMediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true });
+    try {
+      render(<AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode({ dragDrop })} />
+      </AttachmentStoreProvider>);
+      const camera = Array.from(container!.querySelectorAll('button')).find((button) => button.textContent === 'Use camera')!;
+      camera.focus();
+      await act(async () => { camera.click(); await flush(); });
+      const close = Array.from(container!.querySelectorAll('button')).find((button) => button.textContent === 'Close camera')!;
+      close.focus();
+      expect(document.activeElement).toBe(close);
+      act(() => close.click());
+      expect(document.activeElement).toBe(camera);
+      expect(close.isConnected).toBe(false);
+    } finally {
+      Object.defineProperty(navigator, 'mediaDevices', { value: originalMediaDevices, configurable: true });
+    }
+  });
+
+  it('returns focus after camera permission failure and a second opening', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    const getUserMedia = vi.fn().mockRejectedValue(new Error('Permission denied'));
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia }, configurable: true });
+    try {
+      render(<AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode()} />
+      </AttachmentStoreProvider>);
+      const camera = Array.from(container!.querySelectorAll('button')).find((button) => button.textContent === 'Use camera')!;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        camera.focus();
+        await act(async () => { camera.click(); await flush(); });
+        expect(container!.querySelector('[role="alert"]')?.textContent).toContain('could not open the camera');
+        const close = Array.from(container!.querySelectorAll('button')).find((button) => button.textContent === 'Close camera')!;
+        close.focus();
+        act(() => close.click());
+        expect(document.activeElement).toBe(camera);
+      }
+      expect(getUserMedia).toHaveBeenCalledTimes(2);
+    } finally {
+      Object.defineProperty(navigator, 'mediaDevices', { value: originalMediaDevices, configurable: true });
+    }
+  });
+
+  it('uses the current visible trigger after the opening layout changes, then the field when actions are disabled', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true });
+    const harness = makeFieldHarness();
+    const draw = (dragDrop: boolean) => {
+      const control = <AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ dragDrop })} />
+      </AttachmentStoreProvider>;
+      if (root) act(() => root?.render(control));
+      else render(control);
+    };
+    const button = (text: string) => Array.from(container!.querySelectorAll('button')).find((candidate) => candidate.textContent === text)!;
+    try {
+      draw(false);
+      const original = button('Use camera');
+      original.focus();
+      await act(async () => { original.click(); await flush(); });
+      draw(true);
+      expect(original.isConnected).toBe(false);
+      button('Close camera').focus();
+      act(() => button('Close camera').click());
+      expect(document.activeElement).toBe(button('Use camera'));
+      await act(async () => { button('Use camera').click(); await flush(); });
+      button('Use camera').style.display = 'none';
+      button('Close camera').focus();
+      act(() => button('Close camera').click());
+      expect(document.activeElement).toBe(button('Choose file'));
+      button('Use camera').style.display = '';
+      await act(async () => { button('Use camera').click(); await flush(); });
+      harness.field.readonly = true;
+      draw(true);
+      button('Close camera').focus();
+      act(() => button('Close camera').click());
+      expect(document.activeElement).toBe(container!.querySelector('.formspec-field'));
+    } finally {
+      Object.defineProperty(navigator, 'mediaDevices', { value: originalMediaDevices, configurable: true });
+    }
+  });
+
+  it('keeps returned focus and stops a stream that arrives after camera cancellation', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    let resolveStream: (stream: MediaStream) => void = () => {};
+    const streamPromise = new Promise<MediaStream>((resolve) => { resolveStream = resolve; });
+    const stop = vi.fn();
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia: vi.fn(() => streamPromise) }, configurable: true,
+    });
+    try {
+      render(<AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode()} />
+      </AttachmentStoreProvider>);
+      const button = (text: string) => Array.from(container!.querySelectorAll('button')).find((candidate) => candidate.textContent === text)!;
+      const camera = button('Use camera');
+      await act(async () => { camera.click(); await flush(); });
+      button('Close camera').focus();
+      act(() => button('Close camera').click());
+      await act(async () => { resolveStream({ getTracks: () => [{ stop }] } as unknown as MediaStream); await flush(); });
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(container!.querySelector('.formspec-file-camera')).toBeNull();
+      expect(document.activeElement).toBe(camera);
+    } finally {
+      Object.defineProperty(navigator, 'mediaDevices', { value: originalMediaDevices, configurable: true });
+    }
+  });
+
+  it('leaves focus outside the camera alone when an asynchronous capture completes', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray(96 * 96 * 4) }),
+    } as unknown as CanvasRenderingContext2D);
+    let finishCapture: BlobCallback = () => {};
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => { finishCapture = callback; });
+    const elsewhere = document.createElement('button');
+    elsewhere.textContent = 'Another action';
+    document.body.append(elsewhere);
+    try {
+      render(<AttachmentStoreProvider value={stubAttachmentStore()}>
+        <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode({ accept: 'image/*' })} />
+      </AttachmentStoreProvider>);
+      const button = (text: string) => Array.from(container!.querySelectorAll('button')).find((candidate) => candidate.textContent === text)!;
+      await act(async () => { button('Use camera').click(); await flush(); });
+      button('Capture image').focus();
+      act(() => button('Capture image').click());
+      elsewhere.focus();
+      await act(async () => { finishCapture(new Blob(['image'], { type: 'image/jpeg' })); await flush(); });
+      expect(container!.querySelector('.formspec-file-camera')).toBeNull();
+      expect(container!.textContent).toContain('Upload image');
+      expect(document.activeElement).toBe(elsewhere);
+    } finally {
+      elsewhere.remove();
+      Object.defineProperty(navigator, 'mediaDevices', { value: originalMediaDevices, configurable: true });
+    }
+  });
+
   it('uploads a successful camera capture through the same AttachmentStore path', async () => {
     const originalMediaDevices = navigator.mediaDevices;
     const stop = vi.fn();

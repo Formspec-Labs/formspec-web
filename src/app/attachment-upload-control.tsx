@@ -114,6 +114,11 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const fieldError = <p id={`${field.id}-error`} className="formspec-error" aria-live="polite">{showError ? field.error : ''}</p>;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const fieldRootRef = useRef<HTMLDivElement>(null);
+  const cameraPanelRef = useRef<HTMLDivElement>(null);
+  const cameraTriggerRef = useRef<HTMLButtonElement>(null);
+  const browseTriggerRef = useRef<HTMLButtonElement>(null);
+  const cameraReturnTargetRef = useRef<HTMLButtonElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const cameraRequestIdRef = useRef(0);
   const mountedRef = useRef(true);
@@ -362,8 +367,9 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     setPending((prev) => prev.filter((row) => row.key !== key));
   };
 
-  const openCamera = async (): Promise<void> => {
+  const openCamera = async (trigger: HTMLButtonElement): Promise<void> => {
     if (field.readonly) return;
+    cameraReturnTargetRef.current = trigger;
     const requestId = cameraRequestIdRef.current + 1;
     cameraRequestIdRef.current = requestId;
     stopCamera(cameraStreamRef.current);
@@ -405,6 +411,26 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     cameraRequestIdRef.current += 1;
     stopCamera(cameraStreamRef.current);
     cameraStreamRef.current = null;
+    // Return focus before removing the focused control. Async capture completion
+    // must leave focus alone if the respondent has already moved elsewhere.
+    if (cameraPanelRef.current?.contains(document.activeElement)) {
+      const targets = [cameraReturnTargetRef.current, cameraTriggerRef.current, browseTriggerRef.current, fieldRootRef.current];
+      for (const target of targets) {
+        if (!target?.isConnected || target.matches(':disabled') || target.closest('[hidden], [inert]')) continue;
+        let visible = true;
+        for (let ancestor: HTMLElement | null = target; ancestor; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') {
+            visible = false;
+            break;
+          }
+        }
+        if (!visible) continue;
+        target.focus({ preventScroll: true });
+        if (document.activeElement === target) break;
+      }
+    }
+    cameraReturnTargetRef.current = null;
     setCameraOpen(false);
   };
 
@@ -634,7 +660,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   );
 
   const cameraPanel = cameraOpen ? (
-    <div className="formspec-file-camera" aria-label="Camera capture">
+    <div ref={cameraPanelRef} className="formspec-file-camera" aria-label="Camera capture">
       {cameraError ? <p className="formspec-error" role="alert">{cameraError}</p> : null}
       <video
         ref={videoRef}
@@ -729,10 +755,11 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 
   if (!dragDrop) {
     return (
-      <div className="formspec-field" data-name={field.path} style={node.style}>
+      <div ref={fieldRootRef} className="formspec-field" role="group" aria-labelledby={`${field.id}-label`} tabIndex={-1} data-name={field.path} style={node.style}>
         {fieldIntroduction}
         <button
           type="button"
+          ref={browseTriggerRef}
           className="formspec-file-browse-btn formspec-focus-ring formspec-button-secondary"
           aria-invalid={showError}
           aria-describedby={describedBy}
@@ -745,7 +772,8 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         <button
           type="button"
           className="formspec-button-secondary"
-          onClick={() => void openCamera()}
+          ref={cameraTriggerRef}
+          onClick={(event) => void openCamera(event.currentTarget)}
           disabled={field.readonly}
         >
           Use camera
@@ -762,7 +790,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   }
 
   return (
-    <div className="formspec-field" data-name={field.path} style={node.style}>
+    <div ref={fieldRootRef} className="formspec-field" role="group" aria-labelledby={`${field.id}-label`} tabIndex={-1} data-name={field.path} style={node.style}>
       {fieldIntroduction}
       <div
         className={`formspec-file-drop-zone${isDragOver ? ' formspec-file-drop-zone--active' : ''}`}
@@ -788,6 +816,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           </span>
           <button
             type="button"
+            ref={browseTriggerRef}
             className="formspec-file-browse-btn formspec-focus-ring formspec-button-secondary"
           aria-invalid={showError}
           aria-describedby={describedBy}
@@ -799,7 +828,8 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           <button
             type="button"
             className="formspec-button-secondary"
-            onClick={() => void openCamera()}
+            ref={cameraTriggerRef}
+            onClick={(event) => void openCamera(event.currentTarget)}
             disabled={field.readonly}
           >
             Use camera
