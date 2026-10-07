@@ -79,6 +79,37 @@ function fixture(attachment = false) {
 }
 
 describe('generic native package signing session', () => {
+  it('captures actual localized public form titles without changing authority and retains them across retired leases', async () => {
+    const test = fixture(); test.host.dispose();
+    test.invalidateAuthority.mockClear();
+    const actual = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/native-bundle.json'), 'utf8')) as BundleExport;
+    const resolved = dereferenceBundleExport(actual); const definition = [...resolved.definitions.values()][0];
+    const locales = Object.values(actual.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document) as LocaleDocument[];
+    const host = createNativePackageSigningHost({ ...test.policy, bundle: actual, definition, moduleId: actual.manifest.modules![0].id,
+      locales, registryEntries: flattenRegistryEntries(resolved.registries).entries, readiness: { instance: 'draftReadiness', readyPath: 'ready', ownedPath: 'owned' },
+      controller: { ...test.policy.controller, roles: {} }, bindings: {} });
+    expect(host.getSnapshot().formTitle).toBe(definition.title);
+    const attach = async () => {
+      const engine = createFormEngine(definition); for (const document of locales) engine.loadLocale(document); engine.setLocale('en');
+      const lease = await host.configureRuntime({ engine, definition, draftKey: { formUrl: definition.url, formVersion: definition.version }, claim: null, activeLocale: 'en' });
+      return { engine, lease };
+    };
+    const first = await attach(); const english = locales.find(document => document.locale === 'en')!.strings['$form.title'];
+    const spanish = locales.find(document => document.locale === 'es-US')!.strings['$form.title'];
+    expect(host.getSnapshot().formTitle).toBe(english);
+    const epoch = host.getSnapshot().sessionGeneration; const delivery = host.getSnapshot().generation;
+    const changed = vi.fn(); const unsubscribe = host.subscribe(changed);
+    first.engine.setLocale('es-US'); expect(host.getSnapshot().formTitle).toBe(spanish);
+    expect(changed).toHaveBeenCalledOnce(); first.engine.setLocale('es-US'); expect(changed).toHaveBeenCalledOnce();
+    expect(host.getSnapshot().sessionGeneration).toBe(epoch); expect(host.getSnapshot().generation).toBe(delivery);
+    const second = await attach(); expect(host.getSnapshot().formTitle).toBe(english);
+    second.engine.setLocale('es-US'); expect(host.getSnapshot().formTitle).toBe(spanish);
+    first.engine.setLocale('en'); expect(host.getSnapshot().formTitle).toBe(spanish);
+    first.lease.dispose(); first.engine.dispose(); expect(host.getSnapshot().formTitle).toBe(spanish);
+    second.lease.dispose(); second.engine.dispose(); expect(host.getSnapshot().formTitle).toBe(spanish);
+    expect(host.getSnapshot().sessionGeneration).toBe(epoch); expect(host.getSnapshot().generation).toBe(delivery);
+    expect(test.invalidateAuthority).not.toHaveBeenCalled(); unsubscribe(); host.dispose(); test.engine.dispose();
+  });
   it('requires pre-registered maintained Surface markers and retires visits permanently across returns and edits', async () => {
     const test = fixture(); const lease = await test.prepared(); const snapshot = test.host.getSnapshot();
     const app = composeSurfaceApp(test.host.bundle.surfaces);

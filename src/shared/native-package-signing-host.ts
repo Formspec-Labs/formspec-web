@@ -92,6 +92,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   let input: RespondentOwnedRuntimeInput | undefined;
   let rendererEngine: IFormEngine | undefined;
   let locale = policy.initialLocale;
+  let formTitle = typeof policy.definition.title === 'string' ? policy.definition.title : '';
   let generation = 0;
   let authorityGeneration = 0;
   let visitEpoch = 0;
@@ -112,8 +113,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const reads = new Set<AbortController>();
   const sourceRevisions = new Map<string, { value: string; revision: number }>();
   const engineFactory = policy.createEngine ?? createFormEngine;
-  let hostSnapshot = { generation, sessionGeneration: authorityGeneration, locale, cleared, controller: publicSnapshot, runtime };
-  const emit = () => { hostSnapshot = Object.freeze({ generation, sessionGeneration: authorityGeneration, locale, cleared, controller: publicSnapshot, runtime }); for (const listener of listeners) listener(); };
+  let hostSnapshot = { generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime };
+  const emit = () => { hostSnapshot = Object.freeze({ generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime }); for (const listener of listeners) listener(); };
   function fence() {
     generation++; runtime = undefined; review = undefined; expectedReviewIdentity = undefined; reviewState = undefined;
     for (const read of reads) read.abort();
@@ -327,6 +328,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       input = next;
       freezeMetadata(input.draftKey); freezeMetadata(input.claim); freezeMetadata(input.restoredResponse);
       rendererEngine = next.engine;
+      const title = next.engine.getFormVM().title.value;
+      if (typeof title === 'string') formTitle = title;
       if (!controller) start(next.restoredResponse);
       const scope = policy.semanticScope(responseId, ++renderInstance);
       if (scope.responseId !== responseId) throw new Error('native-response-scope-refused');
@@ -335,6 +338,11 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       const answers = () => canonicalize(next.engine.getFieldPaths().map(path => [path, next.engine.signals[path]?.value]));
       let previous = answers();
       let active = true;
+      const releaseTitle = preactReactiveRuntime.effect(() => {
+        if (!active || disposed || rendererEngine !== next.engine) return;
+        const title = next.engine.getFormVM().title.value;
+        if (typeof title === 'string' && title !== formTitle) { formTitle = title; emit(); }
+      });
       const release = preactReactiveRuntime.effect(() => {
         void next.engine.structureVersion.value;
         for (const path of next.engine.getFieldPaths()) void next.engine.signals[path]?.value;
@@ -352,7 +360,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         return result;
       }, semanticControlScope: scope,
       getCompletionGeneration: () => authorityGeneration,
-      invalidate: () => { if (active) stop('clear'); }, dispose: () => { active = false; release(); next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false); if (rendererEngine === next.engine) rendererEngine = undefined; } };
+      invalidate: () => { if (active) stop('clear'); }, dispose: () => { active = false; release(); releaseTitle(); next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false); if (rendererEngine === next.engine) rendererEngine = undefined; } };
     },
     dispose() { if (disposed) return; stop('dispose'); disposed = true; unsubscribeController?.(); listeners.clear(); },
   };
