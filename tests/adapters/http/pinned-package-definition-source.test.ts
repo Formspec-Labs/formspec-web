@@ -58,13 +58,15 @@ function nativeBundle() {
   };
 }
 async function mockNativePackage(candidate: unknown = nativeBundle(), options: {
-  nativePath?: string; nativeBytes?: string; expectedNativeBytes?: string; duplicateLocale?: boolean;
+  nativePath?: string; nativeBytes?: string; expectedNativeBytes?: string; duplicateLocale?: boolean; component?: unknown; componentRef?: unknown; componentPath?: string;
+  componentBytes?: string; expectedComponentBytes?: string; omitNative?: boolean; definition?: typeof nativeDefinition; localeDocument?: typeof locale;
 } = {}) {
   vi.stubGlobal('crypto', webcrypto);
   const texts = {
-    'definition.json': JSON.stringify(nativeDefinition),
-    'locale.json': JSON.stringify(locale),
+    'definition.json': JSON.stringify(options.definition ?? nativeDefinition),
+    'locale.json': JSON.stringify(options.localeDocument ?? locale),
     'native.json': options.nativeBytes ?? JSON.stringify(candidate),
+    'component.json': options.componentBytes ?? JSON.stringify(options.component),
   };
   const pin = async (path: string, bytes: string) => ({ path, sha256: [...new Uint8Array(
     await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(bytes)),
@@ -72,7 +74,11 @@ async function mockNativePackage(candidate: unknown = nativeBundle(), options: {
   const files = {
     definition: await pin('definition.json', texts['definition.json']),
     locales: await Promise.all((options.duplicateLocale ? [1, 2] : [1]).map(() => pin('locale.json', texts['locale.json']))),
-    nativeBundle: await pin(options.nativePath ?? 'native.json', options.expectedNativeBytes ?? texts['native.json']),
+    ...(!options.omitNative ? { nativeBundle: await pin(options.nativePath ?? 'native.json', options.expectedNativeBytes ?? texts['native.json']) } : {}),
+    ...(options.component !== undefined ? { component: {
+      ...await pin(options.componentPath ?? 'component.json', options.expectedComponentBytes ?? texts['component.json']),
+      ref: options.componentRef,
+    } } : {}),
   };
   const fetch = vi.fn(async (url: URL, _init?: RequestInit) => {
     const name = url.pathname.split('/').at(-1)!;
@@ -213,4 +219,301 @@ it('refuses duplicate sidecars that leave another native Locale without a matchi
   bundle.documents[otherUrl] = { ...locale, url: otherUrl, locale: 'fr' };
   await mockNativePackage(bundle, { duplicateLocale: true });
   await expect(new PinnedPackageDefinitionSource('/package.json').getNativeBundleExport()).rejects.toThrow('Locales differ');
+});
+
+const componentRef = { handle: 'intake', url: 'urn:formspec:test:component:intake', version: '0.1.5' };
+function componentDocument() {
+  return { $formspecComponent: '1.2', url: componentRef.url, version: componentRef.version,
+    targetDefinition: { url: nativeDefinition.url, compatibleVersions: nativeDefinition.version },
+    tree: { component: 'Stack', children: [{ component: 'Text', text: 'Authored intake' }] } };
+}
+function componentBundle() {
+  const bundle = nativeBundle();
+  return { ...bundle, manifest: { ...bundle.manifest, components: [{ ...componentRef }] } };
+}
+
+describe('external hash-pinned Component closure', () => {
+  it('qualifies one declared Component and preserves the original export with independent cached clones', async () => {
+    const component = componentDocument();
+    const candidate = componentBundle();
+    const fetch = await mockNativePackage(candidate, { component, componentRef });
+    const source = new PinnedPackageDefinitionSource('/package.json');
+    const loaded = await source.getComponentDocument();
+    expect(loaded).toEqual(component);
+    expect(await source.getNativeBundleExport()).toEqual(candidate);
+    expect(Object.hasOwn((await source.getNativeBundleExport())!.documents, componentRef.url)).toBe(false);
+    loaded!.tree = { component: 'Text', text: 'Changed' };
+    expect(await source.getComponentDocument()).toEqual(component);
+    expect(fetch).toHaveBeenCalledTimes(5);
+    expect(fetch.mock.calls.every(([, init]) => init?.redirect === 'error')).toBe(true);
+  });
+
+  it.each([
+    ['missing explicit reference', () => ({ componentRef: undefined })],
+    ['wrong handle alias', () => ({ componentRef: { ...componentRef, handle: 'alias' } })],
+    ['wrong document URL', () => ({ component: { ...componentDocument(), url: 'urn:other' } })],
+    ['wrong document version', () => ({ component: { ...componentDocument(), version: '0.1.6' } })],
+    ['wrong Definition target', () => ({ component: { ...componentDocument(), targetDefinition: { url: 'urn:other' } } })],
+    ['incompatible Definition version', () => ({ component: { ...componentDocument(), targetDefinition: { url: nativeDefinition.url, compatibleVersions: '99.0.0' } } })],
+    ['malformed target', () => ({ component: { ...componentDocument(), targetDefinition: 'wrong' } })],
+    ['schema-invalid tree', () => ({ component: { ...componentDocument(), tree: { component: 'Stack', children: 'invalid' } } })],
+    ['Component without native bundle', () => ({ omitNative: true })],
+  ])('refuses %s before exposing any packaged resource', async (_name, overrides) => {
+    await mockNativePackage(componentBundle(), { component: componentDocument(), componentRef, ...overrides() });
+    const source = new PinnedPackageDefinitionSource('/package.json');
+    await expect(source.getComponentDocument()).rejects.toThrow();
+    await expect(source.getDefinition()).rejects.toThrow();
+  });
+
+  it.each([
+    ['unused external Component', () => nativeBundle()],
+    ['multiple Component references', () => {
+      const bundle = componentBundle();
+      bundle.manifest.components.push({ ...componentRef, handle: 'second', url: 'urn:second' });
+      return bundle;
+    }],
+    ['inline and external collision', () => {
+      const bundle = componentBundle(); bundle.documents[componentRef.url] = componentDocument(); return bundle;
+    }],
+    ['unlisted inline resource', () => {
+      const bundle = componentBundle(); bundle.documents['urn:unknown'] = {}; return bundle;
+    }],
+  ])('refuses %s through the closed graph loader', async (_name, build) => {
+    const fetch = await mockNativePackage(build(), { component: componentDocument(), componentRef });
+    await expect(new PinnedPackageDefinitionSource('/package.json').getComponentDocument()).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(5);
+  });
+
+  it('refuses cross-origin Component bytes before fetching them', async () => {
+    const fetch = await mockNativePackage(componentBundle(), { component: componentDocument(), componentRef,
+      componentPath: 'https://other.test/component.json' });
+    await expect(new PinnedPackageDefinitionSource('/package.json').getComponentDocument()).rejects.toThrow('this app origin');
+    expect(fetch.mock.calls.some(([url]) => url.origin === 'https://other.test')).toBe(false);
+  });
+
+  it('checks Component bytes before parsing and refuses matching malformed JSON', async () => {
+    await mockNativePackage(componentBundle(), { component: componentDocument(), componentRef,
+      componentBytes: '{broken', expectedComponentBytes: '{}' });
+    await expect(new PinnedPackageDefinitionSource('/package.json').getComponentDocument()).rejects.toThrow('hash mismatch: component.json');
+    await mockNativePackage(componentBundle(), { component: componentDocument(), componentRef, componentBytes: '{broken' });
+    await expect(new PinnedPackageDefinitionSource('/package.json').getComponentDocument()).rejects.toThrow();
+  });
+
+  it('keeps packages without a Component usable', async () => {
+    await mockNativePackage();
+    expect(await new PinnedPackageDefinitionSource('/package.json').getComponentDocument()).toBeNull();
+  });
+});
+
+// Exact reviewed Studio 0.1.5-r3 Component bytes; portable fixture for the generic loader.
+const studioComponentBytes = `{
+  "$formspecComponent": "1.2",
+  "version": "0.1.5",
+  "targetDefinition": {
+    "url": "urn:formspec:demo:d1:passport-renewal",
+    "compatibleVersions": "0.1.5"
+  },
+  "url": "urn:formspec:demo:d1:signing-app:component:intake",
+  "tree": {
+    "component": "Stack",
+    "x-generation": {
+      "anchors": [
+        "need:review-and-sign-demo-response@2"
+      ]
+    },
+    "children": [
+      {
+        "component": "Text",
+        "x-generation": {
+          "anchors": [
+            "need:recognize-demo-sample-limits@2"
+          ]
+        },
+        "text": "Demo application with fictional details. This sample is not an official DS-82 form.",
+        "bind": "demoNotice"
+      },
+      {
+        "component": "Toggle",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "renewalEligible"
+      },
+      {
+        "component": "Text",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "text": "Confirm your renewal details",
+        "bind": "detailsHeading"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "fullName"
+      },
+      {
+        "component": "DatePicker",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "dateOfBirth"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "placeOfBirth"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "email"
+      },
+      {
+        "component": "TextInput",
+        "maxLines": 4,
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "mailingAddress"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "priorPassportNumber"
+      },
+      {
+        "component": "DatePicker",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "priorPassportIssueDate"
+      },
+      {
+        "component": "Toggle",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "ssnIssued"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "socialSecurityNumber"
+      },
+      {
+        "component": "TextInput",
+        "maxLines": 4,
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "neverIssuedStatement"
+      },
+      {
+        "component": "FileUpload",
+        "x-generation": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "bind": "photo"
+      },
+      {
+        "component": "Text",
+        "x-generation": {
+          "anchors": [
+            "need:understand-demo-privacy@2"
+          ]
+        },
+        "text": "Sample privacy notice: submitted answers and photo are visible to authorized demo reviewers. Official legal authority and permitted-sharing wording remain unqualified. Do not enter real personal data.",
+        "bind": "privacyNotice"
+      },
+      {
+        "component": "Text",
+        "x-generation": {
+          "anchors": [
+            "need:review-demo-paper-option@1"
+          ]
+        },
+        "text": "Also available by mail (DS-82) or in person (DS-11).",
+        "bind": "paperAlternative"
+      },
+      {
+        "component": "Text",
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "text": "I declare that my answers are true and complete to the best of my knowledge. Acknowledging this declaration does not sign the application.",
+        "bind": "declaration"
+      },
+      {
+        "component": "Toggle",
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "bind": "declarationAcknowledged"
+      }
+    ]
+  }
+}
+`;
+
+it('admits the exact reviewed Studio r3 Component through its explicit native reference', async () => {
+  const component = JSON.parse(studioComponentBytes);
+  const digest = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(studioComponentBytes)))].map(value => value.toString(16).padStart(2, '0')).join('');
+  expect(digest).toBe('528495ed80d612b9b352cd73beaa18ccd95b6f41dbb3249ecb321bd8a88694a9');
+  const definition = { ...nativeDefinition, url: component.targetDefinition.url, version: component.targetDefinition.compatibleVersions };
+  const localeDocument = { ...locale, target: { kind: 'definition', url: definition.url } };
+  const candidate = nativeBundle();
+  candidate.manifest.definitions = [{ url: definition.url, version: definition.version }];
+  candidate.documents[definition.url] = definition;
+  delete candidate.documents[nativeDefinition.url];
+  candidate.documents[localeUrl] = localeDocument;
+  candidate.documents[surfaceUrl] = { $formspecSurface: '0.2', id: 'native', entry: 'start', routes: [
+    { id: 'start', path: '/', slots: [{ id: 'form', slotType: 'definition-form', binding: { definitionRef: definition.url } }] },
+  ] };
+  const ref = { handle: 'intake', url: component.url, version: component.version };
+  const bundle = { ...candidate, manifest: { ...candidate.manifest, components: [ref] } };
+  await mockNativePackage(bundle, { component, componentRef: ref, componentBytes: studioComponentBytes, definition, localeDocument });
+  const source = new PinnedPackageDefinitionSource('/package.json');
+  expect(await source.getComponentDocument()).toEqual(component);
+  expect(await source.getNativeBundleExport()).toEqual(bundle);
 });
