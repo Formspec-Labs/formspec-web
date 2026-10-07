@@ -32,6 +32,7 @@ describe('createHttpAdapterCohort (FW-0064)', () => {
       subjectRef: 'S-1',
     };
     const key = draftKeyFromHandoff(handoff);
+    expect(cohort.invalidateResponseSigningScope).toBeUndefined();
 
     await cohort.draftStore.save(key, sampleFormResponse);
     const confirmation = await cohort.submitTransport.submit(handoff, generateIdempotencyKey());

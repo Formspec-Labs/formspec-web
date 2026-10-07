@@ -564,3 +564,64 @@ it.each(['definitionUrl', 'definitionVersion', 'candidateHash'] as const)('fails
   await expect(test.build().draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
   expect(test.requests).toHaveLength(requestCount);
 });
+
+describe('retiring local response-signing authority', () => {
+  it('refuses an old preparation without deleting the owned draft or issuing a Sign', async () => {
+    const test = await fixture(); await test.save();
+    const prepared = await test.prepare();
+    const metadata = [...test.values]; const count = test.requests.length;
+    test.cohort.invalidateResponseSigningScope!(key);
+    await expect(test.sign(prepared)).rejects.toThrow('invalidated');
+    expect(test.requests).toHaveLength(count);
+    expect([...test.values]).toEqual(metadata);
+    expect(await test.build().draftStore.load(key)).toEqual(prepared.response);
+    expect(test.requests.some(request => request.method === 'DELETE')).toBe(false);
+  });
+
+  it('keeps late CREATE serialized and retains its uncertainty marker and binding across reload', async () => {
+    const test = await fixture(); let release!: () => void;
+    test.state.createGate = new Promise<void>(resolve => { release = resolve; });
+    const saving = test.save(); await vi.waitFor(() => expect(test.state.createCount).toBe(1));
+    const markers = test.metadata.read('response-draft-create-operations');
+    test.cohort.invalidateResponseSigningScope!(key);
+    await expect(test.save()).rejects.toThrow('already in progress');
+    await expect(test.cohort.draftStore.load(key)).rejects.toThrow('already in progress');
+    release(); await expect(saving).rejects.toThrow('invalidated');
+    expect(test.metadata.read('response-draft-create-operations')).toEqual(markers);
+    expect(await test.build().draftStore.load(key)).toEqual(response);
+    await expect(test.build().draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
+    expect(test.state.createCount).toBe(1);
+    expect(test.requests.some(request => request.method === 'DELETE')).toBe(false);
+  });
+
+  it('refuses readiness from a late owned Save while keeping its updated server binding', async () => {
+    const test = await fixture(); await test.save(); let release!: () => void;
+    test.state.patchGate = new Promise<void>(resolve => { release = resolve; });
+    const changed = { ...structuredClone(response), data: { answer: 'Changed' } };
+    const saving = test.save(saveAction('PATCH'), changed);
+    await vi.waitFor(() => expect(test.state.patchCount).toBe(1));
+    test.cohort.invalidateResponseSigningScope!(key);
+    await expect(test.save(saveAction('PATCH'), changed)).rejects.toThrow('already in progress');
+    release(); await expect(saving).rejects.toThrow('invalidated');
+    expect(await test.build().draftStore.load(key)).toEqual(changed);
+    expect(test.state.version).toBe(2);
+    expect(test.requests.some(request => request.method === 'DELETE')).toBe(false);
+  });
+
+  it('retains a pending Sign marker after invalidation even when the dispatched server request completes', async () => {
+    const test = await fixture(); await test.save(); const prepared = await test.prepare();
+    let release!: () => void;
+    test.state.signGate = new Promise<void>(resolve => { release = resolve; });
+    const signing = test.sign(prepared);
+    await vi.waitFor(() => expect(test.state.signCount).toBe(1));
+    const metadata = [...test.values];
+    test.cohort.invalidateResponseSigningScope!(key);
+    await expect(test.cohort.draftStore.save(key, response)).rejects.toThrow('already in progress');
+    release(); await expect(signing).rejects.toThrow('invalidated');
+    expect([...test.values]).toEqual(metadata);
+    expect(test.state.response.authoredSignatures).toHaveLength(1);
+    await expect(test.sign(prepared)).rejects.toThrow('invalidated');
+    await expect(test.build().draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
+    expect(test.requests.some(request => request.method === 'DELETE')).toBe(false);
+  });
+});

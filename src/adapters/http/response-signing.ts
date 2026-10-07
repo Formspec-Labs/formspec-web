@@ -27,9 +27,13 @@ export class ResponseSigningScopeFence {
 
   constructor(readonly scopeFor: (key: DraftKey) => string) {}
   capture(key: DraftKey): number { return this.generations.get(this.scopeFor(key)) ?? 0; }
+  /** Retire local authority without deleting drafts or cancelling dispatched requests. */
+  invalidate(key: DraftKey): void {
+    this.generations.set(this.scopeFor(key), this.capture(key) + 1);
+  }
   assertCurrent(key: DraftKey, generation: number): void {
     if (this.capture(key) !== generation || this.clearing.has(this.scopeFor(key))) {
-      throw new Error('Draft signing state was cleared while an operation was running');
+      throw new Error('Draft signing state was cleared or invalidated while an operation was running');
     }
   }
   run<T>(key: DraftKey, operation: (generation: number) => Promise<T>): Promise<T> {
@@ -48,7 +52,7 @@ export class ResponseSigningScopeFence {
     const scope = this.scopeFor(key);
     if (this.clearing.has(scope)) throw new Error('Draft state is already being cleared');
     this.clearing.add(scope);
-    this.generations.set(scope, this.capture(key) + 1);
+    this.invalidate(key);
     try {
       await this.pending.get(scope)?.catch(() => {});
       await operation();

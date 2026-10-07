@@ -53,6 +53,8 @@ export interface HttpAdapterCohort {
   draftStore: DraftStore;
   submitTransport: SubmitTransport;
   responseSigning?: ResponseSigning;
+  /** Retire local signing authority; preserve persisted drafts and uncertain-operation markers. */
+  invalidateResponseSigningScope?: (key: DraftKey) => void;
 }
 
 export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAdapterCohort {
@@ -132,7 +134,8 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       });
     },
   };
-  return { draftStore: scopedDrafts, submitTransport: scopedSubmit, responseSigning };
+  return { draftStore: scopedDrafts, submitTransport: scopedSubmit, responseSigning,
+    invalidateResponseSigningScope: key => fence.invalidate(key) };
 }
 
 /**
