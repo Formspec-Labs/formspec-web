@@ -1,0 +1,15 @@
+{
+  "$formspecTheme": "1.0",
+  "version": "0.1.0",
+  "targetDefinition": {
+    "url": "urn:formspec:demo:d1:passport-renewal"
+  },
+  "items": {
+    "photo": {
+      "widgetConfig": {
+        "accept": "image/jpeg,image/png",
+        "preview": true
+      }
+    }
+  }
+}

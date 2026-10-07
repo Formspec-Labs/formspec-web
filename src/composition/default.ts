@@ -1,4 +1,7 @@
+import { publishedDefinitionDraftStore } from '../adapters/composing/published-definition-draft-store.ts';
 import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
+import { PinnedPackageDefinitionSource } from '../adapters/http/pinned-package-definition-source.ts';
+import { defaultFormIdResolver } from '../adapters/http/form-id.ts';
 import { HttpDefinitionSource } from '../adapters/http/definition-source.ts';
 import {
   AnonymousSessionBridge,
@@ -64,6 +67,7 @@ import type { SurfaceRouteState } from '../ports/surface-router.ts';
  */
 export interface DefaultCompositionOptions {
   initialDefinitionUrl?: string;
+  packageUrl?: string;
   selectedResponseId?: string;
   surfaceRoute?: SurfaceRouteState;
 }
@@ -84,7 +88,13 @@ export function createDefaultComposition(
     tenantBinding: config.tenantBinding,
   };
   const initialDefinitionUrl = options.initialDefinitionUrl ?? productionInitialDefinitionUrl(serverUrl);
-  const anonymousSessions = new AnonymousSessionBridge(baseHttpConfig);
+  const packageFormIdResolver = options.packageUrl
+    ? () => defaultFormIdResolver(initialDefinitionUrl)
+    : undefined;
+  const anonymousSessions = new AnonymousSessionBridge({
+    ...baseHttpConfig,
+    ...(packageFormIdResolver ? { formIdResolver: packageFormIdResolver } : {}),
+  });
   const identityBinding = identityProviderFor(config, notificationDelivery, {
     anonymousSessions,
     initialDefinitionUrl,
@@ -95,10 +105,38 @@ export function createDefaultComposition(
   const { draftStore, submitTransport } = createHttpAdapterCohort({
     ...httpConfig,
     anonymousSessions,
+    ...(packageFormIdResolver ? { formIdResolver: packageFormIdResolver } : {}),
     ...(options.selectedResponseId
       ? { responseIdResolver: () => options.selectedResponseId }
       : {}),
   });
+  if (options.packageUrl) {
+    // Local authored-package preview uses the existing demo host capabilities.
+    // Drafts and submission still call the real server and never return stub receipts.
+    const preview = createDemoComposition();
+    const source = new PinnedPackageDefinitionSource(options.packageUrl);
+    return freezeComposition({
+      ...preview,
+      localPackagePreview: true,
+      // Preview has no authenticated subject; server session issuance stays at save/submit.
+      identityProvider: {
+        async discover() { return []; },
+        async authenticate() { throw new Error('Local package preview has no sign-in provider'); },
+        async revoke() {},
+        subscribe(listener) { listener(null); return () => {}; },
+      },
+      offlineSubmitQueue: unavailableOfflineSubmitQueue(),
+      instanceCapabilities: { ...preview.instanceCapabilities, offlineSubmit: 'unavailable' },
+      initialDefinitionUrl,
+      definitionSource: source,
+      draftStore: publishedDefinitionDraftStore(
+        draftStore,
+        () => source.getDefinition(),
+        () => new HttpDefinitionSource(httpConfig).getDefinition(initialDefinitionUrl),
+      ),
+      submitTransport,
+    });
+  }
   const responseActionCapabilityUrl =
     config.referenceAdapters?.formspecStack?.responseActionLedgerCapabilityUrl;
   const responseActionInvoker = responseActionCapabilityUrl

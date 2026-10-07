@@ -6,7 +6,8 @@
  */
 
 import type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
-import type { ComponentDocument, FormDefinition, LocaleDocument } from '@formspec-org/types';
+import type { ResponseActionsDocumentInput } from '@formspec-org/engine';
+import type { ComponentDocument, FormDefinition, LocaleDocument, ThemeDocument } from '@formspec-org/types';
 
 export type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
 export type { ComponentDocument, FormDefinition, LocaleDocument } from '@formspec-org/types';
@@ -20,6 +21,10 @@ export interface DefinitionSource {
    * Other compositions wire static-bundle / CMS / GraphQL adapters.
    */
   getDefinition(url: string, version?: string): Promise<FormDefinition>;
+
+  /** Optional authored presentation and actions from the same package. */
+  getThemeDocument?(url: string, version?: string): Promise<ThemeDocument | null>;
+  getResponseActionsDocument?(url: string, version?: string): Promise<ResponseActionsDocumentInput | null>;
 
   /**
    * Optional FW-0019 sidecar hook. Sources that fetch a runtime payload MAY

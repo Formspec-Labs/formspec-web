@@ -1,0 +1,23 @@
+{
+  "version": "0.1.0",
+  "files": {
+    "definition": {
+      "path": "passport-renewal.definition.json",
+      "sha256": "1771e351cbe6d3af3436f87d356edaf86a75cc5a6191f749eb881d40dce0ebf7"
+    },
+    "locales": [
+      {
+        "path": "passport-renewal.es-US.locale.json",
+        "sha256": "3628676c9cbb55cce35d44b4538c894bbed1d65cede87a7e8e6e4a9b5ed49158"
+      }
+    ],
+    "responseActions": {
+      "path": "passport-renewal.response-actions.json",
+      "sha256": "ab671ed2d2be9f47c38a62eea2269b575075a383611507c8bb163267fd044726"
+    },
+    "theme": {
+      "path": "passport-renewal.theme.json",
+      "sha256": "de68c7fd3766a6cc54490c7f1f07e127ceebfda3b3f4f32e9df5079715228611"
+    }
+  }
+}

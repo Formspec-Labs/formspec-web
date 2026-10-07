@@ -197,6 +197,9 @@ type RespondentState =
   | {
       status: 'ready';
       definition: FormDefinition;
+      localeDocuments: readonly LocaleDocument[];
+      themeDocument: ThemeDocument | null;
+      responseActionsDocument: ResponseActionsDocument | null;
       componentDocument: ComponentDocument | null;
       componentGraph: ComponentGraphProjectionContext | null;
       hostEvidence: LayoutHostEvidence | null;
@@ -664,7 +667,7 @@ function RespondentController({
 
   const responseActionsDocument = form
     ? form.responseActionsDocument
-    : createDemoSubmitResponseActions({
+    : respondentState.responseActionsDocument ?? createDemoSubmitResponseActions({
         definitionUrl: respondentState.definition.url,
       });
   const responseActionInvoker = composition.responseActionInvoker?.({
@@ -920,7 +923,7 @@ function RespondentController({
             componentDocument={respondentState.componentDocument ?? undefined}
             componentGraph={respondentState.componentGraph ?? undefined}
             hostEvidence={respondentState.hostEvidence ?? undefined}
-            themeDocument={form?.themeDocument}
+            themeDocument={form?.themeDocument ?? respondentState.themeDocument ?? undefined}
             registryEntries={form ? [...form.registryEntries] : undefined}
             responseActionsDocument={responseActionsDocument}
             responseActionInvoker={responseActionInvoker}
@@ -967,6 +970,7 @@ function RespondentController({
               />
             ) : (
               <RespondentSurface
+                localeDocuments={respondentState.localeDocuments}
                 activeLocale={respondentState.activeLocale}
                 brandName={config.brand.name}
                 claim={respondentState.claim}
@@ -1243,18 +1247,24 @@ async function createReadyState(
     componentDocument,
     componentGraph,
     hostEvidence,
+    themeDocument,
+    authoredResponseActions,
   ] = form
     ? [
         form.localeDocuments,
         undefined,
         undefined,
         undefined,
+        form.themeDocument,
+        form.responseActionsDocument,
       ] as const
     : await Promise.all([
         composition.definitionSource.getLocaleDocuments?.(composition.initialDefinitionUrl),
         composition.definitionSource.getComponentDocument?.(composition.initialDefinitionUrl),
         composition.definitionSource.getComponentGraphContext?.(composition.initialDefinitionUrl),
         composition.definitionSource.getLayoutHostEvidence?.(composition.initialDefinitionUrl),
+        composition.definitionSource.getThemeDocument?.(composition.initialDefinitionUrl),
+        composition.definitionSource.getResponseActionsDocument?.(composition.initialDefinitionUrl),
       ]);
   const verifiedComponentGraph = componentGraphHasCompletedEvidence({ componentGraph, hostEvidence })
     ? componentGraph ?? null
@@ -1295,6 +1305,9 @@ async function createReadyState(
   return {
     status: 'ready',
     definition,
+    localeDocuments: localeDocuments ?? [],
+    themeDocument: themeDocument ?? null,
+    responseActionsDocument: authoredResponseActions ?? null,
     componentDocument: componentDocument ?? null,
     componentGraph: verifiedComponentGraph,
     hostEvidence: hostEvidence ?? null,
@@ -1705,6 +1718,7 @@ async function readSubmissionStatuses(
 }
 
 function RespondentSurface({
+  localeDocuments,
   activeLocale,
   brandName,
   claim,
@@ -1723,6 +1737,7 @@ function RespondentSurface({
   onClearTerminal,
   onLocaleChange,
 }: {
+  localeDocuments: readonly LocaleDocument[];
   activeLocale: string;
   brandName: string;
   claim: IdentityClaim | null;
@@ -1742,7 +1757,7 @@ function RespondentSurface({
   onLocaleChange: (locale: string) => void;
 }) {
   const { engine } = useFormspecContext();
-  const localeOptions = useMemo(() => localeOptionsForDefinition(definition), [definition]);
+  const localeOptions = useMemo(() => localeOptionsForDefinition(definition, localeDocuments), [definition, localeDocuments]);
   const isUnbranded = resolvedIssuer.source === 'unbranded';
   const title = engine.resolveLocaleString('$form.title', definition.title);
   const description = engine.resolveLocaleString('$form.description', definition.description ?? '');
@@ -1777,10 +1792,15 @@ function RespondentSurface({
           ))}
         </div>
         <div className="respondent-toolbar__meta" aria-live="polite">
-          {draftLoaded ? 'Draft restored' : mode}
+          {draftLoaded ? 'Draft restored' : composition.localPackagePreview ? 'Local preview' : mode}
         </div>
       </div>
 
+      {composition.localPackagePreview ? (
+        <p className="respondent-preview-note" role="note">
+          Photos stay in this browser. Filing and signing are not yet complete.
+        </p>
+      ) : null}
       <RespondentFormContent
         claim={claim}
         composition={composition}

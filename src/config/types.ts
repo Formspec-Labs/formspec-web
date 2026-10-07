@@ -145,6 +145,8 @@ export interface FormspecWebConfig {
 }
 
 export interface RuntimeConfig {
+  /** Explicit deployment scope supplied by runtime JS. */
+  tenantBinding?: TenantBindingConfig;
   profileName?: string;
   formspecServerUrl?: string;
   responseActionLedgerCapabilityUrl?: string;

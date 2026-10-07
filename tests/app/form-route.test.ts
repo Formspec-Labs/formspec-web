@@ -7,6 +7,14 @@ import {
 } from '../../src/app/form-route.ts';
 
 describe('root form route parser', () => {
+  it('keeps local package source separate from server form identity', () => {
+    expect(parseRootFormRoute('https://forms.example.test/?form=server-id&package=/packages/demo/package.json')).toEqual({
+      kind: 'selected', initialDefinitionUrl: 'server-id', packageUrl: '/packages/demo/package.json',
+    });
+    expect(() => parseRootFormRoute('https://forms.example.test/?form=id&package=a&package=b')).toThrow(InvalidFormRouteError);
+    expect(() => parseRootFormRoute('https://forms.example.test/?package=a')).toThrow(InvalidFormRouteError);
+  });
+
   it('returns the default full-app route when the root URL has no form parameter', () => {
     expect(parseRootFormRoute('https://forms.example.test/')).toEqual({ kind: 'default' });
   });

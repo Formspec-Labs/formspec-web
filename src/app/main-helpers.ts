@@ -77,6 +77,7 @@ export function chooseComposition({
     rootFormRoute?.kind === 'selected'
       ? {
           initialDefinitionUrl: rootFormRoute.initialDefinitionUrl,
+          ...(rootFormRoute.packageUrl ? { packageUrl: rootFormRoute.packageUrl } : {}),
           ...(rootFormRoute.selectedResponseId
             ? { selectedResponseId: rootFormRoute.selectedResponseId }
             : {}),

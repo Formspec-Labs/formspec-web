@@ -91,7 +91,6 @@ select {
   justify-content: space-between;
   gap: 1rem;
   min-height: 56px;
-  border-bottom: 1px solid var(--formspec-color-border, #c9d3cd);
   padding-bottom: 1rem;
 }
 
@@ -959,4 +958,19 @@ select {
 
 .formspec-safe-address-field__reveal {
   flex: 0 0 auto;
+}
+
+.respondent-preview-note {
+  margin: 0;
+  color: var(--formspec-color-muted, #5d6b66);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Keep the native file input visually hidden without widening the page. */
+.respondent-flow input.formspec-file-input-hidden {
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
 }

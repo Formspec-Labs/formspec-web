@@ -3,6 +3,7 @@ export type RootFormRouteSelection =
   | {
       kind: 'selected';
       initialDefinitionUrl: string;
+      packageUrl?: string;
       selectedResponseId?: string;
       surfaceRoute?: RootSurfaceRouteState;
     };
@@ -45,13 +46,14 @@ export function parseRootFormRoute(href: string): RootFormRouteSelection | null 
 
   const formValues = url.searchParams.getAll('form');
   const responseValues = url.searchParams.getAll('response');
+  const packageValues = url.searchParams.getAll('package');
   const surfaceValues = url.searchParams.getAll('surface');
   const surfaceVersionValues = url.searchParams.getAll('surfaceVersion');
   const surfaceRouteValues = url.searchParams.getAll('surfaceRoute');
   const surfaceNextRouteValues = url.searchParams.getAll('surfaceNextRoute');
   const surfaceTriggerActionValues = url.searchParams.getAll('surfaceTriggerAction');
   if (formValues.length === 0) {
-    if (responseValues.length > 0) {
+    if (responseValues.length > 0 || packageValues.length > 0) {
       throw new InvalidFormRouteError('The response route parameter requires a form parameter.');
     }
     return { kind: 'default' };
@@ -60,6 +62,7 @@ export function parseRootFormRoute(href: string): RootFormRouteSelection | null 
     throw new AmbiguousFormRouteError(formValues);
   }
   assertSingleOptionalParam(responseValues, 'response');
+  assertSingleOptionalParam(packageValues, 'package');
   assertSingleOptionalParam(surfaceValues, 'surface');
   assertSingleOptionalParam(surfaceVersionValues, 'surfaceVersion');
   assertSingleOptionalParam(surfaceRouteValues, 'surfaceRoute');
@@ -72,9 +75,11 @@ export function parseRootFormRoute(href: string): RootFormRouteSelection | null 
   }
 
   const selectedResponseId = optionalNonEmptyParam(responseValues, 'response');
+  const packageUrl = optionalNonEmptyParam(packageValues, 'package');
   return {
     kind: 'selected',
     initialDefinitionUrl,
+    ...(packageUrl ? { packageUrl } : {}),
     ...(selectedResponseId ? { selectedResponseId } : {}),
     ...surfaceRouteState({
       surface: surfaceValues,

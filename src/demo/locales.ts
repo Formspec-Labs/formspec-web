@@ -81,19 +81,23 @@ export const demoLocaleDocuments: LocaleDocument[] = [
   },
 ];
 
-export function localeOptionsForDefinition(definition: FormDefinition): Array<{ code: string; label: string }> {
-  const localeExtension = definition.extensions?.['x-formspec-locales'];
-  if (!isRecord(localeExtension) || !Array.isArray(localeExtension.available)) {
-    return [{ code: 'en', label: 'English' }];
-  }
-
-  const labels = isRecord(localeExtension.labels) ? localeExtension.labels : {};
-  return localeExtension.available
-    .filter((code): code is string => typeof code === 'string')
-    .map((code) => ({
-      code,
-      label: typeof labels[code] === 'string' ? labels[code] : code.toUpperCase(),
-    }));
+export function localeOptionsForDefinition(
+  definition: FormDefinition,
+  documents: readonly LocaleDocument[] = [],
+): Array<{ code: string; label: string }> {
+  const extension = definition.extensions?.['x-formspec-locales'];
+  const labels = isRecord(extension) && isRecord(extension.labels) ? extension.labels : {};
+  const declared = isRecord(extension) && Array.isArray(extension.available)
+    ? extension.available.filter((code): code is string => typeof code === 'string')
+    : [defaultLocaleForDefinition(definition)];
+  const codes = new Set([...declared, ...documents.filter(document =>
+    document.target.kind === 'definition' && document.target.url === definition.url,
+  ).map(document => document.locale)]);
+  return [...codes].map(code => {
+    let label = code.toUpperCase();
+    try { label = new Intl.DisplayNames([code], { type: 'language' }).of(code) ?? label; } catch { /* Retain an authored nonstandard code. */ }
+    return { code, label: typeof labels[code] === 'string' ? labels[code] : label };
+  });
 }
 
 export function defaultLocaleForDefinition(definition: FormDefinition): string {

@@ -1,0 +1,22 @@
+{
+  "$formspecResponseActions": "1.0",
+  "version": "1.0.0",
+  "targetDefinition": {
+    "url": "urn:formspec:demo:d1:passport-renewal"
+  },
+  "actions": [
+    {
+      "id": "submit",
+      "intent": "submit",
+      "label": {
+        "literal": "Submit application"
+      },
+      "effects": [
+        {
+          "type": "hostEvent",
+          "eventName": "formspec-submit"
+        }
+      ]
+    }
+  ]
+}

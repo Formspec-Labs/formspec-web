@@ -1,0 +1,234 @@
+{
+  "$formspec": "1.0",
+  "url": "urn:formspec:demo:d1:passport-renewal",
+  "version": "0.1.1",
+  "status": "draft",
+  "title": "Passport renewal",
+  "items": [
+    {
+      "key": "demoNotice",
+      "type": "display",
+      "label": "Demo application with fictional details. This sample is not an official DS-82 form.",
+      "presentation": {
+        "widgetHint": "paragraph"
+      }
+    },
+    {
+      "key": "renewalEligible",
+      "type": "field",
+      "label": "Renewal eligibility confirmed",
+      "dataType": "boolean",
+      "hint": "Continue after the renewal eligibility check. This sample does not determine official eligibility.",
+      "presentation": {
+        "widgetHint": "Toggle"
+      },
+      "initialValue": true
+    },
+    {
+      "key": "detailsHeading",
+      "type": "display",
+      "label": "Confirm your renewal details",
+      "presentation": {
+        "widgetHint": "paragraph"
+      }
+    },
+    {
+      "key": "fullName",
+      "type": "field",
+      "label": "Full legal name",
+      "dataType": "string",
+      "initialValue": "Alex Rivera"
+    },
+    {
+      "key": "dateOfBirth",
+      "type": "field",
+      "label": "Date of birth",
+      "dataType": "date",
+      "presentation": {
+        "widgetHint": "DatePicker"
+      },
+      "initialValue": "1988-04-12"
+    },
+    {
+      "key": "placeOfBirth",
+      "type": "field",
+      "label": "Place of birth",
+      "dataType": "string",
+      "initialValue": "Sample City, United States"
+    },
+    {
+      "key": "email",
+      "type": "field",
+      "label": "Email address",
+      "dataType": "string",
+      "initialValue": "alex.rivera@example.com"
+    },
+    {
+      "key": "mailingAddress",
+      "type": "field",
+      "label": "Mailing address",
+      "dataType": "text",
+      "initialValue": "123 Example Street, Sample City, NJ 00000"
+    },
+    {
+      "key": "priorPassportNumber",
+      "type": "field",
+      "label": "Prior passport number",
+      "dataType": "string",
+      "initialValue": "DEMO-PASSPORT-001"
+    },
+    {
+      "key": "priorPassportIssueDate",
+      "type": "field",
+      "label": "Prior passport issue date",
+      "dataType": "date",
+      "presentation": {
+        "widgetHint": "DatePicker"
+      },
+      "initialValue": "2016-03-01"
+    },
+    {
+      "key": "ssnIssued",
+      "type": "field",
+      "label": "Have you ever been issued a Social Security number?",
+      "dataType": "boolean",
+      "presentation": {
+        "widgetHint": "Toggle"
+      },
+      "initialValue": true
+    },
+    {
+      "key": "socialSecurityNumber",
+      "type": "field",
+      "label": "Social Security number",
+      "dataType": "string",
+      "hint": "If issued, your number is required by law; omission can mean denial, according to the source snapshot. The zeros are fictional.",
+      "initialValue": "000000000"
+    },
+    {
+      "key": "neverIssuedStatement",
+      "type": "field",
+      "label": "Sworn statement that you have never been issued a Social Security number",
+      "dataType": "text",
+      "hint": "Enter your sworn never-issued statement. Official wording remains to be qualified."
+    },
+    {
+      "key": "photo",
+      "type": "field",
+      "label": "Passport photo",
+      "dataType": "attachment",
+      "hint": "Upload a JPEG or PNG photo. Passport-specific photo checks are not yet verified.",
+      "presentation": {
+        "widgetHint": "FileUpload"
+      }
+    },
+    {
+      "key": "privacyNotice",
+      "type": "display",
+      "label": "Sample privacy notice: submitted answers and photo are visible to authorized demo reviewers. Official legal authority and permitted-sharing wording remain unqualified. Do not enter real personal data.",
+      "presentation": {
+        "widgetHint": "paragraph"
+      }
+    },
+    {
+      "key": "paperAlternative",
+      "type": "display",
+      "label": "Also available by mail (DS-82) or in person (DS-11).",
+      "presentation": {
+        "widgetHint": "paragraph"
+      }
+    },
+    {
+      "key": "declaration",
+      "type": "display",
+      "label": "I declare that my answers are true and complete to the best of my knowledge. Acknowledging this declaration does not sign the application.",
+      "presentation": {
+        "widgetHint": "paragraph"
+      }
+    },
+    {
+      "key": "declarationAcknowledged",
+      "type": "field",
+      "label": "I have read and acknowledge the declaration.",
+      "dataType": "boolean",
+      "presentation": {
+        "widgetHint": "Toggle"
+      },
+      "initialValue": false
+    }
+  ],
+  "binds": [
+    {
+      "path": "renewalEligible",
+      "constraint": "$ = true",
+      "constraintMessage": "Complete the renewal eligibility check before continuing. This sample supports eligible applicants only.",
+      "required": "true"
+    },
+    {
+      "path": "fullName",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    },
+    {
+      "path": "dateOfBirth",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    },
+    {
+      "path": "placeOfBirth",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    },
+    {
+      "path": "email",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    },
+    {
+      "path": "mailingAddress",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    },
+    {
+      "path": "priorPassportNumber",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    },
+    {
+      "path": "priorPassportIssueDate",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    },
+    {
+      "path": "ssnIssued",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    },
+    {
+      "path": "socialSecurityNumber",
+      "constraint": "matches($, '^[0-9]{9}$')",
+      "constraintMessage": "Enter nine digits without spaces or dashes.",
+      "required": "true",
+      "relevant": "$renewalEligible = true and $ssnIssued = true"
+    },
+    {
+      "path": "neverIssuedStatement",
+      "constraint": "length(trim($)) > 0",
+      "constraintMessage": "Enter your sworn never-issued statement.",
+      "required": "true",
+      "relevant": "$renewalEligible = true and $ssnIssued = false"
+    },
+    {
+      "path": "photo",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    },
+    {
+      "path": "declarationAcknowledged",
+      "constraint": "$ = true",
+      "constraintMessage": "Read and acknowledge the declaration before signing and submitting.",
+      "required": "true",
+      "relevant": "$renewalEligible = true"
+    }
+  ]
+}

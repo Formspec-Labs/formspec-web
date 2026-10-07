@@ -24,7 +24,7 @@ const runtimeEnvMap = {
     'VITE_FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
   ],
 } as const satisfies Record<
-  Exclude<keyof RuntimeConfig, 'surfaceBundle'>,
+  Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding'>,
   readonly string[]
 >;
 
@@ -42,7 +42,7 @@ export function readRuntimeConfig(): RuntimeConfig {
 export function runtimeConfigFromEnvRecord(env: RuntimeEnvRecord): RuntimeConfig {
   const config: RuntimeConfig = {};
   for (const [runtimeKey, envNames] of Object.entries(runtimeEnvMap) as Array<
-    [Exclude<keyof RuntimeConfig, 'surfaceBundle'>, readonly string[]]
+    [Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding'>, readonly string[]]
   >) {
     const value = firstPresent(env, envNames);
     if (value) {
@@ -104,6 +104,7 @@ function applyRuntimeOverrides(
 
   return {
     ...profileConfig,
+    tenantBinding: runtimeConfig.tenantBinding ?? profileConfig.tenantBinding,
     identity: applyIdentityRuntimeOverrides(profileConfig.identity, oidc, magicLink),
     ports: portsForRuntime(profileConfig.ports, formspecStack?.formspecServerUrl),
     referenceAdapters: formspecStack
@@ -186,7 +187,7 @@ function identityMagicLink(identity: IdentityPolicyConfig): MagicLinkConfig | un
 function compactRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
   return Object.fromEntries(
     Object.entries(config).filter(([key, value]) => (
-      key === 'surfaceBundle'
+      key === 'surfaceBundle' || key === 'tenantBinding'
         ? typeof value === 'object' && value !== null
         : typeof value === 'string' && value.length > 0
     )),

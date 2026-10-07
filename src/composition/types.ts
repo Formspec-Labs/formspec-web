@@ -45,6 +45,8 @@ import type {
  */
 export interface Composition {
   mode: 'demo' | 'production';
+  /** Authored local package preview; submission still uses its configured service. */
+  localPackagePreview?: boolean;
   initialDefinitionUrl: string;
   definitionSource: DefinitionSource;
   /**

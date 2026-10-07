@@ -1,0 +1,24 @@
+{
+  "$formspecLocale": "2.0",
+  "locale": "es-US",
+  "version": "0.1.0",
+  "target": {
+    "kind": "definition",
+    "url": "urn:formspec:demo:d1:passport-renewal"
+  },
+  "strings": {
+    "renewalEligible.label": "Confirmación de elegibilidad de renovación de muestra",
+    "fullName.label": "Nombre legal completo",
+    "dateOfBirth.label": "Fecha de nacimiento",
+    "placeOfBirth.label": "Lugar de nacimiento",
+    "email.label": "Correo electrónico",
+    "mailingAddress.label": "Dirección postal",
+    "priorPassportNumber.label": "Número del pasaporte anterior",
+    "priorPassportIssueDate.label": "Fecha de emisión del pasaporte anterior",
+    "ssnIssued.label": "¿Alguna vez le han asignado un número de Seguro Social?",
+    "socialSecurityNumber.label": "Número de Seguro Social",
+    "neverIssuedStatement.label": "Declaración jurada de que nunca le han asignado un número de Seguro Social",
+    "photo.label": "Foto para el pasaporte",
+    "declarationAcknowledged.label": "He leído la declaración y estoy listo para firmar mi solicitud."
+  }
+}
