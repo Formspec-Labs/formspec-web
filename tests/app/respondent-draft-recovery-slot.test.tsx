@@ -165,6 +165,68 @@ describe('draft recovery inside a definition-form Surface slot', () => {
       && control.responseId === scope.responseId && control.control.artifactDigest === scope.responseActionsArtifact!.artifactDigest)).toBe(true);
   });
 
+  it('forwards an actual asynchronous owned Prepare terminal once without a legacy confirmation', async () => {
+    const runtime = { ...ownedRuntime(), getCompletionGeneration: vi.fn(() => 1) }; const completed = vi.fn(); let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    runtime.responseActionInvoker.mockImplementation(input => invokeResponseActionAsync<SubmitResult>(input.document, input.actionRef,
+      { ...input.ports, dispatchEffect: () => pending, resolveIdempotencyKey: () => 'owned-prepare' }, input.nodeId, input.invocationContext));
+    const composition = anonymousComposition(createStubComposition()); const submit = vi.spyOn(composition.submitTransport, 'submit');
+    render(<RespondentDefinitionController composition={composition} config={departmentAppProfile} form={ownedPrepareForm(runtime, completed)} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Prepare owned response' }));
+    await waitFor(() => expect(runtime.responseActionInvoker).toHaveBeenCalledOnce()); expect(completed).not.toHaveBeenCalled();
+    await act(async () => { finish(); });
+    await waitFor(() => expect(completed).toHaveBeenCalledOnce());
+    expect(completed.mock.calls[0][0].id).toBe('prepare');
+    expect(completed.mock.calls[0][1]).toMatchObject({ status: 'completed', detail: { validationReport: { valid: true } } });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('keeps the unsigned action terminal waiting for its actual submit confirmation', async () => {
+    const composition = anonymousComposition(createStubComposition()); const original = composition.submitTransport.submit;
+    let finish!: () => void; const pending = new Promise<void>(resolve => { finish = resolve; });
+    const submit = vi.fn(async (...args: Parameters<typeof original>) => { await pending; return original(...args); });
+    composition.submitTransport = { submit }; const completed = vi.fn();
+    render(<RespondentDefinitionController composition={composition} config={departmentAppProfile} form={{ ...resolvedForm(), onActionCompleted: completed,
+      responseActionsDocument: { $formspecResponseActions: '1.0', version: '1.0', scope: 'response', targetDefinition: { url: definition.url },
+        actions: [{ id: 'submit', intent: 'submit', label: { literal: 'Submit unsigned response' },
+          validation: { profile: 'on-submit', blocking: 'block-on-error', persistence: 'complete-response' },
+          effects: [{ type: 'hostEvent', eventName: 'formspec-submit' }] }] },
+    }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Submit unsigned response' }));
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce()); expect(completed).not.toHaveBeenCalled();
+    await act(async () => { finish(); }); await waitFor(() => expect(completed).toHaveBeenCalledOnce());
+  });
+
+  it('rejects a queued owned terminal when the same lease advances its private generation', async () => {
+    const runtime = { ...ownedRuntime(), getCompletionGeneration: vi.fn().mockReturnValueOnce(1).mockReturnValue(2) };
+    runtime.responseActionInvoker.mockImplementation(input => invokeResponseActionAsync<SubmitResult>(input.document, input.actionRef,
+      { ...input.ports, dispatchEffect: async () => {}, resolveIdempotencyKey: () => 'owned-prepare' }, input.nodeId, input.invocationContext));
+    const completed = vi.fn(); render(<RespondentDefinitionController composition={anonymousComposition(createStubComposition())}
+      config={departmentAppProfile} form={ownedPrepareForm(runtime, completed)} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Prepare owned response' }));
+    await screen.findByText('Completed.'); await act(async () => {});
+    expect(runtime.getCompletionGeneration).toHaveBeenCalledTimes(2); expect(completed).not.toHaveBeenCalled();
+  });
+
+  it('refuses failed owned terminals and completions from an unmounted renderer', async () => {
+    const failed = ownedRuntime(); const completed = vi.fn();
+    failed.responseActionInvoker.mockImplementation(input => invokeResponseActionAsync<SubmitResult>(input.document, input.actionRef,
+      { ...input.ports, dispatchEffect: async () => { throw new Error('owned-prepare-failed'); } }, input.nodeId, input.invocationContext));
+    const composition = anonymousComposition(createStubComposition());
+    const first = render(<RespondentDefinitionController composition={composition} config={departmentAppProfile} form={ownedPrepareForm(failed, completed)} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Prepare owned response' }));
+    await waitFor(() => expect(failed.responseActionInvoker).toHaveBeenCalledOnce()); await act(async () => {});
+    expect(completed).not.toHaveBeenCalled(); first.unmount();
+    const late = ownedRuntime(); let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    late.responseActionInvoker.mockImplementation(input => invokeResponseActionAsync<SubmitResult>(input.document, input.actionRef,
+      { ...input.ports, dispatchEffect: () => pending }, input.nodeId, input.invocationContext));
+    const second = render(<RespondentDefinitionController composition={composition} config={departmentAppProfile} form={ownedPrepareForm(late, completed)} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Prepare owned response' }));
+    await waitFor(() => expect(late.responseActionInvoker).toHaveBeenCalledOnce()); second.unmount();
+    await act(async () => { finish(); }); expect(completed).not.toHaveBeenCalled(); expect(late.dispose).toHaveBeenCalledOnce();
+  });
+
   it('uses a subordinate recovery heading and returns focus locally after restart in the chosen language', async () => {
     const base = createStubComposition();
     let cleared = false;
@@ -222,4 +284,17 @@ function anonymousComposition(base: ReturnType<typeof createStubComposition>) {
 function ownedRuntime() {
   return { responseActionInvoker: vi.fn<ResponseActionInvoker<SubmitResult>>(),
     semanticControlScope: undefined, invalidate: vi.fn(), dispose: vi.fn() };
+}
+
+function ownedPrepareForm(runtime: RespondentOwnedRuntime, completed: NonNullable<ResolvedRespondentFormInput['onActionCompleted']>): ResolvedRespondentFormInput {
+  return { ...resolvedForm(), configureRuntime: async () => runtime, onActionCompleted: completed,
+    componentDocument: { $formspecComponent: '1.2', url: 'urn:test:owned-prepare-component', version: '1.0',
+      targetDefinition: { url: definition.url }, tree: { component: 'Stack', children: [
+        { component: 'TextInput', bind: 'name' }, { component: 'ActionButton', actionRef: 'prepare' },
+      ] } },
+    responseActionsDocument: { $formspecResponseActions: '1.0', version: '1.0', scope: 'response', targetDefinition: { url: definition.url },
+      actions: [{ id: 'prepare', intent: 'x-prepare', label: { literal: 'Prepare owned response' },
+        validation: { profile: 'on-submit', blocking: 'block-on-error', persistence: 'complete-response' },
+        effects: [{ type: 'serviceRequest', requestRef: 'prepare', idempotencyKey: '@invocation.id' }] }] },
+  };
 }

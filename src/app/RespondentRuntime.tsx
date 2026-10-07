@@ -190,6 +190,8 @@ export interface RespondentOwnedRuntime {
   readonly semanticControlScope: SurfaceDefinitionFormRenderInput['semanticControlScope'];
   /** Refuse new actions immediately, before Clear drains any outstanding writes. */
   readonly invalidate: () => void;
+  /** Optional opaque marker used only to reject a queued stale terminal. */
+  readonly getCompletionGeneration?: () => string | number;
   /** Retire this mounted form; its host may retain a frozen preparation across routes. */
   readonly dispose: () => void;
 }
@@ -630,23 +632,24 @@ function RespondentController({
     };
   }, [queuedIdempotencyKey, composition.offlineSubmitQueue]);
 
-  // Response Actions complete synchronously after they dispatch the submit
-  // host event, while SubmitTransport is intentionally asynchronous. Hold the
-  // authored completed terminal until the real confirmation has updated the
-  // parent's `routeParams.caseRef`; the post-render effect then hands the
-  // action and its invocation result back to Surface's existing navigation
-  // boundary.
+  // Legacy host events finish before the asynchronous transport confirmation.
+  // Owned invokers return their verified terminal directly; bind it to its
+  // emitting runtime and private generation until this post-render handoff.
   useEffect(() => {
-    if (
-      renderMode !== 'surface-slot'
-      || completedAction === null
-      || submitState.status !== 'confirmed'
-    ) {
-      return;
-    }
+    if (renderMode !== 'surface-slot' || completedAction === null) return;
+    if (!completedAction.owner && submitState.status !== 'confirmed') return;
     setCompletedAction(null);
+    if (respondentState.status !== 'ready' || terminalClearRequestedRef.current) return;
+    if (completedAction.owner) {
+      if (respondentState.ownedRuntime !== completedAction.owner) return;
+      try {
+        if (completedAction.owner.getCompletionGeneration
+          && completionGeneration(completedAction.owner) !== completedAction.generation) return;
+      } catch { return; }
+    }
+    if (!completedRespondentAction(completedAction.result)) return;
     onActionCompletedRef.current?.(completedAction.action, completedAction.result);
-  }, [completedAction, renderMode, submitState.status]);
+  }, [completedAction, renderMode, respondentState, submitState.status]);
 
   const handleSignIn = async (option: IdpOption): Promise<void> => {
     setRespondentState((current) =>
@@ -1086,7 +1089,13 @@ function RespondentController({
                 if (!action) return;
                 if (renderMode === 'surface-slot') {
                   const completed = completedRespondentAction(result);
-                  if (completed) setCompletedAction({ action: completed, result });
+                  if (completed) {
+                    const owner = respondentState.ownedRuntime;
+                    try {
+                      setCompletedAction({ action: completed, result, owner,
+                        generation: owner?.getCompletionGeneration ? completionGeneration(owner) : undefined });
+                    } catch { /* A malformed or retired marker cannot advance a route. */ }
+                  }
                   return;
                 }
                 composition.surfaceRouter?.transitionAfterResponseAction({
@@ -1150,8 +1159,18 @@ function RespondentController({
  * reduce the terminal to its action and rebuild the rest later.
  */
 interface CompletedRespondentAction {
+  readonly owner?: RespondentOwnedRuntime;
+  readonly generation?: string | number;
   readonly action: ResponseAction;
   readonly result: ResponseActionInvocationResult<SubmitResult>;
+}
+
+function completionGeneration(runtime: RespondentOwnedRuntime): string | number {
+  const value = runtime.getCompletionGeneration!();
+  if (typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value))) {
+    throw new Error('Owned action completion generation is unavailable');
+  }
+  return value;
 }
 
 /**
@@ -1477,7 +1496,8 @@ async function createReadyState(
         restoredResponse: draft ? structuredClone(draft) : undefined, activeLocale });
       if (!configured || typeof configured.responseActionInvoker !== 'function'
         || typeof configured.invalidate !== 'function'
-        || typeof configured.dispose !== 'function') {
+        || typeof configured.dispose !== 'function'
+        || (configured.getCompletionGeneration !== undefined && typeof configured.getCompletionGeneration !== 'function')) {
         configured?.dispose?.();
         throw new Error('An owned action runtime must supply its complete execution and lifecycle hooks');
       }
