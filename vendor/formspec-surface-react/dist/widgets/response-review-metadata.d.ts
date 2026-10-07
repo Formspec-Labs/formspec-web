@@ -397,6 +397,54 @@ export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA: {
             readonly type: "string";
             readonly minLength: 1;
         };
+        readonly locale: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly responseHash: {
+            readonly type: "string";
+            readonly pattern: "^[a-f0-9]{64}$";
+        };
+        readonly definitionUrl: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionVersion: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly fields: {
+            readonly type: "object";
+            readonly additionalProperties: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["label"];
+                readonly properties: {
+                    readonly label: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly options: {
+                        readonly type: "array";
+                        readonly items: {
+                            readonly type: "object";
+                            readonly additionalProperties: false;
+                            readonly required: readonly ["value", "label"];
+                            readonly properties: {
+                                readonly value: {
+                                    readonly type: "string";
+                                    readonly minLength: 1;
+                                };
+                                readonly label: {
+                                    readonly type: "string";
+                                    readonly minLength: 1;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
     };
 };
 /** Closed input wrapper; hosts register the maintained native schemas for admission.
@@ -424,6 +472,54 @@ export declare const ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA: {
                     readonly type: "string";
                     readonly minLength: 1;
                 };
+                readonly locale: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly responseHash: {
+                    readonly type: "string";
+                    readonly pattern: "^[a-f0-9]{64}$";
+                };
+                readonly definitionUrl: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionVersion: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly fields: {
+                    readonly type: "object";
+                    readonly additionalProperties: {
+                        readonly type: "object";
+                        readonly additionalProperties: false;
+                        readonly required: readonly ["label"];
+                        readonly properties: {
+                            readonly label: {
+                                readonly type: "string";
+                                readonly minLength: 1;
+                            };
+                            readonly options: {
+                                readonly type: "array";
+                                readonly items: {
+                                    readonly type: "object";
+                                    readonly additionalProperties: false;
+                                    readonly required: readonly ["value", "label"];
+                                    readonly properties: {
+                                        readonly value: {
+                                            readonly type: "string";
+                                            readonly minLength: 1;
+                                        };
+                                        readonly label: {
+                                            readonly type: "string";
+                                            readonly minLength: 1;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
             };
         };
     };
@@ -440,6 +536,21 @@ export declare const ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA: {
         readonly handoffId: {
             readonly type: "string";
             readonly minLength: 1;
+        };
+        readonly status: {
+            readonly enum: readonly ["pending", "ready", "unavailable"];
+        };
+        readonly locale: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly responseHash: {
+            readonly type: "string";
+            readonly pattern: "^[a-f0-9]{64}$";
+        };
+        readonly contextIdentity: {
+            readonly type: "string";
+            readonly pattern: "^[a-f0-9]{64}$";
         };
     };
     readonly allOf: readonly [{
@@ -546,6 +657,54 @@ export declare const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
                 readonly type: "string";
                 readonly minLength: 1;
             };
+            readonly locale: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly responseHash: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
+            };
+            readonly definitionUrl: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionVersion: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly fields: {
+                readonly type: "object";
+                readonly additionalProperties: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["label"];
+                    readonly properties: {
+                        readonly label: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly options: {
+                            readonly type: "array";
+                            readonly items: {
+                                readonly type: "object";
+                                readonly additionalProperties: false;
+                                readonly required: readonly ["value", "label"];
+                                readonly properties: {
+                                    readonly value: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                    readonly label: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
         };
     }];
 };
@@ -618,6 +777,21 @@ export declare const RESPONSE_REVIEW_STATE_UNION_SCHEMA: {
             readonly handoffId: {
                 readonly type: "string";
                 readonly minLength: 1;
+            };
+            readonly status: {
+                readonly enum: readonly ["pending", "ready", "unavailable"];
+            };
+            readonly locale: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly responseHash: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
+            };
+            readonly contextIdentity: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
             };
         };
         readonly allOf: readonly [{
