@@ -515,6 +515,8 @@ select {
 
 .confirmation-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-inline-size: 0;
   gap: 0.65rem;
   border: 1px solid var(--formspec-color-border, #c9d3cd);
   border-radius: 8px;
@@ -529,6 +531,7 @@ select {
 }
 
 .confirmation-panel strong {
+  overflow-wrap: anywhere;
   color: var(--formspec-color-primary, #155e56);
   font-size: 1.35rem;
 }
