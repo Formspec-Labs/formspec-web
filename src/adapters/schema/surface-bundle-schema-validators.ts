@@ -146,11 +146,12 @@ export function createSurfaceDataSourcePayloadValidator(): DataSourcePayloadVali
 }
 
 const SIGNING_PAYLOAD_REFERENCES = new Set([
+  'https://formspec.org/schemas/definition/1.0',
   'https://formspec.org/schemas/response/1.0',
   'https://formspec.org/schemas/common/1.0#/$defs/SigningContent',
 ]);
 
-/** Opt-in ceremony payload profile: local schemas plus two exact bundled canonical references. */
+/** Opt-in review and ceremony payload profile using exact bundled canonical references. */
 export function createSigningDataSourcePayloadValidator(): DataSourcePayloadValidator {
   let pendingAjv: Promise<Ajv2020> | undefined;
   const compiledSchemas = new WeakMap<object, { fingerprint: string; validate: ValidateFunction }>();

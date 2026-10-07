@@ -431,6 +431,16 @@ describe('createSurfaceDataSourcePayloadValidator', () => {
 });
 
 describe('opt-in signing data source canonical reference profile', () => {
+  it('qualifies full canonical Definition review input while retaining closed references and siblings', async () => {
+    const validate = createSigningDataSourcePayloadValidator();
+    const definition = validArtifacts.find(artifact => artifact.artifactKind === 'definition')!.document;
+    const schema = { $ref: 'https://formspec.org/schemas/definition/1.0' };
+    expect(await validate(payloadRequest(schema, definition))).toEqual({ valid: true });
+    expect(await validate(payloadRequest(schema, { ...definition, items: 'invalid' }))).toMatchObject({ valid: false });
+    expect(await validate(payloadRequest({ ...schema, required: ['missing'] }, definition))).toMatchObject({ valid: false });
+    expect(await validate(payloadRequest({ $ref: `${schema.$ref}#/$defs/Item` }, definition))).toMatchObject({ valid: false });
+    expect(await createSurfaceDataSourcePayloadValidator()(payloadRequest(schema, definition))).toMatchObject({ valid: false });
+  });
   it('validates exact SigningContent and nested Response through maintained schemas', async () => {
     const validate = createSigningDataSourcePayloadValidator();
     const contentSchema = { $ref: CONTENT_REF };
