@@ -1,9 +1,8 @@
 import { targetDefinitionMatches, type ComponentDocument, type FormDefinition, type LocaleDocument, type ThemeDocument } from '@formspec-org/types';
 import type { ResponseActionsDocumentInput as ResponseActionsDocument } from '@formspec-org/engine';
 import canonicalize from 'canonicalize';
-import { produceAppGraphValidationReport, type BundleExportAppGraphReportProducerRequest } from '@formspec-org/app-graph';
+import type { BundleExportAppGraphReportProducerRequest } from '@formspec-org/app-graph';
 import type { BundleExport } from '@formspec-org/surface';
-import { loadSurfaceBundleSchemaValidators } from '../schema/surface-bundle-schema-validators.ts';
 import type { DefinitionSource } from '../../ports/definition-source.ts';
 
 interface PinnedFile { path: string; sha256: string }
@@ -123,6 +122,10 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
       }
       if (Object.hasOwn(documents, ref.url)) throw new Error('Package Component has ambiguous inline and external sources');
     }
+    const [{ produceAppGraphValidationReport }, { loadSurfaceBundleSchemaValidators }] = await Promise.all([
+      import('@formspec-org/app-graph'),
+      import('../schema/surface-bundle-schema-validators.ts'),
+    ]);
     const result = await produceAppGraphValidationReport({
       ...this.nativeValidation, manifest: candidate.manifest,
       schemaValidators: await loadSurfaceBundleSchemaValidators(), source, digest: `sha256:${digest}`,
