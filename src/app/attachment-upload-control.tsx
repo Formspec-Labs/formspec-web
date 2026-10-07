@@ -94,14 +94,24 @@ function formatSize(bytes: number): string {
 export function FormspecWebAttachmentControl({ field, node }: FieldComponentProps) {
   const attachmentStore = useAttachmentStore();
   const graphAttrs = projectionMetadataAttrs(node);
-  const accept = (node.props?.accept as string | undefined) ?? undefined;
-  const multiple = node.props?.multiple === true;
-  const dragDrop = node.props?.dragDrop !== false;
+  const config = { ...node.presentation?.widgetConfig, ...node.props };
+  const accept = typeof config.accept === 'string' ? config.accept : undefined;
+  const multiple = config.multiple === true;
+  const dragDrop = config.dragDrop !== false;
   // L-2: default tab-killer guard. Adopters override per-field via props.maxSize.
-  const maxSize = typeof node.props?.maxSize === 'number'
-    ? node.props.maxSize
-    : ATTACHMENT_DEFAULT_MAX_SIZE_BYTES;
+  const maxSize = typeof config.maxSize === 'number'
+    ? config.maxSize
+    : typeof config.maxSizeMb === 'number'
+      ? config.maxSizeMb * 1024 * 1024
+      : ATTACHMENT_DEFAULT_MAX_SIZE_BYTES;
 
+  const showError = !!(field.error && field.touched);
+  const describedBy = [
+    field.description ? `${field.id}-desc` : '',
+    field.hint ? `${field.id}-hint` : '',
+    showError ? `${field.id}-error` : '',
+  ].filter(Boolean).join(' ') || undefined;
+  const fieldError = <p id={`${field.id}-error`} className="formspec-error" aria-live="polite">{showError ? field.error : ''}</p>;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -120,6 +130,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const [activeRedaction, setActiveRedaction] = useState<RedactionRect | null>(null);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       cameraRequestIdRef.current += 1;
@@ -144,11 +155,8 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 
   const writeBack = useCallback(
     (next: AttachmentRef[]): void => {
-      if (multiple) {
-        field.setValue(next);
-      } else {
-        field.setValue(next[0] ?? null);
-      }
+      const values = next.map(ref => ({ ...ref, url: ref.uri, contentType: ref.mimeType }));
+      field.setValue(multiple ? values : values[0] ?? null);
     },
     [field, multiple],
   );
@@ -536,10 +544,8 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       multiple={multiple}
       aria-invalid={!!(field.error && field.touched)}
       aria-required={field.required}
-      aria-describedby={[
-        field.description ? `${field.id}-desc` : '',
-        field.hint ? `${field.id}-hint` : '',
-      ].filter(Boolean).join(' ') || undefined}
+      aria-describedby={describedBy}
+      tabIndex={-1}
       onChange={handleInputChange}
     />
   );
@@ -723,12 +729,13 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 
   if (!dragDrop) {
     return (
-      <>
+      <div className="formspec-field" data-name={field.path} style={node.style}>
         {fieldIntroduction}
-        {hiddenInput}
         <button
           type="button"
           className="formspec-file-browse-btn formspec-focus-ring formspec-button-secondary"
+          aria-invalid={showError}
+          aria-describedby={describedBy}
           onClick={() => fileInputRef.current?.click()}
           disabled={field.readonly}
           {...graphAttrs}
@@ -743,17 +750,19 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         >
           Use camera
         </button>
+        {hiddenInput}
         {cameraPanel}
         {imageDraftPanel}
         {refList}
         {pendingList}
         {deferredCopy}
-      </>
+        {fieldError}
+      </div>
     );
   }
 
   return (
-    <>
+    <div className="formspec-field" data-name={field.path} style={node.style}>
       {fieldIntroduction}
       <div
         className={`formspec-file-drop-zone${isDragOver ? ' formspec-file-drop-zone--active' : ''}`}
@@ -780,6 +789,8 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           <button
             type="button"
             className="formspec-file-browse-btn formspec-focus-ring formspec-button-secondary"
+          aria-invalid={showError}
+          aria-describedby={describedBy}
             onClick={() => fileInputRef.current?.click()}
             disabled={field.readonly}
           >
@@ -801,7 +812,8 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       {refList}
       {pendingList}
       {deferredCopy}
-    </>
+      {fieldError}
+    </div>
   );
 }
 

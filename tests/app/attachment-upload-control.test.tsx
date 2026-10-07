@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { act, useEffect, useState } from 'react';
+import { act, StrictMode, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { LayoutNode } from '@formspec-org/layout';
 import type { UseFieldResult } from '@formspec-org/react';
@@ -424,6 +424,25 @@ describe('FormspecWebAttachmentControl', () => {
     expect(harness.readValue()).toBeNull();
   });
 
+  it('uses resolved Theme upload config and preserves explicit Component overrides', async () => {
+    const store = stubAttachmentStore();
+    const harness = makeFieldHarness();
+    const themedNode = { ...makeNode(), presentation: { widgetConfig: { accept: 'image/png', multiple: true, maxSizeMb: 1 } } } as LayoutNode;
+    render(<AttachmentStoreProvider value={store}><FormspecWebAttachmentControl field={harness.field} node={themedNode} /></AttachmentStoreProvider>);
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.accept).toBe('image/png');
+    expect(input.multiple).toBe(true);
+    const txt = await fileFromBytes(new Uint8Array([1]), 'note.txt', 'text/plain');
+    Object.defineProperty(input, 'files', { value: [txt], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    expect(container?.textContent).toContain('file type is not accepted');
+    expect(harness.readValue()).toBeNull();
+    render(<AttachmentStoreProvider value={store}><FormspecWebAttachmentControl field={harness.field} node={{ ...themedNode, props: { accept: 'application/pdf', multiple: false } }} /></AttachmentStoreProvider>);
+    const override = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(override.accept).toBe('application/pdf');
+    expect(override.multiple).toBe(false);
+  });
+
   it('client-side rejects a file whose MIME does not match `accept` (L-2)', async () => {
     const store = stubAttachmentStore();
     const harness = makeFieldHarness();
@@ -481,17 +500,17 @@ describe('FormspecWebAttachmentControl', () => {
     expect(harness.readValue()).toEqual(existingAttachment);
   });
 
-  it('opens image review for a file that matches `accept` via wildcard before upload', async () => {
+  it('opens image review for a file that matches `accept` under StrictMode before upload', async () => {
     stubLoadedImage();
     const store = stubAttachmentStore();
     const harness = makeFieldHarness();
     render(
-      <AttachmentStoreProvider value={store}>
+      <StrictMode><AttachmentStoreProvider value={store}>
         <FormspecWebAttachmentControl
           field={harness.field}
           node={makeNode({ accept: 'image/*' })}
         />
-      </AttachmentStoreProvider>,
+      </AttachmentStoreProvider></StrictMode>,
     );
 
     const png = await fileFromBytes(new Uint8Array([1]), 'photo.png', 'image/png');
