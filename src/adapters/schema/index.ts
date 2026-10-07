@@ -1,5 +1,6 @@
 export {
   createSurfaceDataSourcePayloadValidator,
+  createSigningDataSourcePayloadValidator,
   loadSurfaceBundleSchemaValidators,
   loadCanonicalSigningContentValidator,
   validateCanonicalFormResponse,

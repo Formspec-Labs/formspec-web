@@ -145,6 +145,62 @@ export function createSurfaceDataSourcePayloadValidator(): DataSourcePayloadVali
   };
 }
 
+const SIGNING_PAYLOAD_REFERENCES = new Set([
+  'https://formspec.org/schemas/response/1.0',
+  'https://formspec.org/schemas/common/1.0#/$defs/SigningContent',
+]);
+
+/** Opt-in ceremony payload profile: local schemas plus two exact bundled canonical references. */
+export function createSigningDataSourcePayloadValidator(): DataSourcePayloadValidator {
+  let pendingAjv: Promise<Ajv2020> | undefined;
+  const compiledSchemas = new WeakMap<object, { fingerprint: string; validate: ValidateFunction }>();
+  return async ({ schema, value }) => {
+    if (!isSchemaObject(schema) || containsUnsupportedSigningReference(schema)) {
+      return payloadValidationFailure('The signing payload schema uses an unsupported reference or schema identity.');
+    }
+    try {
+      // Capture before awaiting the compiler; later caller mutations cannot change this admission.
+      const snapshot = structuredClone(schema);
+      const fingerprint = JSON.stringify(snapshot);
+      let compiled = compiledSchemas.get(schema);
+      if (!compiled || compiled.fingerprint !== fingerprint) {
+        pendingAjv ??= loadCanonicalSchemaAjv().then(({ ajv }) => ajv).catch((error: unknown) => {
+          pendingAjv = undefined;
+          throw error;
+        });
+        const ajv = await pendingAjv;
+        if (!ajv.validateSchema(snapshot)) return payloadValidationFailure('The signing payload schema is invalid.');
+        compiled = { fingerprint, validate: ajv.compile(snapshot) };
+        compiledSchemas.set(schema, compiled);
+      }
+      return compiled.validate(value) ? Object.freeze({ valid: true as const })
+        : payloadValidationFailure('The data source payload does not match its declared schema.');
+    } catch {
+      return payloadValidationFailure('The signing payload schema is unsupported.');
+    }
+  };
+}
+
+function containsUnsupportedSigningReference(schema: object): boolean {
+  const pending: unknown[] = [schema];
+  const visited = new WeakSet<object>();
+  while (pending.length) {
+    const current = pending.pop();
+    if (typeof current !== 'object' || current === null || visited.has(current)) continue;
+    visited.add(current);
+    if (!Array.isArray(current)) {
+      const record = current as Record<string, unknown>;
+      if (['$id', '$anchor', '$dynamicAnchor', '$dynamicRef', '$recursiveRef', '$async'].some(keyword => keyword in record)) return true;
+      if ('$ref' in record) {
+        const ref = record.$ref;
+        if (typeof ref !== 'string' || (!ref.startsWith('#') && !SIGNING_PAYLOAD_REFERENCES.has(ref))) return true;
+      }
+    }
+    pending.push(...Object.values(current));
+  }
+  return false;
+}
+
 function getCompiledArtifactValidators(): Promise<CompiledArtifactValidators> {
   // A failed load or compile must not poison every later admission, so the
   // memo only survives success.
@@ -156,6 +212,21 @@ function getCompiledArtifactValidators(): Promise<CompiledArtifactValidators> {
 }
 
 async function compileArtifactValidators(): Promise<CompiledArtifactValidators> {
+  const { ajv, artifactSchemas } = await loadCanonicalSchemaAjv();
+
+  const entries = artifactSchemas.map(([artifactKind, schema]) => {
+    const validate = ajv.getSchema(schema.$id);
+    if (!validate) {
+      throw new Error(`Canonical schema '${schema.$id}' did not compile.`);
+    }
+    return [artifactKind, Object.freeze({ schemaId: schema.$id, validate })] as const;
+  });
+  compiledResponseValidator = ajv.getSchema('https://formspec.org/schemas/response/1.0');
+  compiledSigningContentValidator = ajv.getSchema('https://formspec.org/schemas/common/1.0#/$defs/SigningContent');
+  return Object.freeze(Object.fromEntries(entries)) as CompiledArtifactValidators;
+}
+
+async function loadCanonicalSchemaAjv() {
   const { ARTIFACT_SCHEMA_DOCUMENTS, DEPENDENCY_SCHEMA_DOCUMENTS, RESPONSE_SCHEMA_DOCUMENT } = await import(
     './canonical-schemas.ts'
   );
@@ -170,23 +241,9 @@ async function compileArtifactValidators(): Promise<CompiledArtifactValidators> 
     ajv.addSchema(schema);
   }
 
-  const entries = artifactSchemas.map(([artifactKind, schema]) => {
-    const validate = ajv.getSchema(schema.$id);
-    if (!validate) {
-      throw new Error(`Canonical schema '${schema.$id}' did not compile.`);
-    }
-    return [
-      artifactKind,
-      Object.freeze({
-        schemaId: schema.$id,
-        validate,
-      }),
-    ] as const;
-  });
-
-  compiledResponseValidator = ajv.getSchema(canonicalSchema(RESPONSE_SCHEMA_DOCUMENT).$id);
-  compiledSigningContentValidator = ajv.getSchema('https://formspec.org/schemas/common/1.0#/$defs/SigningContent');
-  return Object.freeze(Object.fromEntries(entries)) as CompiledArtifactValidators;
+  // Response is currently a dependency; retain explicit registration if that inventory changes.
+  if (!ajv.getSchema(canonicalSchema(RESPONSE_SCHEMA_DOCUMENT).$id)) ajv.addSchema(canonicalSchema(RESPONSE_SCHEMA_DOCUMENT));
+  return { ajv, artifactSchemas };
 }
 
 function createCanonicalAjv(): Ajv2020 {

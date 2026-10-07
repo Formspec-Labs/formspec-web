@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { sampleFormResponse } from '../../../src/adapter-conformance/fixtures.ts';
 import type {
   AppGraphSchemaValidator,
@@ -6,11 +6,36 @@ import type {
 } from '@formspec-org/app-graph';
 import {
   createSurfaceDataSourcePayloadValidator,
+  createSigningDataSourcePayloadValidator,
   loadSurfaceBundleSchemaValidators,
   loadCanonicalSigningContentValidator,
 } from '../../../src/adapters/schema/index.ts';
 
 const DEFINITION_URL = 'https://example.gov/forms/intake';
+const RESPONSE_REF = 'https://formspec.org/schemas/response/1.0';
+const CONTENT_REF = 'https://formspec.org/schemas/common/1.0#/$defs/SigningContent';
+const signingContent = {
+  source: { ref: `${DEFINITION_URL}#/extensions/x-formspec-signing-content/entries/en`, version: '1' },
+  locale: 'en', documentId: 'demo', signingIntent: 'urn:example:sign', declaration: 'Declaration.',
+  electronicConsent: { textRef: 'urn:example:consent', version: '1', text: 'Consent.', controlLabel: 'I agree' },
+  paperAlternative: 'Paper option.', affirmationText: 'Affirmation.', delegatedSigningNotice: 'Delegated notice.',
+};
+
+// Exact closed signing-result structure authored by the ceremony candidate.
+const signingResultSchema = {
+  oneOf: [
+    { type: 'object', additionalProperties: false, required: ['state'], properties: { state: { const: 'unsigned' } } },
+    { type: 'object', additionalProperties: false, required: ['state', 'response', 'draft', 'verification'], properties: {
+      state: { const: 'signed' }, response: { $ref: RESPONSE_REF },
+      draft: { type: 'object', additionalProperties: false, required: ['id', 'version'], properties: {
+        id: { type: 'string', minLength: 1 }, version: { type: 'integer', minimum: 0 },
+      } },
+      verification: { type: 'object', additionalProperties: false, required: ['mode', 'provider', 'keyId'], properties: {
+        mode: { const: 'delegated-service-key' }, provider: { type: 'string', minLength: 1 }, keyId: { type: 'string', minLength: 1 },
+      } },
+    } },
+  ],
+};
 
 const validArtifacts = Object.freeze([
   {
@@ -402,6 +427,70 @@ describe('createSurfaceDataSourcePayloadValidator', () => {
     expect(await validate(payloadRequest(schema, {}))).toMatchObject({
       valid: false,
     });
+  });
+});
+
+describe('opt-in signing data source canonical reference profile', () => {
+  it('validates exact SigningContent and nested Response through maintained schemas', async () => {
+    const validate = createSigningDataSourcePayloadValidator();
+    const contentSchema = { $ref: CONTENT_REF };
+    expect(await validate(payloadRequest(contentSchema, signingContent))).toEqual({ valid: true });
+    for (const invalid of [{ ...signingContent, declaration: '' }, { ...signingContent, extra: true }]) {
+      expect(await validate(payloadRequest(contentSchema, invalid))).toMatchObject({ valid: false });
+    }
+    const { RESPONSE_SCHEMA_DOCUMENT } = await import('../../../src/adapters/schema/canonical-schemas.ts');
+    const signature = RESPONSE_SCHEMA_DOCUMENT.properties.authoredSignatures.examples[0][0];
+    const signedResponse = { ...sampleFormResponse, id: signature.signedPayload.responseId, authoredSignatures: [signature] };
+    const signed = { state: 'signed', response: signedResponse, draft: { id: 'owned', version: 4 },
+      verification: { mode: 'delegated-service-key', provider: 'urn:provider', keyId: 'key' } };
+    expect(await validate(payloadRequest(signingResultSchema, { state: 'unsigned' }))).toEqual({ valid: true });
+    expect(await validate(payloadRequest(signingResultSchema, signed))).toEqual({ valid: true });
+    for (const invalid of [
+      { ...signed, response: { ...sampleFormResponse, data: null } },
+      { ...signed, response: { ...sampleFormResponse, id: 'response', authoredSignatures: [] } },
+      { ...signed, extra: true }, { ...signed, draft: { ...signed.draft, extra: true } },
+    ]) expect(await validate(payloadRequest(signingResultSchema, invalid))).toMatchObject({ valid: false });
+    expect(await createSurfaceDataSourcePayloadValidator()(payloadRequest(contentSchema, signingContent))).toMatchObject({ valid: false });
+    expect(await createSurfaceDataSourcePayloadValidator()(payloadRequest(signingResultSchema, signed))).toMatchObject({ valid: false });
+  });
+
+  it('applies sibling constraints and recompiles changed local constraints without cross-instance contamination', async () => {
+    const validate = createSigningDataSourcePayloadValidator();
+    const sibling = { $ref: RESPONSE_REF, required: ['missing'] };
+    expect(await validate(payloadRequest(sibling, sampleFormResponse))).toMatchObject({ valid: false });
+    const schema = { type: 'object', properties: { value: { type: 'string', minLength: 1 } } };
+    expect(await validate(payloadRequest(schema, { value: 'a' }))).toEqual({ valid: true });
+    schema.properties.value.minLength = 2;
+    expect(await validate(payloadRequest(schema, { value: 'a' }))).toMatchObject({ valid: false });
+    expect(await createSigningDataSourcePayloadValidator()(payloadRequest(schema, { value: 'a' }))).toMatchObject({ valid: false });
+    expect(await validate(payloadRequest({ $defs: { value: { type: 'string' } }, $ref: '#/$defs/value' }, 'local'))).toEqual({ valid: true });
+  });
+
+  it.each([
+    { $ref: `${RESPONSE_REF}#/$defs/AuthoredSignature` }, { $ref: 'https://formspec.org/schemas/common/1.0' },
+    { $ref: 'https://formspec.org/schemas/common/1.0#/$defs/SigningContent/unknown' },
+    { properties: { nested: { $ref: 'https://example.test/remote' } } }, { $ref: './response.json' },
+    { $dynamicRef: '#local' }, { $dynamicRef: RESPONSE_REF }, { $id: RESPONSE_REF, type: 'object' },
+    { properties: { nested: { $id: 'https://example.test/base', $ref: RESPONSE_REF } } },
+    { $anchor: 'SigningContent', type: 'object' }, { $async: true, type: 'object' },
+  ])('refuses unsupported references/identity %j without fetching', async schema => {
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    try {
+      expect(await createSigningDataSourcePayloadValidator()(payloadRequest(schema, {}))).toMatchObject({ valid: false });
+      expect(fetch).not.toHaveBeenCalled();
+    } finally { fetch.mockRestore(); }
+  });
+
+  it('rechecks references before using a cached schema and snapshots before asynchronous loading', async () => {
+    const validate = createSigningDataSourcePayloadValidator();
+    const schema: Record<string, unknown> = { type: 'object' };
+    const first = validate(payloadRequest(schema, {}));
+    schema.$ref = 'https://example.test/remote';
+    expect(await first).toEqual({ valid: true });
+    expect(await validate(payloadRequest(schema, {}))).toMatchObject({ valid: false });
+    delete schema.$ref;
+    schema.$id = RESPONSE_REF;
+    expect(await validate(payloadRequest(schema, {}))).toMatchObject({ valid: false });
   });
 });
 
