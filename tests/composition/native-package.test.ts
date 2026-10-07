@@ -87,7 +87,7 @@ describe('explicit native package composition', () => {
   it('preflights a submitted owned draft on fresh package boot without mounting an engine or issuing another credential/write', async () => {
     const test = await fixture(); await initFormspecEngine();
     const first = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
-    await first.resumeSubmitted!(); expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
+    await expect(first.resumeSubmitted!()).resolves.toBe('absent'); expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
     const key = { formUrl: test.definition.url, formVersion: test.definition.version };
     const engine = createFormEngine(test.definition); first.localeDocuments.forEach(locale => engine.loadLocale(locale)); engine.setLocale('es-US');
     engine.setValue('declarationAcknowledged', true);
@@ -100,7 +100,7 @@ describe('explicit native package composition', () => {
     const count = test.requests.length;
     const fresh = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
     const configureForm = vi.spyOn(fresh.host, 'configureRuntime'); const configureSubmitted = vi.spyOn(fresh.host, 'configureSubmittedRuntime');
-    await Promise.all([fresh.resumeSubmitted!(), fresh.resumeSubmitted!()]);
+    await expect(Promise.all([fresh.resumeSubmitted!(), fresh.resumeSubmitted!()])).resolves.toEqual(['submitted', 'submitted']);
     expect(configureForm).not.toHaveBeenCalled(); expect(configureSubmitted).toHaveBeenCalledOnce();
     expect(configureSubmitted.mock.calls[0][0].state).toEqual({ kind: 'submitted', response: signed, draft: { id: 'fixture-draft', version: 6 },
       subjectRef: 'anon:fixture', formVersionId: 'actual-publication' });
@@ -112,6 +112,30 @@ describe('explicit native package composition', () => {
     expect(ownedRead[0].headers.get('authorization')).toBe('Bearer fixture-token');
     for (const name of ['tenant', 'workspace', 'cell']) expect(ownedRead[0].headers.get(`x-formspec-${name}-id`)).toBe('fixture');
     expect(ownedRead[0].headers.get('x-formspec-environment-id')).toBe('test'); fresh.host.dispose();
+  });
+  it('reports a retained active draft separately from absent access without terminal initialization or writes', async () => {
+    const test = await fixture();
+    const initial = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version,
+      status: 'in-progress' as const };
+    await initial.composition.draftStore.save({ formUrl: test.definition.url, formVersion: test.definition.version }, response); initial.host.dispose();
+    const fresh = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    const configureSubmitted = vi.spyOn(fresh.host, 'configureSubmittedRuntime'); const count = test.requests.length;
+    await expect(Promise.all([fresh.resumeSubmitted!(), fresh.resumeSubmitted!()])).resolves.toEqual(['active', 'active']);
+    expect(configureSubmitted).not.toHaveBeenCalled(); expect(fresh.host.getSnapshot().submitted).toBeUndefined();
+    expect(test.requests.slice(count)).toHaveLength(1); expect(test.requests[count].method).toBe('GET'); fresh.host.dispose();
+  });
+  it('retains a refused preflight failure instead of reporting absent or active access', async () => {
+    const test = await fixture();
+    const initial = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version };
+    await initial.composition.draftStore.save({ formUrl: test.definition.url, formVersion: test.definition.version }, response); initial.host.dispose();
+    test.setDraft(response, 'unknown', 1);
+    const fresh = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    const count = test.requests.length; const first = fresh.resumeSubmitted!();
+    await expect(first).rejects.toThrow(/qualified publication/);
+    expect(fresh.resumeSubmitted!()).toBe(first); await expect(fresh.resumeSubmitted!()).rejects.toThrow();
+    expect(test.requests.slice(count)).toHaveLength(1); expect(fresh.host.getSnapshot().submitted).toBeUndefined(); fresh.host.dispose();
   });
   it('requires config and explicit package URL, leaving ordinary preview unsigned', async () => {
     const test = await fixture();

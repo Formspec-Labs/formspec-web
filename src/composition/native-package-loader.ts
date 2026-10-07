@@ -129,7 +129,7 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
     invalidateAuthority: (_reason, key) => { if (key) cohort.invalidateResponseSigningScope!(key); },
     reviewResponseDigest: handoffHash, canonicalResponseHandoffBytes: handoffBytes,
   });
-  let resuming: Promise<void> | undefined;
+  let resuming: ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>> | undefined;
   return { composition, host, componentDocument, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale,
     resumeSubmitted: () => resuming ??= (async () => {
       // Validate retained credentials through the bridge; recovery never issues an owner.
@@ -139,6 +139,7 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
       const draftKey = { formUrl: definition.url, formVersion: definition.version };
       const state = await cohort.draftStore.readState!(draftKey);
       if (state?.kind === 'submitted') await host.configureSubmittedRuntime({ definition, draftKey, claim: null, state });
+      return state?.kind ?? 'absent';
     })() };
 }
 async function qualifyRoles(bundle: BundleExport, pins: NativePackageSigningConfig): Promise<Record<ResponseActionRole, QualifiedResponseActionRole>> {

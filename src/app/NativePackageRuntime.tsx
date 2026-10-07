@@ -33,7 +33,7 @@ export function NativePackageRoot({ config }: { config: FormspecWebConfig }) {
 }
 
 export function NativePackageRuntime({ composition, config }: { composition: Composition; config: FormspecWebConfig }) {
-  const [state, setState] = useState<{ owner?: Composition; boot?: NativePackageBoot; failed?: boolean }>({});
+  const [state, setState] = useState<{ owner?: Composition; boot?: NativePackageBoot; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; failed?: boolean }>({});
   const lifetime = useMemo(() => ({ generation: 0 }), [composition]);
   const [location, navigate] = useBrowserLocation(window.location.pathname);
   const selection = useMemo(() => window.location.search, [composition]);
@@ -55,8 +55,8 @@ export function NativePackageRuntime({ composition, config }: { composition: Com
     if (!loading) setState({ owner: composition, failed: true });
     void loading?.then(async value => {
       boot = value;
-      await value.resumeSubmitted?.();
-      if (active) setState({ owner: composition, boot: value });
+      const outcome = await value.resumeSubmitted?.();
+      if (active) setState({ owner: composition, boot: value, outcome });
       else if (lifetime.generation === generation) value.host.dispose();
     }).catch(() => { if (lifetime.generation === generation) boot?.host.dispose(); if (active) setState({ owner: composition, failed: true }); });
     return () => {
@@ -68,7 +68,7 @@ export function NativePackageRuntime({ composition, config }: { composition: Com
   }, [composition, lifetime]);
 
   if (state.owner !== composition || !state.boot) return <NativePackageStatus failed={state.owner === composition && state.failed} />;
-  return <NativePackageFrame boot={state.boot} selection={selection}>
+  return <NativePackageFrame boot={state.boot} selection={selection} location={location} outcome={state.outcome}>
     <NativePackageRespondentHost host={state.boot.host} composition={state.boot.composition}
     config={config} componentDocument={state.boot.componentDocument} localeDocuments={state.boot.localeDocuments}
     location={location} onNavigate={onNavigate} />
@@ -83,7 +83,7 @@ function NativePackageStatus({ failed }: { failed?: boolean }) {
 }
 
 /** Recovery controls use the qualified Locale and the host's scoped authority. */
-function NativePackageFrame({ boot, selection, children }: { boot: NativePackageBoot; selection: string; children: React.ReactNode }) {
+function NativePackageFrame({ boot, selection, location, outcome, children }: { boot: NativePackageBoot; selection: string; location: string; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; children: React.ReactNode }) {
   const state = useSyncExternalStore(boot.host.subscribe, boot.host.getSnapshot, boot.host.getSnapshot);
   const [operation, setOperation] = useState<'idle' | 'locale' | 'clearing' | 'cleared' | 'clear-error' | 'locale-error'>('idle');
   const heading = useRef<HTMLHeadingElement>(null);
@@ -94,9 +94,17 @@ function NativePackageFrame({ boot, selection, children }: { boot: NativePackage
   const options = definition ? localeOptionsForDefinition(definition, boot.localeDocuments) : [];
   const confirmation = state.submitted ?? (state.controller?.phase === 'submitted'
     && state.controller.confirmation?.recordKind === 'response' ? state.controller.confirmation : undefined);
+  let startupRoute: ReturnType<typeof boot.host.getStartupRoute> | undefined;
+  let routeFailed = false;
+  try { startupRoute = boot.host.getStartupRoute(location); } catch { routeFailed = true; }
+  const startupBlocked = !confirmation && !state.cleared && outcome !== 'submitted'
+    && !!startupRoute?.requiresHostState && !state.runtime;
+  const preparing = startupBlocked && (!!state.controller?.prepared || state.controller?.phase === 'prepare');
+  const formTitle = locale?.strings['$form.title'] ?? state.formTitle;
+  const entryLabel = startupRoute?.entryTitle ?? formTitle;
   const localeLocked = !!confirmation || !!state.controller?.signed || !!state.controller?.confirmation
     || state.controller?.phase === 'sign' || state.controller?.phase === 'submit';
-  useEffect(() => { if (operation === 'cleared') heading.current?.focus(); }, [operation]);
+  useEffect(() => { if (operation === 'cleared' || startupBlocked && !preparing) heading.current?.focus(); }, [operation, startupBlocked, preparing]);
   async function changeLocale(code: string) {
     if (operationPending.current) return;
     operationPending.current = true; setOperation('locale');
@@ -111,6 +119,7 @@ function NativePackageFrame({ boot, selection, children }: { boot: NativePackage
     catch { setOperation('clear-error'); }
     finally { operationPending.current = false; }
   }
+  if (routeFailed && !confirmation && operation !== 'cleared') return <NativePackageStatus failed />;
   return <>
     <div className="respondent-toolbar">
       <div className="respondent-toolbar__group" role="group" aria-label={text('form.language')}>
@@ -128,10 +137,13 @@ function NativePackageFrame({ boot, selection, children }: { boot: NativePackage
     {operation === 'cleared' ? <main className="shell__status">
       <h1 tabIndex={-1} ref={heading}>{text('receipt.clearedTitle')}</h1>
       <p>{text('receipt.clearedDetail')}</p>
-      <a className="locale-button" href={`/${selection}`}>{text('draft.startCurrent')}</a>
+      {startupRoute ? <a className="locale-button" href={`${startupRoute.entryHref}${selection}`}>{entryLabel}</a> : null}
     </main> : state.cleared ? null : confirmation ? <main className="shell__status">
       <ConfirmationPanel confirmation={confirmation} resolveChromeText={text} pendingFilingAndSigning={false}
         focusOnMount onClearTerminal={clear} terminalClearState={{ status: operation === 'clearing' ? 'clearing' : 'idle' }} />
+    </main> : startupBlocked ? <main className="shell__status" role="status" aria-busy={preparing}>
+      <h1 ref={heading} tabIndex={-1}>{formTitle}</h1>
+      {!preparing ? <a className="locale-button" href={`${startupRoute!.entryHref}${selection}`}>{entryLabel}</a> : null}
     </main> : children}
   </>;
 }

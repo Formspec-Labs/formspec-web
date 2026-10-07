@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dereferenceBundleExport, type BundleExport } from '@formspec-org/surface';
+import { UI_STRINGS } from '@formspec-org/layout';
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
 import { NativePackageRoot, NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
 import type { NativePackageBoot } from '../../src/composition/native-package.ts';
@@ -27,6 +28,7 @@ function fixture() {
   const listeners = new Set<() => void>();
   const emit = () => { for (const listener of listeners) listener(); };
   const host = {
+    getStartupRoute: () => ({ entryHref: '/', entryTitle: undefined, requiresHostState: false }),
     bundle, moduleId: 'x-demo-signing', reviewOptions: {}, configureRuntime: vi.fn(), widgetExecutor: vi.fn(),
     dispose: vi.fn(), getSnapshot: () => state, subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     selectLocale: vi.fn(async (locale: string) => { state = { ...state, locale }; emit(); }),
@@ -45,6 +47,7 @@ describe('native package boot and scoped recovery', () => {
     test.boot.resumeSubmitted = vi.fn(async () => {
       await gate.promise;
       test.publish({ locale: 'es-US', submitted: { recordKind: 'response', referenceNumber: 'actual-response-id' } });
+      return 'submitted' as const;
     });
     const print = vi.fn(); Object.defineProperty(window, 'print', { configurable: true, value: print });
     render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
@@ -70,7 +73,7 @@ describe('native package boot and scoped recovery', () => {
     await screen.findByRole('alert'); expect(test.host.dispose).toHaveBeenCalled();
     expect(screen.queryByTestId('native-route')).toBeNull(); expect(screen.queryByText('private-state-mismatch')).toBeNull();
     mounted.unmount();
-    const cancelled = fixture(); const gate = deferred<void>(); cancelled.boot.resumeSubmitted = () => gate.promise;
+    const cancelled = fixture(); const gate = deferred<void>(); cancelled.boot.resumeSubmitted = async () => { await gate.promise; return 'absent'; };
     const pending = render(<NativePackageRuntime composition={cancelled.composition} config={departmentAppProfile} />);
     await waitFor(() => expect(cancelled.load).toHaveBeenCalled()); pending.unmount();
     await act(async () => gate.resolve()); expect(cancelled.host.dispose).toHaveBeenCalled();
@@ -85,6 +88,38 @@ describe('native package boot and scoped recovery', () => {
     expect(test.host.dispose).not.toHaveBeenCalled();
     await act(async () => second.resolve());
     await screen.findByTestId('native-route'); expect(test.host.dispose).not.toHaveBeenCalled();
+  });
+  it.each(['absent', 'active'] as const)('guards %s startup on a state-dependent route until explicit authored-entry navigation', async outcome => {
+    window.history.replaceState(null, '', '/review-sign?form=selected&package=%2Fpackage.json');
+    const test = fixture(); test.boot.resumeSubmitted = async () => outcome;
+    test.host.getStartupRoute = pathname => ({ entryHref: '/authored-start', entryTitle: 'Start form', requiresHostState: pathname !== '/authored-start' });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    const link = await screen.findByRole('link', { name: 'Start form' });
+    expect(link.getAttribute('href')).toBe('/authored-start?form=selected&package=%2Fpackage.json');
+    expect(screen.queryByTestId('native-route')).toBeNull(); expect(observed.props).toBeUndefined();
+    expect(screen.queryByText(UI_STRINGS['receipt.clearedDetail'])).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Passport renewal' }));
+    act(() => { window.history.replaceState(null, '', link.getAttribute('href')!); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await screen.findByTestId('native-route'); expect(window.location.pathname).toBe('/authored-start');
+    expect(test.boot.resumeSubmitted).toBeDefined(); expect(test.load).toHaveBeenCalledOnce();
+  });
+  it('shows a preparing status for genuinely owned pending delivery despite a stale absent boot outcome', async () => {
+    window.history.replaceState(null, '', '/review-sign');
+    const test = fixture(); test.boot.resumeSubmitted = async () => 'absent';
+    test.host.getStartupRoute = () => ({ entryHref: '/start', entryTitle: 'Start form', requiresHostState: true });
+    test.publish({ locale: 'es-US', controller: { phase: 'prepared', owned: true, prepared: {} } as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']> });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByRole('heading', { name: 'Renovación de pasaporte' });
+    expect(screen.getByRole('status').getAttribute('aria-busy')).toBe('true'); expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.queryByTestId('native-route')).toBeNull();
+    act(() => test.publish({ runtime: {} as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['runtime']> }));
+    await screen.findByTestId('native-route');
+  });
+  it('refuses an unavailable admitted entry once without mounting state-dependent widgets', async () => {
+    window.history.replaceState(null, '', '/review-sign'); const test = fixture(); test.boot.resumeSubmitted = async () => 'absent';
+    test.host.getStartupRoute = () => { throw new Error('entry-parameter-refusal'); };
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByRole('alert'); expect(screen.queryByTestId('native-route')).toBeNull(); expect(screen.queryByRole('link')).toBeNull();
   });
   it('keeps one package owner and selection query through authored navigation and browser history', async () => {
     window.history.replaceState(null, '', '/?form=public-form&package=%2Fpackage.json');
@@ -108,7 +143,7 @@ describe('native package boot and scoped recovery', () => {
     const heading = await screen.findByRole('heading', { name: 'Acceso guardado borrado' });
     expect(document.activeElement).toBe(heading); expect(test.host.clearDraftAccess).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('native-route')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Borrar el acceso guardado y empezar de nuevo' }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('link', { name: 'Renovación de pasaporte' }).getAttribute('href')).toBe('/');
   });
   it('refuses a missing or failed acquisition without exposing internal errors', async () => {
     const composition = createStubComposition();

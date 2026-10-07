@@ -9,7 +9,7 @@ import { createFormEngine, hashSigningContent } from '@formspec-org/engine/rende
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { FormspecForm, createSemanticControlRegistry } from '@formspec-org/react';
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
-import type { ComponentDocument, LocaleDocument, FormResponse, SigningContent } from '@formspec-org/types';
+import type { ComponentDocument, LocaleDocument, FormResponse, SigningContent, SurfaceDocument } from '@formspec-org/types';
 import { NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
 import { AnonymousSessionBridge } from '../../src/adapters/http/anonymous-session.ts';
 import { delegatedSignedResponseFixture } from '../adapters/http/delegated-signed-response-fixture.ts';
@@ -42,7 +42,7 @@ afterEach(() => { cleanup(); observed.forms.length = 0; observed.real = false; v
 function fixture() {
   const configureRuntime = vi.fn(); const dispose = vi.fn();
   const state = { generation: 0, sessionGeneration: 0, locale: 'en', formTitle: '', cleared: false, controller: undefined, runtime: undefined, submitted: undefined };
-  const host = { moduleId: 'x-demo-signing', bundle: dereferenceBundleExport(structuredClone(bundle)), reviewOptions: {}, configureRuntime, configureSubmittedRuntime: vi.fn(), dispose,
+  const host = { getStartupRoute: () => ({ entryHref: '/', entryTitle: undefined, requiresHostState: false }), moduleId: 'x-demo-signing', bundle: dereferenceBundleExport(structuredClone(bundle)), reviewOptions: {}, configureRuntime, configureSubmittedRuntime: vi.fn(), dispose,
     allocateSurfaceSessionMarker: () => 'fixture-visit',
     createSurfaceVisit: () => ({ activate: vi.fn(), dispose: vi.fn(), bindRuntime: () => ({ authorizeDataSource: () => ({ status: 'refused' as const, reason: 'unavailable' }), dataSourceLoader: () => ({ status: 'unavailable' as const, reason: 'unavailable' }), validateDataSourcePayload: () => ({ valid: true }), dataSourceRevision: () => undefined, widgetActionExecutor: vi.fn() }) }),
     widgetExecutor: vi.fn(), getSnapshot: () => state, subscribe: () => () => {}, selectLocale: vi.fn(), clearDraftAccess: vi.fn() } satisfies NativePackageSigningHost;
@@ -169,6 +169,7 @@ describe('maintained native package Surface host', () => {
       moduleId: host.moduleId, initialLocale: 'en', resumeSubmitted: async () => {
         const state = await cohort.draftStore.readState!(key);
         if (state?.kind === 'submitted') await host.configureSubmittedRuntime({ definition, draftKey: key, claim: null, state });
+        return state?.kind ?? 'absent';
       } }) };
     window.history.replaceState(null, '', '/review-sign?form=form&package=%2Fpackage.json');
     const mounted = render(<NativePackageRuntime composition={composition} config={departmentAppProfile} />);
@@ -178,7 +179,49 @@ describe('maintained native package Surface host', () => {
     expect(transport.requests).toHaveLength(1); expect(host.getSnapshot().controller).toBeUndefined();
     fireEvent.click(screen.getByRole('button', { name: 'Borrar el acceso guardado' }));
     await screen.findByRole('heading', { name: 'Acceso guardado borrado' }); expect(values.size).toBe(0);
-    expect(transport.requests).toHaveLength(1); mounted.unmount(); host.dispose(); window.history.replaceState(null, '', '/');
+    expect(transport.requests).toHaveLength(1); mounted.unmount(); host.dispose();
+    const freshHost = createNativePackageSigningHost({ ...test.policy, createEngine });
+    const freshComposition = createStubComposition(); freshComposition.draftStore = cohort.draftStore;
+    freshComposition.nativePackageRespondent = { load: async () => ({ composition: freshComposition, host: freshHost, componentDocument: component,
+      localeDocuments: test.policy.locales, moduleId: freshHost.moduleId, initialLocale: 'en', resumeSubmitted: async () => {
+        const state = await cohort.draftStore.readState!(key); return state?.kind ?? 'absent';
+      } }) };
+    const restarted = render(<NativePackageRuntime composition={freshComposition} config={departmentAppProfile} />);
+    const entry = await screen.findByRole('link', { name: 'Passport renewal' });
+    expect(entry.getAttribute('href')).toBe('/?form=form&package=%2Fpackage.json');
+    expect(screen.queryByText(signed.id!)).toBeNull(); expect(screen.queryByRole('textbox')).toBeNull();
+    expect(restarted.container.querySelector('.fs-surface-app')).toBeNull(); expect(createEngine).not.toHaveBeenCalled();
+    expect(transport.requests).toHaveLength(1); expect(values.size).toBe(0);
+    expect(screen.queryByText('This browser no longer has saved access to this draft.')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Passport renewal' }));
+    restarted.unmount(); freshHost.dispose(); window.history.replaceState(null, '', '/');
+  });
+  it.each(['non-slash', 'missing', 'parameter', 'collision', 'no-definition', 'embedded-required', 'embedded-definition'] as const)('qualifies the authored %s entry through maintained route plans', async variant => {
+    const test = await actualFixture(); test.host.dispose();
+    const exported = structuredClone(test.policy.bundle);
+    const surface = exported.documents[exported.manifest.entrySurface!] as SurfaceDocument;
+    const entry = surface.routes.find(route => route.id === surface.entry)!;
+    if (variant === 'non-slash') entry.path = '/start-here';
+    if (variant === 'missing') surface.entry = 'missing';
+    if (variant === 'parameter') entry.path = '/start/{subject}';
+    if (variant === 'collision') surface.routes.push({ ...structuredClone(entry), id: 'duplicate' });
+    if (variant === 'no-definition') entry.slots = [{ id: 'static-entry', slotType: 'static-content', binding: { content: [] } }];
+    if (variant === 'embedded-required') {
+      const ceremony = surface.routes.find(route => route.path === '/review-sign')!;
+      surface.routes.push({ id: 'wrapper', path: '/embedded-review', slots: [{ id: 'embedded', slotType: 'embed-route', binding: { routeRef: ceremony.id } }] });
+    }
+    if (variant === 'embedded-definition') {
+      surface.routes.push({ id: 'entry-wrapper', path: '/embedded-entry', slots: [{ id: 'embedded-form', slotType: 'embed-route', binding: { routeRef: entry.id } }] });
+      surface.entry = 'entry-wrapper';
+    }
+    const host = createNativePackageSigningHost({ ...test.policy, bundle: exported });
+    if (variant === 'non-slash') {
+      expect(host.getStartupRoute('/review-sign')).toMatchObject({ entryHref: '/start-here', requiresHostState: true });
+      expect(host.getStartupRoute('/start-here')).toMatchObject({ entryHref: '/start-here', requiresHostState: false });
+    } else if (variant === 'embedded-required') expect(host.getStartupRoute('/embedded-review')).toMatchObject({ entryHref: '/', requiresHostState: true });
+    else if (variant === 'embedded-definition') expect(host.getStartupRoute('/review-sign')).toMatchObject({ entryHref: '/embedded-entry', requiresHostState: true });
+    else expect(() => host.getStartupRoute('/review-sign')).toThrow('native-entry-route-unavailable');
+    host.dispose();
   });
   it('refuses an unknown state-aware port result before mounting editable controls', async () => {
     const test = await actualFixture();

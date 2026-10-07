@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import { createFormEngine, preactReactiveRuntime, type IFormEngine, type RegistryEntry } from '@formspec-org/engine/render';
 import type { SemanticControlScope } from '@formspec-org/react';
-import { composeSurfaceApp, createThemeAuthority, createWidgetRegistry, dataSourceAvailableToWidget, dereferenceBundleExport, flattenRegistryEntries, planMatchedRoute, resolveDataSourceDescriptor, type BundleExport } from '@formspec-org/surface';
+import { composeSurfaceApp, matchRoute, routeHref, createThemeAuthority, createWidgetRegistry, dataSourceAvailableToWidget, dereferenceBundleExport, flattenRegistryEntries, planMatchedRoute, resolveDataSourceDescriptor, type BundleExport, type SlotPlan } from '@formspec-org/surface';
 import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, responseReviewHash, starterWidgetModule, type ResponseReviewData, type ResponseReviewOptions, type ResponseReviewState } from '@formspec-org/surface-react';
 import type { FormDefinition, FormResponse, LocaleDocument, ValidationReport } from '@formspec-org/types';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
@@ -58,13 +58,18 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     || loadedLocales.length !== policy.locales.length || policy.locales.some(document => loadedLocales.filter(loaded => same(loaded, document)).length !== 1)
     || !policy.bundle.manifest.modules?.some(module => module.id === policy.moduleId && module.version === '0.1.0')) throw new Error('native-resource-unadmitted');
   const widgets = createWidgetRegistry({ registryEntries: flattened.entries, modules: [starterWidgetModule(policy.moduleId)] });
-  const app = composeSurfaceApp(bundle.surfaces);
+  const app = composeSurfaceApp(bundle.surfaces, { entrySurface: bundle.entrySurface });
+  const requiredHostRoutes = new Set<typeof app.routes[number]>();
+  const definitionEntryRoutes = new Set<typeof app.routes[number]>();
   for (const handle of app.routes) {
     const plan = planMatchedRoute({ handle, app, definitions: bundle.definitions, experiences: bundle.experiences,
       registryEntries: flattened.entries, widgets, dataSources: bundle.dataSources, surfaceRef: bundle.surfaceRefs?.get(handle.surface),
       responseActions: bundle.responseActions, themeAuthority: createThemeAuthority({ tenantTheme: bundle.tenantTheme }),
       hasExecutor: true, hasWidgetActionExecutor: true });
-    for (const slot of plan.slots) {
+    const slots = [...walkAdmittedSlots(plan.slots)];
+    if (slots.some(slot => slot.slotType === 'module-widget' && slot.dataInputs.some(input => input.required && input.descriptor?.source.kind === 'host-state'))) requiredHostRoutes.add(handle);
+    if (slots.some(slot => slot.slotType === 'definition-form' && slot.status === 'ready' && same(slot.definition, policy.definition))) definitionEntryRoutes.add(handle);
+    for (const slot of slots) {
       if (slot.slotType !== 'module-widget') continue;
       if (slot.resolution.status !== 'resolved' || !slot.resolution.declared) throw new Error('native-widget-unadmitted');
       const shape = slot.key.widgetName === SIGNING_CEREMONY_WIDGET_SHAPE.widgetName ? SIGNING_CEREMONY_WIDGET_SHAPE
@@ -259,6 +264,14 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   return {
     bundle, moduleId: policy.moduleId, reviewOptions, selectLocale,
+    getStartupRoute(pathname: string) {
+      const match = matchRoute(app, pathname).match;
+      const entry = app.entry;
+      if (!match || !entry || !definitionEntryRoutes.has(entry) || requiredHostRoutes.has(entry)) throw new Error('native-entry-route-unavailable');
+      const destination = routeHref(entry);
+      if (destination.refusal) throw new Error('native-entry-route-unavailable');
+      return { entryHref: destination.href, entryTitle: entry.route.title, requiresHostState: requiredHostRoutes.has(match.handle) };
+    },
     allocateSurfaceSessionMarker(sessionGeneration: number) {
       if (disposed || sessionGeneration !== authorityGeneration) throw new Error('native-visit-retired');
       return `native-visit:${sessionGeneration}:${++visitMarkerSequence}`;
@@ -393,6 +406,13 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     },
     dispose() { if (disposed) return; stop('dispose'); disposed = true; unsubscribeController?.(); listeners.clear(); },
   };
+}
+
+function* walkAdmittedSlots<T>(slots: readonly SlotPlan<T>[]): Generator<SlotPlan<T>> {
+  for (const slot of slots) {
+    yield slot;
+    if (slot.slotType === 'embed-route') yield* walkAdmittedSlots(slot.slots);
+  }
 }
 
 export function captureFields(engine: IFormEngine, response: FormResponse): ResponseReviewData['presentation']['fields'] {
