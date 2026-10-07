@@ -1,12 +1,13 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, beforeAll, afterEach, vi } from 'vitest';
 import { act, StrictMode, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { LayoutNode } from '@formspec-org/layout';
+import { UI_STRINGS, type LayoutNode } from '@formspec-org/layout';
+import { FormspecProvider } from '@formspec-org/react';
+import { createFormEngine } from '@formspec-org/engine';
+import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import type { UseFieldResult } from '@formspec-org/react';
 import {
   ATTACHMENT_DEFAULT_MAX_SIZE_BYTES,
-  ATTACHMENT_DEFERRED_CAPABILITY_COPY,
-  ATTACHMENT_LEGIBILITY_WARNING_COPY,
   FormspecWebAttachmentControl,
 } from '../../src/app/attachment-upload-control.tsx';
 import { AttachmentStoreProvider } from '../../src/app/AttachmentStoreProvider.tsx';
@@ -125,6 +126,7 @@ async function flush(): Promise<void> {
   });
 }
 
+beforeAll(() => initFormspecEngine());
 beforeEach(() => {});
 
 afterEach(() => {
@@ -147,6 +149,93 @@ describe('FormspecWebAttachmentControl', () => {
     mimeType: 'application/pdf',
     filename: 'existing.pdf',
   };
+
+  it('re-resolves existing validation and camera errors with literal parameters after a locale switch', async () => {
+    const originalMediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true });
+    const definitionUrl = 'https://example.test/forms/upload-chrome';
+    const engine = createFormEngine({ $formspec: '1.0', url: definitionUrl, version: '1.0.0', title: 'Upload chrome', items: [] });
+    const upload = vi.fn(stubAttachmentStore().upload);
+    const harness = makeFieldHarness();
+    try {
+      render(<FormspecProvider engine={engine}><AttachmentStoreProvider value={{ upload }}>
+        <FormspecWebAttachmentControl field={harness.field} node={makeNode({ maxSize: 1024 })} />
+      </AttachmentStoreProvider></FormspecProvider>);
+      const filename = '{{$literal}}.pdf';
+      const file = await fileFromBytes(new Uint8Array(1025), filename);
+      const input = container!.querySelector('input[type="file"]')!;
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+      const camera = Array.from(container!.querySelectorAll('button')).find(button => button.textContent === 'Use camera')!;
+      await act(async () => { camera.click(); await flush(); });
+      const failure = container!.querySelector('.formspec-file-pending-status')!;
+      expect(failure.textContent).toBe('"{{$literal}}.pdf" is larger than the upload limit of 1.0 KB.');
+      expect(container!.textContent).toContain(UI_STRINGS['fileUpload.cameraUnavailable']);
+      act(() => {
+        engine.loadLocale({ $formspecLocale: '2.0', locale: 'es', version: '1.0.0',
+          target: { kind: 'definition', url: definitionUrl }, strings: {
+            '$ui.fileUpload.fileTooLarge': '{{$filename}} supera el límite de {{$limit}}.',
+            '$ui.fileUpload.dismissError': 'Descartar error de {{$filename}}',
+            '$ui.fileUpload.cameraUnavailable': 'La cámara no está disponible.',
+            '$ui.fileUpload.useCamera': 'Usar cámara',
+            '$ui.screener.required': 'Obligatorio',
+          } });
+        engine.setLocale('es');
+      });
+      expect(failure.textContent).toBe('{{$literal}}.pdf supera el límite de 1.0 KB.');
+      expect(container!.querySelector('.formspec-file-pending-dismiss')!.getAttribute('aria-label')).toBe('Descartar error de {{$literal}}.pdf');
+      expect(container!.textContent).toContain('La cámara no está disponible.');
+      expect(camera.textContent).toBe('Usar cámara');
+      expect(container!.querySelector('abbr')!.title).toBe('Obligatorio');
+      expect(container!.textContent).toContain(UI_STRINGS['fileUpload.deferredLibrary']);
+      act(() => engine.setLocale(''));
+      expect(failure.textContent).toContain('larger than the upload limit');
+      expect(container!.textContent).toContain(UI_STRINGS['fileUpload.cameraUnavailable']);
+      expect(upload).not.toHaveBeenCalled();
+      expect(harness.field.setValue).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(navigator, 'mediaDevices', { value: originalMediaDevices, configurable: true });
+    }
+  });
+
+  it('re-resolves an existing image warning and editor names without replacing or uploading the draft', async () => {
+    stubLoadedImage();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
+    const definitionUrl = 'https://example.test/forms/image-chrome';
+    const engine = createFormEngine({ $formspec: '1.0', url: definitionUrl, version: '1.0.0', title: 'Upload chrome', items: [] });
+    const upload = vi.fn(stubAttachmentStore().upload);
+    const harness = makeFieldHarness();
+    render(<FormspecProvider engine={engine}><AttachmentStoreProvider value={{ upload }}>
+      <FormspecWebAttachmentControl field={harness.field} node={makeNode({ accept: 'image/*' })} />
+    </AttachmentStoreProvider></FormspecProvider>);
+    const file = await fileFromBytes(new Uint8Array(5000), 'scan.png', 'image/png');
+    const input = container!.querySelector('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await flush(); });
+    const warning = container!.querySelector('.formspec-file-legibility')!;
+    const image = container!.querySelector('.formspec-file-redaction-image')!;
+    const source = image.getAttribute('src');
+    expect(warning.textContent).toBe(UI_STRINGS['fileUpload.legibilityWarning']);
+    act(() => {
+      engine.loadLocale({ $formspecLocale: '2.0', locale: 'es', version: '1.0.0',
+        target: { kind: 'definition', url: definitionUrl }, strings: {
+          '$ui.fileUpload.legibilityWarning': 'Compruebe que la imagen sea legible.',
+          '$ui.fileUpload.previewImage': 'Vista previa antes de subir',
+          '$ui.fileUpload.uploadImage': 'Subir imagen',
+          '$ui.fileUpload.redactionSurface': 'Dibuje cuadros para ocultar información',
+        } });
+      engine.setLocale('es');
+    });
+    expect(warning.textContent).toBe('Compruebe que la imagen sea legible.');
+    expect(image.getAttribute('alt')).toBe('Vista previa antes de subir');
+    expect(container!.querySelector('.formspec-file-redaction-surface')!.getAttribute('aria-label')).toBe('Dibuje cuadros para ocultar información');
+    expect(container!.textContent).toContain('Subir imagen');
+    expect(image.getAttribute('src')).toBe(source);
+    expect(upload).not.toHaveBeenCalled();
+    expect(harness.field.setValue).not.toHaveBeenCalled();
+    act(() => engine.setLocale(''));
+    expect(warning.textContent).toBe(UI_STRINGS['fileUpload.legibilityWarning']);
+  });
 
   it('emits Component graph metadata on the primary upload control', () => {
     const harness = makeFieldHarness();
@@ -559,7 +648,7 @@ describe('FormspecWebAttachmentControl', () => {
     });
     await flush();
 
-    expect(container?.textContent ?? '').toContain(ATTACHMENT_LEGIBILITY_WARNING_COPY);
+    expect(container?.textContent ?? '').toContain(UI_STRINGS['fileUpload.legibilityWarning']);
     expect(harness.readValue()).toBeNull();
   });
 
@@ -902,7 +991,7 @@ describe('FormspecWebAttachmentControl', () => {
       button('Use camera').style.display = 'none';
       button('Close camera').focus();
       act(() => button('Close camera').click());
-      expect(document.activeElement).toBe(button('Choose file'));
+      expect(document.activeElement).toBe(button('Upload a file'));
       button('Use camera').style.display = '';
       await act(async () => { button('Use camera').click(); await flush(); });
       harness.field.readonly = true;
@@ -1172,7 +1261,7 @@ describe('FormspecWebAttachmentControl', () => {
         <FormspecWebAttachmentControl field={makeFieldHarness().field} node={makeNode()} />
       </AttachmentStoreProvider>,
     );
-    expect(container?.textContent ?? '').toContain(ATTACHMENT_DEFERRED_CAPABILITY_COPY);
+    expect(container?.textContent ?? '').toContain(UI_STRINGS['fileUpload.deferredLibrary']);
   });
 
   it('uses the resumable upload extension when the adapter provides it and renders progress', async () => {

@@ -16,7 +16,10 @@ const definition: FormDefinition = {
 const spanish: LocaleDocument = {
   $formspecLocale: '2.0', url: 'https://example.test/locales/es-US', version: '2.1.0',
   locale: 'es-us', target: { kind: 'definition', url: definition.url },
-  strings: { '$form.title': 'Texto guardado', 'name.label': 'Nombre' },
+  strings: {
+    '$form.title': 'Texto guardado', 'name.label': 'Nombre',
+    '$ui.form.languageSaveFailed': 'No se pudo guardar el cambio de idioma. Inténtelo de nuevo.',
+  },
 };
 
 beforeAll(() => initFormspecEngine());
@@ -95,7 +98,8 @@ describe('canonical draft wording (ADR 0082 D16.2)', () => {
     await screen.findByLabelText('Name');
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Unsaved answer' } });
     fireEvent.click(screen.getByRole('button', { name: /español/i }));
-    await screen.findByText(/Your language changed, but we could not save it/);
+    await screen.findByText('No se pudo guardar el cambio de idioma. Inténtelo de nuevo.');
+    expect(screen.queryByText(/Draft storage unavailable/)).toBeNull();
     expect((screen.getByLabelText('Nombre') as HTMLInputElement).value).toBe('Unsaved answer');
   });
 

@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { FormDefinition } from '@formspec-org/types';
+import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
+import { createFormEngine } from '@formspec-org/engine';
+import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
+import { FormspecProvider } from '@formspec-org/react';
 import {
   ConfirmationPanel,
   RespondentRuntime,
@@ -56,6 +59,30 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
     expect(container.querySelector('.public-terminal-actions__print-url')?.textContent).toBe('');
     fireEvent.click(screen.getByRole('button', { name: 'Print confirmation' }));
     expect(print).toHaveBeenCalledOnce();
+  });
+
+  it('updates authored response receipt wording with locale while preserving Print and Clear', async () => {
+    await initFormspecEngine();
+    const definition = JSON.parse(readFileSync('public/demo-packages/d1-passport/0.1.3/passport-renewal.definition.json', 'utf8')) as FormDefinition;
+    const locale = JSON.parse(readFileSync('public/demo-packages/d1-passport/0.1.3/passport-renewal.es-US.locale.json', 'utf8')) as LocaleDocument;
+    const engine = createFormEngine(definition);
+    engine.loadLocale(locale);
+    engine.setLocale(locale.locale);
+    const print = vi.fn();
+    const clear = vi.fn();
+    Object.defineProperty(window, 'print', { value: print, configurable: true });
+    render(<FormspecProvider engine={engine}><ConfirmationPanel
+      confirmation={{ referenceNumber: 'response-stable', status: 'accepted', recordKind: 'response' }}
+      onClearTerminal={clear}
+    /></FormspecProvider>);
+    expect(screen.getByRole('heading', { name: 'Respuestas recibidas' })).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Imprimir confirmación' }));
+    expect(print).toHaveBeenCalledOnce();
+    await act(async () => engine.setLocale(''));
+    expect(screen.getByRole('heading', { name: 'Answers received' })).not.toBeNull();
+    expect(screen.getByText('response-stable')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear this computer' }));
+    expect(clear).toHaveBeenCalledOnce();
   });
 
   it('sends an SMS receipt through NotificationDelivery', async () => {

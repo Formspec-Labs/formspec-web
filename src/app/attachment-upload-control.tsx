@@ -22,7 +22,8 @@ import {
   type DragEvent,
   type PointerEvent,
 } from 'react';
-import { projectionMetadataAttrs, type FieldComponentProps } from '@formspec-org/react';
+import { projectionMetadataAttrs, useChromeText, type FieldComponentProps } from '@formspec-org/react';
+import type { ChromeStringKey } from '@formspec-org/layout';
 import {
   AttachmentUploadError,
   type AttachmentRef,
@@ -32,15 +33,6 @@ import {
 } from '../ports/attachment-store.ts';
 import { useAttachmentStore } from './AttachmentStoreProvider.tsx';
 
-/** Honest deferred-capability copy — fixture-pinned per FW-0033 §"Vocabulary firewall". */
-export const ATTACHMENT_DEFERRED_CAPABILITY_COPY =
-  'Saving to your document library is not yet available here.';
-
-export const ATTACHMENT_LEGIBILITY_WARNING_COPY =
-  'This image may be hard to read. Check focus, lighting, and glare before uploading.';
-
-const ATTACHMENT_UPLOAD_FAILURE_COPY = 'We could not upload your file. Try again.';
-
 /**
  * L-2: tab-killer guard. 25 MiB is large enough for typical attachment use
  * (passport scans, lease documents, multi-page PDFs) and small enough that an
@@ -49,9 +41,14 @@ const ATTACHMENT_UPLOAD_FAILURE_COPY = 'We could not upload your file. Try again
  */
 export const ATTACHMENT_DEFAULT_MAX_SIZE_BYTES = 25 * 1024 * 1024;
 
+interface ChromeMessage {
+  readonly key: ChromeStringKey;
+  readonly params?: Record<string, string | number>;
+}
+
 type RowStatus =
   | { kind: 'uploading'; key: string; filename: string; progressPercent?: number }
-  | { kind: 'failed'; key: string; filename: string; message: string };
+  | { kind: 'failed'; key: string; filename: string; message: ChromeMessage };
 
 interface RedactionRect {
   readonly x: number;
@@ -64,12 +61,12 @@ interface ImageDraft {
   readonly file: File;
   readonly objectUrl: string;
   readonly redactions: RedactionRect[];
-  readonly legibilityWarning?: string;
+  readonly legibilityWarning?: ChromeMessage;
 }
 
 interface FileValidationFailure {
   readonly file: File;
-  readonly message: string;
+  readonly message: ChromeMessage;
 }
 
 function asArray(value: unknown): AttachmentRef[] {
@@ -93,6 +90,8 @@ function formatSize(bytes: number): string {
 
 export function FormspecWebAttachmentControl({ field, node }: FieldComponentProps) {
   const attachmentStore = useAttachmentStore();
+  const chrome = useChromeText();
+  const messageText = (message: ChromeMessage): string => chrome(message.key, message.params);
   const graphAttrs = projectionMetadataAttrs(node);
   const config = { ...node.presentation?.widgetConfig, ...node.props };
   const accept = typeof config.accept === 'string' ? config.accept : undefined;
@@ -129,7 +128,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const [pending, setPending] = useState<RowStatus[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<ChromeMessage | null>(null);
   const [imageDraft, setImageDraft] = useState<ImageDraft | null>(null);
   const [imageDraftQueue, setImageDraftQueue] = useState<ImageDraft[]>([]);
   const [activeRedaction, setActiveRedaction] = useState<RedactionRect | null>(null);
@@ -181,12 +180,12 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   }, []);
 
   const validateFile = useCallback(
-    (file: File): string | undefined => {
+    (file: File): ChromeMessage | undefined => {
       if (file.size > maxSize) {
-        return `"${file.name}" is larger than the upload limit of ${formatSize(maxSize)}.`;
+        return { key: 'fileUpload.fileTooLarge', params: { filename: file.name, limit: formatSize(maxSize) } };
       }
       if (accept && !matchesAccept(file, accept)) {
-        return failureMessage(new AttachmentUploadError('File type not accepted', { code: 'mime-rejected' }));
+        return { key: 'fileUpload.errorMimeRejected' };
       }
       return undefined;
     },
@@ -307,7 +306,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         failures.push(
           ...files.slice(1).map((file): FileValidationFailure => ({
             file,
-            message: 'Only one file can be uploaded here.',
+            message: { key: 'fileUpload.singleFileOnly' },
           })),
         );
       }
@@ -377,7 +376,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     setCameraError(null);
     setCameraOpen(true);
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError('Camera capture is not available in this browser.');
+      setCameraError({ key: 'fileUpload.cameraUnavailable' });
       return;
     }
     try {
@@ -402,7 +401,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       }
     } catch {
       if (!mountedRef.current || cameraRequestIdRef.current !== requestId) return;
-      setCameraError('We could not open the camera. Choose a file instead.');
+      setCameraError({ key: 'fileUpload.cameraOpenFailed' });
       setCameraOpen(true);
     }
   };
@@ -444,7 +443,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
     canvas.height = height;
     const context = canvas.getContext('2d');
     if (!context) {
-      setCameraError('We could not capture an image. Choose a file instead.');
+      setCameraError({ key: 'fileUpload.cameraCaptureFailed' });
       return;
     }
     context.drawImage(video, 0, 0, width, height);
@@ -521,7 +520,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           kind: 'failed',
           key: `redaction-${Date.now()}`,
           filename: draft.file.name,
-          message: 'We could not prepare that image. Choose the file again.',
+          message: { key: 'fileUpload.imagePrepareFailed' },
         },
       ]);
       advanceImageDraftQueue();
@@ -552,7 +551,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           kind: 'failed',
           key: `deskew-${Date.now()}`,
           filename: imageDraft.file.name,
-          message: 'We could not clean up the image edges. You can still upload it.',
+          message: { key: 'fileUpload.edgeCleanupFailed' },
         },
       ]);
     }
@@ -587,7 +586,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
       >
         {field.label}
         {field.required ? (
-          <abbr className="formspec-required usa-label--required" title="required">
+          <abbr className="formspec-required usa-label--required" title={chrome('screener.required')}>
             {' *'}
           </abbr>
         ) : null}
@@ -606,7 +605,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   );
 
   const refList = refs.length > 0 ? (
-    <ul className="formspec-file-list" aria-label="Files you have attached">
+    <ul className="formspec-file-list" aria-label={chrome('fileUpload.attachedList')}>
       {refs.map((ref) => (
         <li key={ref.uri} className="formspec-file-list-item">
           <span className="formspec-file-list-name">{ref.filename}</span>
@@ -615,7 +614,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
             <button
               type="button"
               className="formspec-file-list-remove"
-              aria-label={`Remove ${ref.filename}`}
+              aria-label={chrome('fileUpload.remove', { filename: ref.filename })}
               onClick={() => removeAt(ref.uri)}
             >
               <span aria-hidden="true">×</span>
@@ -627,23 +626,23 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   ) : null;
 
   const pendingList = pending.length > 0 ? (
-    <ul className="formspec-file-pending" aria-label="Pending file activity">
+    <ul className="formspec-file-pending" aria-label={chrome('fileUpload.pendingList')}>
       {pending.map((row) => (
         <li key={row.key} className={`formspec-file-pending-item formspec-file-pending-${row.kind}`}>
           <span className="formspec-file-pending-name">{row.filename}</span>
           {row.kind === 'uploading' ? (
             <span className="formspec-file-pending-status" role="status">
               {typeof row.progressPercent === 'number'
-                ? `Uploading ${row.progressPercent}%`
-                : 'Uploading...'}
+                ? chrome('fileUpload.uploadProgress', { percent: row.progressPercent })
+                : chrome('fileUpload.uploading')}
             </span>
           ) : (
             <>
-              <span className="formspec-file-pending-status formspec-error" role="alert">{row.message}</span>
+              <span className="formspec-file-pending-status formspec-error" role="alert">{messageText(row.message)}</span>
               <button
                 type="button"
                 className="formspec-file-pending-dismiss"
-                aria-label={`Dismiss error for ${row.filename}`}
+                aria-label={chrome('fileUpload.dismissError', { filename: row.filename })}
                 onClick={() => dismissPending(row.key)}
               >
                 <span aria-hidden="true">×</span>
@@ -656,25 +655,25 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   ) : null;
 
   const deferredCopy = (
-    <p className="formspec-file-deferred">{ATTACHMENT_DEFERRED_CAPABILITY_COPY}</p>
+    <p className="formspec-file-deferred">{chrome('fileUpload.deferredLibrary')}</p>
   );
 
   const cameraPanel = cameraOpen ? (
-    <div ref={cameraPanelRef} className="formspec-file-camera" aria-label="Camera capture">
-      {cameraError ? <p className="formspec-error" role="alert">{cameraError}</p> : null}
+    <div ref={cameraPanelRef} className="formspec-file-camera" aria-label={chrome('fileUpload.cameraCapture')}>
+      {cameraError ? <p className="formspec-error" role="alert">{messageText(cameraError)}</p> : null}
       <video
         ref={videoRef}
         className="formspec-file-camera-preview"
         playsInline
         muted
-        aria-label="Camera preview"
+        aria-label={chrome('fileUpload.cameraPreview')}
       />
       <div className="formspec-file-actions">
         <button type="button" className="formspec-button-secondary" onClick={() => void captureImage()}>
-          Capture image
+          {chrome('fileUpload.captureImage')}
         </button>
         <button type="button" className="formspec-button-secondary" onClick={closeCamera}>
-          Close camera
+          {chrome('fileUpload.closeCamera')}
         </button>
       </div>
     </div>
@@ -683,25 +682,25 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
   const redactionRects = imageDraft ? [...imageDraft.redactions, ...(activeRedaction ? [activeRedaction] : [])] : [];
   const imageDraftQueueCopy = imageDraft && imageDraftQueue.length > 0 ? (
     <p className="formspec-file-image-queue" role="status">
-      {imageDraftQueue.length} image{imageDraftQueue.length === 1 ? '' : 's'} waiting for review.
+      {chrome(imageDraftQueue.length === 1 ? 'fileUpload.imagesWaitingOne' : 'fileUpload.imagesWaitingMany', { count: imageDraftQueue.length })}
     </p>
   ) : null;
   const imageDraftPanel = imageDraft ? (
-    <div className="formspec-file-image-review" aria-label="Image review before upload">
+    <div className="formspec-file-image-review" aria-label={chrome('fileUpload.imageReview')}>
       {imageDraft.legibilityWarning ? (
-        <p className="formspec-file-legibility" role="alert">{imageDraft.legibilityWarning}</p>
+        <p className="formspec-file-legibility" role="alert">{messageText(imageDraft.legibilityWarning)}</p>
       ) : null}
       {imageDraftQueueCopy}
       <div
         ref={redactionSurfaceRef}
         className="formspec-file-redaction-surface"
         role="application"
-        aria-label="Draw boxes over information you want to redact"
+        aria-label={chrome('fileUpload.redactionSurface')}
         onPointerDown={beginRedaction}
         onPointerMove={updateRedaction}
         onPointerUp={finishRedaction}
       >
-        <img src={imageDraft.objectUrl} alt="Preview before upload" className="formspec-file-redaction-image" />
+        <img src={imageDraft.objectUrl} alt={chrome('fileUpload.previewImage')} className="formspec-file-redaction-image" />
         {redactionRects.map((rect, index) => (
           <span
             key={`${rect.x}-${rect.y}-${rect.width}-${rect.height}-${index}`}
@@ -726,14 +725,14 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
             ],
           });
         }}>
-          Add redaction box
+          {chrome('fileUpload.addRedaction')}
         </button>
         <button
           type="button"
           className="formspec-button-secondary"
           onClick={() => void deskewImageDraft()}
         >
-          Detect page edges
+          {chrome('fileUpload.detectPageEdges')}
         </button>
         <button
           type="button"
@@ -741,13 +740,13 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           onClick={() => replaceImageDraft({ ...imageDraft, redactions: [] })}
           disabled={imageDraft.redactions.length === 0}
         >
-          Clear redactions
+          {chrome('fileUpload.clearRedactions')}
         </button>
         <button type="button" className="formspec-button-secondary" onClick={() => void uploadImageDraft()}>
-          Upload image
+          {chrome('fileUpload.uploadImage')}
         </button>
         <button type="button" className="formspec-button-secondary" onClick={cancelImageDraft}>
-          Cancel
+          {chrome('fileUpload.cancel')}
         </button>
       </div>
     </div>
@@ -767,7 +766,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           disabled={field.readonly}
           {...graphAttrs}
         >
-          Choose file{multiple ? 's' : ''}
+          {chrome(multiple ? 'fileUpload.browseMultiple' : 'fileUpload.browse')}
         </button>
         <button
           type="button"
@@ -776,7 +775,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           onClick={(event) => void openCamera(event.currentTarget)}
           disabled={field.readonly}
         >
-          Use camera
+          {chrome('fileUpload.useCamera')}
         </button>
         {hiddenInput}
         {cameraPanel}
@@ -810,9 +809,9 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
           <span className="formspec-file-drop-label">
             {refs.length === 0
               ? multiple
-                ? 'Drag and drop files here'
-                : 'Drag and drop a file here'
-              : `${refs.length} file${refs.length !== 1 ? 's' : ''} attached`}
+                ? chrome('fileUpload.dropzoneMultiple')
+                : chrome('fileUpload.dropzone')
+              : chrome(refs.length === 1 ? 'fileUpload.attachedOne' : 'fileUpload.attachedMany', { count: refs.length })}
           </span>
           <button
             type="button"
@@ -823,7 +822,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
             onClick={() => fileInputRef.current?.click()}
             disabled={field.readonly}
           >
-            Choose file{multiple ? 's' : ''}
+            {chrome(multiple ? 'fileUpload.browseMultiple' : 'fileUpload.browse')}
           </button>
           <button
             type="button"
@@ -832,7 +831,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
             onClick={(event) => void openCamera(event.currentTarget)}
             disabled={field.readonly}
           >
-            Use camera
+            {chrome('fileUpload.useCamera')}
           </button>
         </div>
       </div>
@@ -871,26 +870,19 @@ async function uploadOne(
   });
 }
 
-/**
- * Vocabulary firewall: respondent-facing copy keyed on the typed code, not on
- * adopter-supplied prose. Adopter `error.message` may include adopter
- * vocabulary (URLs, host names, request IDs) — the renderer keeps the user
- * surface plain-language and uses `error.message` only as a debug fallback
- * for the `unknown` code where the adopter is the only sane source of detail.
- */
-const ATTACHMENT_UPLOAD_FAILURE_COPY_BY_CODE: Record<AttachmentUploadErrorCode, string> = {
-  'file-too-large': 'That file is larger than the upload limit. Try a smaller file.',
-  'mime-rejected': 'That file type is not accepted here.',
-  network: 'We could not reach the upload service. Check your connection and try again.',
-  unavailable: 'File upload is not available on this site.',
-  unknown: ATTACHMENT_UPLOAD_FAILURE_COPY,
+/** Respondent-facing errors use closed chrome keys; adopter/server prose stays out of the UI. */
+const ATTACHMENT_UPLOAD_FAILURE_KEY_BY_CODE: Record<AttachmentUploadErrorCode, ChromeStringKey> = {
+  'file-too-large': 'fileUpload.errorTooLarge',
+  'mime-rejected': 'fileUpload.errorMimeRejected',
+  network: 'fileUpload.errorNetwork',
+  unavailable: 'fileUpload.errorUnavailable',
+  unknown: 'fileUpload.errorUnknown',
 };
 
-function failureMessage(reason: unknown): string {
-  if (reason instanceof AttachmentUploadError) {
-    return ATTACHMENT_UPLOAD_FAILURE_COPY_BY_CODE[reason.code] ?? ATTACHMENT_UPLOAD_FAILURE_COPY;
-  }
-  return ATTACHMENT_UPLOAD_FAILURE_COPY;
+function failureMessage(reason: unknown): ChromeMessage {
+  return { key: reason instanceof AttachmentUploadError
+    ? ATTACHMENT_UPLOAD_FAILURE_KEY_BY_CODE[reason.code] ?? 'fileUpload.errorUnknown'
+    : 'fileUpload.errorUnknown' };
 }
 
 /**
@@ -944,12 +936,12 @@ function normalizeRect(
   };
 }
 
-function estimateLegibilityWarning(file: File): string | undefined {
+function estimateLegibilityWarning(file: File): ChromeMessage | undefined {
   if (!file.type.startsWith('image/')) return undefined;
-  return file.size < 4096 ? ATTACHMENT_LEGIBILITY_WARNING_COPY : undefined;
+  return file.size < 4096 ? { key: 'fileUpload.legibilityWarning' } : undefined;
 }
 
-async function analyzeImageFileLegibility(file: File): Promise<string | undefined> {
+async function analyzeImageFileLegibility(file: File): Promise<ChromeMessage | undefined> {
   if (!file.type.startsWith('image/')) return undefined;
   try {
     const image = await loadImage(file);
@@ -971,8 +963,8 @@ function analyzeLegibility(
   context: CanvasRenderingContext2D,
   width: number,
   height: number,
-): string | undefined {
-  if (width < 900 || height < 600) return ATTACHMENT_LEGIBILITY_WARNING_COPY;
+): ChromeMessage | undefined {
+  if (width < 900 || height < 600) return { key: 'fileUpload.legibilityWarning' };
   const sampleWidth = Math.min(width, 96);
   const sampleHeight = Math.min(height, 96);
   const data = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
@@ -987,7 +979,7 @@ function analyzeLegibility(
   }
   const pixels = data.length / 4;
   if (max - min < 32 || glarePixels / pixels > 0.35) {
-    return ATTACHMENT_LEGIBILITY_WARNING_COPY;
+    return { key: 'fileUpload.legibilityWarning' };
   }
   return undefined;
 }

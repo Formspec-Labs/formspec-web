@@ -21,6 +21,7 @@ import {
   IssuerChromeSlot,
   DefaultField,
   useFormspecContext,
+  useChromeText,
   projectionMetadataAttrs,
   type FieldComponentProps,
   type ResponseAction,
@@ -986,7 +987,7 @@ function RespondentController({
             }}
           >
             {localeSaveError ? (
-              <p role="alert">Your language changed, but we could not save it. {localeSaveError instanceof Error ? localeSaveError.message : String(localeSaveError)}</p>
+              <LocaleSaveErrorNotice />
             ) : null}
             {renderMode === 'surface-slot' ? (
               <RespondentFormContent
@@ -1786,6 +1787,11 @@ async function readSubmissionStatuses(
   )));
 }
 
+function LocaleSaveErrorNotice() {
+  const chrome = useChromeText();
+  return <p role="alert">{chrome('form.languageSaveFailed')}</p>;
+}
+
 function RespondentSurface({
   localeDocuments,
   activeLocale,
@@ -1826,6 +1832,7 @@ function RespondentSurface({
   onLocaleChange: (locale: string) => void;
 }) {
   const { engine } = useFormspecContext();
+  const chrome = useChromeText();
   const localeOptions = useMemo(() => localeOptionsForDefinition(definition, localeDocuments), [definition, localeDocuments]);
   const isUnbranded = resolvedIssuer.source === 'unbranded';
   const title = engine.resolveLocaleString('$form.title', definition.title);
@@ -1846,8 +1853,8 @@ function RespondentSurface({
         </header>
       )}
 
-      <div className="respondent-toolbar" aria-label="Form settings">
-        <div className="respondent-toolbar__group" role="group" aria-label="Language">
+      <div className="respondent-toolbar" aria-label={chrome('form.settings')}>
+        <div className="respondent-toolbar__group" role="group" aria-label={chrome('form.language')}>
           {localeOptions.map((option) => (
             <button
               aria-pressed={activeLocale.toLowerCase() === option.code.toLowerCase()}
@@ -1863,13 +1870,13 @@ function RespondentSurface({
           ))}
         </div>
         <div className="respondent-toolbar__meta" aria-live="polite">
-          {draftLoaded ? 'Draft restored' : composition.localPackagePreview ? 'Local preview' : mode}
+          {draftLoaded ? chrome('localPreview.draftRestored') : composition.localPackagePreview ? chrome('localPreview.preview') : mode}
         </div>
       </div>
 
       {composition.localPackagePreview && submitState.status !== 'confirmed' ? (
         <p className="respondent-preview-note" role="note">
-          Filing and signing are not yet complete.
+          {chrome('receipt.pendingFilingAndSigning')}
         </p>
       ) : null}
       <RespondentFormContent
@@ -2647,6 +2654,8 @@ export function ConfirmationPanel({
   onClearTerminal?: () => Promise<void> | void;
 }) {
   const smsInputId = useId();
+  const actionsHeadingId = useId();
+  const chrome = useChromeText();
   const [smsTo, setSmsTo] = useState('');
   const [smsState, setSmsState] = useState<
     { status: 'idle' } | { status: 'sending' } | { status: 'sent' } | { status: 'error'; error: string }
@@ -2680,26 +2689,26 @@ export function ConfirmationPanel({
 
   return (
     <section className="confirmation-panel" aria-labelledby="confirmation-title" tabIndex={-1}>
-      <h2 id="confirmation-title">{responseOnly ? 'Answers received' : 'Submission received'}</h2>
-      <p>{responseOnly ? 'Submission ID' : 'Reference number'}</p>
+      <h2 id="confirmation-title">{responseOnly ? chrome('receipt.answersReceived') : 'Submission received'}</h2>
+      <p>{responseOnly ? chrome('receipt.submissionId') : 'Reference number'}</p>
       <strong className={responseOnly ? 'confirmation-panel__submission-id' : undefined}>{confirmation.referenceNumber}</strong>
       {responseOnly ? (
-        <p>Your answers were received. Case filing and signing are not yet confirmed.</p>
+        <p>{chrome('receipt.pendingFilingAndSigning')}</p>
       ) : (
         <p>Verifier code <strong>{verifierCode}</strong></p>
       )}
       {trackingHref ? <a href={trackingHref}>{trackingLabel}</a> : null}
       {captureReceipt ? <PaymentReceivedSubCard captureReceipt={captureReceipt} /> : null}
-      <div className="public-terminal-actions" aria-label="Public terminal actions">
-        <h3>{responseOnly ? 'Keep this record' : 'Keep your proof'}</h3>
+      <div className="public-terminal-actions" aria-labelledby={actionsHeadingId}>
+        <h3 id={actionsHeadingId}>{responseOnly ? chrome('receipt.keepRecord') : 'Keep your proof'}</h3>
         <p>
           {canSendSmsReceipt
             ? 'Print this confirmation, text it to a phone you control, then clear this computer before leaving.'
-            : 'Print this confirmation, then clear this computer before leaving.'}
+            : responseOnly ? chrome('receipt.printInstruction') : 'Print this confirmation, then clear this computer before leaving.'}
         </p>
         <div className="public-terminal-actions__row">
           <button type="button" onClick={printConfirmation}>
-            Print confirmation
+            {responseOnly ? chrome('receipt.print') : 'Print confirmation'}
           </button>
           {onClearTerminal ? (
             <button
@@ -2710,7 +2719,9 @@ export function ConfirmationPanel({
                 void onClearTerminal();
               }}
             >
-              {terminalClearState.status === 'clearing' ? 'Clearing...' : 'Clear this computer'}
+              {responseOnly
+                ? chrome(terminalClearState.status === 'clearing' ? 'receipt.clearing' : 'receipt.clear')
+                : terminalClearState.status === 'clearing' ? 'Clearing...' : 'Clear this computer'}
             </button>
           ) : null}
         </div>

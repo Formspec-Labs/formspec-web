@@ -238,7 +238,7 @@ describe('RespondentRuntime attachment integration (FW-0033)', () => {
   it('uploads via the wired AttachmentStore so the AttachmentRef survives JSON serialization (the substrate-honesty contract)', async () => {
     const { composition } = buildComposition({ mode: 'demo-stub-attachment' });
     await renderRuntime(composition);
-    await waitForText('Drag and drop a file here');
+    await waitForText('Drop files here or click to browse');
 
     const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input).toBeTruthy();
