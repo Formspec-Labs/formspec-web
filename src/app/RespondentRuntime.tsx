@@ -31,6 +31,7 @@ import {
   type SubmitResult,
 } from '@formspec-org/react';
 import type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
+import type { SurfaceDefinitionFormRenderInput } from '@formspec-org/surface-react';
 import type {
   ComponentDocument,
   FormDefinition,
@@ -158,6 +159,8 @@ export interface ResolvedRespondentFormInput {
   readonly responseActionsDocument: ResponseActionsDocument | undefined;
   readonly localeDocuments?: readonly LocaleDocument[];
   readonly activeLocale?: string;
+  readonly responseActionInvoker?: SurfaceDefinitionFormRenderInput['responseActionInvoker'];
+  readonly semanticControlScope?: SurfaceDefinitionFormRenderInput['semanticControlScope'];
   /**
    * Surface's completed-action navigation boundary. The invocation result is
    * part of the report, not decoration: `SurfaceRoute` reads
@@ -743,7 +746,7 @@ function RespondentController({
     : respondentState.responseActionsDocument ?? createDemoSubmitResponseActions({
         definitionUrl: respondentState.definition.url,
       });
-  const responseActionInvoker = composition.responseActionInvoker?.({
+  const responseActionInvoker = form?.responseActionInvoker ?? composition.responseActionInvoker?.({
     runtimeDefinitionUrl: form?.definition.url ?? composition.initialDefinitionUrl,
     definition: respondentState.definition,
     draftKey: respondentState.draftKey,
@@ -1029,6 +1032,7 @@ function RespondentController({
               registryEntries={form ? [...form.registryEntries] : undefined}
               responseActionsDocument={responseActionsDocument}
               responseActionInvoker={responseActionInvoker}
+              semanticControlScope={form?.semanticControlScope}
               components={{
                 fields: {
                   Text: SafeAddressTextField,

@@ -1,6 +1,8 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
+import { invokeResponseActionAsync } from '@formspec-org/engine';
+import { createSemanticControlRegistry, type ResponseActionInvoker, type SemanticControlScope, type SubmitResult } from '@formspec-org/react';
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
 import { RespondentDefinitionController } from '../../src/app/RespondentRuntime.tsx';
 import { createStubComposition } from '../../src/composition/stub.ts';
@@ -26,6 +28,49 @@ beforeAll(() => initFormspecEngine());
 afterEach(cleanup);
 
 describe('draft recovery inside a definition-form Surface slot', () => {
+  it('preserves the supplied Surface invoker and semantic scope without invoking the legacy submit transport', async () => {
+    const base = createStubComposition();
+    const factory = vi.fn(() => null);
+    const submit = vi.fn(base.submitTransport.submit);
+    const registry = createSemanticControlRegistry();
+    const register = vi.spyOn(registry, 'register');
+    const scope: SemanticControlScope = {
+      registry, renderInstanceId: 'qualified-slot', responseId: 'qualified-response', initialResponseRevision: 7,
+      definitionArtifact: { artifactRef: definition.url, artifactDigest: `sha256:${'a'.repeat(64)}` },
+      responseActionsArtifact: { artifactRef: 'https://example.test/actions/prepare', artifactDigest: `sha256:${'b'.repeat(64)}` },
+    };
+    const effect = vi.fn(async (_effect: unknown, detail: SubmitResult) => {
+      expect(detail.response.id).toBe(scope.responseId);
+    });
+    const invoker: ResponseActionInvoker<SubmitResult> = vi.fn((input: Parameters<ResponseActionInvoker<SubmitResult>>[0]) => invokeResponseActionAsync<SubmitResult>(
+      input.document, input.actionRef, { ...input.ports,
+        dispatchEffect: effect, resolveIdempotencyKey: () => 'host-operation',
+      }, input.nodeId, input.invocationContext,
+    ));
+    const composition = { ...base, responseActionInvoker: factory,
+      submitTransport: { submit }, identityProvider: { ...base.identityProvider,
+        discover: async () => [], subscribe(listener: (claim: null) => void) { listener(null); return () => {}; },
+      },
+    };
+    render(<RespondentDefinitionController composition={composition} config={departmentAppProfile} form={{
+      definition,
+      themeDocument: { $formspecTheme: '1.0', url: 'https://example.test/themes/recovery', version: '1.0.0', targetDefinition: { url: definition.url } },
+      registryEntries: [], semanticControlScope: scope, responseActionInvoker: invoker,
+      responseActionsDocument: { $formspecResponseActions: '1.0', version: '1.0.0', scope: 'response', targetDefinition: { url: definition.url },
+        actions: [{ id: 'prepare', intent: 'x-prepare', label: { literal: 'Prepare for signing' },
+          validation: { profile: 'on-submit', blocking: 'block-on-error', persistence: 'complete-response' },
+          effects: [{ type: 'serviceRequest', requestRef: 'prepare', idempotencyKey: '@invocation.id' }] }],
+      },
+    }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Prepare for signing' }));
+    await waitFor(() => expect(invoker).toHaveBeenCalledOnce());
+    await waitFor(() => expect(effect).toHaveBeenCalledOnce());
+    expect(factory).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(register.mock.calls.some(([control]) => control.renderInstanceId === scope.renderInstanceId
+      && control.responseId === scope.responseId && control.control.artifactDigest === scope.responseActionsArtifact!.artifactDigest)).toBe(true);
+  });
+
   it('uses a subordinate recovery heading and returns focus locally after restart in the chosen language', async () => {
     const base = createStubComposition();
     let cleared = false;
