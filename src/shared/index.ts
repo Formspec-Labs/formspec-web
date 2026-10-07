@@ -7,3 +7,4 @@ export {
   type IdempotencyKey,
 } from './idempotency-key.ts';
 export { assertProblemJson, isProblemJson, type ProblemJson } from './problem-json.ts';
+export { createFrozenHostStateDataSourceRuntime, type FrozenHostStateDataInput } from './frozen-host-state-data.ts';
