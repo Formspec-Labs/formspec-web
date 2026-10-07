@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import canonicalize from 'canonicalize';
 import { SurfaceApp, starterWidgetModule, useSurfaceApp, deriveSurfaceRuntimeGeneration, type SurfaceAppProps } from '@formspec-org/surface-react';
+import '@formspec-org/surface-react/formspec-surface.css';
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
 import type { Composition } from '../composition/types.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
