@@ -98,7 +98,8 @@ describe('explicit recovery from a retained immutable draft version', () => {
     expect(screen.getByText('SPANISH-RESPONSE-ID')).not.toBeNull();
     const disposalCountBeforeClear = dispose.mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: 'Borrar los datos de esta computadora' }));
-    await screen.findByRole('heading', { name: 'Acceso guardado borrado' });
+    const clearedHeading = await screen.findByRole('heading', { name: 'Acceso guardado borrado' });
+    await waitFor(() => expect(document.activeElement).toBe(clearedHeading));
     expect(screen.getByText('Este navegador ya no tiene acceso guardado a este borrador.')).not.toBeNull();
     expect(dispose).toHaveBeenCalledTimes(disposalCountBeforeClear + 1);
     expect(remove).toHaveBeenCalledOnce();

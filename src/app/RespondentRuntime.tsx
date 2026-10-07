@@ -2911,9 +2911,11 @@ function TerminalClearedPanel({
   headingLevel?: 'h1' | 'h2';
 }) {
   const Heading = headingLevel;
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { heading.current?.focus(); }, []);
   return (
     <div className="shell__status" role="status">
-      <Heading>{title}</Heading>
+      <Heading ref={heading} tabIndex={-1}>{title}</Heading>
       <p>{detail}</p>
     </div>
   );
