@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { HttpClient } from '../../../src/adapters/http/http-client.ts';
 import { departmentAppProfile } from '../../../src/profiles/index.ts';
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
@@ -21,6 +21,16 @@ describe('HttpClient', () => {
     expect(requests[0]?.headers.get('authorization')).toBe(`Bearer ${token}`);
     expect(requests[0]?.headers.get('idempotency-key')).toBe(key);
     expect(requests[0]?.headers.get('x-formspec-tenant-id')).toBe('department-reference');
+  });
+
+  it('refuses redirect following for credentialed JSON requests', async () => {
+    const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.redirect).toBe('error');
+      throw new TypeError('Redirect refused');
+    });
+    const client = new HttpClient({ baseUrl: 'https://formspec-server.example.test', accessToken: 'test-owner', fetchImpl: fetch });
+    await expect(client.postJson('/drafts/owned/sign', {})).rejects.toThrow('Redirect refused');
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces stack Problem JSON on failed requests', async () => {

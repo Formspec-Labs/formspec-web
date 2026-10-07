@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { sampleFormResponse } from '../../../src/adapter-conformance/fixtures.ts';
 import type {
   AppGraphSchemaValidator,
   SchemaValidationOutcome,
@@ -6,6 +7,7 @@ import type {
 import {
   createSurfaceDataSourcePayloadValidator,
   loadSurfaceBundleSchemaValidators,
+  loadCanonicalSigningContentValidator,
 } from '../../../src/adapters/schema/index.ts';
 
 const DEFINITION_URL = 'https://example.gov/forms/intake';
@@ -333,6 +335,49 @@ describe('createSurfaceDataSourcePayloadValidator', () => {
     }, {}))).toEqual({
       valid: false,
       reason: 'The data source payload schema uses an unsupported remote reference.',
+    });
+  });
+
+  it('validates closed signing wording with the maintained common schema', async () => {
+    const validate = await loadCanonicalSigningContentValidator();
+    const content = {
+      source: { ref: 'urn:example:form#/extensions/x-formspec-signing-content/entries/en', version: '1' },
+      locale: 'en', documentId: 'demo', signingIntent: 'urn:example:sign',
+      declaration: 'Example declaration.',
+      electronicConsent: { textRef: 'urn:example:consent', version: '1', text: 'Example consent.', controlLabel: 'I agree' },
+      paperAlternative: 'Example paper option.', affirmationText: 'Example affirmation.',
+      delegatedSigningNotice: 'Example delegated signing notice.',
+    };
+    expect(validate(content)).toBe(true);
+    expect(validate({ ...content, delegatedSigningNotice: '' })).toBe(false);
+    expect(validate({ ...content, unexpected: true })).toBe(false);
+    expect(validate({ ...content, electronicConsent: { ...content.electronicConsent, version: null } })).toBe(false);
+  });
+
+  it('validates the exact bundled Response root without remote resolution', async () => {
+    const validate = createSurfaceDataSourcePayloadValidator();
+    const schema = { $ref: 'https://formspec.org/schemas/response/1.0' };
+    expect(await validate(payloadRequest(schema, sampleFormResponse))).toEqual({ valid: true });
+    expect(await validate(payloadRequest(schema, { ...sampleFormResponse, data: null })))
+      .toMatchObject({ valid: false });
+    for (const unsupported of [
+      { $ref: 'https://formspec.org/schemas/response/2.0' },
+      { $ref: schema.$ref, required: ['unmet'] },
+      { allOf: [schema] },
+    ]) {
+      expect(await validate(payloadRequest(unsupported, sampleFormResponse))).toEqual({
+        valid: false, reason: 'The data source payload schema uses an unsupported remote reference.',
+      });
+    }
+  });
+
+  it('refuses a remote reference added to a previously compiled local schema', async () => {
+    const validate = createSurfaceDataSourcePayloadValidator();
+    const schema: Record<string, unknown> = { type: 'object' };
+    expect(await validate(payloadRequest(schema, {}))).toEqual({ valid: true });
+    schema.$ref = 'https://schemas.example/unknown.json';
+    expect(await validate(payloadRequest(schema, {}))).toEqual({
+      valid: false, reason: 'The data source payload schema uses an unsupported remote reference.',
     });
   });
 

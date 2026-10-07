@@ -16,3 +16,4 @@ export { normalizeBcp47 } from './locale.js';
 export * from './issuer/index.js';
 export { FormEngine } from './engine/FormEngine.js';
 export { createFormEngine } from './engine/init.js';
+export { resolveAuthoredSigningContent, signingContentBytes, hashSigningContent } from './signing-content.js';

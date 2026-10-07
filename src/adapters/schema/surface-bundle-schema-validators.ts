@@ -28,6 +28,7 @@ type CompiledArtifactValidators = Readonly<
 >;
 
 let compiledResponseValidator: ValidateFunction | undefined;
+let compiledSigningContentValidator: ValidateFunction | undefined;
 
 let pendingArtifactValidators: Promise<CompiledArtifactValidators> | undefined;
 
@@ -82,11 +83,19 @@ export async function validateCanonicalFormResponse(document: unknown): Promise<
   return compiledResponseValidator(document);
 }
 
+/** Load the maintained common SigningContent schema as a synchronous host callback. */
+export async function loadCanonicalSigningContentValidator(): Promise<(value: unknown) => boolean> {
+  await getCompiledArtifactValidators();
+  if (!compiledSigningContentValidator) throw new Error('Canonical SigningContent schema did not compile');
+  const validate = compiledSigningContentValidator;
+  return value => Boolean(validate(value));
+}
+
 /**
  * Build the host validator for a Data Sources entry's declared payload schema.
  *
  * Catalog schemas are untrusted until the signed app graph is admitted. This
- * boundary accepts only a valid local JSON Schema, refuses remote references,
+ * boundary accepts a valid local JSON Schema or the exact bundled Response root reference, refuses other remote references,
  * and caches a validator only after compilation succeeds.
  */
 export function createSurfaceDataSourcePayloadValidator(): DataSourcePayloadValidator {
@@ -98,13 +107,21 @@ export function createSurfaceDataSourcePayloadValidator(): DataSourcePayloadVali
       return payloadValidationFailure('The data source does not declare a valid payload schema.');
     }
 
+    // This exact maintained root schema is bundled locally; do not resolve URLs.
+    if (schema.$ref === 'https://formspec.org/schemas/response/1.0'
+      && Object.keys(schema).length === 1) {
+      return validateCanonicalFormResponse(value).then(valid => valid
+        ? Object.freeze({ valid: true as const })
+        : payloadValidationFailure('The data source payload does not match its declared schema.'));
+    }
+
+    if (containsRemoteReference(schema)) {
+      return payloadValidationFailure(
+        'The data source payload schema uses an unsupported remote reference.',
+      );
+    }
     let validate = compiledSchemas.get(schema);
     if (!validate) {
-      if (containsRemoteReference(schema)) {
-        return payloadValidationFailure(
-          'The data source payload schema uses an unsupported remote reference.',
-        );
-      }
       try {
         if (!ajv.validateSchema(schema)) {
           return payloadValidationFailure(
@@ -168,6 +185,7 @@ async function compileArtifactValidators(): Promise<CompiledArtifactValidators> 
   });
 
   compiledResponseValidator = ajv.getSchema(canonicalSchema(RESPONSE_SCHEMA_DOCUMENT).$id);
+  compiledSigningContentValidator = ajv.getSchema('https://formspec.org/schemas/common/1.0#/$defs/SigningContent');
   return Object.freeze(Object.fromEntries(entries)) as CompiledArtifactValidators;
 }
 

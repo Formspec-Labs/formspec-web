@@ -69,6 +69,7 @@ export class HttpClient {
     const headers = await this.headersFor(options);
     const response = await this.fetchImpl(this.urlFor(path), {
       method,
+      redirect: 'error',
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
