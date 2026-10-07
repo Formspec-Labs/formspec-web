@@ -36,7 +36,7 @@ afterEach(() => { cleanup(); observed.forms.length = 0; observed.real = false; v
 function fixture() {
   const configureRuntime = vi.fn(); const dispose = vi.fn();
   const state = { generation: 0, sessionGeneration: 0, locale: 'en', formTitle: '', cleared: false, controller: undefined, runtime: undefined };
-  const host = { moduleId: 'x-demo-signing', bundle: dereferenceBundleExport(bundle), reviewOptions: {}, configureRuntime, dispose,
+  const host = { moduleId: 'x-demo-signing', bundle: dereferenceBundleExport(structuredClone(bundle)), reviewOptions: {}, configureRuntime, dispose,
     allocateSurfaceSessionMarker: () => 'fixture-visit',
     createSurfaceVisit: () => ({ activate: vi.fn(), dispose: vi.fn(), bindRuntime: () => ({ authorizeDataSource: () => ({ status: 'refused' as const, reason: 'unavailable' }), dataSourceLoader: () => ({ status: 'unavailable' as const, reason: 'unavailable' }), validateDataSourcePayload: () => ({ valid: true }), dataSourceRevision: () => undefined, widgetActionExecutor: vi.fn() }) }),
     widgetExecutor: vi.fn(), getSnapshot: () => state, subscribe: () => () => {}, selectLocale: vi.fn(), clearDraftAccess: vi.fn() } satisfies NativePackageSigningHost;
@@ -131,6 +131,39 @@ async function actualFixture() {
     return { host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, submit };
 }
 describe('maintained native package Surface host', () => {
+  it('uses the qualified form title and existing provider container across languages without writes', async () => {
+    const { host, props, saveDraft, prepare, sign, submit, getEngine } = await actualFixture();
+    // Model the real anonymous service's same selected owner across Locale remounts.
+    const authenticate = props.composition.identityProvider.authenticate;
+    let owner: ReturnType<typeof authenticate> | undefined;
+    props.composition.identityProvider.authenticate = option => owner ??= authenticate(option);
+    const mounted = render(<NativePackageRespondentHost {...props} />);
+    await screen.findByRole('heading', { level: 1, name: 'Passport renewal' });
+    const input = await screen.findByRole('textbox', { name: 'Full legal name *' });
+    const container = input.closest('.formspec-container') as HTMLElement;
+    expect(container).not.toBeNull();
+    expect(mounted.container.querySelectorAll('.formspec-container')).toHaveLength(1);
+    expect(container.style.getPropertyValue('--formspec-color-primary')).not.toBe('');
+    expect(getEngine().getFormVM().title.value).toBe('Passport renewal');
+    expect(document.title).toBe('Passport renewal');
+    await act(async () => { await host.selectLocale('es-US'); });
+    await screen.findByRole('heading', { level: 1, name: 'Renovación de pasaporte' });
+    expect(document.title).toBe('Renovación de pasaporte');
+    const translatedInput = await screen.findByRole('textbox', { name: 'Nombre legal completo *' });
+    expect(mounted.container.querySelectorAll('.formspec-container')).toHaveLength(1);
+    expect(translatedInput.closest('.formspec-container')).not.toBeNull();
+    expect(saveDraft).not.toHaveBeenCalled(); expect(prepare).not.toHaveBeenCalled();
+    expect(sign).not.toHaveBeenCalled(); expect(submit).not.toHaveBeenCalled();
+    mounted.unmount(); expect(host.getSnapshot().formTitle).toBe('Renovación de pasaporte'); host.dispose();
+  });
+  it('preserves an explicit authored route title while presenting the qualified app title', () => {
+    const test = fixture(); test.host.getSnapshot().formTitle = 'Qualified form title';
+    test.host.bundle.surfaces[0].routes[0].title = 'Authored route heading';
+    render(<NativePackageRespondentHost {...test.props} />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Authored route heading' })).toBeDefined();
+    expect(document.title).toBe('Qualified form title');
+  });
+
   it('retains the actual session owner through child unmount and retries a failed scoped Clear', async () => {
     const { host, props, saveDraft, clear } = await actualFixture();
     const mounted = render(<NativePackageRespondentHost {...props} />);

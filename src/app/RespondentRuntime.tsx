@@ -17,6 +17,7 @@ import {
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import {
   FormspecNode,
+  FormspecFormContent,
   FormspecProvider,
   IssuerChromeSlot,
   DefaultField,
@@ -1110,6 +1111,7 @@ function RespondentController({
               ) : null}
               {renderMode === 'surface-slot' ? (
                 <RespondentFormContent
+                  renderMode={renderMode}
                   claim={respondentState.claim}
                   composition={composition}
                   definition={respondentState.definition}
@@ -2110,6 +2112,7 @@ function RespondentSurface({
 }
 
 function RespondentFormContent({
+  renderMode,
   claim,
   composition,
   definition,
@@ -2122,6 +2125,7 @@ function RespondentFormContent({
   submitState,
   terminalClearState,
 }: {
+  renderMode?: 'standalone' | 'surface-slot';
   claim: IdentityClaim | null;
   composition: Composition;
   definition: FormDefinition;
@@ -2165,7 +2169,7 @@ function RespondentFormContent({
       ) : layoutPlan ? (
         <>
           <h2 className="sr-only" tabIndex={-1}>{chrome('form.fields')}</h2>
-          <FormspecNode node={layoutPlan} />
+          {renderMode === 'surface-slot' ? <FormspecFormContent /> : <FormspecNode node={layoutPlan} />}
         </>
       ) : (
         <div className="shell__status" role="status">

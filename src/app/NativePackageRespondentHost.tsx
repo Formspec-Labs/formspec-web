@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import canonicalize from 'canonicalize';
-import { SurfaceApp, starterWidgetModule, useSurfaceApp, deriveSurfaceRuntimeGeneration, type SurfaceAppProps } from '@formspec-org/surface-react';
+import { SurfaceApp, starterWidgetModule, useSurfaceApp, deriveSurfaceRuntimeGeneration, type SurfaceAppProps, type SurfaceRouteTitleResolver } from '@formspec-org/surface-react';
 import '@formspec-org/surface-react/formspec-surface.css';
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
 import type { Composition } from '../composition/types.ts';
@@ -44,9 +44,14 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     entry.completed = slot.onActionCompleted;
     return <RespondentDefinitionController composition={props.composition} config={props.config} form={entry.form} />;
   }, [forms, locales, props.componentDocument, props.host, props.composition, props.config, state.locale]);
+  const resolveRouteTitle: SurfaceRouteTitleResolver = useCallback(handle => {
+    if (!props.host.bundle.surfaces.includes(handle.surface)
+      || !handle.surface.routes.includes(handle.route) || handle.route.title !== undefined) return undefined;
+    return state.formTitle || undefined;
+  }, [props.host, state.formTitle]);
   if (state.cleared) return null;
   return <SurfaceApp bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate}
-    widgetModules={modules}
+    widgetModules={modules} appTitle={state.formTitle || undefined} resolveRouteTitle={resolveRouteTitle}
     sessionGeneration={sessionMarker} widgetActionExecutor={ports.widgetActionExecutor}
     authorizeDataSource={ports.authorizeDataSource}
     dataSourceLoader={ports.dataSourceLoader}
