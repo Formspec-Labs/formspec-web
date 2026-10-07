@@ -64,3 +64,4 @@ export {
   createHttpSurfaceBundleSource,
   type HttpSurfaceBundleSourceConfig,
 } from './surface-bundle-source.ts';
+export type { HttpResponseSigningPolicy } from './response-signing.ts';

@@ -17,6 +17,8 @@ export interface JsonRequestOptions {
   body?: unknown;
   idempotencyKey?: string;
   headers?: HeadersInit;
+  /** Optional admitted request catalog status allowlist. */
+  successStatuses?: readonly number[];
 }
 
 export class HttpAdapterError extends Error {
@@ -74,9 +76,11 @@ export class HttpClient {
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
     const payload = await readResponsePayload(response);
-    if (!response.ok) {
+    if (!response.ok || (options.successStatuses !== undefined && !options.successStatuses.includes(response.status))) {
       const problem = isProblemJson(payload) ? payload : undefined;
-      const title = (problem?.title ?? response.statusText) || 'HTTP adapter request failed';
+      const title = response.ok
+        ? 'HTTP response status does not match the admitted request'
+        : (problem?.title ?? response.statusText) || 'HTTP adapter request failed';
       throw new HttpAdapterError(title, response.status, problem, payload);
     }
     return payload as T;

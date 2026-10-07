@@ -18,15 +18,17 @@
  * reference deployment.
  */
 
-import type { DraftKey } from '../../ports/draft-store.ts';
-import type { IntakeHandoff } from '../../ports/submit-transport.ts';
+import type { DraftKey, DraftStore } from '../../ports/draft-store.ts';
+import type { ResponseSigning } from '../../ports/response-signing.ts';
+import type { IntakeHandoff, SubmitTransport } from '../../ports/submit-transport.ts';
 import type { AnonymousSessionBridge } from './anonymous-session.ts';
 import { createDraftBindingRegistry } from './draft-binding-registry.ts';
 import { HttpDraftStore } from './draft-store.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
-import type { HttpClientConfig } from './http-client.ts';
+import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import { HttpSubmitTransport } from './submit-transport.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
+import { HttpResponseSigning, ResponseSigningScopeFence, type HttpResponseSigningPolicy } from './response-signing.ts';
 
 export type { DraftBindingRegistry, DraftBindingSnapshot } from './draft-binding-registry.ts';
 
@@ -43,17 +45,24 @@ export interface HttpAdapterCohortConfig extends HttpClientConfig {
   responseDataResolver?: (handoff: IntakeHandoff) => Record<string, unknown>;
   signingRequested?: boolean | ((handoff: IntakeHandoff) => boolean);
   resumeMetadata?: DraftResumeMetadataStore;
+  /** Explicitly injected signing policy; omission preserves the existing unsigned cohort. */
+  responseSigning?: HttpResponseSigningPolicy;
 }
 
 export interface HttpAdapterCohort {
-  draftStore: HttpDraftStore;
-  submitTransport: HttpSubmitTransport;
+  draftStore: DraftStore;
+  submitTransport: SubmitTransport;
+  responseSigning?: ResponseSigning;
 }
 
 export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAdapterCohort {
+  if (config.responseSigning && !config.resumeMetadata) {
+    throw new Error('Response signing requires injected draft resume metadata for unresolved operation recovery');
+  }
   const resolveFormId = config.formIdResolver ?? defaultFormIdResolver;
   const registry = createDraftBindingRegistry({ resumeMetadata: config.resumeMetadata, formIdResolver: config.formIdResolver });
-  const { anonymousSessions, responseIdResolver, responseDataResolver, signingRequested, resumeMetadata: _resumeMetadata, ...httpConfig } = config;
+  const { anonymousSessions, responseIdResolver, responseDataResolver, signingRequested,
+    resumeMetadata: _resumeMetadata, responseSigning: signingPolicy, ...httpConfig } = config;
   const draftStore = new HttpDraftStore({
     ...httpConfig,
     bindingRegistry: registry,
@@ -77,7 +86,52 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       ? (handoff) => anonymousSessions.tokenForHandoff(handoff, true)
       : undefined,
   });
-  return { draftStore, submitTransport };
+  if (!signingPolicy) return { draftStore, submitTransport };
+  const fence = new ResponseSigningScopeFence(key => JSON.stringify({
+    formId: resolveFormId(key.formUrl, key.formVersion), subject: key.subjectRef ?? null, party: key.partyRef ?? null,
+  }));
+  const responseSigning = new HttpResponseSigning({
+    ...signingPolicy, client: new HttpClient(httpConfig), drafts: draftStore, bindings: registry, fence,
+    resumeMetadata: config.resumeMetadata,
+    async ownerFor(key) {
+      if (key.subjectRef && !key.subjectRef.startsWith('anon:')) return { subjectRef: key.subjectRef };
+      if (!anonymousSessions) throw new Error('Signing requires an owned anonymous session');
+      const session = await anonymousSessions.sessionForForm(key.formUrl, key.formVersion, true);
+      if (key.subjectRef && key.subjectRef !== session.subjectRef) throw new Error('Signing actor differs from the server owner');
+      return { token: session.sessionToken, subjectRef: session.subjectRef };
+    },
+  });
+  const scopedDrafts: DraftStore = {
+    load: key => fence.run(key, async () => draftStore.load(key)),
+    save: (key, response) => fence.run(key, async () => {
+      responseSigning.assertEditable(key);
+      await draftStore.save(key, response);
+    }),
+    list: subject => draftStore.list(subject),
+    delete: key => fence.clear(key, async () => {
+      await draftStore.delete(key);
+      responseSigning.clearScope(key);
+    }),
+    async invalidateSubject(subject) {
+      for (const key of await draftStore.list(subject)) await scopedDrafts.delete(key);
+    },
+  };
+  const scopedSubmit: SubmitTransport = {
+    submit: (handoff, operationId) => {
+      const key = draftKeyFromHandoff(handoff);
+      return fence.run(key, async () => {
+        responseSigning.assertEditable(key);
+        const binding = registry.get(key);
+        const response = handoff.extensions?.['x-formspec-response'];
+        if (binding?.response?.authoredSignatures?.length
+          && JSON.stringify(response) !== JSON.stringify(binding.response)) {
+          throw new Error('Signed submission must preserve the exact saved Response');
+        }
+        return submitTransport.submit(handoff, operationId);
+      });
+    },
+  };
+  return { draftStore: scopedDrafts, submitTransport: scopedSubmit, responseSigning };
 }
 
 /**

@@ -10,6 +10,7 @@ import type {
   OfflineSubmitQueue,
   PaymentRailAdapter,
   ResponseActionInvokerFactory,
+  ResponseSigning,
   SurfaceRouter,
   ReviewerSession,
   ReviewThreadStore,
@@ -62,6 +63,8 @@ export interface Composition {
   surfaceBundleVerifier: SurfaceBundleVerifier;
   draftStore: DraftStore;
   submitTransport: SubmitTransport;
+  /** Optional owned Prepare/Sign capability; Submit retains its separate transport. */
+  responseSigning?: ResponseSigning;
   identityProvider: IdentityProvider;
   /** Optional — only required when an adapter consumes it (e.g., MagicLinkAdapter). */
   notificationDelivery?: NotificationDelivery;

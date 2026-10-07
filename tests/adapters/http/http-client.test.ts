@@ -33,6 +33,16 @@ describe('HttpClient', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('enforces an admitted success status while retaining the default 2xx policy', async () => {
+    const { fetch } = recordingFetch(() => new Response('{"ok":true}', {
+      status: 201, headers: { 'content-type': 'application/json' },
+    }));
+    const client = new HttpClient({ baseUrl: 'https://formspec-server.example.test', fetchImpl: fetch });
+    await expect(client.postJson('/drafts/owned/sign', {}, { successStatuses: [200] }))
+      .rejects.toMatchObject({ status: 201, message: 'HTTP response status does not match the admitted request' });
+    await expect(client.postJson('/example', {})).resolves.toEqual({ ok: true });
+  });
+
   it('surfaces stack Problem JSON on failed requests', async () => {
     const { fetch } = recordingFetch(() => problemResponse(401, 'unauthorized'));
     const client = new HttpClient({ baseUrl: 'https://formspec-server.example.test', fetchImpl: fetch });

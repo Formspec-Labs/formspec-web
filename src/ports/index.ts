@@ -18,6 +18,11 @@ export type {
 } from './definition-source.ts';
 export type { DraftStore, DraftKey, FormResponse } from './draft-store.ts';
 export { DraftVersionConflictError } from './draft-store.ts';
+export { ResponseSigningUnresolvedError } from './response-signing.ts';
+export type {
+  ResponseSigning, PrepareResponseSigningInput, PreparedResponseSigning,
+  SignPreparedResponseInput, SignedResponseSigning,
+} from './response-signing.ts';
 export type { SubmitTransport, IntakeHandoff, SubmitConfirmation } from './submit-transport.ts';
 export type {
   IdentityProvider,
