@@ -18,7 +18,7 @@ export { useFocusField } from './use-focus-field';
 export { useRuntimeContext } from './use-runtime-context';
 export { useSemanticFieldControl } from './use-semantic-field-control';
 // ── Auto-renderer ──
-export { FormspecForm } from './renderer';
+export { FormspecForm, FormspecFormContent } from './renderer';
 export { FormspecNode } from './node-renderer';
 export { IssuerChromeSlot, parseQueryIssuerOverride } from './issuer';
 export { componentGraphIdentityAttrs, projectionMetadataAttrs, uiGraphRoutePolicyAttrs, } from './projection-metadata';

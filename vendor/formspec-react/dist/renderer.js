@@ -89,7 +89,7 @@ export function FormspecForm(props) {
     if (hasScreener && !screenerDone) {
         return (_jsx(FormspecProvider, { definition: definition, ...providerProps, ...issuerProviderProps, children: _jsx(ScreenerGate, { screenerDocument: screenerDocument, className: className, seedAnswers: screenerSeedAnswers, renderExternalRoute: renderExternalRoute, renderNoMatch: renderNoMatch, onRoute: handleRoute, onSkip: () => setScreenerDone(true) }) }));
     }
-    return (_jsx(FormspecProvider, { definition: definition, ...providerProps, ...issuerProviderProps, children: _jsx(FormspecFormInner, { className: className }) }));
+    return (_jsx(FormspecProvider, { definition: definition, ...providerProps, ...issuerProviderProps, children: _jsx(FormspecFormContent, { className: className }) }));
 }
 /**
  * Screener gate rendered inside a FormspecProvider so it has access to the engine.
@@ -108,7 +108,8 @@ function ScreenerGate({ screenerDocument, className, seedAnswers, renderExternal
                     // for internal routes.
                 } })] }));
 }
-function FormspecFormInner({ className }) {
+/** Render the current provider's form, including its scoped tokens and issuer chrome. */
+export function FormspecFormContent({ className }) {
     const { engine, layoutPlan } = useFormspecContext();
     const containerRef = useEmitThemeTokensOnFormspecContainerRef();
     if (!layoutPlan) {

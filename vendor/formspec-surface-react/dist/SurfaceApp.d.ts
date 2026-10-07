@@ -41,6 +41,7 @@
  * of the way of hosts that already have a router — which every host of any size
  * does. A shell that owned history would be a shell that could not be embedded.
  */
+import { type SurfaceRouteTitleResolver } from './title-presentation.js';
 import type { DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from "react";
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type HeadingLevel, type PlannedTransition, type ResolvedBundle, type SurfaceApp as ComposedSurfaceApp, type SurfaceCompositionOptions, type SurfaceDiagnostic, type SurfaceRouteHandle, type SurfaceStringOverrides, type SurfaceStrings, type SurfaceStaticAssetResolver, type ThemeAuthority, type TransitionConditionEvaluator, type WidgetRegistry } from "@formspec-org/surface";
@@ -187,6 +188,10 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
     setDocumentTitle?: boolean | undefined;
     /** Above the navigation — verification chrome, tenant header, whatever the host has. */
     header?: ReactNode;
+    /** Host-owned presentation title for the default banner and browser title. */
+    appTitle?: string | undefined;
+    /** Host-owned route presentation; explicit navigation labels still take precedence. */
+    resolveRouteTitle?: SurfaceRouteTitleResolver | undefined;
     footer?: ReactNode;
     navigationLabel?: string | undefined;
     renderNotFound?: ((location: string) => ReactNode) | undefined;
@@ -216,8 +221,9 @@ export interface SurfaceNavProps {
     onNavigate: (href: string) => void;
     label?: string | undefined;
     menuLabel?: string | undefined;
+    resolveRouteTitle?: SurfaceRouteTitleResolver | undefined;
 }
-export declare function SurfaceNav({ app, location, routeParams, onNavigate, label, menuLabel, }: SurfaceNavProps): import("react/jsx-runtime").JSX.Element | null;
+export declare function SurfaceNav({ app, location, routeParams, onNavigate, label, menuLabel, resolveRouteTitle, }: SurfaceNavProps): import("react/jsx-runtime").JSX.Element | null;
 /**
  * Address-bar location plus a navigate function, for hosts with no router.
  *

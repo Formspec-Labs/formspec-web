@@ -30,3 +30,8 @@ export interface FormspecFormProps extends Omit<FormspecProviderProps, 'children
  * Once the screener routes internally (or is skipped), the form is shown.
  */
 export declare function FormspecForm(props: FormspecFormProps): import("react/jsx-runtime").JSX.Element;
+export interface FormspecFormContentProps {
+    className?: string;
+}
+/** Render the current provider's form, including its scoped tokens and issuer chrome. */
+export declare function FormspecFormContent({ className }: FormspecFormContentProps): import("react/jsx-runtime").JSX.Element;

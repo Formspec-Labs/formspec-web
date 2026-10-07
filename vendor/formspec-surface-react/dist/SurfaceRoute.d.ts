@@ -31,6 +31,7 @@
  *    v0.1 explicitly gives "no normative position vocabulary", so honouring it
  *    would mean inventing one. Authored order is the only thing defined.
  */
+import { type SurfaceRouteTitleResolver } from './title-presentation.js';
 import type { DataSourceRevisionSelector } from './data-source-revision.js';
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type PlannedTransition, type SurfaceDiagnostic, type SurfaceRoutePlan, type SurfaceStrings } from '@formspec-org/surface';
 import type { OntologyDocument, ReferencesDocument, ResponseActionsDocument } from '@formspec-org/types';
@@ -42,6 +43,7 @@ import type { WidgetActionCoordinator } from './widget-action-runtime.js';
 export interface SurfaceRouteViewProps {
     /** Everything the core decided for this route. Nothing here re-decides it. */
     plan: SurfaceRoutePlan<SurfaceWidget>;
+    resolveRouteTitle?: SurfaceRouteTitleResolver | undefined;
     /** The shell's own person-facing strings. Defaults to the shipped English. */
     strings?: SurfaceStrings | undefined;
     dataSourceLoader?: DataSourceLoader | undefined;
@@ -84,4 +86,4 @@ export interface SurfaceRouteViewProps {
      */
     onAdvance?: ((transition: PlannedTransition, outcome?: Pick<SurfaceTransitionOutcome, 'transitionBindings'>) => 'advanced' | 'refused' | void) | undefined;
 }
-export declare function SurfaceRouteView({ plan, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;
+export declare function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;
