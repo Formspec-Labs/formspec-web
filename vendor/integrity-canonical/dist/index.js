@@ -13,8 +13,7 @@ const SIGNING_DOMAIN = 'formspec.response.signed-payload.v1';
  * maintained canonicalizer also rejects invalid Unicode strings and keys.
  */
 export function canonicalResponseHandoffBytes(response) {
-    assertResponse(response);
-    return framedBytes(HANDOFF_DOMAIN, response);
+    return framedBytes(HANDOFF_DOMAIN, responseSnapshot(response));
 }
 /**
  * Builds the formspec-response-signing-v1 preimage matching the Rust authority.
@@ -27,19 +26,15 @@ export function canonicalResponseHandoffBytes(response) {
  * @throws TypeError for a non-object root, non-JSON runtime data or malformed Unicode.
  */
 export function canonicalResponseSignedPayloadBytes(response) {
-    assertResponse(response);
-    const payload = Object.create(null);
-    for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(response))) {
-        if (key !== 'authoredSignatures')
-            Object.defineProperty(payload, key, descriptor);
-    }
+    const payload = responseSnapshot(response);
+    delete payload.authoredSignatures;
     return framedBytes(SIGNING_DOMAIN, payload);
 }
-function assertResponse(response) {
+function responseSnapshot(response) {
     if (response === null || typeof response !== 'object' || Array.isArray(response)) {
         throw new TypeError('response must be a JSON object');
     }
-    assertJsonValue(response, new Set());
+    return jsonSnapshot(response, new Set());
 }
 function framedBytes(domain, response) {
     const json = canonicalize(response);
@@ -48,17 +43,18 @@ function framedBytes(domain, response) {
     return new TextEncoder().encode(`${domain}\0${json}`);
 }
 // Admission checking only: serialization, ordering, and number formatting all
-// belong to the maintained RFC 8785 implementation. Never drop input values.
-function assertJsonValue(value, ancestors) {
+// belong to the maintained RFC 8785 implementation. Serialize only admitted
+// descriptor values, so runtime Proxy reads cannot replace the checked data.
+function jsonSnapshot(value, ancestors) {
     if (typeof value === 'string') {
         if (!value.isWellFormed())
             throw new TypeError('response contains invalid Unicode');
-        return;
+        return value;
     }
     if (value === null || typeof value === 'boolean')
-        return;
+        return value;
     if (typeof value === 'number' && Number.isFinite(value))
-        return;
+        return value;
     if (typeof value !== 'object') {
         throw new TypeError('response contains a non-JSON value');
     }
@@ -82,9 +78,11 @@ function assertJsonValue(value, ancestors) {
     if (Object.getOwnPropertySymbols(value).length > 0) {
         throw new TypeError('response contains symbol properties');
     }
-    if (array && Object.keys(descriptors).length !== value.length + 1) {
+    const length = array ? descriptors.length?.value : 0;
+    if (array && (!Number.isInteger(length) || length < 0 || Object.keys(descriptors).length !== length + 1)) {
         throw new TypeError('response contains a sparse array or extra array properties');
     }
+    const snapshot = array ? Object.setPrototypeOf(new Array(length), null) : Object.create(null);
     for (const [key, descriptor] of Object.entries(descriptors)) {
         if (!key.isWellFormed())
             throw new TypeError('response contains invalid Unicode');
@@ -93,10 +91,13 @@ function assertJsonValue(value, ancestors) {
         if (!descriptor.enumerable || !('value' in descriptor)) {
             throw new TypeError('response contains an accessor or non-JSON property');
         }
-        if (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length)) {
+        if (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= length)) {
             throw new TypeError('response contains extra array properties');
         }
-        assertJsonValue(descriptor.value, ancestors);
+        Object.defineProperty(snapshot, key, {
+            value: jsonSnapshot(descriptor.value, ancestors), enumerable: true, configurable: true, writable: true,
+        });
     }
     ancestors.delete(value);
+    return snapshot;
 }
