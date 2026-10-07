@@ -1,3 +1,4 @@
+import { HttpAttachmentStore } from '../adapters/http/attachment-store.ts';
 import { publishedDefinitionDraftStore } from '../adapters/composing/published-definition-draft-store.ts';
 import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
 import { PinnedPackageDefinitionSource } from '../adapters/http/pinned-package-definition-source.ts';
@@ -111,14 +112,14 @@ export function createDefaultComposition(
       : {}),
   });
   if (options.packageUrl) {
-    // Local authored-package preview uses the existing demo host capabilities.
-    // Drafts and submission still call the real server and never return stub receipts.
+    // Local authored-package preview uses shared host controls with real server
+    // attachment custody, drafts, and submission.
     const preview = createDemoComposition();
     const source = new PinnedPackageDefinitionSource(options.packageUrl);
     return freezeComposition({
       ...preview,
       localPackagePreview: true,
-      // Preview has no authenticated subject; server session issuance stays at save/submit.
+      // Preview has no sign-in claim; server sessions authorize uploads and saves.
       identityProvider: {
         async discover() { return []; },
         async authenticate() { throw new Error('Local package preview has no sign-in provider'); },
@@ -126,7 +127,12 @@ export function createDefaultComposition(
         subscribe(listener) { listener(null); return () => {}; },
       },
       offlineSubmitQueue: unavailableOfflineSubmitQueue(),
-      instanceCapabilities: { ...preview.instanceCapabilities, offlineSubmit: 'unavailable' },
+      instanceCapabilities: { ...preview.instanceCapabilities, offlineSubmit: 'unavailable', fileUpload: 'available' },
+      attachmentStore: new HttpAttachmentStore({
+        ...baseHttpConfig,
+        formId: defaultFormIdResolver(initialDefinitionUrl),
+        accessToken: async () => (await anonymousSessions.sessionForForm(initialDefinitionUrl)).sessionToken,
+      }),
       initialDefinitionUrl,
       definitionSource: source,
       draftStore: publishedDefinitionDraftStore(

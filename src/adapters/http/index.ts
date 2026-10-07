@@ -1,3 +1,4 @@
+export { HttpAttachmentStore, type HttpAttachmentStoreConfig } from './attachment-store.ts';
 export {
   AnonymousSessionBridge,
   HttpAnonymousIdentityProvider,

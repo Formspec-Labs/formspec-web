@@ -669,6 +669,7 @@ async function fulfillFormspecServerRoute(
     && /\/runtime\/forms\/demo-intake\/sessions\/anonymous$/u.test(path)
   ) {
     await json(route, {
+      session_id: 'server-session-id-e2e',
       session_token: 'anonymous-session-token-e2e',
       subject_ref: 'anon:respondent-e2e',
       form_id: 'demo-intake',

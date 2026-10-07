@@ -1798,7 +1798,7 @@ function RespondentSurface({
 
       {composition.localPackagePreview ? (
         <p className="respondent-preview-note" role="note">
-          Photos stay in this browser. Filing and signing are not yet complete.
+          Filing and signing are not yet complete.
         </p>
       ) : null}
       <RespondentFormContent

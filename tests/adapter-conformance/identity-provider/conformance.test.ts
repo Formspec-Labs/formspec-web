@@ -24,6 +24,7 @@ defineIdentityProviderConformance('anonymous IdentityProvider conformance', () =
 defineIdentityProviderConformance('HTTP anonymous IdentityProvider conformance', () => {
   const { fetch } = recordingFetch(() =>
     jsonResponse({
+      session_id: 'server-session-id',
       session_token: 'anonymous-token-1',
       subject_ref: 'anon:server-subject',
       form_id: 'conformance',

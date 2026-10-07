@@ -183,6 +183,7 @@ describe('composition root smoke', () => {
       const path = new URL(request.url).pathname;
       if (request.method === 'POST' && path === '/runtime/forms/demo-intake/sessions/anonymous') {
         return jsonResponse({
+          session_id: 'server-session-id',
           session_token: 'anonymous-token-1',
           subject_ref: 'anon:server-subject',
           form_id: 'demo-intake',
@@ -265,7 +266,7 @@ describe('composition root smoke', () => {
         'POST /runtime/forms/demo-intake/drafts',
         'POST /drafts/draft-http-2/submit',
       ]);
-    expect(requests[0]?.body).toMatchObject({ session_id: expect.stringMatching(/^web-/) });
+    expect(requests[0]?.body).toEqual({});
     expect(requests[2]?.body).toMatchObject({
       anonymous_session_token: 'anonymous-token-1',
       anonymous_subject_ref: 'anon:server-subject',

@@ -7,13 +7,12 @@ import type {
   Unsubscribe,
 } from '../../ports/identity-provider.ts';
 import type { IntakeHandoff } from '../../ports/submit-transport.ts';
-import { IdentitySession, meetsAssurance, randomUuid } from '../identity/assurance.ts';
+import { IdentitySession, meetsAssurance } from '../identity/assurance.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 
 export interface AnonymousSessionBridgeConfig extends HttpClientConfig {
   formIdResolver?: FormIdResolver;
-  sessionIdFactory?: () => string;
 }
 
 export interface AnonymousSession {
@@ -25,6 +24,7 @@ export interface AnonymousSession {
 }
 
 interface AnonymousSessionView {
+  session_id: string;
   session_token: string;
   subject_ref: string;
   form_id: string;
@@ -32,7 +32,6 @@ interface AnonymousSessionView {
 }
 
 interface SessionSlot {
-  sessionId: string;
   session?: AnonymousSession;
   inFlight?: Promise<AnonymousSession>;
 }
@@ -42,30 +41,31 @@ const EXPIRY_SKEW_MS = 60_000;
 export class AnonymousSessionBridge {
   private readonly client: HttpClient;
   private readonly formIdResolver: FormIdResolver;
-  private readonly sessionIdFactory: () => string;
   private readonly sessions = new Map<string, SessionSlot>();
 
   constructor(config: AnonymousSessionBridgeConfig) {
     this.client = new HttpClient(config);
     this.formIdResolver = config.formIdResolver ?? defaultFormIdResolver;
-    this.sessionIdFactory = config.sessionIdFactory ?? (() => `web-${randomUuid()}`);
   }
 
   async sessionForForm(formUrl: string, version?: string): Promise<AnonymousSession> {
     const formId = this.formIdResolver(formUrl, version);
     let slot = this.sessions.get(formId);
     if (!slot) {
-      slot = { sessionId: this.sessionIdFactory() };
+      slot = {};
       this.sessions.set(formId, slot);
     }
-    if (slot.session && !expiresSoon(slot.session.expiresAt)) {
+    if (slot.session) {
+      if (expiresSoon(slot.session.expiresAt)) {
+        throw new Error('Anonymous session is nearing expiration; renewal is required to preserve the active respondent');
+      }
       return slot.session;
     }
     if (slot.inFlight) {
       return slot.inFlight;
     }
 
-    slot.inFlight = this.issueSession(formId, slot.sessionId);
+    slot.inFlight = this.issueSession(formId);
     try {
       slot.session = await slot.inFlight;
       return slot.session;
@@ -96,13 +96,26 @@ export class AnonymousSessionBridge {
     return session.sessionToken;
   }
 
-  private async issueSession(formId: string, sessionId: string): Promise<AnonymousSession> {
+  private async issueSession(formId: string): Promise<AnonymousSession> {
     const view = await this.client.postJson<AnonymousSessionView>(
       `/runtime/forms/${encodeURIComponent(formId)}/sessions/anonymous`,
-      { session_id: sessionId },
+      {},
     );
+    if (!view || typeof view !== 'object') {
+      throw new Error('Anonymous session response is invalid');
+    }
+    if (typeof view.session_id !== 'string' || !view.session_id.trim()) {
+      throw new Error('Anonymous session response is missing its server-issued session ID');
+    }
+    if (typeof view.session_token !== 'string' || !view.session_token.trim()
+      || typeof view.subject_ref !== 'string' || !view.subject_ref.startsWith('anon:')
+      || view.subject_ref.length <= 5 || view.form_id !== formId
+      || typeof view.expires_at !== 'string' || !Number.isFinite(Date.parse(view.expires_at))
+      || Date.parse(view.expires_at) <= Date.now()) {
+      throw new Error('Anonymous session response has invalid authentication or form binding');
+    }
     return {
-      sessionId,
+      sessionId: view.session_id,
       sessionToken: view.session_token,
       subjectRef: view.subject_ref,
       formId: view.form_id,

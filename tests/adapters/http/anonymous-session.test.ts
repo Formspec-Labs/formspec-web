@@ -10,6 +10,7 @@ describe('AnonymousSessionBridge', () => {
   it('issues anonymous sessions through POST /runtime/forms/{form_id}/sessions/anonymous', async () => {
     const { fetch, requests } = recordingFetch(() =>
       jsonResponse({
+        session_id: 'server-session-id',
         session_token: 'anonymous-token-1',
         subject_ref: 'anon:server-subject',
         form_id: 'conformance',
@@ -19,11 +20,11 @@ describe('AnonymousSessionBridge', () => {
     const bridge = new AnonymousSessionBridge({
       baseUrl: 'https://formspec-server.example.test',
       fetchImpl: fetch,
-      sessionIdFactory: () => 'web-session-1',
     });
 
     await expect(bridge.sessionForForm(sampleFormDefinition.url, sampleFormDefinition.version))
       .resolves.toMatchObject({
+        sessionId: 'server-session-id',
         sessionToken: 'anonymous-token-1',
         subjectRef: 'anon:server-subject',
       });
@@ -33,7 +34,42 @@ describe('AnonymousSessionBridge', () => {
     expect(requests[0]?.url).toBe(
       'https://formspec-server.example.test/runtime/forms/conformance/sessions/anonymous',
     );
-    expect(requests[0]?.body).toEqual({ session_id: 'web-session-1' });
+    expect(requests[0]?.body).toEqual({});
+  });
+
+  it('refuses a response without a server-issued session ID', async () => {
+    const { fetch } = recordingFetch(() => jsonResponse({
+      session_token: 'token', subject_ref: 'anon:subject', form_id: 'conformance',
+      expires_at: '2099-01-01T00:00:00.000Z',
+    }));
+    const bridge = new AnonymousSessionBridge({ baseUrl: 'https://server.test', fetchImpl: fetch });
+    await expect(bridge.sessionForForm(sampleFormDefinition.url)).rejects.toThrow(/server-issued session ID/);
+  });
+
+  it('preserves the active subject by refusing silent session rotation near expiry', async () => {
+    let expiry = new Date(Date.now() + 120_000).toISOString();
+    const { fetch, requests } = recordingFetch(() => jsonResponse({
+      session_id: 'server-session-id', session_token: 'token', subject_ref: 'anon:subject',
+      form_id: 'conformance', expires_at: expiry,
+    }));
+    const bridge = new AnonymousSessionBridge({ baseUrl: 'https://server.test', fetchImpl: fetch });
+    const session = await bridge.sessionForForm(sampleFormDefinition.url);
+    expiry = new Date(Date.now() + 30_000).toISOString();
+    session.expiresAt = expiry;
+    await expect(bridge.sessionForForm(sampleFormDefinition.url)).rejects.toThrow(/renewal is required/);
+    expect(requests).toHaveLength(1);
+  });
+
+  it.each([
+    { session_token: '' }, { subject_ref: '' }, { form_id: 'different-form' },
+    { expires_at: 'invalid' }, { expires_at: '2000-01-01T00:00:00.000Z' },
+  ])('refuses invalid server session bindings %j', async invalid => {
+    const { fetch } = recordingFetch(() => jsonResponse({
+      session_id: 'server-session-id', session_token: 'token', subject_ref: 'anon:subject',
+      form_id: 'conformance', expires_at: '2099-01-01T00:00:00.000Z', ...invalid,
+    }));
+    const bridge = new AnonymousSessionBridge({ baseUrl: 'https://server.test', fetchImpl: fetch });
+    await expect(bridge.sessionForForm(sampleFormDefinition.url)).rejects.toThrow(/invalid authentication or form binding/);
   });
 
   it('caches and coalesces same-form session issuance', async () => {
@@ -44,6 +80,7 @@ describe('AnonymousSessionBridge', () => {
     const { fetch, requests } = recordingFetch(async () => {
       await responseGate;
       return jsonResponse({
+        session_id: 'server-session-id',
         session_token: 'anonymous-token-1',
         subject_ref: 'anon:server-subject',
         form_id: 'conformance',
@@ -53,7 +90,6 @@ describe('AnonymousSessionBridge', () => {
     const bridge = new AnonymousSessionBridge({
       baseUrl: 'https://formspec-server.example.test',
       fetchImpl: fetch,
-      sessionIdFactory: () => 'web-session-1',
     });
 
     const first = bridge.sessionForForm(sampleFormDefinition.url, sampleFormDefinition.version);
@@ -73,6 +109,7 @@ describe('AnonymousSessionBridge', () => {
   it('resolves tokens for anonymous draft keys and handoffs only when subjects match', async () => {
     const { fetch } = recordingFetch(() =>
       jsonResponse({
+        session_id: 'server-session-id',
         session_token: 'anonymous-token-1',
         subject_ref: 'anon:server-subject',
         form_id: 'conformance',
@@ -118,6 +155,7 @@ describe('HttpAnonymousIdentityProvider', () => {
   it('normalizes server-issued anonymous sessions into canonical identity claims', async () => {
     const { fetch } = recordingFetch(() =>
       jsonResponse({
+        session_id: 'server-session-id',
         session_token: 'anonymous-token-1',
         subject_ref: 'anon:server-subject',
         form_id: 'conformance',
