@@ -108,6 +108,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   let expectedReviewIdentity: string | undefined;
   let reviewState: ResponseReviewState | undefined;
   let publicSnapshot: ResponseActionControllerSnapshot | undefined;
+  // Ownership survives retiring candidate evidence after edits. This detached
+  // snapshot selects the owned branch only; the cohort requalifies its handle.
+  let ownedResponseSeed: FormResponse | undefined;
   let deliveryIdentity: string | undefined;
   const listeners = new Set<() => void>();
   const reads = new Set<AbortController>();
@@ -122,6 +125,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function current(expected: number) { if (disposed || generation !== expected) throw new Error('native-context-obsolete'); }
   function stop(reason: Parameters<NativePackageSigningHostPolicy['invalidateAuthority']>[0]) {
+    if (reason === 'clear' || reason === 'dispose') ownedResponseSeed = undefined;
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
     authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? structuredClone(input.draftKey) : undefined);
   }
@@ -173,9 +177,10 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function start(restoredResponse?: FormResponse) {
     if (!input) throw new Error('native-runtime-not-attached');
+    if (restoredResponse) { ownedResponseSeed = structuredClone(restoredResponse); freezeMetadata(ownedResponseSeed); }
     unsubscribeController?.();
     const expected = authorityGeneration;
-    controller = createResponseActionController({ ...policy.controller, restoredResponse,
+    controller = createResponseActionController({ ...policy.controller, restoredResponse: ownedResponseSeed,
       context: { definition: policy.definition, draftKey: input.draftKey, publication: policy.publication,
         responseId: responseId!, generation: String(expected) }, signingContext: () => policy.signingContext(locale),
       validateFrozenResponse: async (response, validationTuple) => {
@@ -201,6 +206,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     publicSnapshot = controller.getSnapshot();
     unsubscribeController = controller.subscribe(() => {
       publicSnapshot = controller!.getSnapshot();
+      if (authorityGeneration === expected && publicSnapshot.saved) { ownedResponseSeed = structuredClone(publicSnapshot.saved.response); freezeMetadata(ownedResponseSeed); }
       rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
       const selected = publicSnapshot.signed ?? publicSnapshot.prepared;
       const identity = selected ? canonicalize({ selected, locale, signed: !!publicSnapshot.signed }) : undefined;

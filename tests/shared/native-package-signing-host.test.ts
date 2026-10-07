@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { createFormEngine } from '@formspec-org/engine/render';
 import { createSemanticControlRegistry } from '@formspec-org/react';
-import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
+import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import { composeSurfaceApp, flattenRegistryEntries, dereferenceBundleExport, resolveDataSourceDescriptor, type BundleExport } from '@formspec-org/surface';
 import { deriveSurfaceRuntimeGeneration, responseReviewHash, type ResponseReviewData } from '@formspec-org/surface-react';
 import type { DataSourcesDocument, FormResponse, LocaleDocument, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
@@ -13,6 +13,9 @@ import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '.
 import { createNativePackageSigningHost, captureFields, type NativePackageSigningHostPolicy } from '../../src/shared/native-package-signing-host.ts';
 import type { SavedResponseDraft } from '../../src/ports/response-signing.ts';
 import { isUuidV7IdempotencyKey } from '../../src/shared/idempotency-key.ts';
+import { createHttpAdapterCohort } from '../../src/adapters/http/cohort.ts';
+import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
+import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
 
 beforeAll(() => initFormspecEngine());
 const hashResponse = async (response: FormResponse) => createHash('sha256').update(canonicalResponseHandoffBytes(response)).digest('hex');
@@ -79,6 +82,86 @@ function fixture(attachment = false) {
 }
 
 describe('generic native package signing session', () => {
+  it.each([false, true])('retains verified ownership through edits and attachment upload with captured-data reload=%s, then owned PATCH and Prepare', async reload => {
+    const test = fixture(); test.host.dispose();
+    const source = { ref: `${test.policy.definition.url}#/extensions/x-formspec-signing-content/entries/en`, version: '1' };
+    const content: SigningContent = { source, locale: 'en', documentId: 'doc', signingIntent: 'urn:test:sign',
+      declaration: 'Declaration', affirmationText: 'Affirmation', delegatedSigningNotice: 'Notice', paperAlternative: 'Paper',
+      electronicConsent: { text: 'Consent', controlLabel: 'Consent', textRef: 'urn:test:consent', version: '1' } };
+    const definition = { ...test.policy.definition, items: [...test.policy.definition.items,
+      { key: 'photo', type: 'field' as const, dataType: 'attachment' as const, label: 'Photo' }],
+      extensions: { 'x-formspec-signing-content': { version: '1.0' as const, entries: { en: content } } } };
+    const locale: LocaleDocument = { $formspecLocale: '2.0', url: 'urn:test:locale:en', version: '1', locale: 'en',
+      target: { kind: 'definition', url: definition.url }, strings: {} };
+    const document = structuredClone(test.policy.controller.roles.saveInitial!.document);
+    document.actions = ['save-initial', 'save-owned', 'prepare'].map(id => ({ id, intent: 'save-draft',
+      validation: { profile: id === 'prepare' ? 'on-submit' : 'off', blocking: id === 'prepare' ? 'block-on-error' : 'non-blocking', persistence: id === 'prepare' ? 'complete-response' : 'draft-checkpoint' },
+      effects: [{ type: 'serviceRequest', requestRef: id, idempotencyKey: '@invocation.id' }] })) as unknown as ResponseActionsDocument['actions'];
+    document['x-formspec-runtime'] = { version: '1.0', requests: document.actions.map(action => {
+      const initial = action.id === 'save-initial';
+      return { id: action.id, adapter: 'http-json', successStatuses: [200], request: {
+        method: initial ? 'POST' : 'PATCH', pathTemplate: initial ? '/runtime/forms/{formId}/drafts' : '/drafts/{draftId}',
+        pathBindings: initial ? { formId: { from: 'input', path: 'formId' } } : { draftId: { from: 'input', path: 'draftId' } },
+        bodyBindings: { '/canonical_response': { from: 'input', path: 'frozenResponse' }, '/draft_state': { from: 'input', path: 'frozenResponse.data' },
+          ...(!initial ? { '/expected_draft_version': { from: 'input', path: 'draftVersion' } } : {}) } } };
+    }) as unknown as NonNullable<ResponseActionsDocument['x-formspec-runtime']>['requests'] };
+    const key = { formUrl: definition.url, formVersion: definition.version, subjectRef: 'server-actor' };
+    let version = 0; let stored: FormResponse | undefined;
+    const view = () => ({ draft_id: 'owned-id', form_version_id: 'publication', subject_ref: 'server-actor', draft_version: version,
+      status: 'in_progress', draft_state: stored!.data, canonical_response: structuredClone(stored) });
+    const transport = recordingFetch(request => {
+      if (request.method === 'GET') return jsonResponse(view());
+      const body = request.body as { canonical_response: FormResponse; expected_draft_version?: number };
+      if (request.method === 'PATCH') expect(body.expected_draft_version).toBe(version);
+      else { expect(request.method).toBe('POST'); expect(request.url).toBe('https://server.example.test/runtime/forms/form/drafts'); expect(version).toBe(0); }
+      stored = structuredClone(body.canonical_response); version++; return jsonResponse(view());
+    });
+    const metadata = new Map<string, unknown>();
+    const cohort = createHttpAdapterCohort({ baseUrl: 'https://server.example.test', fetchImpl: transport.fetch,
+      formIdResolver: () => 'form', resumeMetadata: { read: slot => metadata.get(slot), write: (slot, value) => { metadata.set(slot, structuredClone(value)); }, remove: slot => { metadata.delete(slot); } },
+      responseSigning: { validateResponse: validateCanonicalFormResponse, validateContent: await loadCanonicalSigningContentValidator(),
+        signingProfileDigest: async response => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex'), keyId: 'unused-sign-key' } });
+    const roles = Object.fromEntries([['saveInitial', 'save-initial'], ['saveOwned', 'save-owned'], ['prepare', 'prepare']].map(([role, actionRef]) =>
+      [role, { document, actionRef, requestRef: actionRef, artifactRef: 'urn:test:actions', artifactDigest: `sha256:${'b'.repeat(64)}` }]));
+    const policy: NativePackageSigningHostPolicy = { ...test.policy, definition, locales: [locale],
+      bundle: { ...test.policy.bundle, documents: { ...test.policy.bundle.documents, [definition.url]: definition, 'urn:test:actions': document, [locale.url!]: locale } },
+      controller: { ...test.policy.controller, signing: cohort.responseSigning!, roles, validateResponse: validateCanonicalFormResponse },
+      signingContext: () => ({ source, locale: 'en' }), invalidateAuthority: (_reason, actualKey) => { if (actualKey) cohort.invalidateResponseSigningScope!(actualKey); },
+      clearDraftAccess: actualKey => cohort.draftStore.delete(actualKey) };
+    let host = createNativePackageSigningHost(policy);
+    let engine = createFormEngine(definition); engine.loadLocale(locale); engine.setLocale('en'); engine.setValue('fullName', 'Partial');
+    let lease = await host.configureRuntime({ engine, definition, draftKey: key, claim: null, activeLocale: 'en' });
+    const invoke = async (actionRef: string) => lease.responseActionInvoker({ document, actionRef,
+      invocationContext: { invocationId: `node:${actionRef}` }, ports: { dispatchHostEvent: vi.fn(), submit: () => ({
+        response: { ...engine.getResponse({ profile: actionRef === 'prepare' ? 'on-submit' : 'off' }), id: test.response.id },
+        validationReport: engine.getValidationReport({ profile: actionRef === 'prepare' ? 'on-submit' : 'off' }) }) } });
+    await invoke('save-initial'); expect(host.getSnapshot().controller).toMatchObject({ phase: 'saved' }); expect(host.getSnapshot().controller?.saved?.draft.version).toBe(1);
+    engine.setValue('fullName', 'Complete'); engine.setValue('fullName', 'Complete edited');
+    const attachment = { kind: 'attachment-ref', uri: 'attachment:uploaded', contentType: 'image/png', mimeType: 'image/png',
+      filename: 'uploaded.png', size: 17, hash: `sha256:${'c'.repeat(64)}` };
+    engine.setValue('photo', attachment);
+    if (reload) {
+      const capturedData = structuredClone(engine.getResponse({ profile: 'off' }).data);
+      lease.dispose(); host.dispose(); engine.dispose();
+      const restored = await cohort.draftStore.load(key);
+      expect(restored?.data.photo).toBeNull(); expect(version).toBe(1);
+      host = createNativePackageSigningHost(policy);
+      engine = createFormEngine(definition); engine.loadLocale(locale); engine.setLocale('en');
+      engine.loadResponseData(restored!.data as Parameters<typeof engine.loadResponseData>[0]);
+      lease = await host.configureRuntime({ engine, definition, draftKey: key, claim: null, activeLocale: 'en', restoredResponse: restored! });
+      engine.loadResponseData(capturedData as Parameters<typeof engine.loadResponseData>[0]);
+      expect(engine.getResponse({ profile: 'off' }).data).toEqual(capturedData);
+    }
+    expect(host.getSnapshot().controller?.owned).toBe(true);
+    expect(host.getSnapshot().controller?.saved).toBeUndefined(); expect(host.getSnapshot().runtime).toBeUndefined();
+    await invoke('save-owned'); expect(host.getSnapshot().controller?.saved?.draft.version).toBe(2);
+    expect(stored!.data.photo).toEqual(attachment);
+    expect(transport.requests.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(transport.requests.filter(request => request.method === 'PATCH')).toHaveLength(1);
+    await invoke('prepare'); expect(host.getSnapshot().controller?.prepared?.draft.version).toBe(3);
+    expect(host.getSnapshot().controller?.prepared?.response).toEqual(stored);
+    lease.dispose(); host.dispose(); engine.dispose(); test.engine.dispose();
+  });
   it('captures actual localized public form titles without changing authority and retains them across retired leases', async () => {
     const test = fixture(); test.host.dispose();
     test.invalidateAuthority.mockClear();
