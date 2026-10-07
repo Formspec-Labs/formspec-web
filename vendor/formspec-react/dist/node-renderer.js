@@ -98,13 +98,17 @@ const ACTION_STATUS_KEYS = {
     deferred: 'action.deferred',
     unresolved: 'action.unresolved',
 };
-function actionResultMessage(chrome, result) {
-    const status = chrome(ACTION_STATUS_KEYS[result.status]);
-    const reason = result.failureReason?.trim();
-    // The sentence is a template too: a locale decides its own punctuation and word order.
-    return reason
-        ? chrome('action.statusReason', { status, reason })
-        : chrome('action.status', { status });
+function actionResultMessage(chrome, feedback) {
+    if (feedback.phase === 'idle')
+        return '';
+    if (feedback.phase === 'pending')
+        return chrome('action.inProgress');
+    if (feedback.intent === 'save-draft'
+        && (feedback.status === 'failed' || feedback.status === 'unresolved')) {
+        return chrome('draft.saveUnconfirmed');
+    }
+    // Diagnostic reasons remain in the original invocation result, never respondent copy.
+    return chrome('action.status', { status: chrome(ACTION_STATUS_KEYS[feedback.status]) });
 }
 function ActionButtonNode({ node }) {
     const chrome = useChromeText();
@@ -125,7 +129,7 @@ function ActionButtonNode({ node }) {
     const statusId = useId();
     const controlRef = useRef(null);
     const inFlightRef = useRef(null);
-    const [feedback, setFeedback] = useState({ phase: 'idle', message: '' });
+    const [feedback, setFeedback] = useState({ phase: 'idle' });
     useEffect(() => {
         if (finding) {
             onActionFinding?.(finding);
@@ -224,18 +228,17 @@ function ActionButtonNode({ node }) {
         if (inFlightRef.current) {
             return inFlightRef.current;
         }
-        setFeedback({ phase: 'pending', message: chrome('action.inProgress') });
+        const intent = resolution.action?.intent;
+        setFeedback({ phase: 'pending' });
         const invocation = invoke(invocationContext);
         const tracked = invocation.then((result) => {
-            setFeedback({ phase: 'settled', message: actionResultMessage(chrome, result) });
+            setFeedback({ phase: 'settled', status: result.status, intent });
             return result;
         }, (error) => {
             setFeedback({
                 phase: 'settled',
-                message: actionResultMessage(chrome, {
-                    status: 'failed',
-                    failureReason: errorMessage(error),
-                }),
+                status: 'failed',
+                intent,
             });
             throw error;
         });
@@ -250,7 +253,7 @@ function ActionButtonNode({ node }) {
             }
         });
         return tracked;
-    }, [chrome, invoke]);
+    }, [invoke, resolution.action?.intent]);
     useEffect(() => {
         if (!semanticControlScope?.responseActionsArtifact
             || !resolution.resolved) {
@@ -298,7 +301,7 @@ function ActionButtonNode({ node }) {
                 // type="submit" cascades to native form submission and bypasses
                 // Response Actions entirely. type="button" eliminates the
                 // foot-gun and keeps cross-renderer parity.
-                type: "button", className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved || pending, "aria-busy": pending, "aria-describedby": statusId, onClick: handleClick, ...projectionMetadataAttrs(node), ...needAttrs, children: label }), _jsx("div", { id: statusId, className: "formspec-action-status", role: "status", "aria-live": "polite", "aria-atomic": "true", ...needAttrs, children: feedback.message })] }));
+                type: "button", className: node.cssClasses?.join(' ') || 'formspec-action formspec-submit', disabled: !resolution.resolved || pending, "aria-busy": pending, "aria-describedby": statusId, onClick: handleClick, ...projectionMetadataAttrs(node), ...needAttrs, children: label }), _jsx("div", { id: statusId, className: "formspec-action-status", role: "status", "aria-live": "polite", "aria-atomic": "true", ...needAttrs, children: actionResultMessage(chrome, feedback) })] }));
 }
 function WhenGuard({ node }) {
     const visible = useWhen(node.when, node.whenPrefix);

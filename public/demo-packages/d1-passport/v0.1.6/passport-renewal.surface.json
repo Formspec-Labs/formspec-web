@@ -1,0 +1,345 @@
+{
+  "$formspecSurface": "0.2",
+  "id": "surface",
+  "routes": [
+    {
+      "x-generation": {
+        "anchors": [
+          "need:complete-demo-renewal-response@2"
+        ]
+      },
+      "id": "intake",
+      "path": "/",
+      "slots": [
+        {
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          },
+          "id": "form",
+          "slotType": "definition-form",
+          "binding": {
+            "definitionRef": "urn:formspec:demo:d1:passport-renewal"
+          }
+        }
+      ],
+      "navigation": {
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "visible": false
+      },
+      "routeClass": "intake",
+      "transitions": [
+        {
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          },
+          "trigger": "prepare",
+          "to": "signing"
+        }
+      ]
+    },
+    {
+      "x-generation": {
+        "anchors": [
+          "need:review-and-sign-demo-response@2"
+        ]
+      },
+      "id": "signing",
+      "path": "/review-sign",
+      "slots": [
+        {
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          },
+          "id": "review",
+          "slotType": "module-widget",
+          "binding": {
+            "moduleId": "x-demo-signing",
+            "widgetName": "ResponseReview",
+            "config": {
+              "copy": {
+                "en": {
+                  "heading": "LOCAL DEMO: Review your saved response",
+                  "pending": "Preparing the saved response for review.",
+                  "beforeSign": "Review every saved answer and the saved photo before signing this demonstration.",
+                  "beforeSubmit": "Review the complete signed response and saved photo before submitting this demonstration.",
+                  "responseId": "Response reference",
+                  "draftVersion": "Saved revision",
+                  "locale": "Displayed language",
+                  "signatures": "Recorded signatures",
+                  "additionalAnswers": "Additional saved answers",
+                  "emptyString": "Empty text",
+                  "nullValue": "No value",
+                  "trueValue": "Yes",
+                  "falseValue": "No",
+                  "emptyArray": "No saved entries",
+                  "emptyObject": "Empty saved object",
+                  "attachmentPending": "Loading and checking the saved photo.",
+                  "attachmentUnavailable": "The saved photo is unavailable. Signing and submission require its review.",
+                  "attachmentFailed": "The saved photo could not be checked. Retry its review.",
+                  "attachmentPreview": "Saved photo preview",
+                  "attachmentDetails": "Saved file details",
+                  "retry": "Retry saved photo review",
+                  "unavailable": "The complete saved response is unavailable for review. Save and prepare the demonstration again.",
+                  "x-generation": {
+                    "anchors": [
+                      "need:review-and-sign-demo-response@2"
+                    ]
+                  }
+                },
+                "es-US": {
+                  "heading": "DEMOSTRACIÓN LOCAL: Revise su respuesta guardada",
+                  "pending": "Preparando la respuesta guardada para revisarla.",
+                  "beforeSign": "Revise todas las respuestas guardadas y la foto guardada antes de firmar esta demostración.",
+                  "beforeSubmit": "Revise la respuesta firmada completa y la foto guardada antes de enviar esta demostración.",
+                  "responseId": "Referencia de la respuesta",
+                  "draftVersion": "Revisión guardada",
+                  "locale": "Idioma mostrado",
+                  "signatures": "Firmas registradas",
+                  "additionalAnswers": "Respuestas guardadas adicionales",
+                  "emptyString": "Texto vacío",
+                  "nullValue": "Sin valor",
+                  "trueValue": "Sí",
+                  "falseValue": "No",
+                  "emptyArray": "Sin entradas guardadas",
+                  "emptyObject": "Objeto guardado vacío",
+                  "attachmentPending": "Cargando y comprobando la foto guardada.",
+                  "attachmentUnavailable": "La foto guardada no está disponible. Es necesario revisarla para firmar y enviar.",
+                  "attachmentFailed": "No se pudo comprobar la foto guardada. Vuelva a intentar revisarla.",
+                  "attachmentPreview": "Vista previa de la foto guardada",
+                  "attachmentDetails": "Detalles del archivo guardado",
+                  "retry": "Volver a revisar la foto guardada",
+                  "unavailable": "La respuesta guardada completa no está disponible para revisarla. Guarde y prepare la demostración de nuevo.",
+                  "x-generation": {
+                    "anchors": [
+                      "need:review-and-sign-demo-response@2"
+                    ]
+                  }
+                }
+              },
+              "x-generation": {
+                "anchors": [
+                  "need:review-and-sign-demo-response@2"
+                ]
+              }
+            },
+            "dataBindings": {
+              "definition": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:review-definition",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "response": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:signing-response",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "presentation": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:review-presentation",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          },
+          "id": "ceremony",
+          "slotType": "module-widget",
+          "binding": {
+            "moduleId": "x-demo-signing",
+            "widgetName": "SigningCeremony",
+            "config": {
+              "requireResponseReview": true,
+              "contentRefs": {
+                "en": {
+                  "ref": "urn:formspec:demo:d1:passport-renewal#/extensions/x-formspec-signing-content/entries/demoEn",
+                  "version": "1.0.0"
+                },
+                "es-US": {
+                  "ref": "urn:formspec:demo:d1:passport-renewal#/extensions/x-formspec-signing-content/entries/demoEs",
+                  "version": "1.0.0"
+                }
+              },
+              "copy": {
+                "en": {
+                  "heading": "Review and sign this demo response",
+                  "readInstruction": "Read the complete sample text below, then confirm that you have read it.",
+                  "readConfirmation": "I have read the complete sample text.",
+                  "signerName": "Your name for this demonstration",
+                  "pending": "Recording your demo action...",
+                  "signed": "Demo response signed. Review it before submitting.",
+                  "failed": "Your demo action could not be completed. Try again.",
+                  "unavailable": "Signing is unavailable because the required demo information is incomplete.",
+                  "x-generation": {
+                    "anchors": [
+                      "need:review-and-sign-demo-response@2"
+                    ]
+                  },
+                  "reviewPending": "Loading and checking the complete saved response and photo.",
+                  "reviewUnavailable": "Review of the complete saved response and photo is unavailable. Signing and submission are disabled."
+                },
+                "es-US": {
+                  "heading": "Revise y firme esta respuesta de demostración",
+                  "readInstruction": "Lea todo el texto de ejemplo y luego confirme que lo ha leído.",
+                  "readConfirmation": "He leído todo el texto de ejemplo.",
+                  "signerName": "Su nombre para esta demostración",
+                  "pending": "Registrando su acción de demostración...",
+                  "signed": "Respuesta de demostración firmada. Revísela antes de enviarla.",
+                  "failed": "No se pudo completar su acción de demostración. Inténtelo de nuevo.",
+                  "unavailable": "No se puede firmar porque falta información necesaria para la demostración.",
+                  "x-generation": {
+                    "anchors": [
+                      "need:review-and-sign-demo-response@2"
+                    ]
+                  },
+                  "reviewPending": "Cargando y comprobando la respuesta guardada completa y la foto.",
+                  "reviewUnavailable": "No se puede revisar la respuesta guardada completa y la foto. No se puede firmar ni enviar."
+                }
+              },
+              "x-generation": {
+                "anchors": [
+                  "need:review-and-sign-demo-response@2"
+                ]
+              }
+            },
+            "dataBindings": {
+              "review": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:signing-review",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "content": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:signing-content",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "response": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:signing-response",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "draft": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:signing-draft",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "actor": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:signing-actor",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "signingResult": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:signing-result",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "actionLabels": {
+                "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                "sourceRef": "host:signing-action-labels",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              }
+            },
+            "actionBindings": {
+              "sign": {
+                "actionRef": "sign",
+                "responseInput": "response",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "submit": {
+                "actionRef": "submit",
+                "responseInput": "response",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              },
+              "paper": {
+                "actionRef": "paper",
+                "responseInput": "response",
+                "x-generation": {
+                  "anchors": [
+                    "need:review-and-sign-demo-response@2"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "navigation": {
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "visible": false
+      },
+      "routeClass": "ceremony"
+    }
+  ],
+  "x-generation": {
+    "anchors": [
+      "need:review-and-sign-demo-response@2"
+    ]
+  },
+  "entry": "intake"
+}

@@ -122,6 +122,7 @@ export declare const UI_STRINGS: {
     readonly 'action.unresolved': "Unresolved";
     readonly 'action.status': "{{$status}}.";
     readonly 'action.statusReason': "{{$status}}: {{$reason}}";
+    readonly 'draft.saveUnconfirmed': "Saving could not be confirmed. Keep this page open.";
     readonly 'screener.submit': "Check Eligibility";
     readonly 'screener.answerOne': "Please answer at least one question";
     readonly 'assist.filled': "{{$label}} filled by your assistant";

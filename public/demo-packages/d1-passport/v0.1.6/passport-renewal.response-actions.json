@@ -1,0 +1,426 @@
+{
+  "$formspecResponseActions": "1.0",
+  "version": "0.1.6",
+  "actions": [
+    {
+      "id": "save-draft-initial",
+      "intent": "save-draft",
+      "label": {
+        "ref": "$action.save-draft-initial.label"
+      },
+      "x-generation": {
+        "anchors": [
+          "need:complete-demo-renewal-response@2"
+        ]
+      },
+      "validation": {
+        "profile": "off",
+        "blocking": "non-blocking",
+        "persistence": "draft-checkpoint"
+      },
+      "effects": [
+        {
+          "type": "serviceRequest",
+          "requestRef": "save-draft-initial",
+          "idempotencyKey": "@invocation.id",
+          "onError": "fail"
+        }
+      ],
+      "onFailure": "stop"
+    },
+    {
+      "id": "save-draft-owned",
+      "intent": "save-draft",
+      "label": {
+        "ref": "$action.save-draft-owned.label"
+      },
+      "x-generation": {
+        "anchors": [
+          "need:complete-demo-renewal-response@2"
+        ]
+      },
+      "validation": {
+        "profile": "off",
+        "blocking": "non-blocking",
+        "persistence": "draft-checkpoint"
+      },
+      "effects": [
+        {
+          "type": "serviceRequest",
+          "requestRef": "save-draft-owned",
+          "idempotencyKey": "@invocation.id",
+          "onError": "fail"
+        }
+      ],
+      "onFailure": "stop"
+    },
+    {
+      "id": "prepare",
+      "intent": "review",
+      "label": {
+        "ref": "$action.prepare.label"
+      },
+      "x-generation": {
+        "anchors": [
+          "need:review-and-sign-demo-response@2"
+        ]
+      },
+      "validation": {
+        "profile": "on-submit",
+        "blocking": "block-on-error",
+        "persistence": "complete-response"
+      },
+      "effects": [
+        {
+          "type": "serviceRequest",
+          "requestRef": "prepare-signing",
+          "idempotencyKey": "@invocation.id",
+          "onError": "fail"
+        }
+      ],
+      "onFailure": "stop"
+    },
+    {
+      "id": "sign",
+      "intent": "x-sign-demo-response",
+      "label": {
+        "ref": "$action.sign.label"
+      },
+      "x-generation": {
+        "anchors": [
+          "need:review-and-sign-demo-response@2"
+        ]
+      },
+      "validation": {
+        "profile": "on-submit",
+        "blocking": "block-on-error",
+        "persistence": "complete-response"
+      },
+      "effects": [
+        {
+          "type": "serviceRequest",
+          "requestRef": "sign-draft",
+          "idempotencyKey": "@invocation.id",
+          "onError": "fail"
+        }
+      ]
+    },
+    {
+      "id": "submit",
+      "intent": "submit",
+      "label": {
+        "ref": "$action.submit.label"
+      },
+      "x-generation": {
+        "anchors": [
+          "need:review-and-sign-demo-response@2"
+        ]
+      },
+      "effects": [
+        {
+          "type": "serviceRequest",
+          "requestRef": "submit-draft",
+          "idempotencyKey": "@invocation.id",
+          "onError": "fail"
+        }
+      ]
+    },
+    {
+      "id": "paper",
+      "intent": "review",
+      "label": {
+        "ref": "$action.paper.label"
+      },
+      "x-generation": {
+        "anchors": [
+          "need:review-and-sign-demo-response@2"
+        ]
+      },
+      "effects": [
+        {
+          "type": "hostEvent",
+          "eventName": "formspec-review-paper-alternative"
+        }
+      ]
+    }
+  ],
+  "x-formspec-runtime": {
+    "version": "1.0",
+    "requests": [
+      {
+        "id": "sign-draft",
+        "adapter": "http-json",
+        "request": {
+          "method": "POST",
+          "pathTemplate": "/drafts/{draftId}/sign",
+          "pathBindings": {
+            "draftId": {
+              "from": "input",
+              "path": "draftId"
+            }
+          },
+          "bodyBindings": {
+            "/draft_version": {
+              "from": "input",
+              "path": "draftVersion"
+            },
+            "/canonical_response": {
+              "from": "input",
+              "path": "frozenResponse"
+            }
+          }
+        },
+        "successStatuses": [
+          200
+        ],
+        "outputs": {
+          "signedResponse": {
+            "path": "/canonical_response",
+            "exposure": "internal"
+          },
+          "signedDraftVersion": {
+            "path": "/draft_version",
+            "exposure": "internal"
+          },
+          "draftId": {
+            "path": "/draft_id",
+            "exposure": "internal"
+          }
+        },
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        }
+      },
+      {
+        "id": "submit-draft",
+        "adapter": "http-json",
+        "request": {
+          "method": "POST",
+          "pathTemplate": "/drafts/{draftId}/submit",
+          "pathBindings": {
+            "draftId": {
+              "from": "input",
+              "path": "draftId"
+            }
+          },
+          "bodyDefaults": {
+            "signing_requested": false
+          },
+          "bodyBindings": {
+            "/canonical_response": {
+              "from": "input",
+              "path": "frozenResponse"
+            }
+          }
+        },
+        "successStatuses": [
+          200
+        ],
+        "outputs": {
+          "responseId": {
+            "path": "/response_id",
+            "exposure": "transition"
+          },
+          "status": {
+            "path": "/status",
+            "exposure": "internal"
+          }
+        },
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        }
+      },
+      {
+        "id": "prepare-signing",
+        "adapter": "http-json",
+        "request": {
+          "method": "PATCH",
+          "pathTemplate": "/drafts/{draftId}",
+          "pathBindings": {
+            "draftId": {
+              "from": "input",
+              "path": "draftId"
+            }
+          },
+          "bodyBindings": {
+            "/expected_draft_version": {
+              "from": "input",
+              "path": "draftVersion"
+            },
+            "/canonical_response": {
+              "from": "input",
+              "path": "frozenResponse"
+            },
+            "/draft_state": {
+              "from": "input",
+              "path": "frozenResponse.data"
+            }
+          }
+        },
+        "successStatuses": [
+          200
+        ],
+        "outputs": {
+          "savedResponse": {
+            "path": "/canonical_response",
+            "exposure": "internal"
+          },
+          "savedDraftVersion": {
+            "path": "/draft_version",
+            "exposure": "internal"
+          },
+          "draftId": {
+            "path": "/draft_id",
+            "exposure": "internal"
+          },
+          "formVersionId": {
+            "path": "/form_version_id",
+            "exposure": "internal"
+          },
+          "subjectRef": {
+            "path": "/subject_ref",
+            "exposure": "internal"
+          },
+          "status": {
+            "path": "/status",
+            "exposure": "internal"
+          }
+        },
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        }
+      },
+      {
+        "id": "save-draft-initial",
+        "adapter": "http-json",
+        "request": {
+          "method": "POST",
+          "pathTemplate": "/runtime/forms/{formId}/drafts",
+          "pathBindings": {
+            "formId": {
+              "from": "input",
+              "path": "formId"
+            }
+          },
+          "bodyBindings": {
+            "/draft_state": {
+              "from": "input",
+              "path": "frozenResponse.data"
+            },
+            "/canonical_response": {
+              "from": "input",
+              "path": "frozenResponse"
+            }
+          }
+        },
+        "successStatuses": [
+          200
+        ],
+        "outputs": {
+          "draftId": {
+            "path": "/draft_id",
+            "exposure": "internal"
+          },
+          "formVersionId": {
+            "path": "/form_version_id",
+            "exposure": "internal"
+          },
+          "subjectRef": {
+            "path": "/subject_ref",
+            "exposure": "internal"
+          },
+          "draftVersion": {
+            "path": "/draft_version",
+            "exposure": "internal"
+          },
+          "savedResponse": {
+            "path": "/canonical_response",
+            "exposure": "internal"
+          },
+          "status": {
+            "path": "/status",
+            "exposure": "internal"
+          }
+        },
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        }
+      },
+      {
+        "id": "save-draft-owned",
+        "adapter": "http-json",
+        "request": {
+          "method": "PATCH",
+          "pathTemplate": "/drafts/{draftId}",
+          "pathBindings": {
+            "draftId": {
+              "from": "input",
+              "path": "draftId"
+            }
+          },
+          "bodyBindings": {
+            "/draft_state": {
+              "from": "input",
+              "path": "frozenResponse.data"
+            },
+            "/canonical_response": {
+              "from": "input",
+              "path": "frozenResponse"
+            },
+            "/expected_draft_version": {
+              "from": "input",
+              "path": "draftVersion"
+            }
+          }
+        },
+        "successStatuses": [
+          200
+        ],
+        "outputs": {
+          "draftId": {
+            "path": "/draft_id",
+            "exposure": "internal"
+          },
+          "formVersionId": {
+            "path": "/form_version_id",
+            "exposure": "internal"
+          },
+          "subjectRef": {
+            "path": "/subject_ref",
+            "exposure": "internal"
+          },
+          "draftVersion": {
+            "path": "/draft_version",
+            "exposure": "internal"
+          },
+          "savedResponse": {
+            "path": "/canonical_response",
+            "exposure": "internal"
+          },
+          "status": {
+            "path": "/status",
+            "exposure": "internal"
+          }
+        },
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        }
+      }
+    ]
+  },
+  "scope": "response",
+  "targetDefinition": {
+    "url": "urn:formspec:demo:d1:passport-renewal",
+    "compatibleVersions": "0.1.6"
+  }
+}
