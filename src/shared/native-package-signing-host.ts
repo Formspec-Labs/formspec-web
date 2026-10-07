@@ -204,6 +204,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       },
     });
     publicSnapshot = controller.getSnapshot();
+    rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
     unsubscribeController = controller.subscribe(() => {
       publicSnapshot = controller!.getSnapshot();
       if (authorityGeneration === expected && publicSnapshot.saved) { ownedResponseSeed = structuredClone(publicSnapshot.saved.response); freezeMetadata(ownedResponseSeed); }

@@ -19,6 +19,9 @@ import type { ResolvedRespondentFormInput } from '../../src/app/RespondentRuntim
 import type * as RespondentRuntimeModule from '../../src/app/RespondentRuntime.tsx';
 import { createStubComposition } from '../../src/composition/stub.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
+import { createHttpAdapterCohort } from '../../src/adapters/http/cohort.ts';
+import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
+import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
 
 const observed = vi.hoisted(() => ({ forms: [] as unknown[], real: false }));
 vi.mock('../../src/app/RespondentRuntime.tsx', async importOriginal => {
@@ -93,7 +96,7 @@ async function actualFixture() {
     let completeRead!: (blob: Blob) => void;
     const read = vi.fn(async () => new Promise<Blob>(resolve => { completeRead = resolve; }));
     const clear = vi.fn(async () => {}); const invalidateAuthority = vi.fn();
-    const host = createNativePackageSigningHost({ bundle, definition, moduleId: binding.moduleId, locales, initialLocale: 'en',
+    const policy: NativePackageSigningHostPolicy = { bundle, definition, moduleId: binding.moduleId, locales, initialLocale: 'en',
       registryEntries: flattenRegistryEntries(resolved.registries).entries, publication: { formId: 'form', formVersionId: 'publication' },
       readiness: { instance: 'draftReadiness', readyPath: 'ready', ownedPath: 'owned' }, clearDraftAccess: clear,
       controller: { roles, signing: { saveDraft, prepare, sign }, submitTransport: { submit }, validateResponse: () => true, hashResponse },
@@ -105,7 +108,8 @@ async function actualFixture() {
         const reference = document.actions.find(action => action.id === role.actionRef)!.label as { ref: string };
         return [reference.ref, locales.find(document => document.locale === locale)!.strings[reference.ref] as string]; })),
       validatePayload: () => ({ valid: true }), attachmentStore: { upload: vi.fn(), read }, assertOwner: vi.fn(), invalidateAuthority,
-      reviewResponseDigest: hashResponse, canonicalResponseHandoffBytes });
+      reviewResponseDigest: hashResponse, canonicalResponseHandoffBytes };
+    const host = createNativePackageSigningHost(policy);
     const reports: string[] = []; const report = host.reviewOptions.onReviewState!;
     host.reviewOptions.onReviewState = state => {
       reports.push(state.status);
@@ -128,9 +132,70 @@ async function actualFixture() {
     };
     const composition = createStubComposition(); const navigate = vi.fn();
     const props = { host, composition, config: departmentAppProfile, componentDocument: component, localeDocuments: locales, location: '/', onNavigate: navigate };
-    return { host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, submit };
+    return { policy, host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, submit };
 }
 describe('maintained native package Surface host', () => {
+  it('writes restored owned data through the actual authored r5 Save button and HTTP cohort before Prepare', async () => {
+    const fixture = await actualFixture(); fixture.host.dispose();
+    const definition = fixture.policy.definition;
+    const key = { formUrl: definition.url, formVersion: definition.version, subjectRef: 'server-actor' };
+    const seed = createFormEngine(definition); fixture.policy.locales.forEach(locale => seed.loadLocale(locale)); seed.setLocale('es-US');
+    seed.setValue('email', ''); seed.setValue('photo', null); seed.setValue('declarationAcknowledged', false);
+    const partial = { ...seed.getResponse({ profile: 'off' }), id: '01a114cf-c305-73ff-a317-7f7a92c695ad' };
+    const capturedData = { ...structuredClone(partial.data), email: 'complete@example.test', declarationAcknowledged: true,
+      photo: { kind: 'attachment-ref', uri: 'urn:formspec:attachment:owned-photo', filename: 'uploaded.png', mimeType: 'image/png', contentType: 'image/png',
+        size: fixture.photoBytes.length, hash: `sha256:${createHash('sha256').update(fixture.photoBytes).digest('hex')}` } };
+    seed.dispose();
+    let response: FormResponse = partial; let revision = 0;
+    const view = () => ({ draft_id: 'owned-draft', form_version_id: 'publication', subject_ref: 'server-actor', status: 'in_progress',
+      draft_version: revision, draft_state: response.data, canonical_response: structuredClone(response) });
+    const transport = recordingFetch(request => {
+      if (request.method === 'GET') return jsonResponse(view());
+      const body = request.body as { canonical_response: FormResponse; expected_draft_version?: number };
+      if (request.method === 'PATCH') { expect(request.url).toBe('https://server.example.test/drafts/owned-draft'); expect(body.expected_draft_version).toBe(revision); }
+      else { expect(request.method).toBe('POST'); expect(revision).toBe(0); }
+      response = structuredClone(body.canonical_response); revision++; return jsonResponse(view());
+    });
+    const metadata = new Map<string, unknown>();
+    const signingPolicy = { validateResponse: validateCanonicalFormResponse, validateContent: await loadCanonicalSigningContentValidator(),
+      signingProfileDigest: async (response: FormResponse) => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex'), keyId: 'unused-sign-key' };
+    const makeCohort = () => createHttpAdapterCohort({ baseUrl: 'https://server.example.test', fetchImpl: transport.fetch, formIdResolver: () => 'form',
+      resumeMetadata: { read: slot => metadata.get(slot), write: (slot, value) => { metadata.set(slot, structuredClone(value)); }, remove: slot => { metadata.delete(slot); } }, responseSigning: signingPolicy });
+    await makeCohort().draftStore.save(key, partial);
+    const cohort = makeCohort();
+    const host = createNativePackageSigningHost({ ...fixture.policy, initialLocale: 'es-US',
+      controller: { ...fixture.policy.controller, signing: cohort.responseSigning!, validateResponse: validateCanonicalFormResponse },
+      invalidateAuthority: (_reason, key) => { if (key) cohort.invalidateResponseSigningScope!(key); }, clearDraftAccess: key => cohort.draftStore.delete(key) });
+    const configure = host.configureRuntime; const invocations: unknown[] = []; let engine!: Parameters<typeof configure>[0]['engine'];
+    host.configureRuntime = async input => {
+      engine = input.engine; const configured = await configure(input);
+      return { ...configured, responseActionInvoker: async action => { const result = await configured.responseActionInvoker(action); invocations.push(result); return result; } };
+    };
+    const composition = createStubComposition(); composition.draftStore = cohort.draftStore;
+    composition.identityProvider.authenticate = async () => ({ provider: 'test-owner', adapter: 'test', subjectRef: 'server-actor',
+      credentialType: 'other', subjectBinding: 'respondent', assuranceLevel: 'L1', privacyTier: 'anonymous' });
+    composition.identityProvider.subscribe = () => () => {};
+    const mounted = render(<NativePackageRespondentHost {...fixture.props} host={host} composition={composition} />);
+    await screen.findByRole('button', { name: 'Guardar borrador' });
+    await act(async () => { engine.loadResponseData(capturedData as Parameters<typeof engine.loadResponseData>[0]); });
+    await vi.waitFor(() => expect(engine.getResponse({ profile: 'off' }).data).toEqual(capturedData));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(engine.getInstanceData('draftReadiness')).toEqual({ ready: true, owned: true });
+    const save = await screen.findByRole('button', { name: 'Guardar borrador' }); save.focus();
+    // jsdom does not synthesize a button click from Enter; include its native activation click.
+    fireEvent.keyDown(save, { key: 'Enter' }); fireEvent.click(save); fireEvent.keyUp(save, { key: 'Enter' });
+    await vi.waitFor(() => expect(host.getSnapshot().controller?.phase, JSON.stringify({ invocations, requests: transport.requests, scratch: engine.getInstanceData('draftReadiness'), initialWhen: engine.compileExpression("@instance('draftReadiness').ready and not(@instance('draftReadiness').owned)", '')(), ownedWhen: engine.compileExpression("@instance('draftReadiness').ready and @instance('draftReadiness').owned", '')(), snapshot: host.getSnapshot().controller })).toBe('saved'));
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]).toMatchObject({ status: 'completed', resolution: { action: { id: 'save-draft-owned' } } });
+    expect(revision).toBe(2); expect(response.id).toBe(partial.id); expect(response.data).toEqual(capturedData);
+    expect(transport.requests.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(transport.requests.filter(request => request.method === 'PATCH')).toHaveLength(1);
+    expect(transport.requests.filter(request => request.method === 'GET')).toHaveLength(3);
+    fireEvent.click(await screen.findByRole('button', { name: 'Preparar la respuesta guardada' }));
+    await vi.waitFor(() => expect(host.getSnapshot().controller?.phase).toBe('prepared'));
+    expect(revision).toBe(3); expect(host.getSnapshot().controller?.prepared?.response).toEqual(response);
+    mounted.unmount(); host.dispose();
+  });
   it('uses the qualified form title and existing provider container across languages without writes', async () => {
     const { host, props, saveDraft, prepare, sign, submit, getEngine } = await actualFixture();
     // Model the real anonymous service's same selected owner across Locale remounts.
