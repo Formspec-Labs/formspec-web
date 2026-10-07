@@ -1,0 +1,36 @@
+{
+  "version": "0.1.5",
+  "files": {
+    "definition": {
+      "path": "passport-renewal.definition.json",
+      "sha256": "38f8376817188419bc9fb7317c53ee8df5e4ea2046472caa088aee27ca08255b"
+    },
+    "responseActions": {
+      "path": "passport-renewal.response-actions.json",
+      "sha256": "4f0703300733af945180503d5b55325ec3e2be7dd25706a914d882d126eb35b7"
+    },
+    "locales": [
+      {
+        "path": "passport-renewal.en.locale.json",
+        "sha256": "8ed21908b9224f562d8d7fafb9937e090338c626a733d2dd11cda23c66faef5d"
+      },
+      {
+        "path": "passport-renewal.es-US.locale.json",
+        "sha256": "da728f756ba93be0666c7d6307a94732189e170f1070923532ccd490c64058c1"
+      }
+    ],
+    "nativeBundle": {
+      "path": "native-bundle.json",
+      "sha256": "0864994f229c0427f3f13f57430c8cc172eb847d0ec5ebcda00c9b8ac8fbb557"
+    },
+    "component": {
+      "path": "passport-renewal.component.json",
+      "sha256": "053305f50cb4884c3b84fb8f4e5ac1bb03831ca3337fa08171ac96c2c6df5090",
+      "ref": {
+        "handle": "intake",
+        "url": "urn:formspec:demo:d1:signing-app:component:intake",
+        "version": "0.1.5"
+      }
+    }
+  }
+}

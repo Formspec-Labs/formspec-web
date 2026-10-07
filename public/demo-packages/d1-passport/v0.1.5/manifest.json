@@ -1,0 +1,68 @@
+{
+  "$formspecBundle": "2.4",
+  "version": "0.1.5",
+  "id": "urn:formspec:demo:d1:signing-app",
+  "title": "Passport renewal demonstration",
+  "x-generation": {
+    "anchors": [
+      "need:review-and-sign-demo-response@2"
+    ]
+  },
+  "definitions": [
+    {
+      "url": "urn:formspec:demo:d1:passport-renewal",
+      "version": "0.1.5"
+    }
+  ],
+  "responseActionDocuments": [
+    {
+      "url": "urn:formspec:demo:d1:signing-app:response-actions",
+      "version": "0.1.5"
+    }
+  ],
+  "registries": [
+    {
+      "url": "urn:formspec:doc:1b1de9c55011baab:registry",
+      "version": "1.1.0"
+    }
+  ],
+  "surfaces": [
+    {
+      "url": "urn:formspec:demo:d1:signing-app:surface",
+      "version": "0.1.5"
+    }
+  ],
+  "entrySurface": "urn:formspec:demo:d1:signing-app:surface",
+  "dataSources": [
+    {
+      "url": "urn:formspec:demo:d1:signing-app:data-sources",
+      "version": "0.1.5"
+    }
+  ],
+  "locales": [
+    {
+      "url": "urn:formspec:demo:d1:passport-renewal:locale:en",
+      "version": "0.1.5",
+      "locale": "en"
+    },
+    {
+      "url": "urn:formspec:demo:d1:passport-renewal:locale:es-US",
+      "version": "0.1.5",
+      "locale": "es-US"
+    }
+  ],
+  "components": [
+    {
+      "handle": "intake",
+      "url": "urn:formspec:demo:d1:signing-app:component:intake",
+      "version": "0.1.5"
+    }
+  ],
+  "modules": [
+    {
+      "id": "x-demo-signing",
+      "version": "0.1.0"
+    }
+  ],
+  "sessions": []
+}

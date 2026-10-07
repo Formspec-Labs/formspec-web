@@ -1,0 +1,419 @@
+{
+  "$formspecRegistry": "1.1",
+  "publisher": {
+    "name": "Passport renewal demonstration"
+  },
+  "published": "2026-10-07T02:22:00.000Z",
+  "entries": [
+    {
+      "name": "x-demo-signing",
+      "category": "module",
+      "version": "0.1.0",
+      "status": "stable",
+      "description": "Shared generic signing ceremony for illustrative demo responses.",
+      "compatibility": {
+        "formspecVersion": ">=1.0.0 <2.0.0"
+      },
+      "contributes": [
+        "x-signing-ceremony",
+        "x-response-review",
+        "x-sign-demo-response"
+      ]
+    },
+    {
+      "name": "x-signing-ceremony",
+      "category": "widget",
+      "version": "0.1.0",
+      "status": "stable",
+      "description": "Shared read, consent, Sign, then Submit widget.",
+      "compatibility": {
+        "formspecVersion": ">=1.0.0 <2.0.0"
+      },
+      "widgetShape": {
+        "widgetName": "SigningCeremony",
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contentRefs",
+            "copy"
+          ],
+          "properties": {
+            "requireResponseReview": {
+              "type": "boolean"
+            },
+            "contentRefs": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ref",
+                  "version"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "format": "uri"
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "description": "Exact authored content entry URI and content version. The URI is the pinned Definition URL followed by #/extensions/x-formspec-signing-content/entries/<simple identifier>."
+              }
+            },
+            "copy": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "heading",
+                  "readInstruction",
+                  "readConfirmation",
+                  "signerName",
+                  "pending",
+                  "signed",
+                  "failed",
+                  "unavailable"
+                ],
+                "properties": {
+                  "heading": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "readInstruction": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "readConfirmation": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "signerName": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "pending": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "signed": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "failed": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "unavailable": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reviewPending": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reviewUnavailable": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "x-generation": {
+                    "type": "object"
+                  }
+                }
+              }
+            },
+            "x-generation": {
+              "type": "object"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "requireResponseReview"
+                ],
+                "properties": {
+                  "requireResponseReview": {
+                    "const": true
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "copy": {
+                    "additionalProperties": {
+                      "required": [
+                        "reviewPending",
+                        "reviewUnavailable"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "dataInputs": [
+          {
+            "name": "content",
+            "required": true
+          },
+          {
+            "name": "response",
+            "required": true
+          },
+          {
+            "name": "draft",
+            "required": true
+          },
+          {
+            "name": "actor",
+            "required": true
+          },
+          {
+            "name": "signingResult",
+            "required": true
+          },
+          {
+            "name": "actionLabels",
+            "required": true
+          },
+          {
+            "name": "review",
+            "required": false
+          }
+        ],
+        "actionOutputs": [
+          {
+            "name": "sign"
+          },
+          {
+            "name": "submit"
+          },
+          {
+            "name": "paper"
+          }
+        ],
+        "childrenPolicy": "none",
+        "deliveryContractId": "@formspec-org/surface-react/SigningCeremony@0.1",
+        "renderedConfigNodes": [
+          {
+            "pointerPattern": "",
+            "kind": "signing-ceremony"
+          },
+          {
+            "pointerPattern": "/copy/*",
+            "kind": "signing-ceremony-copy"
+          }
+        ]
+      }
+    },
+    {
+      "name": "x-response-review",
+      "category": "widget",
+      "version": "0.1.0",
+      "status": "stable",
+      "description": "Read the complete retained demo Response and byte-qualified saved photo before Sign and Submit.",
+      "compatibility": {
+        "formspecVersion": ">=1.0.0 <2.0.0"
+      },
+      "widgetShape": {
+        "widgetName": "ResponseReview",
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "copy"
+          ],
+          "properties": {
+            "copy": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "heading",
+                  "pending",
+                  "beforeSign",
+                  "beforeSubmit",
+                  "responseId",
+                  "draftVersion",
+                  "locale",
+                  "signatures",
+                  "additionalAnswers",
+                  "emptyString",
+                  "nullValue",
+                  "trueValue",
+                  "falseValue",
+                  "emptyArray",
+                  "emptyObject",
+                  "attachmentPending",
+                  "attachmentUnavailable",
+                  "attachmentFailed",
+                  "attachmentPreview",
+                  "attachmentDetails",
+                  "retry",
+                  "unavailable"
+                ],
+                "properties": {
+                  "heading": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "pending": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "beforeSign": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "beforeSubmit": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "responseId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "draftVersion": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "locale": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "signatures": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "additionalAnswers": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "emptyString": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "nullValue": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "trueValue": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "falseValue": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "emptyArray": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "emptyObject": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "attachmentPending": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "attachmentUnavailable": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "attachmentFailed": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "attachmentPreview": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "attachmentDetails": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retry": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "unavailable": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "x-generation": {
+                    "type": "object"
+                  }
+                }
+              }
+            },
+            "x-generation": {
+              "type": "object"
+            }
+          }
+        },
+        "dataInputs": [
+          {
+            "name": "definition",
+            "required": true
+          },
+          {
+            "name": "response",
+            "required": true
+          },
+          {
+            "name": "presentation",
+            "required": true
+          }
+        ],
+        "childrenPolicy": "none",
+        "deliveryContractId": "@formspec-org/surface-react/ResponseReview@0.1",
+        "renderedConfigNodes": [
+          {
+            "pointerPattern": "",
+            "kind": "response-review"
+          },
+          {
+            "pointerPattern": "/copy/*",
+            "kind": "response-review-copy"
+          }
+        ]
+      }
+    },
+    {
+      "name": "x-sign-demo-response",
+      "category": "action-intent",
+      "version": "0.1.0",
+      "status": "stable",
+      "description": "Record explicit assent to a complete fictional demo Response using the admitted delegated signing service.",
+      "compatibility": {
+        "formspecVersion": ">=1.0.0 <2.0.0"
+      },
+      "validation": {
+        "profile": "on-submit",
+        "blocking": "block-on-error",
+        "persistence": "complete-response"
+      }
+    }
+  ]
+}
