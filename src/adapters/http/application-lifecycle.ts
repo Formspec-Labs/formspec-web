@@ -1,4 +1,5 @@
 import canonicalize from 'canonicalize';
+import { isApplicationDraftId } from '../../shared/application-draft-id.ts';
 import { planServiceRequest, resolveResponseAction, resolveResponseActionValidationTuple, resolveServiceRequest } from '@formspec-org/engine/render';
 import type { AdmittedResponseAction } from '../../ports/response-signing.ts';
 import type { ApplicationCaseReceipt, ApplicationLifecycle, ApplicationLifecycleCapabilities } from '../../ports/application-lifecycle.ts';
@@ -48,7 +49,7 @@ export class HttpApplicationLifecycle implements ApplicationLifecycle {
       if ((method === 'POST' && (!this.capabilities.earlyCaseCreation || !operationId?.trim())) || key.formUrl !== this.definition.url || key.formVersion !== this.definition.version
         || !key.subjectRef?.trim() || key.subjectRef.startsWith('anon:')) throw new Error('Application Start requires the admitted authenticated owner');
       const binding = this.config.bindings.get(key);
-      if (!binding || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(binding.draftId)) throw new Error('Application Start requires an owned draft');
+      if (!binding || !isApplicationDraftId(binding.draftId)) throw new Error('Application Start requires an owned draft');
       const action = resolveResponseAction(this.action.document, this.action.actionRef).action;
       if (!action || this.action.document.scope !== 'response' || this.action.document.targetDefinition?.url !== this.definition.url
         || !this.action.artifactRef || !this.action.artifactDigest || action.intent !== 'x-start-application'

@@ -13,3 +13,5 @@ export { createResponseSigningDataSourceRuntime, type ResponseSigningDataInput }
 export { matchBrowserAuthCallback, completeBrowserAuthCallback, type BrowserAuthCallbackUris, type AuthCallbackKind } from './browser-auth-callback.ts';
 
 export { createBrowserScopedMetadataStore, type BrowserScopedMetadataConfig, type ScopedMetadataStore } from './browser-scoped-metadata.ts';
+
+export { isApplicationDraftId } from './application-draft-id.ts';

@@ -51,7 +51,7 @@ function saveAction(method: 'POST' | 'PATCH') {
 const prepareAction = saveAction('PATCH');
 
 async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean) {
-  const draftId = earlyCaseCreation === undefined ? 'owned-draft' : '00000000-0000-4000-8000-000000000001';
+  const draftId = earlyCaseCreation === undefined ? 'owned-draft' : 'draft_01a11ca26d05793192f9f01f97ba9c0b';
   const draftKey: DraftKey = authenticated ? { ...key, subjectRef: 'oidc:owner' }
     : anonymousSubject ? { ...key, subjectRef: 'anon:owner' } : key;
   const values = new Map<string, string>();

@@ -1,5 +1,6 @@
 import type { AdmittedResponseAction } from '../../../src/ports/response-signing.ts';
 import { describe, expect, it, vi } from 'vitest';
+import { isApplicationDraftId } from '../../../src/shared/application-draft-id.ts';
 import { HttpApplicationLifecycle, readApplicationLifecycleCapabilities } from '../../../src/adapters/http/application-lifecycle.ts';
 import { HttpClient } from '../../../src/adapters/http/http-client.ts';
 import { createDraftBindingRegistry } from '../../../src/adapters/http/draft-binding-registry.ts';
@@ -16,15 +17,52 @@ const action: AdmittedResponseAction = { artifactRef: 'urn:test:actions', artifa
   'x-formspec-runtime': { version: '1.0' as const, requests: [{ id: 'start', adapter: 'http-json' as const, request: { method: 'POST' as const,
     pathTemplate: '/drafts/{draftId}/application-case', pathBindings: { draftId: { from: 'input' as const, path: 'draftId' } }, bodyDefaults: {} }, successStatuses: [200] }] } } };
 const receipt = { caseLedgerId: 'urn:wos:real-case', caseReference: 'APP-001', draftRef: `urn:formspec:draft:${draftId}`, status: 'in-progress' };
-function fixture(value: unknown = receipt) {
+function fixture(value: unknown = receipt, savedDraftId = draftId) {
   const fetch = recordingFetch(() => jsonResponse(value));
   const client = new HttpClient({ baseUrl: 'https://api.test', accessToken: () => 'fresh-bearer', fetchImpl: fetch.fetch });
-  const bindings = createDraftBindingRegistry(); bindings.put(key, { draftId, draftVersion: 1 });
+  const bindings = createDraftBindingRegistry(); bindings.put(key, { draftId: savedDraftId, draftVersion: 1 });
   const fence = new ResponseSigningScopeFence(k => JSON.stringify(k));
   const port = new HttpApplicationLifecycle({ client, publication, definition: { url: key.formUrl, version: key.formVersion }, capabilities, action, bindings, fence });
   return { client, bindings, port, fetch, fence };
 }
 describe('qualified application lifecycle', () => {
+  it('qualifies complete draft ID strings without trimming or creating aliases', () => {
+    const nativeId = 'draft_01a11ca26d05793192f9f01f97ba9c0b';
+    for (const id of [draftId, nativeId]) {
+      expect(isApplicationDraftId(id)).toBe(true);
+      for (const changed of [`${id}\n`, `${id}\r`, `${id}\u0000`, ` ${id}`, `${id}/other`, `${id}#other`]) expect(isApplicationDraftId(changed)).toBe(false);
+    }
+    for (const id of [undefined, null, {}, 7]) expect(isApplicationDraftId(id)).toBe(false);
+  });
+  it('preserves the actual Source-generated prefixed draft through Start retry and GET', async () => {
+    const nativeId = 'draft_01a11ca26d05793192f9f01f97ba9c0b';
+    const nativeReceipt = { ...receipt, draftRef: `urn:formspec:draft:${nativeId}` };
+    const f = fixture(nativeReceipt, nativeId);
+    expect(await f.port.start(key, 'operation')).toEqual(nativeReceipt);
+    expect(await f.port.start(key, 'retry')).toEqual(nativeReceipt);
+    expect(await f.port.load(key)).toEqual(nativeReceipt);
+    expect(f.fetch.requests.map(request => ({ method: request.method, url: request.url }))).toEqual([
+      { method: 'POST', url: `https://api.test/drafts/${nativeId}/application-case` },
+      { method: 'POST', url: `https://api.test/drafts/${nativeId}/application-case` },
+      { method: 'GET', url: `https://api.test/drafts/${nativeId}/application-case` },
+    ]);
+    expect(f.bindings.get(key)?.draftId).toBe(nativeId);
+    const alias = fixture({ ...nativeReceipt, draftRef: 'urn:formspec:draft:01a11ca2-6d05-7931-92f9-f01f97ba9c0b' }, nativeId);
+    await expect(alias.port.load(key)).rejects.toThrow('Application receipt differs');
+    expect(alias.bindings.get(key)?.draftId).toBe(nativeId);
+  });
+  it.each([
+    'response_01a11ca26d05793192f9f01f97ba9c0b', 'DRAFT_01a11ca26d05793192f9f01f97ba9c0b',
+    'draft_01A11ca26d05793192f9f01f97ba9c0b', 'draft_01a11ca26d05493192f9f01f97ba9c0b',
+    'draft_01a11ca26d057931c2f9f01f97ba9c0b', 'draft_01a11ca26d05793192f9f01f97ba9c0',
+    'draft_01a11ca26d05793192f9f01f97ba9c0b0', 'draft_01a11ca2-6d05-7931-92f9-f01f97ba9c0b',
+    'draft_01a11ca26d05793192f9f01f97ba9c0b/other', 'draft_01a11ca26d05793192f9f01f97ba9c0b%2Fother',
+    'draft_01a11ca26d05793192f9f01f97ba9c0b\n', ' draft_01a11ca26d05793192f9f01f97ba9c0b',
+  ])('refuses malformed application draft %j before Start or read dispatch', async id => {
+    const f = fixture({ ...receipt, draftRef: `urn:formspec:draft:${id}` }, id);
+    await expect(f.port.start(key, 'operation')).rejects.toThrow(); await expect(f.port.load(key)).rejects.toThrow();
+    expect(f.fetch.requests).toHaveLength(0); expect(f.bindings.get(key)?.draftId).toBe(id);
+  });
   it('reads strict backend capabilities for the exact admitted publication', async () => {
     const f = fixture(capabilities);
     expect(await readApplicationLifecycleCapabilities(f.client, publication)).toEqual(capabilities);
