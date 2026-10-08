@@ -140,6 +140,25 @@ async function actualFixture() {
     return { policy, host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, invokerFailures, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, submit };
 }
 describe('maintained native package Surface host', () => {
+  it('configures the first runtime with the already-admitted identity subject', async () => {
+    const test = await actualFixture();
+    const claim = { provider: 'https://idp.example.test', adapter: 'test-oidc', subjectRef: 'oidc:admitted',
+      credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const,
+      assuranceLevel: 'L1' as const, privacyTier: 'pseudonymous' as const };
+    const authenticate = vi.fn(async () => claim);
+    test.props.composition.identityProvider = {
+      discover: async () => [{ kind: 'oidc', issuer: claim.provider, displayName: 'Test identity', minAssurance: 'L1' }],
+      authenticate, revoke: vi.fn(async () => {}),
+      subscribe: listener => { listener(claim); return () => {}; },
+    };
+    const configure = vi.spyOn(test.host, 'configureRuntime');
+    render(<NativePackageRespondentHost {...test.props} />);
+    expect(await screen.findByRole('textbox', { name: 'Full legal name *' })).toBeTruthy();
+    expect(configure).toHaveBeenCalledTimes(1);
+    expect(configure.mock.calls[0][0].draftKey.subjectRef).toBe(claim.subjectRef);
+    expect(authenticate).not.toHaveBeenCalled();
+    expect(screen.queryByText('native-runtime-context-refused')).toBeNull();
+  });
   it('mounts a fresh owner-checked submitted revision 6 on the widget route as a receipt with no engine or writes', async () => {
     const test = await actualFixture(); test.host.dispose();
     const definition = test.policy.definition; const key = { formUrl: definition.url, formVersion: definition.version };

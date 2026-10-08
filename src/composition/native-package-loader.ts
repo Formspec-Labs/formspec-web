@@ -25,9 +25,14 @@ import { freezeComposition } from '../policy/index.ts';
 import type { Composition } from './types.ts';
 
 import type { NativePackageBoot, NativePackageCompositionOptions } from './native-package.ts';
+import { atNativeAdmissionStage } from './native-package-admission-error.ts';
 
 /** Called only by the explicit native boot load; all admission precedes credentials. */
 export async function loadNativePackage(config: FormspecWebConfig, options: NativePackageCompositionOptions, deferred: Composition): Promise<NativePackageBoot> {
+  return atNativeAdmissionStage('package', () => loadQualifiedNativePackage(config, options, deferred));
+}
+
+async function loadQualifiedNativePackage(config: FormspecWebConfig, options: NativePackageCompositionOptions, deferred: Composition): Promise<NativePackageBoot> {
   const adapter = config.referenceAdapters!.formspecStack!;
   const base = { baseUrl: adapter.formspecServerUrl!, tenantBinding: config.tenantBinding,
     accessToken: options.identityBinding?.accessToken };
@@ -85,7 +90,7 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
     }));
   };
   actionLabels(pins.initialLocale);
-  const publication = await new HttpDefinitionSource(base).getPublishedDefinition(options.initialDefinitionUrl, definition);
+  const publication = await atNativeAdmissionStage('publication', () => new HttpDefinitionSource(base).getPublishedDefinition(options.initialDefinitionUrl, definition));
   const formIdResolver = (url: string, version?: string) => {
     if ((url !== options.initialDefinitionUrl && url !== definition.url) || (version !== undefined && version !== definition.version)) throw new Error('Native package form scope differs from its qualified publication');
     return publication.form_id;
@@ -139,25 +144,28 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
   });
   let resuming: ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>> | undefined;
   return { composition, host, componentDocument, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale,
-    resumeSubmitted: () => resuming ??= (async () => {
+    resumeSubmitted: () => resuming ??= atNativeAdmissionStage('saved-access', async () => {
       // Validate retained credentials through the bridge; recovery never issues an owner.
       if (anonymousSessions && resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {
         await anonymousSessions.sessionForForm(definition.url, definition.version, true);
       }
       let claim = null;
       if (options.identityBinding) {
-        // Do not start a redirect during recovery; the respondent shell owns sign-in.
-        if (!await options.identityBinding.browserAuthSession!.getSession()) return 'absent';
-        const choices = await options.identityBinding.provider.discover(config.identity.oidc?.minAssurance);
-        const selected = choices.find(choice => choice.kind === 'oidc' && choice.issuer === config.identity.oidc?.issuer);
-        if (!selected) throw new Error('Selected OIDC identity is unavailable for native recovery');
-        claim = await options.identityBinding.provider.authenticate(selected);
+        claim = await atNativeAdmissionStage('identity', async () => {
+          // Do not start a redirect during recovery; the respondent shell owns sign-in.
+          if (!await options.identityBinding!.browserAuthSession!.getSession()) return null;
+          const choices = await options.identityBinding!.provider.discover(config.identity.oidc?.minAssurance);
+          const selected = choices.find(choice => choice.kind === 'oidc' && choice.issuer === config.identity.oidc?.issuer);
+          if (!selected) throw new Error('Selected OIDC identity is unavailable for native recovery');
+          return options.identityBinding!.provider.authenticate(selected);
+        });
+        if (!claim) return 'absent';
       }
       const draftKey = { formUrl: definition.url, formVersion: definition.version, subjectRef: claim?.subjectRef };
       const state = await cohort.draftStore.readState!(draftKey);
       if (state?.kind === 'submitted') await host.configureSubmittedRuntime({ definition, draftKey, claim, state });
       return state?.kind ?? 'absent';
-    })() };
+    }) };
 }
 async function qualifyRoles(bundle: BundleExport, pins: NativePackageSigningConfig): Promise<Record<ResponseActionRole, QualifiedResponseActionRole>> {
   const resolved = dereferenceBundleExport(bundle);

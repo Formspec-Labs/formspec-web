@@ -5,11 +5,23 @@ import { createBrowserScopedMetadataStore } from '../shared/browser-scoped-metad
 
 /** Navigation only: preserve a public native form selection across the provider redirect. */
 export function rememberNativeSignInReturn(href: string, config: FormspecWebConfig): boolean {
+  return rememberNativeReturn(href, config, 'return');
+}
+
+export function rememberNativeSignOutReturn(href: string, config: FormspecWebConfig): boolean {
+  return rememberNativeReturn(href, config, 'signout-return');
+}
+
+export function clearNativeSignOutReturn(href: string, config: FormspecWebConfig): void {
+  navigationStore(new URL(href), config).remove('signout-return');
+}
+
+function rememberNativeReturn(href: string, config: FormspecWebConfig, slot: 'return' | 'signout-return'): boolean {
   const url = new URL(href);
   const target = new URL('/', url);
   target.search = url.search;
   if (url.hash || configuredAuthCallback(href, config) || !nativeSelection(target)) return false;
-  navigationStore(url, config).write('return', `${target.pathname}${target.search}`);
+  navigationStore(url, config).write(slot, `${target.pathname}${target.search}`);
   return true;
 }
 
@@ -22,19 +34,19 @@ function navigationStore(url: URL, config: FormspecWebConfig) {
   if (!oidc) throw new Error('Native sign-in requires the selected OIDC configuration.');
   return createBrowserScopedMetadataStore({ namespace: 'formspec-web:signin-navigation',
     context: { origin: url.origin, issuer: oidc.issuer, clientId: oidc.clientId,
-      redirectUri: oidc.redirectUri, tenantBinding: config.tenantBinding } });
+      redirectUri: oidc.redirectUri, postLogoutRedirectUri: oidc.postLogoutRedirectUri, tenantBinding: config.tenantBinding } });
 }
 
 function nativeSelection(url: URL): boolean {
   return url.pathname === '/' && !url.hash && !!url.searchParams.get('form') && !!url.searchParams.get('package');
 }
 
-function consumeNativeSignInReturn(href: string, config: FormspecWebConfig): string | undefined {
+function consumeNativeReturn(href: string, config: FormspecWebConfig, slot: 'return' | 'signout-return'): string | undefined {
   const callback = new URL(href);
   const store = navigationStore(callback, config);
-  const value = store.read('return');
+  const value = store.read(slot);
   if (value === undefined) return undefined;
-  store.remove('return');
+  store.remove(slot);
   if (typeof value !== 'string' || !value.startsWith('/?')) throw new Error('Stored form navigation is invalid.');
   const target = new URL(value, callback.origin);
   if (target.origin !== callback.origin || !nativeSelection(target)) throw new Error('Stored form navigation is invalid.');
@@ -57,8 +69,9 @@ export async function completeConfiguredAuthCallback(input: {
   const oidc = input.config.identity.oidc;
   return completeBrowserAuthCallback({ href: input.href, uris: oidc,
     createSession: () => input.createSession(oidc), navigate: href => {
-      const target = configuredAuthCallback(input.href, input.config) === 'signin'
-        ? consumeNativeSignInReturn(input.href, input.config) : undefined;
+      const kind = configuredAuthCallback(input.href, input.config);
+      const target = kind === 'signin' ? consumeNativeReturn(input.href, input.config, 'return')
+        : kind === 'signout' ? consumeNativeReturn(input.href, input.config, 'signout-return') : undefined;
       input.navigate(target ?? href);
     } });
 }

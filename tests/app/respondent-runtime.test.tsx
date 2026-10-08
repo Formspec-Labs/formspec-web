@@ -55,6 +55,27 @@ describe('RespondentRuntime identity sign-in', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['anonymous', 'magic-link'] as const)('keeps cached %s identity behind the required OIDC sign-in', async kind => {
+    const cached = testClaimForOption(kind === 'anonymous'
+      ? { kind: 'anonymous', minAssurance: 'L1' }
+      : { kind: 'magic-link', channel: 'email', minAssurance: 'L2' });
+    const provider = new TestIdentityProvider();
+    const originalSubscribe = provider.subscribe.bind(provider);
+    provider.subscribe = listener => {
+      const release = originalSubscribe(listener);
+      listener(cached);
+      return release;
+    };
+    const composition = testComposition(provider);
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    expect(composition.definitionSource.getDefinition).not.toHaveBeenCalled();
+    expect(provider.authenticate).not.toHaveBeenCalled();
+    await clickButton('Sign in with Example IdP');
+    await waitForText('Demo Benefits Intake');
+    expect(provider.authenticate).toHaveBeenCalledOnce();
+  });
+
   it('renders explicit OIDC sign-in and loads the form after user action', async () => {
     const identityProvider = new TestIdentityProvider();
     const composition = testComposition(identityProvider);

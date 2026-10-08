@@ -9,7 +9,8 @@ import type { FormspecWebConfig } from '../config/types.ts';
 import type { IdpOption } from '../ports/identity-provider.ts';
 import { AuthRequiredSurface, ConfirmationPanel } from './RespondentRuntime.tsx';
 import { isIdentityInteractionStarted } from './respondent-flow.ts';
-import { clearNativeSignInReturn, rememberNativeSignInReturn } from './auth-callback.ts';
+import { clearNativeSignInReturn, rememberNativeSignInReturn, clearNativeSignOutReturn, rememberNativeSignOutReturn } from './auth-callback.ts';
+import { nativeAdmissionDiagnostic } from '../composition/native-package-admission-error.ts';
 import { NativePackageRespondentHost } from './NativePackageRespondentHost.tsx';
 import { chooseComposition } from './main-helpers.ts';
 
@@ -96,7 +97,7 @@ function NativePackageSignIn({ composition, config }: { composition: Composition
 }
 
 function AdmittedNativePackageRuntime({ composition, config }: { composition: Composition; config: FormspecWebConfig }) {
-  const [state, setState] = useState<{ owner?: Composition; boot?: NativePackageBoot; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; failed?: boolean; identityChanged?: boolean }>({});
+  const [state, setState] = useState<{ owner?: Composition; boot?: NativePackageBoot; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; failed?: boolean; identityChanged?: boolean; failureStage?: string }>({});
   const lifetime = useMemo(() => ({ generation: 0 }), [composition]);
   const [location, navigate] = useBrowserLocation(window.location.pathname);
   const selection = useMemo(() => window.location.search, [composition]);
@@ -135,7 +136,14 @@ function AdmittedNativePackageRuntime({ composition, config }: { composition: Co
       const outcome = await value.resumeSubmitted?.();
       if (active) setState({ owner: composition, boot: value, outcome });
       else if (lifetime.generation === generation) value.host.dispose();
-    }).catch(() => { if (lifetime.generation === generation) boot?.host.dispose(); if (active) setState({ owner: composition, failed: true }); });
+    }).catch(error => {
+      if (lifetime.generation === generation) boot?.host.dispose();
+      if (active) {
+        const diagnostic = nativeAdmissionDiagnostic(error);
+        console.warn('Native form admission failed', JSON.stringify(diagnostic));
+        setState({ owner: composition, failed: true, failureStage: diagnostic.stage });
+      }
+    });
     return () => {
       active = false;
       releaseIdentity?.();
@@ -145,7 +153,11 @@ function AdmittedNativePackageRuntime({ composition, config }: { composition: Co
     };
   }, [composition, lifetime]);
 
-  if (state.owner !== composition || !state.boot) return <NativePackageStatus failed={state.owner === composition && state.failed} identityChanged={state.identityChanged} />;
+  if (state.owner !== composition || !state.boot) return <NativePackageStatus failed={state.owner === composition && state.failed} identityChanged={state.identityChanged}>
+    {state.owner === composition && state.failed && state.failureStage === 'identity'
+      && composition.browserAuthSession && config.identity.oidc?.postLogoutRedirectUri
+      ? <NativePackageIdentityRecovery composition={composition} config={config} /> : null}
+  </NativePackageStatus>;
   return <NativePackageFrame boot={state.boot} selection={selection} location={location} outcome={state.outcome}>
     <NativePackageRespondentHost host={state.boot.host} composition={state.boot.composition}
     config={config} componentDocument={state.boot.componentDocument} localeDocuments={state.boot.localeDocuments}
@@ -153,11 +165,43 @@ function AdmittedNativePackageRuntime({ composition, config }: { composition: Co
   </NativePackageFrame>;
 }
 
-function NativePackageStatus({ failed, identityChanged }: { failed?: boolean; identityChanged?: boolean }) {
+function NativePackageIdentityRecovery({ composition, config }: { composition: Composition; config: FormspecWebConfig }) {
+  const [state, setState] = useState<'idle' | 'pending' | 'failed'>('idle');
+  const pending = useRef(false);
+  const lifetime = useRef(0);
+  useEffect(() => { ++lifetime.current; return () => { ++lifetime.current; }; }, [composition, config]);
+  async function signOut() {
+    if (pending.current) return;
+    pending.current = true;
+    const generation = lifetime.current;
+    const href = window.location.href;
+    let retained = false;
+    setState('pending');
+    try {
+      retained = rememberNativeSignOutReturn(href, config);
+      await composition.browserAuthSession!.logout();
+    } catch {
+      if (lifetime.current !== generation) return;
+      if (retained) { try { clearNativeSignOutReturn(href, config); } catch { /* Navigation grants no access. */ } }
+      pending.current = false;
+      setState('failed');
+    }
+  }
+  return <>
+    <p>Your sign-in could not be confirmed for this form. Sign out to try again with a fresh session.</p>
+    <button type="button" className="locale-button" disabled={state === 'pending'} onClick={() => void signOut()}>
+      {state === 'pending' ? 'Opening sign-out' : 'Sign out and try again'}
+    </button>
+    {state === 'failed' ? <p role="alert">Sign-out could not be confirmed. Try again.</p> : null}
+  </>;
+}
+
+function NativePackageStatus({ failed, identityChanged, children }: { failed?: boolean; identityChanged?: boolean; children?: React.ReactNode }) {
   return <main className="fs-surface-admission native-package-status" role={failed ? 'alert' : 'status'}>
     <h1>{identityChanged ? 'Your sign-in session changed' : failed ? 'This form cannot be loaded.' : 'Preparing this form'}</h1>
     {identityChanged ? <a className="locale-button" href={`/${window.location.search}`}>Return to form</a> : null}
-    {failed && !identityChanged ? <p>Use the form link provided by its publisher.</p> : null}
+    {failed && !identityChanged && !children ? <p>Use the form link provided by its publisher.</p> : null}
+    {children}
   </main>;
 }
 

@@ -242,11 +242,19 @@ describe('explicit native package composition', () => {
       logout: async () => {}, completeLogoutCallback: async () => {}, accessToken: async () => 'oidc-bearer',
       subscribe: () => () => {}, dispose: () => {} };
     const identityBinding: IdentityBinding = { provider, accessToken: vi.fn(async () => 'oidc-bearer'), browserAuthSession };
-    const config = { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: { mode: 'oidc-required' as const, oidc: {
+    const config = { ...test.config, tenantBinding: { kind: 'bound' as const, scope: {
+      tenant: 'tenant_test', workspace: 'workspace_test', environment: 'environment_test', cell: 'cell_test',
+    } }, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: { mode: 'oidc-required' as const, oidc: {
       issuer: claim.provider, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const,
     } } };
     const options = { packageUrl: '/package.json', initialDefinitionUrl, identityBinding };
     const boot = await createDefaultComposition(config, options).nativePackageRespondent!.load();
+    const runtime = test.requests.find(request => request.url.endsWith('/runtime/forms/actual-form'))!;
+    expect(runtime.headers.get('authorization')).toBe('Bearer oidc-bearer');
+    expect(runtime.headers.get('x-formspec-tenant-id')).toBe('tenant_test');
+    expect(runtime.headers.get('x-formspec-workspace-id')).toBe('workspace_test');
+    expect(runtime.headers.get('x-formspec-environment-id')).toBe('environment_test');
+    expect(runtime.headers.get('x-formspec-cell-id')).toBe('cell_test');
     expect(boot.composition.identityProvider).toBe(provider); expect(boot.composition.browserAuthSession).toBe(browserAuthSession);
     const key = { formUrl: test.definition.url, formVersion: test.definition.version, subjectRef: claim.subjectRef };
     const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version };
@@ -269,6 +277,7 @@ describe('explicit native package composition', () => {
     }) });
     const composition = createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl });
     await expect(composition.nativePackageRespondent!.load()).rejects.toThrow();
+    await expect(composition.nativePackageRespondent!.load()).rejects.toMatchObject({ stage: field === 'publication' ? 'publication' : 'package' });
     expect(test.requests.every(request => request.method === 'GET')).toBe(true);
     expect(test.requests.some(request => request.url.includes('sessions/anonymous'))).toBe(false);
   });

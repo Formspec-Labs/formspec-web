@@ -490,7 +490,10 @@ function RespondentController({
       // future OIDC re-hydrate emitting boot.claim) would compare nextClaim
       // to a stale null and trip the subject-changed branch (code review H-1).
       activeClaim = boot.claim;
-      unsubscribe = composition.identityProvider.subscribe((nextClaim) => {
+      unsubscribe = composition.identityProvider.subscribe((receivedClaim) => {
+        const nextClaim = identityClaimAllowedForPolicy(receivedClaim, {
+          identityMode: config.identity.mode, runtimeMode: composition.mode,
+        }) ? receivedClaim : null;
         if (terminalClearRequestedRef.current) {
           activeClaim = nextClaim;
           return;
@@ -1313,6 +1316,14 @@ async function bootIdentity(
   },
 ): Promise<{ claim: IdentityClaim | null; options: IdpOption[] }> {
   const options = await identityProvider.discover(formAssuranceFloor);
+  // Stateful providers replay their normalized current claim synchronously.
+  // Reuse an admitted identity before allocating a subject-bound runtime.
+  let currentClaim: IdentityClaim | null = null;
+  const release = identityProvider.subscribe(claim => { currentClaim = claim; });
+  release();
+  if (currentClaim && identityClaimAllowedForPolicy(currentClaim, pickerPolicy)) {
+    return { options, claim: currentClaim };
+  }
   const pickerWillRender = pickerPolicy
     ? signInOptionsForIdentityPolicy({ options, ...pickerPolicy }).length > 0
     : false;
@@ -1321,6 +1332,13 @@ async function bootIdentity(
     options,
     claim: option ? await identityProvider.authenticate(option) : null,
   };
+}
+
+function identityClaimAllowedForPolicy(
+  claim: IdentityClaim | null,
+  policy?: { identityMode: IdentityPolicyConfig['mode']; runtimeMode: 'demo' | 'production' },
+): boolean {
+  return policy?.runtimeMode !== 'production' || policy.identityMode !== 'oidc-required' || claim?.credentialType === 'oidc-token';
 }
 
 async function createReadyState(

@@ -9,6 +9,8 @@ import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
 import { NativePackageRoot, NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
 import { rememberNativeSignInReturn } from '../../src/app/auth-callback.ts';
 import { createBrowserScopedMetadataStore } from '../../src/shared/browser-scoped-metadata.ts';
+import { NativePackageAdmissionError } from '../../src/composition/native-package-admission-error.ts';
+import { OidcAssuranceError } from '../../src/adapters/identity/oidc.ts';
 import type { BrowserAuthSessionState } from '../../src/ports/browser-auth-session.ts';
 import type { NativePackageBoot } from '../../src/composition/native-package.ts';
 import type { NativePackageSigningHost } from '../../src/shared/native-package-signing-host.ts';
@@ -182,6 +184,39 @@ describe('native package boot and scoped recovery', () => {
     await waitFor(() => expect(cancelled.load).toHaveBeenCalled()); pending.unmount();
     await act(async () => gate.resolve()); expect(cancelled.host.dispose).toHaveBeenCalled();
     expect(screen.queryByTestId('native-route')).toBeNull();
+  });
+  it('logs only a bounded diagnostic for native assurance failure', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const test = fixture(); test.boot.resumeSubmitted = async () => {
+        throw new NativePackageAdmissionError('identity', new OidcAssuranceError('unmapped-acr', '0', 'private-token-or-person'));
+      };
+      render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+      await screen.findByRole('alert');
+      expect(warn).toHaveBeenCalledExactlyOnceWith('Native form admission failed', '{"stage":"identity","reason":"unmapped-acr","acr":"0"}');
+      expect(screen.queryByText('private-token-or-person')).toBeNull(); expect(test.host.dispose).toHaveBeenCalled();
+    } finally { warn.mockRestore(); }
+  });
+  it('offers explicit maintained logout on identity refusal and retires the failed host on withdrawal', async () => {
+    window.history.replaceState(null, '', '/?form=passport&package=%2Fpackage.json');
+    const test = fixture();
+    const current = { issuer: departmentAppProfile.identity.oidc!.issuer, subject: 'owner', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+    let notify!: (value: BrowserAuthSessionState | null) => void;
+    const logout = vi.fn(async () => { notify(null); throw new Error('private provider failure'); });
+    test.composition.browserAuthSession = { getSession: async () => current, logout,
+      subscribe: (listener: typeof notify) => { notify = listener; listener(current); return () => {}; } } as never;
+    test.boot.resumeSubmitted = async () => { throw new NativePackageAdmissionError('identity', new OidcAssuranceError('unmapped-acr', '0', 'private')); };
+    const config = { ...departmentAppProfile, identity: { ...departmentAppProfile.identity,
+      oidc: { ...departmentAppProfile.identity.oidc!, postLogoutRedirectUri: '/auth/logout' } } };
+    render(<NativePackageRuntime composition={test.composition} config={config} />);
+    const signOut = await screen.findByRole('button', { name: 'Sign out and try again' });
+    expect(logout).not.toHaveBeenCalled(); expect(test.host.dispose).toHaveBeenCalled();
+    expect(screen.queryByTestId('native-route')).toBeNull();
+    fireEvent.click(signOut);
+    await screen.findByRole('heading', { name: 'Your sign-in session changed' });
+    expect(logout).toHaveBeenCalledOnce();
+    expect(screen.getByRole('link', { name: 'Return to form' }).getAttribute('href')).toBe('/?form=passport&package=%2Fpackage.json');
+    expect(screen.queryByText('private provider failure')).toBeNull();
   });
   it('does not dispose a current cached owner when an obsolete StrictMode preflight rejects', async () => {
     const test = fixture(); const first = deferred<void>(); const second = deferred<void>();

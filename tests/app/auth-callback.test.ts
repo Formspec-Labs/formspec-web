@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { completeConfiguredAuthCallback, configuredAuthCallback, rememberNativeSignInReturn } from '../../src/app/auth-callback.ts';
+import { completeConfiguredAuthCallback, configuredAuthCallback, rememberNativeSignInReturn, rememberNativeSignOutReturn } from '../../src/app/auth-callback.ts';
 import { createBrowserScopedMetadataStore } from '../../src/shared/browser-scoped-metadata.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import type { BrowserAuthSession } from '../../src/ports/browser-auth-session.ts';
@@ -18,6 +18,21 @@ function session(): BrowserAuthSession {
 }
 
 describe('configured callback startup', () => {
+  it('restores explicit native signout navigation only after the qualified signout callback', async () => {
+    const selected = 'https://web.example.test/?form=passport&package=%2Fpackage.json';
+    rememberNativeSignOutReturn(selected, config);
+    const navigate = vi.fn();
+    await completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/callback', createSession: session, navigate });
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('https://web.example.test/');
+    const refused = session(); vi.mocked(refused.completeLogoutCallback).mockRejectedValue(new Error('invalid logout state'));
+    await expect(completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/logout', createSession: () => refused, navigate })).rejects.toThrow('invalid logout state');
+    const accepted = vi.fn();
+    await completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/logout', createSession: session, navigate: accepted });
+    expect(accepted).toHaveBeenCalledExactlyOnceWith(selected);
+    const again = vi.fn();
+    await completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/logout', createSession: session, navigate: again });
+    expect(again).toHaveBeenCalledExactlyOnceWith('https://web.example.test/');
+  });
   it('restores and consumes the native selection only after a successful sign-in callback', async () => {
     const selected = 'https://web.example.test/?form=passport&package=%2Fpublished%2Fpackage.json';
     expect(rememberNativeSignInReturn(selected, config)).toBe(true);
@@ -64,7 +79,7 @@ describe('configured callback startup', () => {
   it.each(['https://untrusted.test/?form=x&package=y', '//untrusted.test/?form=x&package=y', '/auth/callback?form=x&package=y', '/?form=x&package=y#unsafe', 5])('refuses invalid stored navigation %s after authenticating', async value => {
     createBrowserScopedMetadataStore({ namespace: 'formspec-web:signin-navigation',
       context: { origin: 'https://web.example.test', issuer: config.identity.oidc.issuer, clientId: config.identity.oidc.clientId,
-        redirectUri: config.identity.oidc.redirectUri, tenantBinding: config.tenantBinding } }).write('return', value);
+        redirectUri: config.identity.oidc.redirectUri, postLogoutRedirectUri: config.identity.oidc.postLogoutRedirectUri, tenantBinding: config.tenantBinding } }).write('return', value);
     const auth = session(); const navigate = vi.fn();
     await expect(completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/callback', createSession: () => auth, navigate })).rejects.toThrow(/navigation/);
     expect(auth.completeCallback).toHaveBeenCalledOnce(); expect(auth.dispose).toHaveBeenCalledOnce();

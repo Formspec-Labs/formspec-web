@@ -11,6 +11,16 @@ import { IdentitySession, assuranceRank, meetsAssurance } from './assurance.ts';
 export type { OidcClientDriver, OidcUserLike, OidcClock } from './oidc-browser-session.ts';
 export type AcrAssuranceMap = Record<string, AssuranceLevel>;
 
+/** Bounded diagnostics only; arbitrary provider claim text is never exposed. */
+export class OidcAssuranceError extends Error {
+  readonly numericAcr?: string;
+  constructor(readonly reason: 'unmapped-acr' | 'below-minimum', acr: unknown, message: string) {
+    super(message);
+    this.name = 'OidcAssuranceError';
+    this.numericAcr = typeof acr === 'string' && /^[0-9]{1,3}$/.test(acr) ? acr : undefined;
+  }
+}
+
 export interface OidcAdapterConfig extends OidcBrowserAuthSessionConfig {
   displayName?: string;
   minAssurance: AssuranceLevel;
@@ -90,7 +100,7 @@ export class OidcAdapter implements IdentityProvider {
       this.config.acrAssuranceMap ?? defaultAcrAssuranceMap,
     );
     if (assuranceRank(assuranceLevel) < Math.max(assuranceRank(option.minAssurance), assuranceRank(this.config.minAssurance))) {
-      throw new Error(
+      throw new OidcAssuranceError('below-minimum', user.profile.acr,
         `OIDC ACR resolved to ${assuranceLevel}, below required ${option.minAssurance}`,
       );
     }
@@ -151,7 +161,7 @@ export function assuranceLevelFromAcr(acr: unknown, map: AcrAssuranceMap): Assur
     .sort((left, right) => assuranceRank(right) - assuranceRank(left));
   const [highest] = mapped;
   if (!highest) {
-    throw new Error('OIDC ACR did not map to a Formspec assurance level');
+    throw new OidcAssuranceError('unmapped-acr', acr, 'OIDC ACR did not map to a Formspec assurance level');
   }
   return highest;
 }
