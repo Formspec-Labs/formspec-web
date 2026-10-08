@@ -337,6 +337,22 @@ export function createResponseActionController(config: ResponseActionControllerC
   };
   return {
     definitionInvoker, widgetExecutor,
+    async restoreSigned(value: SignedResponseSigning) {
+      const generation = epoch;
+      current(generation);
+      if (!restored?.authoredSignatures?.length || prepared || signed || saved || busy || snapshot.confirmation) throw new ControllerRefusal('restoration-unresolved');
+      const result = freeze(structuredClone(value));
+      await checkEvidence(result, restored); current(generation);
+      const wording = config.signingContext();
+      if ((context.draftKey.subjectRef && result.actor.id !== context.draftKey.subjectRef)
+        || !same(result.content, result.response.extensions?.['x-formspec-signing-content']?.content)
+        || !same(result.content.source, wording.source) || result.content.locale !== wording.locale
+        || result.response.authoredSignatures?.length !== 1 || result.verification.mode !== 'delegated-service-key'
+        || result.verification.provider !== result.response.authoredSignatures[0].signatureProvider || !result.verification.keyId
+        || prepared || signed || saved || busy || snapshot.confirmation) throw new ControllerRefusal('context-mismatch');
+      signed = result; saved = result; actor = result.actor.id; owned = true;
+      publish('signed');
+    },
     getSnapshot: () => snapshot,
     subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
     invalidate() {

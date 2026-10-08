@@ -32,7 +32,7 @@ import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import { HttpSubmitTransport } from './submit-transport.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
-import { assertDelegatedSignedResponseConsistency, HttpResponseSigning, ResponseSigningScopeFence, type HttpResponseSigningPolicy } from './response-signing.ts';
+import { assertDelegatedSignedResponseConsistency, handoffHash, HttpResponseSigning, ResponseSigningScopeFence, type HttpResponseSigningPolicy } from './response-signing.ts';
 
 export type { DraftBindingRegistry, DraftBindingSnapshot } from './draft-binding-registry.ts';
 
@@ -96,7 +96,13 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
         || view.subject_ref !== owner.subjectRef || !response.id?.trim()
         || !Number.isSafeInteger(view.draft_version) || view.draft_version < 1
         || !['in_progress', 'submitted'].includes(view.status ?? '')) throw new Error('Owned draft state differs from its qualified publication');
-      if (view.status === 'in_progress') return { kind: 'active', response };
+      if (view.status === 'in_progress' && !response.authoredSignatures?.length) {
+        if (response.extensions?.['x-formspec-signing-content']) {
+          responseSigning.assertEditable(key);
+          throw new Error('Active draft has incomplete signing evidence');
+        }
+        return { kind: 'active', response };
+      }
       const displayed = response.displayedLocale;
       const locale = displayed && statePolicy.localeDocuments.filter(document => document.url === displayed.url && document.version === displayed.version
         && document.locale.toLowerCase() === displayed.locale.toLowerCase() && document.target.kind === 'definition'
@@ -104,12 +110,21 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       const commitment = response.extensions?.['x-formspec-signing-content'];
       if (response.status !== 'completed' || !locale || locale.length !== 1 || !commitment
         || commitment.actorRef !== owner.subjectRef || commitment.draftId !== view.draft_id
-        || !Number.isSafeInteger(commitment.draftVersion) || view.draft_version !== commitment.draftVersion + 2
+        || !Number.isSafeInteger(commitment.draftVersion) || view.draft_version !== commitment.draftVersion + (view.status === 'submitted' ? 2 : 1)
         || commitment.content.locale.toLowerCase() !== displayed!.locale.toLowerCase()) throw new Error('Submitted draft has no matching Locale or signing commitment');
       const content = resolveAuthoredSigningContent({ definition: statePolicy.definition, response,
         source: commitment.content.source, locale: commitment.content.locale, validateContent: signingPolicy!.validateContent });
       if (canonicalize(content) !== canonicalize(commitment.content)) throw new Error('Submitted signing content differs from the authored package');
       await assertDelegatedSignedResponseConsistency(response, signingPolicy!); current();
+      if (view.status === 'in_progress') {
+        responseSigning.assertEditable(key);
+        const responseHash = await handoffHash(response); current();
+        return { kind: 'active', response, signed: { draftKey: key, response, content,
+          draft: { id: view.draft_id, version: view.draft_version, responseHash }, actor: { id: owner.subjectRef },
+          evidence: { draft_id: view.draft_id, draft_version: view.draft_version, form_version_id: view.form_version_id!,
+            subject_ref: owner.subjectRef, draft_state: view.draft_state, canonical_response: response, status: 'in_progress' },
+          verification: { mode: 'delegated-service-key', provider: response.authoredSignatures![0].signatureProvider, keyId: signingPolicy!.keyId } } };
+      }
       return { kind: 'submitted', response, draft: { id: view.draft_id, version: view.draft_version },
         subjectRef: owner.subjectRef, formVersionId: view.form_version_id! };
     } : undefined,
@@ -144,7 +159,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     ownerFor,
   });
   const scopedDrafts: DraftStore = {
-    load: key => fence.run(key, async () => draftStore.load(key)),
+    load: key => fence.run(key, async generation => draftStore.load(key, () => fence.assertCurrent(key, generation))),
     ...(draftStore.readState ? { readState: (suppliedKey: DraftKey) => {
       const key = structuredClone(suppliedKey);
       return fence.run(key, async generation => draftStore.readState!(key, () => fence.assertCurrent(key, generation)));
@@ -159,13 +174,19 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       responseSigning.clearScope(key);
     }),
     async invalidateSubject(subject) {
+      if (statePolicy && subject && !subject.startsWith('anon:')) {
+        const keys = registry.entries().filter(entry => entry.key.subjectRef === subject).map(entry => entry.key);
+        for (const key of keys) fence.invalidate(key);
+        await draftStore.retireSubject(subject);
+        return;
+      }
       for (const key of await draftStore.list(subject)) await scopedDrafts.delete(key);
     },
   };
   const scopedSubmit: SubmitTransport = {
     submit: (handoff, operationId) => {
       const key = draftKeyFromHandoff(handoff);
-      return fence.run(key, async () => {
+      return fence.run(key, async generation => {
         responseSigning.assertEditable(key);
         const binding = registry.get(key);
         const response = handoff.extensions?.['x-formspec-response'];
@@ -173,7 +194,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
           && JSON.stringify(response) !== JSON.stringify(binding.response)) {
           throw new Error('Signed submission must preserve the exact saved Response');
         }
-        return submitTransport.submit(handoff, operationId);
+        return submitTransport.submit(handoff, operationId, () => fence.assertCurrent(key, generation));
       });
     },
   };

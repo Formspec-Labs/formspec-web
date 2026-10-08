@@ -99,6 +99,46 @@ function fixture(change: Partial<ResponseActionControllerConfig> = {}) {
 }
 
 describe('generic admitted Response Action controller', () => {
+  async function restoredSignedFixture() {
+    const producer = fixture(); await producer.widget('sign', await producer.ready());
+    const previous = producer.controller.getSnapshot().signed!;
+    const value: FormResponse = { ...previous.response, extensions: { ...previous.response.extensions,
+      'x-formspec-signing-content': { version: '1.0', content, draftId: previous.draft.id, draftVersion: previous.draft.version - 1,
+        actorRef: previous.actor.id, signerName: 'Actual signer', consentAccepted: true, signedAt: '2026-10-08T12:00:00Z',
+        documentHash: 'a'.repeat(64), documentHashAlgorithm: 'sha-256' } } };
+    const signed = { ...previous, ...await evidence(value, previous.draft.version), content,
+      verification: { ...previous.verification, provider: value.authoredSignatures![0].signatureProvider } };
+    return { signed, test: fixture({ restoredResponse: value }) };
+  }
+  it('restores qualified signed evidence without writes and requires fresh review before Submit', async () => {
+    const { signed, test } = await restoredSignedFixture();
+    test.reviewReady.mockReturnValue(false);
+    await test.controller.restoreSigned(signed);
+    expect(test.controller.getSnapshot()).toMatchObject({ phase: 'signed', signed, owned: true });
+    const refused = await test.widget('submit', signed);
+    expect('invocation' in refused ? refused.invocation.failureReason : refused.failureReason).toBe('review-unready');
+    expect(test.submit).not.toHaveBeenCalled();
+    test.reviewReady.mockReturnValue(true);
+    await test.widget('submit', signed, 'fresh-reviewed-submit');
+    expect(test.submit).toHaveBeenCalledOnce();
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+  });
+  it.each(['response', 'hash', 'content', 'verification'] as const)('refuses mismatched restored signed %s', async changed => {
+    const { signed, test } = await restoredSignedFixture(); const candidate = structuredClone(signed);
+    if (changed === 'response') candidate.response.id = 'another-response';
+    if (changed === 'hash') candidate.draft = { ...candidate.draft, responseHash: '0'.repeat(64) };
+    if (changed === 'content') candidate.content = { ...candidate.content, declaration: 'Changed' };
+    if (changed === 'verification') candidate.verification = { ...candidate.verification, provider: 'different-provider' };
+    await expect(test.controller.restoreSigned(candidate)).rejects.toThrow();
+    expect(test.controller.getSnapshot().signed).toBeUndefined(); expect(test.submit).not.toHaveBeenCalled();
+  });
+  it('refuses late signed restoration after controller withdrawal', async () => {
+    const { signed, test } = await restoredSignedFixture(); let finish!: () => void;
+    test.config.hashResponse = async () => new Promise(resolve => { finish = () => resolve(signed.draft.responseHash); });
+    const restoring = test.controller.restoreSigned(signed); const refused = expect(restoring).rejects.toThrow('context-obsolete');
+    await vi.waitFor(() => expect(finish).toBeDefined()); test.controller.invalidate(); finish(); await refused;
+    expect(test.controller.getSnapshot().signed).toBeUndefined();
+  });
   it('returns the known Submit outcome for the same exact delivery without another transport call or phase change', async () => {
     const test = fixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
     const signed = test.controller.getSnapshot().signed!;

@@ -61,12 +61,21 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const app = composeSurfaceApp(bundle.surfaces, { entrySurface: bundle.entrySurface });
   const requiredHostRoutes = new Set<typeof app.routes[number]>();
   const definitionEntryRoutes = new Set<typeof app.routes[number]>();
+  const signedReviewRoutes = new Set<typeof app.routes[number]>();
+  const submitSource = policy.controller.roles.submit?.widgetSource;
   for (const handle of app.routes) {
     const plan = planMatchedRoute({ handle, app, definitions: bundle.definitions, experiences: bundle.experiences,
       registryEntries: flattened.entries, widgets, dataSources: bundle.dataSources, surfaceRef: bundle.surfaceRefs?.get(handle.surface),
       responseActions: bundle.responseActions, themeAuthority: createThemeAuthority({ tenantTheme: bundle.tenantTheme }),
       hasExecutor: true, hasWidgetActionExecutor: true });
     const slots = [...walkAdmittedSlots(plan.slots)];
+    if (submitSource && handle.surfaceId === submitSource.route.surfaceId
+      && bundle.surfaceRefs?.get(handle.surface) === submitSource.route.surfaceRef
+      && handle.routeId === submitSource.route.routeId && handle.route.routeClass === submitSource.route.routeClass
+      && slots.some(slot => slot.slotType === 'module-widget' && slot.slotId === submitSource.slotId
+        && slot.key.moduleId === submitSource.moduleId && slot.key.widgetName === submitSource.widgetName
+        && slot.actionOutputs.some(output => output.name === submitSource.outputName
+          && output.actionRef === policy.controller.roles.submit?.actionRef && !!output.action))) signedReviewRoutes.add(handle);
     if (slots.some(slot => slot.slotType === 'module-widget' && slot.dataInputs.some(input => input.required && input.descriptor?.source.kind === 'host-state'))) requiredHostRoutes.add(handle);
     if (slots.some(slot => slot.slotType === 'definition-form' && slot.status === 'ready' && same(slot.definition, policy.definition))) definitionEntryRoutes.add(handle);
     for (const slot of slots) {
@@ -117,6 +126,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   // snapshot selects the owned branch only; the cohort requalifies its handle.
   let ownedResponseSeed: FormResponse | undefined;
   let deliveryIdentity: string | undefined;
+  let pendingDelivery: Promise<void> | undefined;
   let submitted: { referenceNumber: string; recordKind: 'response' } | undefined;
   let submittedKey: DraftKey | undefined;
   const listeners = new Set<() => void>();
@@ -221,7 +231,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       if (selected && identity !== deliveryIdentity) {
         deliveryIdentity = identity;
         const producing = generation + 1;
-        void delivery(publicSnapshot).catch(() => { if (generation === producing) { runtime = undefined; reviewState = undefined; emit(); } });
+        pendingDelivery = delivery(publicSnapshot);
+        void pendingDelivery.catch(() => { if (generation === producing) { runtime = undefined; reviewState = undefined; emit(); } });
       }
       emit();
     });
@@ -264,13 +275,23 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   return {
     bundle, moduleId: policy.moduleId, reviewOptions, selectLocale,
-    getStartupRoute(pathname: string) {
+    getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; signedReviewHref?: string; signedReviewTitle?: string } {
       const match = matchRoute(app, pathname).match;
       const entry = app.entry;
       if (!match || !entry || !definitionEntryRoutes.has(entry) || requiredHostRoutes.has(entry)) throw new Error('native-entry-route-unavailable');
       const destination = routeHref(entry);
       if (destination.refusal) throw new Error('native-entry-route-unavailable');
-      return { entryHref: destination.href, entryTitle: entry.route.title, requiresHostState: requiredHostRoutes.has(match.handle) };
+      let signedReviewHref: string | undefined;
+      let signedReviewTitle: string | undefined;
+      if (signedReviewRoutes.size === 1 && submitSource) {
+        const review = [...signedReviewRoutes][0];
+        const target = routeHref(review, submitSource.route.params);
+        if (requiredHostRoutes.has(review) && !target.refusal && review !== match.handle) {
+          signedReviewHref = target.href; signedReviewTitle = review.route.title;
+        }
+      }
+      return { entryHref: destination.href, entryTitle: entry.route.title, requiresHostState: requiredHostRoutes.has(match.handle),
+        signedReviewHref, signedReviewTitle };
     },
     allocateSurfaceSessionMarker(sessionGeneration: number) {
       if (disposed || sessionGeneration !== authorityGeneration) throw new Error('native-visit-retired');
@@ -366,13 +387,23 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       if (input) next.engine.setLocale(locale);
       else locale = next.activeLocale;
       next = { ...next, draftKey: structuredClone(next.draftKey), claim: structuredClone(next.claim),
-        restoredResponse: next.restoredResponse ? structuredClone(next.restoredResponse) : undefined, activeLocale: locale };
+        restoredResponse: next.restoredResponse ? structuredClone(next.restoredResponse) : undefined,
+        restoredSigning: next.restoredSigning ? structuredClone(next.restoredSigning) : undefined, activeLocale: locale };
       input = next;
       freezeMetadata(input.draftKey); freezeMetadata(input.claim); freezeMetadata(input.restoredResponse);
       rendererEngine = next.engine;
       const title = next.engine.getFormVM().title.value;
       if (typeof title === 'string') formTitle = title;
-      if (!controller) start(next.restoredResponse);
+      if (!controller) {
+        start(next.restoredResponse);
+        if (next.restoredSigning) {
+          if (!same(next.restoredSigning.response, next.restoredResponse)) throw new Error('native-signed-restoration-mismatch');
+          const expected = authorityGeneration;
+          await controller!.restoreSigned(next.restoredSigning);
+          await pendingDelivery;
+          if (disposed || authorityGeneration !== expected || !runtime) throw new Error('native-signed-restoration-retired');
+        }
+      }
       const scope = policy.semanticScope(responseId, ++renderInstance);
       if (scope.responseId !== responseId) throw new Error('native-response-scope-refused');
       next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot!.owned);

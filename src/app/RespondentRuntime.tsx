@@ -49,6 +49,7 @@ import {
 } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
 import { DraftVersionConflictError, type DraftReadState, type DraftKey } from '../ports/draft-store.ts';
+import type { SignedResponseSigning } from '../ports/response-signing.ts';
 import type { ReviewerShare } from '../ports/reviewer-session.ts';
 import { respondentSessionToken } from '../ports/reviewer-session.ts';
 import type {
@@ -184,6 +185,7 @@ export interface RespondentOwnedRuntimeInput {
   readonly draftKey: DraftKey;
   readonly claim: IdentityClaim | null;
   readonly restoredResponse?: FormResponse;
+  readonly restoredSigning?: SignedResponseSigning;
   readonly activeLocale: string;
 }
 
@@ -1480,6 +1482,7 @@ async function createReadyState(
     subjectRef: claim?.subjectRef,
   };
   let recoveredDraft: FormResponse | undefined;
+  let recoveredSigning: SignedResponseSigning | undefined;
   if (form?.configureSubmittedRuntime) {
     if (!composition.draftStore.readState || !form.configureRuntime || runtimeProfile.multiParty) {
       throw new Error('Submitted recovery requires its complete qualified runtime');
@@ -1497,6 +1500,7 @@ async function createReadyState(
       return { status: 'submitted', terminalRuntime };
     }
     recoveredDraft = state?.response;
+    recoveredSigning = state?.kind === 'active' ? state.signed : undefined;
   }
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
@@ -1546,7 +1550,7 @@ async function createReadyState(
       }
       const configured = await form.configureRuntime({ engine, definition,
         draftKey: multiPartyState ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef) : draftKey, claim,
-        restoredResponse: draft ? structuredClone(draft) : undefined, activeLocale });
+        restoredResponse: draft ? structuredClone(draft) : undefined, restoredSigning: recoveredSigning, activeLocale });
       if (!configured || typeof configured.responseActionInvoker !== 'function'
         || typeof configured.invalidate !== 'function'
         || typeof configured.dispose !== 'function'

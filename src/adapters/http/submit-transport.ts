@@ -41,7 +41,8 @@ export class HttpSubmitTransport implements SubmitTransport {
     this.signingRequested = config.signingRequested;
   }
 
-  async submit(handoff: IntakeHandoff, idempotencyKey: string): Promise<SubmitConfirmation> {
+  async submit(handoff: IntakeHandoff, idempotencyKey: string, assertCurrent: () => void = () => {}): Promise<SubmitConfirmation> {
+    assertCurrent();
     assertUuidV7IdempotencyKey(idempotencyKey);
     requireCanonicalResponse(handoff);
     const finalized = this.finalizedHandoffs.get(idempotencyKey);
@@ -55,7 +56,7 @@ export class HttpSubmitTransport implements SubmitTransport {
     if (existing) {
       return existing;
     }
-    const submission = this.submitOnce(snapshot, canonicalResponse, idempotencyKey);
+    const submission = this.submitOnce(snapshot, canonicalResponse, idempotencyKey, assertCurrent);
     this.replay.set(idempotencyKey, submission);
     try {
       return await submission;
@@ -69,6 +70,7 @@ export class HttpSubmitTransport implements SubmitTransport {
     handoff: IntakeHandoff,
     snapshot: CanonicalResponse,
     idempotencyKey: string,
+    assertCurrent: () => void,
   ): Promise<SubmitConfirmation> {
     const draftId = await this.draftIdResolver(handoff);
     if (!draftId) {
@@ -94,7 +96,7 @@ export class HttpSubmitTransport implements SubmitTransport {
         anonymous_session_token: token,
         signing_requested: this.resolveSigningRequested(handoff),
       },
-      { idempotencyKey, headers: token ? { authorization: `Bearer ${token}` } : {} },
+      { idempotencyKey, headers: token ? { authorization: `Bearer ${token}` } : {}, assertCurrent },
     );
     if (snapshotId && response.response_id !== snapshotId) {
       throw new Error('Server response identity differs from the canonical Response');

@@ -244,6 +244,23 @@ describe('maintained native package Surface host', () => {
     else expect(() => host.getStartupRoute('/review-sign')).toThrow('native-entry-route-unavailable');
     host.dispose();
   });
+  it.each(['renamed', 'collision', 'parameter', 'wrong-slot', 'wrong-output', 'wrong-surface'] as const)('derives signed-review navigation from the admitted %s Submit route', async variant => {
+    const test = await actualFixture(); test.host.dispose();
+    const policy = { ...test.policy, bundle: structuredClone(test.policy.bundle),
+      controller: { ...test.policy.controller, roles: structuredClone(test.policy.controller.roles) } };
+    const surface = policy.bundle.documents[policy.bundle.manifest.entrySurface!] as SurfaceDocument;
+    const review = surface.routes.find(route => route.path === '/review-sign')!;
+    if (variant === 'renamed') review.path = '/check-signed-response';
+    if (variant === 'collision') surface.routes.push({ ...structuredClone(review), id: 'duplicate-review' });
+    if (variant === 'parameter') review.path = '/review/{unknown}';
+    if (variant === 'wrong-slot') policy.controller.roles.submit!.widgetSource!.slotId = 'missing';
+    if (variant === 'wrong-output') policy.controller.roles.submit!.widgetSource!.outputName = 'missing';
+    if (variant === 'wrong-surface') policy.controller.roles.submit!.widgetSource!.route.surfaceRef = 'missing';
+    const host = createNativePackageSigningHost(policy);
+    expect(host.getStartupRoute('/').signedReviewHref).toBe(variant === 'renamed' ? '/check-signed-response' : undefined);
+    if (variant === 'renamed') expect(host.getStartupRoute('/check-signed-response').signedReviewHref).toBeUndefined();
+    host.dispose();
+  });
   it('refuses an unknown state-aware port result before mounting editable controls', async () => {
     const test = await actualFixture();
     test.props.composition.draftStore.readState = async () => ({ kind: 'unknown' }) as unknown as Awaited<ReturnType<NonNullable<typeof test.props.composition.draftStore.readState>>>;
@@ -360,8 +377,12 @@ describe('maintained native package Surface host', () => {
     expect(clear.mock.calls).toEqual([[key], [key]]);
     host.dispose();
   });
-  it('runs actual r5 Save, Prepare, independently reviewed Sign and exact signed Submit through maintained controls', async () => {
-    const { host, props, saveDraft, prepare, navigate, terminals, getEngine, read, reports, photoBytes, completeRead, sign, submit } = await actualFixture();
+  it('runs actual r5 Save, Prepare, Sign, fresh signed recovery and exact Submit through maintained controls', async () => {
+    const { host, props, policy, saveDraft, prepare, navigate, terminals, getEngine, read, reports, photoBytes, completeRead, sign, submit } = await actualFixture();
+    const claim = { provider: 'https://idp.example.test', adapter: 'test-oidc', subjectRef: 'server-actor',
+      credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L1' as const };
+    props.composition.identityProvider = { discover: async () => [{ kind: 'oidc', issuer: claim.provider, displayName: 'Test identity', minAssurance: 'L1' }],
+      authenticate: vi.fn(async () => claim), revoke: vi.fn(async () => {}), subscribe: listener => { listener(claim); return () => {}; } };
     const mounted = render(<NativePackageRespondentHost {...props} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
     await vi.waitFor(() => expect(saveDraft).toHaveBeenCalledOnce());
@@ -398,15 +419,37 @@ describe('maintained native package Surface host', () => {
     expect(signed.response.id).toBe(prepared.response.id); expect(signed.response.data).toEqual(prepared.response.data);
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     expect((screen.getByRole('button', { name: 'Submit demo response' }) as HTMLButtonElement).disabled).toBe(true);
+    mounted.unmount(); host.dispose();
+    const freshHost = createNativePackageSigningHost(policy);
+    props.composition.draftStore.readState = vi.fn(async () => ({ kind: 'active' as const, response: signed.response, signed }));
+    props.composition.nativePackageRespondent = { load: async () => ({ composition: props.composition, host: freshHost,
+      componentDocument: component, localeDocuments: policy.locales, moduleId: freshHost.moduleId, initialLocale: 'en' }) };
+    window.history.replaceState(null, '', '/?form=form&package=%2Fpackage.json');
+    const restored = render(<NativePackageRuntime composition={props.composition} config={props.config} />);
+    await screen.findByRole('textbox', { name: 'Full legal name *' });
+    await vi.waitFor(() => expect(freshHost.getSnapshot().controller?.phase).toBe('signed'));
+    await vi.waitFor(() => expect(freshHost.getSnapshot().runtime).toBeDefined());
+    expect(freshHost.getSnapshot().controller!.signed!.response).toEqual(signed.response);
+    expect(saveDraft).toHaveBeenCalledOnce(); expect(prepare).toHaveBeenCalledOnce(); expect(sign).toHaveBeenCalledOnce();
+    expect(submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare saved response' }));
+    await vi.waitFor(() => expect(freshHost.getSnapshot().controller?.phase).toBe('refused'));
+    expect(prepare).toHaveBeenCalledOnce();
+    fireEvent.click(await screen.findByRole('button', { name: 'Review signed response' }));
+    expect(window.location.pathname).toBe('/review-sign');
+    expect(window.location.search).toBe('?form=form&package=%2Fpackage.json');
+    expect(screen.queryByRole('button', { name: 'Review signed response' })).toBeNull();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
+    expect((screen.getByRole('button', { name: 'Submit demo response' }) as HTMLButtonElement).disabled).toBe(true);
     completeRead(new Blob([photoBytes], { type: 'image/png' }));
     fireEvent.load(await screen.findByRole('img', { name: /saved photo/i }));
     await vi.waitFor(() => expect((screen.getByRole('button', { name: 'Submit demo response' }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: 'Submit demo response' }));
     await vi.waitFor(() => expect(submit).toHaveBeenCalledOnce());
     expect(submit.mock.calls[0][0].extensions!['x-formspec-response']).toEqual(signed.response);
-    expect(host.getSnapshot().controller!.signed!.response).toEqual(signed.response);
+    expect(freshHost.getSnapshot().controller!.signed!.response).toEqual(signed.response);
     expect(saveDraft).toHaveBeenCalledOnce(); expect(prepare).toHaveBeenCalledOnce();
-    expect(navigate).toHaveBeenCalledWith('/review-sign'); mounted.unmount(); host.dispose();
+    expect(navigate).toHaveBeenCalledWith('/review-sign'); restored.unmount(); freshHost.dispose();
   });
   it('mounts the actual authored r5 Definition slot and passes the qualified Component and ownership seam unchanged', () => {
     const test = fixture(); const mounted = render(<NativePackageRespondentHost {...test.props} />);

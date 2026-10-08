@@ -5,11 +5,12 @@ import type { HttpClientConfig } from '../http/http-client.ts';
 export type DraftResumeMetadataStore = ScopedMetadataStore;
 
 export function createBrowserDraftResumeMetadataStore(
-  config: Pick<HttpClientConfig, 'baseUrl' | 'tenantBinding'>,
+  config: Pick<HttpClientConfig, 'baseUrl' | 'tenantBinding'> & { identityContext?: { issuer: string; clientId: string } },
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
 ): DraftResumeMetadataStore {
   const context = {
     endpoint: new URL(config.baseUrl).href.replace(/\/+$/, ''),
+    ...(config.identityContext ? { identity: { issuer: config.identityContext.issuer, clientId: config.identityContext.clientId } } : {}),
     tenantBinding: config.tenantBinding ? {
       kind: config.tenantBinding.kind,
       scope: (() => {

@@ -19,6 +19,8 @@ export interface JsonRequestOptions {
   headers?: HeadersInit;
   /** Optional admitted request catalog status allowlist. */
   successStatuses?: readonly number[];
+  /** Caller-owned lifetime check after asynchronous credential resolution, before dispatch. */
+  assertCurrent?: () => void;
 }
 
 export class HttpAdapterError extends Error {
@@ -69,6 +71,7 @@ export class HttpClient {
     options: JsonRequestOptions = {},
   ): Promise<T> {
     const headers = await this.headersFor(options);
+    options.assertCurrent?.();
     const response = await this.fetchImpl(this.urlFor(path), {
       method,
       redirect: 'error',

@@ -16,6 +16,7 @@ export interface DraftBindingSnapshot {
   draftId: string;
   draftVersion?: number;
   response?: FormResponse;
+  responseId?: string;
 }
 
 export interface DraftBindingRegistry {
@@ -48,10 +49,12 @@ export function createDraftBindingRegistry(options: {
           || (key.partyRef !== undefined && typeof key.partyRef !== 'string')
           || typeof entry.draftId !== 'string' || !entry.draftId
           || !Number.isInteger(entry.draftVersion) || entry.draftVersion < 0
+          || (entry.responseId !== undefined && (typeof entry.responseId !== 'string' || !entry.responseId.trim()))
           || entry.formId !== resolveFormId(key.formUrl, key.formVersion)) {
           throw new Error('Stored draft handle does not match its form context');
         }
-        map.set(serializeKey(key), { key: copyKey(key), snapshot: { draftId: entry.draftId, draftVersion: entry.draftVersion } });
+        map.set(serializeKey(key), { key: copyKey(key), snapshot: { draftId: entry.draftId, draftVersion: entry.draftVersion,
+          ...(entry.responseId !== undefined ? { responseId: entry.responseId } : {}) } });
       }
     }
     restored = true;
@@ -60,6 +63,7 @@ export function createDraftBindingRegistry(options: {
     const handles = [...map.values()].map(({ key, snapshot }) => ({
       key, formId: resolveFormId(key.formUrl, key.formVersion),
       draftId: snapshot.draftId, draftVersion: snapshot.draftVersion,
+      ...(snapshot.responseId !== undefined ? { responseId: snapshot.responseId } : {}),
     }));
     if (handles.length) options.resumeMetadata?.write('draft-handles', handles);
     else options.resumeMetadata?.remove('draft-handles');
@@ -84,7 +88,8 @@ export function createDraftBindingRegistry(options: {
     },
     put(key, snapshot) {
       restore();
-      map.set(serializeKey(key), { key: copyKey(key), snapshot });
+      map.set(serializeKey(key), { key: copyKey(key), snapshot: { ...snapshot,
+        ...(snapshot.response?.id ? { responseId: snapshot.response.id } : {}) } });
       persist();
     },
     delete(key) {

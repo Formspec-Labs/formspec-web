@@ -10,6 +10,7 @@
  */
 
 import type { FormResponse } from '@formspec-org/types';
+import type { SignedResponseSigning } from './response-signing.ts';
 
 export type { FormResponse } from '@formspec-org/types';
 
@@ -27,7 +28,7 @@ export interface DraftKey {
 }
 
 /** State qualified from the same owned draft read; submitted is the actual server draft status. */
-export type DraftReadState = { kind: 'active'; response: FormResponse } | {
+export type DraftReadState = { kind: 'active'; response: FormResponse; signed?: SignedResponseSigning } | {
   kind: 'submitted'; response: FormResponse; draft: { id: string; version: number };
   subjectRef: string; formVersionId: string;
 };

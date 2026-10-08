@@ -40,6 +40,8 @@ export class HttpDraftStore implements DraftStore {
   private readonly pendingSaves = new Set<Promise<void>>();
   private clearing = 0;
   private generation = 0;
+  // Explicit Clear drains existing saves; identity retirement refuses their late dispatch/results.
+  private retirementGeneration = 0;
 
   constructor(config: HttpDraftStoreConfig) {
     this.client = new HttpClient(config);
@@ -54,8 +56,8 @@ export class HttpDraftStore implements DraftStore {
     };
   }
 
-  async load(key: DraftKey): Promise<FormResponse | undefined> {
-    return this.read(key, view => Promise.resolve(view.canonical_response));
+  async load(key: DraftKey, assertCurrent: () => void = () => {}): Promise<FormResponse | undefined> {
+    return this.read(key, view => Promise.resolve(view.canonical_response), assertCurrent);
   }
 
   private async read<T>(key: DraftKey, qualify: (view: OwnedDraftView) => Promise<T>, assertCurrent: () => void = () => {}, missingIsAbsent = true): Promise<T | undefined> {
@@ -72,6 +74,7 @@ export class HttpDraftStore implements DraftStore {
       current();
       const view = await this.client.getJson<OwnedDraftView>(`/drafts/${encodeURIComponent(binding.draftId)}`, {
         headers: bearerHeaders(token),
+        assertCurrent: current,
         ...(!missingIsAbsent ? { successStatuses: [200] } : {}),
       });
       current();
@@ -85,7 +88,7 @@ export class HttpDraftStore implements DraftStore {
         throw new Error('Server draft has no matching canonical Response snapshot');
       }
       if (!missingIsAbsent && ((binding.draftVersion !== undefined && view.draft_version < binding.draftVersion)
-        || (binding.response?.id !== undefined && response.id !== binding.response.id))) {
+        || (binding.responseId !== undefined && response.id !== binding.responseId))) {
         throw new Error('Owned draft state regressed from its retained identity or revision');
       }
       current();
@@ -112,17 +115,20 @@ export class HttpDraftStore implements DraftStore {
   }
 
   private async saveOnce(key: DraftKey, response: FormResponse): Promise<void> {
+    const generation = this.retirementGeneration;
+    const current = () => { if (generation !== this.retirementGeneration) throw new Error('Draft state was retired while saving'); };
     response = structuredClone(response);
     const existing = this.bindings.get(key);
     const respondentSubject = respondentSubjectRef(key);
     const anonymousSessionToken = respondentSubject
       ? undefined
       : await this.resolveAnonymousSessionToken(key);
+    current();
     if (!existing) {
       await this.createDraft(key, response, {
         anonymousSessionToken,
         respondentSubject,
-      });
+      }, current);
       return;
     }
 
@@ -133,8 +139,9 @@ export class HttpDraftStore implements DraftStore {
         canonical_response: response,
         expected_draft_version: existing.draftVersion,
       },
-      { headers: bearerHeaders(anonymousSessionToken) },
+      { headers: bearerHeaders(anonymousSessionToken), assertCurrent: current },
     );
+    current();
     this.bindings.put(key, {
       draftId: existing.draftId,
       draftVersion: update.draft_version,
@@ -167,6 +174,20 @@ export class HttpDraftStore implements DraftStore {
     }
   }
 
+  /** Retire cached answers and pending work; keep only owner-scoped server locators. */
+  async retireSubject(subjectRef: string): Promise<void> {
+    this.generation += 1;
+    this.retirementGeneration += 1;
+    this.clearing += 1;
+    try {
+      await Promise.allSettled([...this.pendingSaves]);
+      for (const { key, snapshot } of this.bindings.entries()) {
+        if (key.subjectRef === subjectRef) this.bindings.put(key, { draftId: snapshot.draftId,
+          draftVersion: snapshot.draftVersion, responseId: snapshot.responseId });
+      }
+    } finally { this.clearing -= 1; }
+  }
+
   private async createDraft(
     key: DraftKey,
     response: FormResponse,
@@ -177,6 +198,7 @@ export class HttpDraftStore implements DraftStore {
       anonymousSessionToken?: string;
       respondentSubject?: string;
     },
+    current: () => void = () => {},
   ): Promise<void> {
     const formId = this.formIdResolver(key.formUrl, key.formVersion);
     const draft = await this.client.postJson<DraftView>(
@@ -189,8 +211,9 @@ export class HttpDraftStore implements DraftStore {
         draft_state: response.data,
         canonical_response: response,
       },
-      { headers: bearerHeaders(anonymousSessionToken) },
+      { headers: bearerHeaders(anonymousSessionToken), assertCurrent: current },
     );
+    current();
     this.bindings.put(key, {
       draftId: draft.draft_id,
       draftVersion: draft.draft_version,

@@ -158,7 +158,7 @@ function AdmittedNativePackageRuntime({ composition, config }: { composition: Co
       && composition.browserAuthSession && config.identity.oidc?.postLogoutRedirectUri
       ? <NativePackageIdentityRecovery composition={composition} config={config} /> : null}
   </NativePackageStatus>;
-  return <NativePackageFrame boot={state.boot} selection={selection} location={location} outcome={state.outcome}>
+  return <NativePackageFrame boot={state.boot} selection={selection} location={location} outcome={state.outcome} onNavigate={onNavigate}>
     <NativePackageRespondentHost host={state.boot.host} composition={state.boot.composition}
     config={config} componentDocument={state.boot.componentDocument} localeDocuments={state.boot.localeDocuments}
     location={location} onNavigate={onNavigate} />
@@ -206,7 +206,7 @@ function NativePackageStatus({ failed, identityChanged, children }: { failed?: b
 }
 
 /** Recovery controls use the qualified Locale and the host's scoped authority. */
-function NativePackageFrame({ boot, selection, location, outcome, children }: { boot: NativePackageBoot; selection: string; location: string; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; children: React.ReactNode }) {
+function NativePackageFrame({ boot, selection, location, outcome, onNavigate, children }: { onNavigate: (href: string) => void; boot: NativePackageBoot; selection: string; location: string; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; children: React.ReactNode }) {
   const state = useSyncExternalStore(boot.host.subscribe, boot.host.getSnapshot, boot.host.getSnapshot);
   const [operation, setOperation] = useState<'idle' | 'locale' | 'clearing' | 'cleared' | 'clear-error' | 'locale-error'>('idle');
   const heading = useRef<HTMLHeadingElement>(null);
@@ -255,6 +255,12 @@ function NativePackageFrame({ boot, selection, location, outcome, children }: { 
         {text(operation === 'clearing' ? 'receipt.clearing' : 'receipt.clear')}
       </button> : null}
     </div>
+    {!confirmation && !state.cleared && operation === 'idle' && state.runtime && state.controller?.signed
+      && ['signed', 'refused', 'failed'].includes(state.controller.phase)
+      && startupRoute?.signedReviewHref ? <button type="button" className="locale-button"
+        onClick={() => onNavigate(startupRoute.signedReviewHref!)}>
+        {locale?.strings['$ui.response.reviewSigned'] ?? startupRoute.signedReviewTitle ?? 'Review signed response'}
+      </button> : null}
     {operation === 'clear-error' ? <p role="alert">{text('draft.startCurrentFailed')}</p> : null}
     {operation === 'locale-error' ? <p role="alert">{text('form.languageSaveFailed')}</p> : null}
     {operation === 'cleared' ? <main className="shell__status">

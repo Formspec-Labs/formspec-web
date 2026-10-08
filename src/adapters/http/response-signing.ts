@@ -330,6 +330,7 @@ export class HttpResponseSigning implements ResponseSigning {
       signed = await this.config.client.postJson<DraftView>(planned.path, planned.body, {
         headers: { ...planned.headers, ...bearer(owner.token) }, idempotencyKey: input.operationId,
         successStatuses: planned.successStatuses,
+        assertCurrent: () => this.current(context),
       });
     } catch (error) {
       this.current(context);
@@ -368,7 +369,7 @@ export class HttpResponseSigning implements ResponseSigning {
     const owner = await this.config.ownerFor(context.input.draftKey);
     this.current(context);
     let view: DraftView;
-    try { view = await this.config.client.getJson<DraftView>(`/drafts/${encodeURIComponent(id)}`, { headers: bearer(owner.token) }); }
+    try { view = await this.config.client.getJson<DraftView>(`/drafts/${encodeURIComponent(id)}`, { headers: bearer(owner.token), assertCurrent: () => this.current(context) }); }
     catch (error) { this.current(context); throw error; }
     this.current(context);
     await this.validateView(context, id, view, owner.subjectRef);
@@ -485,7 +486,7 @@ function freeze<T>(value: T): T {
   }
   return value;
 }
-async function handoffHash(response: FormResponse): Promise<string> {
+export async function handoffHash(response: FormResponse): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', canonicalResponseHandoffBytes(response));
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }

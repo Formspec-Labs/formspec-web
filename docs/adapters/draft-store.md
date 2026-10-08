@@ -12,11 +12,29 @@ The port key remains `{ formUrl, formVersion?, subjectRef? }`. The adapter owns
 the local key-to-`draft_id` mapping, so callers never handle server draft IDs.
 
 `formspec-server` does not currently expose `DELETE /drafts/{draft_id}` (EXT-21),
-so `delete()` and `invalidateSubject()` clear only the adapter-local mapping.
-The server also returns `DraftView` metadata, not `draft_state`; this adapter
-keeps the latest saved response locally for same-session hydration until the
-server read shape expands (EXT-26). Cross-reload or cross-device draft resume is
-not server-backed yet.
+so `delete()` clears only adapter-local access. Explicit Clear drains existing
+saves, then removes the scoped locator and credentials.
+
+A signing cohort with `qualifiedDraftState` treats authenticated identity
+retirement separately: it rejects obsolete local work, clears cached answers,
+and retains only the subject-scoped server draft ID, revision, and response ID.
+Anonymous invalidation retains its existing clear behavior. The selected native
+OIDC composition also scopes these locators to its issuer and client, endpoint,
+and tenant. Retained locators confer no access; recovery requires a fresh bearer
+and an owner-qualified server GET against the exact form publication.
+
+Recovery of a signed active response checks its saved revision, exact authored
+signing content and Locale, and maintained delegated evidence consistency. It
+regenerates the signed review and requires fresh review readiness before Submit.
+It restores no prior preparation, assent, or ready state, and preserves refusal
+for unresolved signing operations. These checks do not independently verify the
+delegated signature cryptographically. Missing or older-context locators remain
+unavailable; this path does not reconstruct or migrate them. Recovery is tab-local
+and does not provide cross-device draft discovery. After signed recovery at the
+entry page, the native host offers a review control from the exact admitted
+Submit widget route. It preserves the active host and selected package; fresh
+review, including saved attachments, still gates Submit. Ambiguous, colliding,
+or unresolved routes do not produce a recovery control.
 
 Anonymous production saves intentionally create a fresh server draft on each
 save and move the local binding to that new `draft_id`. The current server

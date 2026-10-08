@@ -96,7 +96,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     if ((url !== options.initialDefinitionUrl && url !== definition.url) || (version !== undefined && version !== definition.version)) throw new Error('Native package form scope differs from its qualified publication');
     return publication.form_id;
   };
-  const resumeMetadata = createBrowserDraftResumeMetadataStore(base);
+  const resumeMetadata = createBrowserDraftResumeMetadataStore({ ...base,
+    ...(options.identityBinding ? { identityContext: { issuer: config.identity.oidc!.issuer, clientId: config.identity.oidc!.clientId } } : {}) });
   const anonymousSessions = options.identityBinding ? undefined : new AnonymousSessionBridge({ ...base, resumeMetadata, formIdResolver,
     validateFormContext: async (url, version) => { formIdResolver(url, version); } });
   const ownedAccessToken = options.identityBinding ? async () => {
@@ -117,12 +118,17 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     prepare: input => diagnoseNativePrepare(() => cohort.responseSigning!.prepare(input)).then(remember),
     sign: input => cohort.responseSigning!.sign(input).then(remember),
   };
+  const draftStore = { ...cohort.draftStore, readState: async (key: DraftKey) => {
+    const state = await cohort.draftStore.readState!(key);
+    if (state?.kind === 'active' && state.signed) remember(state.signed);
+    return state;
+  } };
   const attachmentStore = new HttpAttachmentStore({ ...base, formId: publication.form_id,
     maxUploadBytes: adapter!.attachments?.maxUploadBytes,
     accessToken: ownedAccessToken
       ?? (async () => (await anonymousSessions!.sessionForForm(definition.url, definition.version)).sessionToken) });
   const composition = freezeComposition({ ...deferred, nativePackageRespondent: undefined, definitionSource: source,
-    draftStore: cohort.draftStore, submitTransport: cohort.submitTransport, responseSigning: signing, attachmentStore,
+    draftStore, submitTransport: cohort.submitTransport, responseSigning: signing, attachmentStore,
     instanceCapabilities: { ...deferred.instanceCapabilities, fileUpload: 'available' as const } });
   const registryEntries = flattenRegistryEntries(resolved.registries);
   if (registryEntries.diagnostics.length) throw new Error('Native Registry entries are ambiguous');
@@ -163,7 +169,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
         if (!claim) return 'absent';
       }
       const draftKey = { formUrl: definition.url, formVersion: definition.version, subjectRef: claim?.subjectRef };
-      const state = await cohort.draftStore.readState!(draftKey);
+      const state = await draftStore.readState(draftKey);
       if (state?.kind === 'submitted') await host.configureSubmittedRuntime({ definition, draftKey, claim, state });
       return state?.kind ?? 'absent';
     }) };
