@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { HttpSubmitTransport } from '../../../src/adapters/http/submit-transport.ts';
 import {
   sampleFormResponse,
@@ -8,6 +8,46 @@ import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import { idempotencyKey, jsonResponse, recordingFetch } from './test-fetch.ts';
 
 describe('HttpSubmitTransport', () => {
+  it.each<[string, Record<string, unknown> | undefined]>([
+    ['absent extensions', undefined],
+    ['answer-only extensions', { 'x-formspec-response-data': sampleFormResponse.data }],
+    ...[undefined, null, 'response', [], {}, { data: null }, { data: [] }, { data: 'answers' }]
+      .map(value => [`malformed snapshot ${JSON.stringify(value)}`, { 'x-formspec-response': value }] as [string, Record<string, unknown>]),
+  ])('refuses %s before any resolver or HTTP effect and permits corrected same-key input', async (_label, extensions) => {
+    const { fetch, requests } = recordingFetch(() =>
+      jsonResponse({ response_id: 'corrected-response', status: 'accepted' }));
+    const draftIdResolver = vi.fn(() => 'draft-1');
+    const responseDataResolver = vi.fn(() => sampleFormResponse.data);
+    const responseIdResolver = vi.fn(() => undefined);
+    const anonymousSessionToken = vi.fn(() => 'session-token');
+    const accessToken = vi.fn(() => 'access-token');
+    const signingRequested = vi.fn(() => false);
+    const adapter = new HttpSubmitTransport({
+      baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver,
+      responseDataResolver, responseIdResolver, anonymousSessionToken, accessToken, signingRequested,
+    });
+    const key = generateIdempotencyKey();
+    const invalidHandoff = { ...sampleIntakeHandoff, extensions };
+    await expect(adapter.submit(invalidHandoff, key)).rejects.toThrow(/canonical Response/);
+    for (const resolver of [draftIdResolver, responseDataResolver, responseIdResolver,
+      anonymousSessionToken, accessToken, signingRequested]) {
+      expect(resolver).not.toHaveBeenCalled();
+    }
+    expect(requests).toHaveLength(0);
+    await expect(adapter.submit({ ...sampleIntakeHandoff,
+      extensions: { 'x-formspec-response': sampleFormResponse },
+    }, key)).resolves.toMatchObject({ referenceNumber: 'corrected-response' });
+    expect(requests).toHaveLength(1);
+  });
+
+  it('checks UUIDv7 before canonical Response admission', async () => {
+    const draftIdResolver = vi.fn(() => 'draft-1');
+    const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', draftIdResolver });
+    await expect(adapter.submit({ ...sampleIntakeHandoff, extensions: undefined }, 'invalid-key'))
+      .rejects.toThrow(/UUIDv7/);
+    expect(draftIdResolver).not.toHaveBeenCalled();
+  });
+
   it('submits through POST /drafts/{draft_id}/submit with server idempotency header', async () => {
     const { fetch, requests } = recordingFetch(() =>
       jsonResponse({ response_id: `response-${requests.length}`, status: 'accepted' }),
@@ -34,13 +74,14 @@ describe('HttpSubmitTransport', () => {
     );
     expect(idempotencyKey(requests[0])).toBe(key);
     expect(requests[0]?.body).toMatchObject({
+      canonical_response: sampleFormResponse,
       response_data: { fullName: 'Ada Lovelace' },
       anonymous_session_token: 'session-token',
       signing_requested: true,
     });
   });
 
-  it('uses response data carried by the handoff when no resolver override is supplied', async () => {
+  it('uses canonical data and ignores the answer-only alias when no resolver is supplied', async () => {
     const { fetch, requests } = recordingFetch(() =>
       jsonResponse({ response_id: 'response-from-handoff', status: 'accepted' }),
     );
@@ -53,6 +94,7 @@ describe('HttpSubmitTransport', () => {
       ...sampleIntakeHandoff,
       extensions: {
         'x-formspec-response': sampleFormResponse,
+        'x-formspec-response-data': { fullName: 'Ignored legacy alias' },
       },
     };
 
@@ -61,6 +103,7 @@ describe('HttpSubmitTransport', () => {
       status: 'accepted',
     });
     expect(requests[0]?.body).toMatchObject({
+      canonical_response: sampleFormResponse,
       response_data: sampleFormResponse.data,
     });
   });
@@ -114,6 +157,50 @@ describe('HttpSubmitTransport', () => {
     const second = await adapter.submit(sampleIntakeHandoff, key);
     expect(second).toEqual(first);
     expect(requests).toHaveLength(1);
+  });
+
+  it('refuses changed handoffs after a completed replay without another request', async () => {
+    const { fetch, requests } = recordingFetch(() =>
+      jsonResponse({ response_id: 'completed-response', status: 'accepted' }));
+    const draftIdResolver = vi.fn(() => 'draft-1');
+    const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver });
+    const key = generateIdempotencyKey();
+    await adapter.submit(sampleIntakeHandoff, key);
+    await expect(adapter.submit({ ...sampleIntakeHandoff, extensions: {
+      'x-formspec-response': { ...sampleFormResponse, authored: '2026-05-23T00:00:00.000Z' },
+    } }, key)).rejects.toThrow(/preserve the finalized/);
+    expect(draftIdResolver).toHaveBeenCalledTimes(1);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('refuses returned identity mismatch and retains the finalized snapshot for retry', async () => {
+    const snapshot = { ...sampleFormResponse, id: 'stable-id' };
+    const { fetch, requests } = recordingFetch(() =>
+      jsonResponse({ response_id: requests.length === 1 ? 'wrong-id' : snapshot.id, status: 'accepted' }));
+    const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver: () => 'draft-1' });
+    const handoff = { ...sampleIntakeHandoff, extensions: { 'x-formspec-response': snapshot } };
+    const key = generateIdempotencyKey();
+    await expect(adapter.submit(handoff, key)).rejects.toThrow(/Server response identity differs/);
+    await expect(adapter.submit(handoff, key)).resolves.toMatchObject({ referenceNumber: snapshot.id });
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.body).toEqual(requests[1]?.body);
+  });
+
+  it('captures the canonical snapshot before an asynchronous resolver allows caller mutation', async () => {
+    let releaseDraft: ((id: string) => void) | undefined;
+    const draftGate = new Promise<string>(resolve => { releaseDraft = resolve; });
+    const { fetch, requests } = recordingFetch(() =>
+      jsonResponse({ response_id: 'captured-id', status: 'accepted' }));
+    const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver: () => draftGate });
+    const snapshot = { ...sampleFormResponse, id: 'captured-id', data: { ...sampleFormResponse.data } };
+    const expectedSnapshot = structuredClone(snapshot);
+    const handoff = { ...sampleIntakeHandoff, extensions: { 'x-formspec-response': snapshot } };
+    const submission = adapter.submit(handoff, generateIdempotencyKey());
+    snapshot.data.fullName = 'Mutated after submit';
+    snapshot.id = 'mutated-id';
+    releaseDraft?.('draft-1');
+    await expect(submission).resolves.toMatchObject({ referenceNumber: 'captured-id' });
+    expect(requests[0]?.body).toMatchObject({ canonical_response: expectedSnapshot, response_data: expectedSnapshot.data });
   });
 
   it('coalesces concurrent submissions with the same idempotency key', async () => {

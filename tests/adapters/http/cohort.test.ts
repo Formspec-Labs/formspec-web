@@ -175,7 +175,7 @@ describe('createHttpAdapterCohort (FW-0064)', () => {
       ...sampleIntakeHandoff,
       definitionRef: { url: sampleFormDefinition.url, version: '1.0.0' },
       subjectRef: 'S-no-ext',
-      extensions: { 'x-formspec-response-data': sampleFormResponse.data },
+      extensions: { 'x-formspec-response': sampleFormResponse },
     };
     expect(handoff.extensions).not.toHaveProperty('x-formspec-draft-key');
 

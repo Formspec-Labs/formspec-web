@@ -52,6 +52,7 @@ export const sampleIntakeHandoff: IntakeHandoff = {
   intakeSessionId: 'intake-session-conformance-1',
   ledgerHeadRef: 'ledger:conformance:head',
   occurredAt: '2026-05-22T00:00:00.000Z',
+  extensions: { 'x-formspec-response': sampleFormResponse },
 };
 
 export const sampleNotificationMessage: NotificationMessage = {

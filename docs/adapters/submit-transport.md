@@ -9,9 +9,24 @@ the port submits an `IntakeHandoff` while the server route is draft-scoped.
 
 The submit body maps to `SubmitDraftCommand`:
 
-- `response_data` comes from an injected resolver or `handoff.extensions["x-formspec-response-data"]`.
+- `canonical_response` always carries the full `handoff.extensions["x-formspec-response"]` snapshot.
+- `response_data` always comes from that snapshot's `data` object, including attachment values.
+- `response_id` comes from the snapshot's optional `id`; an injected identity resolver must agree with it.
 - `subject_ref` comes from `handoff.subjectRef` when present.
 - `anonymous_session_token` and `signing_requested` are injected composition values.
+
+The adapter requires an object canonical Response with object `data` immediately
+after checking the UUIDv7 key, before retaining retry state or calling any draft,
+answer, identity, credential or HTTP resolver. Missing, answer-only or malformed
+snapshots refuse locally; a corrected canonical handoff can reuse that key.
+`responseDataResolver` and `responseIdResolver` only check equality with the
+snapshot. They cannot supply a missing Response. The server validates the full
+normative Response schema.
+
+The adapter clones the finalized handoff and requires retries to preserve it
+exactly. Concurrent calls share one submission, successful confirmations replay
+locally, and failed HTTP attempts retain the snapshot for a stable retry. When
+the snapshot supplies an `id`, the returned server identity must match it.
 
 ## Composition pairing
 

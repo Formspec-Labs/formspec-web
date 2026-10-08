@@ -15,6 +15,8 @@ export interface HttpSubmitTransportConfig extends HttpClientConfig {
   signingRequested?: boolean | ((handoff: IntakeHandoff) => boolean);
 }
 
+type CanonicalResponse = Record<string, unknown> & { data: Record<string, unknown> };
+
 interface ResponseView {
   response_id: string;
   status: 'accepted' | 'queued' | 'rejected';
@@ -41,17 +43,19 @@ export class HttpSubmitTransport implements SubmitTransport {
 
   async submit(handoff: IntakeHandoff, idempotencyKey: string): Promise<SubmitConfirmation> {
     assertUuidV7IdempotencyKey(idempotencyKey);
+    requireCanonicalResponse(handoff);
     const finalized = this.finalizedHandoffs.get(idempotencyKey);
     if (finalized && canonicalize(finalized) !== canonicalize(handoff)) {
       throw new Error('A submission retry must preserve the finalized Response snapshot');
     }
     const snapshot = finalized ?? structuredClone(handoff);
+    const canonicalResponse = requireCanonicalResponse(snapshot);
     this.finalizedHandoffs.set(idempotencyKey, snapshot);
     const existing = this.replay.get(idempotencyKey);
     if (existing) {
       return existing;
     }
-    const submission = this.submitOnce(snapshot, idempotencyKey);
+    const submission = this.submitOnce(snapshot, canonicalResponse, idempotencyKey);
     this.replay.set(idempotencyKey, submission);
     try {
       return await submission;
@@ -63,6 +67,7 @@ export class HttpSubmitTransport implements SubmitTransport {
 
   private async submitOnce(
     handoff: IntakeHandoff,
+    snapshot: CanonicalResponse,
     idempotencyKey: string,
   ): Promise<SubmitConfirmation> {
     const draftId = await this.draftIdResolver(handoff);
@@ -70,17 +75,11 @@ export class HttpSubmitTransport implements SubmitTransport {
       throw new Error('HTTP SubmitTransport requires a draft id for formspec-server submission');
     }
 
-    const canonicalResponse = handoff.extensions?.['x-formspec-response'];
-    const snapshot = isRecord(canonicalResponse) && isRecord(canonicalResponse.data)
-      ? canonicalResponse : undefined;
-    if (canonicalResponse !== undefined && !snapshot) {
-      throw new Error('Submission has an invalid canonical Response snapshot');
-    }
-    const answers = this.responseDataResolver?.(handoff) ?? responseDataFromHandoff(handoff);
+    const configuredAnswers = this.responseDataResolver?.(handoff);
     const configuredId = this.responseIdResolver?.(handoff);
-    const snapshotId = typeof snapshot?.id === 'string' ? snapshot.id : undefined;
-    if (snapshot && (canonicalize(answers) !== canonicalize(snapshot.data)
-      || (configuredId !== undefined && configuredId !== snapshotId))) {
+    const snapshotId = typeof snapshot.id === 'string' ? snapshot.id : undefined;
+    if ((configuredAnswers !== undefined && canonicalize(configuredAnswers) !== canonicalize(snapshot.data))
+      || (configuredId !== undefined && configuredId !== snapshotId)) {
       throw new Error('Submission data or identity conflicts with the canonical Response');
     }
     const token = await this.resolveAnonymousSessionToken(handoff);
@@ -88,7 +87,7 @@ export class HttpSubmitTransport implements SubmitTransport {
       `/drafts/${encodeURIComponent(draftId)}/submit`,
       {
         response_id: configuredId ?? snapshotId,
-        response_data: snapshot?.data ?? answers,
+        response_data: snapshot.data,
         canonical_response: snapshot,
         subject_ref: handoff.subjectRef ?? null,
         party_ref: partyRefFromHandoff(handoff) ?? null,
@@ -129,16 +128,12 @@ export function createHttpSubmitTransport(
   return new HttpSubmitTransport(config);
 }
 
-function responseDataFromHandoff(handoff: IntakeHandoff): Record<string, unknown> {
-  const candidate = handoff.extensions?.['x-formspec-response-data'];
-  if (isRecord(candidate)) {
-    return candidate;
-  }
+function requireCanonicalResponse(handoff: IntakeHandoff): CanonicalResponse {
   const response = handoff.extensions?.['x-formspec-response'];
-  if (isRecord(response) && isRecord(response.data)) {
-    return response.data;
+  if (!isRecord(response) || !isRecord(response.data)) {
+    throw new Error('HTTP SubmitTransport requires a canonical Response snapshot with object data');
   }
-  return {};
+  return response as CanonicalResponse;
 }
 
 function partyRefFromHandoff(handoff: IntakeHandoff): string | undefined {
