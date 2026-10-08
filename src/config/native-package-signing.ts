@@ -7,6 +7,8 @@ export interface NativePackageSigningConfig {
   definition: { url: string; version: string };
   bundle: { id: string; version: string };
   module: { id: string; version: string };
+  /** Explicit package module pins; omission admits only the signing module. */
+  modules?: readonly { id: string; version: string }[];
   initialLocale: string;
   roles: Record<Exclude<ResponseActionRole, 'startApplication'>, { artifactRef: string; actionRef: string }>
     & Partial<Record<'startApplication', { artifactRef: string; actionRef: string }>>;
@@ -24,12 +26,23 @@ const inputNames = [...new Set([...SIGNING_CEREMONY_WIDGET_SHAPE.dataInputs,
 export function nativePackageSigningConfig(value: unknown): NativePackageSigningConfig {
   const config = snapshotFiniteJson(value);
   closed(config, ['keyId', 'definition', 'bundle', 'module', 'initialLocale', 'roles', 'bindings', 'readiness',
+    ...(config && typeof config === 'object' && Object.hasOwn(config, 'modules') ? ['modules'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'applicationLifecycle') ? ['applicationLifecycle'] : [])]);
   nonblank(config.keyId);
   for (const name of ['definition', 'bundle', 'module'] as const) {
     const pin = config[name]; const identity = name === 'definition' ? 'url' : 'id';
     closed(pin, [identity, 'version']); nonblank(pin[identity]); nonblank(pin.version);
     if (name !== 'module') absoluteUrl(pin[identity]);
+  }
+  if (Object.hasOwn(config, 'modules')) {
+    if (!Array.isArray(config.modules) || !config.modules.length) invalid();
+    const moduleIds = new Set<string>();
+    for (const pin of config.modules) {
+      closed(pin, ['id', 'version']); nonblank(pin.id); nonblank(pin.version);
+      unique(moduleIds, pin.id);
+    }
+    const signing = config.module as { id: string; version: string };
+    if (config.modules.filter(pin => pin.id === signing.id && pin.version === signing.version).length !== 1) invalid();
   }
   nonblank(config.initialLocale);
   try { Intl.getCanonicalLocales(config.initialLocale); } catch { invalid(); }

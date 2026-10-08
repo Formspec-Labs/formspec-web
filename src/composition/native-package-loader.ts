@@ -40,8 +40,9 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   const base = { baseUrl: adapter.formspecServerUrl!, tenantBinding: config.tenantBinding,
     accessToken: options.identityBinding?.accessToken };
   const payloadSchemaResources = await loadCanonicalModulePayloadSchemaResources();
+  const modulePins = options.signing.modules ?? [options.signing.module];
   const source = new PinnedPackageDefinitionSource(options.packageUrl, {
-    moduleAdmission: { allowedModules: [options.signing.module] }, moduleSupport: { payloadSchemaResources },
+    moduleAdmission: { allowedModules: [...modulePins] }, moduleSupport: { payloadSchemaResources },
   });
   const [definition, bundle, componentDocument, localeDocuments] = await Promise.all([
     source.getDefinition(), source.getNativeBundleExport(), source.getComponentDocument(), source.getLocaleDocuments(),
@@ -49,7 +50,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   const pins = options.signing;
   if (!bundle || !componentDocument || definition.url !== pins.definition.url || definition.version !== pins.definition.version
     || bundle.manifest.id !== pins.bundle.id || bundle.manifest.version !== pins.bundle.version
-    || bundle.manifest.modules?.length !== 1 || !same(bundle.manifest.modules[0], pins.module)) throw new Error('Native package differs from its explicit deployment pins');
+    || bundle.manifest.modules?.length !== modulePins.length
+    || modulePins.some(pin => bundle.manifest.modules!.filter(module => same(module, pin)).length !== 1)) throw new Error('Native package differs from its explicit deployment pins');
   const resolved = dereferenceBundleExport(bundle);
   const localeFor = (locale: string) => {
     const matches = localeDocuments.filter(document => document.locale === locale);

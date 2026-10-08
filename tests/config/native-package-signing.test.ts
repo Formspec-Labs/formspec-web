@@ -45,6 +45,26 @@ describe('closed native package signing opt-in', () => {
     expect(active.ports).toEqual(publicPortalProfile.ports);
   });
 
+  it('admits explicit exact module pins independently of the signing module and detaches them', () => {
+    const value = { ...fixture(), modules: [{ id: 'x-review', version: '42' }, fixture().module] };
+    const selected = nativePackageSigningConfig(value);
+    expect(selected.modules).toEqual(value.modules);
+    value.modules[0].version = 'changed';
+    expect(selected.modules![0].version).toBe('42');
+    expect(nativePackageSigningConfig(fixture()).modules).toBeUndefined();
+  });
+
+  it.each([
+    ['empty module selection', []],
+    ['missing signing module', [{ id: 'x-review', version: '1' }]],
+    ['changed signing version', [{ ...fixture().module, version: 'other' }]],
+    ['duplicate module ID', [fixture().module, { ...fixture().module, version: 'other' }]],
+    ['extra module pin key', [fixture().module, { id: 'x-review', version: '1', trusted: true }]],
+    ['empty additional module version', [fixture().module, { id: 'x-review', version: '' }]],
+  ])('refuses %s', (_name, modules) => {
+    expect(() => nativePackageSigningConfig({ ...fixture(), modules })).toThrow();
+  });
+
   it('admits the optional Start role only with a complete detached capability path map', () => {
     const value = { ...fixture(), applicationLifecycle: { instance: 'scratch', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' },
       roles: { ...fixture().roles, startApplication: { artifactRef: 'urn:test:actions', actionRef: 'start' } } };

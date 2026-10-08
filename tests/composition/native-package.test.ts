@@ -91,6 +91,22 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
 }
 
 describe('explicit native package composition', () => {
+  it('preserves explicit single-module selection through the maintained composition operation', async () => {
+    const test = await fixture();
+    const config = { ...test.config, referenceAdapters: { ...test.config.referenceAdapters, formspecStack: { ...test.config.referenceAdapters!.formspecStack!, nativePackageSigning: { ...test.signing, modules: [test.signing.module] } } } };
+    const boot = await createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    expect(boot.moduleId).toBe(test.signing.module.id);
+    expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
+  });
+
+  it('refuses a configured module absent from the package before publication or credentials', async () => {
+    const test = await fixture();
+    const config = { ...test.config, referenceAdapters: { ...test.config.referenceAdapters, formspecStack: { ...test.config.referenceAdapters!.formspecStack!, nativePackageSigning: { ...test.signing, modules: [test.signing.module, { id: 'x-additional-review', version: '1' }] } } } };
+    await expect(createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load())
+      .rejects.toThrow('Native package differs from its explicit deployment pins');
+    expect(test.requests.every(request => !request.url.startsWith('https://server.example.test'))).toBe(true);
+  });
+
   it('preflights a submitted owned draft on fresh package boot without mounting an engine or issuing another credential/write', async () => {
     const test = await fixture(); await initFormspecEngine();
     const first = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
