@@ -8,20 +8,23 @@ export interface NativePackageSigningConfig {
   bundle: { id: string; version: string };
   module: { id: string; version: string };
   initialLocale: string;
-  roles: Record<ResponseActionRole, { artifactRef: string; actionRef: string }>;
+  roles: Record<Exclude<ResponseActionRole, 'startApplication'>, { artifactRef: string; actionRef: string }>
+    & Partial<Record<'startApplication', { artifactRef: string; actionRef: string }>>;
+  applicationLifecycle?: { instance: string; canStartPath: string; startedPath: string; persistentSavingPath: string };
   bindings: Readonly<Record<string, { catalogRef: string; sourceRef: string }>>;
   /** Syntax only; the host must qualify writable paths against the admitted Definition. */
   readiness: { instance: string; readyPath: string; ownedPath: string };
 }
 
-const roles = { saveInitial: true, saveOwned: true, prepare: true, sign: true, submit: true, paper: true } satisfies Record<ResponseActionRole, true>;
+const roles = { saveInitial: true, saveOwned: true, prepare: true, sign: true, submit: true, paper: true } satisfies Record<Exclude<ResponseActionRole, 'startApplication'>, true>;
 const inputNames = [...new Set([...SIGNING_CEREMONY_WIDGET_SHAPE.dataInputs,
   ...RESPONSE_REVIEW_WIDGET_SHAPE.dataInputs].map(input => input.name))];
 
 /** Closed, detached deployment configuration; does not admit a package or signing authority. */
 export function nativePackageSigningConfig(value: unknown): NativePackageSigningConfig {
   const config = snapshotFiniteJson(value);
-  closed(config, ['keyId', 'definition', 'bundle', 'module', 'initialLocale', 'roles', 'bindings', 'readiness']);
+  closed(config, ['keyId', 'definition', 'bundle', 'module', 'initialLocale', 'roles', 'bindings', 'readiness',
+    ...(config && typeof config === 'object' && Object.hasOwn(config, 'applicationLifecycle') ? ['applicationLifecycle'] : [])]);
   nonblank(config.keyId);
   for (const name of ['definition', 'bundle', 'module'] as const) {
     const pin = config[name]; const identity = name === 'definition' ? 'url' : 'id';
@@ -30,7 +33,13 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
   }
   nonblank(config.initialLocale);
   try { Intl.getCanonicalLocales(config.initialLocale); } catch { invalid(); }
-  closed(config.roles, Object.keys(roles));
+  closed(config.roles, [...Object.keys(roles), ...(Object.hasOwn(config, 'applicationLifecycle') ? ['startApplication'] : [])]);
+  if (Object.hasOwn(config, 'applicationLifecycle')) {
+    const lifecycle = config.applicationLifecycle;
+    closed(lifecycle, ['instance', 'canStartPath', 'startedPath', 'persistentSavingPath']);
+    Object.values(lifecycle).forEach(nonblank);
+    if (new Set(['canStartPath', 'startedPath', 'persistentSavingPath'].map(key => lifecycle[key])).size !== 3) invalid();
+  }
   const actions = new Set<string>();
   for (const action of Object.values(config.roles)) {
     closed(action, ['artifactRef', 'actionRef']); absoluteUrl(action.artifactRef); nonblank(action.actionRef);

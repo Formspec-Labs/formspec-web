@@ -49,6 +49,7 @@ import {
 } from '../demo/locales.ts';
 import type { Composition } from '../composition/types.ts';
 import { DraftVersionConflictError, type DraftReadState, type DraftKey } from '../ports/draft-store.ts';
+import type { ApplicationCaseReceipt } from '../ports/application-lifecycle.ts';
 import type { SignedResponseSigning } from '../ports/response-signing.ts';
 import type { ReviewerShare } from '../ports/reviewer-session.ts';
 import { respondentSessionToken } from '../ports/reviewer-session.ts';
@@ -186,6 +187,7 @@ export interface RespondentOwnedRuntimeInput {
   readonly claim: IdentityClaim | null;
   readonly restoredResponse?: FormResponse;
   readonly restoredSigning?: SignedResponseSigning;
+  readonly restoredApplication?: ApplicationCaseReceipt;
   readonly activeLocale: string;
 }
 
@@ -1483,6 +1485,7 @@ async function createReadyState(
   };
   let recoveredDraft: FormResponse | undefined;
   let recoveredSigning: SignedResponseSigning | undefined;
+  let recoveredApplication: ApplicationCaseReceipt | undefined;
   if (form?.configureSubmittedRuntime) {
     if (!composition.draftStore.readState || !form.configureRuntime || runtimeProfile.multiParty) {
       throw new Error('Submitted recovery requires its complete qualified runtime');
@@ -1501,6 +1504,7 @@ async function createReadyState(
     }
     recoveredDraft = state?.response;
     recoveredSigning = state?.kind === 'active' ? state.signed : undefined;
+    recoveredApplication = state?.application;
   }
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
@@ -1550,7 +1554,7 @@ async function createReadyState(
       }
       const configured = await form.configureRuntime({ engine, definition,
         draftKey: multiPartyState ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef) : draftKey, claim,
-        restoredResponse: draft ? structuredClone(draft) : undefined, restoredSigning: recoveredSigning, activeLocale });
+        restoredResponse: draft ? structuredClone(draft) : undefined, restoredSigning: recoveredSigning, restoredApplication: recoveredApplication, activeLocale });
       if (!configured || typeof configured.responseActionInvoker !== 'function'
         || typeof configured.invalidate !== 'function'
         || typeof configured.dispose !== 'function'

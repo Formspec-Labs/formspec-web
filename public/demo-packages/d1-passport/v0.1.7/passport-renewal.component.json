@@ -1,0 +1,283 @@
+{
+  "$formspecComponent": "1.2",
+  "version": "0.1.7",
+  "targetDefinition": {
+    "url": "urn:formspec:demo:d1:passport-renewal",
+    "compatibleVersions": "0.1.7"
+  },
+  "url": "urn:formspec:demo:d1:signing-app:component:intake",
+  "tree": {
+    "component": "Stack",
+    "x-generation": {
+      "anchors": [
+        "need:review-and-sign-demo-response@2"
+      ]
+    },
+    "children": [
+      {
+        "component": "Text",
+        "x-generation": {
+          "anchors": [
+            "need:recognize-demo-sample-limits@2"
+          ]
+        },
+        "text": "Demo application with fictional details. This sample is not an official DS-82 form.",
+        "bind": "demoNotice"
+      },
+      {
+        "component": "Toggle",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "renewalEligible"
+      },
+      {
+        "component": "Heading",
+        "id": "d1-details-heading",
+        "level": 2,
+        "text": "Confirm your renewal details",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        }
+      },
+      {
+        "component": "Text",
+        "when": "false",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "text": "Confirm your renewal details",
+        "bind": "detailsHeading"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "fullName"
+      },
+      {
+        "component": "DatePicker",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "dateOfBirth"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "placeOfBirth"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "email"
+      },
+      {
+        "component": "TextInput",
+        "maxLines": 4,
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "mailingAddress"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "priorPassportNumber"
+      },
+      {
+        "component": "DatePicker",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "priorPassportIssueDate"
+      },
+      {
+        "component": "Toggle",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "ssnIssued"
+      },
+      {
+        "component": "TextInput",
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "socialSecurityNumber"
+      },
+      {
+        "component": "TextInput",
+        "maxLines": 4,
+        "x-generation": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "bind": "neverIssuedStatement"
+      },
+      {
+        "component": "FileUpload",
+        "x-generation": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "bind": "photo"
+      },
+      {
+        "component": "Text",
+        "x-generation": {
+          "anchors": [
+            "need:understand-demo-privacy@2"
+          ]
+        },
+        "text": "Sample privacy notice: submitted answers and photo are visible to authorized demo reviewers. Official legal authority and permitted-sharing wording remain unqualified. Do not enter real personal data.",
+        "bind": "privacyNotice"
+      },
+      {
+        "component": "Text",
+        "x-generation": {
+          "anchors": [
+            "need:review-demo-paper-option@1"
+          ]
+        },
+        "text": "Also available by mail (DS-82) or in person (DS-11).",
+        "bind": "paperAlternative"
+      },
+      {
+        "component": "Text",
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "text": "I declare that my answers are true and complete to the best of my knowledge. Acknowledging this declaration does not sign the application.",
+        "bind": "declaration"
+      },
+      {
+        "component": "Toggle",
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "bind": "declarationAcknowledged"
+      },
+      {
+        "component": "ActionButton",
+        "actionRef": "save-draft-initial",
+        "label": {
+          "ref": "$component.d1-save-progress-initial.label"
+        },
+        "when": "@instance('draftReadiness').ready and not(@instance('draftReadiness').owned) and @instance('draftReadiness').persistentSaving",
+        "x-generation": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "id": "d1-save-progress-initial"
+      },
+      {
+        "component": "ActionButton",
+        "actionRef": "save-draft-owned",
+        "label": {
+          "ref": "$component.d1-save-progress-owned.label"
+        },
+        "when": "@instance('draftReadiness').ready and @instance('draftReadiness').owned and @instance('draftReadiness').persistentSaving",
+        "x-generation": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "id": "d1-save-progress-owned"
+      },
+      {
+        "component": "ActionButton",
+        "actionRef": "prepare",
+        "label": {
+          "ref": "$action.prepare.label"
+        },
+        "when": "@instance('draftReadiness').ready and @instance('draftReadiness').owned",
+        "x-generation": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        }
+      },
+      {
+        "component": "ActionButton",
+        "id": "d1-signing-copy-initial",
+        "actionRef": "save-draft-initial",
+        "label": {
+          "ref": "$component.d1-signing-copy-initial.label"
+        },
+        "when": "@instance('draftReadiness').ready and not(@instance('draftReadiness').owned) and not(@instance('draftReadiness').persistentSaving)",
+        "x-generation": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        }
+      },
+      {
+        "component": "ActionButton",
+        "id": "d1-signing-copy-owned",
+        "actionRef": "save-draft-owned",
+        "label": {
+          "ref": "$component.d1-signing-copy-owned.label"
+        },
+        "when": "@instance('draftReadiness').ready and @instance('draftReadiness').owned and not(@instance('draftReadiness').persistentSaving)",
+        "x-generation": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        }
+      },
+      {
+        "component": "ActionButton",
+        "id": "d1-start-application",
+        "actionRef": "start-application",
+        "label": {
+          "ref": "$action.start-application.label"
+        },
+        "when": "@instance('draftReadiness').ready and @instance('draftReadiness').canStart and not(@instance('draftReadiness').started)",
+        "x-generation": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        }
+      }
+    ]
+  }
+}

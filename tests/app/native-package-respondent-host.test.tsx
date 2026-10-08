@@ -15,6 +15,7 @@ import { AnonymousSessionBridge } from '../../src/adapters/http/anonymous-sessio
 import { delegatedSignedResponseFixture } from '../adapters/http/delegated-signed-response-fixture.ts';
 import { NativePackageRespondentHost } from '../../src/app/NativePackageRespondentHost.tsx';
 import { createNativePackageSigningHost, type NativePackageSigningHost, type NativePackageSigningHostPolicy } from '../../src/shared/native-package-signing-host.ts';
+import type { ApplicationLifecycle } from '../../src/ports/application-lifecycle.ts';
 import type { SavedResponseDraft } from '../../src/ports/response-signing.ts';
 import type { SubmitTransport } from '../../src/ports/submit-transport.ts';
 import { sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
@@ -37,6 +38,9 @@ vi.mock('../../src/app/RespondentRuntime.tsx', async importOriginal => {
 const root = resolve(process.cwd(), 'tests/fixtures/native-signing-r5');
 const bundle = JSON.parse(readFileSync(resolve(root, 'native-bundle.json'), 'utf8')) as BundleExport;
 const component = JSON.parse(readFileSync(resolve(root, 'passport-renewal.component.json'), 'utf8')) as ComponentDocument;
+const lifecycleRoot = resolve('public/demo-packages/d1-passport/v0.1.7');
+const lifecycleBundle = JSON.parse(readFileSync(resolve(lifecycleRoot, 'native-bundle.json'), 'utf8')) as BundleExport;
+const lifecycleComponent = JSON.parse(readFileSync(resolve(lifecycleRoot, 'passport-renewal.component.json'), 'utf8')) as ComponentDocument;
 beforeAll(() => initFormspecEngine());
 afterEach(() => { cleanup(); observed.forms.length = 0; observed.real = false; vi.unstubAllGlobals(); });
 function fixture() {
@@ -50,12 +54,14 @@ function fixture() {
     localeDocuments: [], location: '/', onNavigate: vi.fn() };
   return { props, host, configureRuntime, dispose };
 }
-async function actualFixture() {
+async function actualFixture(options?: { bundle?: BundleExport; component?: ComponentDocument; lifecycle?: NonNullable<NativePackageSigningHostPolicy['controller']['applicationLifecycle']> }) {
+    const sourceBundle = options?.bundle ?? bundle;
+    const admittedComponent = options?.component ?? component;
     observed.real = true; vi.stubGlobal('crypto', webcrypto);
     const Url = URL; vi.stubGlobal('URL', class extends Url { static override createObjectURL() { return 'blob:test-photo'; } static override revokeObjectURL() {} });
     const photoBytes = new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jhOsAAAAASUVORK5CYII=', 'base64'));
-    const resolved = dereferenceBundleExport(bundle); const definition = [...resolved.definitions.values()][0];
-    const locales = Object.values(bundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document) as LocaleDocument[];
+    const resolved = dereferenceBundleExport(sourceBundle); const definition = [...resolved.definitions.values()][0];
+    const locales = Object.values(sourceBundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document) as LocaleDocument[];
     const document = resolved.responseActions[0]; const surface = resolved.surfaces[0]; const route = surface.routes.find(route => route.path === '/review-sign')!;
     type Binding = { moduleId: string; widgetName: string; dataBindings: Record<string, { catalogRef: string; sourceRef: string }>; actionBindings: Record<string, { actionRef: string; responseInput: string }> };
     const ceremony = route.slots!.find(slot => slot.slotType === 'module-widget' && (slot.binding as Binding).widgetName === 'SigningCeremony')!;
@@ -63,10 +69,10 @@ async function actualFixture() {
     const binding = ceremony.binding as Binding;
     const bindings = Object.fromEntries(Object.entries({ ...(review.binding as Binding).dataBindings, ...binding.dataBindings }).map(([name, source]) => [name, { catalogRef: source.catalogRef, sourceRef: source.sourceRef }]));
     const roles: NativePackageSigningHostPolicy['controller']['roles'] = {};
-    for (const [name, actionRef] of Object.entries({ saveInitial: 'save-draft-initial', saveOwned: 'save-draft-owned', prepare: 'prepare', sign: 'sign', submit: 'submit', paper: 'paper' })) {
+    for (const [name, actionRef] of Object.entries({ ...(options?.lifecycle ? { startApplication: 'start-application' } : {}), saveInitial: 'save-draft-initial', saveOwned: 'save-draft-owned', prepare: 'prepare', sign: 'sign', submit: 'submit', paper: 'paper' })) {
       const action = document.actions.find(action => action.id === actionRef)!; const effect = action.effects![0];
       const output = Object.entries(binding.actionBindings).find(([, value]) => value.actionRef === actionRef);
-      roles[name as keyof typeof roles] = { document, actionRef, artifactRef: bundle.manifest.responseActionDocuments![0].url, artifactDigest: `sha256:${'b'.repeat(64)}`,
+      roles[name as keyof typeof roles] = { document, actionRef, artifactRef: sourceBundle.manifest.responseActionDocuments![0].url, artifactDigest: `sha256:${'b'.repeat(64)}`,
         ...(effect.type === 'serviceRequest' ? { requestRef: effect.requestRef } : {}), ...(output ? {
           responseSource: { inputName: output[1].responseInput, ...bindings[output[1].responseInput] },
           widgetSource: { moduleId: binding.moduleId, widgetName: binding.widgetName, slotId: ceremony.id, outputName: output[0],
@@ -99,10 +105,11 @@ async function actualFixture() {
     let completeRead!: (blob: Blob) => void;
     const read = vi.fn(async () => new Promise<Blob>(resolve => { completeRead = resolve; }));
     const clear = vi.fn(async () => {}); const invalidateAuthority = vi.fn();
-    const policy: NativePackageSigningHostPolicy = { bundle, definition, moduleId: binding.moduleId, locales, initialLocale: 'en',
+    const policy: NativePackageSigningHostPolicy = { bundle: sourceBundle, definition, moduleId: binding.moduleId, locales, initialLocale: 'en',
       registryEntries: flattenRegistryEntries(resolved.registries).entries, publication: { formId: 'form', formVersionId: 'publication' },
       readiness: { instance: 'draftReadiness', readyPath: 'ready', ownedPath: 'owned' }, clearDraftAccess: clear,
-      controller: { roles, signing: { saveDraft, prepare, sign }, submitTransport: { submit }, validateResponse: () => true, hashResponse },
+      applicationReadiness: options?.lifecycle ? { instance: 'draftReadiness', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' } : undefined,
+      controller: { applicationLifecycle: options?.lifecycle, roles, signing: { saveDraft, prepare, sign }, submitTransport: { submit }, validateResponse: () => true, hashResponse },
       buildHandoff: async response => ({ ...sampleIntakeHandoff, definitionRef: { url: response.definitionUrl, version: response.definitionVersion },
         responseRef: `response:${response.id}`, responseHash: `sha256:${await hashResponse(response)}`, subjectRef: 'server-actor',
         extensions: { ...sampleIntakeHandoff.extensions, 'x-formspec-response': response } }), signingContext: locale => ({ source: content(locale).source, locale }),
@@ -136,9 +143,68 @@ async function actualFixture() {
       } };
     };
     const composition = createStubComposition(); const navigate = vi.fn();
-    const props = { host, composition, config: departmentAppProfile, componentDocument: component, localeDocuments: locales, location: '/', onNavigate: navigate };
+    const props = { host, composition, config: departmentAppProfile, componentDocument: admittedComponent, localeDocuments: locales, location: '/', onNavigate: navigate };
     return { policy, host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, invokerFailures, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, submit };
 }
+function lifecycleFixture(earlyCaseCreation = true, persistentSaving = true) {
+  const receipt = { caseLedgerId: 'urn:wos:real-case', caseReference: 'APP-001', draftRef: 'urn:formspec:draft:owned-draft', status: 'in-progress' as const };
+  const lifecycle = { capabilities: { earlyCaseCreation, persistentSaving, formVersionId: 'publication' },
+    start: vi.fn<ApplicationLifecycle['start']>(async () => receipt), load: vi.fn<ApplicationLifecycle['load']>(async () => receipt) };
+  return { lifecycle, receipt };
+}
+describe('authored optional application lifecycle', () => {
+  it.each([[true, true], [true, false], [false, true], [false, false]])('admits backend options early=%s saving=%s through native controls', async (early, saving) => {
+    const { lifecycle } = lifecycleFixture(early, saving);
+    const test = await actualFixture({ bundle: lifecycleBundle, component: lifecycleComponent, lifecycle });
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    await screen.findByRole('button', { name: saving ? 'Save progress' : 'Prepare signing copy' });
+    expect(!!screen.queryByRole('button', { name: 'Start application' })).toBe(early);
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(lifecycle.start).not.toHaveBeenCalled(); expect(lifecycle.load).not.toHaveBeenCalled();
+    await act(async () => { test.getEngine().setValue('fullName', ''); });
+    expect(test.getEngine().getValidationReport({ profile: 'on-submit' }).results.length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: saving ? 'Save progress' : 'Prepare signing copy' }));
+    await vi.waitFor(() => expect(test.host.getSnapshot().checkpointState).toBe('saved'));
+    expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.saveDraft.mock.calls[0][0].response.data.fullName).toBe('');
+    expect(lifecycle.start).not.toHaveBeenCalled(); mounted.unmount(); test.host.dispose();
+  });
+  it.each(['missing', 'alias', 'publication'])('refuses unqualified lifecycle %s before native mounting', async change => {
+    const { lifecycle } = lifecycleFixture();
+    const test = await actualFixture({ bundle: lifecycleBundle, component: lifecycleComponent, lifecycle }); test.host.dispose();
+    const policy = { ...test.policy, applicationReadiness: { ...test.policy.applicationReadiness! } };
+    if (change === 'missing') policy.applicationReadiness.startedPath = 'missing';
+    if (change === 'alias') policy.applicationReadiness.startedPath = 'ready';
+    if (change === 'publication') policy.publication = { ...policy.publication, formVersionId: 'different-publication' };
+    expect(() => createNativePackageSigningHost(policy)).toThrow(/native-application/);
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(lifecycle.start).not.toHaveBeenCalled();
+  });
+  it('retries Start with the same saved draft and retains the case across edits and Locale changes', async () => {
+    const { lifecycle, receipt } = lifecycleFixture(); lifecycle.start.mockRejectedValueOnce(new Error('lost case reply'));
+    const test = await actualFixture({ bundle: lifecycleBundle, component: lifecycleComponent, lifecycle });
+    const authenticate = test.props.composition.identityProvider.authenticate;
+    let owner: ReturnType<typeof authenticate> | undefined;
+    test.props.composition.identityProvider.authenticate = option => owner ??= authenticate(option);
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    await screen.findByRole('button', { name: 'Start application' });
+    await act(async () => { test.getEngine().setValue('fullName', ''); });
+    expect(test.getEngine().getValidationReport({ profile: 'on-submit' }).results.length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Start application' }));
+    await vi.waitFor(() => expect(test.host.getSnapshot().controller?.phase).toBe('failed'));
+    expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.host.getSnapshot().controller?.owned).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Start application' }));
+    await vi.waitFor(() => expect(test.host.getSnapshot().application).toEqual(receipt));
+    expect(test.saveDraft).toHaveBeenCalledOnce(); expect(lifecycle.start).toHaveBeenCalledTimes(2);
+    expect(lifecycle.start.mock.calls[0][0]).toEqual(lifecycle.start.mock.calls[1][0]);
+    await act(async () => { test.getEngine().setValue('fullName', 'Edited owner'); });
+    expect(test.host.getSnapshot().application).toEqual(receipt);
+    expect(test.host.getSnapshot().checkpointState).toBe('unsaved');
+    await act(async () => { await test.host.selectLocale('es-US'); });
+    expect(test.host.getSnapshot().application).toEqual(receipt);
+    await act(async () => { await test.host.refreshApplication!(); });
+    expect(lifecycle.load).toHaveBeenCalledOnce(); expect(lifecycle.start).toHaveBeenCalledTimes(2);
+    mounted.unmount(); test.host.dispose();
+  });
+});
+
 describe('maintained native package Surface host', () => {
   it('configures the first runtime with the already-admitted identity subject', async () => {
     const test = await actualFixture();
@@ -377,14 +443,16 @@ describe('maintained native package Surface host', () => {
     expect(clear.mock.calls).toEqual([[key], [key]]);
     host.dispose();
   });
-  it('runs actual r5 Save, Prepare, Sign, fresh signed recovery and exact Submit through maintained controls', async () => {
-    const { host, props, policy, saveDraft, prepare, navigate, terminals, getEngine, read, reports, photoBytes, completeRead, sign, submit } = await actualFixture();
+  it.each(['legacy', 'early', 'after-submit'] as const)('runs %s Save, Prepare, Sign, fresh signed recovery and exact Submit through maintained controls', async mode => {
+    const application = mode === 'legacy' ? undefined : lifecycleFixture(mode === 'early');
+    const selectedComponent = application ? lifecycleComponent : component;
+    const { host, props, policy, saveDraft, prepare, navigate, terminals, getEngine, read, reports, photoBytes, completeRead, sign, submit } = await actualFixture(application ? { bundle: lifecycleBundle, component: selectedComponent, lifecycle: application.lifecycle } : undefined);
     const claim = { provider: 'https://idp.example.test', adapter: 'test-oidc', subjectRef: 'server-actor',
       credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L1' as const };
     props.composition.identityProvider = { discover: async () => [{ kind: 'oidc', issuer: claim.provider, displayName: 'Test identity', minAssurance: 'L1' }],
       authenticate: vi.fn(async () => claim), revoke: vi.fn(async () => {}), subscribe: listener => { listener(claim); return () => {}; } };
     const mounted = render(<NativePackageRespondentHost {...props} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
+    fireEvent.click(await screen.findByRole('button', { name: application ? 'Save progress' : 'Save draft' }));
     await vi.waitFor(() => expect(saveDraft).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(host.getSnapshot().controller?.phase).toBe('saved'));
     expect(getEngine().getValidationReport({ profile: 'on-submit' }).results).toEqual([]);
@@ -421,15 +489,16 @@ describe('maintained native package Surface host', () => {
     expect((screen.getByRole('button', { name: 'Submit demo response' }) as HTMLButtonElement).disabled).toBe(true);
     mounted.unmount(); host.dispose();
     const freshHost = createNativePackageSigningHost(policy);
-    props.composition.draftStore.readState = vi.fn(async () => ({ kind: 'active' as const, response: signed.response, signed }));
+    props.composition.draftStore.readState = vi.fn(async () => ({ kind: 'active' as const, response: signed.response, signed, ...(application ? { application: application.receipt } : {}) }));
     props.composition.nativePackageRespondent = { load: async () => ({ composition: props.composition, host: freshHost,
-      componentDocument: component, localeDocuments: policy.locales, moduleId: freshHost.moduleId, initialLocale: 'en' }) };
+      componentDocument: selectedComponent, localeDocuments: policy.locales, moduleId: freshHost.moduleId, initialLocale: 'en' }) };
     window.history.replaceState(null, '', '/?form=form&package=%2Fpackage.json');
     const restored = render(<NativePackageRuntime composition={props.composition} config={props.config} />);
     await screen.findByRole('textbox', { name: 'Full legal name *' });
     await vi.waitFor(() => expect(freshHost.getSnapshot().controller?.phase).toBe('signed'));
     await vi.waitFor(() => expect(freshHost.getSnapshot().runtime).toBeDefined());
     expect(freshHost.getSnapshot().controller!.signed!.response).toEqual(signed.response);
+    if (application) expect(freshHost.getSnapshot().application).toEqual(application.receipt);
     expect(saveDraft).toHaveBeenCalledOnce(); expect(prepare).toHaveBeenCalledOnce(); expect(sign).toHaveBeenCalledOnce();
     expect(submit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Prepare saved response' }));
@@ -450,7 +519,26 @@ describe('maintained native package Surface host', () => {
     expect(freshHost.getSnapshot().controller!.signed!.response).toEqual(signed.response);
     expect(saveDraft).toHaveBeenCalledOnce(); expect(prepare).toHaveBeenCalledOnce();
     expect(navigate).toHaveBeenCalledWith('/review-sign'); restored.unmount(); freshHost.dispose();
-  });
+    if (application) {
+      const createEngine = vi.fn(createFormEngine);
+      const terminalHost = createNativePackageSigningHost({ ...policy, createEngine });
+      const submittedCase = { ...application.receipt, status: 'submitted' as const };
+      await terminalHost.configureSubmittedRuntime({ definition: policy.definition, draftKey: signed.draftKey, claim,
+        state: { kind: 'submitted', response: signed.response, draft: { id: signed.draft.id, version: signed.draft.version + 1 },
+          subjectRef: claim.subjectRef, formVersionId: 'publication', application: submittedCase } });
+      application.lifecycle.load.mockResolvedValue(submittedCase);
+      props.composition.nativePackageRespondent = { load: async () => ({ composition: props.composition, host: terminalHost,
+        componentDocument: selectedComponent, localeDocuments: policy.locales, moduleId: terminalHost.moduleId, initialLocale: 'en' }) };
+      const terminal = render(<NativePackageRuntime composition={props.composition} config={props.config} />);
+      await screen.findByText('Application submitted: APP-001');
+      expect(terminalHost.getSnapshot().controller).toBeUndefined(); expect(createEngine).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh application status' }));
+      await vi.waitFor(() => expect(application.lifecycle.load).toHaveBeenCalledOnce());
+      expect(application.lifecycle.start).not.toHaveBeenCalled(); expect(submit).toHaveBeenCalledOnce();
+      expect(saveDraft).toHaveBeenCalledOnce(); expect(prepare).toHaveBeenCalledOnce(); expect(sign).toHaveBeenCalledOnce();
+      terminal.unmount(); terminalHost.dispose();
+    }
+  }, 15000);
   it('mounts the actual authored r5 Definition slot and passes the qualified Component and ownership seam unchanged', () => {
     const test = fixture(); const mounted = render(<NativePackageRespondentHost {...test.props} />);
     expect(screen.getByTestId('admitted-form')).toBeDefined();

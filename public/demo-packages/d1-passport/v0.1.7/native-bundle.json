@@ -1,0 +1,4390 @@
+{
+  "manifest": {
+    "$formspecBundle": "2.4",
+    "version": "0.1.7",
+    "id": "urn:formspec:demo:d1:signing-app",
+    "title": "Passport renewal demonstration",
+    "x-generation": {
+      "anchors": [
+        "need:review-and-sign-demo-response@2"
+      ]
+    },
+    "definitions": [
+      {
+        "url": "urn:formspec:demo:d1:passport-renewal",
+        "version": "0.1.7"
+      }
+    ],
+    "responseActionDocuments": [
+      {
+        "url": "urn:formspec:demo:d1:signing-app:response-actions",
+        "version": "0.1.7"
+      }
+    ],
+    "registries": [
+      {
+        "url": "urn:formspec:doc:1b1de9c55011baab:registry",
+        "version": "1.1.0"
+      }
+    ],
+    "surfaces": [
+      {
+        "url": "urn:formspec:demo:d1:signing-app:surface",
+        "version": "0.1.7"
+      }
+    ],
+    "entrySurface": "urn:formspec:demo:d1:signing-app:surface",
+    "dataSources": [
+      {
+        "url": "urn:formspec:demo:d1:signing-app:data-sources",
+        "version": "0.1.7"
+      }
+    ],
+    "locales": [
+      {
+        "url": "urn:formspec:demo:d1:passport-renewal:locale:en",
+        "version": "0.1.7",
+        "locale": "en"
+      },
+      {
+        "url": "urn:formspec:demo:d1:passport-renewal:locale:es-US",
+        "version": "0.1.7",
+        "locale": "es-US"
+      }
+    ],
+    "components": [
+      {
+        "handle": "intake",
+        "url": "urn:formspec:demo:d1:signing-app:component:intake",
+        "version": "0.1.7"
+      }
+    ],
+    "modules": [
+      {
+        "id": "x-demo-signing",
+        "version": "0.1.0"
+      }
+    ],
+    "sessions": []
+  },
+  "documents": {
+    "urn:formspec:demo:d1:signing-app:surface": {
+      "$formspecSurface": "0.2",
+      "id": "surface",
+      "routes": [
+        {
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          },
+          "id": "intake",
+          "path": "/",
+          "slots": [
+            {
+              "x-generation": {
+                "anchors": [
+                  "need:complete-demo-renewal-response@2"
+                ]
+              },
+              "id": "form",
+              "slotType": "definition-form",
+              "binding": {
+                "definitionRef": "urn:formspec:demo:d1:passport-renewal"
+              }
+            }
+          ],
+          "navigation": {
+            "x-generation": {
+              "anchors": [
+                "need:complete-demo-renewal-response@2"
+              ]
+            },
+            "visible": false
+          },
+          "routeClass": "intake",
+          "transitions": [
+            {
+              "x-generation": {
+                "anchors": [
+                  "need:review-and-sign-demo-response@2"
+                ]
+              },
+              "trigger": "prepare",
+              "to": "signing"
+            }
+          ]
+        },
+        {
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          },
+          "id": "signing",
+          "path": "/review-sign",
+          "slots": [
+            {
+              "x-generation": {
+                "anchors": [
+                  "need:review-and-sign-demo-response@2"
+                ]
+              },
+              "id": "review",
+              "slotType": "module-widget",
+              "binding": {
+                "moduleId": "x-demo-signing",
+                "widgetName": "ResponseReview",
+                "config": {
+                  "copy": {
+                    "en": {
+                      "heading": "LOCAL DEMO: Review your saved response",
+                      "pending": "Preparing the saved response for review.",
+                      "beforeSign": "Review every saved answer and the saved photo before signing this demonstration.",
+                      "beforeSubmit": "Review the complete signed response and saved photo before submitting this demonstration.",
+                      "responseId": "Response reference",
+                      "draftVersion": "Saved revision",
+                      "locale": "Displayed language",
+                      "signatures": "Recorded signatures",
+                      "additionalAnswers": "Additional saved answers",
+                      "emptyString": "Empty text",
+                      "nullValue": "No value",
+                      "trueValue": "Yes",
+                      "falseValue": "No",
+                      "emptyArray": "No saved entries",
+                      "emptyObject": "Empty saved object",
+                      "attachmentPending": "Loading and checking the saved photo.",
+                      "attachmentUnavailable": "The saved photo is unavailable. Signing and submission require its review.",
+                      "attachmentFailed": "The saved photo could not be checked. Retry its review.",
+                      "attachmentPreview": "Saved photo preview",
+                      "attachmentDetails": "Saved file details",
+                      "retry": "Retry saved photo review",
+                      "unavailable": "The complete saved response is unavailable for review. Save and prepare the demonstration again.",
+                      "x-generation": {
+                        "anchors": [
+                          "need:review-and-sign-demo-response@2"
+                        ]
+                      }
+                    },
+                    "es-US": {
+                      "heading": "DEMOSTRACIÓN LOCAL: Revise su respuesta guardada",
+                      "pending": "Preparando la respuesta guardada para revisarla.",
+                      "beforeSign": "Revise todas las respuestas guardadas y la foto guardada antes de firmar esta demostración.",
+                      "beforeSubmit": "Revise la respuesta firmada completa y la foto guardada antes de enviar esta demostración.",
+                      "responseId": "Referencia de la respuesta",
+                      "draftVersion": "Revisión guardada",
+                      "locale": "Idioma mostrado",
+                      "signatures": "Firmas registradas",
+                      "additionalAnswers": "Respuestas guardadas adicionales",
+                      "emptyString": "Texto vacío",
+                      "nullValue": "Sin valor",
+                      "trueValue": "Sí",
+                      "falseValue": "No",
+                      "emptyArray": "Sin entradas guardadas",
+                      "emptyObject": "Objeto guardado vacío",
+                      "attachmentPending": "Cargando y comprobando la foto guardada.",
+                      "attachmentUnavailable": "La foto guardada no está disponible. Es necesario revisarla para firmar y enviar.",
+                      "attachmentFailed": "No se pudo comprobar la foto guardada. Vuelva a intentar revisarla.",
+                      "attachmentPreview": "Vista previa de la foto guardada",
+                      "attachmentDetails": "Detalles del archivo guardado",
+                      "retry": "Volver a revisar la foto guardada",
+                      "unavailable": "La respuesta guardada completa no está disponible para revisarla. Guarde y prepare la demostración de nuevo.",
+                      "x-generation": {
+                        "anchors": [
+                          "need:review-and-sign-demo-response@2"
+                        ]
+                      }
+                    }
+                  },
+                  "x-generation": {
+                    "anchors": [
+                      "need:review-and-sign-demo-response@2"
+                    ]
+                  }
+                },
+                "dataBindings": {
+                  "definition": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:review-definition",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "response": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:signing-response",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "presentation": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:review-presentation",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "x-generation": {
+                "anchors": [
+                  "need:review-and-sign-demo-response@2"
+                ]
+              },
+              "id": "ceremony",
+              "slotType": "module-widget",
+              "binding": {
+                "moduleId": "x-demo-signing",
+                "widgetName": "SigningCeremony",
+                "config": {
+                  "requireResponseReview": true,
+                  "contentRefs": {
+                    "en": {
+                      "ref": "urn:formspec:demo:d1:passport-renewal#/extensions/x-formspec-signing-content/entries/demoEn",
+                      "version": "1.0.0"
+                    },
+                    "es-US": {
+                      "ref": "urn:formspec:demo:d1:passport-renewal#/extensions/x-formspec-signing-content/entries/demoEs",
+                      "version": "1.0.0"
+                    }
+                  },
+                  "copy": {
+                    "en": {
+                      "heading": "Review and sign this demo response",
+                      "readInstruction": "Read the complete sample text below, then confirm that you have read it.",
+                      "readConfirmation": "I have read the complete sample text.",
+                      "signerName": "Your name for this demonstration",
+                      "pending": "Recording your demo action...",
+                      "signed": "Demo response signed. Review it before submitting.",
+                      "failed": "Your demo action could not be completed. Try again.",
+                      "unavailable": "Signing is unavailable because the required demo information is incomplete.",
+                      "x-generation": {
+                        "anchors": [
+                          "need:review-and-sign-demo-response@2"
+                        ]
+                      },
+                      "reviewPending": "Loading and checking the complete saved response and photo.",
+                      "reviewUnavailable": "Review of the complete saved response and photo is unavailable. Signing and submission are disabled."
+                    },
+                    "es-US": {
+                      "heading": "Revise y firme esta respuesta de demostración",
+                      "readInstruction": "Lea todo el texto de ejemplo y luego confirme que lo ha leído.",
+                      "readConfirmation": "He leído todo el texto de ejemplo.",
+                      "signerName": "Su nombre para esta demostración",
+                      "pending": "Registrando su acción de demostración...",
+                      "signed": "Respuesta de demostración firmada. Revísela antes de enviarla.",
+                      "failed": "No se pudo completar su acción de demostración. Inténtelo de nuevo.",
+                      "unavailable": "No se puede firmar porque falta información necesaria para la demostración.",
+                      "x-generation": {
+                        "anchors": [
+                          "need:review-and-sign-demo-response@2"
+                        ]
+                      },
+                      "reviewPending": "Cargando y comprobando la respuesta guardada completa y la foto.",
+                      "reviewUnavailable": "No se puede revisar la respuesta guardada completa y la foto. No se puede firmar ni enviar."
+                    }
+                  },
+                  "x-generation": {
+                    "anchors": [
+                      "need:review-and-sign-demo-response@2"
+                    ]
+                  }
+                },
+                "dataBindings": {
+                  "review": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:signing-review",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "content": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:signing-content",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "response": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:signing-response",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "draft": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:signing-draft",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "actor": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:signing-actor",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "signingResult": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:signing-result",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "actionLabels": {
+                    "catalogRef": "urn:formspec:demo:d1:signing-app:data-sources",
+                    "sourceRef": "host:signing-action-labels",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  }
+                },
+                "actionBindings": {
+                  "sign": {
+                    "actionRef": "sign",
+                    "responseInput": "response",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "submit": {
+                    "actionRef": "submit",
+                    "responseInput": "response",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  },
+                  "paper": {
+                    "actionRef": "paper",
+                    "responseInput": "response",
+                    "x-generation": {
+                      "anchors": [
+                        "need:review-and-sign-demo-response@2"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "navigation": {
+            "x-generation": {
+              "anchors": [
+                "need:review-and-sign-demo-response@2"
+              ]
+            },
+            "visible": false
+          },
+          "routeClass": "ceremony"
+        }
+      ],
+      "x-generation": {
+        "anchors": [
+          "need:review-and-sign-demo-response@2"
+        ]
+      },
+      "entry": "intake"
+    },
+    "urn:formspec:demo:d1:passport-renewal": {
+      "$formspec": "1.0",
+      "url": "urn:formspec:demo:d1:passport-renewal",
+      "version": "0.1.7",
+      "status": "draft",
+      "title": "Passport renewal",
+      "x-generation": {
+        "anchors": [
+          "need:review-and-sign-demo-response@2"
+        ]
+      },
+      "items": [
+        {
+          "key": "demoNotice",
+          "type": "display",
+          "label": "Demo application with fictional details. This sample is not an official DS-82 form.",
+          "presentation": {
+            "widgetHint": "Text"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:recognize-demo-sample-limits@2"
+            ]
+          }
+        },
+        {
+          "key": "renewalEligible",
+          "type": "field",
+          "label": "Renewal eligibility confirmed",
+          "dataType": "boolean",
+          "hint": "Continue after the renewal eligibility check. This sample does not determine official eligibility.",
+          "presentation": {
+            "widgetHint": "Toggle"
+          },
+          "initialValue": true,
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "detailsHeading",
+          "type": "display",
+          "label": "Confirm your renewal details",
+          "presentation": {
+            "widgetHint": "Heading"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "fullName",
+          "type": "field",
+          "label": "Full legal name",
+          "dataType": "string",
+          "initialValue": "Alex Rivera",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "dateOfBirth",
+          "type": "field",
+          "label": "Date of birth",
+          "dataType": "date",
+          "presentation": {
+            "widgetHint": "DatePicker"
+          },
+          "initialValue": "1988-04-12",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "placeOfBirth",
+          "type": "field",
+          "label": "Place of birth",
+          "dataType": "string",
+          "initialValue": "Sample City, United States",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "email",
+          "type": "field",
+          "label": "Email address",
+          "dataType": "string",
+          "initialValue": "alex.rivera@example.com",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "mailingAddress",
+          "type": "field",
+          "label": "Mailing address",
+          "dataType": "text",
+          "initialValue": "123 Example Street, Sample City, NJ 00000",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "priorPassportNumber",
+          "type": "field",
+          "label": "Prior passport number",
+          "dataType": "string",
+          "initialValue": "DEMO-PASSPORT-001",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "priorPassportIssueDate",
+          "type": "field",
+          "label": "Prior passport issue date",
+          "dataType": "date",
+          "presentation": {
+            "widgetHint": "DatePicker"
+          },
+          "initialValue": "2016-03-01",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "ssnIssued",
+          "type": "field",
+          "label": "Have you ever been issued a Social Security number?",
+          "dataType": "boolean",
+          "presentation": {
+            "widgetHint": "Toggle"
+          },
+          "initialValue": true,
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "socialSecurityNumber",
+          "type": "field",
+          "label": "Social Security number",
+          "dataType": "string",
+          "hint": "If issued, your number is required by law; omission can mean denial, according to the source snapshot. The zeros are fictional.",
+          "initialValue": "000000000",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "neverIssuedStatement",
+          "type": "field",
+          "label": "Sworn statement that you have never been issued a Social Security number",
+          "dataType": "text",
+          "hint": "Enter your sworn never-issued statement. Official wording remains to be qualified.",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "key": "photo",
+          "type": "field",
+          "label": "Passport photo",
+          "dataType": "attachment",
+          "hint": "Upload a JPEG or PNG photo. Passport-specific photo checks are not yet verified.",
+          "presentation": {
+            "widgetHint": "FileUpload"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:attach-demo-renewal-photo@1"
+            ]
+          }
+        },
+        {
+          "key": "privacyNotice",
+          "type": "display",
+          "label": "Sample privacy notice: submitted answers and photo are visible to authorized demo reviewers. Official legal authority and permitted-sharing wording remain unqualified. Do not enter real personal data.",
+          "presentation": {
+            "widgetHint": "Text"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:understand-demo-privacy@2"
+            ]
+          }
+        },
+        {
+          "key": "paperAlternative",
+          "type": "display",
+          "label": "Also available by mail (DS-82) or in person (DS-11).",
+          "presentation": {
+            "widgetHint": "Text"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-demo-paper-option@1"
+            ]
+          }
+        },
+        {
+          "key": "declaration",
+          "type": "display",
+          "label": "I declare that my answers are true and complete to the best of my knowledge. Acknowledging this declaration does not sign the application.",
+          "presentation": {
+            "widgetHint": "Text"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        },
+        {
+          "key": "declarationAcknowledged",
+          "type": "field",
+          "label": "I have read and acknowledge the declaration.",
+          "dataType": "boolean",
+          "presentation": {
+            "widgetHint": "Toggle"
+          },
+          "initialValue": false,
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        }
+      ],
+      "binds": [
+        {
+          "path": "renewalEligible",
+          "constraint": "$ = true",
+          "constraintMessage": "Complete the renewal eligibility check before continuing. This sample supports eligible applicants only.",
+          "required": "true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "fullName",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "dateOfBirth",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "placeOfBirth",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "email",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "mailingAddress",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "priorPassportNumber",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "priorPassportIssueDate",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "ssnIssued",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "socialSecurityNumber",
+          "constraint": "matches($, '^[0-9]{9}$')",
+          "constraintMessage": "Enter nine digits without spaces or dashes.",
+          "required": "true",
+          "relevant": "$renewalEligible = true and $ssnIssued = true",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "neverIssuedStatement",
+          "constraint": "length(trim($)) > 0",
+          "constraintMessage": "Enter your sworn never-issued statement.",
+          "required": "true",
+          "relevant": "$renewalEligible = true and $ssnIssued = false",
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          }
+        },
+        {
+          "path": "photo",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:attach-demo-renewal-photo@1"
+            ]
+          }
+        },
+        {
+          "path": "declarationAcknowledged",
+          "constraint": "$ = true",
+          "constraintMessage": "Read and acknowledge the declaration before signing and submitting.",
+          "required": "true",
+          "relevant": "$renewalEligible = true",
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        }
+      ],
+      "instances": {
+        "draftReadiness": {
+          "readonly": false,
+          "data": {
+            "ready": false,
+            "owned": false,
+            "canStart": false,
+            "started": false,
+            "persistentSaving": false
+          }
+        }
+      },
+      "extensions": {
+        "x-formspec-signing-content": {
+          "version": "1.0",
+          "entries": {
+            "demoEn": {
+              "source": {
+                "ref": "urn:formspec:demo:d1:passport-renewal#/extensions/x-formspec-signing-content/entries/demoEn",
+                "version": "1.0.0"
+              },
+              "locale": "en",
+              "documentId": "passport-renewal-demo",
+              "signingIntent": "urn:formspec:demo:d1:attest-fictional-response",
+              "declaration": "Sample declaration for this local demonstration. I have reviewed the complete fictional answers and the attached photo shown in this demonstration. I confirm that these are the demo details I intend to record. My action applies to this complete saved version of the demo response. Changing the answers, photo, language or saved version requires another review and a new signing action. This is not an official passport declaration or an application to the U.S. Department of State.",
+              "electronicConsent": {
+                "textRef": "urn:formspec:demo:d1:passport-renewal#/extensions/x-formspec-signing-content/entries/demoEn/electronicConsent",
+                "version": "1.0.0",
+                "text": "Sample electronic consent for this demonstration only. I agree to record my name and my explicit signing action electronically for the fictional response I have reviewed. Selecting Sign demo response records this consent and my assent to the saved demo response. Signing is separate from submitting; I can review the signed response before selecting Submit demo response. I may choose the paper alternative instead. This demonstration does not submit an official passport application or establish the legal validity of an electronic signature.",
+                "controlLabel": "I consent to electronic signing for this demo response."
+              },
+              "paperAlternative": "Paper alternative for this demonstration: choose Review paper alternative to review the option of using paper for this demonstration. That action does not sign or submit the response. This demo does not produce or mail a paper document, file an official passport application, or replace an official passport application channel.",
+              "affirmationText": "For this demonstration, I affirm that I reviewed this complete fictional response and intend to record my assent to it.",
+              "delegatedSigningNotice": "Demo signing uses a service-owned signing key after my explicit assent. The service records my demo session identifier, name, consent and the exact saved response. It does not independently verify my real-world identity. This does not prove that I hold or control a personal private key, and the demo does not claim agency approval or legal signature validity."
+            },
+            "demoEs": {
+              "source": {
+                "ref": "urn:formspec:demo:d1:passport-renewal#/extensions/x-formspec-signing-content/entries/demoEs",
+                "version": "1.0.0"
+              },
+              "locale": "es-US",
+              "documentId": "passport-renewal-demo",
+              "signingIntent": "urn:formspec:demo:d1:attest-fictional-response",
+              "declaration": "Declaración de ejemplo para esta demostración local. He revisado todas las respuestas ficticias y la foto adjunta que se muestran en esta demostración. Confirmo que estos son los datos de ejemplo que deseo registrar. Mi acción se aplica a esta versión completa y guardada de la respuesta de demostración. Si cambian las respuestas, la foto, el idioma o la versión guardada, debo revisarlos y firmar de nuevo. Esta no es una declaración oficial para un pasaporte ni una solicitud al Departamento de Estado de los Estados Unidos.",
+              "electronicConsent": {
+                "textRef": "urn:formspec:demo:d1:passport-renewal#/extensions/x-formspec-signing-content/entries/demoEs/electronicConsent",
+                "version": "1.0.0",
+                "text": "Consentimiento electrónico de ejemplo, solo para esta demostración. Acepto registrar electrónicamente mi nombre y mi acción explícita de firma para la respuesta ficticia que he revisado. Al seleccionar Firmar respuesta de demostración, se registran este consentimiento y mi aceptación de la respuesta guardada. Firmar y enviar son acciones separadas; puedo revisar la respuesta firmada antes de seleccionar Enviar respuesta de demostración. Puedo elegir la alternativa en papel. Esta demostración no presenta una solicitud oficial de pasaporte ni establece la validez legal de una firma electrónica.",
+                "controlLabel": "Acepto firmar electrónicamente esta respuesta de demostración."
+              },
+              "paperAlternative": "Alternativa en papel para esta demostración: seleccione Revisar alternativa en papel para revisar la opción de usar papel en esta demostración. Esa acción no firma ni envía la respuesta. Esta demostración no produce ni envía documentos en papel por correo, no presenta una solicitud oficial de pasaporte ni sustituye un canal oficial para solicitarlo.",
+              "affirmationText": "Para esta demostración, afirmo que he revisado toda esta respuesta ficticia y que deseo registrar mi aceptación de ella.",
+              "delegatedSigningNotice": "La firma de demostración usa una clave de firma del servicio después de mi aceptación explícita. El servicio registra el identificador de mi sesión de demostración, mi nombre, mi consentimiento y la respuesta guardada exacta. No verifica de forma independiente mi identidad en el mundo real. Esto no demuestra que yo posea o controle una clave privada personal, y la demostración no afirma tener aprobación de la agencia ni validez legal de la firma."
+            }
+          }
+        }
+      }
+    },
+    "urn:formspec:demo:d1:signing-app:response-actions": {
+      "$formspecResponseActions": "1.0",
+      "version": "0.1.7",
+      "actions": [
+        {
+          "id": "save-draft-initial",
+          "intent": "save-draft",
+          "label": {
+            "ref": "$action.save-draft-initial.label"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          },
+          "validation": {
+            "profile": "off",
+            "blocking": "non-blocking",
+            "persistence": "draft-checkpoint"
+          },
+          "effects": [
+            {
+              "type": "serviceRequest",
+              "requestRef": "save-draft-initial",
+              "idempotencyKey": "@invocation.id",
+              "onError": "fail"
+            }
+          ],
+          "onFailure": "stop"
+        },
+        {
+          "id": "save-draft-owned",
+          "intent": "save-draft",
+          "label": {
+            "ref": "$action.save-draft-owned.label"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:complete-demo-renewal-response@2"
+            ]
+          },
+          "validation": {
+            "profile": "off",
+            "blocking": "non-blocking",
+            "persistence": "draft-checkpoint"
+          },
+          "effects": [
+            {
+              "type": "serviceRequest",
+              "requestRef": "save-draft-owned",
+              "idempotencyKey": "@invocation.id",
+              "onError": "fail"
+            }
+          ],
+          "onFailure": "stop"
+        },
+        {
+          "id": "prepare",
+          "intent": "review",
+          "label": {
+            "ref": "$action.prepare.label"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          },
+          "validation": {
+            "profile": "on-submit",
+            "blocking": "block-on-error",
+            "persistence": "complete-response"
+          },
+          "effects": [
+            {
+              "type": "serviceRequest",
+              "requestRef": "prepare-signing",
+              "idempotencyKey": "@invocation.id",
+              "onError": "fail"
+            }
+          ],
+          "onFailure": "stop"
+        },
+        {
+          "id": "sign",
+          "intent": "x-sign-demo-response",
+          "label": {
+            "ref": "$action.sign.label"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          },
+          "validation": {
+            "profile": "on-submit",
+            "blocking": "block-on-error",
+            "persistence": "complete-response"
+          },
+          "effects": [
+            {
+              "type": "serviceRequest",
+              "requestRef": "sign-draft",
+              "idempotencyKey": "@invocation.id",
+              "onError": "fail"
+            }
+          ]
+        },
+        {
+          "id": "submit",
+          "intent": "submit",
+          "label": {
+            "ref": "$action.submit.label"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          },
+          "effects": [
+            {
+              "type": "serviceRequest",
+              "requestRef": "submit-draft",
+              "idempotencyKey": "@invocation.id",
+              "onError": "fail"
+            }
+          ]
+        },
+        {
+          "id": "paper",
+          "intent": "review",
+          "label": {
+            "ref": "$action.paper.label"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          },
+          "effects": [
+            {
+              "type": "hostEvent",
+              "eventName": "formspec-review-paper-alternative"
+            }
+          ]
+        },
+        {
+          "id": "start-application",
+          "intent": "x-start-application",
+          "label": {
+            "ref": "$action.start-application.label"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:start-demo-application-early@1"
+            ]
+          },
+          "validation": {
+            "profile": "off",
+            "blocking": "non-blocking",
+            "persistence": "none"
+          },
+          "effects": [
+            {
+              "type": "serviceRequest",
+              "requestRef": "start-application",
+              "idempotencyKey": "@invocation.id"
+            }
+          ],
+          "onFailure": "stop"
+        }
+      ],
+      "x-formspec-runtime": {
+        "version": "1.0",
+        "requests": [
+          {
+            "id": "sign-draft",
+            "adapter": "http-json",
+            "request": {
+              "method": "POST",
+              "pathTemplate": "/drafts/{draftId}/sign",
+              "pathBindings": {
+                "draftId": {
+                  "from": "input",
+                  "path": "draftId"
+                }
+              },
+              "bodyBindings": {
+                "/draft_version": {
+                  "from": "input",
+                  "path": "draftVersion"
+                },
+                "/canonical_response": {
+                  "from": "input",
+                  "path": "frozenResponse"
+                }
+              }
+            },
+            "successStatuses": [
+              200
+            ],
+            "outputs": {
+              "signedResponse": {
+                "path": "/canonical_response",
+                "exposure": "internal"
+              },
+              "signedDraftVersion": {
+                "path": "/draft_version",
+                "exposure": "internal"
+              },
+              "draftId": {
+                "path": "/draft_id",
+                "exposure": "internal"
+              }
+            },
+            "x-generation": {
+              "anchors": [
+                "need:review-and-sign-demo-response@2"
+              ]
+            }
+          },
+          {
+            "id": "submit-draft",
+            "adapter": "http-json",
+            "request": {
+              "method": "POST",
+              "pathTemplate": "/drafts/{draftId}/submit",
+              "pathBindings": {
+                "draftId": {
+                  "from": "input",
+                  "path": "draftId"
+                }
+              },
+              "bodyDefaults": {
+                "signing_requested": false
+              },
+              "bodyBindings": {
+                "/canonical_response": {
+                  "from": "input",
+                  "path": "frozenResponse"
+                }
+              }
+            },
+            "successStatuses": [
+              200
+            ],
+            "outputs": {
+              "responseId": {
+                "path": "/response_id",
+                "exposure": "transition"
+              },
+              "status": {
+                "path": "/status",
+                "exposure": "internal"
+              }
+            },
+            "x-generation": {
+              "anchors": [
+                "need:review-and-sign-demo-response@2"
+              ]
+            }
+          },
+          {
+            "id": "prepare-signing",
+            "adapter": "http-json",
+            "request": {
+              "method": "PATCH",
+              "pathTemplate": "/drafts/{draftId}",
+              "pathBindings": {
+                "draftId": {
+                  "from": "input",
+                  "path": "draftId"
+                }
+              },
+              "bodyBindings": {
+                "/expected_draft_version": {
+                  "from": "input",
+                  "path": "draftVersion"
+                },
+                "/canonical_response": {
+                  "from": "input",
+                  "path": "frozenResponse"
+                },
+                "/draft_state": {
+                  "from": "input",
+                  "path": "frozenResponse.data"
+                }
+              }
+            },
+            "successStatuses": [
+              200
+            ],
+            "outputs": {
+              "savedResponse": {
+                "path": "/canonical_response",
+                "exposure": "internal"
+              },
+              "savedDraftVersion": {
+                "path": "/draft_version",
+                "exposure": "internal"
+              },
+              "draftId": {
+                "path": "/draft_id",
+                "exposure": "internal"
+              },
+              "formVersionId": {
+                "path": "/form_version_id",
+                "exposure": "internal"
+              },
+              "subjectRef": {
+                "path": "/subject_ref",
+                "exposure": "internal"
+              },
+              "status": {
+                "path": "/status",
+                "exposure": "internal"
+              }
+            },
+            "x-generation": {
+              "anchors": [
+                "need:review-and-sign-demo-response@2"
+              ]
+            }
+          },
+          {
+            "id": "save-draft-initial",
+            "adapter": "http-json",
+            "request": {
+              "method": "POST",
+              "pathTemplate": "/runtime/forms/{formId}/drafts",
+              "pathBindings": {
+                "formId": {
+                  "from": "input",
+                  "path": "formId"
+                }
+              },
+              "bodyBindings": {
+                "/draft_state": {
+                  "from": "input",
+                  "path": "frozenResponse.data"
+                },
+                "/canonical_response": {
+                  "from": "input",
+                  "path": "frozenResponse"
+                }
+              }
+            },
+            "successStatuses": [
+              200
+            ],
+            "outputs": {
+              "draftId": {
+                "path": "/draft_id",
+                "exposure": "internal"
+              },
+              "formVersionId": {
+                "path": "/form_version_id",
+                "exposure": "internal"
+              },
+              "subjectRef": {
+                "path": "/subject_ref",
+                "exposure": "internal"
+              },
+              "draftVersion": {
+                "path": "/draft_version",
+                "exposure": "internal"
+              },
+              "savedResponse": {
+                "path": "/canonical_response",
+                "exposure": "internal"
+              },
+              "status": {
+                "path": "/status",
+                "exposure": "internal"
+              }
+            },
+            "x-generation": {
+              "anchors": [
+                "need:review-and-sign-demo-response@2"
+              ]
+            }
+          },
+          {
+            "id": "save-draft-owned",
+            "adapter": "http-json",
+            "request": {
+              "method": "PATCH",
+              "pathTemplate": "/drafts/{draftId}",
+              "pathBindings": {
+                "draftId": {
+                  "from": "input",
+                  "path": "draftId"
+                }
+              },
+              "bodyBindings": {
+                "/draft_state": {
+                  "from": "input",
+                  "path": "frozenResponse.data"
+                },
+                "/canonical_response": {
+                  "from": "input",
+                  "path": "frozenResponse"
+                },
+                "/expected_draft_version": {
+                  "from": "input",
+                  "path": "draftVersion"
+                }
+              }
+            },
+            "successStatuses": [
+              200
+            ],
+            "outputs": {
+              "draftId": {
+                "path": "/draft_id",
+                "exposure": "internal"
+              },
+              "formVersionId": {
+                "path": "/form_version_id",
+                "exposure": "internal"
+              },
+              "subjectRef": {
+                "path": "/subject_ref",
+                "exposure": "internal"
+              },
+              "draftVersion": {
+                "path": "/draft_version",
+                "exposure": "internal"
+              },
+              "savedResponse": {
+                "path": "/canonical_response",
+                "exposure": "internal"
+              },
+              "status": {
+                "path": "/status",
+                "exposure": "internal"
+              }
+            },
+            "x-generation": {
+              "anchors": [
+                "need:review-and-sign-demo-response@2"
+              ]
+            }
+          },
+          {
+            "id": "start-application",
+            "adapter": "http-json",
+            "request": {
+              "method": "POST",
+              "pathTemplate": "/drafts/{draftId}/application-case",
+              "pathBindings": {
+                "draftId": {
+                  "from": "input",
+                  "path": "draftId"
+                }
+              },
+              "bodyDefaults": {}
+            },
+            "successStatuses": [
+              200
+            ],
+            "outputs": {
+              "caseLedgerId": {
+                "path": "/caseLedgerId",
+                "exposure": "internal"
+              },
+              "caseReference": {
+                "path": "/caseReference",
+                "exposure": "internal"
+              },
+              "draftRef": {
+                "path": "/draftRef",
+                "exposure": "internal"
+              },
+              "status": {
+                "path": "/status",
+                "exposure": "internal"
+              }
+            },
+            "x-generation": {
+              "anchors": [
+                "need:start-demo-application-early@1"
+              ]
+            }
+          }
+        ]
+      },
+      "scope": "response",
+      "targetDefinition": {
+        "url": "urn:formspec:demo:d1:passport-renewal",
+        "compatibleVersions": "0.1.7"
+      }
+    },
+    "urn:formspec:doc:1b1de9c55011baab:registry": {
+      "$formspecRegistry": "1.1",
+      "publisher": {
+        "name": "Passport renewal demonstration"
+      },
+      "published": "2026-10-08T17:01:56.109Z",
+      "entries": [
+        {
+          "name": "x-demo-signing",
+          "category": "module",
+          "version": "0.1.0",
+          "status": "stable",
+          "description": "Shared generic signing ceremony for illustrative demo responses.",
+          "compatibility": {
+            "formspecVersion": ">=1.0.0 <2.0.0"
+          },
+          "contributes": [
+            "x-signing-ceremony",
+            "x-response-review",
+            "x-sign-demo-response",
+            "x-start-application"
+          ]
+        },
+        {
+          "name": "x-signing-ceremony",
+          "category": "widget",
+          "version": "0.1.0",
+          "status": "stable",
+          "description": "Shared read, consent, Sign, then Submit widget.",
+          "compatibility": {
+            "formspecVersion": ">=1.0.0 <2.0.0"
+          },
+          "widgetShape": {
+            "widgetName": "SigningCeremony",
+            "props": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "contentRefs",
+                "copy"
+              ],
+              "properties": {
+                "requireResponseReview": {
+                  "type": "boolean"
+                },
+                "contentRefs": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "ref",
+                      "version"
+                    ],
+                    "properties": {
+                      "ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "format": "uri"
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "description": "Exact authored content entry URI and content version. The URI is the pinned Definition URL followed by #/extensions/x-formspec-signing-content/entries/<simple identifier>."
+                  }
+                },
+                "copy": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "heading",
+                      "readInstruction",
+                      "readConfirmation",
+                      "signerName",
+                      "pending",
+                      "signed",
+                      "failed",
+                      "unavailable"
+                    ],
+                    "properties": {
+                      "heading": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "readInstruction": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "readConfirmation": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "signerName": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "pending": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "signed": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "failed": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "unavailable": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "reviewPending": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "reviewUnavailable": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "x-generation": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                "x-generation": {
+                  "type": "object"
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "required": [
+                      "requireResponseReview"
+                    ],
+                    "properties": {
+                      "requireResponseReview": {
+                        "const": true
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "copy": {
+                        "additionalProperties": {
+                          "required": [
+                            "reviewPending",
+                            "reviewUnavailable"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "dataInputs": [
+              {
+                "name": "content",
+                "required": true
+              },
+              {
+                "name": "response",
+                "required": true
+              },
+              {
+                "name": "draft",
+                "required": true
+              },
+              {
+                "name": "actor",
+                "required": true
+              },
+              {
+                "name": "signingResult",
+                "required": true
+              },
+              {
+                "name": "actionLabels",
+                "required": true
+              },
+              {
+                "name": "review",
+                "required": false
+              }
+            ],
+            "actionOutputs": [
+              {
+                "name": "sign"
+              },
+              {
+                "name": "submit"
+              },
+              {
+                "name": "paper"
+              }
+            ],
+            "childrenPolicy": "none",
+            "deliveryContractId": "@formspec-org/surface-react/SigningCeremony@0.1",
+            "renderedConfigNodes": [
+              {
+                "pointerPattern": "",
+                "kind": "signing-ceremony"
+              },
+              {
+                "pointerPattern": "/copy/*",
+                "kind": "signing-ceremony-copy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "x-response-review",
+          "category": "widget",
+          "version": "0.1.0",
+          "status": "stable",
+          "description": "Read the complete retained demo Response and byte-qualified saved photo before Sign and Submit.",
+          "compatibility": {
+            "formspecVersion": ">=1.0.0 <2.0.0"
+          },
+          "widgetShape": {
+            "widgetName": "ResponseReview",
+            "props": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "copy"
+              ],
+              "properties": {
+                "copy": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "heading",
+                      "pending",
+                      "beforeSign",
+                      "beforeSubmit",
+                      "responseId",
+                      "draftVersion",
+                      "locale",
+                      "signatures",
+                      "additionalAnswers",
+                      "emptyString",
+                      "nullValue",
+                      "trueValue",
+                      "falseValue",
+                      "emptyArray",
+                      "emptyObject",
+                      "attachmentPending",
+                      "attachmentUnavailable",
+                      "attachmentFailed",
+                      "attachmentPreview",
+                      "attachmentDetails",
+                      "retry",
+                      "unavailable"
+                    ],
+                    "properties": {
+                      "heading": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "pending": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "beforeSign": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "beforeSubmit": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "responseId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "draftVersion": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "locale": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "signatures": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "additionalAnswers": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "emptyString": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "nullValue": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "trueValue": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "falseValue": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "emptyArray": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "emptyObject": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "attachmentPending": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "attachmentUnavailable": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "attachmentFailed": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "attachmentPreview": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "attachmentDetails": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "retry": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "unavailable": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "x-generation": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                "x-generation": {
+                  "type": "object"
+                }
+              }
+            },
+            "dataInputs": [
+              {
+                "name": "definition",
+                "required": true
+              },
+              {
+                "name": "response",
+                "required": true
+              },
+              {
+                "name": "presentation",
+                "required": true
+              }
+            ],
+            "childrenPolicy": "none",
+            "deliveryContractId": "@formspec-org/surface-react/ResponseReview@0.1",
+            "renderedConfigNodes": [
+              {
+                "pointerPattern": "",
+                "kind": "response-review"
+              },
+              {
+                "pointerPattern": "/copy/*",
+                "kind": "response-review-copy"
+              }
+            ]
+          }
+        },
+        {
+          "name": "x-sign-demo-response",
+          "category": "action-intent",
+          "version": "0.1.0",
+          "status": "stable",
+          "description": "Record explicit assent to a complete fictional demo Response using the admitted delegated signing service.",
+          "compatibility": {
+            "formspecVersion": ">=1.0.0 <2.0.0"
+          },
+          "validation": {
+            "profile": "on-submit",
+            "blocking": "block-on-error",
+            "persistence": "complete-response"
+          }
+        },
+        {
+          "name": "x-start-application",
+          "category": "action-intent",
+          "version": "0.1.0",
+          "status": "draft",
+          "description": "Deliberately associate an owned checkpoint with the application case before final submission.",
+          "compatibility": {
+            "formspecVersion": ">=1.0.0 <2.0.0"
+          },
+          "validation": {
+            "profile": "off",
+            "blocking": "non-blocking",
+            "persistence": "none"
+          }
+        }
+      ]
+    },
+    "urn:formspec:demo:d1:signing-app:data-sources": {
+      "$formspecDataSources": "1.0",
+      "id": "urn:formspec:demo:d1:signing-app:data-sources",
+      "version": "0.1.7",
+      "title": "Saved response for local demonstration",
+      "sources": [
+        {
+          "id": "host:review-definition",
+          "kind": "host-state",
+          "owner": "host",
+          "scope": "route",
+          "availability": {
+            "level": "route",
+            "surfaceRef": "urn:formspec:demo:d1:signing-app:surface",
+            "routeRef": "signing"
+          },
+          "runtime": {
+            "delivery": "live",
+            "cache": {
+              "mode": "subscribe"
+            },
+            "authorizationBoundary": "host",
+            "failureMode": "block-render",
+            "provenance": {
+              "kind": "host-state",
+              "source": "admitted-response-review:definition"
+            }
+          },
+          "schema": {
+            "$ref": "https://formspec.org/schemas/definition/1.0"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        },
+        {
+          "id": "host:review-presentation",
+          "kind": "host-state",
+          "owner": "host",
+          "scope": "route",
+          "availability": {
+            "level": "route",
+            "surfaceRef": "urn:formspec:demo:d1:signing-app:surface",
+            "routeRef": "signing"
+          },
+          "runtime": {
+            "delivery": "live",
+            "cache": {
+              "mode": "subscribe"
+            },
+            "authorizationBoundary": "host",
+            "failureMode": "block-render",
+            "provenance": {
+              "kind": "host-state",
+              "source": "admitted-response-review:presentation"
+            }
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "responseHash",
+              "definitionUrl",
+              "definitionVersion",
+              "locale",
+              "actorRef",
+              "draft",
+              "phase",
+              "fields"
+            ],
+            "properties": {
+              "responseHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "definitionUrl": {
+                "type": "string",
+                "minLength": 1
+              },
+              "definitionVersion": {
+                "type": "string",
+                "minLength": 1
+              },
+              "locale": {
+                "type": "string",
+                "minLength": 1
+              },
+              "actorRef": {
+                "type": "string",
+                "minLength": 1
+              },
+              "draft": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                }
+              },
+              "phase": {
+                "enum": [
+                  "before-sign",
+                  "before-submit"
+                ]
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "label"
+                  ],
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "value",
+                          "label"
+                        ],
+                        "properties": {
+                          "value": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "label": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        },
+        {
+          "id": "host:signing-review",
+          "kind": "host-state",
+          "owner": "host",
+          "scope": "route",
+          "availability": {
+            "level": "route",
+            "surfaceRef": "urn:formspec:demo:d1:signing-app:surface",
+            "routeRef": "signing"
+          },
+          "runtime": {
+            "delivery": "live",
+            "cache": {
+              "mode": "subscribe"
+            },
+            "authorizationBoundary": "host",
+            "failureMode": "degraded-widget",
+            "provenance": {
+              "kind": "host-state",
+              "source": "admitted-signing-cohort:review"
+            }
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "contextIdentity",
+              "state"
+            ],
+            "properties": {
+              "contextIdentity": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "state": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "status",
+                  "responseHash",
+                  "actorRef",
+                  "draft",
+                  "locale",
+                  "phase"
+                ],
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "pending",
+                      "ready",
+                      "unavailable"
+                    ]
+                  },
+                  "contextIdentity": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "responseHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "actorRef": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "draft": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "version"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
+                  "locale": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "phase": {
+                    "enum": [
+                      "before-sign",
+                      "before-submit"
+                    ]
+                  }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "status": {
+                          "const": "ready"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ]
+                    },
+                    "then": {
+                      "required": [
+                        "contextIdentity"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        },
+        {
+          "id": "host:signing-content",
+          "kind": "host-state",
+          "owner": "host",
+          "scope": "route",
+          "availability": {
+            "level": "route",
+            "surfaceRef": "urn:formspec:demo:d1:signing-app:surface",
+            "routeRef": "signing"
+          },
+          "runtime": {
+            "delivery": "live",
+            "cache": {
+              "mode": "subscribe"
+            },
+            "authorizationBoundary": "host",
+            "failureMode": "block-render",
+            "provenance": {
+              "kind": "host-state",
+              "source": "admitted-signing-cohort:content"
+            }
+          },
+          "schema": {
+            "$ref": "https://formspec.org/schemas/common/1.0#/$defs/SigningContent"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        },
+        {
+          "id": "host:signing-response",
+          "kind": "host-state",
+          "owner": "host",
+          "scope": "route",
+          "availability": {
+            "level": "route",
+            "surfaceRef": "urn:formspec:demo:d1:signing-app:surface",
+            "routeRef": "signing"
+          },
+          "runtime": {
+            "delivery": "live",
+            "cache": {
+              "mode": "subscribe"
+            },
+            "authorizationBoundary": "host",
+            "failureMode": "block-render",
+            "provenance": {
+              "kind": "host-state",
+              "source": "admitted-signing-cohort:response"
+            }
+          },
+          "schema": {
+            "$ref": "https://formspec.org/schemas/response/1.0"
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        },
+        {
+          "id": "host:signing-draft",
+          "kind": "host-state",
+          "owner": "host",
+          "scope": "route",
+          "availability": {
+            "level": "route",
+            "surfaceRef": "urn:formspec:demo:d1:signing-app:surface",
+            "routeRef": "signing"
+          },
+          "runtime": {
+            "delivery": "live",
+            "cache": {
+              "mode": "subscribe"
+            },
+            "authorizationBoundary": "host",
+            "failureMode": "block-render",
+            "provenance": {
+              "kind": "host-state",
+              "source": "admitted-signing-cohort:draft"
+            }
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version",
+              "responseHash"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "responseHash": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        },
+        {
+          "id": "host:signing-actor",
+          "kind": "host-state",
+          "owner": "host",
+          "scope": "route",
+          "availability": {
+            "level": "route",
+            "surfaceRef": "urn:formspec:demo:d1:signing-app:surface",
+            "routeRef": "signing"
+          },
+          "runtime": {
+            "delivery": "live",
+            "cache": {
+              "mode": "subscribe"
+            },
+            "authorizationBoundary": "host",
+            "failureMode": "block-render",
+            "provenance": {
+              "kind": "host-state",
+              "source": "admitted-signing-cohort:actor"
+            }
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        },
+        {
+          "id": "host:signing-result",
+          "kind": "host-state",
+          "owner": "host",
+          "scope": "route",
+          "availability": {
+            "level": "route",
+            "surfaceRef": "urn:formspec:demo:d1:signing-app:surface",
+            "routeRef": "signing"
+          },
+          "runtime": {
+            "delivery": "live",
+            "cache": {
+              "mode": "subscribe"
+            },
+            "authorizationBoundary": "host",
+            "failureMode": "block-render",
+            "provenance": {
+              "kind": "host-state",
+              "source": "admitted-signing-cohort:signingResult"
+            }
+          },
+          "schema": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "state"
+                ],
+                "properties": {
+                  "state": {
+                    "const": "unsigned"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "state",
+                  "response",
+                  "draft",
+                  "verification"
+                ],
+                "properties": {
+                  "state": {
+                    "const": "signed"
+                  },
+                  "response": {
+                    "$ref": "https://formspec.org/schemas/response/1.0"
+                  },
+                  "draft": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "version"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  },
+                  "verification": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "mode",
+                      "provider",
+                      "keyId"
+                    ],
+                    "properties": {
+                      "mode": {
+                        "const": "delegated-service-key"
+                      },
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "keyId": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        },
+        {
+          "id": "host:signing-action-labels",
+          "kind": "host-state",
+          "owner": "host",
+          "scope": "route",
+          "availability": {
+            "level": "route",
+            "surfaceRef": "urn:formspec:demo:d1:signing-app:surface",
+            "routeRef": "signing"
+          },
+          "runtime": {
+            "delivery": "live",
+            "cache": {
+              "mode": "subscribe"
+            },
+            "authorizationBoundary": "host",
+            "failureMode": "block-render",
+            "provenance": {
+              "kind": "host-state",
+              "source": "admitted-signing-cohort:actionLabels"
+            }
+          },
+          "schema": {
+            "type": "object",
+            "required": [
+              "$action.sign.label",
+              "$action.submit.label",
+              "$action.paper.label"
+            ],
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "x-generation": {
+            "anchors": [
+              "need:review-and-sign-demo-response@2"
+            ]
+          }
+        }
+      ]
+    },
+    "urn:formspec:demo:d1:passport-renewal:locale:en": {
+      "$formspecLocale": "2.0",
+      "url": "urn:formspec:demo:d1:passport-renewal:locale:en",
+      "version": "0.1.7",
+      "locale": "en",
+      "target": {
+        "kind": "definition",
+        "url": "urn:formspec:demo:d1:passport-renewal",
+        "compatibleVersions": "0.1.7"
+      },
+      "strings": {
+        "$form.title": "Passport renewal",
+        "$action.submit.label": "Submit demo response",
+        "demoNotice.label": "Demo application with fictional details. This sample is not an official DS-82 form.",
+        "renewalEligible.label": "Renewal eligibility confirmed",
+        "renewalEligible.hint": "Continue after the renewal eligibility check. This sample does not determine official eligibility.",
+        "renewalEligible.requiredMessage": "Complete this field.",
+        "renewalEligible.errors.TYPE_MISMATCH": "Choose yes or no.",
+        "renewalEligible.constraintMessage": "Complete the renewal eligibility check before continuing. This sample supports eligible applicants only.",
+        "detailsHeading.label": "Confirm your renewal details",
+        "fullName.label": "Full legal name",
+        "fullName.requiredMessage": "Complete this field.",
+        "fullName.errors.TYPE_MISMATCH": "Enter a valid answer.",
+        "dateOfBirth.label": "Date of birth",
+        "dateOfBirth.requiredMessage": "Complete this field.",
+        "dateOfBirth.errors.TYPE_MISMATCH": "Enter a valid date.",
+        "placeOfBirth.label": "Place of birth",
+        "placeOfBirth.requiredMessage": "Complete this field.",
+        "placeOfBirth.errors.TYPE_MISMATCH": "Enter a valid answer.",
+        "email.label": "Email address",
+        "email.requiredMessage": "Complete this field.",
+        "email.errors.TYPE_MISMATCH": "Enter a valid answer.",
+        "mailingAddress.label": "Mailing address",
+        "mailingAddress.requiredMessage": "Complete this field.",
+        "mailingAddress.errors.TYPE_MISMATCH": "Enter a valid answer.",
+        "priorPassportNumber.label": "Prior passport number",
+        "priorPassportNumber.requiredMessage": "Complete this field.",
+        "priorPassportNumber.errors.TYPE_MISMATCH": "Enter a valid answer.",
+        "priorPassportIssueDate.label": "Prior passport issue date",
+        "priorPassportIssueDate.requiredMessage": "Complete this field.",
+        "priorPassportIssueDate.errors.TYPE_MISMATCH": "Enter a valid date.",
+        "ssnIssued.label": "Have you ever been issued a Social Security number?",
+        "ssnIssued.requiredMessage": "Complete this field.",
+        "ssnIssued.errors.TYPE_MISMATCH": "Choose yes or no.",
+        "socialSecurityNumber.label": "Social Security number",
+        "socialSecurityNumber.hint": "If issued, your number is required by law; omission can mean denial, according to the source snapshot. The zeros are fictional.",
+        "socialSecurityNumber.requiredMessage": "Complete this field.",
+        "socialSecurityNumber.errors.TYPE_MISMATCH": "Enter a valid answer.",
+        "socialSecurityNumber.constraintMessage": "Enter nine digits without spaces or dashes.",
+        "neverIssuedStatement.label": "Sworn statement that you have never been issued a Social Security number",
+        "neverIssuedStatement.hint": "Enter your sworn never-issued statement. Official wording remains to be qualified.",
+        "neverIssuedStatement.requiredMessage": "Complete this field.",
+        "neverIssuedStatement.errors.TYPE_MISMATCH": "Enter a valid answer.",
+        "neverIssuedStatement.constraintMessage": "Enter your sworn never-issued statement.",
+        "photo.label": "Passport photo",
+        "photo.hint": "Upload a JPEG or PNG photo. Passport-specific photo checks are not yet verified.",
+        "photo.requiredMessage": "Upload a photo.",
+        "photo.errors.TYPE_MISMATCH": "Choose a valid image file.",
+        "privacyNotice.label": "Sample privacy notice: submitted answers and photo are visible to authorized demo reviewers. Official legal authority and permitted-sharing wording remain unqualified. Do not enter real personal data.",
+        "paperAlternative.label": "Also available by mail (DS-82) or in person (DS-11).",
+        "declaration.label": "I declare that my answers are true and complete to the best of my knowledge. Acknowledging this declaration does not sign the application.",
+        "declarationAcknowledged.label": "I have read and acknowledge the declaration.",
+        "declarationAcknowledged.requiredMessage": "Complete this field.",
+        "declarationAcknowledged.errors.TYPE_MISMATCH": "Choose yes or no.",
+        "declarationAcknowledged.constraintMessage": "Read and acknowledge the declaration before signing and submitting.",
+        "$ui.fileUpload.dropzone": "Drop files here or click to browse",
+        "$ui.fileUpload.dropzoneKeyboard": "Drop files here or press Enter to browse",
+        "$ui.fileUpload.browse": "Upload a file",
+        "$ui.validationSummary.heading": "Please correct the following",
+        "$ui.validationSummary.fixOne": "Please fix this error before continuing:",
+        "$ui.validationSummary.fixMany": "Please fix these {{$count}} errors before continuing:",
+        "$ui.validationSummary.reviewOne": "Please review this warning before continuing:",
+        "$ui.validationSummary.reviewMany": "Please review these {{$count}} warnings before continuing:",
+        "$ui.validationSummary.review": "Please review the following before continuing:",
+        "$ui.validationSummary.errorCountOne": "There is 1 error on this form.",
+        "$ui.validationSummary.errorCount": "There are {{$count}} errors on this form.",
+        "$ui.validationSummary.issueCountOne": "There is 1 issue to review on this form.",
+        "$ui.validationSummary.issueCount": "There are {{$count}} issues to review on this form.",
+        "$ui.validationSummary.row": "{{$label}}: {{$message}}",
+        "$ui.action.submit": "Submit",
+        "$ui.action.inProgress": "In progress.",
+        "$ui.action.completed": "Completed",
+        "$ui.action.blocked": "Blocked",
+        "$ui.action.failed": "Failed",
+        "$ui.action.deferred": "Deferred",
+        "$ui.action.unresolved": "Unresolved",
+        "$ui.action.status": "{{$status}}.",
+        "$ui.action.statusReason": "{{$status}}: {{$reason}}",
+        "$ui.fieldHelp.label": "Help me answer this question",
+        "$ui.fileUpload.attachedList": "Files you have attached",
+        "$ui.fileUpload.pendingList": "Pending file activity",
+        "$ui.fileUpload.remove": "Remove {{$filename}}",
+        "$ui.fileUpload.dismissError": "Dismiss error for {{$filename}}",
+        "$ui.fileUpload.uploading": "Uploading...",
+        "$ui.fileUpload.uploadProgress": "Uploading {{$percent}}%",
+        "$ui.fileUpload.deferredLibrary": "Saving to your document library is not yet available here.",
+        "$ui.fileUpload.cameraCapture": "Camera capture",
+        "$ui.fileUpload.cameraPreview": "Camera preview",
+        "$ui.fileUpload.captureImage": "Capture image",
+        "$ui.fileUpload.closeCamera": "Close camera",
+        "$ui.fileUpload.useCamera": "Use camera",
+        "$ui.fileUpload.cameraUnavailable": "Camera capture is not available in this browser.",
+        "$ui.fileUpload.cameraOpenFailed": "We could not open the camera. Choose a file instead.",
+        "$ui.fileUpload.cameraCaptureFailed": "We could not capture an image. Choose a file instead.",
+        "$ui.fileUpload.imagesWaitingOne": "{{$count}} image waiting for review.",
+        "$ui.fileUpload.imagesWaitingMany": "{{$count}} images waiting for review.",
+        "$ui.fileUpload.imageReview": "Image review before upload",
+        "$ui.fileUpload.legibilityWarning": "This image may be hard to read. Check focus, lighting, and glare before uploading.",
+        "$ui.fileUpload.redactionSurface": "Draw boxes over information you want to redact",
+        "$ui.fileUpload.previewImage": "Preview before upload",
+        "$ui.fileUpload.addRedaction": "Add redaction box",
+        "$ui.fileUpload.detectPageEdges": "Detect page edges",
+        "$ui.fileUpload.clearRedactions": "Clear redactions",
+        "$ui.fileUpload.uploadImage": "Upload image",
+        "$ui.fileUpload.cancel": "Cancel",
+        "$ui.fileUpload.browseMultiple": "Upload files",
+        "$ui.fileUpload.dropzoneMultiple": "Drop files here or click to browse",
+        "$ui.fileUpload.attachedOne": "{{$count}} file attached",
+        "$ui.fileUpload.attachedMany": "{{$count}} files attached",
+        "$ui.fileUpload.fileTooLarge": "\"{{$filename}}\" is larger than the upload limit of {{$limit}}.",
+        "$ui.fileUpload.errorTooLarge": "That file is larger than the upload limit. Try a smaller file.",
+        "$ui.fileUpload.errorMimeRejected": "That file type is not accepted here.",
+        "$ui.fileUpload.errorNetwork": "We could not reach the upload service. Check your connection and try again.",
+        "$ui.fileUpload.errorUnavailable": "File upload is not available on this site.",
+        "$ui.fileUpload.errorUnknown": "We could not upload your file. Try again.",
+        "$ui.fileUpload.imagePrepareFailed": "We could not prepare that image. Choose the file again.",
+        "$ui.fileUpload.edgeCleanupFailed": "We could not clean up the image edges. You can still upload it.",
+        "$ui.fileUpload.singleFileOnly": "Only one file can be uploaded here.",
+        "$ui.localPreview.preview": "Local preview",
+        "$ui.localPreview.draftRestored": "Draft restored",
+        "$ui.form.settings": "Form settings",
+        "$ui.form.language": "Language",
+        "$ui.form.languageSaveFailed": "The language change could not be saved. Try again.",
+        "$ui.receipt.answersReceived": "Answers received",
+        "$ui.receipt.submissionId": "Submission ID",
+        "$ui.receipt.pendingFilingAndSigning": "Case filing and signing are not yet confirmed.",
+        "$ui.receipt.keepRecord": "Keep this record",
+        "$ui.receipt.printInstruction": "Print this confirmation, then clear saved access before leaving.",
+        "$ui.receipt.print": "Print confirmation",
+        "$ui.receipt.clear": "Clear saved access",
+        "$ui.receipt.clearing": "Clearing...",
+        "$ui.form.fields": "Form fields",
+        "$ui.draft.versionChangedTitle": "This saved draft uses a different form version",
+        "$ui.draft.versionChanged": "This draft was saved with form version {{$version}}. Start again with the current form to continue.",
+        "$ui.draft.startCurrent": "Clear saved access and start again",
+        "$ui.draft.startingCurrent": "Starting again...",
+        "$ui.draft.startCurrentFailed": "Saved access could not be cleared. Try again.",
+        "$ui.draft.browserAccessNotice": "Starting again removes saved access to this draft from this browser. Other saved drafts stay available.",
+        "$ui.receipt.clearedTitle": "Saved access cleared",
+        "$ui.receipt.clearedDetail": "This browser no longer has saved access to this draft.",
+        "$component.d1-details-heading.text": "Confirm your renewal details",
+        "$action.save-draft-initial.label": "Record current answers",
+        "$action.save-draft-owned.label": "Record current answers",
+        "$action.prepare.label": "Prepare saved response",
+        "$action.sign.label": "Sign demo response",
+        "$action.paper.label": "Review paper alternative",
+        "$ui.draft.saveUnconfirmed": "Saving could not be confirmed. Keep this page open.",
+        "$action.start-application.label": "Start application",
+        "$component.d1-save-progress-initial.label": "Save progress",
+        "$component.d1-save-progress-owned.label": "Save progress",
+        "$component.d1-signing-copy-initial.label": "Prepare signing copy",
+        "$component.d1-signing-copy-owned.label": "Update signing copy",
+        "$module.x-demo-signing.application.inProgress": "Application in progress",
+        "$module.x-demo-signing.application.submitted": "Application submitted",
+        "$module.x-demo-signing.application.refresh": "Refresh application status",
+        "$module.x-demo-signing.application.refreshFailed": "Application status could not be confirmed. Try again.",
+        "$module.x-demo-signing.application.saveUnavailable": "Save for later is unavailable. Prepare a signing copy when you are ready.",
+        "$module.x-demo-signing.application.checkpointUnsaved": "Changes have not been saved",
+        "$module.x-demo-signing.application.checkpointSaving": "Saving progress",
+        "$module.x-demo-signing.application.checkpointSaved": "Progress saved",
+        "$module.x-demo-signing.application.checkpointFailed": "Progress could not be saved. Try again.",
+        "$module.x-demo-signing.application.stagingUnsaved": "Signing copy has not been prepared",
+        "$module.x-demo-signing.application.stagingSaving": "Preparing signing copy",
+        "$module.x-demo-signing.application.stagingSaved": "Signing copy prepared",
+        "$module.x-demo-signing.application.stagingFailed": "Signing copy could not be prepared. Try again.",
+        "$module.x-demo-signing.response.reviewSigned": "Review signed response"
+      },
+      "stringGeneration": {
+        "$form.title": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$action.submit.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "demoNotice.label": {
+          "anchors": [
+            "need:recognize-demo-sample-limits@2"
+          ]
+        },
+        "renewalEligible.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "renewalEligible.hint": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "renewalEligible.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "renewalEligible.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "renewalEligible.constraintMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "detailsHeading.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "fullName.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "fullName.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "fullName.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "dateOfBirth.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "dateOfBirth.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "dateOfBirth.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "placeOfBirth.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "placeOfBirth.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "placeOfBirth.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "email.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "email.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "email.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "mailingAddress.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "mailingAddress.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "mailingAddress.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportNumber.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportNumber.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportNumber.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportIssueDate.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportIssueDate.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportIssueDate.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "ssnIssued.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "ssnIssued.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "ssnIssued.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.hint": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.constraintMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.hint": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.constraintMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "photo.label": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "photo.hint": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "photo.requiredMessage": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "photo.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "privacyNotice.label": {
+          "anchors": [
+            "need:understand-demo-privacy@2"
+          ]
+        },
+        "paperAlternative.label": {
+          "anchors": [
+            "need:review-demo-paper-option@1"
+          ]
+        },
+        "declaration.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "declarationAcknowledged.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "declarationAcknowledged.requiredMessage": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "declarationAcknowledged.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "declarationAcknowledged.constraintMessage": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "$ui.fileUpload.dropzone": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.dropzoneKeyboard": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.browse": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.validationSummary.heading": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.fixOne": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.fixMany": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.reviewOne": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.reviewMany": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.review": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.errorCountOne": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.errorCount": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.issueCountOne": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.issueCount": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.row": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.submit": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.inProgress": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.completed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.blocked": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.failed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.deferred": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.unresolved": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.status": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.statusReason": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.fieldHelp.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.fileUpload.attachedList": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.pendingList": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.remove": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.dismissError": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.uploading": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.uploadProgress": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.deferredLibrary": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraCapture": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraPreview": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.captureImage": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.closeCamera": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.useCamera": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraUnavailable": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraOpenFailed": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraCaptureFailed": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.imagesWaitingOne": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.imagesWaitingMany": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.imageReview": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.legibilityWarning": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.redactionSurface": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.previewImage": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.addRedaction": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.detectPageEdges": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.clearRedactions": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.uploadImage": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cancel": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.browseMultiple": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.dropzoneMultiple": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.attachedOne": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.attachedMany": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.fileTooLarge": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorTooLarge": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorMimeRejected": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorNetwork": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorUnavailable": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorUnknown": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.imagePrepareFailed": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.edgeCleanupFailed": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.singleFileOnly": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.localPreview.preview": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.localPreview.draftRestored": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.form.settings": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.form.language": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.form.languageSaveFailed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.answersReceived": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.submissionId": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.pendingFilingAndSigning": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.keepRecord": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.printInstruction": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.print": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.clear": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.clearing": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.form.fields": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.versionChangedTitle": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.versionChanged": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.startCurrent": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.startingCurrent": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.startCurrentFailed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.browserAccessNotice": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.clearedTitle": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.clearedDetail": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$component.d1-details-heading.text": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$action.save-draft-initial.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$action.save-draft-owned.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$action.prepare.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "$action.sign.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "$action.paper.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "$ui.draft.saveUnconfirmed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$action.start-application.label": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$component.d1-save-progress-initial.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$component.d1-save-progress-owned.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$component.d1-signing-copy-initial.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$component.d1-signing-copy-owned.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.inProgress": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$module.x-demo-signing.application.submitted": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$module.x-demo-signing.application.refresh": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$module.x-demo-signing.application.refreshFailed": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$module.x-demo-signing.application.saveUnavailable": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.checkpointUnsaved": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.checkpointSaving": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.checkpointSaved": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.checkpointFailed": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.stagingUnsaved": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.stagingSaving": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.stagingSaved": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.stagingFailed": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.response.reviewSigned": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        }
+      }
+    },
+    "urn:formspec:demo:d1:passport-renewal:locale:es-US": {
+      "$formspecLocale": "2.0",
+      "url": "urn:formspec:demo:d1:passport-renewal:locale:es-US",
+      "version": "0.1.7",
+      "locale": "es-US",
+      "target": {
+        "kind": "definition",
+        "url": "urn:formspec:demo:d1:passport-renewal",
+        "compatibleVersions": "0.1.7"
+      },
+      "fallback": "en",
+      "strings": {
+        "$form.title": "Renovación de pasaporte",
+        "$action.submit.label": "Enviar respuesta de demostración",
+        "demoNotice.label": "Solicitud de demostración con datos ficticios. Esta muestra no es un formulario oficial DS-82.",
+        "detailsHeading.label": "Confirme los datos de su renovación",
+        "privacyNotice.label": "Aviso de privacidad de muestra: los revisores autorizados de la demostración pueden ver las respuestas y la foto enviadas. La autoridad legal oficial y el texto sobre divulgaciones permitidas aún no se han verificado. No ingrese datos personales reales.",
+        "paperAlternative.label": "También disponible por correo (DS-82) o en persona (DS-11).",
+        "declaration.label": "Declaro que mis respuestas son verdaderas y completas según mi leal saber y entender. Aceptar esta declaración no firma la solicitud.",
+        "renewalEligible.label": "Elegibilidad de renovación confirmada",
+        "fullName.label": "Nombre legal completo",
+        "dateOfBirth.label": "Fecha de nacimiento",
+        "placeOfBirth.label": "Lugar de nacimiento",
+        "email.label": "Correo electrónico",
+        "mailingAddress.label": "Dirección postal",
+        "priorPassportNumber.label": "Número del pasaporte anterior",
+        "priorPassportIssueDate.label": "Fecha de emisión del pasaporte anterior",
+        "ssnIssued.label": "¿Alguna vez le han asignado un número de Seguro Social?",
+        "socialSecurityNumber.label": "Número de Seguro Social",
+        "neverIssuedStatement.label": "Declaración jurada de que nunca le han asignado un número de Seguro Social",
+        "photo.label": "Foto para el pasaporte",
+        "declarationAcknowledged.label": "He leído y acepto la declaración.",
+        "renewalEligible.hint": "Continúe después de la revisión de elegibilidad para renovar. Esta muestra no determina la elegibilidad oficial.",
+        "socialSecurityNumber.hint": "Si se le asignó un número, la ley exige proporcionarlo; omitirlo puede causar una denegación, según la fuente conservada. Los ceros son ficticios.",
+        "neverIssuedStatement.hint": "Ingrese su declaración jurada de que nunca le han asignado un número. El texto oficial aún debe verificarse.",
+        "photo.hint": "Suba una foto JPEG o PNG. Las comprobaciones específicas para fotos de pasaporte aún no se han verificado.",
+        "renewalEligible.constraintMessage": "Complete la revisión de elegibilidad antes de continuar. Esta muestra solo admite solicitantes elegibles.",
+        "socialSecurityNumber.constraintMessage": "Ingrese nueve dígitos sin espacios ni guiones.",
+        "neverIssuedStatement.constraintMessage": "Ingrese su declaración jurada de que nunca le han asignado un número.",
+        "declarationAcknowledged.constraintMessage": "Lea y acepte la declaración antes de firmar y enviar la solicitud.",
+        "renewalEligible.requiredMessage": "Complete este campo.",
+        "renewalEligible.errors.TYPE_MISMATCH": "Seleccione sí o no.",
+        "fullName.requiredMessage": "Complete este campo.",
+        "fullName.errors.TYPE_MISMATCH": "Ingrese una respuesta válida.",
+        "dateOfBirth.requiredMessage": "Complete este campo.",
+        "dateOfBirth.errors.TYPE_MISMATCH": "Ingrese una fecha válida.",
+        "placeOfBirth.requiredMessage": "Complete este campo.",
+        "placeOfBirth.errors.TYPE_MISMATCH": "Ingrese una respuesta válida.",
+        "email.requiredMessage": "Complete este campo.",
+        "email.errors.TYPE_MISMATCH": "Ingrese una respuesta válida.",
+        "mailingAddress.requiredMessage": "Complete este campo.",
+        "mailingAddress.errors.TYPE_MISMATCH": "Ingrese una respuesta válida.",
+        "priorPassportNumber.requiredMessage": "Complete este campo.",
+        "priorPassportNumber.errors.TYPE_MISMATCH": "Ingrese una respuesta válida.",
+        "priorPassportIssueDate.requiredMessage": "Complete este campo.",
+        "priorPassportIssueDate.errors.TYPE_MISMATCH": "Ingrese una fecha válida.",
+        "ssnIssued.requiredMessage": "Complete este campo.",
+        "ssnIssued.errors.TYPE_MISMATCH": "Seleccione sí o no.",
+        "socialSecurityNumber.requiredMessage": "Complete este campo.",
+        "socialSecurityNumber.errors.TYPE_MISMATCH": "Ingrese una respuesta válida.",
+        "neverIssuedStatement.requiredMessage": "Complete este campo.",
+        "neverIssuedStatement.errors.TYPE_MISMATCH": "Ingrese una respuesta válida.",
+        "photo.requiredMessage": "Suba una foto.",
+        "photo.errors.TYPE_MISMATCH": "Seleccione un archivo de imagen válido.",
+        "declarationAcknowledged.requiredMessage": "Complete este campo.",
+        "declarationAcknowledged.errors.TYPE_MISMATCH": "Seleccione sí o no.",
+        "$ui.fileUpload.dropzone": "Arrastre los archivos aquí o haga clic para buscarlos",
+        "$ui.fileUpload.dropzoneKeyboard": "Arrastre los archivos aquí o presione Intro para buscarlos",
+        "$ui.fileUpload.browse": "Subir un archivo",
+        "$ui.validationSummary.heading": "Corrija lo siguiente",
+        "$ui.validationSummary.fixOne": "Corrija este error antes de continuar:",
+        "$ui.validationSummary.fixMany": "Corrija estos {{$count}} errores antes de continuar:",
+        "$ui.validationSummary.reviewOne": "Revise esta advertencia antes de continuar:",
+        "$ui.validationSummary.reviewMany": "Revise estas {{$count}} advertencias antes de continuar:",
+        "$ui.validationSummary.review": "Revise lo siguiente antes de continuar:",
+        "$ui.validationSummary.errorCountOne": "Hay 1 error en este formulario.",
+        "$ui.validationSummary.errorCount": "Hay {{$count}} errores en este formulario.",
+        "$ui.validationSummary.issueCountOne": "Hay 1 asunto que revisar en este formulario.",
+        "$ui.validationSummary.issueCount": "Hay {{$count}} asuntos que revisar en este formulario.",
+        "$ui.validationSummary.row": "{{$label}}: {{$message}}",
+        "$ui.action.submit": "Enviar",
+        "$ui.action.inProgress": "En curso.",
+        "$ui.action.completed": "Completado",
+        "$ui.action.blocked": "Bloqueado",
+        "$ui.action.failed": "Falló",
+        "$ui.action.deferred": "Aplazado",
+        "$ui.action.unresolved": "Sin resolver",
+        "$ui.action.status": "{{$status}}.",
+        "$ui.action.statusReason": "{{$status}}: {{$reason}}",
+        "$ui.fieldHelp.label": "Ayúdeme a responder esta pregunta",
+        "$ui.fileUpload.attachedList": "Archivos adjuntos",
+        "$ui.fileUpload.pendingList": "Actividad de archivos pendiente",
+        "$ui.fileUpload.remove": "Eliminar {{$filename}}",
+        "$ui.fileUpload.dismissError": "Descartar el error de {{$filename}}",
+        "$ui.fileUpload.uploading": "Subiendo...",
+        "$ui.fileUpload.uploadProgress": "Subiendo {{$percent}}%",
+        "$ui.fileUpload.deferredLibrary": "Guardar en su biblioteca de documentos todavía no está disponible aquí.",
+        "$ui.fileUpload.cameraCapture": "Captura con cámara",
+        "$ui.fileUpload.cameraPreview": "Vista previa de la cámara",
+        "$ui.fileUpload.captureImage": "Capturar imagen",
+        "$ui.fileUpload.closeCamera": "Cerrar cámara",
+        "$ui.fileUpload.useCamera": "Usar cámara",
+        "$ui.fileUpload.cameraUnavailable": "La captura con cámara no está disponible en este navegador.",
+        "$ui.fileUpload.cameraOpenFailed": "No pudimos abrir la cámara. Seleccione un archivo.",
+        "$ui.fileUpload.cameraCaptureFailed": "No pudimos capturar una imagen. Seleccione un archivo.",
+        "$ui.fileUpload.imagesWaitingOne": "{{$count}} imagen pendiente de revisión.",
+        "$ui.fileUpload.imagesWaitingMany": "{{$count}} imágenes pendientes de revisión.",
+        "$ui.fileUpload.imageReview": "Revisar la imagen antes de subirla",
+        "$ui.fileUpload.legibilityWarning": "Esta imagen puede ser difícil de leer. Revise el enfoque, la iluminación y los reflejos antes de subirla.",
+        "$ui.fileUpload.redactionSurface": "Dibuje recuadros sobre la información que desea ocultar",
+        "$ui.fileUpload.previewImage": "Vista previa antes de subir",
+        "$ui.fileUpload.addRedaction": "Añadir recuadro para ocultar información",
+        "$ui.fileUpload.detectPageEdges": "Detectar los bordes de la página",
+        "$ui.fileUpload.clearRedactions": "Quitar los recuadros",
+        "$ui.fileUpload.uploadImage": "Subir imagen",
+        "$ui.fileUpload.cancel": "Cancelar",
+        "$ui.fileUpload.browseMultiple": "Subir archivos",
+        "$ui.fileUpload.dropzoneMultiple": "Arrastre los archivos aquí o haga clic para seleccionarlos",
+        "$ui.fileUpload.attachedOne": "{{$count}} archivo adjunto",
+        "$ui.fileUpload.attachedMany": "{{$count}} archivos adjuntos",
+        "$ui.fileUpload.fileTooLarge": "\"{{$filename}}\" supera el límite de carga de {{$limit}}.",
+        "$ui.fileUpload.errorTooLarge": "Ese archivo supera el límite de carga. Pruebe con un archivo más pequeño.",
+        "$ui.fileUpload.errorMimeRejected": "Ese tipo de archivo no se acepta aquí.",
+        "$ui.fileUpload.errorNetwork": "No pudimos conectarnos al servicio de carga. Revise su conexión e inténtelo de nuevo.",
+        "$ui.fileUpload.errorUnavailable": "La carga de archivos no está disponible en este sitio.",
+        "$ui.fileUpload.errorUnknown": "No pudimos subir su archivo. Inténtelo de nuevo.",
+        "$ui.fileUpload.imagePrepareFailed": "No pudimos preparar esa imagen. Seleccione el archivo de nuevo.",
+        "$ui.fileUpload.edgeCleanupFailed": "No pudimos limpiar los bordes de la imagen. Aún puede subirla.",
+        "$ui.fileUpload.singleFileOnly": "Aquí solo se puede subir un archivo.",
+        "$ui.localPreview.preview": "Vista previa local",
+        "$ui.localPreview.draftRestored": "Borrador recuperado",
+        "$ui.form.settings": "Configuración del formulario",
+        "$ui.form.language": "Idioma",
+        "$ui.form.languageSaveFailed": "No se pudo guardar el cambio de idioma. Inténtelo de nuevo.",
+        "$ui.receipt.answersReceived": "Respuestas recibidas",
+        "$ui.receipt.submissionId": "ID de envío",
+        "$ui.receipt.pendingFilingAndSigning": "La presentación del caso y la firma aún no se han confirmado.",
+        "$ui.receipt.keepRecord": "Conserve este comprobante",
+        "$ui.receipt.printInstruction": "Imprima esta confirmación y luego borre el acceso guardado antes de irse.",
+        "$ui.receipt.print": "Imprimir confirmación",
+        "$ui.receipt.clear": "Borrar el acceso guardado",
+        "$ui.receipt.clearing": "Borrando...",
+        "$ui.form.fields": "Campos del formulario",
+        "$ui.draft.versionChangedTitle": "Este borrador guardado usa una versión diferente del formulario",
+        "$ui.draft.versionChanged": "Este borrador se guardó con la versión {{$version}} del formulario. Empiece de nuevo con el formulario actual para continuar.",
+        "$ui.draft.startCurrent": "Borrar el acceso guardado y empezar de nuevo",
+        "$ui.draft.startingCurrent": "Empezando de nuevo...",
+        "$ui.draft.startCurrentFailed": "No se pudo borrar el acceso guardado. Inténtelo de nuevo.",
+        "$ui.draft.browserAccessNotice": "Al empezar de nuevo, se borra de este navegador el acceso guardado a este borrador. Los demás borradores guardados siguen disponibles.",
+        "$ui.receipt.clearedTitle": "Acceso guardado borrado",
+        "$ui.receipt.clearedDetail": "Este navegador ya no tiene acceso guardado a este borrador.",
+        "$component.d1-details-heading.text": "Confirme los datos de su renovación",
+        "$action.save-draft-initial.label": "Registrar las respuestas actuales",
+        "$action.save-draft-owned.label": "Registrar las respuestas actuales",
+        "$action.prepare.label": "Preparar la respuesta guardada",
+        "$action.sign.label": "Firmar respuesta de demostración",
+        "$action.paper.label": "Revisar alternativa en papel",
+        "$ui.draft.saveUnconfirmed": "No se pudo confirmar que se haya guardado. Mantenga esta página abierta.",
+        "$action.start-application.label": "Iniciar solicitud",
+        "$component.d1-save-progress-initial.label": "Guardar progreso",
+        "$component.d1-save-progress-owned.label": "Guardar progreso",
+        "$component.d1-signing-copy-initial.label": "Preparar copia para firmar",
+        "$component.d1-signing-copy-owned.label": "Actualizar copia para firmar",
+        "$module.x-demo-signing.application.inProgress": "Solicitud en curso",
+        "$module.x-demo-signing.application.submitted": "Solicitud enviada",
+        "$module.x-demo-signing.application.refresh": "Actualizar estado de la solicitud",
+        "$module.x-demo-signing.application.refreshFailed": "No se pudo confirmar el estado de la solicitud. Inténtelo de nuevo.",
+        "$module.x-demo-signing.application.saveUnavailable": "No se puede guardar para más tarde. Prepare una copia para firmar cuando esté listo.",
+        "$module.x-demo-signing.application.checkpointUnsaved": "Los cambios no se han guardado",
+        "$module.x-demo-signing.application.checkpointSaving": "Guardando progreso",
+        "$module.x-demo-signing.application.checkpointSaved": "Progreso guardado",
+        "$module.x-demo-signing.application.checkpointFailed": "No se pudo guardar el progreso. Inténtelo de nuevo.",
+        "$module.x-demo-signing.application.stagingUnsaved": "La copia para firmar no se ha preparado",
+        "$module.x-demo-signing.application.stagingSaving": "Preparando copia para firmar",
+        "$module.x-demo-signing.application.stagingSaved": "Copia para firmar preparada",
+        "$module.x-demo-signing.application.stagingFailed": "No se pudo preparar la copia para firmar. Inténtelo de nuevo.",
+        "$module.x-demo-signing.response.reviewSigned": "Revisar respuesta firmada"
+      },
+      "stringGeneration": {
+        "$form.title": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$action.submit.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "demoNotice.label": {
+          "anchors": [
+            "need:recognize-demo-sample-limits@2"
+          ]
+        },
+        "detailsHeading.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "privacyNotice.label": {
+          "anchors": [
+            "need:understand-demo-privacy@2"
+          ]
+        },
+        "paperAlternative.label": {
+          "anchors": [
+            "need:review-demo-paper-option@1"
+          ]
+        },
+        "declaration.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "renewalEligible.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "fullName.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "dateOfBirth.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "placeOfBirth.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "email.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "mailingAddress.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportNumber.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportIssueDate.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "ssnIssued.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "photo.label": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "declarationAcknowledged.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "renewalEligible.hint": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.hint": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.hint": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "photo.hint": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "renewalEligible.constraintMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.constraintMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.constraintMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "declarationAcknowledged.constraintMessage": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "renewalEligible.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "renewalEligible.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "fullName.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "fullName.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "dateOfBirth.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "dateOfBirth.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "placeOfBirth.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "placeOfBirth.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "email.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "email.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "mailingAddress.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "mailingAddress.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportNumber.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportNumber.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportIssueDate.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "priorPassportIssueDate.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "ssnIssued.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "ssnIssued.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "socialSecurityNumber.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.requiredMessage": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "neverIssuedStatement.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "photo.requiredMessage": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "photo.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "declarationAcknowledged.requiredMessage": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "declarationAcknowledged.errors.TYPE_MISMATCH": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "$ui.fileUpload.dropzone": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.dropzoneKeyboard": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.browse": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.validationSummary.heading": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.fixOne": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.fixMany": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.reviewOne": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.reviewMany": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.review": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.errorCountOne": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.errorCount": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.issueCountOne": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.issueCount": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.validationSummary.row": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.submit": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.inProgress": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.completed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.blocked": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.failed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.deferred": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.unresolved": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.status": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.action.statusReason": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.fieldHelp.label": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.fileUpload.attachedList": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.pendingList": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.remove": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.dismissError": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.uploading": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.uploadProgress": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.deferredLibrary": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraCapture": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraPreview": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.captureImage": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.closeCamera": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.useCamera": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraUnavailable": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraOpenFailed": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cameraCaptureFailed": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.imagesWaitingOne": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.imagesWaitingMany": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.imageReview": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.legibilityWarning": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.redactionSurface": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.previewImage": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.addRedaction": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.detectPageEdges": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.clearRedactions": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.uploadImage": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.cancel": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.browseMultiple": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.dropzoneMultiple": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.attachedOne": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.attachedMany": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.fileTooLarge": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorTooLarge": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorMimeRejected": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorNetwork": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorUnavailable": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.errorUnknown": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.imagePrepareFailed": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.edgeCleanupFailed": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.fileUpload.singleFileOnly": {
+          "anchors": [
+            "need:attach-demo-renewal-photo@1"
+          ]
+        },
+        "$ui.localPreview.preview": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.localPreview.draftRestored": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.form.settings": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.form.language": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.form.languageSaveFailed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.answersReceived": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.submissionId": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.pendingFilingAndSigning": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.keepRecord": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.printInstruction": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.print": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.clear": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.clearing": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.form.fields": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.versionChangedTitle": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.versionChanged": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.startCurrent": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.startingCurrent": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.startCurrentFailed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.draft.browserAccessNotice": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.clearedTitle": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$ui.receipt.clearedDetail": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$component.d1-details-heading.text": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$action.save-draft-initial.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$action.save-draft-owned.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$action.prepare.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "$action.sign.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "$action.paper.label": {
+          "anchors": [
+            "need:review-and-sign-demo-response@2"
+          ]
+        },
+        "$ui.draft.saveUnconfirmed": {
+          "anchors": [
+            "need:complete-demo-renewal-response@2"
+          ]
+        },
+        "$action.start-application.label": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$component.d1-save-progress-initial.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$component.d1-save-progress-owned.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$component.d1-signing-copy-initial.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$component.d1-signing-copy-owned.label": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.inProgress": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$module.x-demo-signing.application.submitted": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$module.x-demo-signing.application.refresh": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$module.x-demo-signing.application.refreshFailed": {
+          "anchors": [
+            "need:start-demo-application-early@1"
+          ]
+        },
+        "$module.x-demo-signing.application.saveUnavailable": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.checkpointUnsaved": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.checkpointSaving": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.checkpointSaved": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.checkpointFailed": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.stagingUnsaved": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.stagingSaving": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.stagingSaved": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.application.stagingFailed": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        },
+        "$module.x-demo-signing.response.reviewSigned": {
+          "anchors": [
+            "need:control-demo-progress-persistence@1"
+          ]
+        }
+      }
+    }
+  }
+}

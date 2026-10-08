@@ -98,6 +98,59 @@ function fixture(change: Partial<ResponseActionControllerConfig> = {}) {
   return { controller, config, roles, saveDraft, prepare, sign, submit, reviewReady, buildHandoff, definition, widget, ready };
 }
 
+function lifecycleFixture(enabled = true) {
+  const original = fixture();
+  const roles = structuredClone(original.config.roles);
+  const start = roleAdmission('startApplication');
+  start.document.actions[0].intent = 'x-start-application';
+  start.document.actions[0].validation = { profile: 'off', blocking: 'non-blocking', persistence: 'none' };
+  const request = start.document['x-formspec-runtime']!.requests[0];
+  request.request = { method: 'POST', pathTemplate: '/drafts/{draftId}/application-case',
+    pathBindings: { draftId: { from: 'input', path: 'draftId' } }, bodyDefaults: {} };
+  request.outputs = { case: { path: '/caseLedgerId' } };
+  roles.startApplication = start;
+  roles.saveInitial!.document.actions[0].validation = { profile: 'off', blocking: 'non-blocking', persistence: 'draft-checkpoint' };
+  const startApplication = vi.fn(async () => ({ caseLedgerId: 'urn:wos:real-case', caseReference: 'APP-001', draftRef: 'urn:formspec:draft:owned-draft', status: 'in-progress' as const }));
+  return { ...fixture({ roles, applicationLifecycle: { capabilities: { earlyCaseCreation: enabled, persistentSaving: true, formVersionId: 'publication' }, load: vi.fn(async () => undefined), start: startApplication } }), startApplication };
+}
+describe('maintained application Start', () => {
+  it('creates no draft or case on startup, then checkpoints progress and starts deliberately', async () => {
+    const f = lifecycleFixture(); expect(f.saveDraft).not.toHaveBeenCalled(); expect(f.startApplication).not.toHaveBeenCalled();
+    const result = await f.definition('startApplication');
+    expect(result).toMatchObject({ status: 'completed' }); expect(f.saveDraft).toHaveBeenCalledOnce(); expect(f.startApplication).toHaveBeenCalledOnce();
+    expect(f.controller.getSnapshot().application).toMatchObject({ caseReference: 'APP-001', status: 'in-progress' });
+  });
+  it('retains the exact first checkpoint and operation on a failed Start retry', async () => {
+    const f = lifecycleFixture(); f.startApplication.mockRejectedValueOnce(new Error('lost-reply'));
+    expect(await f.definition('startApplication', 'start-act')).toMatchObject({ status: 'failed' });
+    expect(f.controller.getSnapshot().owned).toBe(true); expect(f.controller.getSnapshot().application).toBeUndefined();
+    expect(await f.definition('startApplication', 'start-act')).toMatchObject({ status: 'completed' });
+    expect(f.saveDraft).toHaveBeenCalledOnce(); expect(f.startApplication).toHaveBeenCalledTimes(2);
+    expect(f.startApplication.mock.calls[0]).toEqual(f.startApplication.mock.calls[1]);
+  });
+  it('refuses disabled early creation without checkpoint or case effect', async () => {
+    const f = lifecycleFixture(false); expect(await f.definition('startApplication')).toMatchObject({ status: 'failed' });
+    expect(f.saveDraft).not.toHaveBeenCalled(); expect(f.startApplication).not.toHaveBeenCalled();
+  });
+  it('keeps a restored case visible from the initial snapshot and refreshes through read-only lookup', async () => {
+    const f = lifecycleFixture(); await f.definition('startApplication');
+    const application = f.controller.getSnapshot().application!;
+    const load = vi.fn(async () => ({ ...application, status: 'submitted' as const }));
+    const next = fixture({ roles: f.config.roles, restoredResponse: response, restoredApplication: application,
+      applicationLifecycle: { ...f.config.applicationLifecycle!, load } });
+    expect(next.controller.getSnapshot().application).toEqual(application);
+    await next.controller.refreshApplication(); expect(load).toHaveBeenCalledWith(next.config.context.draftKey);
+    expect(f.startApplication).toHaveBeenCalledOnce();
+    expect(next.controller.getSnapshot().application?.status).toBe('submitted');
+  });
+  it('discards late Start evidence after authority withdrawal', async () => {
+    const f = lifecycleFixture(); let release!: (receipt: Awaited<ReturnType<typeof f.startApplication>>) => void;
+    f.startApplication.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const pending = f.definition('startApplication'); await vi.waitFor(() => expect(f.startApplication).toHaveBeenCalledOnce());
+    f.controller.invalidate(); release({ caseLedgerId: 'urn:wos:real-case', caseReference: 'APP-001', draftRef: 'urn:formspec:draft:owned-draft', status: 'in-progress' });
+    expect(await pending).toMatchObject({ status: 'failed' }); expect(f.controller.getSnapshot().application).toBeUndefined();
+  });
+});
 describe('generic admitted Response Action controller', () => {
   async function restoredSignedFixture() {
     const producer = fixture(); await producer.widget('sign', await producer.ready());

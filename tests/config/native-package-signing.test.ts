@@ -45,6 +45,15 @@ describe('closed native package signing opt-in', () => {
     expect(active.ports).toEqual(publicPortalProfile.ports);
   });
 
+  it('admits the optional Start role only with a complete detached capability path map', () => {
+    const value = { ...fixture(), applicationLifecycle: { instance: 'scratch', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' },
+      roles: { ...fixture().roles, startApplication: { artifactRef: 'urn:test:actions', actionRef: 'start' } } };
+    expect(nativePackageSigningConfig(value).roles.startApplication?.actionRef).toBe('start');
+    expect(() => nativePackageSigningConfig({ ...value, applicationLifecycle: { ...value.applicationLifecycle, startedPath: 'canStart' } })).toThrow();
+    expect(() => nativePackageSigningConfig({ ...fixture(), applicationLifecycle: value.applicationLifecycle })).toThrow();
+    expect(() => nativePackageSigningConfig({ ...fixture(), roles: value.roles })).toThrow();
+    expect(() => nativePackageSigningConfig({ ...value, applicationLifecycle: { ...value.applicationLifecycle, persistentSaving: true } })).toThrow();
+  });
   it('uses canonical version identifiers without inventing a semver-only policy or normalizing locale pins', () => {
     const value = fixture(); value.definition.version = '42'; value.initialLocale = 'es-us';
     expect(nativePackageSigningConfig(value)).toMatchObject({ definition: { version: '42' }, initialLocale: 'es-us' });

@@ -23,7 +23,9 @@ import { resolveAuthoredSigningContent } from '@formspec-org/engine/render';
 import canonicalize from 'canonicalize';
 import { formspecTenantHeaderNames, tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import type { DraftKey, DraftStore } from '../../ports/draft-store.ts';
-import type { ResponseSigning } from '../../ports/response-signing.ts';
+import type { ApplicationLifecycle, ApplicationLifecycleCapabilities } from '../../ports/application-lifecycle.ts';
+import { HttpApplicationLifecycle } from './application-lifecycle.ts';
+import type { AdmittedResponseAction, ResponseSigning } from '../../ports/response-signing.ts';
 import type { IntakeHandoff, SubmitTransport } from '../../ports/submit-transport.ts';
 import type { AnonymousSessionBridge } from './anonymous-session.ts';
 import { createDraftBindingRegistry } from './draft-binding-registry.ts';
@@ -37,6 +39,7 @@ import { assertDelegatedSignedResponseConsistency, handoffHash, HttpResponseSign
 export type { DraftBindingRegistry, DraftBindingSnapshot } from './draft-binding-registry.ts';
 
 export interface HttpAdapterCohortConfig extends HttpClientConfig {
+  applicationLifecycle?: { capabilities: ApplicationLifecycleCapabilities; action: AdmittedResponseAction };
   formIdResolver?: FormIdResolver;
   /**
    * When supplied, the cohort routes anonymous session bookkeeping through
@@ -59,6 +62,7 @@ export interface HttpAdapterCohort {
   draftStore: DraftStore;
   submitTransport: SubmitTransport;
   responseSigning?: ResponseSigning;
+  applicationLifecycle?: ApplicationLifecycle;
   /** Retire local signing authority; preserve persisted drafts and uncertain-operation markers. */
   invalidateResponseSigningScope?: (key: DraftKey) => void;
 }
@@ -72,9 +76,10 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     const headers = config.tenantBinding ? tenantScopeHeaders(config.tenantBinding) : {};
     if (Object.values(formspecTenantHeaderNames).some(name => !headers[name]?.trim())) throw new Error('Qualified draft state requires all four tenant scope headers');
   }
+  if (config.applicationLifecycle && (!config.qualifiedDraftState || !config.responseSigning)) throw new Error('Application lifecycle requires a qualified signing publication');
   const resolveFormId = config.formIdResolver ?? defaultFormIdResolver;
   const registry = createDraftBindingRegistry({ resumeMetadata: config.resumeMetadata, formIdResolver: config.formIdResolver });
-  const { anonymousSessions, responseIdResolver, responseDataResolver, signingRequested,
+  const { applicationLifecycle: lifecycleCapabilities, anonymousSessions, responseIdResolver, responseDataResolver, signingRequested,
     resumeMetadata: _resumeMetadata, responseSigning: signingPolicyInput, qualifiedDraftState: statePolicyInput, ...httpConfig } = config;
   const signingPolicy = signingPolicyInput ? Object.freeze({ ...signingPolicyInput }) : undefined;
   const statePolicy = statePolicyInput ? structuredClone(statePolicyInput) : undefined;
@@ -162,7 +167,12 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     load: key => fence.run(key, async generation => draftStore.load(key, () => fence.assertCurrent(key, generation))),
     ...(draftStore.readState ? { readState: (suppliedKey: DraftKey) => {
       const key = structuredClone(suppliedKey);
-      return fence.run(key, async generation => draftStore.readState!(key, () => fence.assertCurrent(key, generation)));
+      return fence.run(key, async generation => {
+        const state = await draftStore.readState!(key, () => fence.assertCurrent(key, generation));
+        const application = state && applicationLifecycle ? await applicationLifecycle.loadInCurrentScope(key, generation) : undefined;
+        fence.assertCurrent(key, generation);
+        return state && application ? { ...state, application } : state;
+      });
     } } : {}),
     save: (key, response) => fence.run(key, async () => {
       responseSigning.assertEditable(key);
@@ -198,7 +208,10 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       });
     },
   };
-  return { draftStore: scopedDrafts, submitTransport: scopedSubmit, responseSigning,
+  const applicationLifecycle = lifecycleCapabilities ? new HttpApplicationLifecycle({ client: new HttpClient(httpConfig), bindings: registry, fence,
+    publication: { formId: resolveFormId(statePolicy!.definition.url, statePolicy!.definition.version), formVersionId: statePolicy!.formVersionId },
+    definition: { url: statePolicy!.definition.url, version: statePolicy!.definition.version }, capabilities: lifecycleCapabilities.capabilities, action: lifecycleCapabilities.action }) : undefined;
+  return { draftStore: scopedDrafts, submitTransport: scopedSubmit, responseSigning, applicationLifecycle,
     invalidateResponseSigningScope: key => fence.invalidate(key) };
 }
 

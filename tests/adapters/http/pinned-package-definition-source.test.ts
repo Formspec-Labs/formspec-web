@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA } from '@formspec-org/surface-react';
 import { loadCanonicalModulePayloadSchemaResources } from '../../../src/adapters/schema/index.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +10,17 @@ import { sampleFormDefinition } from '../../../src/adapter-conformance/fixtures.
 afterEach(() => vi.unstubAllGlobals());
 
 describe('PinnedPackageDefinitionSource', () => {
+  it('loads the exact authored application-lifecycle public package through canonical admission', async () => {
+    vi.stubGlobal('crypto', webcrypto);
+    const root = resolve('public/demo-packages/d1-passport/v0.1.7');
+    const bundle = JSON.parse(readFileSync(resolve(root, 'native-bundle.json'), 'utf8'));
+    vi.stubGlobal('fetch', async (url: URL) => new Response(readFileSync(resolve(root, url.pathname.split('/').at(-1)!), 'utf8')));
+    const source = new PinnedPackageDefinitionSource('/demo-packages/d1-passport/v0.1.7/package.json', {
+      moduleAdmission: { allowedModules: bundle.manifest.modules }, moduleSupport: { payloadSchemaResources: await loadCanonicalModulePayloadSchemaResources() } });
+    expect(await source.getDefinition()).toMatchObject({ url: 'urn:formspec:demo:d1:passport-renewal', version: '0.1.7' });
+    expect(await source.getNativeBundleExport()).toEqual(bundle);
+    expect((await source.getResponseActionsDocument())?.actions.some(action => action.intent === 'x-start-application')).toBe(true);
+  });
   it('preserves authored data and shares the verified load across consumers', async () => {
     vi.stubGlobal('crypto', webcrypto);
     const bytes = JSON.stringify(sampleFormDefinition);

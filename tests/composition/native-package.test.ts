@@ -25,15 +25,18 @@ const componentBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/nativ
 const initialDefinitionUrl = 'https://server.example.test/runtime/forms/actual-form';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-async function fixture(subject = 'anon:fixture') {
+async function fixture(subject = 'anon:fixture', lifecycle = false) {
+  const selectedNativeBytes = lifecycle ? readFileSync(resolve('public/demo-packages/d1-passport/v0.1.7/native-bundle.json'), 'utf8') : nativeBytes;
+  const selectedComponentBytes = lifecycle ? readFileSync(resolve('public/demo-packages/d1-passport/v0.1.7/passport-renewal.component.json'), 'utf8') : componentBytes;
+  const capabilities = { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'actual-publication' };
   vi.stubGlobal('crypto', webcrypto);
   const values = new Map<string, string>();
   vi.stubGlobal('sessionStorage', { getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } });
-  const bundle = JSON.parse(nativeBytes) as BundleExport;
+  const bundle = JSON.parse(selectedNativeBytes) as BundleExport;
   const resolved = dereferenceBundleExport(bundle);
   const definition = [...resolved.definitions.values()][0];
-  const component = JSON.parse(componentBytes);
+  const component = JSON.parse(selectedComponentBytes);
   const locales = Object.values(bundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document) as LocaleDocument[];
   const document = resolved.responseActions[0];
   const ceremony = resolved.surfaces.flatMap(surface => surface.routes.flatMap(route => route.slots ?? []))
@@ -47,17 +50,18 @@ async function fixture(subject = 'anon:fixture') {
       return [name, { catalogRef: selected.catalogRef, sourceRef: selected.sourceRef }]; }));
   const signing = nativePackageSigningConfig({ keyId: 'fixture-key', definition: { url: definition.url, version: definition.version },
     bundle: { id: bundle.manifest.id, version: bundle.manifest.version }, module: bundle.manifest.modules![0], initialLocale: 'en',
-    roles: Object.fromEntries(Object.entries({ saveInitial: 'save-draft-initial', saveOwned: 'save-draft-owned', prepare: 'prepare', sign: 'sign', submit: 'submit', paper: 'paper' })
+    roles: Object.fromEntries(Object.entries({ ...(lifecycle ? { startApplication: 'start-application' } : {}), saveInitial: 'save-draft-initial', saveOwned: 'save-draft-owned', prepare: 'prepare', sign: 'sign', submit: 'submit', paper: 'paper' })
       .map(([role, actionRef]) => [role, { artifactRef: bundle.manifest.responseActionDocuments![0].url, actionRef }])), bindings,
-    readiness: { instance: 'draftReadiness', readyPath: 'ready', ownedPath: 'owned' } });
+    readiness: { instance: 'draftReadiness', readyPath: 'ready', ownedPath: 'owned' },
+    ...(lifecycle ? { applicationLifecycle: { instance: 'draftReadiness', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' } } : {}) });
   const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
     attachmentMaxUploadBytes: 1024 * 1024, tenantBinding: { kind: 'bound', scope: { tenant: 'fixture', workspace: 'fixture', environment: 'test', cell: 'fixture' } } });
-  const texts: Record<string, string> = { 'native.json': nativeBytes, 'component.json': componentBytes,
+  const texts: Record<string, string> = { 'native.json': selectedNativeBytes, 'component.json': selectedComponentBytes,
     'definition.json': JSON.stringify(definition), ...Object.fromEntries(locales.map((locale, index) => [`locale-${index}.json`, JSON.stringify(locale)])) };
   // Package pins cover raw bytes, not the independent canonical publication digest.
   const rawPin = async (path: string) => ({ path, sha256: [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(texts[path])))].map(byte => byte.toString(16).padStart(2, '0')).join('') });
   const files = { definition: await rawPin('definition.json'), locales: await Promise.all(locales.map((_, index) => rawPin(`locale-${index}.json`))),
-    nativeBundle: await rawPin('native.json'), component: { ...await rawPin('component.json'), ref: (JSON.parse(nativeBytes).manifest.components)[0] } };
+    nativeBundle: await rawPin('native.json'), component: { ...await rawPin('component.json'), ref: (JSON.parse(selectedNativeBytes).manifest.components)[0] } };
   const publication = { form_id: 'actual-form', form_version_id: 'actual-publication', definition_url: definition.url,
     definition_version: definition.version, definition_hash: await computeJcsSha256Digest(definition), definition: structuredClone(definition) };
   const requests: { url: string; method: string; body?: unknown; headers: Headers }[] = [];
@@ -73,6 +77,7 @@ async function fixture(subject = 'anon:fixture') {
     }
     if (url.pathname.endsWith('/sessions/anonymous')) return Response.json({ session_id: 'fixture-session', session_token: 'fixture-token',
       subject_ref: 'anon:fixture', form_id: 'actual-form', expires_at: '2099-01-01T00:00:00Z' });
+    if (url.pathname === '/runtime/forms/actual-form/application-lifecycle') return Response.json(capabilities);
     if (url.pathname === '/runtime/forms/actual-form' && method === 'GET') return Response.json(publication);
     if (url.pathname === '/runtime/forms/actual-form/drafts' && method === 'POST') saved = structuredClone(body.canonical_response);
     if (url.pathname === '/drafts/fixture-draft' || (url.pathname.endsWith('/drafts') && method === 'POST')) return Response.json({
@@ -81,7 +86,7 @@ async function fixture(subject = 'anon:fixture') {
     throw new Error(`Unexpected test request ${method} ${url.href}`);
   });
   vi.stubGlobal('fetch', fetch);
-  return { config, signing, bundle, definition, document, component, files, texts, publication, requests, fetch, values,
+  return { capabilities, config, signing, bundle, definition, document, component, files, texts, publication, requests, fetch, values,
     setDraft: (response: FormResponse, status: string, version: number) => { saved = structuredClone(response); draftStatus = status; draftVersion = version; } };
 }
 
@@ -240,6 +245,31 @@ describe('explicit native package composition', () => {
     expect(test.requests).toEqual([]);
   });
 
+  it.each(['qualified', 'wrong-publication', 'anonymous'] as const)('qualifies lifecycle capabilities through the native loader: %s', async mode => {
+    const test = await fixture('oidc:fixture', true);
+    if (mode === 'wrong-publication') test.capabilities.formVersionId = 'different';
+    const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',
+      credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+    const provider = { discover: async () => [], authenticate: async () => claim, revoke: async () => {}, subscribe: () => () => {} };
+    const config = { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: { mode: 'oidc-required' as const,
+      oidc: { issuer: claim.provider, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const } } };
+    const session = { issuer: claim.provider, subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+    const browserAuthSession = { getSession: async () => session, begin: async () => {}, completeCallback: async () => session,
+      completeSilentCallback: async () => {}, renew: async () => session, logout: async () => {}, completeLogoutCallback: async () => {},
+      accessToken: async () => 'oidc-bearer', subscribe: () => () => {}, dispose: () => {} };
+    const composition = createDefaultComposition(mode === 'anonymous' ? test.config : config, { packageUrl: '/package.json', initialDefinitionUrl,
+      ...(mode !== 'anonymous' ? { identityBinding: { provider, accessToken: async () => 'oidc-bearer', browserAuthSession } } : {}) });
+    if (mode === 'qualified') {
+      const boot = await composition.nativePackageRespondent!.load();
+      expect(boot.host.applicationCapabilities).toEqual(test.capabilities); boot.host.dispose();
+    } else await expect(composition.nativePackageRespondent!.load()).rejects.toThrow();
+    expect(test.requests.every(request => request.method === 'GET')).toBe(true);
+    const request = test.requests.find(request => request.url.endsWith('/application-lifecycle'));
+    if (mode !== 'anonymous') {
+      expect(request?.headers.get('authorization')).toBe('Bearer oidc-bearer');
+      expect(request?.headers.get('x-formspec-tenant-id')).toBe('fixture');
+    }
+  });
   it('preserves selected OIDC identity and bearer for native draft save and recovery without anonymous credentials', async () => {
     const test = await fixture('oidc:fixture');
     const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',

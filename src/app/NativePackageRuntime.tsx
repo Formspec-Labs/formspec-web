@@ -208,11 +208,14 @@ function NativePackageStatus({ failed, identityChanged, children }: { failed?: b
 /** Recovery controls use the qualified Locale and the host's scoped authority. */
 function NativePackageFrame({ boot, selection, location, outcome, onNavigate, children }: { onNavigate: (href: string) => void; boot: NativePackageBoot; selection: string; location: string; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; children: React.ReactNode }) {
   const state = useSyncExternalStore(boot.host.subscribe, boot.host.getSnapshot, boot.host.getSnapshot);
-  const [operation, setOperation] = useState<'idle' | 'locale' | 'clearing' | 'cleared' | 'clear-error' | 'locale-error'>('idle');
+  const [operation, setOperation] = useState<'idle' | 'locale' | 'clearing' | 'cleared' | 'clear-error' | 'locale-error' | 'refreshing' | 'refresh-error'>('idle');
   const heading = useRef<HTMLHeadingElement>(null);
   const operationPending = useRef(false);
   const locale = boot.localeDocuments.find(document => document.locale.toLowerCase() === state.locale.toLowerCase());
   const text = (key: ChromeStringKey) => locale?.strings[`$ui.${key}`] ?? UI_STRINGS[key];
+  const applicationText = (property: string) => locale?.strings[`$module.${boot.host.moduleId}.application.${property}`];
+  const checkpoint = state.checkpointState ?? 'unsaved';
+  const checkpointSuffix = { unsaved: 'Unsaved', saving: 'Saving', saved: 'Saved', failed: 'Failed' }[checkpoint];
   const definition = locale?.target.kind === 'definition' ? boot.host.bundle.definitions.get(locale.target.url) : undefined;
   const options = definition ? localeOptionsForDefinition(definition, boot.localeDocuments) : [];
   const confirmation = state.submitted ?? (state.controller?.phase === 'submitted'
@@ -235,6 +238,13 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
     catch { setOperation('locale-error'); }
     finally { operationPending.current = false; }
   }
+  async function refreshApplication() {
+    if (operationPending.current || !boot.host.refreshApplication) return;
+    operationPending.current = true; setOperation('refreshing');
+    try { await boot.host.refreshApplication(); setOperation('idle'); }
+    catch { setOperation('refresh-error'); }
+    finally { operationPending.current = false; }
+  }
   async function clear() {
     if (operationPending.current) return;
     operationPending.current = true; setOperation('clearing');
@@ -251,7 +261,7 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
           aria-pressed={state.locale.toLowerCase() === option.code.toLowerCase()} onClick={() => void changeLocale(option.code)}>{option.label}</button>)}
       </div>
       {(!confirmation && state.controller || operation === 'clear-error') && operation !== 'cleared' ? <button type="button" className="locale-button"
-        disabled={operation === 'locale' || operation === 'clearing'} onClick={() => void clear()}>
+        disabled={operation === 'locale' || operation === 'clearing' || operation === 'refreshing'} onClick={() => void clear()}>
         {text(operation === 'clearing' ? 'receipt.clearing' : 'receipt.clear')}
       </button> : null}
     </div>
@@ -259,8 +269,25 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
       && ['signed', 'refused', 'failed'].includes(state.controller.phase)
       && startupRoute?.signedReviewHref ? <button type="button" className="locale-button"
         onClick={() => onNavigate(startupRoute.signedReviewHref!)}>
-        {locale?.strings['$ui.response.reviewSigned'] ?? startupRoute.signedReviewTitle ?? 'Review signed response'}
+        {locale?.strings[`$module.${boot.host.moduleId}.response.reviewSigned`] ?? startupRoute.signedReviewTitle ?? 'Review signed response'}
       </button> : null}
+    {boot.host.applicationCapabilities && !state.cleared && operation !== 'cleared' ? <div className="native-application-status">
+      {state.application ? <>
+        <p role="status">{applicationText(state.application.status === 'submitted' ? 'submitted' : 'inProgress')
+          ?? (state.application.status === 'submitted' ? 'Application submitted' : 'Application in progress')}: {state.application.caseReference}</p>
+        <button type="button" className="locale-button" disabled={operation === 'refreshing' || operation === 'clearing'
+          || !!state.controller && !['idle', 'saved', 'prepared', 'signed', 'submitted', 'refused', 'failed'].includes(state.controller.phase)}
+          onClick={() => void refreshApplication()}>{applicationText('refresh') ?? 'Refresh application status'}</button>
+      </> : null}
+      {!confirmation ? <p role="status">{boot.host.applicationCapabilities.persistentSaving
+        ? applicationText(`checkpoint${checkpointSuffix}`)
+          ?? ({ unsaved: 'Changes have not been saved', saving: 'Saving progress', saved: 'Progress saved', failed: 'Progress could not be saved. Try again.' })[checkpoint]
+         : applicationText(`staging${checkpointSuffix}`)
+          ?? ({ unsaved: 'Signing copy has not been prepared', saving: 'Preparing signing copy', saved: 'Signing copy prepared', failed: 'Signing copy could not be prepared. Try again.' })[checkpoint]}</p> : null}
+      {!confirmation && !boot.host.applicationCapabilities.persistentSaving ? <p>{applicationText('saveUnavailable')
+        ?? 'Save for later is unavailable. Prepare a signing copy when you are ready.'}</p> : null}
+    </div> : null}
+    {operation === 'refresh-error' ? <p role="alert">{applicationText('refreshFailed') ?? 'Application status could not be confirmed. Try again.'}</p> : null}
     {operation === 'clear-error' ? <p role="alert">{text('draft.startCurrentFailed')}</p> : null}
     {operation === 'locale-error' ? <p role="alert">{text('form.languageSaveFailed')}</p> : null}
     {operation === 'cleared' ? <main className="shell__status">

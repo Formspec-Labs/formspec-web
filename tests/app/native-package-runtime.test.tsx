@@ -46,6 +46,36 @@ function fixture() {
   return { composition, boot, host, load, publish: (next: Partial<typeof state>) => { state = { ...state, ...next }; emit(); } };
 }
 describe('native package boot and scoped recovery', () => {
+  it.each([true, false])('shows truthful persistent-saving %s state without a case creation request', async persistentSaving => {
+    const test = fixture();
+    test.host.applicationCapabilities = { earlyCaseCreation: false, persistentSaving, formVersionId: 'publication' };
+    test.publish({ checkpointState: 'saved' });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    expect(await screen.findByText(persistentSaving ? 'Progress saved' : 'Signing copy prepared')).toBeTruthy();
+    expect(screen.queryByText('APP-001')).toBeNull();
+    expect(screen.queryByText('Application in progress')).toBeNull();
+    if (!persistentSaving) expect(screen.getByText(/Save for later is unavailable/)).toBeTruthy();
+  });
+  it('resolves lifecycle status text from the admitted publisher module', async () => {
+    const test = fixture(); test.host.moduleId = 'x-other'; test.boot.moduleId = 'x-other';
+    test.host.applicationCapabilities = { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'publication' };
+    test.boot.localeDocuments = localeDocuments.map(document => ({ ...document, strings: { ...document.strings,
+      '$module.x-other.application.inProgress': 'Current application', '$module.x-other.application.checkpointSaved': 'Current progress retained' } }));
+    test.publish({ checkpointState: 'saved', application: { caseLedgerId: 'urn:wos:private', caseReference: 'APP-001', draftRef: 'urn:formspec:draft:private', status: 'in-progress' } });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByText('Current application: APP-001'); expect(screen.getByText('Current progress retained')).toBeTruthy();
+  });
+  it('renders only the real display reference and refreshes the existing association explicitly', async () => {
+    const test = fixture(); test.host.applicationCapabilities = { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'publication' };
+    test.host.refreshApplication = vi.fn(async () => { test.publish({ application: { caseLedgerId: 'urn:wos:case-private', caseReference: 'APP-001',
+      draftRef: 'urn:formspec:draft:private', status: 'submitted' } }); });
+    test.publish({ controller: { phase: 'saved', owned: true }, application: { caseLedgerId: 'urn:wos:case-private', caseReference: 'APP-001', draftRef: 'urn:formspec:draft:private', status: 'in-progress' } });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByText('Application in progress: APP-001'); expect(test.host.refreshApplication).not.toHaveBeenCalled();
+    expect(screen.queryByText('urn:wos:case-private')).toBeNull(); expect(screen.queryByText('urn:formspec:draft:private')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh application status' }));
+    await screen.findByText('Application submitted: APP-001'); expect(test.host.refreshApplication).toHaveBeenCalledOnce();
+  });
   it('offers explicit selected OIDC sign-in before loading the native form', async () => {
     const test = fixture();
     const authenticate = vi.fn(async () => { throw new Error('Provider unavailable'); });

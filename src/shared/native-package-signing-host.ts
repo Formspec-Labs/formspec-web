@@ -27,6 +27,7 @@ export interface NativePackageSigningHostPolicy {
   /** Qualified host pins; this function must not derive pins from widget input. */
   signingContext: (locale: string) => ReturnType<ResponseActionControllerConfig['signingContext']>;
   semanticScope: (responseId: string, renderInstance: number) => SemanticControlScope;
+  applicationReadiness?: { instance: string; canStartPath: string; startedPath: string; persistentSavingPath: string };
   readiness: { instance: string; readyPath: string; ownedPath: string };
   bindings: Readonly<Record<string, { catalogRef: string; sourceRef: string }>>;
   /** Resolved mapped action labels from the exact admitted Locale. */
@@ -46,7 +47,7 @@ export interface NativePackageSigningHostPolicy {
 export function createNativePackageSigningHost(policy: NativePackageSigningHostPolicy) {
   policy = { ...policy, bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
     registryEntries: structuredClone(policy.registryEntries), locales: structuredClone(policy.locales), bindings: structuredClone(policy.bindings),
-    readiness: structuredClone(policy.readiness), publication: structuredClone(policy.publication),
+    applicationReadiness: structuredClone(policy.applicationReadiness), readiness: structuredClone(policy.readiness), publication: structuredClone(policy.publication),
     controller: { ...policy.controller, roles: structuredClone(policy.controller.roles) } };
   freezeMetadata(policy.bundle); freezeMetadata(policy.definition); freezeMetadata(policy.registryEntries); freezeMetadata(policy.locales);
   freezeMetadata(policy.bindings); freezeMetadata(policy.readiness); freezeMetadata(policy.publication); freezeMetadata(policy.controller.roles);
@@ -86,6 +87,14 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       if (!shape || !same(slot.resolution.entry?.widgetShape, shape)) throw new Error('native-widget-shape-unadmitted');
     }
   }
+  if (!!policy.applicationReadiness !== !!policy.controller.applicationLifecycle || !!policy.applicationReadiness !== !!policy.controller.roles.startApplication
+    || policy.controller.applicationLifecycle && policy.controller.applicationLifecycle.capabilities.formVersionId !== policy.publication.formVersionId) throw new Error('native-application-policy-unadmitted');
+  if (policy.applicationReadiness) {
+    const paths = policy.applicationReadiness; const scratch = policy.definition.instances?.[paths.instance];
+    if (scratch?.readonly !== false || [paths.canStartPath, paths.startedPath, paths.persistentSavingPath].some(path => atPath(scratch.data, path) !== false)
+      || new Set([paths.canStartPath, paths.startedPath, paths.persistentSavingPath]).size !== 3
+      || (paths.instance === policy.readiness.instance && [paths.canStartPath, paths.startedPath, paths.persistentSavingPath].some(path => [policy.readiness.readyPath, policy.readiness.ownedPath].includes(path)))) throw new Error('native-application-readiness-unadmitted');
+  }
   const scratch = policy.definition.instances?.[policy.readiness.instance];
   if (scratch?.readonly !== false || policy.readiness.readyPath === policy.readiness.ownedPath
     || atPath(scratch.data, policy.readiness.readyPath) !== false || atPath(scratch.data, policy.readiness.ownedPath) !== false) throw new Error('native-readiness-unadmitted');
@@ -102,6 +111,16 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     if (!descriptor || descriptor.source.runtime.provenance.source !== `${producer}:${name}`) throw new Error('native-source-unadmitted');
     return { name, descriptor };
   });
+  let application: ResponseActionControllerSnapshot['application'];
+  let checkpointState: 'unsaved' | 'saving' | 'saved' | 'failed' = 'unsaved';
+  let pendingCheckpoint = false;
+  const applicationFlags = () => {
+    const paths = policy.applicationReadiness; const capabilities = policy.controller.applicationLifecycle?.capabilities;
+    if (!rendererEngine || !paths || !capabilities) return;
+    rendererEngine.setInstanceValue(paths.instance, paths.canStartPath, capabilities.earlyCaseCreation);
+    rendererEngine.setInstanceValue(paths.instance, paths.startedPath, !!application);
+    rendererEngine.setInstanceValue(paths.instance, paths.persistentSavingPath, capabilities.persistentSaving);
+  };
   let controller: ReturnType<typeof createResponseActionController> | undefined;
   let input: RespondentOwnedRuntimeInput | undefined;
   let rendererEngine: IFormEngine | undefined;
@@ -133,8 +152,10 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const reads = new Set<AbortController>();
   const sourceRevisions = new Map<string, { value: string; revision: number }>();
   const engineFactory = policy.createEngine ?? createFormEngine;
-  let hostSnapshot = { generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted };
-  const emit = () => { hostSnapshot = Object.freeze({ generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
+  const applicationStatus = (): { application?: NonNullable<ResponseActionControllerSnapshot['application']> } => application ? { application } : {};
+  const checkpointStatus = (): { checkpointState?: 'unsaved' | 'saving' | 'saved' | 'failed' } => policy.controller.applicationLifecycle ? { checkpointState } : {};
+  let hostSnapshot = { ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted };
+  const emit = () => { hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
   function fence() {
     generation++; runtime = undefined; review = undefined; expectedReviewIdentity = undefined; reviewState = undefined;
     for (const read of reads) read.abort();
@@ -142,7 +163,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function current(expected: number) { if (disposed || generation !== expected) throw new Error('native-context-obsolete'); }
   function stop(reason: Parameters<NativePackageSigningHostPolicy['invalidateAuthority']>[0]) {
-    if (reason === 'clear' || reason === 'dispose') { ownedResponseSeed = undefined; submitted = undefined; }
+    if (reason === 'clear' || reason === 'dispose') { application = undefined; ownedResponseSeed = undefined; submitted = undefined; }
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
     authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? structuredClone(input.draftKey) : submittedKey ? structuredClone(submittedKey) : undefined);
   }
@@ -197,7 +218,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     if (restoredResponse) { ownedResponseSeed = structuredClone(restoredResponse); freezeMetadata(ownedResponseSeed); }
     unsubscribeController?.();
     const expected = authorityGeneration;
-    controller = createResponseActionController({ ...policy.controller, restoredResponse: ownedResponseSeed,
+    controller = createResponseActionController({ ...policy.controller, restoredApplication: application, restoredResponse: ownedResponseSeed,
       context: { definition: policy.definition, draftKey: input.draftKey, publication: policy.publication,
         responseId: responseId!, generation: String(expected) }, signingContext: () => policy.signingContext(locale),
       validateFrozenResponse: async (response, validationTuple) => {
@@ -224,6 +245,13 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
     unsubscribeController = controller.subscribe(() => {
       publicSnapshot = controller!.getSnapshot();
+      application = publicSnapshot.application; applicationFlags();
+      if (['saveInitial', 'saveOwned'].includes(publicSnapshot.phase) || publicSnapshot.phase === 'startApplication' && !publicSnapshot.owned) {
+        pendingCheckpoint = true; checkpointState = 'saving';
+      } else if (pendingCheckpoint) {
+        if (publicSnapshot.saved && ['saved', 'startApplication'].includes(publicSnapshot.phase)) { checkpointState = 'saved'; pendingCheckpoint = false; }
+        else if (['failed', 'refused'].includes(publicSnapshot.phase)) { checkpointState = 'failed'; pendingCheckpoint = false; }
+      }
       if (authorityGeneration === expected && publicSnapshot.saved) { ownedResponseSeed = structuredClone(publicSnapshot.saved.response); freezeMetadata(ownedResponseSeed); }
       rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
       const selected = publicSnapshot.signed ?? publicSnapshot.prepared;
@@ -269,12 +297,23 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const selected = policy.locales.find(document => document.locale.toLowerCase() === value.toLowerCase());
     if (disposed || cleared || !input || !selected) throw new Error('native-locale-unavailable');
     value = selected.locale;
+    checkpointState = 'unsaved';
     const saved = publicSnapshot?.saved?.response; stop('locale'); locale = value;
     rendererEngine?.setLocale(value); start(saved);
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
   }
   return {
-    bundle, moduleId: policy.moduleId, reviewOptions, selectLocale,
+    bundle, moduleId: policy.moduleId,
+    ...(policy.controller.applicationLifecycle ? { applicationCapabilities: policy.controller.applicationLifecycle.capabilities,
+      async refreshApplication() {
+        if (controller) return controller.refreshApplication();
+        if (disposed || cleared || !submittedKey || !application) throw new Error('native-application-unavailable');
+        const expected = authorityGeneration;
+        const receipt = await policy.controller.applicationLifecycle!.load(submittedKey);
+        if (disposed || cleared || authorityGeneration !== expected || !receipt || receipt.caseLedgerId !== application.caseLedgerId
+          || receipt.draftRef !== application.draftRef || application.status === 'submitted' && receipt.status !== 'submitted') throw new Error('native-application-context-retired');
+        application = structuredClone(receipt); freezeMetadata(application); emit();
+      } } : {}), reviewOptions, selectLocale,
     getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; signedReviewHref?: string; signedReviewTitle?: string } {
       const match = matchRoute(app, pathname).match;
       const entry = app.entry;
@@ -372,6 +411,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         || response.definitionUrl !== policy.definition.url || response.definitionVersion !== policy.definition.version) {
         throw new Error('native-submitted-context-refused');
       }
+      application = next.state.application ? structuredClone(next.state.application) : undefined; freezeMetadata(application);
       submittedKey = structuredClone(next.draftKey); freezeMetadata(submittedKey);
       responseId = response.id; locale = selectedLocale.locale;
       submitted = Object.freeze({ referenceNumber: response.id, recordKind: 'response' });
@@ -389,6 +429,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       next = { ...next, draftKey: structuredClone(next.draftKey), claim: structuredClone(next.claim),
         restoredResponse: next.restoredResponse ? structuredClone(next.restoredResponse) : undefined,
         restoredSigning: next.restoredSigning ? structuredClone(next.restoredSigning) : undefined, activeLocale: locale };
+      if (!input) checkpointState = next.restoredResponse ? 'saved' : 'unsaved';
+      if (!input && next.restoredApplication) { application = structuredClone(next.restoredApplication); freezeMetadata(application); }
       input = next;
       freezeMetadata(input.draftKey); freezeMetadata(input.claim); freezeMetadata(input.restoredResponse);
       rendererEngine = next.engine;
@@ -406,6 +448,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       }
       const scope = policy.semanticScope(responseId, ++renderInstance);
       if (scope.responseId !== responseId) throw new Error('native-response-scope-refused');
+      applicationFlags();
       next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot!.owned);
       next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
       const answers = () => canonicalize(next.engine.getFieldPaths().map(path => [path, next.engine.signals[path]?.value]));
@@ -421,7 +464,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         for (const path of next.engine.getFieldPaths()) void next.engine.signals[path]?.value;
         const value = answers();
         if (active && value !== previous) {
-          previous = value; const saved = publicSnapshot?.saved?.response; stop('edit'); start(saved);
+          previous = value; checkpointState = 'unsaved'; pendingCheckpoint = false; const saved = publicSnapshot?.saved?.response; stop('edit'); start(saved);
           next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
         }
       });

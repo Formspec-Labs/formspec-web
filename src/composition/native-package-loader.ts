@@ -8,6 +8,8 @@ import type { NativePackageSigningConfig } from '../config/native-package-signin
 import type { FormspecWebConfig } from '../config/types.ts';
 import { PinnedPackageDefinitionSource } from '../adapters/http/pinned-package-definition-source.ts';
 import { HttpDefinitionSource } from '../adapters/http/definition-source.ts';
+import { HttpClient } from '../adapters/http/http-client.ts';
+import { readApplicationLifecycleCapabilities } from '../adapters/http/application-lifecycle.ts';
 import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
 import { AnonymousSessionBridge } from '../adapters/http/anonymous-session.ts';
 import { HttpAttachmentStore } from '../adapters/http/attachment-store.ts';
@@ -20,7 +22,7 @@ import type { QualifiedResponseActionRole, ResponseActionRole } from '../shared/
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { buildIntakeHandoff, responseHash } from '../app/respondent-flow.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
-import type { ResponseSigning, SavedResponseDraft } from '../ports/response-signing.ts';
+import type { AdmittedResponseAction, ResponseSigning, SavedResponseDraft } from '../ports/response-signing.ts';
 import { freezeComposition } from '../policy/index.ts';
 import type { Composition } from './types.ts';
 
@@ -105,7 +107,11 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     if (!token) throw new Error('Selected OIDC session is unavailable');
     return token;
   } : undefined;
+  if (pins.applicationLifecycle && !options.identityBinding) throw new Error('Application lifecycle requires the selected authenticated session');
+  const lifecycleCapabilities = pins.applicationLifecycle
+    ? await readApplicationLifecycleCapabilities(new HttpClient({ ...base, accessToken: ownedAccessToken }), { formId: publication.form_id, formVersionId: publication.form_version_id }) : undefined;
   const cohort = createHttpAdapterCohort({ ...base, accessToken: ownedAccessToken, resumeMetadata, formIdResolver, anonymousSessions,
+    applicationLifecycle: lifecycleCapabilities ? { capabilities: lifecycleCapabilities, action: roles.startApplication as AdmittedResponseAction } : undefined,
     qualifiedDraftState: { definition, formVersionId: publication.form_version_id, localeDocuments },
     responseSigning: { keyId: pins.keyId, validateResponse: validateCanonicalFormResponse,
       validateContent, signingProfileDigest: responseSigningDigest } });
@@ -137,7 +143,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   const host = createNativePackageSigningHost({ bundle, definition, moduleId: pins.module.id, registryEntries: registryEntries.entries,
     locales: localeDocuments, initialLocale: pins.initialLocale,
     clearDraftAccess: async key => { formIdResolver(key.formUrl, key.formVersion); await cohort.draftStore.delete(key); owner = undefined; }, publication: { formId: publication.form_id, formVersionId: publication.form_version_id },
-    controller: { roles, signing, submitTransport: cohort.submitTransport, validateResponse: validateCanonicalFormResponse, hashResponse: handoffHash },
+    applicationReadiness: pins.applicationLifecycle,
+    controller: { applicationLifecycle: cohort.applicationLifecycle, roles, signing, submitTransport: cohort.submitTransport, validateResponse: validateCanonicalFormResponse, hashResponse: handoffHash },
     buildHandoff: (response, report, context) => buildIntakeHandoff({ definition, response, validationReport: report,
       draftKey: context.draftKey, claim: context.claim, idempotencyKey: generateIdempotencyKey() }),
     semanticScope: (responseId, renderInstance) => ({ registry: semantics, renderInstanceId: `native:${renderInstance}`,
@@ -177,7 +184,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
 async function qualifyRoles(bundle: BundleExport, pins: NativePackageSigningConfig): Promise<Record<ResponseActionRole, QualifiedResponseActionRole>> {
   const resolved = dereferenceBundleExport(bundle);
   const result = {} as Record<ResponseActionRole, QualifiedResponseActionRole>;
-  for (const [name, selected] of Object.entries(pins.roles) as [ResponseActionRole, NativePackageSigningConfig['roles'][ResponseActionRole]][]) {
+  for (const [name, selected] of Object.entries(pins.roles) as [ResponseActionRole, { artifactRef: string; actionRef: string }][]) {
     const document = resolved.responseActions.find(document => same(document, bundle.documents[selected.artifactRef]));
     if (!document || resolved.responseActions.filter(document => document.actions.some(action => action.id === selected.actionRef)).length !== 1) throw new Error('Native mapped action is unavailable or ambiguous');
     const action = resolveResponseAction(document, selected.actionRef).action;

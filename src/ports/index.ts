@@ -199,3 +199,5 @@ export { SurfaceBundleVerifierError } from './surface-bundle-verifier.ts';
 
 export { BrowserAuthSessionError } from './browser-auth-session.ts';
 export type { BrowserAuthSession, BrowserAuthSessionState, BrowserAuthSessionErrorCode } from './browser-auth-session.ts';
+
+export type { ApplicationLifecycle, ApplicationLifecycleCapabilities, ApplicationCaseReceipt } from './application-lifecycle.ts';

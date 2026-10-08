@@ -50,7 +50,8 @@ function saveAction(method: 'POST' | 'PATCH') {
 }
 const prepareAction = saveAction('PATCH');
 
-async function fixture(stateReading = false, authenticated = false, anonymousSubject = false) {
+async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean) {
+  const draftId = earlyCaseCreation === undefined ? 'owned-draft' : '00000000-0000-4000-8000-000000000001';
   const draftKey: DraftKey = authenticated ? { ...key, subjectRef: 'oidc:owner' }
     : anonymousSubject ? { ...key, subjectRef: 'anon:owner' } : key;
   const values = new Map<string, string>();
@@ -64,12 +65,16 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
     tokenGate: undefined as Promise<void> | undefined, formVersionId: 'publication-1',
     mutateSigned: undefined as ((response: FormResponse) => void) | undefined,
     createGate: undefined as Promise<void> | undefined, patchGate: undefined as Promise<void> | undefined, signGate: undefined as Promise<void> | undefined, getGate: undefined as Promise<void> | undefined, getStatus: 200 };
-  const view = () => ({ draft_id: 'owned-draft', form_version_id: state.formVersionId, subject_ref: state.actor,
+  const view = () => ({ draft_id: draftId, form_version_id: state.formVersionId, subject_ref: state.actor,
     status: state.status, draft_version: state.version, draft_state: state.response.data, canonical_response: structuredClone(state.response) });
   const { fetch, requests } = recordingFetch(async request => {
     if (authenticated && (!state.token || request.headers.get('authorization') !== `Bearer ${state.token}`)) return jsonResponse({ detail: 'unauthorized' }, 401);
     if (request.url.endsWith('/sessions/anonymous')) return jsonResponse({ session_id: 'session', session_token: 'owner-token',
       subject_ref: 'anon:owner', form_id: 'conformance', expires_at: '2099-01-01T00:00:00Z' });
+    if (request.url.endsWith('/application-case')) {
+      expect(request.method).toBe('GET');
+      return jsonResponse({ caseLedgerId: 'urn:wos:real-case', caseReference: 'APP-001', draftRef: `urn:formspec:draft:${draftId}`, status: state.status === 'submitted' ? 'submitted' : 'in-progress' });
+    }
     if (request.method === 'GET') { await state.getGate; return jsonResponse(view(), state.getStatus); }
     if (request.url.endsWith('/submit')) return jsonResponse({ response_id: response.id, status: 'accepted' });
     if (request.url.endsWith('/sign')) {
@@ -109,9 +114,16 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
     locale: response.displayedLocale!.locale, target: { kind: 'definition' as const, url: definition.url }, strings: {},
   }] };
   const metadata = createBrowserDraftResumeMetadataStore(context, storage);
+  const startAction = structuredClone(action);
+  startAction.actionRef = 'start'; startAction.requestRef = 'start';
+  startAction.document.actions = [{ id: 'start', intent: 'x-start-application', validation: { profile: 'off', blocking: 'non-blocking', persistence: 'none' },
+    effects: [{ type: 'serviceRequest', requestRef: 'start', idempotencyKey: '@invocation.id' }] }];
+  startAction.document['x-formspec-runtime'] = { version: '1.0', requests: [{ id: 'start', adapter: 'http-json', request: { method: 'POST',
+    pathTemplate: '/drafts/{draftId}/application-case', pathBindings: { draftId: { from: 'input', path: 'draftId' } }, bodyDefaults: {} }, successStatuses: [200] }] };
   const build = () => {
     const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
-    return createHttpAdapterCohort({ ...config, responseSigning: policy, ...(stateReading ? { qualifiedDraftState: statePolicy } : {}),
+    return createHttpAdapterCohort({ ...config, responseSigning: policy,
+      ...(earlyCaseCreation !== undefined ? { applicationLifecycle: { capabilities: { earlyCaseCreation, persistentSaving: true, formVersionId: 'publication-1' }, action: startAction } } : {}), ...(stateReading ? { qualifiedDraftState: statePolicy } : {}),
       ...(authenticated ? { accessToken: async () => { await state.tokenGate; return state.token; } } : { anonymousSessions: new AnonymousSessionBridge(config) }) });
   };
   const cohort = build();
@@ -147,6 +159,21 @@ async function profileDigest(response: FormResponse): Promise<string> {
 }
 
 describe('cohort-owned Response Prepare and Sign', () => {
+  it.each([true, false])('restores the existing case through GET when early creation is %s', async earlyCaseCreation => {
+    const test = await fixture(true, true, false, earlyCaseCreation);
+    await test.save(); await test.sign(await test.prepare());
+    await test.cohort.draftStore.invalidateSubject(test.draftKey.subjectRef!);
+    const writes = test.requests.filter(request => request.method !== 'GET').length;
+    for (const submitted of [false, true]) {
+      if (submitted) { test.state.status = 'submitted'; test.state.version++; }
+      const state = await test.build().draftStore.readState!(test.draftKey);
+      expect(state).toMatchObject({ kind: submitted ? 'submitted' : 'active', application: { caseReference: 'APP-001', status: submitted ? 'submitted' : 'in-progress' } });
+      expect(test.requests.slice(-2).map(request => request.method)).toEqual(['GET', 'GET']);
+      expect(test.requests.at(-1)?.url).toMatch(/application-case$/);
+    }
+    expect(test.requests.filter(request => request.method !== 'GET')).toHaveLength(writes);
+    expect(test.state.createCount).toBe(1); expect(test.state.signCount).toBe(1);
+  });
   it('retains only the authenticated locator through withdrawal and requires a fresh owner GET', async () => {
     const test = await fixture(true, true);
     await test.save(); const prepared = await test.prepare(); const signed = await test.sign(prepared);

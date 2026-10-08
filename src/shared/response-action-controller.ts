@@ -3,12 +3,13 @@ import { extractServiceRequestOutputs, invokeResponseActionAsync, planServiceReq
 import type { ResponseActionInvoker, SubmitResult } from '@formspec-org/react';
 import type { SurfaceWidgetActionExecutor, SurfaceWidgetActionSource } from '@formspec-org/surface-react';
 import type { FormDefinition, FormResponse, SigningContentSource, ValidationOverride } from '@formspec-org/types';
+import type { ApplicationCaseReceipt, ApplicationLifecycle } from '../ports/application-lifecycle.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { AdmittedResponseAction, PreparedResponseSigning, ResponseSigning, SavedResponseDraft, SignedResponseSigning } from '../ports/response-signing.ts';
 import type { IntakeHandoff, SubmitConfirmation, SubmitTransport } from '../ports/submit-transport.ts';
 import { generateIdempotencyKey } from './idempotency-key.ts';
 
-export type ResponseActionRole = 'saveInitial' | 'saveOwned' | 'prepare' | 'sign' | 'submit' | 'paper';
+export type ResponseActionRole = 'startApplication' | 'saveInitial' | 'saveOwned' | 'prepare' | 'sign' | 'submit' | 'paper';
 export type ResponseActionControllerReason = 'action-unadmitted' | 'context-mismatch' | 'response-invalid' | 'branch-mismatch' | 'outputs-unsupported' | 'review-unready' | 'operation-conflict' | 'operation-pending' | 'context-obsolete' | 'restoration-unresolved' | 'port-failed';
 export interface QualifiedResponseActionRole extends Omit<AdmittedResponseAction, 'requestRef'> {
   requestRef?: string;
@@ -35,6 +36,7 @@ export interface ResponseActionReviewContext {
 export interface ResponseActionControllerSnapshot {
   phase: 'idle' | ResponseActionRole | 'saved' | 'prepared' | 'signed' | 'submitted' | 'refused' | 'failed';
   owned: boolean;
+  application?: ApplicationCaseReceipt;
   reason?: ResponseActionControllerReason;
   saved?: SavedResponseDraft;
   prepared?: PreparedResponseSigning;
@@ -42,6 +44,8 @@ export interface ResponseActionControllerSnapshot {
   confirmation?: SubmitConfirmation;
 }
 export interface ResponseActionControllerConfig {
+  applicationLifecycle?: ApplicationLifecycle;
+  restoredApplication?: ApplicationCaseReceipt;
   context: ResponseActionControllerContext;
   roles: Partial<Record<ResponseActionRole, QualifiedResponseActionRole>>;
   restoredResponse?: FormResponse;
@@ -77,6 +81,7 @@ export function createResponseActionController(config: ResponseActionControllerC
   let invalidated = false;
   let owned = restored !== undefined;
   let actor = context.expectedActor;
+  let application = config.restoredApplication ? freeze(structuredClone(config.restoredApplication)) : undefined;
   let saved: SavedResponseDraft | undefined;
   // Keep the actual cohort preparation privately: its WeakMap identity authorizes Sign.
   let prepared: PreparedResponseSigning | undefined;
@@ -84,13 +89,13 @@ export function createResponseActionController(config: ResponseActionControllerC
   let busy: string | undefined;
   let confirmedDelivery: string | undefined;
   let completedSubmit: { identity: string; result: ResponseActionInvocationResult<SubmitResult> } | undefined;
-  let snapshot: ResponseActionControllerSnapshot = freeze({ phase: 'idle', owned });
+  let snapshot: ResponseActionControllerSnapshot = freeze({ phase: 'idle', owned, ...(application ? { application } : {}) });
   const listeners = new Set<() => void>();
   const deliveries = new Map<string, Delivery>();
 
   function publish(phase: ResponseActionControllerSnapshot['phase'], reason?: ResponseActionControllerReason, confirmation?: SubmitConfirmation) {
     snapshot = freeze(structuredClone({ phase, owned, ...(reason ? { reason } : {}),
-      ...(saved ? { saved } : {}), ...(prepared ? { prepared } : {}), ...(signed ? { signed } : {}), ...(confirmation ? { confirmation } : {}) }));
+      ...(application ? { application } : {}), ...(saved ? { saved } : {}), ...(prepared ? { prepared } : {}), ...(signed ? { signed } : {}), ...(confirmation ? { confirmation } : {}) }));
     for (const listener of listeners) listener();
   }
   function current(generation: number) { if (invalidated || generation !== epoch) throw new ControllerRefusal('context-obsolete'); }
@@ -104,7 +109,9 @@ export function createResponseActionController(config: ResponseActionControllerC
     const action = resolution.action;
     if (!resolution.resolved || !action || admission.document.scope === 'app'
       || admission.document.targetDefinition?.url !== context.definition.url) throw new ControllerRefusal('action-unadmitted');
-    resolveResponseActionValidationTuple(action);
+    const tuple = resolveResponseActionValidationTuple(action);
+    if (role === 'startApplication' && (action.intent !== 'x-start-application'
+      || !same(tuple, { profile: 'off', blocking: 'non-blocking', persistence: 'none' }))) throw new ControllerRefusal('action-unadmitted');
     if (action.effects?.length !== 1) throw new ControllerRefusal('action-unadmitted');
     const effect = action.effects[0];
     if (role === 'paper') {
@@ -115,12 +122,12 @@ export function createResponseActionController(config: ResponseActionControllerC
       || effect.idempotencyKey !== '@invocation.id' || !admission.artifactRef || !admission.artifactDigest) throw new ControllerRefusal('action-unadmitted');
     const request = resolveServiceRequest(admission.document['x-formspec-runtime'], admission.requestRef!);
     if (!same(request.successStatuses, [200])) throw new ControllerRefusal('action-unadmitted');
-    const fields = role === 'submit' ? ['/response_id', '/status']
+    const fields = role === 'startApplication' ? ['/caseLedgerId', '/caseReference', '/draftRef', '/status'] : role === 'submit' ? ['/response_id', '/status']
       : ['/draft_id', '/form_version_id', '/subject_ref', '/draft_version', '/draft_state', '/canonical_response', '/status'];
     for (const [name, output] of Object.entries(request.outputs ?? {})) {
       if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(name) || !fields.includes(output.path)
         || (output.exposure !== undefined && !['internal', 'transition'].includes(output.exposure))
-        || (output.exposure === 'transition' && !['/draft_id', '/form_version_id', '/subject_ref', '/status', '/response_id'].includes(output.path))) {
+        || (output.exposure === 'transition' && (role === 'startApplication' || !['/draft_id', '/form_version_id', '/subject_ref', '/status', '/response_id'].includes(output.path)))) {
         throw new ControllerRefusal('outputs-unsupported');
       }
     }
@@ -155,6 +162,8 @@ export function createResponseActionController(config: ResponseActionControllerC
     const request = requestFor(role, admission);
     await validateResponse(response);
     current(generation);
+    if (role === 'startApplication' && (!config.applicationLifecycle?.capabilities.earlyCaseCreation
+      || config.applicationLifecycle.capabilities.formVersionId !== context.publication.formVersionId || signed)) throw new ControllerRefusal('branch-mismatch');
     if (restored?.authoredSignatures?.length && !signed) throw new ControllerRefusal('restoration-unresolved');
     const wording = freeze(structuredClone(config.signingContext()));
     const subject = role === 'sign' ? prepared : role === 'submit' ? signed : saved;
@@ -193,7 +202,7 @@ export function createResponseActionController(config: ResponseActionControllerC
     publish(role);
     const pending = (async () => {
       // The cohort owns hidden locator planning on a restored owned Save with no exposed evidence.
-      if (request && (role !== 'saveOwned' || saved)) {
+      if (request && role !== 'startApplication' && (role !== 'saveOwned' || saved)) {
         const planned = planServiceRequest(request, { input: { ...input, formId: context.publication.formId,
           draftId: subject?.draft.id, draftVersion: subject?.draft.version,
           frozenResponse: response }, route: {}, session: {} });
@@ -205,6 +214,26 @@ export function createResponseActionController(config: ResponseActionControllerC
       }
       current(generation);
       if (role === 'paper') { publish('paper'); return {}; }
+      if (role === 'startApplication') {
+        if (!owned) {
+          const checkpoint = roles.saveInitial;
+          if (!checkpoint) throw new ControllerRefusal('action-unadmitted');
+          const tuple = resolveResponseActionValidationTuple(resolveResponseAction(checkpoint.document, checkpoint.actionRef).action!);
+          if (!same(tuple, { profile: 'off', blocking: 'non-blocking', persistence: 'draft-checkpoint' })) throw new ControllerRefusal('action-unadmitted');
+          requestFor('saveInitial', checkpoint);
+          saved = await config.signing.saveDraft({ ...context, formId: context.publication.formId, formVersionId: context.publication.formVersionId,
+            response, operationId: operation.operationId, action: checkpoint as AdmittedResponseAction });
+          current(generation); await checkEvidence(saved, response); current(generation);
+          actor = saved.actor.id; owned = true; publish('startApplication');
+        }
+        const receipt = await config.applicationLifecycle!.start(context.draftKey, operation.operationId);
+        current(generation);
+        if (application && (application.caseLedgerId !== receipt.caseLedgerId || application.draftRef !== receipt.draftRef)) throw new ControllerRefusal('context-mismatch');
+        if (saved && receipt.draftRef !== `urn:formspec:draft:${saved.draft.id}`) throw new ControllerRefusal('context-mismatch');
+        application = freeze(structuredClone(receipt));
+        publish('saved');
+        return { ...extractServiceRequestOutputs(request!, application).transitionBindings };
+      }
       const action = admission as AdmittedResponseAction;
       let result: SavedResponseDraft;
       if (role === 'saveInitial' || role === 'saveOwned') {
@@ -269,7 +298,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       current(generation);
       if (snapshot.confirmation) throw new ControllerRefusal('operation-conflict');
       const [role, admission] = roleFor(input.document, input.actionRef);
-      if (!['saveInitial', 'saveOwned', 'prepare', 'paper'].includes(role)) throw new ControllerRefusal('action-unadmitted');
+      if (!['startApplication', 'saveInitial', 'saveOwned', 'prepare', 'paper'].includes(role)) throw new ControllerRefusal('action-unadmitted');
       requestFor(role, admission);
       return await invokeResponseActionAsync(admission.document, input.actionRef, { ...input.ports,
         dispatchHostEvent: () => { current(generation); publish('paper'); },
@@ -336,6 +365,16 @@ export function createResponseActionController(config: ResponseActionControllerC
     } catch (error) { return failure(input.document, input.actionRef, input.invocationId, fail(error, generation)); }
   };
   return {
+    async refreshApplication() {
+      const generation = epoch; current(generation);
+      if (!application || !config.applicationLifecycle || busy) throw new ControllerRefusal('branch-mismatch');
+      const receipt = await config.applicationLifecycle.load(context.draftKey);
+      current(generation);
+      if (!receipt || receipt.caseLedgerId !== application.caseLedgerId || receipt.draftRef !== application.draftRef
+        || application.status === 'submitted' && receipt.status !== 'submitted') throw new ControllerRefusal('context-mismatch');
+      application = freeze(structuredClone(receipt));
+      publish(snapshot.phase, snapshot.reason, snapshot.confirmation);
+    },
     definitionInvoker, widgetExecutor,
     async restoreSigned(value: SignedResponseSigning) {
       const generation = epoch;
