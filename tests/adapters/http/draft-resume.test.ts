@@ -22,6 +22,44 @@ const grant = { session_id: 'session', session_token: 'server-owner-token', subj
   form_id: 'conformance', expires_at: '2099-01-01T00:00:00Z' };
 
 describe('tab metadata anonymous draft resume', () => {
+  it.each([
+    { config: context, serializedContext: '{"endpoint":"https://server.example.test/api","tenantBinding":{"kind":"bound","scope":{"tenant":"tenant","workspace":"workspace","environment":"test","cell":"cell"},"headerMode":null}}' },
+    { config: { baseUrl: context.baseUrl }, serializedContext: '{"endpoint":"https://server.example.test/api","tenantBinding":null}' },
+    ...(['sentinel-until-ext24', 'omit-post-ext24'] as const).map(headerMode => ({
+      config: { baseUrl: context.baseUrl, tenantBinding: {
+        kind: 'implicit' as const, sentinelScope: context.tenantBinding.scope, headerMode,
+      } },
+      serializedContext: headerMode === 'sentinel-until-ext24'
+        ? '{"endpoint":"https://server.example.test/api","tenantBinding":{"kind":"implicit","scope":{"tenant":"tenant","workspace":"workspace","environment":"test","cell":"cell"},"headerMode":"sentinel-until-ext24"}}'
+        : '{"endpoint":"https://server.example.test/api","tenantBinding":{"kind":"implicit","scope":{"tenant":"tenant","workspace":"workspace","environment":"test","cell":"cell"},"headerMode":"omit-post-ext24"}}',
+    })),
+  ])('preserves the existing draft metadata address and record bytes for $serializedContext', ({ config, serializedContext }) => {
+    const storage = tabStorage();
+    const slot = 'grant:form';
+    const oldKey = `formspec-web:draft-resume:v1:${serializedContext}:${slot}`;
+    const oldRaw = JSON.stringify({ context: serializedContext, slot, value: { token: 'same-token' } });
+    storage.values.set(oldKey, oldRaw);
+    const metadata = createBrowserDraftResumeMetadataStore(config, storage);
+    expect(metadata.read(slot)).toEqual({ token: 'same-token' });
+    metadata.write(slot, { token: 'same-token' });
+    expect([...storage.values]).toEqual([[oldKey, oldRaw]]);
+  });
+
+  it('refuses a draft metadata write that storage silently drops', () => {
+    const metadata = createBrowserDraftResumeMetadataStore(context, {
+      getItem: () => null, setItem: () => {}, removeItem: () => {},
+    });
+    expect(() => metadata.write('grant:form', { token: 'token' })).toThrow(/unavailable or invalid/);
+  });
+
+  it('refuses a draft metadata remove that storage silently retains', () => {
+    const storage = tabStorage();
+    const metadata = createBrowserDraftResumeMetadataStore(context, { ...storage, removeItem: () => {} });
+    metadata.write('grant:form', { token: 'token' });
+    expect(() => metadata.remove('grant:form')).toThrow(/unavailable or invalid/);
+    expect(metadata.read('grant:form')).toEqual({ token: 'token' });
+  });
+
   it('exposes only a copied immutable current key and retained version for recovery', () => {
     const current = { ...key, formVersion: '0.1.3', partyRef: 'applicant' };
     const registry = createDraftBindingRegistry();

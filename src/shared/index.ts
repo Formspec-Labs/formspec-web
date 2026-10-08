@@ -11,3 +11,5 @@ export { createFrozenHostStateDataSourceRuntime, type FrozenHostStateDataInput }
 export { createResponseSigningDataSourceRuntime, type ResponseSigningDataInput } from './response-signing-data.ts';
 
 export { matchBrowserAuthCallback, completeBrowserAuthCallback, type BrowserAuthCallbackUris, type AuthCallbackKind } from './browser-auth-callback.ts';
+
+export { createBrowserScopedMetadataStore, type BrowserScopedMetadataConfig, type ScopedMetadataStore } from './browser-scoped-metadata.ts';
