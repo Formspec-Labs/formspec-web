@@ -2662,7 +2662,7 @@ function UnbrandedCover({
   );
 }
 
-function AuthRequiredSurface({
+export function AuthRequiredSurface({
   authenticating,
   error,
   headingLevel = 'h1',
@@ -2688,7 +2688,7 @@ function AuthRequiredSurface({
       : 'Sign in to continue';
   const body = reason === 'assurance-step-up'
     ? 'This form needs a stronger sign-in before it can be loaded. Choose one of the listed options to continue.'
-    : 'This form requires a verified sign-in before it can be loaded.';
+    : 'Sign in to continue with this form.';
   const Heading = headingLevel;
   return (
     <section className="auth-required" aria-labelledby="auth-required-title">

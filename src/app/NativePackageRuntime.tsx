@@ -6,7 +6,10 @@ import type { IdentityBinding } from '../composition/default.ts';
 import type { Composition } from '../composition/types.ts';
 import type { NativePackageBoot } from '../composition/native-package.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
-import { ConfirmationPanel } from './RespondentRuntime.tsx';
+import type { IdpOption } from '../ports/identity-provider.ts';
+import { AuthRequiredSurface, ConfirmationPanel } from './RespondentRuntime.tsx';
+import { isIdentityInteractionStarted } from './respondent-flow.ts';
+import { clearNativeSignInReturn, rememberNativeSignInReturn } from './auth-callback.ts';
 import { NativePackageRespondentHost } from './NativePackageRespondentHost.tsx';
 import { chooseComposition } from './main-helpers.ts';
 
@@ -34,6 +37,65 @@ export function NativePackageRoot({ config, identityBindingFactory }: { config: 
 }
 
 export function NativePackageRuntime({ composition, config }: { composition: Composition; config: FormspecWebConfig }) {
+  const required = !!composition.browserAuthSession
+    && (config.identity.mode === 'oidc-required' || config.ports.identityProvider === 'oidc');
+  return required
+    ? <NativePackageSignIn key={config.identity.oidc?.issuer} composition={composition} config={config} />
+    : <AdmittedNativePackageRuntime composition={composition} config={config} />;
+}
+
+/** Explicit sign-in uses the composition's selected provider; boot owns recovery afterwards. */
+function NativePackageSignIn({ composition, config }: { composition: Composition; config: FormspecWebConfig }) {
+  const [state, setState] = useState<{ owner?: Composition; ready?: boolean; options?: IdpOption[]; authenticating?: boolean; error?: unknown }>({});
+  const attempt = useRef(false);
+  const lifetime = useRef(0);
+  useEffect(() => {
+    const generation = ++lifetime.current;
+    attempt.current = false;
+    setState({ owner: composition });
+    void (async () => {
+      const session = await composition.browserAuthSession!.getSession();
+      if (lifetime.current !== generation) return;
+      if (session) { setState({ owner: composition, ready: true }); return; }
+      const choices = await composition.identityProvider.discover(config.identity.oidc?.minAssurance);
+      if (lifetime.current !== generation) return;
+      const options = choices.filter(option => option.kind === 'oidc' && option.issuer === config.identity.oidc?.issuer);
+      if (!options.length) throw new Error('The configured sign-in option is unavailable.');
+      setState({ owner: composition, options });
+    })().catch(error => { if (lifetime.current === generation) setState({ owner: composition, options: [], error }); });
+    return () => { ++lifetime.current; };
+  }, [composition, config]);
+  async function signIn(option: IdpOption) {
+    if (attempt.current) return;
+    attempt.current = true;
+    const generation = lifetime.current;
+    const href = window.location.href;
+    let retained = false;
+    setState(current => ({ ...current, authenticating: true, error: undefined }));
+    try {
+      retained = rememberNativeSignInReturn(href, config);
+      await composition.identityProvider.authenticate(option);
+      if (lifetime.current !== generation) return;
+      if (!await composition.browserAuthSession!.getSession()) throw new Error('Sign-in could not be confirmed.');
+      if (lifetime.current !== generation) return;
+      if (retained) clearNativeSignInReturn(href, config);
+      if (lifetime.current === generation) setState({ owner: composition, ready: true });
+    } catch (error) {
+      if (lifetime.current !== generation || isIdentityInteractionStarted(error)) return;
+      attempt.current = false;
+      if (retained) { try { clearNativeSignInReturn(href, config); } catch { /* Retained navigation grants no access. */ } }
+      setState(current => ({ ...current, authenticating: false, error }));
+    }
+  }
+  if (state.owner !== composition || !state.options && !state.ready) return <NativePackageStatus />;
+  if (state.ready) return <AdmittedNativePackageRuntime composition={composition} config={config} />;
+  return <main className="fs-surface-admission native-package-status">
+    <AuthRequiredSurface options={state.options ?? []} reason="initial-sign-in" authenticating={!!state.authenticating}
+      error={state.error} onSignIn={option => void signIn(option)} />
+  </main>;
+}
+
+function AdmittedNativePackageRuntime({ composition, config }: { composition: Composition; config: FormspecWebConfig }) {
   const [state, setState] = useState<{ owner?: Composition; boot?: NativePackageBoot; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; failed?: boolean; identityChanged?: boolean }>({});
   const lifetime = useMemo(() => ({ generation: 0 }), [composition]);
   const [location, navigate] = useBrowserLocation(window.location.pathname);

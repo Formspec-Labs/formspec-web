@@ -7,6 +7,8 @@ import { dereferenceBundleExport, type BundleExport } from '@formspec-org/surfac
 import { UI_STRINGS } from '@formspec-org/layout';
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
 import { NativePackageRoot, NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
+import { rememberNativeSignInReturn } from '../../src/app/auth-callback.ts';
+import { createBrowserScopedMetadataStore } from '../../src/shared/browser-scoped-metadata.ts';
 import type { BrowserAuthSessionState } from '../../src/ports/browser-auth-session.ts';
 import type { NativePackageBoot } from '../../src/composition/native-package.ts';
 import type { NativePackageSigningHost } from '../../src/shared/native-package-signing-host.ts';
@@ -22,7 +24,7 @@ const exported = JSON.parse(readFileSync(resolve(fixtureRoot, 'native-bundle.jso
 const bundle = dereferenceBundleExport(exported);
 const componentDocument = JSON.parse(readFileSync(resolve(fixtureRoot, 'passport-renewal.component.json'), 'utf8')) as ComponentDocument;
 const localeDocuments = Object.values(exported.documents).filter(document => typeof document === 'object' && document !== null && '$formspecLocale' in document) as LocaleDocument[];
-afterEach(() => { cleanup(); observed.props = undefined; observed.choose.mockReset(); window.history.replaceState(null, '', '/'); });
+afterEach(() => { cleanup(); observed.props = undefined; observed.choose.mockReset(); window.history.replaceState(null, '', '/'); window.sessionStorage.clear(); });
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; }); return { promise, resolve, reject }; }
 function fixture() {
   let state: Partial<ReturnType<NativePackageSigningHost['getSnapshot']>> = { generation: 1, locale: 'en', cleared: false, controller: {} as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']>, runtime: undefined };
@@ -42,6 +44,71 @@ function fixture() {
   return { composition, boot, host, load, publish: (next: Partial<typeof state>) => { state = { ...state, ...next }; emit(); } };
 }
 describe('native package boot and scoped recovery', () => {
+  it('offers explicit selected OIDC sign-in before loading the native form', async () => {
+    const test = fixture();
+    const authenticate = vi.fn(async () => { throw new Error('Provider unavailable'); });
+    test.composition.browserAuthSession = { getSession: async () => null } as never;
+    test.composition.identityProvider = {
+      discover: async () => [
+        { kind: 'anonymous', minAssurance: 'L1' },
+        { kind: 'oidc', issuer: departmentAppProfile.identity.oidc!.issuer, displayName: 'Applicant account', minAssurance: 'L2' },
+      ], authenticate, revoke: async () => {}, subscribe: () => () => {},
+    };
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    const signIn = await screen.findByRole('button', { name: 'Sign in with Applicant account' });
+    expect(test.load).not.toHaveBeenCalled(); expect(authenticate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('native-route')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue without an account' })).toBeNull();
+    fireEvent.click(signIn);
+    await screen.findByRole('alert');
+    expect(authenticate).toHaveBeenCalledOnce(); expect(test.load).not.toHaveBeenCalled();
+    expect(signIn.hasAttribute('disabled')).toBe(false);
+  });
+  it.each(['complete', 'redirect'] as const)('uses maintained sign-in outcome without premature native loading: %s', async outcome => {
+    window.history.replaceState(null, '', '/?form=passport&package=%2Fpackage.json');
+    const test = fixture();
+    let signedIn = false;
+    test.composition.browserAuthSession = { getSession: async () => signedIn
+      ? { issuer: departmentAppProfile.identity.oidc!.issuer, subject: 'owner', revision: 1, expiresAt: '2099-01-01T00:00:00Z' } : null,
+      subscribe: () => () => {}, } as never;
+    const authenticate = vi.fn(async () => {
+      if (outcome === 'redirect') { const error = new Error('Redirect started'); error.name = 'IdentityInteractionStartedError'; throw error; }
+      signedIn = true;
+      return {} as never;
+    });
+    test.composition.identityProvider = {
+      discover: async () => [{ kind: 'oidc', issuer: departmentAppProfile.identity.oidc!.issuer, displayName: 'Applicant account', minAssurance: 'L2' }],
+      authenticate, revoke: async () => {}, subscribe: () => () => {},
+    };
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Applicant account' }));
+    if (outcome === 'complete') await screen.findByTestId('native-route');
+    else {
+      const pending = await screen.findByRole('button', { name: 'Opening sign-in' });
+      expect(pending.hasAttribute('disabled')).toBe(true);
+      expect(test.load).not.toHaveBeenCalled(); expect(screen.queryByRole('alert')).toBeNull();
+    }
+    expect(authenticate).toHaveBeenCalledOnce();
+  });
+  it('ignores authentication completion after the native selection is unmounted', async () => {
+    window.history.replaceState(null, '', '/?form=old&package=%2Fold.json');
+    const test = fixture(); const gate = deferred<never>();
+    test.composition.browserAuthSession = { getSession: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ subject: 'owner' }) } as never;
+    test.composition.identityProvider = {
+      discover: async () => [{ kind: 'oidc', issuer: departmentAppProfile.identity.oidc!.issuer, displayName: 'Applicant account', minAssurance: 'L2' }],
+      authenticate: () => gate.promise, revoke: async () => {}, subscribe: () => () => {},
+    };
+    const mounted = render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Applicant account' }));
+    mounted.unmount();
+    rememberNativeSignInReturn(new URL('/?form=new&package=%2Fnew.json', window.location.href).href, departmentAppProfile);
+    await act(async () => gate.resolve({} as never));
+    expect(test.load).not.toHaveBeenCalled(); expect(screen.queryByTestId('native-route')).toBeNull();
+    const oidc = departmentAppProfile.identity.oidc!;
+    expect(createBrowserScopedMetadataStore({ namespace: 'formspec-web:signin-navigation',
+      context: { origin: window.location.origin, issuer: oidc.issuer, clientId: oidc.clientId,
+        redirectUri: oidc.redirectUri, tenantBinding: departmentAppProfile.tenantBinding } }).read('return')).toBe('/?form=new&package=%2Fnew.json');
+  });
   it.each(['withdraw', 'replace', 'renew'] as const)('retires native review authority when the admitted OIDC session changes: %s', async change => {
     const test = fixture();
     const state = { issuer: 'https://idp.test', subject: 'owner', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
@@ -65,7 +132,7 @@ describe('native package boot and scoped recovery', () => {
     const test = fixture(); const gate = deferred<'active'>();
     test.boot.resumeSubmitted = () => gate.promise;
     let notify!: (value: BrowserAuthSessionState | null) => void;
-    test.boot.composition.browserAuthSession = { subscribe: (listener: typeof notify) => {
+    test.boot.composition.browserAuthSession = { getSession: async () => ({ issuer: 'https://idp.test', subject: 'owner', revision: 1, expiresAt: '2099-01-01T00:00:00Z' }), subscribe: (listener: typeof notify) => {
       notify = listener; listener({ issuer: 'https://idp.test', subject: 'owner', revision: 1, expiresAt: '2099-01-01T00:00:00Z' });
       return () => {};
     } } as never;
