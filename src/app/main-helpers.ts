@@ -77,7 +77,8 @@ export function chooseComposition({
   return createDefaultComposition(
     config,
     {
-      ...(identityBindingFactory && !(rootFormRoute?.kind === 'selected' && rootFormRoute.packageUrl)
+      ...(identityBindingFactory && (config.ports.identityProvider === 'oidc'
+        || !(rootFormRoute?.kind === 'selected' && rootFormRoute.packageUrl))
         ? { identityBinding: identityBindingFactory() } : {}),
       ...(rootFormRoute?.kind === 'selected'
         ? {

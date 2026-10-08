@@ -5,6 +5,8 @@ import type { RuntimeConfig } from './config/types.ts';
 declare global {
   interface Window {
     __FORMSPEC_RUNTIME_CONFIG__?: RuntimeConfig;
+    /** Public preview fallbacks; explicit environment/window settings take precedence. */
+    __FORMSPEC_RUNTIME_DEFAULTS__?: RuntimeConfig;
   }
 
   interface ImportMetaEnv {

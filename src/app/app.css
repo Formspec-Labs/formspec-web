@@ -991,3 +991,45 @@ select {
   background: transparent;
   color: var(--formspec-color-primary, #155e56);
 }
+
+/* Native package chrome stays outside the authored route theme. */
+.native-package-workspace > .respondent-toolbar {
+  width: min(100% - 2rem, 72rem);
+  margin: 1rem auto 0;
+  border-top: 0;
+}
+
+.native-package-status {
+  width: min(100% - 2rem, 38rem);
+  margin: clamp(2rem, 8vh, 5rem) auto;
+  padding: 1.5rem 0;
+  line-height: 1.55;
+}
+
+.native-package-status h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  line-height: 1.2;
+}
+
+.native-package-status .locale-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.native-package-workspace .locale-button,
+.native-package-status .locale-button {
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.native-package-workspace .locale-button:hover:not(:disabled),
+.native-package-status .locale-button:hover {
+  border-color: var(--formspec-color-primary, #155e56);
+  background: var(--formspec-color-surface, #edf3ef);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .native-package-workspace .locale-button,
+  .native-package-status .locale-button { transition: none; }
+}

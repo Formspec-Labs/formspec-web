@@ -40,8 +40,10 @@ export function readRuntimeConfig(): RuntimeConfig {
   const windowConfig =
     typeof window === 'undefined' ? undefined : window.__FORMSPEC_RUNTIME_CONFIG__;
 
+  const defaults = typeof window === 'undefined' ? undefined : window.__FORMSPEC_RUNTIME_DEFAULTS__;
   const nativePackageSigning = readNativePackageSigningConfig(windowConfig);
   return compactRuntimeConfig({
+    ...defaults,
     ...viteConfig,
     ...windowConfig,
     ...(nativePackageSigning ? { nativePackageSigning } : {}),

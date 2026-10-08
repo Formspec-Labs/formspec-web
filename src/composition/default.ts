@@ -92,13 +92,19 @@ export function createDefaultComposition(
     if (respondentSurfaceDeploymentIsConfigured(config)) throw new Error('Native package and signed Surface deployments cannot both be active');
     if (!serverUrl || !options.packageUrl) throw new Error('Native package signing requires an explicit package URL and server');
     assertReferenceHttpDataPorts(config);
-    return createNativePackageComposition(config, { signing: nativeSigning, packageUrl: options.packageUrl,
+    const identityBinding = config.ports.identityProvider === 'oidc'
+      ? options.identityBinding ?? (config.identity.oidc ? createOidcIdentityBinding(config.identity.oidc) : undefined)
+      : undefined;
+    return createNativePackageComposition(config, { signing: nativeSigning, packageUrl: options.packageUrl, identityBinding,
       initialDefinitionUrl: options.initialDefinitionUrl ?? productionInitialDefinitionUrl(serverUrl) });
   }
   if (!serverUrl) {
     return createDemoComposition();
   }
   assertReferenceHttpDataPorts(config);
+  if (config.identity.mode === 'oidc-required' && config.ports.identityProvider !== 'oidc') {
+    throw new Error('OIDC-required identity policy requires the OIDC provider');
+  }
 
   const notificationDelivery = stubNotificationDelivery();
   const baseHttpConfig = {
@@ -133,14 +139,23 @@ export function createDefaultComposition(
     async revoke() {},
     subscribe(listener) { listener(null); return () => {}; },
   };
-  const identityBinding: IdentityBinding = options.packageUrl
+  const authenticatedPackage = !!options.packageUrl && config.ports.identityProvider === 'oidc';
+  const identityBinding: IdentityBinding = options.packageUrl && !authenticatedPackage
     ? { provider: previewIdentityProvider }
     : options.identityBinding ?? identityProviderFor(config, notificationDelivery, {
     anonymousSessions,
     initialDefinitionUrl,
   });
-  const httpConfig = identityBinding.accessToken
-    ? { ...baseHttpConfig, accessToken: identityBinding.accessToken }
+  if (authenticatedPackage && (!identityBinding.accessToken || !identityBinding.browserAuthSession)) {
+    throw new Error('Authenticated package requires the selected OIDC session and bearer provider');
+  }
+  const accessToken = authenticatedPackage ? async () => {
+    const token = await identityBinding.accessToken!();
+    if (!token) throw new Error('Selected OIDC session is unavailable');
+    return token;
+  } : identityBinding.accessToken;
+  const httpConfig = accessToken
+    ? { ...baseHttpConfig, accessToken }
     : baseHttpConfig;
   const { draftStore, submitTransport } = createHttpAdapterCohort({
     ...httpConfig,
@@ -159,15 +174,17 @@ export function createDefaultComposition(
     return freezeComposition({
       ...preview,
       localPackagePreview: true,
-      // Preview has no sign-in claim; server sessions authorize uploads and saves.
-      identityProvider: previewIdentityProvider,
+      // Preserve an explicitly selected OIDC identity; anonymous previews use server sessions.
+      identityProvider: identityBinding.provider,
+      browserAuthSession: identityBinding.browserAuthSession,
       offlineSubmitQueue: unavailableOfflineSubmitQueue(),
       instanceCapabilities: { ...preview.instanceCapabilities, offlineSubmit: 'unavailable', fileUpload: 'available' },
       attachmentStore: new HttpAttachmentStore({
-        ...baseHttpConfig,
+        ...httpConfig,
         maxUploadBytes: config.referenceAdapters?.formspecStack?.attachments?.maxUploadBytes,
         formId: defaultFormIdResolver(initialDefinitionUrl),
-        accessToken: async () => (await anonymousSessions.sessionForForm(initialDefinitionUrl)).sessionToken,
+        accessToken: accessToken
+          ?? (async () => (await anonymousSessions.sessionForForm(initialDefinitionUrl)).sessionToken),
       }),
       initialDefinitionUrl,
       definitionSource: source,

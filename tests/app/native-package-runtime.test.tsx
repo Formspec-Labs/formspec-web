@@ -7,6 +7,7 @@ import { dereferenceBundleExport, type BundleExport } from '@formspec-org/surfac
 import { UI_STRINGS } from '@formspec-org/layout';
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
 import { NativePackageRoot, NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
+import type { BrowserAuthSessionState } from '../../src/ports/browser-auth-session.ts';
 import type { NativePackageBoot } from '../../src/composition/native-package.ts';
 import type { NativePackageSigningHost } from '../../src/shared/native-package-signing-host.ts';
 import { createStubComposition } from '../../src/composition/stub.ts';
@@ -41,6 +42,42 @@ function fixture() {
   return { composition, boot, host, load, publish: (next: Partial<typeof state>) => { state = { ...state, ...next }; emit(); } };
 }
 describe('native package boot and scoped recovery', () => {
+  it.each(['withdraw', 'replace', 'renew'] as const)('retires native review authority when the admitted OIDC session changes: %s', async change => {
+    const test = fixture();
+    const state = { issuer: 'https://idp.test', subject: 'owner', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+    let notify!: (value: BrowserAuthSessionState | null) => void;
+    const unsubscribe = vi.fn();
+    test.boot.composition.browserAuthSession = {
+      subscribe: (listener: (value: BrowserAuthSessionState | null) => void) => { notify = listener; listener(state); return unsubscribe; },
+      getSession: async () => state, begin: async () => {}, completeCallback: async () => state,
+      completeSilentCallback: async () => {}, renew: async () => state, logout: async () => {},
+      completeLogoutCallback: async () => {}, accessToken: async () => 'fixture-bearer', dispose: () => {},
+    };
+    const mounted = render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByTestId('native-route');
+    act(() => notify(change === 'withdraw' ? null : { ...state, ...(change === 'replace' ? { subject: 'other' } : { revision: 2 }) }));
+    await screen.findByRole('heading', { name: 'Your sign-in session changed' });
+    expect(screen.queryByTestId('native-route')).toBeNull(); expect(test.host.dispose).toHaveBeenCalled();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    mounted.unmount();
+  });
+  it('refuses delayed recovery completion after the selected identity is withdrawn', async () => {
+    const test = fixture(); const gate = deferred<'active'>();
+    test.boot.resumeSubmitted = () => gate.promise;
+    let notify!: (value: BrowserAuthSessionState | null) => void;
+    test.boot.composition.browserAuthSession = { subscribe: (listener: typeof notify) => {
+      notify = listener; listener({ issuer: 'https://idp.test', subject: 'owner', revision: 1, expiresAt: '2099-01-01T00:00:00Z' });
+      return () => {};
+    } } as never;
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await waitFor(() => expect(notify).toBeDefined());
+    act(() => notify(null));
+    await screen.findByRole('heading', { name: 'Your sign-in session changed' });
+    await act(async () => gate.resolve('active'));
+    expect(screen.queryByTestId('native-route')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Your sign-in session changed' })).toBeTruthy();
+    expect(test.host.dispose).toHaveBeenCalled();
+  });
   it('awaits owner recovery on the widget-only route and renders a focused qualified receipt without ceremony', async () => {
     window.history.replaceState(null, '', '/review-sign?form=public-form&package=%2Fpackage.json');
     const test = fixture(); const gate = deferred<void>();

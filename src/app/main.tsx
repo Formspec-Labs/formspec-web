@@ -75,7 +75,7 @@ void completeConfiguredAuthCallback({
 
 function RoutedApp({ config }: { config: FormspecWebConfig }) {
   if (config.referenceAdapters?.formspecStack?.nativePackageSigning) {
-    return <Suspense fallback={<main className="fs-surface-admission" role="status"><h1>Preparing this form</h1></main>}><NativePackageRoot config={config} /></Suspense>;
+    return <Suspense fallback={<main className="fs-surface-admission" role="status"><h1>Preparing this form</h1></main>}><NativePackageRoot config={config} identityBindingFactory={identityBindingFactory} /></Suspense>;
   }
   if (respondentSurfaceDeploymentIsConfigured(config)) {
     return (

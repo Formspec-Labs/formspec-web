@@ -1,13 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chooseComposition } from '../../src/app/main-helpers.ts';
 import { createDefaultComposition } from '../../src/composition/default.ts';
 import { createStubComposition } from '../../src/composition/stub.ts';
+import type { BrowserAuthSession } from '../../src/ports/browser-auth-session.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 
 const config = { ...departmentAppProfile, ports: { ...departmentAppProfile.ports,
   definitionSource: 'reference-http' as const, draftStore: 'reference-http' as const, submitTransport: 'reference-http' as const },
   referenceAdapters: { formspecStack: { ...departmentAppProfile.referenceAdapters?.formspecStack,
     tenantHeaderDialect: 'formspec' as const, formspecServerUrl: 'https://api.example.test' } } };
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('composition auth dependency injection', () => {
   it('uses the supplied provider across form routes', () => {
@@ -17,6 +20,34 @@ describe('composition auth dependency injection', () => {
     const next = chooseComposition({ config, href: 'https://web.example.test/?other=route', identityBindingFactory });
     expect(first.identityProvider).toBe(provider); expect(next.identityProvider).toBe(provider);
     expect(identityBindingFactory).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses incomplete OIDC package injection before creating anonymous credentials', () => {
+    const identityBindingFactory = vi.fn(() => ({ provider: createStubComposition().identityProvider }));
+    expect(() => chooseComposition({ config, href: 'https://web.example.test/?form=actual-form&package=/package.json',
+      identityBindingFactory })).toThrow(/selected OIDC session and bearer provider/);
+    expect(identityBindingFactory).toHaveBeenCalledOnce();
+  });
+
+  it('keeps ordinary package OIDC identity and refuses upload when its bearer is withdrawn', async () => {
+    const provider = createStubComposition().identityProvider;
+    const state = { issuer: 'https://idp.example.gov/realms/formspec', subject: 'owner', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+    const browserAuthSession: BrowserAuthSession = { getSession: async () => state, begin: async () => {},
+      completeCallback: async () => state, completeSilentCallback: async () => {}, renew: async () => state,
+      logout: async () => {}, completeLogoutCallback: async () => {}, accessToken: async () => token,
+      subscribe: () => () => {}, dispose: () => {} };
+    let token: string | undefined = 'selected-bearer';
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ kind: 'attachment-ref', uri: 'attachment:actual',
+      filename: 'photo.png', mimeType: 'image/png', size: 1, hash: `sha256:${'c'.repeat(64)}` }));
+    const composition = chooseComposition({ config, href: 'https://web.example.test/?form=actual-form&package=/package.json',
+      identityBindingFactory: () => ({ provider, browserAuthSession, accessToken: () => token }) });
+    expect(composition.identityProvider).toBe(provider); expect(composition.browserAuthSession).toBe(browserAuthSession);
+    await composition.attachmentStore.upload(new Blob(['a']), { filename: 'photo.png', mimeType: 'image/png' });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(new Headers(fetch.mock.calls[0][1]?.headers).get('authorization')).toBe('Bearer selected-bearer');
+    token = undefined;
+    await expect(composition.attachmentStore.upload(new Blob(['a']), { filename: 'photo.png', mimeType: 'image/png' })).rejects.toThrow(/OIDC session is unavailable/);
+    expect(fetch).toHaveBeenCalledOnce();
   });
 
   it('leaves unavailable narrowed routes free of auth construction', () => {

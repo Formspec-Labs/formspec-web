@@ -29,7 +29,8 @@ import type { NativePackageBoot, NativePackageCompositionOptions } from './nativ
 /** Called only by the explicit native boot load; all admission precedes credentials. */
 export async function loadNativePackage(config: FormspecWebConfig, options: NativePackageCompositionOptions, deferred: Composition): Promise<NativePackageBoot> {
   const adapter = config.referenceAdapters!.formspecStack!;
-  const base = { baseUrl: adapter.formspecServerUrl!, tenantBinding: config.tenantBinding };
+  const base = { baseUrl: adapter.formspecServerUrl!, tenantBinding: config.tenantBinding,
+    accessToken: options.identityBinding?.accessToken };
   const payloadSchemaResources = await loadCanonicalModulePayloadSchemaResources();
   const source = new PinnedPackageDefinitionSource(options.packageUrl, {
     moduleAdmission: { allowedModules: [options.signing.module] }, moduleSupport: { payloadSchemaResources },
@@ -90,9 +91,14 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
     return publication.form_id;
   };
   const resumeMetadata = createBrowserDraftResumeMetadataStore(base);
-  const anonymousSessions = new AnonymousSessionBridge({ ...base, resumeMetadata, formIdResolver,
+  const anonymousSessions = options.identityBinding ? undefined : new AnonymousSessionBridge({ ...base, resumeMetadata, formIdResolver,
     validateFormContext: async (url, version) => { formIdResolver(url, version); } });
-  const cohort = createHttpAdapterCohort({ ...base, resumeMetadata, formIdResolver, anonymousSessions,
+  const ownedAccessToken = options.identityBinding ? async () => {
+    const token = await options.identityBinding!.accessToken!();
+    if (!token) throw new Error('Selected OIDC session is unavailable');
+    return token;
+  } : undefined;
+  const cohort = createHttpAdapterCohort({ ...base, accessToken: ownedAccessToken, resumeMetadata, formIdResolver, anonymousSessions,
     qualifiedDraftState: { definition, formVersionId: publication.form_version_id, localeDocuments },
     responseSigning: { keyId: pins.keyId, validateResponse: validateCanonicalFormResponse,
       validateContent, signingProfileDigest: responseSigningDigest } });
@@ -107,7 +113,8 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
   };
   const attachmentStore = new HttpAttachmentStore({ ...base, formId: publication.form_id,
     maxUploadBytes: adapter!.attachments?.maxUploadBytes,
-    accessToken: async () => (await anonymousSessions.sessionForForm(definition.url, definition.version)).sessionToken });
+    accessToken: ownedAccessToken
+      ?? (async () => (await anonymousSessions!.sessionForForm(definition.url, definition.version)).sessionToken) });
   const composition = freezeComposition({ ...deferred, nativePackageRespondent: undefined, definitionSource: source,
     draftStore: cohort.draftStore, submitTransport: cohort.submitTransport, responseSigning: signing, attachmentStore,
     instanceCapabilities: { ...deferred.instanceCapabilities, fileUpload: 'available' as const } });
@@ -134,12 +141,21 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
   return { composition, host, componentDocument, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale,
     resumeSubmitted: () => resuming ??= (async () => {
       // Validate retained credentials through the bridge; recovery never issues an owner.
-      if (resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {
+      if (anonymousSessions && resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {
         await anonymousSessions.sessionForForm(definition.url, definition.version, true);
       }
-      const draftKey = { formUrl: definition.url, formVersion: definition.version };
+      let claim = null;
+      if (options.identityBinding) {
+        // Do not start a redirect during recovery; the respondent shell owns sign-in.
+        if (!await options.identityBinding.browserAuthSession!.getSession()) return 'absent';
+        const choices = await options.identityBinding.provider.discover(config.identity.oidc?.minAssurance);
+        const selected = choices.find(choice => choice.kind === 'oidc' && choice.issuer === config.identity.oidc?.issuer);
+        if (!selected) throw new Error('Selected OIDC identity is unavailable for native recovery');
+        claim = await options.identityBinding.provider.authenticate(selected);
+      }
+      const draftKey = { formUrl: definition.url, formVersion: definition.version, subjectRef: claim?.subjectRef };
       const state = await cohort.draftStore.readState!(draftKey);
-      if (state?.kind === 'submitted') await host.configureSubmittedRuntime({ definition, draftKey, claim: null, state });
+      if (state?.kind === 'submitted') await host.configureSubmittedRuntime({ definition, draftKey, claim, state });
       return state?.kind ?? 'absent';
     })() };
 }

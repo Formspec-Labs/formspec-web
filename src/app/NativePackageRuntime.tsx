@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useBrowserLocation } from '@formspec-org/surface-react';
 import { UI_STRINGS, type ChromeStringKey } from '@formspec-org/layout';
 import { localeOptionsForDefinition } from '../demo/locales.ts';
+import type { IdentityBinding } from '../composition/default.ts';
 import type { Composition } from '../composition/types.ts';
 import type { NativePackageBoot } from '../composition/native-package.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
@@ -10,7 +11,7 @@ import { NativePackageRespondentHost } from './NativePackageRespondentHost.tsx';
 import { chooseComposition } from './main-helpers.ts';
 
 /** Keep the package owner alive across its authored Surface routes. */
-export function NativePackageRoot({ config }: { config: FormspecWebConfig }) {
+export function NativePackageRoot({ config, identityBindingFactory }: { config: FormspecWebConfig; identityBindingFactory?: () => IdentityBinding }) {
   const [selectionQuery, setSelectionQuery] = useState(() => window.location.search);
   useEffect(() => {
     const changed = () => setSelectionQuery(window.location.search);
@@ -24,16 +25,16 @@ export function NativePackageRoot({ config }: { config: FormspecWebConfig }) {
       selection.pathname = '/';
       selection.search = selectionQuery;
       selection.hash = '';
-      return { composition: chooseComposition({ href: selection.href, config }) };
+      return { composition: chooseComposition({ href: selection.href, config, identityBindingFactory }) };
     } catch { return { composition: undefined }; }
-  }, [config, selectionQuery]);
+  }, [config, selectionQuery, identityBindingFactory]);
   return selected.composition
     ? <NativePackageRuntime composition={selected.composition} config={config} />
     : <NativePackageStatus failed />;
 }
 
 export function NativePackageRuntime({ composition, config }: { composition: Composition; config: FormspecWebConfig }) {
-  const [state, setState] = useState<{ owner?: Composition; boot?: NativePackageBoot; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; failed?: boolean }>({});
+  const [state, setState] = useState<{ owner?: Composition; boot?: NativePackageBoot; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; failed?: boolean; identityChanged?: boolean }>({});
   const lifetime = useMemo(() => ({ generation: 0 }), [composition]);
   const [location, navigate] = useBrowserLocation(window.location.pathname);
   const selection = useMemo(() => window.location.search, [composition]);
@@ -50,24 +51,39 @@ export function NativePackageRuntime({ composition, config }: { composition: Com
     const generation = ++lifetime.generation;
     let active = true;
     let boot: NativePackageBoot | undefined;
+    let releaseIdentity: (() => void) | undefined;
     setState({ owner: composition });
     const loading = composition.nativePackageRespondent?.load();
     if (!loading) setState({ owner: composition, failed: true });
     void loading?.then(async value => {
       boot = value;
+      const session = value.composition.browserAuthSession;
+      if (session && active) {
+        let accepted: string | undefined;
+        releaseIdentity = session.subscribe(next => {
+          const identity = next ? JSON.stringify([next.issuer, next.subject, next.revision]) : undefined;
+          if (accepted && identity !== accepted) {
+            value.host.dispose();
+            if (active) setState({ owner: composition, failed: true, identityChanged: true });
+            active = false;
+            releaseIdentity?.();
+          } else if (identity) accepted = identity;
+        });
+      }
       const outcome = await value.resumeSubmitted?.();
       if (active) setState({ owner: composition, boot: value, outcome });
       else if (lifetime.generation === generation) value.host.dispose();
     }).catch(() => { if (lifetime.generation === generation) boot?.host.dispose(); if (active) setState({ owner: composition, failed: true }); });
     return () => {
       active = false;
+      releaseIdentity?.();
       queueMicrotask(() => {
         if (lifetime.generation === generation) boot?.host.dispose();
       });
     };
   }, [composition, lifetime]);
 
-  if (state.owner !== composition || !state.boot) return <NativePackageStatus failed={state.owner === composition && state.failed} />;
+  if (state.owner !== composition || !state.boot) return <NativePackageStatus failed={state.owner === composition && state.failed} identityChanged={state.identityChanged} />;
   return <NativePackageFrame boot={state.boot} selection={selection} location={location} outcome={state.outcome}>
     <NativePackageRespondentHost host={state.boot.host} composition={state.boot.composition}
     config={config} componentDocument={state.boot.componentDocument} localeDocuments={state.boot.localeDocuments}
@@ -75,10 +91,11 @@ export function NativePackageRuntime({ composition, config }: { composition: Com
   </NativePackageFrame>;
 }
 
-function NativePackageStatus({ failed }: { failed?: boolean }) {
-  return <main className="fs-surface-admission" role={failed ? 'alert' : 'status'}>
-    <h1>{failed ? 'This form cannot be loaded.' : 'Preparing this form'}</h1>
-    {failed ? <p>Use the form link provided by its publisher.</p> : null}
+function NativePackageStatus({ failed, identityChanged }: { failed?: boolean; identityChanged?: boolean }) {
+  return <main className="fs-surface-admission native-package-status" role={failed ? 'alert' : 'status'}>
+    <h1>{identityChanged ? 'Your sign-in session changed' : failed ? 'This form cannot be loaded.' : 'Preparing this form'}</h1>
+    {identityChanged ? <a className="locale-button" href={`/${window.location.search}`}>Return to form</a> : null}
+    {failed && !identityChanged ? <p>Use the form link provided by its publisher.</p> : null}
   </main>;
 }
 
@@ -120,7 +137,7 @@ function NativePackageFrame({ boot, selection, location, outcome, children }: { 
     finally { operationPending.current = false; }
   }
   if (routeFailed && !confirmation && operation !== 'cleared') return <NativePackageStatus failed />;
-  return <>
+  return <div className="native-package-workspace">
     <div className="respondent-toolbar">
       <div className="respondent-toolbar__group" role="group" aria-label={text('form.language')}>
         {options.map(option => <button type="button" className="locale-button" key={option.code}
@@ -145,5 +162,5 @@ function NativePackageFrame({ boot, selection, location, outcome, children }: { 
       <h1 ref={heading} tabIndex={-1}>{formTitle}</h1>
       {!preparing ? <a className="locale-button" href={`${startupRoute!.entryHref}${selection}`}>{entryLabel}</a> : null}
     </main> : children}
-  </>;
+  </div>;
 }

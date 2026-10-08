@@ -2,7 +2,7 @@
 window.__FORMSPEC_RUNTIME_CONFIG__ = window.__FORMSPEC_RUNTIME_CONFIG__ ?? {};
 // Local package previews keep submission connected to the real local service.
 if (new URL(window.location.href).searchParams.has('package')) {
-  window.__FORMSPEC_RUNTIME_CONFIG__ = {
+  window.__FORMSPEC_RUNTIME_DEFAULTS__ = {
     profileName: 'publicPortal',
     formspecServerUrl: 'http://127.0.0.1:18080',
     tenantBinding: {
@@ -14,7 +14,6 @@ if (new URL(window.location.href).searchParams.has('package')) {
         cell: 'cell_primary',
       },
     },
-    ...window.__FORMSPEC_RUNTIME_CONFIG__,
     attachmentMaxUploadBytes: 15728640,
   };
 }
@@ -28,7 +27,7 @@ const nativePackageVersion = new Map([
 if (nativeSelection.get('form') === 'form_d1_passport_001' && nativePackageVersion) {
   window.__FORMSPEC_RUNTIME_CONFIG__ = {
     nativePackageSigning: {
-      "keyId": "formspec-d1-delegated-response-e1fae90b73e7",
+      "keyId": "formspec-local-oidc-response-20261008-v1",
       "definition": {
         "url": "urn:formspec:demo:d1:passport-renewal",
         "version": nativePackageVersion

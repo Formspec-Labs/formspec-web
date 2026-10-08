@@ -10,7 +10,7 @@ import { createFormEngine } from '@formspec-org/engine/render';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { delegatedSignedResponseFixture } from '../adapters/http/delegated-signed-response-fixture.ts';
 import * as nativeHostModule from '../../src/shared/native-package-signing-host.ts';
-import { createDefaultComposition } from '../../src/composition/default.ts';
+import { createDefaultComposition, type IdentityBinding } from '../../src/composition/default.ts';
 import { resolveActiveConfig } from '../../src/config/runtime.ts';
 import { nativePackageSigningConfig } from '../../src/config/native-package-signing.ts';
 import { publicPortalProfile } from '../../src/profiles/profiles.ts';
@@ -25,7 +25,7 @@ const componentBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/nativ
 const initialDefinitionUrl = 'https://server.example.test/runtime/forms/actual-form';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-async function fixture() {
+async function fixture(subject = 'anon:fixture') {
   vi.stubGlobal('crypto', webcrypto);
   const values = new Map<string, string>();
   vi.stubGlobal('sessionStorage', { getItem: (key: string) => values.get(key) ?? null,
@@ -76,7 +76,7 @@ async function fixture() {
     if (url.pathname === '/runtime/forms/actual-form' && method === 'GET') return Response.json(publication);
     if (url.pathname === '/runtime/forms/actual-form/drafts' && method === 'POST') saved = structuredClone(body.canonical_response);
     if (url.pathname === '/drafts/fixture-draft' || (url.pathname.endsWith('/drafts') && method === 'POST')) return Response.json({
-      draft_id: 'fixture-draft', draft_version: draftVersion, form_version_id: 'actual-publication', subject_ref: 'anon:fixture',
+      draft_id: 'fixture-draft', draft_version: draftVersion, form_version_id: 'actual-publication', subject_ref: subject,
       canonical_response: saved, draft_state: saved?.data, status: draftStatus });
     throw new Error(`Unexpected test request ${method} ${url.href}`);
   });
@@ -230,12 +230,35 @@ describe('explicit native package composition', () => {
     expect(test.requests).toEqual([]);
   });
 
-  it('refuses authenticated-required native configuration instead of borrowing preview identity', async () => {
-    const test = await fixture();
-    expect(() => createDefaultComposition({ ...test.config, identity: { mode: 'oidc-required', oidc: {
-      issuer: 'https://idp.test', clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2',
-    } } }, { packageUrl: '/package.json', initialDefinitionUrl })).toThrow('anonymous package service');
-    expect(test.requests).toEqual([]);
+  it('preserves selected OIDC identity and bearer for native draft save and recovery without anonymous credentials', async () => {
+    const test = await fixture('oidc:fixture');
+    const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',
+      credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+    const provider = { discover: vi.fn(async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }]),
+      authenticate: vi.fn(async () => claim), revoke: vi.fn(async () => {}), subscribe: vi.fn(() => () => {}) };
+    const session = { issuer: claim.provider, subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+    const browserAuthSession = { getSession: vi.fn(async () => session), begin: async () => {},
+      completeCallback: async () => session, completeSilentCallback: async () => {}, renew: async () => session,
+      logout: async () => {}, completeLogoutCallback: async () => {}, accessToken: async () => 'oidc-bearer',
+      subscribe: () => () => {}, dispose: () => {} };
+    const identityBinding: IdentityBinding = { provider, accessToken: vi.fn(async () => 'oidc-bearer'), browserAuthSession };
+    const config = { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: { mode: 'oidc-required' as const, oidc: {
+      issuer: claim.provider, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const,
+    } } };
+    const options = { packageUrl: '/package.json', initialDefinitionUrl, identityBinding };
+    const boot = await createDefaultComposition(config, options).nativePackageRespondent!.load();
+    expect(boot.composition.identityProvider).toBe(provider); expect(boot.composition.browserAuthSession).toBe(browserAuthSession);
+    const key = { formUrl: test.definition.url, formVersion: test.definition.version, subjectRef: claim.subjectRef };
+    const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version };
+    await boot.composition.draftStore.save(key, response); boot.host.dispose();
+    const create = test.requests.find(request => request.method === 'POST' && request.url.endsWith('/drafts'))!;
+    expect(create.headers.get('authorization')).toBe('Bearer oidc-bearer');
+    expect(create.body).toMatchObject({ respondent_subject_ref: claim.subjectRef });
+    const fresh = await createDefaultComposition(config, options).nativePackageRespondent!.load();
+    await expect(fresh.resumeSubmitted!()).resolves.toBe('active');
+    expect(test.requests.at(-1)!.headers.get('authorization')).toBe('Bearer oidc-bearer');
+    expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
+    fresh.host.dispose();
   });
 
   it.each(['definition', 'bundle', 'publication'] as const)('refuses %s pin/content mismatch before credentials or writes', async field => {

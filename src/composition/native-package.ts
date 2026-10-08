@@ -7,6 +7,7 @@ import type { createNativePackageSigningHost } from '../shared/native-package-si
 import { freezeComposition } from '../policy/index.ts';
 import { createDemoComposition } from './demo.ts';
 import type { Composition } from './types.ts';
+import type { IdentityBinding } from './default.ts';
 
 export interface NativePackageBoot {
   composition: Composition;
@@ -20,6 +21,7 @@ export interface NativePackageBoot {
 
 export interface NativePackageCompositionOptions {
   packageUrl: string; initialDefinitionUrl: string; signing: NativePackageSigningConfig;
+  identityBinding?: IdentityBinding;
 }
 
 /** Deferred local hash-pinned package admission, separate from signed-release verification. */
@@ -27,7 +29,11 @@ export function createNativePackageComposition(config: FormspecWebConfig, option
   config = structuredClone(config);
   options = { ...options, signing: nativePackageSigningConfig(options.signing) };
   const adapter = config.referenceAdapters?.formspecStack;
-  if (!adapter?.formspecServerUrl || config.identity.mode === 'oidc-required') throw new Error('Native package signing requires the configured anonymous package service');
+  if (!adapter?.formspecServerUrl) throw new Error('Native package signing requires the configured package service');
+  if ((config.identity.mode === 'oidc-required' || config.ports.identityProvider === 'oidc')
+    && (!options.identityBinding?.accessToken || !options.identityBinding.browserAuthSession)) {
+    throw new Error('Native package signing requires the selected OIDC session and bearer provider');
+  }
   const preview = createDemoComposition();
   const unavailable = async (): Promise<never> => { throw new Error('Native package admission has not completed'); };
   let pending: Promise<NativePackageBoot> | undefined;
@@ -35,7 +41,8 @@ export function createNativePackageComposition(config: FormspecWebConfig, option
     ...preview, localPackagePreview: true, initialDefinitionUrl: options.initialDefinitionUrl,
     definitionSource: { getDefinition: unavailable }, attachmentStore: unavailableAttachmentStore(), offlineSubmitQueue: unavailableOfflineSubmitQueue(),
     instanceCapabilities: { ...preview.instanceCapabilities, fileUpload: 'unavailable', offlineSubmit: 'unavailable' },
-    identityProvider: { async discover() { return []; }, authenticate: unavailable, async revoke() {}, subscribe(listener) { listener(null); return () => {}; } },
+    browserAuthSession: options.identityBinding?.browserAuthSession,
+    identityProvider: options.identityBinding?.provider ?? { async discover() { return []; }, authenticate: unavailable, async revoke() {}, subscribe(listener) { listener(null); return () => {}; } },
     draftStore: { load: unavailable, save: unavailable, list: unavailable, delete: unavailable, invalidateSubject: unavailable },
     submitTransport: { submit: unavailable },
     nativePackageRespondent: { load: () => pending ??= import('./native-package-loader.ts')
