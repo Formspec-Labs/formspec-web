@@ -274,6 +274,79 @@ function componentBundle() {
   return { ...bundle, manifest: { ...bundle.manifest, components: [{ ...componentRef }] } };
 }
 
+describe('explicit inline Component selection', () => {
+  it.each([false, true])('selects one exact declared Component among siblings with reversed=%s', async reverse => {
+    const candidate = componentBundle();
+    const alternateRef = { ...componentRef, handle: 'alternate', url: 'urn:test:component:alternate' };
+    candidate.manifest.components.push(alternateRef);
+    if (reverse) candidate.manifest.components.reverse();
+    candidate.documents[componentRef.url] = componentDocument();
+    candidate.documents[alternateRef.url] = { ...componentDocument(), url: alternateRef.url };
+    await mockNativePackage(candidate);
+    const selection = { ...componentRef };
+    const source = new PinnedPackageDefinitionSource('/package.json', {}, selection);
+    selection.handle = 'changed';
+    const loaded = await source.getComponentDocument();
+    expect(loaded).toEqual(componentDocument());
+    expect(await source.getNativeBundleExport()).toEqual(candidate);
+    loaded!.tree = { component: 'Text', text: 'Changed' };
+    expect(await source.getComponentDocument()).toEqual(componentDocument());
+  });
+
+  it.each([
+    ['wrong handle', { ...componentRef, handle: 'other' }],
+    ['wrong version', { ...componentRef, version: 'other' }],
+    ['missing declared Component', { ...componentRef, url: 'urn:test:missing' }],
+  ])('refuses %s before exposing the bundle', async (_name, selection) => {
+    const candidate = componentBundle(); candidate.documents[componentRef.url] = componentDocument();
+    await mockNativePackage(candidate);
+    const source = new PinnedPackageDefinitionSource('/package.json', {}, selection);
+    await expect(source.getComponentDocument()).rejects.toThrow();
+    await expect(source.getNativeBundleExport()).rejects.toThrow();
+  });
+
+  it('refuses a separately external Component when inline selection is configured', async () => {
+    await mockNativePackage(componentBundle(), { component: componentDocument(), componentRef });
+    await expect(new PinnedPackageDefinitionSource('/package.json', {}, componentRef).getComponentDocument()).rejects.toThrow();
+  });
+
+  it('refuses duplicate declared inline selections', async () => {
+    const candidate = componentBundle(); candidate.manifest.components.push({ ...componentRef });
+    candidate.documents[componentRef.url] = componentDocument();
+    await mockNativePackage(candidate);
+    await expect(new PinnedPackageDefinitionSource('/package.json', {}, componentRef).getNativeBundleExport()).rejects.toThrow();
+  });
+
+  it('preserves full manifest reference correspondence including extension metadata', async () => {
+    const candidate = componentBundle(); Object.assign(candidate.manifest.components[0], { 'x-test': true });
+    candidate.documents[componentRef.url] = componentDocument();
+    await mockNativePackage(candidate);
+    await expect(new PinnedPackageDefinitionSource('/package.json', {}, componentRef).getComponentDocument()).rejects.toThrow('differs from its explicit selection');
+  });
+
+  it('requires a native bundle for configured inline selection', async () => {
+    await mockNativePackage(nativeBundle(), { omitNative: true });
+    await expect(new PinnedPackageDefinitionSource('/package.json', {}, componentRef).getDefinition()).rejects.toThrow('requires a native bundle');
+  });
+
+  it('refuses malformed direct selection and accessors without executing them', () => {
+    expect(() => new PinnedPackageDefinitionSource('/package.json', {}, { ...componentRef, trusted: true } as never)).toThrow();
+    const getter = vi.fn(() => componentRef.handle);
+    const selection = { ...componentRef }; Object.defineProperty(selection, 'handle', { enumerable: true, get: getter });
+    expect(() => new PinnedPackageDefinitionSource('/package.json', {}, selection)).toThrow();
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  it('refuses selected inline Component targeting another Definition', async () => {
+    const candidate = componentBundle();
+    candidate.manifest.definitions.push({ url: 'urn:other', version: nativeDefinition.version });
+    candidate.documents['urn:other'] = { ...nativeDefinition, url: 'urn:other' };
+    candidate.documents[componentRef.url] = { ...componentDocument(), targetDefinition: { url: 'urn:other' } };
+    await mockNativePackage(candidate);
+    await expect(new PinnedPackageDefinitionSource('/package.json', {}, componentRef).getComponentDocument()).rejects.toThrow();
+  });
+});
+
 describe('external hash-pinned Component closure', () => {
   it('qualifies one declared Component and preserves the original export with independent cached clones', async () => {
     const component = componentDocument();

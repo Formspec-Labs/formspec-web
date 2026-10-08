@@ -2,7 +2,7 @@ import { targetDefinitionMatches, type ComponentDocument, type FormDefinition, t
 import type { ResponseActionsDocumentInput as ResponseActionsDocument } from '@formspec-org/engine';
 import canonicalize from 'canonicalize';
 import type { BundleExportAppGraphReportProducerRequest } from '@formspec-org/app-graph';
-import type { BundleExport } from '@formspec-org/surface';
+import { snapshotFiniteJson, type BundleExport } from '@formspec-org/surface';
 import type { DefinitionSource } from '../../ports/definition-source.ts';
 
 interface PinnedFile { path: string; sha256: string }
@@ -30,11 +30,27 @@ export type NativeBundleValidationOptions = Omit<BundleExportAppGraphReportProdu
 /** Load authored JSON files through a hash-pinned same-origin package manifest. */
 export class PinnedPackageDefinitionSource implements DefinitionSource {
   private loaded?: Promise<LoadedPackage>;
+  private readonly componentSelection?: PinnedComponent['ref'];
 
   constructor(
     private readonly manifestUrl: string,
     private readonly nativeValidation: NativeBundleValidationOptions = {},
-  ) {}
+    componentSelection?: PinnedComponent['ref'],
+  ) {
+    if (componentSelection !== undefined) {
+      const selected = snapshotFiniteJson(componentSelection);
+      if (!isRecord(selected) || Object.keys(selected).length !== 3
+        || ['handle', 'url', 'version'].some(key => typeof selected[key] !== 'string'
+          || !selected[key].trim() || selected[key] !== selected[key].trim())) {
+        throw new Error('Package inline Component selection is malformed');
+      }
+      const url = new URL(selected.url as string);
+      if (!['http:', 'https:', 'urn:'].includes(url.protocol) || url.username || url.password) {
+        throw new Error('Package inline Component selection is malformed');
+      }
+      this.componentSelection = selected as unknown as PinnedComponent['ref'];
+    }
+  }
 
   private getPackage(): Promise<LoadedPackage> {
     return this.loaded ??= this.load(this.manifestUrl);
@@ -62,6 +78,9 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
     const response = await fetch(manifest, { redirect: 'error' });
     if (!response.ok) throw new Error(`Package manifest failed: HTTP ${response.status}`);
     const { files } = await response.json() as { files: PackageFiles };
+    if (this.componentSelection && (!files.nativeBundle || files.component)) {
+      throw new Error('Package inline Component selection requires a native bundle without an external Component');
+    }
     if (Object.hasOwn(files, 'nativeBundle') && !isRecord(files.nativeBundle)) {
       throw new Error('Package native bundle file pin is malformed');
     }
@@ -89,20 +108,20 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
       files.nativeBundle ? read<unknown>(files.nativeBundle) : null,
       files.component ? read<unknown>(files.component) : null,
     ]);
-    const nativeBundle = files.nativeBundle
+    const qualified = files.nativeBundle
       ? await this.qualifyNativeBundle(nativeCandidate, definition, locales,
         new URL(files.nativeBundle.path, manifest).href, files.nativeBundle.sha256,
         files.component ? { pin: files.component, document: componentCandidate, source: new URL(files.component.path, manifest).href } : undefined)
       : null;
-    return { definition, theme, responseActions, locales, nativeBundle,
-      component: files.component ? structuredClone(componentCandidate) as ComponentDocument : null };
+    return { definition, theme, responseActions, locales, nativeBundle: qualified?.bundle ?? null,
+      component: qualified?.component ?? null };
   }
 
   private async qualifyNativeBundle(
     candidate: unknown, definition: FormDefinition, locales: LocaleDocument[],
     source: string, digest: string,
     external?: { pin: PinnedComponent; document: unknown; source: string },
-  ): Promise<BundleExport> {
+  ): Promise<{ bundle: BundleExport; component: ComponentDocument | null }> {
     if (!isRecord(candidate) || Object.keys(candidate).some(key => key !== 'manifest' && key !== 'documents')
       || !isRecord(candidate.manifest) || !isRecord(candidate.documents)) {
       throw new Error('Package native bundle must contain manifest and documents');
@@ -110,14 +129,10 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
     const documents = candidate.documents;
     if (external) {
       const ref = external.pin.ref;
-      const target = isRecord(external.document) ? external.document.targetDefinition : undefined;
       if (!isRecord(ref) || Object.keys(ref).some(key => !['handle', 'url', 'version'].includes(key))
         || typeof ref.handle !== 'string' || !ref.handle.trim() || typeof ref.url !== 'string' || !ref.url.trim()
         || typeof ref.version !== 'string' || !ref.version.trim()
-        || !isRecord(external.document) || external.document.url !== ref.url || external.document.version !== ref.version
-        || !isRecord(target) || typeof target.url !== 'string'
-        || (target.compatibleVersions !== undefined && typeof target.compatibleVersions !== 'string')
-        || !targetDefinitionMatches({ url: target.url, compatibleVersions: typeof target.compatibleVersions === 'string' ? target.compatibleVersions : undefined }, definition)) {
+        || !matchesComponentDocument(external.document, ref, definition)) {
         throw new Error('Package Component identity or Definition target differs from its explicit pin');
       }
       if (Object.hasOwn(documents, ref.url)) throw new Error('Package Component has ambiguous inline and external sources');
@@ -157,6 +172,15 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
         throw new Error('Package Component must match exactly one native manifest reference');
       }
     }
+    let component = external ? external.document as ComponentDocument : null;
+    if (this.componentSelection) {
+      const matches = (result.artifactResolutionReport.artifacts.components ?? [])
+        .filter(handle => sameDocument(handle.ref, this.componentSelection));
+      if (matches.length !== 1 || !matchesComponentDocument(matches[0].document, this.componentSelection, definition)) {
+        throw new Error('Package inline Component differs from its explicit selection or Definition target');
+      }
+      component = matches[0].document as ComponentDocument;
+    }
     const definitions = result.artifactResolutionReport.artifacts.definitions ?? [];
     if (definitions.filter(handle => matchesSidecar(handle, definition)).length !== 1) {
       throw new Error('Package native bundle Definition differs from the pinned sidecar');
@@ -168,12 +192,20 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
       throw new Error('Package native bundle Locales differ from the pinned sidecars');
     }
     const bundle = candidate as unknown as BundleExport;
-    return structuredClone(bundle);
+    return { bundle: structuredClone(bundle), component: structuredClone(component) };
   }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function matchesComponentDocument(document: unknown, ref: { url: string; version: string }, definition: FormDefinition): boolean {
+  const target = isRecord(document) ? document.targetDefinition : undefined;
+  return isRecord(document) && document.url === ref.url && document.version === ref.version
+    && isRecord(target) && typeof target.url === 'string'
+    && (target.compatibleVersions === undefined || typeof target.compatibleVersions === 'string')
+    && targetDefinitionMatches({ url: target.url, compatibleVersions: target.compatibleVersions as string | undefined }, definition);
 }
 
 function matchesSidecar(

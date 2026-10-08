@@ -65,6 +65,22 @@ describe('closed native package signing opt-in', () => {
     expect(() => nativePackageSigningConfig({ ...fixture(), modules })).toThrow();
   });
 
+  it('preserves explicit native Component selection and detaches its pin', () => {
+    const value = { ...fixture(), component: { handle: 'intake', url: 'urn:test:component', version: '42' } };
+    const selected = nativePackageSigningConfig(value);
+    value.component.handle = 'changed';
+    expect(selected.component).toEqual({ handle: 'intake', url: 'urn:test:component', version: '42' });
+    expect(nativePackageSigningConfig(fixture()).component).toBeUndefined();
+  });
+  it.each([
+    { handle: '', url: 'urn:test:component', version: '42' },
+    { handle: 'intake', url: '/relative', version: '42' },
+    { handle: 'intake', url: 'urn:test:component', version: '' },
+    { handle: 'intake', url: 'urn:test:component', version: '42', trusted: true },
+  ])('refuses malformed Component deployment selection %j', component => {
+    expect(() => nativePackageSigningConfig({ ...fixture(), component })).toThrow();
+  });
+
   it('admits the optional Start role only with a complete detached capability path map', () => {
     const value = { ...fixture(), applicationLifecycle: { instance: 'scratch', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' },
       roles: { ...fixture().roles, startApplication: { artifactRef: 'urn:test:actions', actionRef: 'start' } } };

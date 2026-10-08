@@ -91,6 +91,19 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
 }
 
 describe('explicit native package composition', () => {
+  it('loads an explicitly selected inline Component without a duplicate external file', async () => {
+    const test = await fixture();
+    const component = test.files.component.ref;
+    const bundle = { ...test.bundle, documents: { ...test.bundle.documents, [component.url]: test.component } };
+    test.texts['native.json'] = JSON.stringify(bundle);
+    test.files.nativeBundle.sha256 = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(test.texts['native.json'])))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    delete (test.files as { component?: unknown }).component;
+    const config = { ...test.config, referenceAdapters: { ...test.config.referenceAdapters, formspecStack: { ...test.config.referenceAdapters!.formspecStack!, nativePackageSigning: { ...test.signing, component } } } };
+    const boot = await createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    expect(boot.componentDocument).toEqual(test.component);
+    expect(test.requests.some(request => request.url.endsWith('/component.json') || request.url.endsWith('/sessions/anonymous'))).toBe(false);
+  });
+
   it('preserves explicit single-module selection through the maintained composition operation', async () => {
     const test = await fixture();
     const config = { ...test.config, referenceAdapters: { ...test.config.referenceAdapters, formspecStack: { ...test.config.referenceAdapters!.formspecStack!, nativePackageSigning: { ...test.signing, modules: [test.signing.module] } } } };

@@ -9,6 +9,8 @@ export interface NativePackageSigningConfig {
   module: { id: string; version: string };
   /** Explicit package module pins; omission admits only the signing module. */
   modules?: readonly { id: string; version: string }[];
+  /** Exact inline Component selection; omission retains the external file path. */
+  component?: { handle: string; url: string; version: string };
   initialLocale: string;
   roles: Record<Exclude<ResponseActionRole, 'startApplication'>, { artifactRef: string; actionRef: string }>
     & Partial<Record<'startApplication', { artifactRef: string; actionRef: string }>>;
@@ -27,6 +29,7 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
   const config = snapshotFiniteJson(value);
   closed(config, ['keyId', 'definition', 'bundle', 'module', 'initialLocale', 'roles', 'bindings', 'readiness',
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'modules') ? ['modules'] : []),
+    ...(config && typeof config === 'object' && Object.hasOwn(config, 'component') ? ['component'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'applicationLifecycle') ? ['applicationLifecycle'] : [])]);
   nonblank(config.keyId);
   for (const name of ['definition', 'bundle', 'module'] as const) {
@@ -45,6 +48,10 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
     if (config.modules.filter(pin => pin.id === signing.id && pin.version === signing.version).length !== 1) invalid();
   }
   nonblank(config.initialLocale);
+  if (Object.hasOwn(config, 'component')) {
+    closed(config.component, ['handle', 'url', 'version']);
+    nonblank(config.component.handle); absoluteUrl(config.component.url); nonblank(config.component.version);
+  }
   try { Intl.getCanonicalLocales(config.initialLocale); } catch { invalid(); }
   closed(config.roles, [...Object.keys(roles), ...(Object.hasOwn(config, 'applicationLifecycle') ? ['startApplication'] : [])]);
   if (Object.hasOwn(config, 'applicationLifecycle')) {

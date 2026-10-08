@@ -43,7 +43,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   const modulePins = options.signing.modules ?? [options.signing.module];
   const source = new PinnedPackageDefinitionSource(options.packageUrl, {
     moduleAdmission: { allowedModules: [...modulePins] }, moduleSupport: { payloadSchemaResources },
-  });
+  }, options.signing.component);
   const [definition, bundle, componentDocument, localeDocuments] = await Promise.all([
     source.getDefinition(), source.getNativeBundleExport(), source.getComponentDocument(), source.getLocaleDocuments(),
   ]);
