@@ -106,6 +106,33 @@ async function mockNativePackage(candidate: unknown = nativeBundle(), options: {
 }
 
 describe('hash-pinned native package closure', () => {
+  it.each(['first', 'last'] as const)('preserves a multi-form App with its selected sidecar %s', async position => {
+    const candidate = nativeBundle();
+    const other = { ...structuredClone(nativeDefinition), url: 'https://example.test/definitions/other' };
+    const otherRef = { url: other.url, version: other.version };
+    candidate.manifest.definitions = position === 'first'
+      ? [...candidate.manifest.definitions, otherRef] : [otherRef, ...candidate.manifest.definitions];
+    candidate.documents[other.url] = other;
+    await mockNativePackage(candidate);
+    const source = new PinnedPackageDefinitionSource('/package.json');
+    expect(await source.getDefinition()).toEqual(nativeDefinition);
+    expect(await source.getNativeBundleExport()).toEqual(candidate);
+  });
+
+  it.each(['absent', 'changed'] as const)('refuses an %s selected sidecar within a valid multi-form App', async mismatch => {
+    const candidate = nativeBundle();
+    const other = { ...structuredClone(nativeDefinition), url: 'https://example.test/definitions/other' };
+    candidate.manifest.definitions.push({ url: other.url, version: other.version });
+    candidate.documents[other.url] = other;
+    const definition = mismatch === 'absent'
+      ? { ...nativeDefinition, url: 'https://example.test/definitions/absent' }
+      : { ...nativeDefinition, title: 'Changed selected document' };
+    await mockNativePackage(candidate, { definition });
+    const source = new PinnedPackageDefinitionSource('/package.json');
+    await expect(source.getDefinition()).rejects.toThrow('Definition differs from the pinned sidecar');
+    await expect(source.getNativeBundleExport()).rejects.toThrow('Definition differs from the pinned sidecar');
+  });
+
   it('qualifies coherent resources once and returns independent native exports', async () => {
     const candidate = nativeBundle();
     const fetch = await mockNativePackage(candidate);

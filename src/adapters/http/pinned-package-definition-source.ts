@@ -158,7 +158,7 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
       }
     }
     const definitions = result.artifactResolutionReport.artifacts.definitions ?? [];
-    if (definitions.length !== 1 || !matchesSidecar(definitions[0], definition)) {
+    if (definitions.filter(handle => matchesSidecar(handle, definition)).length !== 1) {
       throw new Error('Package native bundle Definition differs from the pinned sidecar');
     }
     const localeHandles = result.artifactResolutionReport.artifacts.locales ?? [];
