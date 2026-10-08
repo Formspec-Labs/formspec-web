@@ -30,6 +30,19 @@ The `OidcAdapter` maps provider ACR values to Formspec `L1` through `L4`
 assurance levels. Unknown ACR values fail. A token whose mapped assurance is
 below the selected option's `minAssurance` also fails.
 
+A deployment can override the minimum with `oidcMinAssurance` and supply an
+exact JSON mapping through `oidcAcrAssuranceMapJson` in runtime configuration.
+The environment equivalents are `FORMSPEC_WEB_OIDC_MIN_ASSURANCE` and
+`FORMSPEC_WEB_OIDC_ACR_ASSURANCE_MAP_JSON` (also `VITE_FORMSPEC_WEB_` prefixes).
+For a provider whose verified ACR `"1"` represents self-asserted identity,
+explicit configuration is `oidcMinAssurance: "L1"` and
+`oidcAcrAssuranceMapJson: '{"1":"L1"}'`. This mapping replaces the default
+mapping for that deployment. It does not lower an authored form's minimum or
+change other profiles. Missing or unmapped ACR still fails. Formspec levels
+express the framework's identity assurance semantics; they do not establish
+NIST authentication assurance levels. Verify the provider's actual claims
+before choosing a mapping.
+
 ## Current Gate
 
 Full OIDC production close is blocked by EXT-23 in `formspec-server`: per-tenant

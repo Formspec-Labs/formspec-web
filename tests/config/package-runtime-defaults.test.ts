@@ -8,6 +8,38 @@ const script = readFileSync('public/formspec-runtime-config.js', 'utf8');
 afterEach(() => { vi.unstubAllEnvs(); delete window.__FORMSPEC_RUNTIME_CONFIG__; delete window.__FORMSPEC_RUNTIME_DEFAULTS__; });
 
 describe('package defaults preserve explicit deployment identity', () => {
+  it('preserves trusted settings injected before the native package script runs', () => {
+    const trusted = {
+      profileName: 'departmentApp',
+      formspecServerUrl: 'http://127.0.0.1:18084',
+      oidcIssuer: 'http://127.0.0.1:18090/realms/formspec-dev',
+      oidcClientId: 'formspec-web-dev',
+      oidcMinAssurance: 'L1',
+      oidcAcrAssuranceMapJson: '{"1":"L1"}',
+      tenantBinding: { kind: 'bound', scope: {
+        tenant: 'tenant_test', workspace: 'workspace_test',
+        environment: 'environment_test', cell: 'cell_test',
+      } },
+    } as const;
+    const deployed = {
+      location: { href: 'http://127.0.0.1:5173/?form=form_d1_passport_001&package=/demo-packages/d1-passport/v0.1.6/package.json' },
+      __FORMSPEC_RUNTIME_CONFIG__: trusted,
+    } as unknown as Window;
+    runInNewContext(script, { window: deployed, URL });
+    expect(deployed.__FORMSPEC_RUNTIME_CONFIG__).toMatchObject(trusted);
+    window.__FORMSPEC_RUNTIME_CONFIG__ = JSON.parse(JSON.stringify(deployed.__FORMSPEC_RUNTIME_CONFIG__));
+    window.__FORMSPEC_RUNTIME_DEFAULTS__ = JSON.parse(JSON.stringify(deployed.__FORMSPEC_RUNTIME_DEFAULTS__));
+    const config = resolveActiveConfig(departmentAppProfile, readRuntimeConfig());
+    expect(config.tenantBinding).toEqual(trusted.tenantBinding);
+    expect(config.identity.oidc).toMatchObject({
+      issuer: trusted.oidcIssuer, clientId: trusted.oidcClientId,
+      minAssurance: 'L1', acrAssuranceMap: { '1': 'L1' },
+    });
+    expect(config.referenceAdapters?.formspecStack?.formspecServerUrl).toBe(trusted.formspecServerUrl);
+    expect(config.referenceAdapters?.formspecStack?.nativePackageSigning).toMatchObject({
+      keyId: 'formspec-local-oidc-response-20261008-v1', definition: { version: '0.1.6' },
+    });
+  });
   it('keeps root-selected OIDC and backend while selecting the maintained native signing package', () => {
     const deployed = { location: { href: 'http://127.0.0.1:5173/?form=form_d1_passport_001&package=/demo-packages/d1-passport/v0.1.6/package.json' } } as Window;
     runInNewContext(script, { window: deployed, URL });

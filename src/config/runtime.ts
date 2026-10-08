@@ -1,3 +1,4 @@
+import type { AssuranceLevel } from '../ports/identity-provider.ts';
 import { readNativePackageSigningConfig } from './native-package-signing.ts';
 import { validatedAttachmentMaxUploadBytes } from './attachment-policy.ts';
 import { getReferenceProfile } from '../profiles/profiles.ts';
@@ -25,6 +26,8 @@ const runtimeEnvMap = {
   oidcSilentRedirectUri: ['FORMSPEC_WEB_OIDC_SILENT_REDIRECT_URI', 'VITE_FORMSPEC_WEB_OIDC_SILENT_REDIRECT_URI'],
   oidcPostLogoutRedirectUri: ['FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI', 'VITE_FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI'],
   oidcAcrValues: ['FORMSPEC_WEB_OIDC_ACR_VALUES', 'VITE_FORMSPEC_WEB_OIDC_ACR_VALUES'],
+  oidcMinAssurance: ['FORMSPEC_WEB_OIDC_MIN_ASSURANCE', 'VITE_FORMSPEC_WEB_OIDC_MIN_ASSURANCE'],
+  oidcAcrAssuranceMapJson: ['FORMSPEC_WEB_OIDC_ACR_ASSURANCE_MAP_JSON', 'VITE_FORMSPEC_WEB_OIDC_ACR_ASSURANCE_MAP_JSON'],
   oidcResource: ['FORMSPEC_WEB_OIDC_RESOURCE', 'VITE_FORMSPEC_WEB_OIDC_RESOURCE'],
   magicLinkCallbackPath: [
     'FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
@@ -105,7 +108,7 @@ function applyRuntimeOverrides(
     runtimeConfig.oidcIssuer ||
     runtimeConfig.oidcClientId ||
     runtimeConfig.oidcRedirectUri || runtimeConfig.oidcScope || runtimeConfig.oidcSilentRedirectUri
-    || runtimeConfig.oidcPostLogoutRedirectUri || runtimeConfig.oidcAcrValues || runtimeConfig.oidcResource
+    || runtimeConfig.oidcPostLogoutRedirectUri || runtimeConfig.oidcAcrValues || runtimeConfig.oidcResource || runtimeConfig.oidcMinAssurance !== undefined || runtimeConfig.oidcAcrAssuranceMapJson !== undefined
     || runtimeConfig.surfaceBundle
     || maxUploadBytes !== undefined
     || nativePackageSigning !== undefined;
@@ -182,7 +185,7 @@ function applyOidcRuntimeOverrides(
   runtimeConfig: RuntimeConfig,
 ): OidcClientConfig | undefined {
   if (!runtimeConfig.oidcIssuer && !runtimeConfig.oidcClientId && !runtimeConfig.oidcRedirectUri && !runtimeConfig.oidcScope && !runtimeConfig.oidcSilentRedirectUri
-    && !runtimeConfig.oidcPostLogoutRedirectUri && !runtimeConfig.oidcAcrValues && !runtimeConfig.oidcResource) {
+    && !runtimeConfig.oidcPostLogoutRedirectUri && !runtimeConfig.oidcAcrValues && !runtimeConfig.oidcResource && runtimeConfig.oidcMinAssurance === undefined && runtimeConfig.oidcAcrAssuranceMapJson === undefined) {
     return oidc;
   }
 
@@ -196,7 +199,8 @@ function applyOidcRuntimeOverrides(
     postLogoutRedirectUri: runtimeConfig.oidcPostLogoutRedirectUri ?? oidc?.postLogoutRedirectUri,
     acrValues: runtimeConfig.oidcAcrValues ?? oidc?.acrValues,
     resource: runtimeConfig.oidcResource ?? oidc?.resource,
-    minAssurance: oidc?.minAssurance ?? 'L2',
+    minAssurance: runtimeConfig.oidcMinAssurance === undefined ? oidc?.minAssurance ?? 'L2' : assurance(runtimeConfig.oidcMinAssurance),
+    ...(runtimeConfig.oidcAcrAssuranceMapJson === undefined ? {} : { acrAssuranceMap: acrMap(runtimeConfig.oidcAcrAssuranceMapJson) }),
   };
 }
 
@@ -238,4 +242,22 @@ function firstPresent(env: RuntimeEnvRecord, names: readonly string[]): string |
     }
   }
   return undefined;
+}
+
+function assurance(value: unknown): AssuranceLevel {
+  if (value !== 'L1' && value !== 'L2' && value !== 'L3' && value !== 'L4') {
+    throw new TypeError('OIDC minimum and ACR mappings must use Formspec L1-L4');
+  }
+  return value;
+}
+
+function acrMap(value: string): Record<string, AssuranceLevel> {
+  const parsed: unknown = JSON.parse(value);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length === 0) {
+    throw new TypeError('OIDC ACR mapping must be a nonempty JSON object');
+  }
+  return Object.fromEntries(Object.entries(parsed).map(([acr, level]) => {
+    if (!acr || acr !== acr.trim()) throw new TypeError('OIDC ACR mapping keys must be exact nonblank strings');
+    return [acr, assurance(level)];
+  }));
 }

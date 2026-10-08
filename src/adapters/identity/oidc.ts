@@ -146,7 +146,7 @@ export function assuranceLevelFromAcr(acr: unknown, map: AcrAssuranceMap): Assur
   const acrValues = Array.isArray(acr) ? acr : [acr];
   const mapped = acrValues
     .filter((value): value is string => typeof value === 'string')
-    .map((value) => map[value])
+    .map((value) => Object.hasOwn(map, value) ? map[value] : undefined)
     .filter((value): value is AssuranceLevel => value !== undefined)
     .sort((left, right) => assuranceRank(right) - assuranceRank(left));
   const [highest] = mapped;

@@ -175,6 +175,10 @@ export interface RuntimeConfig {
   oidcSilentRedirectUri?: string;
   oidcPostLogoutRedirectUri?: string;
   oidcAcrValues?: string;
+  /** Explicit deployment minimum, validated as Formspec L1-L4. */
+  oidcMinAssurance?: string;
+  /** JSON object mapping exact provider ACR strings to Formspec L1-L4. */
+  oidcAcrAssuranceMapJson?: string;
   oidcResource?: string;
   magicLinkCallbackPath?: string;
   /** Complete object supplied by runtime JS; locator-only objects stay disabled. */
