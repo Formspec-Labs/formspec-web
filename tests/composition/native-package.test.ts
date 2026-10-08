@@ -180,6 +180,16 @@ describe('explicit native package composition', () => {
     const creates = test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'));
     expect(creates).toHaveLength(1); expect((creates[0].body as { canonical_response: FormResponse }).canonical_response.id).toBe(response.id);
     expect(await boot.composition.draftStore.load({ formUrl: test.definition.url, formVersion: test.definition.version })).toEqual(response);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const prepareAction = test.document.actions.find(action => action.id === test.signing.roles.prepare.actionRef)!;
+    await expect(boot.composition.responseSigning!.prepare({
+      draftKey: { formUrl: test.definition.url, formVersion: test.definition.version }, definition: test.definition,
+      formVersionId: test.publication.form_version_id, response, source: { ref: 'unused', version: 'unused' }, locale: 'en',
+      action: { ...test.signing.roles.prepare, document: test.document, artifactDigest: await computeJcsSha256Digest(test.document),
+        requestRef: (prepareAction.effects[0] as { requestRef: string }).requestRef },
+    })).rejects.toThrow('Preparation requires a completed unsigned pinned Response');
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Native form action failed',
+      JSON.stringify({ stage: 'prepare-port', reason: 'candidate-invalid' }));
     boot.host.dispose();
   });
 

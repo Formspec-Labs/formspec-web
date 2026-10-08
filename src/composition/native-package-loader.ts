@@ -26,6 +26,7 @@ import type { Composition } from './types.ts';
 
 import type { NativePackageBoot, NativePackageCompositionOptions } from './native-package.ts';
 import { atNativeAdmissionStage } from './native-package-admission-error.ts';
+import { diagnoseNativePrepare } from './native-package-action-diagnostic.ts';
 
 /** Called only by the explicit native boot load; all admission precedes credentials. */
 export async function loadNativePackage(config: FormspecWebConfig, options: NativePackageCompositionOptions, deferred: Composition): Promise<NativePackageBoot> {
@@ -113,7 +114,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   };
   const signing: ResponseSigning = {
     saveDraft: input => cohort.responseSigning!.saveDraft(input).then(remember),
-    prepare: input => cohort.responseSigning!.prepare(input).then(remember),
+    prepare: input => diagnoseNativePrepare(() => cohort.responseSigning!.prepare(input)).then(remember),
     sign: input => cohort.responseSigning!.sign(input).then(remember),
   };
   const attachmentStore = new HttpAttachmentStore({ ...base, formId: publication.form_id,
