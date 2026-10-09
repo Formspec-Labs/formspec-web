@@ -38,7 +38,9 @@ export { initFormspecEngine, initFormspecEngine as initEngine, initFormspecEngin
 export { attachAuthoredSignature, buildValidationReportEnvelope } from './engine/response-assembly.js';
 export { deepEqual, toValidationResults } from './engine/helpers.js';
 export type { LocaleDocument } from './locale.js';
-export { normalizeBcp47 } from './locale.js';
+export { normalizeBcp47, LocaleStore } from './locale.js';
+export { createScreenerLocaleResolver, screenerOptionLocaleKey } from './screener-locale.js';
+export type { ScreenerLocaleInput, ScreenerLocaleText, ScreenerLocaleAdmission } from './screener-locale.js';
 export * from './issuer/index.js';
 export { FormEngine } from './engine/FormEngine.js';
 export { createFormEngine } from './engine/init.js';

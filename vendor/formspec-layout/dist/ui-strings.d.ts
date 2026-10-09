@@ -148,6 +148,18 @@ export declare const UI_STRINGS: {
     readonly 'draft.browserAccessNotice': "Starting again removes saved access to this draft from this browser. Other saved drafts stay available.";
     readonly 'receipt.clearedTitle': "Saved access cleared";
     readonly 'receipt.clearedDetail': "This browser no longer has saved access to this draft.";
+    readonly 'screener.yes': "Yes";
+    readonly 'screener.no': "No";
+    readonly 'screener.titleDefault': "Eligibility Check";
+    readonly 'screener.externalDefault': "Not Eligible";
+    readonly 'screener.restart': "Start Over";
+    readonly 'screener.noMatchTitle': "No matching route";
+    readonly 'screener.noMatchBody': "No matching eligibility route was found.";
+    readonly 'screener.requiredMessage': "{{$label}} is required";
+    readonly 'screener.answerRequired': "{{$label}} needs an answer";
+    readonly 'screener.completionFailed': "We could not continue. Review your answers and try again.";
+    readonly 'screener.localeFailed': "The screening language could not be loaded.";
+    readonly 'screener.translationWarning': "Some screening text could not be translated.";
 };
 /** Closed suffix set for `$ui.<ChromeStringKey>` (Locale spec §3.1.10), one-for-one with the schema enum. */
 export type ChromeStringKey = keyof typeof UI_STRINGS;

@@ -2,6 +2,7 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useChromeText } from '../../use-chrome-text';
+import { NativeSelectControl } from './controls/native-select';
 import { ComboboxSelect } from './controls/combobox-select';
 import { MoneyInputControl } from './controls/money-input';
 import { SliderControl } from './controls/slider';
@@ -128,5 +129,5 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
  */
 function NativeSelect({ field, common, value, isReadonly, clearable, placeholder }) {
     const chrome = useChromeText();
-    return (_jsxs("div", { className: "formspec-select-wrapper", children: [_jsxs("select", { ...common, className: "formspec-input formspec-select-native", value: value ?? '', onChange: isReadonly ? undefined : (e) => field.setValue(e.target.value), disabled: isReadonly, children: [_jsx("option", { value: "", disabled: true, hidden: true, children: placeholder || chrome('select.placeholder') }), field.options.map((opt) => (_jsx("option", { value: opt.value, ...needTraceAttrs(opt.needAnchors), children: opt.label }, opt.value)))] }), clearable && value != null && value !== '' && !isReadonly && (_jsx("button", { type: "button", className: "formspec-select-clear", "aria-label": chrome('select.clearSelection'), onClick: () => { field.setValue(null); field.touch(); }, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) }))] }));
+    return (_jsxs(NativeSelectControl, { ...common, value: value ?? '', onChange: isReadonly ? undefined : (e) => field.setValue(e.target.value), disabled: isReadonly, afterControl: clearable && value != null && value !== '' && !isReadonly && (_jsx("button", { type: "button", className: "formspec-select-clear", "aria-label": chrome('select.clearSelection'), onClick: () => { field.setValue(null); field.touch(); }, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), children: [_jsx("option", { value: "", disabled: true, hidden: true, children: placeholder || chrome('select.placeholder') }), field.options.map((opt) => (_jsx("option", { value: opt.value, ...needTraceAttrs(opt.needAnchors), children: opt.label }, opt.value)))] }));
 }

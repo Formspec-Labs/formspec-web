@@ -1,6 +1,7 @@
 /** @filedesc App Manifest 2.4 Locale reference and target coherence checks. */
 import { satisfies, valid, validRange } from 'semver';
 import { diagnosticSourceForHandle } from './report.js';
+import { isExactVersion } from './component-routes.js';
 import { handlesByKind, ownProp, record, recordArray, stringProp, } from './surface-widgets.js';
 /**
  * Normalize the case conventions that are significant to BCP 47 comparison.
@@ -70,10 +71,16 @@ function targetArtifact(context, kind, url) {
             ? { version: stringProp(manifest, 'version'), matches: 1 }
             : { matches: 0 };
     }
-    if (kind !== 'definition')
+    if (kind !== 'definition' && kind !== 'screener')
         return { matches: 0 };
-    const definitions = handlesByKind(context.handles, 'definition').filter((definition) => definition.ref?.url === url
-        && stringProp(record(definition.document), 'url') === url);
+    const declaredScreeners = recordArray(ownProp(manifestRecord(context), 'screeners'));
+    if (kind === 'screener' && declaredScreeners.filter(ref => stringProp(ref, 'url') === url).length !== 1)
+        return { matches: 0 };
+    const definitions = handlesByKind(context.handles, kind).filter((definition) => definition.ref?.url === url
+        && stringProp(record(definition.document), 'url') === url
+        && (kind !== 'screener' || (isExactVersion(definition.ref?.version)
+            && stringProp(declaredScreeners.find(ref => stringProp(ref, 'url') === url), 'version') === definition.ref.version
+            && stringProp(record(definition.document), 'version') === definition.ref.version)));
     return {
         ...(definitions.length === 1
             ? { version: stringProp(record(definitions[0]?.document), 'version') }

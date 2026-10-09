@@ -1,4 +1,3 @@
-/** @filedesc FormspecScreener — standalone eligibility gate component. */
 import React from 'react';
 import type { UseScreenerOptions, ScreenerRoute } from './types';
 export interface FormspecScreenerProps extends UseScreenerOptions {

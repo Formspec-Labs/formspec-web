@@ -45,7 +45,7 @@ import { type SurfaceRouteTitleResolver } from './title-presentation.js';
 import type { DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from "react";
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type HeadingLevel, type PlannedTransition, type ResolvedBundle, type SurfaceApp as ComposedSurfaceApp, type SurfaceCompositionOptions, type SurfaceDiagnostic, type SurfaceRouteHandle, type SurfaceStringOverrides, type SurfaceStrings, type SurfaceStaticAssetResolver, type ThemeAuthority, type TransitionConditionEvaluator, type WidgetRegistry } from "@formspec-org/surface";
-import type { RegistryEntry } from "@formspec-org/types";
+import type { RegistryEntry, LocaleDocument } from "@formspec-org/types";
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetModule } from "./widget-api.js";
 import type { SurfaceDefinitionFormRenderInput, SurfaceDefinitionFormRenderer, SurfaceSemanticControlScopeResolver } from "./SurfaceSlot.js";
 import type { SurfaceSemanticOutputScopeResolver } from "./semantic-output.js";
@@ -104,6 +104,10 @@ export interface SurfaceAppModel {
 }
 export declare function useSurfaceApp(input: UseSurfaceAppInput): SurfaceAppModel;
 export interface SurfaceAppProps extends UseSurfaceAppInput {
+    /** Selected host language for native Screener presentation. */
+    activeLocale?: string | undefined;
+    /** Host-admitted resources; defaults to exact manifested Locale documents. */
+    localeDocuments?: readonly LocaleDocument[] | undefined;
     /** Current path, e.g. `window.location.pathname`. */
     location: string;
     onNavigate: (href: string) => void;

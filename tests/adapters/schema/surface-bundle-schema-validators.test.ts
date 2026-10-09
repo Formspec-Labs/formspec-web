@@ -358,6 +358,33 @@ describe('loadSurfaceBundleSchemaValidators', () => {
     expect(validateArtifact(validate, oldWithNativeSlot).ok).toBe(false);
   });
 
+  it('selects exact authored Locale versions and preserves published 2.0 without a fallback', async () => {
+    const validate = await schemaValidator();
+    const old = validArtifacts.find(candidate => candidate.artifactKind === 'locale')!;
+    const native = {
+      artifactKind: 'locale', schemaId: 'https://formspec.org/schemas/locale/2.1',
+      document: { $formspecLocale: '2.1', version: '1.0.0', locale: 'es-US',
+        target: { kind: 'screener', url: 'https://example.gov/screeners/eligibility' }, strings: {} },
+    };
+    for (const artifact of [old, native]) {
+      expect(validateArtifact(validate, artifact).ok).toBe(true);
+      expect(validateArtifact(validate, { ...artifact, schemaId: undefined }).ok).toBe(true);
+    }
+    expect(validateArtifact(validate, { ...native, schemaId: old.schemaId }).ok).toBe(false);
+    expect(validateArtifact(validate, { ...old, schemaId: native.schemaId }).ok).toBe(false);
+    for (const marker of ['2.2', undefined]) {
+      expect(validateArtifact(validate, { ...native, schemaId: undefined,
+        document: { ...native.document, $formspecLocale: marker } }).ok).toBe(false);
+      expect(validateArtifact(validate, { ...native,
+        document: { ...native.document, $formspecLocale: marker } }).ok).toBe(false);
+    }
+    expect(validateArtifact(validate, { ...native, schemaId: 'https://formspec.org/schemas/locale/2.2' }).ok).toBe(false);
+    expect(validateArtifact(validate, { ...native, schemaId: old.schemaId,
+      document: { ...native.document, $formspecLocale: '2.0' } }).ok).toBe(false);
+    expect(validateArtifact(validate, { ...native,
+      document: { ...native.document, target: { kind: 'screener' } } }).ok).toBe(false);
+  });
+
   it('fails closed for unknown artifact kinds and unexpected schema ids', async () => {
     const validate = await schemaValidator();
     const unknown = validateArtifact(validate, {

@@ -134,6 +134,7 @@ export function dereferenceBundleExport(bundle) {
         title: typeof bundle.manifest.title === 'string' ? bundle.manifest.title : undefined,
         surfaces,
         screenerHandles,
+        localeDocuments: lookupAll(bundle.manifest.locales, 'Locale'),
         ...(entrySurface === undefined ? {} : { entrySurface }),
         surfaceRefs,
         experiences,

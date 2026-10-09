@@ -2,7 +2,7 @@
 /** @filedesc useScreener — React hook for the Formspec screener gate. */
 import { useState, useCallback, useMemo } from 'react';
 import { evalFEL, wasmEvaluateScreenerDocument } from '@formspec-org/engine';
-import { useChromeText } from '../use-chrome-text';
+import { useScreenerText } from './use-screener-text';
 /**
  * Read the item's data type, supporting both the canonical schema field
  * (`dataType`) and the simplified alias (`type`) from the user-facing API.
@@ -81,8 +81,6 @@ function firstMatchedRouteFromDetermination(determination) {
     };
 }
 export function useScreener(options = {}) {
-    // Inside a form this follows that form's Locale; standalone it answers with the English defaults.
-    const chrome = useChromeText();
     const screenerDoc = options.screenerDocument ?? null;
     const items = useMemo(() => screenerDoc?.items ?? [], [screenerDoc]);
     const routes = useMemo(() => (screenerDoc?.evaluation?.flatMap((p) => p.routes ?? []) ?? []), [screenerDoc]);
@@ -91,7 +89,20 @@ export function useScreener(options = {}) {
     const [state, setState] = useState('idle');
     const [routeResult, setRouteResult] = useState(null);
     const [skipped, setSkipped] = useState(false);
-    const [errors, setErrors] = useState({});
+    const [issues, setErrors] = useState({});
+    const presentation = useScreenerText(options, answers, Object.keys(issues).filter(key => issues[key] === 'required'));
+    const chrome = presentation.chrome;
+    const errors = Object.fromEntries(Object.entries(issues).map(([key, issue]) => {
+        const item = items.find(item => item.key === key);
+        const label = presentation.text(`${key}.label`, item?.label ?? key, answers, key);
+        if (issue === 'required')
+            return [key, presentation.text(`${key}.requiredMessage`, chrome('screener.requiredMessage', { label }), answers, key, true)];
+        if (issue === 'answerRequired')
+            return [key, chrome('screener.answerRequired', { label })];
+        if (issue === 'answerOne')
+            return [key, chrome('screener.answerOne')];
+        return [key, issue];
+    }));
     const setAnswer = useCallback((key, value) => {
         setAnswers((prev) => ({ ...prev, [key]: value }));
         setErrors((prev) => {
@@ -104,6 +115,10 @@ export function useScreener(options = {}) {
         setState((s) => (s === 'idle' ? 'answering' : s));
     }, []);
     const submit = useCallback(() => {
+        if (presentation.localeFinding) {
+            setErrors({ $completion: presentation.localeFinding });
+            return;
+        }
         const newErrors = {};
         const hasExplicitRequired = items.some((i) => isItemRequired(i, screenerDoc, answers));
         if (hasExplicitRequired) {
@@ -111,7 +126,7 @@ export function useScreener(options = {}) {
                 if (isItemRequired(item, screenerDoc, answers)) {
                     const val = answers[item.key];
                     if (val === undefined || val === null || val === '') {
-                        newErrors[item.key] = `${item.label || item.key} is required`;
+                        newErrors[item.key] = 'required';
                     }
                 }
             }
@@ -122,7 +137,7 @@ export function useScreener(options = {}) {
                 return v !== undefined && v !== null && v !== '';
             });
             if (!hasAny && items.length > 0) {
-                newErrors[items[0].key] = chrome('screener.answerOne');
+                newErrors[items[0].key] = 'answerOne';
             }
         }
         if (Object.keys(newErrors).length > 0) {
@@ -134,7 +149,7 @@ export function useScreener(options = {}) {
             // Every presented field must have an explicit answer in this bounded mode.
             for (const item of items) {
                 if (answers[item.key] === undefined || answers[item.key] === null)
-                    newErrors[item.key] = `${item.label || item.key} needs an answer`;
+                    newErrors[item.key] = 'answerRequired';
             }
             if (Object.keys(newErrors).length) {
                 setErrors(newErrors);
@@ -208,7 +223,7 @@ export function useScreener(options = {}) {
         setRouteResult({ route, routeType });
         setState('routed');
         options.onRoute?.(route, routeType, answers);
-    }, [answers, items, routes, screenerDoc, options]);
+    }, [answers, items, routes, screenerDoc, options, presentation.localeFinding]);
     const restart = useCallback(() => {
         setAnswers(buildSeedAnswers(items, options.seedAnswers));
         setRouteResult(null);
@@ -233,6 +248,7 @@ export function useScreener(options = {}) {
         routeResult,
         skipped,
         errors,
+        presentation,
     };
 }
 export { itemDataType, itemOptions };

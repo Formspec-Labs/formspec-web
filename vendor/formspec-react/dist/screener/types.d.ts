@@ -1,5 +1,5 @@
 /** @filedesc Screener types for formspec-react. */
-import type { Bind, DeterminationRecord, FormItem, Phase, Route, ScreenerDocument } from '@formspec-org/types';
+import type { Bind, LocaleDocument, DeterminationRecord, FormItem, Phase, Route, ScreenerDocument } from '@formspec-org/types';
 export type ScreenerRouteType = 'internal' | 'external' | 'none';
 /** JSON-compatible screener field answer (aligned with engine FormFieldValue). */
 export type ScreenerFieldValue = string | number | boolean | null | ScreenerFieldValue[] | {
@@ -41,6 +41,9 @@ export type ScreenerCompletionDisposition = {
     reason: string;
 };
 export interface UseScreenerOptions {
+    /** Host-admitted Screener-target Locale resources; Definition/App targets stay separate. */
+    localeDocuments?: readonly LocaleDocument[] | undefined;
+    activeLocale?: string | undefined;
     /** Opt-in native completion. Acceptance precedes leaving answering state. */
     onDetermination?: (record: DeterminationRecord, answers: ScreenerAnswers, evaluationTime: string) => ScreenerCompletionDisposition;
     /** Pre-fill answers. */
@@ -78,5 +81,7 @@ export interface UseScreenerResult {
     skipped: boolean;
     /** Validation errors for screener fields (key -> error message). */
     errors: Record<string, string>;
+    /** Target-qualified display text; answer/evaluation state remains canonical. */
+    presentation: import('./use-screener-text').ScreenerPresentationText;
 }
 export type { Bind, DeterminationRecord, FormItem, Phase, Route, ScreenerDocument };

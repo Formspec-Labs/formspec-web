@@ -20,6 +20,7 @@ import definitionSchemaJson from '../../../vendor/formspec-schemas/definition.sc
 import experienceSchemaJson from '../../../vendor/formspec-schemas/experience.schema.json';
 import issuerSchemaJson from '../../../vendor/formspec-schemas/issuer.schema.json';
 import localeSchemaJson from '../../../vendor/formspec-schemas/locale.schema.json';
+import locale20SchemaJson from '../../../vendor/formspec-schemas/locale-v2.0.schema.json';
 import mappingSchemaJson from '../../../vendor/formspec-schemas/mapping.schema.json';
 import ontologySchemaJson from '../../../vendor/formspec-schemas/ontology.schema.json';
 import referencesSchemaJson from '../../../vendor/formspec-schemas/references.schema.json';
@@ -53,12 +54,15 @@ export const ARTIFACT_SCHEMA_DOCUMENTS = Object.freeze({
   surface: Object.freeze([surface02SchemaJson, surfaceSchemaJson]),
   screener: Object.freeze([screenerSchemaJson]),
   dataSources: Object.freeze([dataSourcesSchemaJson]),
-  locale: Object.freeze([localeSchemaJson]),
+  locale: Object.freeze([locale20SchemaJson, localeSchemaJson]),
   mapping: Object.freeze([mappingSchemaJson]),
 });
 
 /** Authored version markers select exact schema URIs when AppGraph omits one. */
 export const ARTIFACT_SCHEMA_IDENTITIES = Object.freeze({
+  locale: Object.freeze({ versionField: '$formspecLocale', versions: Object.freeze({
+    '2.0': locale20SchemaJson.$id, '2.1': localeSchemaJson.$id,
+  }) }),
   surface: Object.freeze({ versionField: '$formspecSurface', versions: Object.freeze({
     '0.2': surface02SchemaJson.$id, '0.3': surfaceSchemaJson.$id,
   }) }),
