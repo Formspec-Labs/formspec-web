@@ -483,3 +483,25 @@ describe('explicit native package composition', () => {
     expect(test.requests.some(request => request.url.includes('sessions/anonymous'))).toBe(false);
   });
 });
+
+
+describe('trusted native Screener completion DI', () => {
+  it('snapshots the explicit policy across default composition and deferred package admission', async () => {
+    const test = await fixture();
+    const complete = vi.fn(() => ({ status: 'refused' as const, reason: 'not-ready' }));
+    const policy = { mode: 'host-required' as const, selectionKey: 'original-selection', complete };
+    const composition = createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl, screenerCompletion: policy });
+    policy.selectionKey = 'changed-selection';
+    policy.complete = vi.fn(() => ({ status: 'refused' as const, reason: 'changed-callback' }));
+    const boot = await composition.nativePackageRespondent!.load();
+    expect(boot.screenerCompletion).toEqual({ mode: 'host-required', selectionKey: 'original-selection', complete });
+    expect(Object.isFrozen(boot.screenerCompletion)).toBe(true);
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('preserves omitted completion policy through normal package admission', async () => {
+    const test = await fixture();
+    const boot = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    expect(boot.screenerCompletion).toBeUndefined();
+  });
+});

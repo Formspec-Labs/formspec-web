@@ -172,7 +172,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     reviewResponseDigest: handoffHash, canonicalResponseHandoffBytes: handoffBytes,
   });
   let resuming: ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>> | undefined;
-  return { composition, host, componentDocument, componentRouteResolver, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale,
+  return { composition, host, componentDocument, componentRouteResolver, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale, screenerCompletion: options.screenerCompletion,
     resumeSubmitted: () => resuming ??= atNativeAdmissionStage('saved-access', async () => {
       // Validate retained credentials through the bridge; recovery never issues an owner.
       if (anonymousSessions && resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {

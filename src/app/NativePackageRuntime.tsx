@@ -162,7 +162,7 @@ function AdmittedNativePackageRuntime({ composition, config }: { composition: Co
   </NativePackageStatus>;
   const boot = state.boot;
   return <NativePackageFrame boot={boot} selection={selection} location={location} outcome={state.outcome} onNavigate={onNavigate}>
-    {screenerLocale => <NativePackageRespondentHost screenerLocale={screenerLocale} host={boot.host} composition={boot.composition}
+    {screenerLocale => <NativePackageRespondentHost screenerCompletion={boot.screenerCompletion} screenerLocale={screenerLocale} host={boot.host} composition={boot.composition}
     config={config} componentDocument={boot.componentDocument} localeDocuments={boot.localeDocuments}
     componentRouteResolver={boot.componentRouteResolver}
     location={location} onNavigate={onNavigate} />}

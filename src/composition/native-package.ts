@@ -1,4 +1,5 @@
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
+import type { SurfaceScreenerCompletionPolicy } from '@formspec-org/surface-react';
 import type { ComponentRouteResolver } from '@formspec-org/app-graph';
 import { nativePackageSigningConfig, type NativePackageSigningConfig } from '../config/native-package-signing.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
@@ -18,18 +19,22 @@ export interface NativePackageBoot {
   localeDocuments: readonly LocaleDocument[];
   moduleId: string;
   initialLocale: string;
+  screenerCompletion?: SurfaceScreenerCompletionPolicy;
   resumeSubmitted?: () => Promise<'absent' | 'active' | 'submitted'>;
 }
 
 export interface NativePackageCompositionOptions {
   packageUrl: string; initialDefinitionUrl: string; signing: NativePackageSigningConfig;
   identityBinding?: IdentityBinding;
+  /** Trusted host capability; authored documents cannot supply completion callbacks. */
+  screenerCompletion?: SurfaceScreenerCompletionPolicy;
 }
 
 /** Deferred local hash-pinned package admission, separate from signed-release verification. */
 export function createNativePackageComposition(config: FormspecWebConfig, options: NativePackageCompositionOptions): Composition {
   config = structuredClone(config);
-  options = { ...options, signing: nativePackageSigningConfig(options.signing) };
+  options = { ...options, signing: nativePackageSigningConfig(options.signing),
+    screenerCompletion: options.screenerCompletion === undefined ? undefined : Object.freeze({ ...options.screenerCompletion }) };
   const adapter = config.referenceAdapters?.formspecStack;
   if (!adapter?.formspecServerUrl) throw new Error('Native package signing requires the configured package service');
   if ((config.identity.mode === 'oidc-required' || config.ports.identityProvider === 'oidc')

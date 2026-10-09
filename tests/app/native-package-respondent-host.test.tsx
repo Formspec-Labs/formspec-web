@@ -7,7 +7,7 @@ import { cleanup, render, screen, act, fireEvent } from '@testing-library/react'
 import { dereferenceBundleExport, flattenRegistryEntries, type BundleExport } from '@formspec-org/surface';
 import { createFormEngine, hashSigningContent } from '@formspec-org/engine/render';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
-import { starterWidgetModule } from '@formspec-org/surface-react';
+import { starterWidgetModule, type SurfaceScreenerCompletionPolicy, type SurfaceScreenerCompletionRequest } from '@formspec-org/surface-react';
 import { FormspecForm, createSemanticControlRegistry } from '@formspec-org/react';
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import type { ComponentDocument, LocaleDocument, FormResponse, SigningContent, SurfaceDocument } from '@formspec-org/types';
@@ -157,7 +157,7 @@ function lifecycleFixture(earlyCaseCreation = true, persistentSaving = true) {
   return { lifecycle, receipt };
 }
 describe('independent native Screener language', () => {
-  function screenerFixture(mutate?: (locales: LocaleDocument[], documents: NonNullable<ReturnType<typeof dereferenceBundleExport>['screenerHandles']>[number]['document'][]) => void) {
+  function screenerFixture(mutate?: (locales: LocaleDocument[], documents: NonNullable<ReturnType<typeof dereferenceBundleExport>['screenerHandles']>[number]['document'][]) => void, screenerCompletion?: SurfaceScreenerCompletionPolicy) {
     const candidate = JSON.parse(readFileSync(resolve('tests/fixtures/native-screener-locale-v2.1.bundle.json'), 'utf8')) as BundleExport;
     const resolved = dereferenceBundleExport(candidate);
     const test = fixture();
@@ -175,12 +175,52 @@ describe('independent native Screener language', () => {
     const composition = createStubComposition();
     composition.nativePackageRespondent = { load: async () => ({ host: test.host, composition,
       componentDocument: component, componentRouteResolver: componentResolver(component), localeDocuments: locales,
-      moduleId: test.host.moduleId, initialLocale: 'en' }) };
+      moduleId: test.host.moduleId, initialLocale: 'en', screenerCompletion }) };
     window.history.replaceState(null, '', '/eligibility');
     const mounted = render(<NativePackageRuntime composition={composition} config={departmentAppProfile} />);
     return { test, locales, documents, selectLocale, mounted,
       advanceSession: () => { snapshot = { ...snapshot, sessionGeneration: snapshot.sessionGeneration + 1 }; listeners.forEach(listener => listener()); } };
   }
+
+  it('passes host-required policy from boot and refuses a missing completion callback', async () => {
+    const { mounted } = screenerFixture(undefined, { mode: 'host-required', selectionKey: 'selected-policy' });
+    await screen.findByRole('button', { name: /continue|check/i });
+    for (const field of mounted.container.querySelectorAll('select')) fireEvent.change(field, { target: { value: 'no' } });
+    fireEvent.click(mounted.container.querySelector('.formspec-screener-continue')!);
+    expect((await screen.findByRole('alert')).getAttribute('data-finding')).toBe('screener-completion-host-unavailable');
+    expect(window.location.pathname).toBe('/eligibility');
+    expect(mounted.container.querySelectorAll('select')).toHaveLength(8);
+    mounted.unmount(); window.history.replaceState(null, '', '/');
+  });
+
+  it('awaits the public host callback and retries the same act with false answers intact', async () => {
+    let finish!: (value: { status: 'refused'; reason: string; retry: 'same-act' }) => void;
+    const calls: SurfaceScreenerCompletionRequest[] = [];
+    const complete = vi.fn((request: SurfaceScreenerCompletionRequest) => {
+      calls.push(request);
+      return new Promise<{ status: 'refused'; reason: string; retry: 'same-act' }>(resolve => { finish = resolve; });
+    });
+    const { mounted } = screenerFixture(undefined, { mode: 'host-required', selectionKey: 'selected-policy', complete });
+    await screen.findByRole('button', { name: /continue|check/i });
+    for (const field of mounted.container.querySelectorAll('select')) fireEvent.change(field, { target: { value: 'no' } });
+    const submit = mounted.container.querySelector<HTMLButtonElement>('.formspec-screener-continue')!;
+    fireEvent.click(submit);
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledOnce());
+    expect(submit.disabled).toBe(true);
+    expect(window.location.pathname).toBe('/eligibility');
+    expect(calls[0]?.selectionKey).toBe('selected-policy');
+    expect(calls[0]?.target).toBe('surface:paper-help');
+    expect(Object.values(calls[0]!.answers)).toEqual(Array(8).fill(false));
+    await act(async () => { finish({ status: 'refused', reason: 'source-unavailable', retry: 'same-act' }); });
+    expect((await screen.findByRole('alert')).getAttribute('data-finding')).toBe('source-unavailable');
+    fireEvent.click(submit);
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(2));
+    expect(calls[1]?.completionId).toBe(calls[0]?.completionId);
+    expect(calls[1]?.answers).toEqual(calls[0]?.answers);
+    mounted.unmount();
+    expect(calls[1]?.signal.aborted).toBe(true);
+    await act(async () => { finish({ status: 'refused', reason: 'retired', retry: 'same-act' }); }); window.history.replaceState(null, '', '/');
+  });
   it('switches the exact 47-document candidate without a renewal controller or draft mutation', async () => {
     const { test, locales, documents, selectLocale, mounted, advanceSession } = screenerFixture((locales) => {
       const spanish = locales.find(locale => locale.target.kind === 'screener' && locale.locale === 'es-US')!;
