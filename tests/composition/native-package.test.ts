@@ -9,6 +9,8 @@ import type { SigningContent } from '@formspec-org/types';
 import { createFormEngine } from '@formspec-org/engine/render';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { delegatedSignedResponseFixture } from '../adapters/http/delegated-signed-response-fixture.ts';
+import type { BrowserAuthSessionState } from '../../src/ports/browser-auth-session.ts';
+import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts';
 import * as nativeHostModule from '../../src/shared/native-package-signing-host.ts';
 import { createDefaultComposition, type IdentityBinding } from '../../src/composition/default.ts';
 import { resolveActiveConfig } from '../../src/config/runtime.ts';
@@ -431,6 +433,44 @@ describe('explicit native package composition', () => {
       expect(request?.headers.get('x-formspec-tenant-id')).toBe('fixture');
     }
   });
+  it.each(['read-failure', 'newer-subscription'] as const)('reconciles native auth setup with %s', async mode => {
+    const test = await fixture('oidc:fixture');
+    const selected = await hydrationFixture();
+    const selection = structuredClone(selected.config.selection);
+    Object.assign(selection.evaluationSelection, { formId: test.publication.form_id, formVersionId: test.publication.form_version_id,
+      definitionUrl: test.definition.url, definitionVersion: test.definition.version, definitionHash: test.publication.definition_hash,
+      scope: { tenant_id: 'fixture', workspace_id: 'fixture', environment_id: 'test', cell_id: 'fixture' } });
+    const release = vi.fn();
+    const session = { issuer: 'https://idp.test', subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+    let onSession!: (state: BrowserAuthSessionState | null) => void;
+    const browserAuthSession = { getSession: vi.fn(async () => {
+      if (mode === 'read-failure') throw new Error('session read failed');
+      onSession({ ...session, revision: 2 });
+      return { ...session, issuer: 'https://stale-issuer.test', revision: 1 };
+    }), begin: async () => {},
+      completeCallback: async () => session, completeSilentCallback: async () => {}, renew: async () => session,
+      logout: async () => {}, completeLogoutCallback: async () => {}, accessToken: async () => 'oidc-bearer',
+      subscribe: vi.fn((listener: (state: BrowserAuthSessionState | null) => void) => { onSession = listener; return release; }), dispose: () => {} };
+    const provider = { discover: vi.fn(async () => []), authenticate: vi.fn(), revoke: vi.fn(async () => {}), subscribe: vi.fn(() => () => {}) };
+    const config = { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: {
+      mode: 'oidc-required' as const, oidc: { issuer: session.issuer, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const } } };
+    const composition = createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl,
+      nativeScreener: { selection, selectionHash: await computeJcsSha256Digest(selection), selectionKey: 'native' },
+      identityBinding: { provider, accessToken: async () => 'oidc-bearer', browserAuthSession } });
+    if (mode === 'read-failure') await expect(composition.nativePackageRespondent!.load()).rejects.toThrow('session read failed');
+    else {
+      const boot = await composition.nativePackageRespondent!.load();
+      // A stale initial read has a different issuer and would fail before retained-run lookup.
+      await expect(boot.host.preSignCandidate!({ saved: selected.input.saved, operationId: 'act', assertCurrent() {} })).rejects.toThrow('retained run unavailable');
+      const retire = vi.spyOn(boot.host, 'retireScreenerAuthority');
+      onSession({ ...session, revision: 3 });
+      expect(retire).toHaveBeenCalledOnce();
+      expect(boot.host.getSnapshot().nativeReadiness).toBe('pending');
+      boot.host.dispose();
+    }
+    expect(browserAuthSession.subscribe).toHaveBeenCalledOnce(); expect(release).toHaveBeenCalledOnce();
+  });
+
   it('preserves selected OIDC identity and bearer for native draft save and recovery without anonymous credentials', async () => {
     const test = await fixture('oidc:fixture');
     const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',

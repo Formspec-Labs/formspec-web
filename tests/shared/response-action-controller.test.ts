@@ -98,7 +98,7 @@ function fixture(change: Partial<ResponseActionControllerConfig> = {}) {
   return { controller, config, roles, saveDraft, prepare, sign, submit, reviewReady, buildHandoff, definition, widget, ready };
 }
 
-function lifecycleFixture(enabled = true) {
+function lifecycleFixture(enabled = true, change: Partial<ResponseActionControllerConfig> = {}) {
   const original = fixture();
   const roles = structuredClone(original.config.roles);
   const start = roleAdmission('startApplication');
@@ -111,7 +111,7 @@ function lifecycleFixture(enabled = true) {
   roles.startApplication = start;
   roles.saveInitial!.document.actions[0].validation = { profile: 'off', blocking: 'non-blocking', persistence: 'draft-checkpoint' };
   const startApplication = vi.fn(async () => ({ caseLedgerId: 'urn:wos:real-case', caseReference: 'APP-001', draftRef: 'urn:formspec:draft:owned-draft', status: 'in-progress' as const }));
-  return { ...fixture({ roles, applicationLifecycle: { capabilities: { earlyCaseCreation: enabled, persistentSaving: true, formVersionId: 'publication' }, load: vi.fn(async () => undefined), start: startApplication } }), startApplication };
+  return { ...fixture({ roles, applicationLifecycle: { capabilities: { earlyCaseCreation: enabled, persistentSaving: true, formVersionId: 'publication' }, load: vi.fn(async () => undefined), start: startApplication }, ...change }), startApplication };
 }
 describe('maintained application Start', () => {
   it('keeps Save available while unavailable case status blocks Start and Submit, then retries authoritative absence', async () => {
@@ -537,5 +537,117 @@ describe('generic admitted Response Action controller', () => {
     await test.widget('submit', test.controller.getSnapshot().signed!);
     expect(test.controller.getSnapshot().reason).toBe('context-mismatch');
     expect(test.submit).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('durable publication before downstream qualification', () => {
+  it('gives downstream checks a detached frozen result and keeps preparation private for Sign', async () => {
+    const observed: SavedResponseDraft[] = [];
+    const test = fixture({ afterCommittedDraft: value => {
+      observed.push(value);
+      expect(Object.isFrozen(value.response.data)).toBe(true);
+      expect(() => { Object.assign(value.draft, { id: 'tampered' }); }).toThrow();
+    } });
+    const prepared = await test.ready();
+    const privatePrepared = await test.prepare.mock.results[0].value;
+    expect(observed[1]).not.toBe(privatePrepared);
+    expect(await test.widget('sign', prepared)).toMatchObject({ status: 'completed' });
+    expect(test.sign.mock.calls[0][0].preparation).toBe(privatePrepared);
+    expect(test.controller.getSnapshot().signed!.draft.id).toBe('owned-draft');
+  });
+
+  it('keeps the checkpoint but prevents Start dispatch after retirement during downstream checks', async () => {
+    let finish!: () => void;
+    const downstream = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    const test = lifecycleFixture(true, { afterCommittedDraft: downstream });
+    const pending = test.definition('startApplication');
+    await vi.waitFor(() => expect(downstream).toHaveBeenCalledOnce());
+    expect(test.controller.getSnapshot().saved!.draft.id).toBe('owned-draft');
+    test.controller.invalidate(); finish();
+    expect(await pending).toMatchObject({ status: 'failed' });
+    expect(test.saveDraft).toHaveBeenCalledOnce();
+    expect(test.startApplication).not.toHaveBeenCalled();
+  });
+
+  it('preserves Save, Prepare and Sign success when the awaited downstream callback rejects', async () => {
+    const phases: string[] = [];
+    const afterCommittedDraft = vi.fn(async (value: SavedResponseDraft) => {
+      phases.push(test.controller.getSnapshot().phase);
+      expect(test.controller.getSnapshot().saved).toEqual(value);
+      throw new Error('later qualification Pending');
+    });
+    const test = fixture({ afterCommittedDraft });
+    expect(await test.definition('saveInitial')).toMatchObject({ status: 'completed' });
+    expect(await test.definition('prepare')).toMatchObject({ status: 'completed' });
+    const prepared = test.controller.getSnapshot().prepared!;
+    expect(await test.widget('sign', prepared)).toMatchObject({ status: 'completed' });
+    expect(test.controller.getSnapshot()).toMatchObject({ phase: 'signed', owned: true });
+    expect(test.controller.getSnapshot().signed!.response.authoredSignatures).toHaveLength(1);
+    expect(phases).toEqual(['saved', 'prepared', 'signed']);
+    expect(afterCommittedDraft).toHaveBeenCalledTimes(3);
+    expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.prepare).toHaveBeenCalledOnce(); expect(test.sign).toHaveBeenCalledOnce();
+  });
+
+  it('shares the original pending Save while downstream checks wait and never resaves', async () => {
+    let finish!: () => void;
+    const afterCommittedDraft = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    const hash = vi.fn(hashResponse);
+    const test = fixture({ afterCommittedDraft, hashResponse: hash });
+    const first = test.definition('saveInitial', 'same-act');
+    await vi.waitFor(() => expect(afterCommittedDraft).toHaveBeenCalledOnce());
+    expect(test.controller.getSnapshot().phase).toBe('saved');
+    const retry = test.definition('saveInitial', 'same-act');
+    await vi.waitFor(() => expect(hash).toHaveBeenCalledTimes(3));
+    finish();
+    expect(await first).toMatchObject({ status: 'completed' });
+    expect(await retry).toMatchObject({ status: 'completed' });
+    expect(test.saveDraft).toHaveBeenCalledOnce(); expect(afterCommittedDraft).toHaveBeenCalledOnce();
+  });
+});
+
+
+describe('exact dispatched Sign reconciliation retry', () => {
+  it.each(['uncommitted', 'committed'] as const)('re-enters only the frozen existing act after an ambiguous %s result', async kind => {
+    const validation = vi.fn(fixture().config.validateFrozenResponse);
+    const test = fixture({ reconcileSignRetries: true, validateFrozenResponse: validation });
+    const prepared = await test.ready();
+    const original = test.sign.getMockImplementation()!;
+    const gate = vi.fn(); let writes = 0; let retained: SignedResponseSigning | undefined;
+    test.sign.mockImplementation(async input => {
+      if (retained) return retained;
+      gate();
+      if (kind === 'committed' || gate.mock.calls.length > 1) { writes++; retained = await original(input); }
+      if (gate.mock.calls.length === 1) {
+        test.reviewReady.mockReturnValue(false);
+        validation.mockImplementation(() => { throw new Error('prepared facts retired'); });
+        throw new Error('ambiguous transport');
+      }
+      return retained!;
+    });
+    expect(await test.widget('sign', prepared, 'same-sign-act')).toMatchObject({ status: 'failed' });
+    expect(test.sign).toHaveBeenCalledOnce();
+    expect(await test.widget('sign', prepared, 'new-sign-act')).toMatchObject({ status: 'failed' });
+    expect(await test.widget('sign', prepared, 'same-sign-act', { input: { signerName: 'changed' } })).toMatchObject({ status: 'failed' });
+    expect(test.sign).toHaveBeenCalledOnce();
+    expect(await test.widget('sign', prepared, 'same-sign-act')).toMatchObject({ status: 'completed' });
+    expect(test.sign).toHaveBeenCalledTimes(2);
+    expect(test.sign.mock.calls[1][0].operationId).toBe(test.sign.mock.calls[0][0].operationId);
+    expect(test.sign.mock.calls[1][0].preparation).toBe(test.sign.mock.calls[0][0].preparation);
+    expect(test.sign.mock.calls[1][0].assent).toEqual(test.sign.mock.calls[0][0].assent);
+    expect(gate).toHaveBeenCalledTimes(kind === 'committed' ? 1 : 2);
+    expect(writes).toBe(1);
+    expect(test.controller.getSnapshot().signed).toEqual(retained);
+    expect(await test.widget('submit', test.controller.getSnapshot().signed!)).toMatchObject({ status: 'failed' });
+    expect(test.submit).not.toHaveBeenCalled();
+  });
+
+  it('clears retry admission when the controller epoch retires', async () => {
+    const test = fixture({ reconcileSignRetries: true }); const prepared = await test.ready();
+    test.sign.mockRejectedValueOnce(new Error('ambiguous transport'));
+    expect(await test.widget('sign', prepared, 'same-sign-act')).toMatchObject({ status: 'failed' });
+    test.controller.invalidate();
+    expect(await test.widget('sign', prepared, 'same-sign-act')).toMatchObject({ status: 'failed' });
+    expect(test.sign).toHaveBeenCalledOnce();
   });
 });

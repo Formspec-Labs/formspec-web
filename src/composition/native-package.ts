@@ -1,4 +1,5 @@
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
+import type { ScreenerSelection } from '../ports/screener-retention.ts';
 import type { SurfaceScreenerCompletionPolicy } from '@formspec-org/surface-react';
 import type { ComponentRouteResolver } from '@formspec-org/app-graph';
 import { nativePackageSigningConfig, type NativePackageSigningConfig } from '../config/native-package-signing.ts';
@@ -23,18 +24,28 @@ export interface NativePackageBoot {
   resumeSubmitted?: () => Promise<'absent' | 'active' | 'submitted'>;
 }
 
+export interface NativeScreenerCompositionPins {
+  readonly selection: ScreenerSelection;
+  readonly selectionHash: string;
+  readonly selectionKey: string;
+}
+
 export interface NativePackageCompositionOptions {
   packageUrl: string; initialDefinitionUrl: string; signing: NativePackageSigningConfig;
   identityBinding?: IdentityBinding;
   /** Trusted host capability; authored documents cannot supply completion callbacks. */
   screenerCompletion?: SurfaceScreenerCompletionPolicy;
+  nativeScreener?: NativeScreenerCompositionPins;
 }
 
 /** Deferred local hash-pinned package admission, separate from signed-release verification. */
 export function createNativePackageComposition(config: FormspecWebConfig, options: NativePackageCompositionOptions): Composition {
   config = structuredClone(config);
   options = { ...options, signing: nativePackageSigningConfig(options.signing),
+    nativeScreener: options.nativeScreener ? structuredClone(options.nativeScreener) : undefined,
     screenerCompletion: options.screenerCompletion === undefined ? undefined : Object.freeze({ ...options.screenerCompletion }) };
+  if (options.nativeScreener && options.screenerCompletion) throw new Error('Native Screener completion policies are ambiguous');
+  if (options.nativeScreener && (!options.identityBinding?.browserAuthSession || !config.identity.oidc)) throw new Error('Native Screener requires the selected authenticated session');
   const adapter = config.referenceAdapters?.formspecStack;
   if (!adapter?.formspecServerUrl) throw new Error('Native package signing requires the configured package service');
   if ((config.identity.mode === 'oidc-required' || config.ports.identityProvider === 'oidc')

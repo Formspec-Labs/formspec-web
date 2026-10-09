@@ -68,4 +68,17 @@ describe('native replacement capability and abort limits', () => {
       old.dispose(); vi.unstubAllGlobals();
     }
   });
+  it('transfers disposal ownership once before Runtime commits the adopted engine', async () => {
+    const old = createFormEngine(definition()); const host = new AbortController();
+    const result = await replaceNativeFormEngine({ currentEngine: old, engineOptions: { instanceSourceResolver: resolver },
+      localeDocuments: [], signal: host.signal, assertCurrent() {} });
+    expect(result.status).toBe('replaced'); if (result.status !== 'replaced') throw new Error('expected replacement');
+    const disposed = vi.spyOn(result.engine, 'dispose');
+    result.adopt(); expect(() => result.adopt()).toThrow();
+    host.abort(); result.dispose();
+    expect(disposed).not.toHaveBeenCalled();
+    result.engine.setValue('parent', 'Runtime owns this'); expect(result.engine.signals.parent.value).toBe('Runtime owns this');
+    result.engine.dispose(); expect(disposed).toHaveBeenCalledOnce(); old.dispose();
+  });
+
 });

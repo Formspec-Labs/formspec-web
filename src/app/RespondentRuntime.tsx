@@ -1,9 +1,11 @@
+import { assertSynchronousGuard } from '../shared/synchronous-guard.ts';
 import {
   Component,
   type ErrorInfo,
   type ReactNode,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,6 +14,7 @@ import {
   createDemoSubmitResponseActions,
   createFormEngine,
   type IFormEngine,
+  type InstanceSourceResolver,
   type ResolvedIssuer,
 } from '@formspec-org/engine';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
@@ -164,6 +167,8 @@ export interface ResolvedRespondentFormInput {
   readonly activeLocale?: string;
   readonly componentDocument?: ComponentDocument;
   /** Establish ownership after restore and before controls mount; release resources if setup throws. */
+  /** Trusted native source policy; supplied before any engine source task starts. */
+  readonly instanceSourceResolver?: InstanceSourceResolver;
   readonly configureRuntime?: (input: RespondentOwnedRuntimeInput) => Promise<RespondentOwnedRuntime>;
   readonly configureSubmittedRuntime?: (input: RespondentSubmittedRuntimeInput) => Promise<Pick<RespondentOwnedRuntime, 'invalidate' | 'dispose'>>;
   readonly responseActionInvoker?: SurfaceDefinitionFormRenderInput['responseActionInvoker'];
@@ -180,8 +185,18 @@ export interface ResolvedRespondentFormInput {
   ) => void;
 }
 
+export interface RespondentEngineExchange {
+  readonly expected: IFormEngine;
+  readonly engine: IFormEngine;
+  readonly adopt: () => void;
+  readonly signal: AbortSignal;
+  readonly assertCurrent: () => void;
+}
+
 export interface RespondentOwnedRuntimeInput {
   readonly engine: IFormEngine;
+  /** Runtime owns both engines until React commits or rolls back this exchange. */
+  readonly exchangeEngine?: (replacement: RespondentEngineExchange) => Promise<void>;
   readonly definition: FormDefinition;
   readonly draftKey: DraftKey;
   readonly claim: IdentityClaim | null;
@@ -204,6 +219,8 @@ export interface RespondentOwnedRuntime {
   readonly semanticControlScope: SurfaceDefinitionFormRenderInput['semanticControlScope'];
   /** Refuse new actions immediately, before Clear drains any outstanding writes. */
   readonly invalidate: () => void;
+  /** Observed after the initial renderer commit; may qualify an existing saved candidate. */
+  readonly afterMount?: () => Promise<void>;
   /** Optional opaque marker used only to reject a queued stale terminal. */
   readonly getCompletionGeneration?: () => string | number;
   /** Retire this mounted form; its host may retain a frozen preparation across routes. */
@@ -365,6 +382,34 @@ function RespondentController({
   onSubmitConfirmed,
 }: RespondentControllerProps) {
   const [respondentState, setRespondentState] = useState<RespondentState>({ status: 'loading' });
+  const pendingExchange = useRef<{
+    request: RespondentEngineExchange; rollback?: unknown;
+    commit: () => void; resolve: () => void; reject: (error: unknown) => void;
+  } | undefined>(undefined);
+  useLayoutEffect(() => {
+    const pending = pendingExchange.current;
+    if (!pending) return;
+    const { request } = pending;
+    if (respondentState.status === 'ready' && respondentState.engine === request.engine) {
+      try {
+        if (pending.rollback) throw pending.rollback;
+        request.signal.throwIfAborted(); assertSynchronousGuard(request.assertCurrent);
+        pending.commit(); pendingExchange.current = undefined;
+        request.expected.dispose(); pending.resolve();
+      } catch (error) {
+        pending.rollback = error;
+        setRespondentState(previous => previous.status === 'ready' && previous.engine === request.engine
+          ? { ...previous, engine: request.expected } : previous);
+      }
+    } else {
+      // Replacement never committed, or React has now committed the rollback.
+      pendingExchange.current = undefined; request.engine.dispose();
+      pending.reject(pending.rollback ?? new Error('Respondent engine exchange retired'));
+    }
+  }, [respondentState]);
+
+  const mountedOwner = respondentState.status === 'ready' ? respondentState.ownedRuntime : undefined;
+  useEffect(() => { if (mountedOwner?.afterMount) void mountedOwner.afterMount().catch(() => {}); }, [mountedOwner]);
   const [submitState, setSubmitState] = useState<SubmitState>({ status: 'idle' });
   const [respondentPlaceState, setRespondentPlaceState] = useState<RespondentPlaceState>({
     status: 'loading',
@@ -427,8 +472,24 @@ function RespondentController({
       setSubmitState({ status: 'idle' });
       try {
         await engineReady;
+        const exchangeEngine = async (request: RespondentEngineExchange): Promise<void> => {
+          request.signal.throwIfAborted(); assertSynchronousGuard(request.assertCurrent);
+          if (cancelled || sequence !== reloadSequence || engine !== request.expected || pendingExchange.current) {
+            throw new Error('Respondent engine exchange retired');
+          }
+          assertSynchronousGuard(request.adopt);
+          await new Promise<void>((resolve, reject) => {
+            pendingExchange.current = { request, resolve, reject,
+              commit: () => {
+                if (cancelled || sequence !== reloadSequence || engine !== request.expected) throw new Error('Respondent engine exchange retired');
+                engine = request.engine;
+              } };
+            setRespondentState(previous => previous.status === 'ready' && previous.engine === request.expected
+              ? { ...previous, engine: request.engine } : previous);
+          });
+        };
         const readyState = await createReadyState(composition, config, claim,
-          restartLocale.current === undefined ? options : { ...options, locale: restartLocale.current }, form);
+          restartLocale.current === undefined ? options : { ...options, locale: restartLocale.current }, form, exchangeEngine);
         restartLocale.current = undefined;
 
         if (cancelled || sequence !== reloadSequence) {
@@ -539,6 +600,9 @@ function RespondentController({
       unsubscribe?.();
       disposeOwnedRuntime();
       engine?.dispose();
+      const exchange = pendingExchange.current;
+      pendingExchange.current = undefined;
+      if (exchange) { exchange.request.engine.dispose(); exchange.reject(new Error('Respondent engine exchange unmounted')); }
       applyReadyStateRef.current = null;
       disposeActiveEngine.current = null;
     };
@@ -1352,6 +1416,7 @@ async function createReadyState(
   claim: IdentityClaim | null,
   options: { locale?: string } = {},
   form?: ResolvedRespondentFormInput,
+  exchangeEngine?: RespondentOwnedRuntimeInput['exchangeEngine'],
 ): Promise<ReadyRespondentState | Extract<RespondentState, { status: 'auth-required' | 'draft-conflict' | 'submitted' }>> {
   assertIdentityPolicySatisfied({
     claim,
@@ -1511,7 +1576,8 @@ async function createReadyState(
   }
   const engine = createFormEngine(definition, {
     runtimeContext: { locale: activeLocale },
-    ...(form ? { registryEntries: [...form.registryEntries] } : {}),
+    ...(form ? { registryEntries: [...form.registryEntries], instanceSourceResolver: form.instanceSourceResolver,
+      ...(form.instanceSourceResolver && recoveredDraft ? { responseData: recoveredDraft.data as Parameters<IFormEngine['loadResponseData']>[0] } : {}) } : {}),
   });
   let multiPartyState: MultiPartyPersistedState | null;
   let draft: FormResponse | undefined;
@@ -1555,13 +1621,14 @@ async function createReadyState(
       if (runtimeProfile.enabled.has('trustedReviewer')) {
         throw new Error('An owned action runtime cannot use the legacy reviewer draft writer');
       }
-      const configured = await form.configureRuntime({ engine, definition,
+      const configured = await form.configureRuntime({ engine, definition, exchangeEngine,
         draftKey: multiPartyState ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef) : draftKey, claim,
         restoredResponse: draft ? structuredClone(draft) : undefined, restoredSigning: recoveredSigning, restoredApplication: recoveredApplication,
         restoredApplicationLookup: recoveredApplicationLookup, activeLocale });
       if (!configured || typeof configured.responseActionInvoker !== 'function'
         || typeof configured.invalidate !== 'function'
         || typeof configured.dispose !== 'function'
+        || (configured.afterMount !== undefined && typeof configured.afterMount !== 'function')
         || (configured.getCompletionGeneration !== undefined && typeof configured.getCompletionGeneration !== 'function')) {
         configured?.dispose?.();
         throw new Error('An owned action runtime must supply its complete execution and lifecycle hooks');

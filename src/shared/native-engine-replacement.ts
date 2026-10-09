@@ -21,7 +21,9 @@ export type NativeEngineReplacement = Readonly<{
   engine: IFormEngine;
   /** Unavailable is explicit and grants no readiness. Caller still qualifies every required source. */
   sourceOutcomes: Readonly<Record<string, InstanceSourceLoadOutcome>>;
-  /** Releases the host abort subscription and disposes only this replacement. */
+  /** Transfer once to Runtime before enqueue; staging abort/dispose relinquishes ownership. */
+  adopt: () => void;
+  /** Releases the host abort subscription and disposes only an unadopted replacement. */
   dispose: () => void;
 }>;
 
@@ -47,8 +49,9 @@ export async function replaceNativeFormEngine(input: NativeEngineReplacementInpu
     runtimeContext: { ...input.engineOptions.runtimeContext, locale }, responseData };
   const engine = (input.createEngine ?? createFormEngine)(definition, options);
   let disposed = false;
+  let adopted = false;
   const dispose = () => {
-    if (disposed) return;
+    if (disposed || adopted) return;
     disposed = true; signal.removeEventListener('abort', dispose); engine.dispose();
   };
   signal.addEventListener('abort', dispose, { once: true });
@@ -66,7 +69,10 @@ export async function replaceNativeFormEngine(input: NativeEngineReplacementInpu
     }
     await waitForHost(signal, () => engine.waitForRemoteOptions());
     check();
-    return Object.freeze({ status: 'replaced', engine, sourceOutcomes, dispose });
+    return Object.freeze({ status: 'replaced', engine, sourceOutcomes, dispose, adopt: () => {
+      check(); if (adopted) throw new Error('Native replacement already adopted');
+      adopted = true; signal.removeEventListener('abort', dispose);
+    } });
   } catch (error) { dispose(); throw error; }
 }
 

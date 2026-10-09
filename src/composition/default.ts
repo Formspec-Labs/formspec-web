@@ -1,3 +1,4 @@
+import type { NativeScreenerCompositionPins } from './native-package.ts';
 import type { SurfaceScreenerCompletionPolicy } from '@formspec-org/surface-react';
 import { OidcBrowserAuthSession } from '../adapters/identity/oidc-browser-session.ts';
 import type { BrowserAuthSession } from '../ports/browser-auth-session.ts';
@@ -83,6 +84,7 @@ export interface DefaultCompositionOptions {
   identityBinding?: IdentityBinding;
   /** Explicit trusted host policy for native package Screener completion. */
   screenerCompletion?: SurfaceScreenerCompletionPolicy;
+  nativeScreener?: NativeScreenerCompositionPins;
 }
 
 export function createDefaultComposition(
@@ -98,7 +100,7 @@ export function createDefaultComposition(
     const identityBinding = config.ports.identityProvider === 'oidc'
       ? options.identityBinding ?? (config.identity.oidc ? createOidcIdentityBinding(config.identity.oidc) : undefined)
       : undefined;
-    return createNativePackageComposition(config, { signing: nativeSigning, packageUrl: options.packageUrl, identityBinding, screenerCompletion: options.screenerCompletion,
+    return createNativePackageComposition(config, { signing: nativeSigning, packageUrl: options.packageUrl, identityBinding, screenerCompletion: options.screenerCompletion, nativeScreener: options.nativeScreener,
       initialDefinitionUrl: options.initialDefinitionUrl ?? productionInitialDefinitionUrl(serverUrl) });
   }
   if (!serverUrl) {

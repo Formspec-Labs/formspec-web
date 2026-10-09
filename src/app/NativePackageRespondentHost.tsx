@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import canonicalize from 'canonicalize';
 import { SurfaceApp, useSurfaceApp, deriveSurfaceRuntimeGeneration, renderDefaultDefinitionForm, type SurfaceAppProps, type SurfaceRouteTitleResolver } from '@formspec-org/surface-react';
 import '@formspec-org/surface-react/formspec-surface.css';
@@ -31,7 +31,13 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
   const sessionMarker = useMemo(() => props.host.allocateSurfaceSessionMarker(state.sessionGeneration), [props.host, props.location, state.sessionGeneration]);
   const marker = deriveSurfaceRuntimeGeneration({ app: model.app, location: props.location, sessionGeneration: sessionMarker });
   const visit = useMemo(() => props.host.createSurfaceVisit(marker, state.sessionGeneration), [props.host, marker, state.sessionGeneration]);
-  useLayoutEffect(() => { if (state.cleared) return; visit.activate(); return () => visit.dispose(); }, [visit, state.cleared]);
+  useLayoutEffect(() => {
+    if (state.cleared) return; visit.activate();
+    return () => visit.dispose();
+  }, [visit, state.cleared, props.host]);
+  useEffect(() => {
+    if (!state.cleared) void props.host.qualifyCurrentVisit?.().catch(() => {});
+  }, [visit, state.cleared, props.host]);
   const ports = useMemo(() => visit.bindRuntime(), [visit]);
   const locales = useMemo(() => [...props.localeDocuments], [props.localeDocuments]);
   const definitionLocales = useMemo(() => new Map([...props.host.bundle.definitions.values()].map(definition => [definition.url,
@@ -57,7 +63,7 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
       entry = { completed: slot.onActionCompleted, form: { definition: slot.plan.definition, themeDocument: slot.grant.themeDocument,
         registryEntries: slot.plan.registryEntries, responseActionsDocument: slot.responseActionsDocument,
         localeDocuments: slotLocales, activeLocale: state.locale || undefined, componentDocument,
-        configureRuntime: props.host.configureRuntime, configureSubmittedRuntime: props.composition.draftStore.readState ? props.host.configureSubmittedRuntime : undefined, onActionCompleted: (action, result) => entry!.completed?.(action, result) } };
+        instanceSourceResolver: props.host.instanceSourceResolver, configureRuntime: props.host.configureRuntime, configureSubmittedRuntime: props.composition.draftStore.readState ? props.host.configureSubmittedRuntime : undefined, onActionCompleted: (action, result) => entry!.completed?.(action, result) } };
       forms.set(key, entry);
     }
     entry.completed = slot.onActionCompleted;
@@ -79,7 +85,10 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     return state.formTitle || undefined;
   }, [props.host, props.componentRouteResolver, props.componentDocument, state.formTitle]);
   if (state.cleared) return null;
-  return <SurfaceApp screenerCompletion={props.screenerCompletion} activeLocale={props.screenerLocale} localeDocuments={locales} bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate}
+  return <>{state.controller?.retrySignAvailable && ports.retrySigningResult ? <div lang="en">
+    <p>Check the result of your previous signing attempt.</p>
+    <button type="button" onClick={() => { void ports.retrySigningResult?.().catch(() => {}); }}>Check previous signing result</button>
+  </div> : null}{state.nativeReadiness && state.nativeReadiness !== 'ready' ? <p role="status" lang="en">{state.nativeReadiness === 'needs-save' ? 'Updated answers need saving.' : 'Checks pending.'}</p> : null}<SurfaceApp screenerCompletion={props.screenerCompletion ?? props.host.screenerCompletion} activeLocale={props.screenerLocale} localeDocuments={locales} bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate}
     staticAssetResolver={props.host.staticAssetResolver}
     widgetModules={modules} appTitle={state.formTitle || undefined} resolveRouteTitle={resolveRouteTitle}
     sessionGeneration={sessionMarker} widgetActionExecutor={ports.widgetActionExecutor}
@@ -87,5 +96,5 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     dataSourceLoader={ports.dataSourceLoader}
     dataSourceRevision={ports.dataSourceRevision}
     validateDataSourcePayload={ports.validateDataSourcePayload}
-    renderDefinitionForm={renderDefinitionForm} />;
+    renderDefinitionForm={renderDefinitionForm} /></>;
 }

@@ -1,3 +1,4 @@
+import { assertSynchronousGuard } from './synchronous-guard.ts';
 import type { SurfaceScreenerCompletionPolicy, SurfaceScreenerCompletionRequest } from '@formspec-org/surface-react';
 import type { SavedResponseDraft } from '../ports/response-signing.ts';
 import type { ScreenerOperationContext, ScreenerRetention, ScreenerRunView } from '../ports/screener-retention.ts';
@@ -49,7 +50,7 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
           controller.signal.throwIfAborted();
           if (disposed || active !== operation) throw new Error('Native Screener operation retired');
           for (const signal of parents) signal.throwIfAborted();
-          synchronous(parentAssert); if (caller) synchronous(caller);
+          assertSynchronousGuard(parentAssert); if (caller) assertSynchronousGuard(caller);
         } catch (error) { operation.retire(); throw error; }
       },
       wait: task => Promise.race([task, aborted]),
@@ -120,13 +121,6 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
     },
     dispose: () => { if (disposed) return; disposed = true; run = undefined; retireFacts(); },
   });
-}
-function synchronous(assert: () => void): void {
-  const admission: unknown = assert();
-  if (admission !== undefined) {
-    void Promise.resolve(admission).catch(() => {});
-    throw new Error('Native Screener guard must be synchronous');
-  }
 }
 function primitiveAnswers(answers: SurfaceScreenerCompletionRequest['answers']): Record<string, string | number | boolean> {
   return Object.fromEntries(Object.entries(answers).map(([path, value]) => {

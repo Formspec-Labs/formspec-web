@@ -13,6 +13,9 @@ import { HttpClient } from '../adapters/http/http-client.ts';
 import { readApplicationLifecycleCapabilities } from '../adapters/http/application-lifecycle.ts';
 import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
 import { AnonymousSessionBridge } from '../adapters/http/anonymous-session.ts';
+import { HttpScreenerRetention } from '../adapters/http/screener-retention.ts';
+import { HttpScreenerHydration } from '../adapters/http/screener-hydration.ts';
+import type { BrowserAuthSessionState } from '../ports/browser-auth-session.ts';
 import { HttpAttachmentStore } from '../adapters/http/attachment-store.ts';
 import { createBrowserDraftResumeMetadataStore } from '../adapters/browser/draft-resume-metadata.ts';
 import { computeJcsSha256Digest } from '../adapters/http/response-action-ledger.ts';
@@ -125,11 +128,24 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   if (pins.applicationLifecycle && !options.identityBinding) throw new Error('Application lifecycle requires the selected authenticated session');
   const lifecycleCapabilities = pins.applicationLifecycle
     ? await readApplicationLifecycleCapabilities(new HttpClient({ ...base, accessToken: ownedAccessToken }), { formId: publication.form_id, formVersionId: publication.form_version_id }) : undefined;
+  let host: ReturnType<typeof createNativePackageSigningHost> | undefined;
+  const nativePins = options.nativeScreener;
+  if (nativePins) {
+    const selected = nativePins.selection.evaluationSelection;
+    if (selected.formId !== publication.form_id || selected.formVersionId !== publication.form_version_id
+      || selected.definitionUrl !== definition.url || selected.definitionVersion !== definition.version
+      || selected.definitionHash !== publication.definition_hash || !nativePins.selectionKey.trim()
+      || nativePins.selectionHash !== await computeJcsSha256Digest(nativePins.selection)) throw new Error('Native Screener publication pins mismatch');
+  }
   const cohort = createHttpAdapterCohort({ ...base, accessToken: ownedAccessToken, resumeMetadata, formIdResolver, anonymousSessions,
     applicationLifecycle: lifecycleCapabilities ? { capabilities: lifecycleCapabilities, action: roles.startApplication as AdmittedResponseAction } : undefined,
     qualifiedDraftState: { definition, formVersionId: publication.form_version_id, localeDocuments },
     responseSigning: { keyId: pins.keyId, validateResponse: validateCanonicalFormResponse,
-      validateContent, signingProfileDigest: responseSigningDigest } });
+      validateContent, signingProfileDigest: responseSigningDigest,
+      ...(nativePins ? { preSignCandidate: async input => {
+        if (!host?.preSignCandidate) throw new Error('Native Screener host unavailable');
+        return host.preSignCandidate(input);
+      } } : {}) } });
   let owner: { key: DraftKey; actor: string } | undefined;
   const remember = <T extends SavedResponseDraft>(result: T): T => {
     owner = { key: structuredClone(result.draftKey), actor: result.actor.id }; return result;
@@ -155,46 +171,79 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   if (registryEntries.diagnostics.length) throw new Error('Native Registry entries are ambiguous');
   const semantics = createSemanticControlRegistry();
   const definitionDigest = await computeJcsSha256Digest(definition);
-  const host = createNativePackageSigningHost({ bundle, definition, moduleId: pins.module.id, modules: modulePins, staticAssets: pins.staticAssets, registryEntries: registryEntries.entries,
-    locales: localeDocuments, initialLocale: pins.initialLocale,
-    clearDraftAccess: async key => { formIdResolver(key.formUrl, key.formVersion); await cohort.draftStore.delete(key); owner = undefined; }, publication: { formId: publication.form_id, formVersionId: publication.form_version_id },
-    applicationReadiness: pins.applicationLifecycle,
-    controller: { applicationLifecycle: cohort.applicationLifecycle, roles, signing, submitTransport: cohort.submitTransport, validateResponse: validateCanonicalFormResponse, hashResponse: handoffHash },
-    buildHandoff: (response, report, context) => buildIntakeHandoff({ definition, response, validationReport: report,
-      draftKey: context.draftKey, claim: context.claim, idempotencyKey: generateIdempotencyKey() }),
-    semanticScope: (responseId, renderInstance) => ({ registry: semantics, renderInstanceId: `native:${renderInstance}`,
-      definitionArtifact: { artifactRef: definition.url, artifactDigest: definitionDigest },
-      responseActionsArtifact: { artifactRef: roles.saveInitial.artifactRef, artifactDigest: roles.saveInitial.artifactDigest }, responseId }),
-    readiness: pins.readiness, bindings: pins.bindings, actionLabels, signingContext,
-    validatePayload: createSigningDataSourcePayloadValidator(), attachmentStore,
-    assertOwner: (key, actor) => { if (!owner || !same(owner.key, key) || owner.actor !== actor) throw new Error('Native private draft owner is unavailable or differs'); },
-    invalidateAuthority: (_reason, key) => { if (key) cohort.invalidateResponseSigningScope!(key); },
-    reviewResponseDigest: handoffHash, canonicalResponseHandoffBytes: handoffBytes,
-  });
-  let resuming: ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>> | undefined;
-  return { composition, host, componentDocument, componentRouteResolver, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale, screenerCompletion: options.screenerCompletion,
-    resumeSubmitted: () => resuming ??= atNativeAdmissionStage('saved-access', async () => {
-      // Validate retained credentials through the bridge; recovery never issues an owner.
-      if (anonymousSessions && resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {
-        await anonymousSessions.sessionForForm(definition.url, definition.version, true);
-      }
-      let claim = null;
-      if (options.identityBinding) {
-        claim = await atNativeAdmissionStage('identity', async () => {
-          // Do not start a redirect during recovery; the respondent shell owns sign-in.
-          if (!await options.identityBinding!.browserAuthSession!.getSession()) return null;
-          const choices = await options.identityBinding!.provider.discover(config.identity.oidc?.minAssurance);
-          const selected = choices.find(choice => choice.kind === 'oidc' && choice.issuer === config.identity.oidc?.issuer);
-          if (!selected) throw new Error('Selected OIDC identity is unavailable for native recovery');
-          return options.identityBinding!.provider.authenticate(selected);
-        });
-        if (!claim) return 'absent';
-      }
-      const draftKey = { formUrl: definition.url, formVersion: definition.version, subjectRef: claim?.subjectRef };
-      const state = await draftStore.readState(draftKey);
-      if (state?.kind === 'submitted') await host.configureSubmittedRuntime({ definition, draftKey, claim, state });
-      return state?.kind ?? 'absent';
-    }) };
+  const session = options.identityBinding?.browserAuthSession;
+  let authState: BrowserAuthSessionState | null = null;
+  let authSequence = 0; let authLifetime = new AbortController();
+  const releaseAuth = nativePins ? session!.subscribe(next => {
+    authSequence++; authLifetime.abort(); authLifetime = new AbortController(); authState = next ? structuredClone(next) : null;
+    host?.retireScreenerAuthority?.();
+  }) : undefined;
+  try {
+    if (nativePins) {
+      const sequence = authSequence;
+      const initial = await session!.getSession();
+      if (sequence === authSequence) authState = initial ? structuredClone(initial) : null;
+    }
+    host = createNativePackageSigningHost({
+      ...(nativePins ? { nativeScreener: { selectionKey: nativePins.selectionKey,
+        retention: new HttpScreenerRetention({ ...base, accessToken: ownedAccessToken, ...nativePins }),
+        hydration: new HttpScreenerHydration({ ...base, accessToken: ownedAccessToken, ...nativePins, definition }),
+        context: () => {
+          const state = authState; const sequence = authSequence; const lifetime = authLifetime;
+          const assertCurrent = () => { lifetime.signal.throwIfAborted();
+            if (!state || state.issuer !== config.identity.oidc!.issuer || sequence !== authSequence
+              || Date.parse(state.expiresAt) <= Date.now() || !Number.isFinite(Date.parse(state.expiresAt))) throw new Error('Native Screener browser session retired'); };
+          assertCurrent();
+          return { identity: { issuer: state!.issuer, subject: state!.subject, clientId: config.identity.oidc!.clientId }, signal: lifetime.signal, assertCurrent };
+        } } } : {}), bundle, definition, moduleId: pins.module.id, modules: modulePins, staticAssets: pins.staticAssets, registryEntries: registryEntries.entries,
+      locales: localeDocuments, initialLocale: pins.initialLocale,
+      clearDraftAccess: async key => { formIdResolver(key.formUrl, key.formVersion); await cohort.draftStore.delete(key); owner = undefined; }, publication: { formId: publication.form_id, formVersionId: publication.form_version_id },
+      applicationReadiness: pins.applicationLifecycle,
+      controller: { applicationLifecycle: cohort.applicationLifecycle, roles, signing, submitTransport: cohort.submitTransport, validateResponse: validateCanonicalFormResponse, hashResponse: handoffHash },
+      buildHandoff: (response, report, context) => buildIntakeHandoff({ definition, response, validationReport: report,
+        draftKey: context.draftKey, claim: context.claim, idempotencyKey: generateIdempotencyKey() }),
+      semanticScope: (responseId, renderInstance) => ({ registry: semantics, renderInstanceId: `native:${renderInstance}`,
+        definitionArtifact: { artifactRef: definition.url, artifactDigest: definitionDigest },
+        responseActionsArtifact: { artifactRef: roles.saveInitial.artifactRef, artifactDigest: roles.saveInitial.artifactDigest }, responseId }),
+      readiness: pins.readiness, bindings: pins.bindings, actionLabels, signingContext,
+      validatePayload: createSigningDataSourcePayloadValidator(), attachmentStore,
+      assertOwner: (key, actor) => { if (!owner || !same(owner.key, key) || owner.actor !== actor) throw new Error('Native private draft owner is unavailable or differs'); },
+      invalidateAuthority: (_reason, key) => { if (key) cohort.invalidateResponseSigningScope!(key); },
+      reviewResponseDigest: handoffHash, canonicalResponseHandoffBytes: handoffBytes,
+    });
+    const admittedHost = host;
+    const disposeHost = admittedHost.dispose;
+    admittedHost.dispose = () => { releaseAuth?.(); authLifetime.abort(); disposeHost(); };
+    let resuming: ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>> | undefined;
+    return { composition, host: admittedHost, componentDocument, componentRouteResolver, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale, screenerCompletion: admittedHost.screenerCompletion ?? options.screenerCompletion,
+      resumeSubmitted: () => resuming ??= atNativeAdmissionStage('saved-access', async () => {
+        // Validate retained credentials through the bridge; recovery never issues an owner.
+        if (anonymousSessions && resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {
+          await anonymousSessions.sessionForForm(definition.url, definition.version, true);
+        }
+        let claim = null;
+        if (options.identityBinding) {
+          claim = await atNativeAdmissionStage('identity', async () => {
+            // Do not start a redirect during recovery; the respondent shell owns sign-in.
+            if (!await options.identityBinding!.browserAuthSession!.getSession()) return null;
+            const choices = await options.identityBinding!.provider.discover(config.identity.oidc?.minAssurance);
+            const selected = choices.find(choice => choice.kind === 'oidc' && choice.issuer === config.identity.oidc?.issuer);
+            if (!selected) throw new Error('Selected OIDC identity is unavailable for native recovery');
+            return options.identityBinding!.provider.authenticate(selected);
+          });
+          if (!claim) return 'absent';
+        }
+        const draftKey = { formUrl: definition.url, formVersion: definition.version, subjectRef: claim?.subjectRef };
+        const state = await draftStore.readState(draftKey);
+        if (state?.kind === 'submitted') await admittedHost.configureSubmittedRuntime({ definition, draftKey, claim, state });
+        return state?.kind ?? 'absent';
+      }) };
+  } catch (error) {
+    releaseAuth?.();
+    authLifetime.abort();
+    host?.dispose();
+    throw error;
+  }
 }
 async function qualifyRoles(bundle: BundleExport, pins: NativePackageSigningConfig): Promise<Record<ResponseActionRole, QualifiedResponseActionRole>> {
   const resolved = dereferenceBundleExport(bundle);

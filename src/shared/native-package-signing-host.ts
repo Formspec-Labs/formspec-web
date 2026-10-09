@@ -1,3 +1,4 @@
+import { assertSynchronousGuard } from './synchronous-guard.ts';
 import canonicalize from 'canonicalize';
 import { createFormEngine, preactReactiveRuntime, type IFormEngine, type RegistryEntry } from '@formspec-org/engine/render';
 import type { SemanticControlScope } from '@formspec-org/react';
@@ -9,6 +10,12 @@ import type { DraftKey } from '../ports/draft-store.ts';
 import type { RespondentOwnedRuntimeInput, RespondentOwnedRuntime, RespondentSubmittedRuntimeInput } from '../app/RespondentRuntime.tsx';
 import { createResponseActionController, type ResponseActionControllerConfig, type ResponseActionControllerSnapshot } from './response-action-controller.ts';
 import { createFrozenHostStateDataSourceRuntime } from './frozen-host-state-data.ts';
+import { createNativeScreenerCoordinator, type NativeScreenerCoordinatorConfig } from './native-screener-coordinator.ts';
+import { createEvaluationInstanceResolver } from './evaluation-instance-resolver.ts';
+import { replaceNativeFormEngine } from './native-engine-replacement.ts';
+import { computeJcsSha256Digest } from '../adapters/http/response-action-ledger.ts';
+import type { HydratedScreenerCandidate } from '../ports/screener-hydration.ts';
+import type { SavedResponseDraft } from '../ports/response-signing.ts';
 import { generateIdempotencyKey } from './idempotency-key.ts';
 
 export interface NativePackageSigningHostPolicy {
@@ -44,6 +51,8 @@ export interface NativePackageSigningHostPolicy {
   reviewResponseDigest: (response: FormResponse) => Promise<string>;
   canonicalResponseHandoffBytes: NonNullable<ResponseReviewOptions['canonicalResponseHandoffBytes']>;
   createEngine?: typeof createFormEngine;
+  /** Explicit trusted native policy. Omission preserves the existing host behavior. */
+  nativeScreener?: NativeScreenerCoordinatorConfig;
 }
 
 /** One host session survives form-route unmount. Renderer leases never own the ceremony. */
@@ -51,6 +60,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   policy = { ...policy, modules: structuredClone(policy.modules), staticAssets: structuredClone(policy.staticAssets), bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
     registryEntries: structuredClone(policy.registryEntries), locales: structuredClone(policy.locales), bindings: structuredClone(policy.bindings),
     applicationReadiness: structuredClone(policy.applicationReadiness), readiness: structuredClone(policy.readiness), publication: structuredClone(policy.publication),
+    nativeScreener: policy.nativeScreener ? Object.freeze({ ...policy.nativeScreener }) : undefined,
     controller: { ...policy.controller, roles: structuredClone(policy.controller.roles) } };
   freezeMetadata(policy.modules); freezeMetadata(policy.staticAssets); freezeMetadata(policy.bundle); freezeMetadata(policy.definition); freezeMetadata(policy.registryEntries); freezeMetadata(policy.locales);
   freezeMetadata(policy.bindings); freezeMetadata(policy.readiness); freezeMetadata(policy.publication); freezeMetadata(policy.controller.roles);
@@ -158,6 +168,13 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   let controller: ReturnType<typeof createResponseActionController> | undefined;
   let input: RespondentOwnedRuntimeInput | undefined;
   let rendererEngine: IFormEngine | undefined;
+  let rendererLease: { active: boolean; exchange: RespondentOwnedRuntimeInput['exchangeEngine']; rebind: (engine: IFormEngine) => void } | undefined;
+  let nativeLifetime = new AbortController();
+  let nativeStage: AbortController | undefined;
+  let qualificationSequence = 0;
+  let nativeReadiness: 'pending' | 'ready' | 'needs-save' | undefined = policy.nativeScreener ? 'pending' : undefined;
+  let nativeCandidate: { saved: SavedResponseDraft; facts: HydratedScreenerCandidate } | undefined;
+
   let locale = policy.initialLocale;
   let formTitle = typeof policy.definition.title === 'string' ? policy.definition.title : '';
   let generation = 0;
@@ -186,11 +203,72 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const reads = new Set<AbortController>();
   const sourceRevisions = new Map<string, { value: string; revision: number }>();
   const engineFactory = policy.createEngine ?? createFormEngine;
+  const native = policy.nativeScreener ? createNativeScreenerCoordinator({ ...policy.nativeScreener, context: () => {
+    const parent = policy.nativeScreener!.context(); const expectedAuthority = authorityGeneration;
+    const expectedVisit = visitEpoch; const lease = rendererLease; const lifetime = nativeLifetime; const expectedSequence = qualificationSequence;
+    return { identity: parent.identity, signal: AbortSignal.any([parent.signal, lifetime.signal, ...(nativeStage ? [nativeStage.signal] : [])]), assertCurrent: () => {
+      parent.signal.throwIfAborted(); assertSynchronousGuard(parent.assertCurrent.bind(parent)); lifetime.signal.throwIfAborted();
+      if (disposed || cleared || expectedSequence !== qualificationSequence || expectedAuthority !== authorityGeneration || expectedVisit !== visitEpoch
+        || lease && (!lease.active || rendererLease !== lease)) throw new Error('native-facts-context-retired');
+    } };
+  } }) : undefined;
+  const unavailableSources = () => ({ status: 'unavailable' as const, reason: 'native-facts-pending' });
+  function retireNative() {
+    controller?.retireSignRetry();
+    qualificationSequence++; nativeStage?.abort(); nativeStage = undefined;
+    nativeLifetime.abort(); nativeLifetime = new AbortController(); native?.retireFacts();
+    nativeCandidate = undefined; if (native) { nativeReadiness = 'pending'; fence(); emit(); }
+  }
+  async function exactFacts(response: FormResponse, expected: SavedResponseDraft | undefined) {
+    const candidate = nativeCandidate;
+    if (!candidate || !expected || !same(candidate.saved.draft, expected.draft) || !same(candidate.saved.actor, expected.actor)
+      || candidate.facts.view.draftId !== expected.draft.id || candidate.facts.view.draftVersion !== expected.draft.version
+      || !same(candidate.saved.response, response)
+      || candidate.facts.view.candidateHash !== await computeJcsSha256Digest(response)) throw new Error('native-facts-candidate-mismatch');
+    candidate.facts.assertReady(); return candidate.facts;
+  }
+  async function qualifyCommitted(saved: SavedResponseDraft) {
+    if (!native) return;
+    const sequence = ++qualificationSequence; nativeStage?.abort();
+    nativeReadiness = 'pending'; nativeCandidate = undefined; fence(); emit();
+    const lease = rendererLease; const old = rendererEngine;
+    const stage = new AbortController(); nativeStage = stage;
+    const timer = setTimeout(() => stage.abort(new Error('native-facts-deadline')), 10_000);
+    const expectedAuthority = authorityGeneration; const expectedVisit = visitEpoch;
+    const assertCurrent = () => {
+      stage.signal.throwIfAborted();
+      if (disposed || cleared || sequence !== qualificationSequence || expectedAuthority !== authorityGeneration || expectedVisit !== visitEpoch
+        || lease && (!lease.active || rendererLease !== lease)) throw new Error('native-facts-context-retired');
+    };
+    try {
+      const facts = await abortable(stage.signal, native.qualifySaved(saved, assertCurrent)); assertCurrent();
+      if (old && lease?.active) {
+        if (!lease.exchange) throw new Error('native-renderer-exchange-unavailable');
+        const replacement = await replaceNativeFormEngine({ currentEngine: old,
+          engineOptions: { registryEntries: [...policy.registryEntries], instanceSourceResolver: createEvaluationInstanceResolver(facts) },
+          localeDocuments: policy.locales, signal: AbortSignal.any([stage.signal, nativeLifetime.signal]), assertCurrent: facts.assertCurrent, createEngine: engineFactory });
+        if (replacement.status !== 'replaced') throw new Error('native-renderer-replacement-unsupported');
+        try {
+          await lease.exchange({ expected: old, engine: replacement.engine, adopt: replacement.adopt,
+            signal: AbortSignal.any([stage.signal, nativeLifetime.signal]), assertCurrent: facts.assertCurrent });
+          assertCurrent(); lease.rebind(replacement.engine);
+        } catch (error) { replacement.dispose(); throw error; }
+        if (!same(replacement.engine.getResponse({ profile: 'off' }).data, saved.response.data)) {
+          nativeReadiness = 'needs-save'; emit(); return;
+        }
+      }
+      nativeCandidate = { saved: structuredClone(saved), facts };
+      facts.assertReady(); nativeReadiness = 'ready';
+      if (publicSnapshot?.prepared || publicSnapshot?.signed) await delivery(publicSnapshot);
+    } catch { if (sequence === qualificationSequence && expectedAuthority === authorityGeneration && expectedVisit === visitEpoch && !disposed) nativeReadiness = 'pending'; }
+    finally { clearTimeout(timer); emit(); }
+  }
   const applicationStatus = (): Pick<ResponseActionControllerSnapshot, 'application' | 'applicationLookup'> => ({
     ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}) });
   const checkpointStatus = (): { checkpointState?: 'unsaved' | 'saving' | 'saved' | 'failed' } => policy.controller.applicationLifecycle ? { checkpointState } : {};
-  let hostSnapshot = { ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted };
-  const emit = () => { hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
+  const nativeStatus = (): { nativeReadiness?: 'pending' | 'ready' | 'needs-save' } => native ? { nativeReadiness } : {};
+  let hostSnapshot = { ...checkpointStatus(), ...applicationStatus(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted };
+  const emit = () => { hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
   function fence() {
     generation++; runtime = undefined; review = undefined; expectedReviewIdentity = undefined; reviewState = undefined;
     for (const read of reads) read.abort();
@@ -199,24 +277,38 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   function current(expected: number) { if (disposed || generation !== expected) throw new Error('native-context-obsolete'); }
   function stop(reason: Parameters<NativePackageSigningHostPolicy['invalidateAuthority']>[0]) {
     if (reason === 'clear' || reason === 'dispose') { application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; }
+    retireNative();
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
     authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? structuredClone(input.draftKey) : submittedKey ? structuredClone(submittedKey) : undefined);
   }
-  async function isolated(response: FormResponse, activeLocale: string, run: (engine: IFormEngine) => unknown) {
-    const engine = engineFactory(policy.definition, { registryEntries: [...policy.registryEntries], runtimeContext: { locale: activeLocale } });
+  async function isolated(response: FormResponse, activeLocale: string, run: (engine: IFormEngine) => unknown, saved?: SavedResponseDraft, qualifiedFacts?: HydratedScreenerCandidate) {
+    const facts = native ? qualifiedFacts ?? await exactFacts(response, saved) : undefined;
+    if (qualifiedFacts && (!saved || qualifiedFacts.view.draftId !== saved.draft.id
+      || qualifiedFacts.view.draftVersion !== saved.draft.version || !same(response, saved.response)
+      || qualifiedFacts.view.candidateHash !== await computeJcsSha256Digest(response))) throw new Error('native-gate-candidate-mismatch');
+    facts?.assertReady();
+    const expected = authorityGeneration; const visit = visitEpoch; const lifetime = nativeLifetime;
+    const stage = new AbortController(); const timer = setTimeout(() => stage.abort(new Error('native-isolated-deadline')), 10_000);
+    const signal = AbortSignal.any([stage.signal, lifetime.signal]);
+    const check = () => { signal.throwIfAborted(); facts?.assertCurrent(); if (disposed || expected !== authorityGeneration || visit !== visitEpoch) throw new Error('native-isolated-retired'); };
+    const engine = engineFactory(policy.definition, { registryEntries: [...policy.registryEntries], runtimeContext: { locale: activeLocale },
+      responseData: response.data as Parameters<IFormEngine['loadResponseData']>[0],
+      ...(native ? { instanceSourceResolver: facts ? createEvaluationInstanceResolver(facts) : unavailableSources } : {}) });
     try {
       for (const document of policy.locales) engine.loadLocale(document);
-      engine.setLocale(activeLocale); engine.loadResponseData(response.data as Parameters<IFormEngine['loadResponseData']>[0]);
-      await engine.waitForInstanceSources(); await engine.waitForRemoteOptions();
+      engine.setLocale(activeLocale);
+      await abortable(signal, engine.waitForInstanceSources()); check();
+      await abortable(signal, engine.waitForRemoteOptions()); check();
+      if (native && !same(engine.getResponse({ profile: 'off' }).data, response.data)) throw new Error('native-isolated-candidate-changed');
       return await run(engine);
-    } finally { engine.dispose(); }
+    } finally { clearTimeout(timer); engine.dispose(); }
   }
   async function delivery(snapshot: ResponseActionControllerSnapshot) {
     const selected = snapshot.signed ?? snapshot.prepared;
     if (!selected || !input) return;
     fence(); const expected = generation;
     const phase = snapshot.signed ? 'before-submit' : 'before-sign';
-    const fields = await isolated(selected.response, locale, engine => captureFields(engine, selected.response)) as ResponseReviewData['presentation']['fields'];
+    const fields = await isolated(selected.response, locale, engine => captureFields(engine, selected.response), selected) as ResponseReviewData['presentation']['fields'];
     current(expected); policy.assertOwner(input.draftKey, selected.actor.id);
     if (await policy.reviewResponseDigest(selected.response) !== selected.draft.responseHash) throw new Error('native-review-digest-profile-mismatch');
     const captured: ResponseReviewData = structuredClone({ definition: policy.definition, response: selected.response,
@@ -253,17 +345,17 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     if (restoredResponse) { ownedResponseSeed = structuredClone(restoredResponse); freezeMetadata(ownedResponseSeed); }
     unsubscribeController?.();
     const expected = authorityGeneration;
-    controller = createResponseActionController({ ...policy.controller, restoredApplication: application, restoredApplicationLookup: applicationLookup, restoredResponse: ownedResponseSeed,
+    controller = createResponseActionController({ ...policy.controller, ...(native ? { afterCommittedDraft: qualifyCommitted, reconcileSignRetries: true } : {}), restoredApplication: application, restoredApplicationLookup: applicationLookup, restoredResponse: ownedResponseSeed,
       context: { definition: policy.definition, draftKey: input.draftKey, publication: policy.publication,
         responseId: responseId!, generation: String(expected) }, signingContext: () => policy.signingContext(locale),
       validateFrozenResponse: async (response, validationTuple) => {
         const result = await isolated(response, locale, engine => ({ response, validationTuple,
-          validationReport: engine.getValidationReport({ profile: validationTuple.profile }) }));
+          validationReport: engine.getValidationReport({ profile: validationTuple.profile }) }), publicSnapshot?.signed ?? publicSnapshot?.prepared);
         if (disposed || authorityGeneration !== expected) throw new Error('native-context-obsolete');
         return result as Awaited<ReturnType<ResponseActionControllerConfig['validateFrozenResponse']>>;
       },
       buildHandoff: async response => {
-        const report = await isolated(response, locale, engine => engine.getValidationReport({ profile: 'on-submit' })) as ValidationReport;
+        const report = await isolated(response, locale, engine => engine.getValidationReport({ profile: 'on-submit' }), publicSnapshot?.signed) as ValidationReport;
         if (disposed || authorityGeneration !== expected || !report.valid || report.definitionUrl !== response.definitionUrl
           || report.definitionVersion !== response.definitionVersion) throw new Error('native-handoff-validation-refused');
         return policy.buildHandoff(response, report, structuredClone({ draftKey: input!.draftKey, claim: input!.claim }));
@@ -273,7 +365,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           || !same(context.response, review.response) || !same(context.draft, { ...review.presentation.draft, responseHash: review.presentation.responseHash })
           || context.actor.id !== review.presentation.actorRef || context.locale !== locale
           || reviewState.phase !== (stage === 'signed' ? 'before-submit' : 'before-sign')) return false;
-        policy.assertOwner(input!.draftKey, context.actor.id); return true;
+        if (native) { try { nativeCandidate?.facts.assertReady(); if (!nativeCandidate || !same(nativeCandidate.saved.response, context.response) || nativeReadiness !== 'ready') return false; } catch { return false; } }
+      policy.assertOwner(input!.draftKey, context.actor.id); return true;
       },
     });
     publicSnapshot = controller.getSnapshot();
@@ -291,7 +384,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
       const selected = publicSnapshot.signed ?? publicSnapshot.prepared;
       const identity = selected ? canonicalize({ selected, locale, signed: !!publicSnapshot.signed }) : undefined;
-      if (selected && identity !== deliveryIdentity) {
+      if (!native && selected && identity !== deliveryIdentity) {
         deliveryIdentity = identity;
         const producing = generation + 1;
         pendingDelivery = delivery(publicSnapshot);
@@ -341,7 +434,19 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   const widgetModules = registerModules(reviewOptions); freezeMetadata(widgetModules);
   return {
-    bundle, definition: policy.definition, moduleId: policy.moduleId, widgetModules, ...(staticAssetResolver ? { staticAssetResolver } : {}),
+    bundle, definition: policy.definition,
+    ...(native ? { screenerCompletion: native.completionPolicy, instanceSourceResolver: unavailableSources, retireScreenerAuthority: retireNative,
+      preSignCandidate: async (input: Parameters<typeof native.preSignCandidate>[0]) => {
+        qualificationSequence++; nativeStage?.abort(); nativeStage = new AbortController();
+        nativeReadiness = 'pending'; nativeCandidate = undefined;
+        const facts = await native.qualifySaved(input.saved, input.assertCurrent);
+        facts.assertReady();
+        await isolated(input.saved.response, locale, () => undefined, input.saved, facts);
+        facts.assertReady();
+        return Object.freeze({ assertCurrent: facts.assertCurrent });
+      },
+      qualifyCurrentVisit: async () => { const saved = publicSnapshot?.saved; if (saved) await qualifyCommitted(saved); },
+    } : {}), moduleId: policy.moduleId, widgetModules, ...(staticAssetResolver ? { staticAssetResolver } : {}),
     ...(policy.controller.applicationLifecycle ? { applicationCapabilities: policy.controller.applicationLifecycle.capabilities,
       async refreshApplication() {
         if (controller) return controller.refreshApplication();
@@ -384,9 +489,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return {
         activate() {
           if (disposed || cleared || sessionGeneration !== authorityGeneration) throw new Error('native-visit-retired');
-          ticket = ++visitEpoch; for (const read of reads) read.abort(); reads.clear();
+          ticket = ++visitEpoch; retireNative(); for (const read of reads) read.abort(); reads.clear();
         },
-        dispose() { if (ticket === visitEpoch) { visitEpoch++; for (const read of reads) read.abort(); reads.clear(); } ticket = undefined; },
+        dispose() { if (ticket === visitEpoch) { visitEpoch++; retireNative(); for (const read of reads) read.abort(); reads.clear(); } ticket = undefined; },
         bindRuntime() {
           const requestFor = (request: Parameters<NonNullable<typeof runtime>['dataSourceLoader']>[0]) => {
             const delivery = runtime; const deliveryGeneration = generation;
@@ -395,6 +500,19 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
             return { delivery, request: { ...request, context: { ...request.context, sessionGeneration: deliveryGeneration } } };
           };
           return {
+            ...(native ? { retrySigningResult: async () => {
+              assertVisit();
+              const authority = policy.nativeScreener!.context(); authority.signal.throwIfAborted();
+              assertSynchronousGuard(authority.assertCurrent.bind(authority));
+              const candidate = publicSnapshot?.prepared;
+              if (!controller || !input || !candidate) throw new Error('native-sign-retry-unavailable');
+              policy.assertOwner(input.draftKey, candidate.actor.id);
+              const result = await controller.retrySign();
+              // The durable result is already published; later retirement affects only this visit.
+              try { assertVisit(); authority.signal.throwIfAborted(); assertSynchronousGuard(authority.assertCurrent.bind(authority)); }
+              catch { retireNative(); }
+              return result;
+            } } : {}),
             authorizeDataSource: ((request) => {
               try { const captured = requestFor(request); return captured.delivery?.authorizeDataSource(captured.request) ?? { status: 'refused', reason: 'native-state-unavailable' }; }
               catch { return { status: 'refused', reason: 'native-visit-retired' }; }
@@ -483,7 +601,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           const expected = authorityGeneration;
           await controller!.restoreSigned(next.restoredSigning);
           await pendingDelivery;
-          if (disposed || authorityGeneration !== expected || !runtime) throw new Error('native-signed-restoration-retired');
+          if (disposed || authorityGeneration !== expected || !native && !runtime) throw new Error('native-signed-restoration-retired');
         }
       }
       const scope = policy.semanticScope(responseId, ++renderInstance);
@@ -491,34 +609,54 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       applicationFlags();
       next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot!.owned);
       next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
-      const answers = () => canonicalize(next.engine.getFieldPaths().map(path => [path, next.engine.signals[path]?.value]));
-      let previous = answers();
       let active = true;
-      const releaseTitle = preactReactiveRuntime.effect(() => {
-        if (!active || disposed || rendererEngine !== next.engine) return;
-        const title = next.engine.getFormVM().title.value;
-        if (typeof title === 'string' && title !== formTitle) { formTitle = title; emit(); }
-      });
-      const release = preactReactiveRuntime.effect(() => {
-        void next.engine.structureVersion.value;
-        for (const path of next.engine.getFieldPaths()) void next.engine.signals[path]?.value;
-        const value = answers();
-        if (active && value !== previous) {
-          previous = value; checkpointState = 'unsaved'; pendingCheckpoint = false; const saved = publicSnapshot?.saved?.response; stop('edit'); start(saved);
-          next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
-        }
-      });
+      let leasedEngine = next.engine;
+      let release = () => {}; let releaseTitle = () => {};
+      const lease = { active: true, exchange: next.exchangeEngine, rebind: (engine: IFormEngine) => {
+        release(); releaseTitle(); leasedEngine = engine; rendererEngine = engine; bind(); applicationFlags();
+        engine.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot!.owned);
+        engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
+      } };
+      rendererLease = lease;
+      function bind() {
+        const watched = leasedEngine;
+        const answers = () => canonicalize(watched.getFieldPaths().map(path => [path, watched.signals[path]?.value]));
+        let previous = answers();
+        releaseTitle = preactReactiveRuntime.effect(() => {
+          if (!active || disposed || rendererEngine !== watched) return;
+          const title = watched.getFormVM().title.value;
+          if (typeof title === 'string' && title !== formTitle) { formTitle = title; emit(); }
+        });
+        release = preactReactiveRuntime.effect(() => {
+          void watched.structureVersion.value;
+          for (const path of watched.getFieldPaths()) void watched.signals[path]?.value;
+          const value = answers();
+          if (active && value !== previous) {
+            previous = value; checkpointState = 'unsaved'; pendingCheckpoint = false; const saved = publicSnapshot?.saved?.response; stop('edit'); start(saved);
+            watched.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
+          }
+        });
+      }
+      bind();
       return { responseActionInvoker: async action => {
         const expected = authorityGeneration;
         if (!active || disposed) throw new Error('native-renderer-retired');
+        if (native && action.actionRef === policy.controller.roles.prepare?.actionRef && nativeReadiness !== 'ready') throw new Error('native-facts-pending-save-required');
         const result = await controller!.definitionInvoker(action);
         if (!active || disposed || authorityGeneration !== expected) throw new Error('native-renderer-retired');
         return result;
       }, semanticControlScope: scope,
+      ...(native ? { afterMount: async () => { const saved = publicSnapshot?.saved; if (saved && active) await qualifyCommitted(saved); } } : {}),
       getCompletionGeneration: () => authorityGeneration,
-      invalidate: () => { if (active) { active = false; stop('clear'); if (rendererEngine === next.engine) rendererEngine = undefined; emit(); } }, dispose: () => { active = false; release(); releaseTitle(); next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false); if (rendererEngine === next.engine) { rendererEngine = undefined; emit(); } } };
+      invalidate: () => { if (active) { active = false; lease.active = false; stop('clear'); if (rendererEngine === leasedEngine) rendererEngine = undefined; emit(); } },
+      dispose: () => {
+        active = false; lease.active = false; release(); releaseTitle(); leasedEngine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
+        if (rendererLease === lease) { rendererLease = undefined; retireNative(); }
+        if (rendererEngine === leasedEngine) { rendererEngine = undefined; emit(); }
+      } };
+
     },
-    dispose() { if (disposed) return; disposed = true; stop('dispose'); emit(); unsubscribeController?.(); listeners.clear(); },
+    dispose() { if (disposed) return; disposed = true; stop('dispose'); native?.dispose(); emit(); unsubscribeController?.(); listeners.clear(); },
   };
 }
 
@@ -551,4 +689,14 @@ function atPath(data: unknown, path: string): unknown {
 export type NativePackageSigningHost = ReturnType<typeof createNativePackageSigningHost>;
 function freezeMetadata(value: unknown): void {
   if (value && typeof value === 'object') { for (const child of Object.values(value)) freezeMetadata(child); Object.freeze(value); }
+}
+
+function abortable<T>(signal: AbortSignal, task: Promise<T>): Promise<T> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => { cleanup(); reject(signal.reason); };
+    const cleanup = () => signal.removeEventListener('abort', abort);
+    signal.addEventListener('abort', abort, { once: true });
+    task.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
+  });
 }
