@@ -29,7 +29,7 @@ export function admitNativeSigningScope(bundle: BundleExport, moduleId: string, 
   }
   const route = routes[0];
   const select = (id: string, widgetName: string) => {
-    const slots = (route.slots ?? []).filter(slot => slot.id === id);
+    const slots = ((route.slots ?? []) as readonly (typeof route.slots)[number][]).filter(slot => slot.id === id);
     const slot = slots[0];
     const binding = slot?.binding as Record<string, unknown> | undefined;
     if (slots.length !== 1 || slot.slotType !== 'module-widget'
