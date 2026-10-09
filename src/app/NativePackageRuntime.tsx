@@ -15,6 +15,7 @@ import { clearNativeSignInReturn, rememberNativeSignInReturn, clearNativeSignOut
 import { nativeAdmissionDiagnostic } from '../composition/native-package-admission-error.ts';
 import { NativePackageRespondentHost } from './NativePackageRespondentHost.tsx';
 import { chooseComposition } from './main-helpers.ts';
+import { SessionStatus } from './SessionStatus.tsx';
 
 /** Keep the package owner alive across its authored Surface routes. */
 export function NativePackageRoot({ config, identityBindingFactory }: { config: FormspecWebConfig; identityBindingFactory?: () => IdentityBinding }) {
@@ -301,7 +302,8 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
         onClick={() => onNavigate(startupRoute.signedReviewHref!)}>
         {locale?.strings[`$module.${boot.host.moduleId}.response.reviewSigned`] ?? startupRoute.signedReviewTitle ?? 'Review signed response'}
       </button> : null}
-    {boot.host.applicationCapabilities && !state.cleared && operation !== 'cleared' ? <div className="native-application-status">
+    {boot.host.applicationCapabilities && !state.cleared && operation !== 'cleared'
+      && (state.applicationLookup || state.application || !confirmation && state.editableSessionActive) ? <SessionStatus>
       {state.applicationLookup ? <p role="status">{applicationText('statusUnavailable')
         ?? 'Application status is unavailable. Saved progress remains available; Start and Submit are unavailable until status can be checked.'}</p> : null}
       {state.application ? <>
@@ -318,10 +320,10 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
           ?? ({ unsaved: 'Signing copy has not been prepared', saving: 'Preparing signing copy', saved: 'Signing copy prepared', failed: 'Signing copy could not be prepared. Try again.' })[checkpoint]}</p> : null}
       {!confirmation && state.editableSessionActive && !boot.host.applicationCapabilities.persistentSaving ? <p>{applicationText('saveUnavailable')
         ?? 'Save for later is unavailable. Prepare a signing copy when you are ready.'}</p> : null}
-    </div> : null}
-    {operation === 'refresh-error' ? <p role="alert">{applicationText('refreshFailed') ?? 'Application status could not be confirmed. Try again.'}</p> : null}
-    {operation === 'clear-error' ? <p role="alert">{text('draft.startCurrentFailed')}</p> : null}
-    {operation === 'locale-error' ? <p role="alert">{text('form.languageSaveFailed')}</p> : null}
+    </SessionStatus> : null}
+    {operation === 'refresh-error' ? <SessionStatus><p role="alert">{applicationText('refreshFailed') ?? 'Application status could not be confirmed. Try again.'}</p></SessionStatus> : null}
+    {operation === 'clear-error' ? <SessionStatus><p role="alert">{text('draft.startCurrentFailed')}</p></SessionStatus> : null}
+    {operation === 'locale-error' ? <SessionStatus><p role="alert">{text('form.languageSaveFailed')}</p></SessionStatus> : null}
     {operation === 'cleared' ? <main className="shell__status">
       <h1 tabIndex={-1} ref={heading}>{text('receipt.clearedTitle')}</h1>
       <p>{text('receipt.clearedDetail')}</p>

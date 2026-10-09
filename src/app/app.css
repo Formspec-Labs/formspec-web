@@ -1033,3 +1033,30 @@ select {
   .native-package-workspace .locale-button,
   .native-package-status .locale-button { transition: none; }
 }
+
+/* Shared native-session notices follow the same content width as the toolbar. */
+.session-status {
+  box-sizing: border-box;
+  width: min(100% - 2rem, 72rem);
+  margin: 0.75rem auto;
+  color: var(--formspec-color-foreground, #1f2933);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.session-status p { margin: 0 0 0.65rem; }
+.session-status > :last-child,
+.session-status > div > :last-child { margin-bottom: 0; }
+
+/* These notices were printable before adopting the shared notice treatment. */
+@media print {
+  .submit-notice.session-status {
+    display: block;
+    width: 100%;
+    margin: 0.75rem 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+}

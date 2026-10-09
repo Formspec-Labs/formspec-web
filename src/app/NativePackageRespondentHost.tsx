@@ -8,6 +8,7 @@ import type { Composition } from '../composition/types.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import type { NativePackageSigningHost } from '../shared/native-package-signing-host.ts';
 import { RespondentDefinitionController, type ResolvedRespondentFormInput } from './RespondentRuntime.tsx';
+import { SessionStatus } from './SessionStatus.tsx';
 
 export interface NativePackageRespondentHostProps {
   host: NativePackageSigningHost;
@@ -85,10 +86,17 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     return state.formTitle || undefined;
   }, [props.host, props.componentRouteResolver, props.componentDocument, state.formTitle]);
   if (state.cleared) return null;
-  return <>{state.controller?.retrySignAvailable && ports.retrySigningResult ? <div lang="en">
-    <p>Check the result of your previous signing attempt.</p>
-    <button type="button" onClick={() => { void ports.retrySigningResult?.().catch(() => {}); }}>Check previous signing result</button>
-  </div> : null}{state.nativeReadiness && state.nativeReadiness !== 'ready' ? <p role="status" lang="en">{state.nativeReadiness === 'needs-save' ? 'Updated answers need saving.' : 'Checks pending.'}</p> : null}<SurfaceApp screenerCompletion={props.screenerCompletion ?? props.host.screenerCompletion} activeLocale={props.screenerLocale} localeDocuments={locales} bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate}
+  return <>
+    {state.controller?.retrySignAvailable && ports.retrySigningResult ? <SessionStatus>
+      <div lang="en">
+        <p>Check the result of your previous signing attempt.</p>
+        <button type="button" className="locale-button" onClick={() => { void ports.retrySigningResult?.().catch(() => {}); }}>Check previous signing result</button>
+      </div>
+    </SessionStatus> : null}
+    {state.nativeReadiness && state.nativeReadiness !== 'ready' ? <SessionStatus>
+      <p role="status" lang="en">{state.nativeReadiness === 'needs-save' ? 'Updated answers need saving.' : 'Checks pending.'}</p>
+    </SessionStatus> : null}
+    <SurfaceApp screenerCompletion={props.screenerCompletion ?? props.host.screenerCompletion} activeLocale={props.screenerLocale} localeDocuments={locales} bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate}
     staticAssetResolver={props.host.staticAssetResolver}
     widgetModules={modules} appTitle={state.formTitle || undefined} resolveRouteTitle={resolveRouteTitle}
     sessionGeneration={sessionMarker} widgetActionExecutor={ports.widgetActionExecutor}
