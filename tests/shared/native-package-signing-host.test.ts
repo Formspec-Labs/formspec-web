@@ -19,7 +19,7 @@ import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
 
 beforeAll(() => initFormspecEngine());
 const hashResponse = async (response: FormResponse) => createHash('sha256').update(canonicalResponseHandoffBytes(response)).digest('hex');
-function fixture(attachment = false) {
+function fixture(attachment = false, signingScope?: NativePackageSigningHostPolicy['signingScope']) {
   const definition = { ...sampleFormDefinition, items: attachment ? [{ key: 'fullName', type: 'field' as const, dataType: 'attachment' as const, label: 'Photo' }] : sampleFormDefinition.items, instances: { readiness: { readonly: false, data: { owned: false, ready: false } } } };
   const response: FormResponse & { id: string } = { ...sampleFormResponse, id: 'stable-id', data: attachment ? { fullName: { kind: 'attachment-ref', uri: 'attachment:owned', mimeType: 'image/png', contentType: 'image/png', filename: 'photo.png', size: 1, hash: `sha256:${'a'.repeat(64)}` } } : sampleFormResponse.data };
   const source = { ref: `${definition.url}#/extensions/x-formspec-signing-content/entries/en`, version: '1' };
@@ -52,7 +52,7 @@ function fixture(attachment = false) {
   const sign = vi.fn(async (input: Parameters<NativePackageSigningHostPolicy['controller']['signing']['sign']>[0]) => ({ ...input.preparation, ...await saved({ ...input.preparation.response, authoredSignatures: [{}] as unknown as FormResponse['authoredSignatures'] }), verification: { mode: 'delegated-service-key' as const, provider: 'urn:test:delegated', keyId: 'key' } }));
   const read = vi.fn(async () => new Blob(['actual bytes']));
   const invalidateAuthority = vi.fn(); const assertOwner = vi.fn();
-  const policy: NativePackageSigningHostPolicy = { bundle, moduleId: 'test', definition, registryEntries: [], locales: [], publication: { formId: 'form', formVersionId: 'publication' },
+  const policy: NativePackageSigningHostPolicy = { signingScope, bundle, moduleId: 'test', definition, registryEntries: [], locales: [], publication: { formId: 'form', formVersionId: 'publication' },
     responseId: response.id, initialLocale: 'en', clearDraftAccess: vi.fn(async () => {}), readiness: { instance: 'readiness', readyPath: 'ready', ownedPath: 'owned' },
     controller: { roles: Object.fromEntries([['saveInitial', 'save'], ['prepare', 'prepare'], ['sign', 'sign']].map(([role, actionRef]) => [role,
       { document, actionRef, requestRef: actionRef, artifactRef: 'urn:test:actions', artifactDigest: `sha256:${'b'.repeat(64)}`, ...(role === 'sign' ? { widgetSource: { moduleId: 'test', widgetName: 'SigningCeremony', slotId: 'review', outputName: 'sign', route: { surfaceId: 'surface', routeId: 'review', routeClass: 'ceremony', params: {} } }, responseSource: { inputName: 'response', catalogRef: catalog.id, sourceRef: 'host:response' } } : {}) }])),
@@ -397,6 +397,37 @@ describe('generic native package signing session', () => {
     expect(host.getSnapshot().editableSessionActive).toBe(false);
     expect(host.getSnapshot().sessionGeneration).toBe(epoch); expect(host.getSnapshot().generation).toBe(delivery);
     expect(test.invalidateAuthority).not.toHaveBeenCalled(); unsubscribe(); host.dispose(); test.engine.dispose();
+  });
+  it('refuses foreign scoped host deliveries and widget actions before backing calls', async () => {
+    const scope = { surface: { url: 'urn:test:surface', version: '1' }, surfaceId: 'surface', moduleId: 'test',
+      route: 'review', ceremonySlot: 'ceremony', reviewSlot: 'review' };
+    const test = fixture(false, scope); const lease = await test.prepared(); const snapshot = test.host.getSnapshot();
+    const marker = test.host.allocateSurfaceSessionMarker(snapshot.sessionGeneration);
+    const visit = test.host.createSurfaceVisit(marker, snapshot.sessionGeneration); visit.activate();
+    const ports = visit.bindRuntime();
+    const request = { descriptor: resolveDataSourceDescriptor(test.host.bundle.dataSources!, test.policy.bindings.response)!,
+      context: { surfaceId: scope.surfaceId, surfaceRef: scope.surface.url, routeId: scope.route, slotId: scope.reviewSlot,
+        moduleId: scope.moduleId, widgetName: 'ResponseReview', params: {}, sessionGeneration: marker } };
+    const authorize = vi.spyOn(snapshot.runtime!, 'authorizeDataSource');
+    const load = vi.spyOn(snapshot.runtime!, 'dataSourceLoader');
+    expect(await ports.authorizeDataSource(request)).toMatchObject({ status: 'authorized' });
+    expect(await ports.dataSourceLoader(request)).toMatchObject({ status: 'loaded' });
+    authorize.mockClear(); load.mockClear();
+    for (const key of ['surfaceId', 'surfaceRef', 'routeId', 'slotId', 'moduleId', 'widgetName'] as const) {
+      const foreign = { ...request, context: { ...request.context, [key]: 'foreign' } };
+      expect(await ports.authorizeDataSource(foreign)).toMatchObject({ status: 'refused' });
+      expect(await ports.dataSourceLoader(foreign)).toMatchObject({ status: 'unavailable' });
+      expect(ports.dataSourceRevision(foreign)).toBeUndefined();
+    }
+    expect(authorize).not.toHaveBeenCalled(); expect(load).not.toHaveBeenCalled();
+    const role = test.policy.controller.roles.sign!;
+    for (const key of ['routeId', 'surfaceRef'] as const) {
+      await expect(ports.widgetActionExecutor({ document: role.document, actionRef: role.actionRef, invocationId: 'foreign-act',
+        source: { ...role.widgetSource!, slotId: scope.ceremonySlot, route: { ...role.widgetSource!.route, [key]: 'foreign' } },
+        input: {} })).rejects.toThrow('native-signing-scope-unadmitted');
+    }
+    expect(test.sign).not.toHaveBeenCalled();
+    visit.dispose(); lease.dispose(); test.host.dispose(); test.engine.dispose();
   });
   it('requires pre-registered maintained Surface markers and retires visits permanently across returns and edits', async () => {
     const test = fixture(); const lease = await test.prepared(); const snapshot = test.host.getSnapshot();

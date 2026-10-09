@@ -1,3 +1,4 @@
+import { signingScopeAllows, type NativeSigningScopeIdentity } from './native-signing-scope.ts';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
 import canonicalize from 'canonicalize';
 import { createFormEngine, preactReactiveRuntime, type IFormEngine, type RegistryEntry } from '@formspec-org/engine/render';
@@ -21,6 +22,7 @@ import { generateIdempotencyKey } from './idempotency-key.ts';
 export interface NativePackageSigningHostPolicy {
   bundle: BundleExport;
   moduleId: string;
+  signingScope?: NativeSigningScopeIdentity;
   /** Explicit deployment module pins; omission preserves the single signing-module host. */
   modules?: readonly { id: string; version: string }[];
   staticAssets?: readonly { kind: 'image'; source: string }[];
@@ -57,12 +59,13 @@ export interface NativePackageSigningHostPolicy {
 
 /** One host session survives form-route unmount. Renderer leases never own the ceremony. */
 export function createNativePackageSigningHost(policy: NativePackageSigningHostPolicy) {
-  policy = { ...policy, modules: structuredClone(policy.modules), staticAssets: structuredClone(policy.staticAssets), bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
+  policy = { ...policy, signingScope: policy.signingScope ? structuredClone(policy.signingScope) : undefined, modules: structuredClone(policy.modules), staticAssets: structuredClone(policy.staticAssets), bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
     registryEntries: structuredClone(policy.registryEntries), locales: structuredClone(policy.locales), bindings: structuredClone(policy.bindings),
     applicationReadiness: structuredClone(policy.applicationReadiness), readiness: structuredClone(policy.readiness), publication: structuredClone(policy.publication),
     nativeScreener: policy.nativeScreener ? Object.freeze({ ...policy.nativeScreener }) : undefined,
     controller: { ...policy.controller, roles: structuredClone(policy.controller.roles) } };
   freezeMetadata(policy.modules); freezeMetadata(policy.staticAssets); freezeMetadata(policy.bundle); freezeMetadata(policy.definition); freezeMetadata(policy.registryEntries); freezeMetadata(policy.locales);
+  freezeMetadata(policy.signingScope);
   freezeMetadata(policy.bindings); freezeMetadata(policy.readiness); freezeMetadata(policy.publication); freezeMetadata(policy.controller.roles);
   const bundle = dereferenceBundleExport(policy.bundle);
   const flattened = flattenRegistryEntries(bundle.registries);
@@ -496,6 +499,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           const requestFor = (request: Parameters<NonNullable<typeof runtime>['dataSourceLoader']>[0]) => {
             const delivery = runtime; const deliveryGeneration = generation;
             assertVisit(); current(deliveryGeneration);
+            if (policy.signingScope && !signingScopeAllows(policy.signingScope, request.context)) throw new Error('native-signing-scope-unadmitted');
             if (request.context.sessionGeneration !== marker) throw new Error('native-visit-unqualified');
             return { delivery, request: { ...request, context: { ...request.context, sessionGeneration: deliveryGeneration } } };
           };
@@ -534,6 +538,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
             validateDataSourcePayload: policy.validatePayload,
             widgetActionExecutor: async (action: Parameters<NonNullable<typeof controller>['widgetExecutor']>[0]) => {
               assertVisit(); if (!controller) throw new Error('native-runtime-unavailable');
+              if (policy.signingScope && (!signingScopeAllows(policy.signingScope, { ...action.source.route, slotId: action.source.slotId, moduleId: action.source.moduleId, widgetName: action.source.widgetName })
+                || action.source.slotId !== policy.signingScope.ceremonySlot || action.source.moduleId !== policy.signingScope.moduleId
+                || action.source.widgetName !== SIGNING_CEREMONY_WIDGET_SHAPE.widgetName)) throw new Error('native-signing-scope-unadmitted');
               const result = await controller.widgetExecutor(action); assertVisit(); return result;
             },
           };

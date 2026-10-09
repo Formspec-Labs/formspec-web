@@ -23,6 +23,7 @@ import { responseSigningDigest } from '../adapters/integrity/response-signing-di
 import { createSigningDataSourcePayloadValidator, loadCanonicalSigningContentValidator, loadCanonicalModulePayloadSchemaResources, validateCanonicalFormResponse } from '../adapters/schema/surface-bundle-schema-validators.ts';
 import { createNativePackageSigningHost } from '../shared/native-package-signing-host.ts';
 import type { QualifiedResponseActionRole, ResponseActionRole } from '../shared/response-action-controller.ts';
+import { admitNativeSigningScope, nativeSigningActionMappings } from '../shared/native-signing-scope.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { buildIntakeHandoff, responseHash } from '../app/respondent-flow.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
@@ -75,17 +76,19 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     return matches[0];
   };
   localeFor(pins.initialLocale);
-  const roles = await qualifyRoles(bundle, pins);
+  const signingScope = admitNativeSigningScope(bundle, pins.module.id, pins.signingScope);
+  const roles = await qualifyRoles(bundle, pins, signingScope);
   for (const [name, binding] of Object.entries(pins.bindings)) {
-    const authored = resolved.surfaces.flatMap(surface => surface.routes.flatMap(route => (route.slots ?? []).flatMap(slot => {
+    const authored = (signingScope ? [signingScope.ceremony, signingScope.review]
+      : resolved.surfaces.flatMap(surface => surface.routes.flatMap(route => route.slots ?? []))).flatMap(slot => {
       if (slot.slotType !== 'module-widget' || record(slot.binding)?.moduleId !== pins.module.id) return [];
       const source = record(record(record(slot.binding)?.dataBindings)?.[name]);
       return source ? [{ catalogRef: source.catalogRef, sourceRef: source.sourceRef }] : [];
-    })));
+    });
     if (!authored.length || authored.some(source => !same(source, binding))) throw new Error('Native source binding differs from the authored Surface');
   }
   const validateContent = await loadCanonicalSigningContentValidator();
-  const ceremonies = resolved.surfaces.flatMap(surface => surface.routes.flatMap(route => route.slots ?? []))
+  const ceremonies = signingScope ? [signingScope.ceremony] : resolved.surfaces.flatMap(surface => surface.routes.flatMap(route => route.slots ?? []))
     .filter(slot => slot.slotType === 'module-widget' && record(slot.binding)?.moduleId === pins.module.id
       && record(slot.binding)?.widgetName === SIGNING_CEREMONY_WIDGET_SHAPE.widgetName);
   if (ceremonies.length !== 1) throw new Error('Native signing ceremony is ambiguous');
@@ -195,7 +198,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
               || Date.parse(state.expiresAt) <= Date.now() || !Number.isFinite(Date.parse(state.expiresAt))) throw new Error('Native Screener browser session retired'); };
           assertCurrent();
           return { identity: { issuer: state!.issuer, subject: state!.subject, clientId: config.identity.oidc!.clientId }, signal: lifetime.signal, assertCurrent };
-        } } } : {}), bundle, definition, moduleId: pins.module.id, modules: modulePins, staticAssets: pins.staticAssets, registryEntries: registryEntries.entries,
+        } } } : {}), signingScope: signingScope?.identity, bundle, definition, moduleId: pins.module.id, modules: modulePins, staticAssets: pins.staticAssets, registryEntries: registryEntries.entries,
       locales: localeDocuments, initialLocale: pins.initialLocale,
       clearDraftAccess: async key => { formIdResolver(key.formUrl, key.formVersion); await cohort.draftStore.delete(key); owner = undefined; }, publication: { formId: publication.form_id, formVersionId: publication.form_version_id },
       applicationReadiness: pins.applicationLifecycle,
@@ -245,7 +248,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     throw error;
   }
 }
-async function qualifyRoles(bundle: BundleExport, pins: NativePackageSigningConfig): Promise<Record<ResponseActionRole, QualifiedResponseActionRole>> {
+async function qualifyRoles(bundle: BundleExport, pins: NativePackageSigningConfig, signingScope: ReturnType<typeof admitNativeSigningScope>): Promise<Record<ResponseActionRole, QualifiedResponseActionRole>> {
   const resolved = dereferenceBundleExport(bundle);
   const result = {} as Record<ResponseActionRole, QualifiedResponseActionRole>;
   for (const [name, selected] of Object.entries(pins.roles) as [ResponseActionRole, { artifactRef: string; actionRef: string }][]) {
@@ -257,12 +260,7 @@ async function qualifyRoles(bundle: BundleExport, pins: NativePackageSigningConf
     if (name !== 'paper' && effect?.type !== 'serviceRequest') throw new Error('Native role requires one declared service request');
     const role: QualifiedResponseActionRole = { ...selected, document, artifactDigest: await computeJcsSha256Digest(document),
       ...(effect?.type === 'serviceRequest' ? { requestRef: effect.requestRef } : {}) };
-    const mapped = resolved.surfaces.flatMap(surface => surface.routes.flatMap(route => (route.slots ?? []).flatMap(slot => {
-      if (slot.slotType !== 'module-widget') return [];
-      const binding = record(slot.binding)!;
-      return Object.entries(record(binding.actionBindings) ?? {}).filter(([, mapping]) => record(mapping)?.actionRef === selected.actionRef)
-        .map(([outputName, mapping]) => ({ surface, route, slot, outputName, mapping: record(mapping)! }));
-    })));
+    const mapped = nativeSigningActionMappings(resolved, selected.actionRef, signingScope?.identity);
     if (['sign', 'submit', 'paper'].includes(name) && mapped.length !== 1) throw new Error('Native role requires one exact widget mapping');
     if (mapped.length) {
       if (mapped.length !== 1) throw new Error('Native widget action mapping is ambiguous');

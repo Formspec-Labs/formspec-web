@@ -21,6 +21,20 @@ function fixture() {
 }
 
 describe('closed native package signing opt-in', () => {
+  it('detaches exact ceremony selection and rejects unknown or overlapping slots', () => {
+    const signingScope = { surface: { url: 'urn:test:surface', version: '1' }, route: 'signing', ceremonySlot: 'ceremony', reviewSlot: 'review' };
+    const admitted = nativePackageSigningConfig({ ...fixture(), signingScope });
+    signingScope.surface.version = 'changed';
+    expect(admitted.signingScope?.surface.version).toBe('1');
+    expect(nativePackageSigningConfig(fixture()).signingScope).toBeUndefined();
+    for (const invalid of [
+      { ...signingScope, trusted: true },
+      { ...signingScope, reviewSlot: 'ceremony' },
+      { ...signingScope, route: '' },
+      { ...signingScope, surface: { ...signingScope.surface, version: '' } },
+    ]) expect(() => nativePackageSigningConfig({ ...fixture(), signingScope: invalid })).toThrow();
+  });
+
   it('preserves detached exact static image pins and keeps omission unavailable', () => {
     const value = { ...fixture(), staticAssets: [{ kind: 'image', source: 'https://travel.state.gov/example.jpeg' }] };
     const selected = nativePackageSigningConfig(value);

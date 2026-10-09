@@ -1,5 +1,6 @@
 import { snapshotFiniteJson } from '@formspec-org/surface';
 import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE } from '@formspec-org/surface-react/widget-metadata';
+import type { NativeSigningScopeSelection } from '../shared/native-signing-scope.ts';
 import type { ResponseActionRole } from '../shared/response-action-controller.ts';
 
 export interface NativePackageSigningConfig {
@@ -14,6 +15,8 @@ export interface NativePackageSigningConfig {
   /** Exact deployment-approved static image URLs; omission admits no image source. */
   staticAssets?: readonly { kind: 'image'; source: string }[];
   initialLocale: string;
+  /** Exact ceremony and sibling review; omission retains one-ceremony admission. */
+  signingScope?: NativeSigningScopeSelection;
   roles: Record<Exclude<ResponseActionRole, 'startApplication'>, { artifactRef: string; actionRef: string }>
     & Partial<Record<'startApplication', { artifactRef: string; actionRef: string }>>;
   applicationLifecycle?: { instance: string; canStartPath: string; startedPath: string; persistentSavingPath: string };
@@ -30,6 +33,7 @@ const inputNames = [...new Set([...SIGNING_CEREMONY_WIDGET_SHAPE.dataInputs,
 export function nativePackageSigningConfig(value: unknown): NativePackageSigningConfig {
   const config = snapshotFiniteJson(value);
   closed(config, ['keyId', 'definition', 'bundle', 'module', 'initialLocale', 'roles', 'bindings', 'readiness',
+    ...(config && typeof config === 'object' && Object.hasOwn(config, 'signingScope') ? ['signingScope'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'modules') ? ['modules'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'component') ? ['component'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'staticAssets') ? ['staticAssets'] : []),
@@ -49,6 +53,13 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
     }
     const signing = config.module as { id: string; version: string };
     if (config.modules.filter(pin => pin.id === signing.id && pin.version === signing.version).length !== 1) invalid();
+  }
+  if (Object.hasOwn(config, 'signingScope')) {
+    const scope = config.signingScope;
+    closed(scope, ['surface', 'route', 'ceremonySlot', 'reviewSlot']);
+    closed(scope.surface, ['url', 'version']); absoluteUrl(scope.surface.url); nonblank(scope.surface.version);
+    nonblank(scope.route); nonblank(scope.ceremonySlot); nonblank(scope.reviewSlot);
+    if (scope.ceremonySlot === scope.reviewSlot) invalid();
   }
   nonblank(config.initialLocale);
   if (Object.hasOwn(config, 'staticAssets')) {

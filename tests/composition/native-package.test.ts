@@ -166,7 +166,70 @@ async function moduleBindingFixture(selectedModule = false) {
   return { ...test, config };
 }
 
+async function completeStudioFixture(scoped: boolean) {
+  const test = await fixture();
+  const bytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/photo-complete-successor-v1.bundle.json'), 'utf8');
+  const bundle = JSON.parse(bytes) as BundleExport;
+  const resolved = dereferenceBundleExport(bundle);
+  const definition = resolved.definitions.get('urn:formspec:demo:d1:passport-renewal')!;
+  const locales = Object.values(bundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document) as LocaleDocument[];
+  const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  test.texts['native.json'] = bytes; test.files.nativeBundle.sha256 = await rawDigest(bytes);
+  test.texts['definition.json'] = JSON.stringify(definition); test.files.definition.sha256 = await rawDigest(test.texts['definition.json']);
+  // Actual inline Components remain in the frozen complete graph.
+  Reflect.deleteProperty(test.files, 'component');
+  test.files.locales = await Promise.all(locales.map(async (document, index) => {
+    const path = `locale-${index}.json`; test.texts[path] = JSON.stringify(document);
+    return { path, sha256: await rawDigest(test.texts[path]) };
+  }));
+  Object.assign(test.publication, { definition_url: definition.url, definition_version: definition.version,
+    definition_hash: await computeJcsSha256Digest(definition), definition });
+  const intakeSurface = resolved.surfaces.find(surface => resolved.surfaceRefs?.get(surface) === 'urn:formspec:demo:d1:signing-app:surface')!;
+  const route = intakeSurface.routes.find(route => route.id === 'signing')!;
+  const bindingFor = (name: string) => route.slots!.flatMap(slot => {
+    const binding = slot.binding as { dataBindings?: Record<string, { catalogRef: string; sourceRef: string }> };
+    const selected = binding.dataBindings?.[name];
+    return selected ? [{ catalogRef: selected.catalogRef, sourceRef: selected.sourceRef }] : [];
+  })[0];
+  const signing = { ...test.signing, definition: { url: definition.url, version: definition.version },
+    bundle: { id: bundle.manifest.id!, version: bundle.manifest.version! }, module: bundle.manifest.modules![0], modules: bundle.manifest.modules,
+    component: (bundle.manifest as typeof bundle.manifest & { components: { handle: string; url: string; version: string }[] })
+      .components.find(ref => ref.handle === 'intake')!,
+    bindings: Object.fromEntries(Object.keys(test.signing.bindings).map(name => [name, bindingFor(name)])),
+    ...(scoped ? { signingScope: { surface: { url: 'urn:formspec:demo:d1:signing-app:surface', version: '0.3.3' },
+      route: 'signing', ceremonySlot: 'ceremony', reviewSlot: 'review' } } : {}) };
+  const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
+    tenantBinding: { kind: 'bound', scope: { tenant: 'fixture', workspace: 'fixture', environment: 'test', cell: 'fixture' } } });
+  return { ...test, config };
+}
+
 describe('explicit native package composition', () => {
+  it('loads the exact Studio two-ceremony package with explicit intake selection', async () => {
+    const test = await completeStudioFixture(true);
+    const boot = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    expect(boot.host.bundle.surfaces).toHaveLength(5);
+    boot.host.dispose();
+  });
+  it('refuses the same complete two-ceremony package without selection', async () => {
+    const test = await completeStudioFixture(false);
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow();
+    expect(test.requests.filter(request => request.url.startsWith('https://server.example.test'))).toHaveLength(0);
+  });
+
+  it('carries one admitted selected ceremony identity into the private host', async () => {
+    const test = await fixture();
+    const factory = vi.spyOn(nativeHostModule, 'createNativePackageSigningHost');
+    const signing = { ...test.signing, signingScope: { surface: { ...test.bundle.manifest.surfaces![0], version: test.bundle.manifest.surfaces![0].version! },
+      route: 'signing', ceremonySlot: 'ceremony', reviewSlot: 'review' } };
+    const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
+      tenantBinding: { kind: 'bound', scope: { tenant: 'fixture', workspace: 'fixture', environment: 'test', cell: 'fixture' } } });
+    const boot = await createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    const policy = factory.mock.calls[0][0];
+    expect(policy.signingScope).toMatchObject({ ...signing.signingScope, surfaceId: 'surface', moduleId: signing.module.id });
+    expect(policy.controller.roles.sign?.widgetSource?.route.routeId).toBe('signing');
+    boot.host.dispose();
+  });
+
   it('scopes Source binding comparison to the explicitly selected module', async () => {
     const test = await moduleBindingFixture();
     await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow('native-widget-unadmitted');
