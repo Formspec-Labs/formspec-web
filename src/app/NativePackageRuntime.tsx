@@ -284,12 +284,12 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
       {state.application || state.applicationLookup ? <button type="button" className="locale-button" disabled={operation === 'refreshing' || operation === 'clearing'
           || !!state.controller && !['idle', 'saved', 'prepared', 'signed', 'submitted', 'refused', 'failed'].includes(state.controller.phase)}
           onClick={() => void refreshApplication()}>{applicationText('refresh') ?? 'Refresh application status'}</button> : null}
-      {!confirmation ? <p role="status">{boot.host.applicationCapabilities.persistentSaving
+      {!confirmation && state.editableSessionActive ? <p role="status">{boot.host.applicationCapabilities.persistentSaving
         ? applicationText(`checkpoint${checkpointSuffix}`)
           ?? ({ unsaved: 'Changes have not been saved', saving: 'Saving progress', saved: 'Progress saved', failed: 'Progress could not be saved. Try again.' })[checkpoint]
          : applicationText(`staging${checkpointSuffix}`)
           ?? ({ unsaved: 'Signing copy has not been prepared', saving: 'Preparing signing copy', saved: 'Signing copy prepared', failed: 'Signing copy could not be prepared. Try again.' })[checkpoint]}</p> : null}
-      {!confirmation && !boot.host.applicationCapabilities.persistentSaving ? <p>{applicationText('saveUnavailable')
+      {!confirmation && state.editableSessionActive && !boot.host.applicationCapabilities.persistentSaving ? <p>{applicationText('saveUnavailable')
         ?? 'Save for later is unavailable. Prepare a signing copy when you are ready.'}</p> : null}
     </div> : null}
     {operation === 'refresh-error' ? <p role="alert">{applicationText('refreshFailed') ?? 'Application status could not be confirmed. Try again.'}</p> : null}

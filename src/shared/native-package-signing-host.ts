@@ -186,8 +186,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const applicationStatus = (): Pick<ResponseActionControllerSnapshot, 'application' | 'applicationLookup'> => ({
     ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}) });
   const checkpointStatus = (): { checkpointState?: 'unsaved' | 'saving' | 'saved' | 'failed' } => policy.controller.applicationLifecycle ? { checkpointState } : {};
-  let hostSnapshot = { ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted };
-  const emit = () => { hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
+  let hostSnapshot = { ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted };
+  const emit = () => { hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
   function fence() {
     generation++; runtime = undefined; review = undefined; expectedReviewIdentity = undefined; reviewState = undefined;
     for (const read of reads) read.abort();
@@ -513,9 +513,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         return result;
       }, semanticControlScope: scope,
       getCompletionGeneration: () => authorityGeneration,
-      invalidate: () => { if (active) stop('clear'); }, dispose: () => { active = false; release(); releaseTitle(); next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false); if (rendererEngine === next.engine) rendererEngine = undefined; } };
+      invalidate: () => { if (active) { active = false; stop('clear'); if (rendererEngine === next.engine) rendererEngine = undefined; emit(); } }, dispose: () => { active = false; release(); releaseTitle(); next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false); if (rendererEngine === next.engine) { rendererEngine = undefined; emit(); } } };
     },
-    dispose() { if (disposed) return; stop('dispose'); disposed = true; unsubscribeController?.(); listeners.clear(); },
+    dispose() { if (disposed) return; disposed = true; stop('dispose'); emit(); unsubscribeController?.(); listeners.clear(); },
   };
 }
 

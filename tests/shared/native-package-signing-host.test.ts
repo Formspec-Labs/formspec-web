@@ -105,6 +105,31 @@ function siblingModulePolicy(test: ReturnType<typeof fixture>) {
 }
 
 describe('generic native package signing session', () => {
+  it('publishes editable activity only for the current form lease and refuses retired actions', async () => {
+    const test = fixture();
+    expect(test.host.getSnapshot().editableSessionActive).toBe(false);
+    const first = await test.attach();
+    expect(test.host.getSnapshot().editableSessionActive).toBe(true);
+    expect(test.host.getSnapshot().runtime).toBeUndefined();
+    const secondEngine = createFormEngine(test.policy.definition);
+    const second = await test.host.configureRuntime({ engine: secondEngine, definition: test.policy.definition,
+      draftKey: { formUrl: test.policy.definition.url, formVersion: test.policy.definition.version }, claim: null, activeLocale: 'en' });
+    first.dispose(); expect(test.host.getSnapshot().editableSessionActive).toBe(true);
+    await expect(test.invoke(first, 'save')).rejects.toThrow('retired');
+    second.dispose(); expect(test.host.getSnapshot().editableSessionActive).toBe(false);
+    await expect(test.invoke(second, 'save')).rejects.toThrow('retired');
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+    const returning = await test.attach();
+    expect(test.host.getSnapshot().editableSessionActive).toBe(true);
+    returning.invalidate(); expect(test.host.getSnapshot().editableSessionActive).toBe(false);
+    await expect(test.invoke(returning, 'save')).rejects.toThrow('retired');
+    returning.dispose();
+    const finalLease = await test.attach(); expect(test.host.getSnapshot().editableSessionActive).toBe(true);
+    test.host.dispose(); expect(test.host.getSnapshot().editableSessionActive).toBe(false);
+    await expect(test.invoke(finalLease, 'save')).rejects.toThrow('retired');
+    finalLease.dispose(); secondEngine.dispose(); test.engine.dispose();
+  });
+
   it('admits a maintained native Screener entry without granting applicant authority', () => {
     const test = fixture(); test.host.dispose(); test.engine.dispose();
     const surfaceUrl = 'urn:test:surface', screenerUrl = 'urn:test:screener';
@@ -366,7 +391,9 @@ describe('generic native package signing session', () => {
     second.engine.setLocale('es-US'); expect(host.getSnapshot().formTitle).toBe(spanish);
     first.engine.setLocale('en'); expect(host.getSnapshot().formTitle).toBe(spanish);
     first.lease.dispose(); first.engine.dispose(); expect(host.getSnapshot().formTitle).toBe(spanish);
+    expect(host.getSnapshot().editableSessionActive).toBe(true);
     second.lease.dispose(); second.engine.dispose(); expect(host.getSnapshot().formTitle).toBe(spanish);
+    expect(host.getSnapshot().editableSessionActive).toBe(false);
     expect(host.getSnapshot().sessionGeneration).toBe(epoch); expect(host.getSnapshot().generation).toBe(delivery);
     expect(test.invalidateAuthority).not.toHaveBeenCalled(); unsubscribe(); host.dispose(); test.engine.dispose();
   });
@@ -495,6 +522,7 @@ describe('generic native package signing session', () => {
     expect(test.host.getSnapshot().sessionGeneration).toBeGreaterThan(sessionGeneration);
     expect(test.invalidateAuthority).toHaveBeenCalledWith('edit', { formUrl: test.policy.definition.url, formVersion: test.policy.definition.version }); expect(test.host.getSnapshot().runtime).toBeUndefined();
     expect(test.host.getSnapshot().controller?.owned).toBe(true);
+    expect(test.host.getSnapshot().editableSessionActive).toBe(true);
     expect(test.host.getSnapshot().controller?.prepared).toBeUndefined();
     lease.dispose(); test.host.dispose(); test.engine.dispose(); expect(old).toBeDefined();
   });
@@ -574,6 +602,7 @@ describe('generic native package signing session', () => {
     clear.mockImplementation(async () => new Promise<void>(resolve => { finish = resolve; }));
     const pending = test.host.clearDraftAccess();
     expect(test.host.getSnapshot().runtime).toBeUndefined(); expect(test.invalidateAuthority).toHaveBeenCalledWith('clear', { formUrl: test.policy.definition.url, formVersion: test.policy.definition.version });
+    expect(test.host.getSnapshot().editableSessionActive).toBe(false);
     expect(clear).toHaveBeenCalledWith({ formUrl: test.policy.definition.url, formVersion: test.policy.definition.version });
     finish(); await pending;
     await expect(test.host.configureRuntime({ engine: test.engine, definition: test.policy.definition, draftKey: { formUrl: test.policy.definition.url }, claim: null, activeLocale: 'en' })).rejects.toThrow('refused');

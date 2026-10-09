@@ -49,7 +49,7 @@ beforeAll(() => initFormspecEngine());
 afterEach(() => { cleanup(); observed.forms.length = 0; observed.real = false; vi.unstubAllGlobals(); });
 function fixture() {
   const configureRuntime = vi.fn(); const dispose = vi.fn();
-  const state = { generation: 0, sessionGeneration: 0, locale: 'en', formTitle: '', cleared: false, controller: undefined, runtime: undefined, submitted: undefined };
+  const state = { generation: 0, sessionGeneration: 0, locale: 'en', formTitle: '', cleared: false, editableSessionActive: false, controller: undefined, runtime: undefined, submitted: undefined };
   const host = { getStartupRoute: () => ({ entryHref: '/', entryTitle: undefined, requiresHostState: false }), definition: [...dereferenceBundleExport(bundle).definitions.values()][0], moduleId: 'x-demo-signing', widgetModules: [starterWidgetModule('x-demo-signing', { responseReview: {} })], bundle: dereferenceBundleExport(structuredClone(bundle)), reviewOptions: {}, configureRuntime, configureSubmittedRuntime: vi.fn(), dispose,
     allocateSurfaceSessionMarker: () => 'fixture-visit',
     createSurfaceVisit: () => ({ activate: vi.fn(), dispose: vi.fn(), bindRuntime: () => ({ authorizeDataSource: () => ({ status: 'refused' as const, reason: 'unavailable' }), dataSourceLoader: () => ({ status: 'unavailable' as const, reason: 'unavailable' }), validateDataSourcePayload: () => ({ valid: true }), dataSourceRevision: () => undefined, widgetActionExecutor: vi.fn() }) }),

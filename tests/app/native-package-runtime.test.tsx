@@ -29,7 +29,7 @@ const localeDocuments = Object.values(exported.documents).filter(document => typ
 afterEach(() => { cleanup(); observed.props = undefined; observed.choose.mockReset(); window.history.replaceState(null, '', '/'); window.sessionStorage.clear(); });
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; }); return { promise, resolve, reject }; }
 function fixture() {
-  let state: Partial<ReturnType<NativePackageSigningHost['getSnapshot']>> = { generation: 1, locale: 'en', cleared: false, controller: {} as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']>, runtime: undefined };
+  let state: Partial<ReturnType<NativePackageSigningHost['getSnapshot']>> = { generation: 1, locale: 'en', cleared: false, editableSessionActive: true, controller: {} as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']>, runtime: undefined };
   const listeners = new Set<() => void>();
   const emit = () => { for (const listener of listeners) listener(); };
   const host = {
@@ -55,6 +55,27 @@ describe('native package boot and scoped recovery', () => {
     render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
     await screen.findByText('Progress saved'); expect(screen.queryByText('Wrong sibling progress')).toBeNull();
     expect(screen.queryByText('Wrong sibling form')).toBeNull();
+  });
+
+  it.each([true, false])('hides editable checkpoint copy on stateless routes while retaining case status (%s)', async persistentSaving => {
+    const test = fixture();
+    test.host.applicationCapabilities = { earlyCaseCreation: true, persistentSaving, formVersionId: 'publication' };
+    test.publish({ editableSessionActive: false, checkpointState: 'unsaved', controller: undefined,
+      application: { caseLedgerId: 'urn:wos:private', caseReference: 'APP-001', draftRef: 'urn:formspec:draft:private', status: 'in-progress' } });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByText('Application in progress: APP-001');
+    expect(screen.queryByText('Changes have not been saved')).toBeNull();
+    expect(screen.queryByText('Signing copy has not been prepared')).toBeNull();
+    expect(screen.queryByText(/Save for later is unavailable/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(Save|Prepare|Sign)$/ })).toBeNull();
+    act(() => test.publish({ editableSessionActive: true, controller: { phase: 'idle', owned: true } }));
+    await screen.findByText(persistentSaving ? 'Changes have not been saved' : 'Signing copy has not been prepared');
+    act(() => test.publish({ checkpointState: 'saved' }));
+    await screen.findByText(persistentSaving ? 'Progress saved' : 'Signing copy prepared');
+    act(() => test.publish({ editableSessionActive: false }));
+    expect(screen.queryByText(persistentSaving ? 'Progress saved' : 'Signing copy prepared')).toBeNull();
+    expect(screen.queryByText(/Save for later is unavailable/)).toBeNull();
+    expect(screen.getByText('Application in progress: APP-001')).toBeTruthy();
   });
 
   it('shows unavailable case status separately from saved progress and permits explicit status retry', async () => {
