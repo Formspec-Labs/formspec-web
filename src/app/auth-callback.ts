@@ -18,8 +18,8 @@ export function clearNativeSignOutReturn(href: string, config: FormspecWebConfig
 
 function rememberNativeReturn(href: string, config: FormspecWebConfig, slot: 'return' | 'signout-return'): boolean {
   const url = new URL(href);
-  const target = new URL('/', url);
-  target.search = url.search;
+  const target = new URL(url);
+  if (slot === 'signout-return') target.pathname = '/';
   if (url.hash || configuredAuthCallback(href, config) || !nativeSelection(target)) return false;
   navigationStore(url, config).write(slot, `${target.pathname}${target.search}`);
   return true;
@@ -38,7 +38,7 @@ function navigationStore(url: URL, config: FormspecWebConfig) {
 }
 
 function nativeSelection(url: URL): boolean {
-  return url.pathname === '/' && !url.hash && !!url.searchParams.get('form') && !!url.searchParams.get('package');
+  return !url.hash && !!url.searchParams.get('form') && !!url.searchParams.get('package');
 }
 
 function consumeNativeReturn(href: string, config: FormspecWebConfig, slot: 'return' | 'signout-return'): string | undefined {
@@ -47,9 +47,9 @@ function consumeNativeReturn(href: string, config: FormspecWebConfig, slot: 'ret
   const value = store.read(slot);
   if (value === undefined) return undefined;
   store.remove(slot);
-  if (typeof value !== 'string' || !value.startsWith('/?')) throw new Error('Stored form navigation is invalid.');
+  if (typeof value !== 'string' || (!value.startsWith('/') || value.startsWith('//'))) throw new Error('Stored form navigation is invalid.');
   const target = new URL(value, callback.origin);
-  if (target.origin !== callback.origin || !nativeSelection(target)) throw new Error('Stored form navigation is invalid.');
+  if (target.origin !== callback.origin || !nativeSelection(target) || (slot === 'signout-return' && target.pathname !== '/') || configuredAuthCallback(target.href, config)) throw new Error('Stored form navigation is invalid.');
   return target.href;
 }
 

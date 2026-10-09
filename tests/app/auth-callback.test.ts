@@ -44,11 +44,29 @@ describe('configured callback startup', () => {
     await completeConfiguredAuthCallback({ config, href, createSession: session, navigate: again });
     expect(again).toHaveBeenCalledExactlyOnceWith('https://web.example.test/');
   });
-  it('returns a fresh authored-route sign-in to the form entry while retaining its package selection', async () => {
-    rememberNativeSignInReturn('https://web.example.test/review-sign?form=passport&package=%2Fpackage.json', config);
+  it.each(['/eligibility', '/review-sign', '/correction/review-sign'])('preserves the requested native route %s after sign-in', async route => {
+    const selected = `https://web.example.test${route}?form=passport&package=%2Fpackage.json`;
+    expect(rememberNativeSignInReturn(selected, config)).toBe(true);
     const navigate = vi.fn();
     await completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/callback', createSession: session, navigate });
+    expect(navigate).toHaveBeenCalledExactlyOnceWith(selected);
+  });
+  it('keeps signout return at the form entry without restoring a signed-review route', async () => {
+    expect(rememberNativeSignOutReturn('https://web.example.test/review-sign?form=passport&package=%2Fpackage.json', config)).toBe(true);
+    const navigate = vi.fn();
+    await completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/logout', createSession: session, navigate });
     expect(navigate).toHaveBeenCalledExactlyOnceWith('https://web.example.test/?form=passport&package=%2Fpackage.json');
+  });
+  it('refuses a stored deep route after signout', async () => {
+    createBrowserScopedMetadataStore({ namespace: 'formspec-web:signin-navigation',
+      context: { origin: 'https://web.example.test', issuer: config.identity.oidc.issuer, clientId: config.identity.oidc.clientId,
+        redirectUri: config.identity.oidc.redirectUri, postLogoutRedirectUri: config.identity.oidc.postLogoutRedirectUri, tenantBinding: config.tenantBinding } })
+      .write('signout-return', '/review-sign?form=passport&package=%2Fpackage.json');
+    const auth = session(); const navigate = vi.fn();
+    await expect(completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/logout', createSession: () => auth, navigate }))
+      .rejects.toThrow(/navigation/);
+    expect(auth.completeLogoutCallback).toHaveBeenCalledOnce(); expect(auth.dispose).toHaveBeenCalledOnce();
+    expect(navigate).not.toHaveBeenCalled();
   });
   it('keeps navigation scoped to the selected issuer and client', async () => {
     const selected = 'https://web.example.test/?form=passport&package=%2Fpackage.json';
@@ -76,7 +94,7 @@ describe('configured callback startup', () => {
     await completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/callback', createSession: session, navigate: accepted });
     expect(accepted).toHaveBeenCalledExactlyOnceWith(selected);
   });
-  it.each(['https://untrusted.test/?form=x&package=y', '//untrusted.test/?form=x&package=y', '/auth/callback?form=x&package=y', '/?form=x&package=y#unsafe', 5])('refuses invalid stored navigation %s after authenticating', async value => {
+  it.each(['https://untrusted.test/?form=x&package=y', '//untrusted.test/?form=x&package=y', '/auth/callback?form=x&package=y', '/auth/silent?form=x&package=y', '/auth/logout?form=x&package=y', '/?form=x&package=y#unsafe', 5])('refuses invalid stored navigation %s after authenticating', async value => {
     createBrowserScopedMetadataStore({ namespace: 'formspec-web:signin-navigation',
       context: { origin: 'https://web.example.test', issuer: config.identity.oidc.issuer, clientId: config.identity.oidc.clientId,
         redirectUri: config.identity.oidc.redirectUri, postLogoutRedirectUri: config.identity.oidc.postLogoutRedirectUri, tenantBinding: config.tenantBinding } }).write('return', value);
