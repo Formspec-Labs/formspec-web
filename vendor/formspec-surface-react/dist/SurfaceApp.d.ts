@@ -1,3 +1,4 @@
+import type { SurfaceScreenerCompletionPolicy } from './screener-completion.js';
 /**
  * @filedesc `SurfaceApp` — a bundle's Surfaces, running.
  *
@@ -104,6 +105,8 @@ export interface SurfaceAppModel {
 }
 export declare function useSurfaceApp(input: UseSurfaceAppInput): SurfaceAppModel;
 export interface SurfaceAppProps extends UseSurfaceAppInput {
+    /** Explicit awaited host completion; omitted means stateless navigation. */
+    screenerCompletion?: SurfaceScreenerCompletionPolicy | undefined;
     /** Selected host language for native Screener presentation. */
     activeLocale?: string | undefined;
     /** Host-admitted resources; defaults to exact manifested Locale documents. */

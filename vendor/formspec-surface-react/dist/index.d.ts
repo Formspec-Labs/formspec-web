@@ -21,3 +21,4 @@ export * from './widgets/response-review.js';
 export { deriveSurfaceRuntimeGeneration, type SurfaceRuntimeGenerationInput } from "./runtime-generation.js";
 export type { DataSourceRevisionSelector } from './data-source-revision.js';
 export type { SurfaceRouteTitleResolver } from './title-presentation.js';
+export type { SurfaceScreenerCompletionPolicy, SurfaceScreenerCompletion, SurfaceScreenerCompletionRequest } from './screener-completion.js';

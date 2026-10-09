@@ -1,3 +1,4 @@
+import type { SurfaceScreenerCompletionPolicy } from './screener-completion.js';
 /**
  * @filedesc `SurfaceRouteView` — one route plan, rendered, with its theme
  * boundary.
@@ -43,7 +44,15 @@ import type { WidgetActionCoordinator } from './widget-action-runtime.js';
 export interface SurfaceRouteViewProps {
     localeDocuments?: readonly LocaleDocument[] | undefined;
     activeLocale?: string | undefined;
+    screenerCompletion?: SurfaceScreenerCompletionPolicy | undefined;
     screenerInstanceId?: string | undefined;
+    /** Pure destination check; required before host-required completion. */
+    checkScreenerTarget?: ((target: string) => {
+        status: 'accepted';
+    } | {
+        status: 'refused';
+        reason: string;
+    }) | undefined;
     onScreenerTarget?: ((target: string) => {
         status: 'accepted';
     } | {
@@ -95,4 +104,4 @@ export interface SurfaceRouteViewProps {
      */
     onAdvance?: ((transition: PlannedTransition, outcome?: Pick<SurfaceTransitionOutcome, 'transitionBindings'>) => 'advanced' | 'refused' | void) | undefined;
 }
-export declare function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, onScreenerTarget, screenerInstanceId, localeDocuments, activeLocale, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;
+export declare function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;

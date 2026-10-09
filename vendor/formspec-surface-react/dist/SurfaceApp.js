@@ -208,6 +208,16 @@ export function SurfaceApp(props) {
         props.staticAssetResolver,
         strings,
     ]);
+    // One pure destination resolver is shared by preflight and navigation.
+    const screenerDestination = (target) => {
+        if (!screenerVisit.active || liveScreenerVisit.current !== screenerVisit || !routePlan)
+            return { status: 'refused', reason: 'screener-generation-stale' };
+        const matches = model.app.routes.filter(handle => `surface:${handle.routeId}` === target);
+        if (matches.length !== 1 || matches[0].pathCollides)
+            return { status: 'refused', reason: 'screener-target-not-unique' };
+        const destination = routeHref(matches[0], routePlan.params);
+        return destination.refusal ? { status: 'refused', reason: destination.refusal } : { status: 'accepted', href: destination.href };
+    };
     const [runtimeDiagnosticsByScope, setRuntimeDiagnosticsByScope] = useState(() => new Map());
     const onRuntimeDiagnosticsChange = useCallback((scope, next) => {
         setRuntimeDiagnosticsByScope((previous) => {
@@ -296,15 +306,10 @@ export function SurfaceApp(props) {
             document.title = previous;
         };
     }, [appTitle, setDocumentTitle]);
-    return (_jsxs("div", { className: "fs-surface-app", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: [(props.header !== undefined || appTitle) && (_jsx("header", { className: "fs-surface-header", children: _jsx("div", { className: "fs-surface-header__inner", children: props.header ?? (_jsx("span", { className: "fs-surface-brand", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: appTitle })) }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: props.routeParams, onNavigate: onNavigate, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, screenerInstanceId: screenerVisit.id, localeDocuments: props.localeDocuments ?? props.bundle.localeDocuments, activeLocale: props.activeLocale, resolveRouteTitle: props.resolveRouteTitle, strings: strings, dataSourceLoader: props.dataSourceLoader, dataSourceRevision: props.dataSourceRevision, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, onScreenerTarget: (target) => {
-                                if (!screenerVisit.active || liveScreenerVisit.current !== screenerVisit)
-                                    return { status: 'refused', reason: 'screener-generation-stale' };
-                                const matches = model.app.routes.filter(handle => `surface:${handle.routeId}` === target);
-                                if (matches.length !== 1 || matches[0].pathCollides)
-                                    return { status: 'refused', reason: 'screener-target-not-unique' };
-                                const destination = routeHref(matches[0], routePlan.params);
-                                if (destination.refusal)
-                                    return { status: 'refused', reason: destination.refusal };
+    return (_jsxs("div", { className: "fs-surface-app", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: [(props.header !== undefined || appTitle) && (_jsx("header", { className: "fs-surface-header", children: _jsx("div", { className: "fs-surface-header__inner", children: props.header ?? (_jsx("span", { className: "fs-surface-brand", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: appTitle })) }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: props.routeParams, onNavigate: onNavigate, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, screenerCompletion: props.screenerCompletion, screenerInstanceId: screenerVisit.id, localeDocuments: props.localeDocuments ?? props.bundle.localeDocuments, activeLocale: props.activeLocale, resolveRouteTitle: props.resolveRouteTitle, strings: strings, dataSourceLoader: props.dataSourceLoader, dataSourceRevision: props.dataSourceRevision, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, checkScreenerTarget: screenerDestination, onScreenerTarget: (target) => {
+                                const destination = screenerDestination(target);
+                                if (destination.status === 'refused')
+                                    return destination;
                                 onNavigate(destination.href);
                                 return { status: 'accepted' };
                             }, onAdvance: (transition, outcome) => {

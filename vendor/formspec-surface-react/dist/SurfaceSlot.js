@@ -1,4 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { NativeScreenerSlot } from './screener-completion.js';
 /**
  * @filedesc `SurfaceSlot` — one planned slot, rendered — and `SurfaceSlotFrame`,
  * the ONE place a slot's own title becomes a heading.
@@ -26,9 +27,9 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { selectDataSourceRevisions } from './data-source-revision.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from 'react';
 import { createFormEngine, createMappingEngine, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
-import { FormspecScreener, FormspecForm } from '@formspec-org/react';
+import { FormspecForm } from '@formspec-org/react';
 import { resolveFieldReferences, targetDefinitionMatches, } from '@formspec-org/types';
-import { resolveScreenerDetermination, loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
+import { loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
 import { Heading, nextLevel } from './heading.js';
 import { allocateWidgetActionInvocationId, admitSurfaceWidgetActionInput, createWidgetActionCoordinator, responseActionsDocumentForAction, snapshotWidgetResponseContext, } from './widget-action-runtime.js';
 import { WidgetEmptyState } from './widgets/empty-state.js';
@@ -167,7 +168,7 @@ export function SurfaceSlotFrame(props) {
         (plan.slotType !== 'experience-unit' || showExperienceNeeds);
     return (_jsxs("section", { className: "fs-surface-slot", "data-slot": plan.slotId, "data-slot-type": plan.slotType, ...needTraceAttributes(plan.needAnchors), ...(showsAuthoredTitle ? { 'aria-label': plan.title } : {}), children: [showsAuthoredTitle && !rendersOwnHeading(plan) && (_jsx(Heading, { level: plan.headingBaseLevel, className: "fs-surface-slot__title", children: plan.title })), _jsx(SurfaceSlot, { ...props })] }));
 }
-export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, screenerInstanceId, localeDocuments, activeLocale, }) {
+export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, }) {
     const subjectPrefix = surfaceSemanticOutputSubjectRef(route.routeId, plan.slotId);
     const slotSemanticOutputScope = semanticOutputScope && subjectPrefix
         ? { ...semanticOutputScope, subjectPrefix }
@@ -176,12 +177,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
         case 'screener': {
             if (plan.status !== 'ready' || !plan.screener)
                 return _jsx(UnavailableSlot, { children: plan.reason ?? 'screener-unavailable' });
-            return _jsx(FormspecScreener, { screenerDocument: plan.screener.document, localeDocuments: localeDocuments, activeLocale: activeLocale, onDetermination: (determination, answers, evaluationTime) => {
-                    const result = resolveScreenerDetermination({ document: plan.screener.document, allowedTargets: plan.allowedTargets, determination, answers, evaluationTime, nowIso: new Date().toISOString() });
-                    if (result.status === 'refused')
-                        return result;
-                    return onScreenerTarget?.(result.target) ?? { status: 'refused', reason: 'screener-navigation-unavailable' };
-                } }, `${screenerInstanceId ?? runtimeGeneration ?? ''}/${plan.screener.ref.url}/${plan.screener.ref.version}`);
+            return _jsx(NativeScreenerSlot, { document: plan.screener.document, screenerRef: { url: plan.screener.ref.url, version: plan.screener.document.version }, allowedTargets: plan.allowedTargets, route: route, slotId: plan.slotId, runtimeGeneration: runtimeGeneration, visitId: screenerInstanceId, policy: screenerCompletion, localeDocuments: localeDocuments, activeLocale: activeLocale, checkTarget: checkScreenerTarget, navigate: onScreenerTarget }, `${screenerInstanceId ?? runtimeGeneration ?? ''}/${plan.screener.ref.url}/${plan.screener.ref.version}`);
         }
         case 'definition-form': {
             if (plan.status === 'unresolved' || plan.definition === undefined) {
@@ -266,7 +262,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
             // the host's grant — an embedded route cannot restore branding the host
             // refuses. Headings step down a level, which `planRoute` already decided;
             // this renders the level it was handed and re-derives nothing.
-            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, onAdvance: onAdvance }, child.slotId))) }));
+            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, onAdvance: onAdvance }, child.slotId))) }));
         }
         case 'unknown':
             return _jsx(UnavailableSlot, { children: strings('slotUnavailableStaticContent') });

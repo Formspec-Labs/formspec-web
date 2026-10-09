@@ -1,3 +1,4 @@
+import type { SurfaceScreenerCompletionPolicy } from './screener-completion.js';
 /**
  * @filedesc `SurfaceSlot` — one planned slot, rendered — and `SurfaceSlotFrame`,
  * the ONE place a slot's own title becomes a heading.
@@ -104,7 +105,15 @@ export declare function createSurfaceSemanticControlScopeResolver(pairing: Surfa
 export interface SurfaceSlotProps {
     localeDocuments?: readonly LocaleDocument[] | undefined;
     activeLocale?: string | undefined;
+    screenerCompletion?: SurfaceScreenerCompletionPolicy | undefined;
     screenerInstanceId?: string | undefined;
+    /** Pure destination check; required before host-required completion. */
+    checkScreenerTarget?: ((target: string) => {
+        status: 'accepted';
+    } | {
+        status: 'refused';
+        reason: string;
+    }) | undefined;
     onScreenerTarget?: ((target: string) => {
         status: 'accepted';
     } | {
@@ -180,6 +189,6 @@ export declare function rendersOwnHeading(plan: SlotPlan<SurfaceWidget>): boolea
  * landmark — which is the honest shape for a slot the author did not name.
  */
 export declare function SurfaceSlotFrame(props: SurfaceSlotProps): import("react/jsx-runtime").JSX.Element | null;
-export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, screenerInstanceId, localeDocuments, activeLocale, }: SurfaceSlotProps): ReactNode;
+export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, }: SurfaceSlotProps): ReactNode;
 export declare function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, }: SurfaceDefinitionFormRenderInput): ReactNode;
 export { nextLevel };

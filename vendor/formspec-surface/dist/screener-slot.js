@@ -67,12 +67,16 @@ export function resolveScreenerDetermination(input) {
         return refuse('determination-input-coverage');
     for (const item of document.items) {
         const entry = record.inputs[item.key];
-        if (!entry || entry.state !== 'answered' || !screenerAnswerMatches(item, entry.value) || entry.value !== answers[item.key])
+        if (entry && entry.state !== 'answered')
+            return refuse('determination-input-unanswered');
+        if (!entry || !screenerAnswerMatches(item, entry.value) || entry.value !== answers[item.key])
             return refuse('determination-input-mismatch');
         if (document.binds?.some(b => b.path === item.key && b.required === 'true') && entry.value === '')
             return refuse('determination-required-answer');
     }
-    if (!Array.isArray(record.phases) || !Array.isArray(record.overrides?.matched) || record.phases.some(p => p.status === 'unsupported-strategy' || (p.warnings?.length ?? 0) > 0 || !Array.isArray(p.matched)))
+    if (!Array.isArray(record.phases) || !Array.isArray(record.overrides?.matched) || record.phases.some(p => !['evaluated', 'skipped'].includes(p.status) || !['first-match', 'fan-out', 'score-threshold'].includes(p.strategy) || (p.warnings?.length ?? 0) > 0 || !Array.isArray(p.matched)))
+        return refuse('determination-diagnostics');
+    if (!Array.isArray(document.evaluation) || !document.evaluation.length || document.evaluation.some(p => !['first-match', 'fan-out', 'score-threshold'].includes(p.strategy) || !Array.isArray(p.routes) || p.routes.some(r => typeof r.target !== 'string')))
         return refuse('determination-diagnostics');
     const authored = new Set(document.evaluation.flatMap(p => p.routes.map(r => r.target)));
     const allowed = new Set(input.allowedTargets);
