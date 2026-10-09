@@ -17,3 +17,6 @@ export { createBrowserScopedMetadataStore, type BrowserScopedMetadataConfig, typ
 export { isApplicationDraftId } from './application-draft-id.ts';
 
 export { createEvaluationInstanceResolver } from './evaluation-instance-resolver.ts';
+
+export { createIntakeResponseCompletion } from './intake-response-completion.ts';
+export { createTaskResponseCompletion } from './task-response-completion.ts';

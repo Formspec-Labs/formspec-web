@@ -1,3 +1,4 @@
+import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 /**
  * HTTP adapter cohort (FW-0064).
  *
@@ -202,7 +203,8 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     },
   };
   const scopedSubmit: SubmitTransport = {
-    submit: (handoff, operationId) => {
+    submit: (handoff, operationId, assertCurrent = () => {}) => {
+      assertSynchronousGuard(assertCurrent);
       const key = draftKeyFromHandoff(handoff);
       return fence.run(key, async generation => {
         responseSigning.assertEditable(key);
@@ -212,7 +214,10 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
           && JSON.stringify(response) !== JSON.stringify(binding.response)) {
           throw new Error('Signed submission must preserve the exact saved Response');
         }
-        return submitTransport.submit(handoff, operationId, () => fence.assertCurrent(key, generation));
+        return submitTransport.submit(handoff, operationId, () => {
+          fence.assertCurrent(key, generation);
+          assertSynchronousGuard(assertCurrent);
+        });
       });
     },
   };

@@ -72,3 +72,5 @@ export { HttpScreenerRetention, type HttpScreenerRetentionConfig } from './scree
 export { decodeEvaluationHydrationWire } from './evaluation-hydration-wire.ts';
 
 export { HttpScreenerHydration, type HttpScreenerHydrationConfig } from './screener-hydration.ts';
+
+export { HttpTaskCompletion } from './task-completion.ts';

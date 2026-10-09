@@ -210,3 +210,8 @@ export type { EvaluationHydrationWire, EvaluationHydrationOwner, EvaluationProvi
   HttpEvaluationProviderReceipt, NativeScreenerMappingReceipt, EvaluationHydrationResult } from './evaluation-hydration.ts';
 
 export type { HydrateScreenerCandidate, HydratedScreenerCandidate, ScreenerHydration } from './screener-hydration.ts';
+
+export type { CompletionLifetime, CaptureResponseCompletion, PreparedResponseCompletion,
+  ResponseCompletionResult, ResponseCompletion } from './response-completion.ts';
+export { ResponseCompletionRefusal } from './response-completion.ts';
+export type { TaskOutcomeEvent, TaskSubmission, CompletedTaskOutcome, TaskCompletionSelection, TaskCompletion } from './task-completion.ts';

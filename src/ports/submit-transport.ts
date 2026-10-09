@@ -44,5 +44,5 @@ export interface SubmitTransport {
    * `idempotencyKey` MUST be a client-generated UUIDv7 (queue EXT-14).
    * The same key passed twice MUST yield the same response.
    */
-  submit(handoff: IntakeHandoff, idempotencyKey: string): Promise<SubmitConfirmation>;
+  submit(handoff: IntakeHandoff, idempotencyKey: string, assertCurrent?: () => void): Promise<SubmitConfirmation>;
 }

@@ -1,3 +1,4 @@
+import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import canonicalize from 'canonicalize';
 import type {
   IntakeHandoff,
@@ -42,7 +43,8 @@ export class HttpSubmitTransport implements SubmitTransport {
   }
 
   async submit(handoff: IntakeHandoff, idempotencyKey: string, assertCurrent: () => void = () => {}): Promise<SubmitConfirmation> {
-    assertCurrent();
+    const check = () => assertSynchronousGuard(assertCurrent);
+    check();
     assertUuidV7IdempotencyKey(idempotencyKey);
     requireCanonicalResponse(handoff);
     const finalized = this.finalizedHandoffs.get(idempotencyKey);
@@ -56,7 +58,7 @@ export class HttpSubmitTransport implements SubmitTransport {
     if (existing) {
       return existing;
     }
-    const submission = this.submitOnce(snapshot, canonicalResponse, idempotencyKey, assertCurrent);
+    const submission = this.submitOnce(snapshot, canonicalResponse, idempotencyKey, check);
     this.replay.set(idempotencyKey, submission);
     try {
       return await submission;
@@ -73,6 +75,7 @@ export class HttpSubmitTransport implements SubmitTransport {
     assertCurrent: () => void,
   ): Promise<SubmitConfirmation> {
     const draftId = await this.draftIdResolver(handoff);
+    assertSynchronousGuard(assertCurrent);
     if (!draftId) {
       throw new Error('HTTP SubmitTransport requires a draft id for formspec-server submission');
     }
@@ -85,6 +88,7 @@ export class HttpSubmitTransport implements SubmitTransport {
       throw new Error('Submission data or identity conflicts with the canonical Response');
     }
     const token = await this.resolveAnonymousSessionToken(handoff);
+    assertSynchronousGuard(assertCurrent);
     const response = await this.client.postJson<ResponseView>(
       `/drafts/${encodeURIComponent(draftId)}/submit`,
       {
@@ -96,7 +100,7 @@ export class HttpSubmitTransport implements SubmitTransport {
         anonymous_session_token: token,
         signing_requested: this.resolveSigningRequested(handoff),
       },
-      { idempotencyKey, headers: token ? { authorization: `Bearer ${token}` } : {}, assertCurrent },
+      { idempotencyKey, headers: token ? { authorization: `Bearer ${token}` } : {}, assertCurrent: () => assertSynchronousGuard(assertCurrent) },
     );
     if (snapshotId && response.response_id !== snapshotId) {
       throw new Error('Server response identity differs from the canonical Response');

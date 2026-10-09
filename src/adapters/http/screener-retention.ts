@@ -1,3 +1,4 @@
+import { isLosslessHttpIdempotencyKey } from '../../shared/idempotency-key.ts';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import canonicalize from 'canonicalize';
@@ -70,7 +71,7 @@ export class HttpScreenerRetention implements ScreenerRetention {
     // Detach before hashing, credentials or transport. Retries keep the host's original completionId.
     const request = structuredClone({ completionId: input.completionId, document: input.document,
       screenerRef: input.screenerRef, answers: input.answers, target: input.target, identity: input.identity });
-    if (!validCompletionKey(request.completionId)
+    if (!isLosslessHttpIdempotencyKey(request.completionId)
       || !this.selection.allowedTargets.includes(request.target)
       || request.screenerRef.url !== this.selection.screenerUrl
       || request.screenerRef.version !== this.selection.screenerVersion
@@ -153,10 +154,4 @@ function freeze(value: unknown): void {
   if (value === null || typeof value !== 'object') return;
   for (const child of Object.values(value)) freeze(child);
   Object.freeze(value);
-}
-
-function validCompletionKey(value: string): boolean {
-  // Public Surface acts are UUIDs. Require a lossless visible-ASCII HTTP header representation.
-  if (!value || value !== value.trim() || /[^\x20-\x7e]/.test(value) || new TextEncoder().encode(value).byteLength > 256) return false;
-  return new Headers({ 'Idempotency-Key': value }).get('Idempotency-Key') === value;
 }

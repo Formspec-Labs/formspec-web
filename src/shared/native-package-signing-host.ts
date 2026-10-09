@@ -30,8 +30,8 @@ export interface NativePackageSigningHostPolicy {
   registryEntries: readonly RegistryEntry[];
   locales: readonly LocaleDocument[];
   controller: Omit<ResponseActionControllerConfig, 'context' | 'restoredResponse' | 'validateFrozenResponse' | 'reviewReady' | 'signingContext' | 'buildHandoff'>;
-  buildHandoff: (response: FormResponse, report: ValidationReport,
-    context: Pick<RespondentOwnedRuntimeInput, 'draftKey' | 'claim'>) => ReturnType<ResponseActionControllerConfig['buildHandoff']>;
+  buildHandoff?: (response: FormResponse, report: ValidationReport,
+    context: Pick<RespondentOwnedRuntimeInput, 'draftKey' | 'claim'>) => ReturnType<NonNullable<ResponseActionControllerConfig['buildHandoff']>>;
   publication: { formId: string; formVersionId: string };
   responseId?: string;
   initialLocale: string;
@@ -361,6 +361,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         const report = await isolated(response, locale, engine => engine.getValidationReport({ profile: 'on-submit' }), publicSnapshot?.signed) as ValidationReport;
         if (disposed || authorityGeneration !== expected || !report.valid || report.definitionUrl !== response.definitionUrl
           || report.definitionVersion !== response.definitionVersion) throw new Error('native-handoff-validation-refused');
+        if (!policy.buildHandoff) throw new Error('Intake handoff builder is unavailable');
         return policy.buildHandoff(response, report, structuredClone({ draftKey: input!.draftKey, claim: input!.claim }));
       },
       reviewReady: (context, stage) => {

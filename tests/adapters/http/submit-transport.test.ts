@@ -241,3 +241,26 @@ async function waitForRequests(requests: unknown[], count: number): Promise<void
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
+
+
+it('refuses retired completion after delayed credentials before HTTP dispatch', async () => {
+  let release!: (value: string) => void;
+  const credentials = new Promise<string>(resolve => { release = resolve; });
+  const token = vi.fn(() => credentials); const fetchImpl = vi.fn();
+  const transport = new HttpSubmitTransport({ baseUrl: 'https://source.test', fetchImpl,
+    draftIdResolver: () => 'owned', anonymousSessionToken: token });
+  let current = true;
+  const pending = transport.submit({ ...sampleIntakeHandoff, extensions: { 'x-formspec-response': sampleFormResponse } },
+    generateIdempotencyKey(), () => { if (!current) throw new Error('retired'); });
+  await vi.waitFor(() => expect(token).toHaveBeenCalledOnce());
+  current = false; release('token');
+  await expect(pending).rejects.toThrow('retired'); expect(fetchImpl).not.toHaveBeenCalled();
+});
+
+it.each([async () => {}, async () => { throw new Error('late rejection'); }])('refuses asynchronous currentness guards before resolvers', async guard => {
+  const draftIdResolver = vi.fn(() => 'owned'); const fetchImpl = vi.fn();
+  const transport = new HttpSubmitTransport({ baseUrl: 'https://source.test', draftIdResolver, fetchImpl });
+  await expect(transport.submit({ ...sampleIntakeHandoff, extensions: { 'x-formspec-response': sampleFormResponse } },
+    generateIdempotencyKey(), guard)).rejects.toThrow('must be synchronous');
+  expect(draftIdResolver).not.toHaveBeenCalled(); expect(fetchImpl).not.toHaveBeenCalled();
+});

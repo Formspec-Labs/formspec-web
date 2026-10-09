@@ -54,3 +54,10 @@ export async function deriveUuidV7FromString(
   assertUuidV7IdempotencyKey(formatted);
   return formatted;
 }
+
+/** Require a bounded HTTP header value that preserves every operation-key byte. */
+export function isLosslessHttpIdempotencyKey(value: string): boolean {
+  if (!value || value !== value.trim() || /[^\x20-\x7e]/.test(value)
+    || new TextEncoder().encode(value).byteLength > 256) return false;
+  return new Headers({ 'Idempotency-Key': value }).get('Idempotency-Key') === value;
+}

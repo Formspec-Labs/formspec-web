@@ -1,3 +1,6 @@
+import type { TaskSubmission } from '../../src/ports/task-completion.ts';
+import type { CompletionLifetime } from '../../src/ports/response-completion.ts';
+import { createTaskResponseCompletion } from '../../src/shared/task-response-completion.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { dereferenceBundleExport, type BundleExport } from '@formspec-org/surface';
@@ -298,7 +301,7 @@ describe('generic admitted Response Action controller', () => {
     const operation = test.submit.mock.calls[0][1]; const handoff = test.submit.mock.calls[0][0];
     expect(isUuidV7IdempotencyKey(operation)).toBe(true);
     const result = await test.widget('submit', signed, 'uncertain-submit');
-    expect(test.submit.mock.calls[1]).toEqual([handoff, operation]); expect(test.buildHandoff).toHaveBeenCalledOnce();
+    expect(test.submit.mock.calls[1]).toEqual([handoff, operation, expect.any(Function)]); expect(test.buildHandoff).toHaveBeenCalledOnce();
     expect(test.controller.getSnapshot().phase).toBe('submitted');
     expect(await test.widget('submit', signed, 'uncertain-submit')).toEqual(result);
     expect(test.submit).toHaveBeenCalledTimes(2);
@@ -649,5 +652,99 @@ describe('exact dispatched Sign reconciliation retry', () => {
     test.controller.invalidate();
     expect(await test.widget('sign', prepared, 'same-sign-act')).toMatchObject({ status: 'failed' });
     expect(test.sign).toHaveBeenCalledOnce();
+  });
+});
+
+
+describe('typed response completion', () => {
+  const selection = { taskId: 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db/tasks/correction',
+    processId: 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db',
+    definitionUrl: sampleFormDefinition.url, definitionVersion: sampleFormDefinition.version };
+  function taskFixture(optionalOutput = false) {
+    const roles = Object.fromEntries(['saveInitial', 'saveOwned', 'prepare', 'sign', 'submit', 'paper'].map(role =>
+      [role, roleAdmission(role as ResponseActionRole)])) as ResponseActionControllerConfig['roles'];
+    const request = roles.submit!.document['x-formspec-runtime']!.requests[0];
+    request.request = { method: 'POST', pathTemplate: '/api/v1/tasks/{taskId}/response',
+      pathBindings: { taskId: { from: 'input', path: 'taskId' } },
+      bodyDefaults: { definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion },
+      bodyBindings: { '/response': { from: 'input', path: 'frozenResponse' } } };
+    request.outputs = { task: { path: '/taskId', exposure: 'transition' }, status: { path: '/newStatus', exposure: 'internal' },
+      ...(optionalOutput ? { actor: { path: '/actorRef', exposure: 'internal' as const } } : {}) };
+    const complete = vi.fn(async (_submission: TaskSubmission, _operationId: string, _lifetime: CompletionLifetime) => ({ taskId: selection.taskId, processId: selection.processId,
+      outcome: 'completed' as const, newStatus: 'submitted' as const, occurredAt: '2026-10-09T12:00:00Z' }));
+    return { ...fixture({ roles, completion: createTaskResponseCompletion({ selection, transport: { complete } }) }), complete };
+  }
+  it('publishes the actual task outcome, preserves full signed bytes, and caches the completed act', async () => {
+    const test = taskFixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    const first = await test.widget('submit', signed, 'task-completion');
+    expect('invocation' in first ? first.invocation.status : first.status).toBe('completed');
+    expect(test.complete).toHaveBeenCalledOnce();
+    expect(test.complete.mock.calls[0][0]).toEqual({ definitionUrl: selection.definitionUrl,
+      definitionVersion: selection.definitionVersion, response: signed.response });
+    expect(test.controller.getSnapshot()).toMatchObject({ phase: 'submitted', completion: { kind: 'task', outcome: {
+      taskId: selection.taskId, processId: selection.processId, outcome: 'completed', newStatus: 'submitted' } } });
+    expect(test.controller.getSnapshot().confirmation).toBeUndefined();
+    expect(test.buildHandoff).not.toHaveBeenCalled(); expect(test.submit).not.toHaveBeenCalled();
+    expect(await test.widget('submit', signed, 'task-completion')).toEqual(first);
+    expect(test.complete).toHaveBeenCalledOnce();
+  });
+  it('retains the committed task event when optional authored output extraction fails', async () => {
+    const test = taskFixture(true); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    await test.widget('submit', signed, 'missing-optional-output');
+    expect(test.controller.getSnapshot().completion).toMatchObject({ kind: 'task', outcome: { outcome: 'completed' } });
+    await test.widget('submit', signed, 'missing-optional-output');
+    await test.widget('submit', signed, 'new-act');
+    expect(test.complete).toHaveBeenCalledOnce();
+  });
+  it('refuses forged or foreign preparations and changed operation keys', async () => {
+    const test = taskFixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    const strategy = createTaskResponseCompletion({ selection, transport: { complete: test.complete } });
+    const foreign = createTaskResponseCompletion({ selection, transport: { complete: test.complete } });
+    const lifetime = { signal: new AbortController().signal, assertCurrent: () => {} };
+    const input = { signed, request: test.config.roles.submit!.document['x-formspec-runtime']!.requests[0], invocationInput: {} };
+    const captured = await strategy.capture(input, lifetime);
+    await expect(foreign.complete(captured, 'operation', lifetime)).rejects.toThrow('preparation mismatch');
+    await expect(strategy.complete({ kind: 'task' }, 'operation', lifetime)).rejects.toThrow('preparation mismatch');
+    expect(test.complete).not.toHaveBeenCalled();
+    await strategy.complete(captured, 'operation', lifetime);
+    await expect(strategy.complete(captured, 'changed-operation', lifetime)).rejects.toThrow('preparation mismatch');
+    expect(test.complete).toHaveBeenCalledOnce();
+  });
+  it('keeps one captured task and operation key across an ambiguous retry', async () => {
+    const test = taskFixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    test.complete.mockRejectedValueOnce(new Error('reply lost'));
+    await test.widget('submit', signed, 'same-task-act');
+    await test.widget('submit', signed, 'same-task-act');
+    expect(test.complete).toHaveBeenCalledTimes(2);
+    expect(test.complete.mock.calls[1].slice(0, 2)).toEqual(test.complete.mock.calls[0].slice(0, 2));
+  });
+  it('prevents intake dispatch when the controller retires during handoff preparation', async () => {
+    const test = fixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    let release!: () => void;
+    const wait = new Promise<void>(resolve => { release = resolve; });
+    const original = test.buildHandoff.getMockImplementation()!;
+    test.buildHandoff.mockImplementation(async value => { await wait; return original(value); });
+    const pending = test.widget('submit', signed);
+    await vi.waitFor(() => expect(test.buildHandoff).toHaveBeenCalledOnce());
+    test.controller.invalidate(); release(); await pending;
+    expect(test.submit).not.toHaveBeenCalled();
+    expect(test.controller.getSnapshot().completion).toBeUndefined();
+  });
+  it('freezes the detached signed response before invoking an intake builder', async () => {
+    const test = fixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    test.buildHandoff.mockImplementation(async value => {
+      expect(Object.isFrozen(value.data)).toBe(true);
+      expect(() => { value.data.changed = true; }).toThrow();
+      return { ...sampleIntakeHandoff, responseRef: `response:${value.id}`, responseHash: `sha256:${await hashResponse(value)}`,
+        extensions: { 'x-formspec-response': value } };
+    });
+    await test.widget('submit', signed);
+    expect(signed.response.data.changed).toBeUndefined(); expect(test.submit).toHaveBeenCalledOnce();
   });
 });
