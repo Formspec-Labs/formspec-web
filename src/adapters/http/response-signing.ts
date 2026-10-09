@@ -17,6 +17,12 @@ export interface HttpResponseSigningPolicy {
   signingProfileDigest: (response: FormResponse) => Promise<string>;
   keyId: string;
   now?: () => string;
+  /** Optional host qualification of the actual commitment-bearing saved revision. */
+  preSignCandidate?: (input: Readonly<{
+    saved: SavedResponseDraft;
+    operationId: string;
+    assertCurrent: () => void;
+  }>) => Promise<Readonly<{ assertCurrent: () => void }>>;
 }
 
 /** Shared by draft edits, Prepare, Sign, Submit and clear; no state getter is exposed. */
@@ -323,6 +329,16 @@ export class HttpResponseSigning implements ResponseSigning {
       throw new Error('Saved signing candidate changed; redisplay and explicit assent are required');
     }
     const planned = this.validateAction(act);
+    let assertBeforeDispatch: (() => void) | undefined;
+    if (this.config.preSignCandidate) {
+      const candidate = await this.savedResult(context.input.draftKey, saved);
+      this.current(context);
+      const qualification = await this.config.preSignCandidate(Object.freeze({ saved: candidate,
+        operationId: input.operationId, assertCurrent: () => this.current(context) }));
+      this.current(context);
+      if (typeof qualification?.assertCurrent !== 'function') throw new Error('Sign candidate qualification requires a dispatch assertion');
+      assertBeforeDispatch = qualification.assertCurrent.bind(qualification);
+    }
     const owner = await this.config.ownerFor(context.input.draftKey);
     this.current(context);
     let signed: DraftView;
@@ -331,6 +347,7 @@ export class HttpResponseSigning implements ResponseSigning {
         headers: { ...planned.headers, ...bearer(owner.token) }, idempotencyKey: input.operationId,
         successStatuses: planned.successStatuses,
         assertCurrent: () => this.current(context),
+        assertBeforeDispatch,
       });
     } catch (error) {
       this.current(context);

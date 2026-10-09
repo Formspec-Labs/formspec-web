@@ -6,7 +6,7 @@ import { createHttpAdapterCohort } from '../../../src/adapters/http/cohort.ts';
 import { AnonymousSessionBridge } from '../../../src/adapters/http/anonymous-session.ts';
 import { createBrowserDraftResumeMetadataStore } from '../../../src/adapters/browser/draft-resume-metadata.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../../src/adapters/schema/index.ts';
-import { ResponseSigningUnresolvedError, type PreparedResponseSigning } from '../../../src/ports/response-signing.ts';
+import { ResponseSigningUnresolvedError, type PreparedResponseSigning, type SavedResponseDraft } from '../../../src/ports/response-signing.ts';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../../src/adapter-conformance/fixtures.ts';
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import type { DraftKey } from '../../../src/ports/draft-store.ts';
@@ -50,7 +50,8 @@ function saveAction(method: 'POST' | 'PATCH') {
 }
 const prepareAction = saveAction('PATCH');
 
-async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean) {
+type CandidateGate = (input: { saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }) => Promise<{ assertCurrent: () => void }>;
+async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean, preSignCandidate?: CandidateGate) {
   const draftId = earlyCaseCreation === undefined ? 'owned-draft' : 'draft_01a11ca26d05793192f9f01f97ba9c0b';
   const draftKey: DraftKey = authenticated ? { ...key, subjectRef: 'oidc:owner' }
     : anonymousSubject ? { ...key, subjectRef: 'anon:owner' } : key;
@@ -112,7 +113,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   });
   const now = vi.fn(() => '2026-10-07T03:00:00.000Z');
   const policy = { validateResponse: validateCanonicalFormResponse,
-    validateContent: await loadCanonicalSigningContentValidator(), signingProfileDigest: vi.fn(profileDigest), keyId: 'test-key', now };
+    validateContent: await loadCanonicalSigningContentValidator(), signingProfileDigest: vi.fn(profileDigest), keyId: 'test-key', now, ...(preSignCandidate ? { preSignCandidate } : {}) };
   const statePolicy = { definition: structuredClone(definition), formVersionId: 'publication-1', localeDocuments: [{
     $formspecLocale: '2.0' as const, url: response.displayedLocale!.url, version: response.displayedLocale!.version,
     locale: response.displayedLocale!.locale, target: { kind: 'definition' as const, url: definition.url }, strings: {},
@@ -921,4 +922,135 @@ describe('retiring local response-signing authority', () => {
     await expect(test.build().draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
     expect(test.requests.some(request => request.method === 'DELETE')).toBe(false);
   });
+});
+
+
+describe('exact saved Sign candidate gate', () => {
+  it('qualifies the commitment-bearing revision before dispatch with frozen full evidence', async () => {
+    const calls: Parameters<CandidateGate>[0][] = [];
+    const gate = vi.fn(async (input: Parameters<CandidateGate>[0]) => {
+      calls.push(input);
+      expect(test.state.signCount).toBe(0);
+      expect(Object.isFrozen(input.saved.response.data)).toBe(true);
+      expect(Object.isFrozen(input.saved.evidence)).toBe(true);
+      input.assertCurrent();
+      return { assertCurrent: vi.fn() };
+    });
+    const test = await fixture(false, true, false, undefined, gate);
+    await test.save();
+    const prepared = await test.prepare();
+    const operationId = generateIdempotencyKey();
+    await test.sign(prepared, operationId);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.operationId).toBe(operationId);
+    expect(calls[0]?.saved.draft.version).toBe(prepared.draft.version + 1);
+    expect(calls[0]?.saved.response.extensions?.['x-formspec-signing-content']).toMatchObject({
+      consentAccepted: true, signerName: 'Ada Lovelace', draftVersion: prepared.draft.version + 1,
+    });
+    expect(calls[0]?.saved.response).toEqual(calls[0]?.saved.evidence.canonical_response);
+    expect(test.state.signCount).toBe(1);
+  });
+
+  it('retains the same frozen act after a gate refusal and skips gates after committed recovery', async () => {
+    const calls: Parameters<CandidateGate>[0][] = [];
+    let ready = false;
+    const gate: CandidateGate = async input => {
+      calls.push(input);
+      if (!ready) throw new Error('association pending');
+      return { assertCurrent() {} };
+    };
+    const test = await fixture(false, true, false, undefined, gate);
+    await test.save();
+    const prepared = await test.prepare();
+    const operationId = generateIdempotencyKey();
+    await expect(test.sign(prepared, operationId)).rejects.toThrow('association pending');
+    expect(test.state.signCount).toBe(0);
+    const patches = test.state.patchCount;
+    ready = true;
+    const signed = await test.sign(prepared, operationId);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.saved).toEqual(calls[0]?.saved);
+    expect(test.state.patchCount).toBe(patches);
+    expect(test.now).toHaveBeenCalledTimes(1);
+    await expect(test.sign(prepared, operationId)).resolves.toEqual(signed);
+    expect(calls).toHaveLength(2);
+    expect(test.state.signCount).toBe(1);
+  });
+
+  it('refuses a configured gate without its required dispatch assertion', async () => {
+    const gate = (async () => undefined) as unknown as CandidateGate;
+    const test = await fixture(false, true, false, undefined, gate);
+    await test.save();
+    const prepared = await test.prepare();
+    await expect(test.sign(prepared)).rejects.toThrow('dispatch assertion');
+    expect(test.state.signCount).toBe(0);
+  });
+
+  it('rechecks qualification after delayed credential resolution and before any Sign dispatch', async () => {
+    let ready = true;
+    let release!: () => void;
+    let called = false;
+    const gate: CandidateGate = async () => {
+      test.state.tokenGate = new Promise<void>(resolve => { release = resolve; });
+      called = true;
+      return { assertCurrent() { if (!ready) throw new Error('proof expired'); } };
+    };
+    const test = await fixture(false, true, false, undefined, gate);
+    await test.save();
+    const prepared = await test.prepare();
+    const pending = test.sign(prepared);
+    await vi.waitFor(() => expect(called).toBe(true));
+    ready = false;
+    release();
+    await expect(pending).rejects.toThrow('proof expired');
+    expect(test.state.signCount).toBe(0);
+  });
+
+  it('preserves committed Sign success when evidence expires after dispatch', async () => {
+    let ready = true;
+    const assertCurrent = vi.fn(() => { if (!ready) throw new Error('proof expired'); });
+    const gate: CandidateGate = async () => ({ assertCurrent });
+    const test = await fixture(false, true, false, undefined, gate);
+    await test.save();
+    const prepared = await test.prepare();
+    let release!: () => void;
+    test.state.signGate = new Promise<void>(resolve => { release = resolve; });
+    const pending = test.sign(prepared);
+    await vi.waitFor(() => expect(test.state.signCount).toBe(1));
+    ready = false;
+    release();
+    await expect(pending).resolves.toMatchObject({ verification: { mode: 'delegated-service-key' } });
+    expect(assertCurrent).toHaveBeenCalledTimes(1);
+  });
+
+  it('fences an owner or edit generation change while candidate qualification is pending', async () => {
+    let release!: (value: { assertCurrent: () => void }) => void;
+    let captured: SavedResponseDraft | undefined;
+    const gate: CandidateGate = async input => {
+      captured = input.saved;
+      return new Promise(resolve => { release = resolve; });
+    };
+    const test = await fixture(false, true, false, undefined, gate);
+    await test.save();
+    const prepared = await test.prepare();
+    const pending = test.sign(prepared);
+    await vi.waitFor(() => expect(captured).toBeDefined());
+    test.cohort.invalidateResponseSigningScope!(test.draftKey);
+    release({ assertCurrent() {} });
+    await expect(pending).rejects.toThrow('invalidated');
+    expect(test.state.signCount).toBe(0);
+    expect(test.state.response).toEqual(captured?.response);
+  });
+
+  it('does not qualify a contradictory commitment-bearing saved readback', async () => {
+    const gate = vi.fn(async () => ({ assertCurrent() {} }));
+    const test = await fixture(false, true, false, undefined, gate);
+    await test.save();
+    const prepared = await test.prepare();
+    test.state.mutateSave = candidate => { candidate.data.fullName = 'Crossed candidate'; };
+    await expect(test.sign(prepared)).rejects.toThrow();
+    expect(gate).not.toHaveBeenCalled();
+    expect(test.state.signCount).toBe(0);
+  });
+
 });

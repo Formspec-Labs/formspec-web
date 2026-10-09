@@ -154,4 +154,26 @@ describe('HttpClient', () => {
     await expect(client.getJson('/private', { requireJson: true, requireNoStore: true, maxResponseBytes: 100 })).resolves.toEqual({ ok: true });
   });
 
+
+  it('runs effect admission once after credentials and never after a successful effect', async () => {
+    let release!: (value: string) => void;
+    const credentials = new Promise<string>(resolve => { release = resolve; });
+    const assertBeforeDispatch = vi.fn();
+    const client = new HttpClient({ baseUrl: 'https://source.example', accessToken: () => credentials,
+      fetchImpl: async () => { expect(assertBeforeDispatch).toHaveBeenCalledTimes(1); return jsonResponse({ committed: true }); } });
+    const pending = client.postJson('/effect', {}, { assertBeforeDispatch });
+    expect(assertBeforeDispatch).not.toHaveBeenCalled();
+    release('owner-token');
+    await expect(pending).resolves.toEqual({ committed: true });
+    expect(assertBeforeDispatch).toHaveBeenCalledTimes(1);
+  });
+
+
+  it.each([false, true])('refuses an asynchronous effect guard before dispatch (reject=%s)', async reject => {
+    const fetch = vi.fn(async () => jsonResponse({ committed: true }));
+    const client = new HttpClient({ baseUrl: 'https://source.example', fetchImpl: fetch });
+    await expect(client.postJson('/effect', {}, { assertBeforeDispatch: async () => { if (reject) throw new Error('async refusal'); } })).rejects.toThrow('synchronous');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
 });

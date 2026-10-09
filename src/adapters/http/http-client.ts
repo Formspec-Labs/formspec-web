@@ -26,6 +26,8 @@ export interface JsonRequestOptions {
   successStatuses?: readonly number[];
   /** Caller-owned lifetime check after asynchronous credential resolution, before dispatch. */
   assertCurrent?: () => void;
+  /** Effect admission after credentials, immediately before fetch; never called after dispatch. */
+  assertBeforeDispatch?: () => void;
 }
 
 export class HttpAdapterError extends Error {
@@ -83,6 +85,12 @@ export class HttpClient {
       check();
       const headers = await withAbort(this.headersFor(options), signal);
       check();
+      const admission: unknown = options.assertBeforeDispatch?.();
+      if (admission !== undefined) {
+        // A Promise-returning callback cannot authorize a synchronous effect boundary.
+        void Promise.resolve(admission).catch(() => {});
+        throw new Error('Effect dispatch assertion must be synchronous and return no value');
+      }
       const pendingResponse = this.fetchImpl(this.urlFor(path), {
         method,
         redirect: 'error',
