@@ -1,0 +1,781 @@
+{
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "purpose": {
+      "const": "formspec.instance.hydrate"
+    },
+    "operation": {
+      "const": "hydrate"
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "workspace_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "environment_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "cell_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "tenant_id",
+        "workspace_id",
+        "environment_id",
+        "cell_id"
+      ],
+      "additionalProperties": false
+    },
+    "owner": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subjectRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authenticated": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "issuer": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "subject": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "clientId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "principalId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "profile": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "actorRef": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "subjectRef": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "issuer",
+                "subject",
+                "clientId",
+                "principalId",
+                "profile",
+                "actorRef",
+                "subjectRef",
+                "sessionId"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sessionId",
+        "subjectRef",
+        "authenticated"
+      ],
+      "additionalProperties": false
+    },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "object",
+          "properties": {
+            "tenant_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "workspace_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "cell_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "tenant_id",
+            "workspace_id",
+            "environment_id",
+            "cell_id"
+          ],
+          "additionalProperties": false
+        },
+        "formId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "formVersionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definitionUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definitionVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definitionHash": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "requiredSources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "scope",
+        "formId",
+        "formVersionId",
+        "definitionUrl",
+        "definitionVersion",
+        "definitionHash",
+        "requiredSources"
+      ],
+      "additionalProperties": false
+    },
+    "draftId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "draftVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "candidateHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "formVersionHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "requestHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sources": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "attachmentBindings": {
+      "type": "array",
+      "maxItems": 16
+    },
+    "qualifiedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "qualified"
+              },
+              "instanceName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceRef": {
+                "type": "string",
+                "minLength": 1
+              },
+              "data": {},
+              "dataHash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "evidenceRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "issuedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "status",
+              "instanceName",
+              "sourceRef",
+              "data",
+              "dataHash",
+              "evidenceRef",
+              "issuedAt",
+              "expiresAt"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "pending"
+              },
+              "instanceName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceRef": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            },
+            "required": [
+              "status",
+              "instanceName",
+              "sourceRef",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "unavailable"
+              },
+              "instanceName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceRef": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            },
+            "required": [
+              "status",
+              "instanceName",
+              "sourceRef",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "providerReceipt": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "registration": {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "providerVersion": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "registrationHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "outputSchemaHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "maxEvidenceAgeSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 300
+                },
+                "maxValiditySeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 900
+                },
+                "publicDescriptor": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "providerId",
+                "providerVersion",
+                "registrationHash",
+                "outputSchemaHash",
+                "maxEvidenceAgeSeconds",
+                "maxValiditySeconds",
+                "publicDescriptor"
+              ],
+              "additionalProperties": false
+            },
+            "requestHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "callHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "requestedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "responseStatus": {
+              "const": 200
+            },
+            "attachments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "reference": {},
+                  "hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "reference",
+                  "hash",
+                  "contentType",
+                  "size"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 16
+            }
+          },
+          "required": [
+            "registration",
+            "requestHash",
+            "callHash",
+            "requestedAt",
+            "responseStatus",
+            "attachments"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "nativeScreenerMapping"
+            },
+            "version": {
+              "const": 1
+            },
+            "purpose": {
+              "const": "formspec.instance.native-screener.map"
+            },
+            "registration": {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "providerVersion": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "registrationHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "outputSchemaHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "maxEvidenceAgeSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 300
+                },
+                "maxValiditySeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 900
+                },
+                "publicDescriptor": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "providerId",
+                "providerVersion",
+                "registrationHash",
+                "outputSchemaHash",
+                "maxEvidenceAgeSeconds",
+                "maxValiditySeconds",
+                "publicDescriptor"
+              ],
+              "additionalProperties": false
+            },
+            "requestHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "resolvedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "proof": {
+              "type": "object",
+              "properties": {
+                "association": {
+                  "$ref": "#/$defs/Association"
+                },
+                "evidenceRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "evidenceHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "issuedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "expiresAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "instanceName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "sourceRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "dataHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "association",
+                "evidenceRef",
+                "evidenceHash",
+                "issuedAt",
+                "expiresAt",
+                "instanceName",
+                "sourceRef",
+                "dataHash"
+              ],
+              "additionalProperties": false
+            },
+            "receiptHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "kind",
+            "version",
+            "purpose",
+            "registration",
+            "requestHash",
+            "resolvedAt",
+            "proof",
+            "receiptHash"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "version",
+    "purpose",
+    "operation",
+    "scope",
+    "owner",
+    "selection",
+    "draftId",
+    "draftVersion",
+    "candidateHash",
+    "formVersionHash",
+    "requestHash",
+    "sources",
+    "attachmentBindings",
+    "qualifiedAt",
+    "results",
+    "providerReceipt"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:formspec-server:evaluation-hydration:v1",
+  "$defs": {
+    "Association": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "object",
+          "properties": {
+            "tenant_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "workspace_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "cell_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "tenant_id",
+            "workspace_id",
+            "environment_id",
+            "cell_id"
+          ],
+          "additionalProperties": false
+        },
+        "draftId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "draftVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "selectionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "subjectRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "authenticated": {
+              "type": "object",
+              "properties": {
+                "issuer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subject": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "principalId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "profile": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "actorRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subjectRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "clientId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "issuer",
+                "subject",
+                "principalId",
+                "profile",
+                "actorRef",
+                "subjectRef",
+                "sessionId",
+                "clientId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sessionId",
+            "subjectRef",
+            "authenticated"
+          ],
+          "additionalProperties": false
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "runRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "evidenceHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "associatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "scope",
+        "draftId",
+        "draftVersion",
+        "candidateHash",
+        "selectionHash",
+        "owner",
+        "runId",
+        "runRevision",
+        "evidenceHash",
+        "associatedAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

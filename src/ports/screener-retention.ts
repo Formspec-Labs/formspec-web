@@ -19,6 +19,8 @@ export interface ScreenerSelection {
   readonly screenerHash: string;
   readonly allowedTargets: readonly string[];
   readonly qualificationProfile: 'flat-first-match-v1';
+  /** Original Source mapping policy pin, when selected before proof issuance. Absence stays absent. */
+  readonly instanceMappingHash?: string;
 }
 export interface SourceScope {
   readonly tenant_id: string;

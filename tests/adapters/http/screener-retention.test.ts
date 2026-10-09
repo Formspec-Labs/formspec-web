@@ -17,13 +17,14 @@ const placeholder = `sha256:${'a'.repeat(64)}`;
 function response(value: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 }
-async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpRequest) => unknown) {
+async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpRequest) => unknown, instanceMappingHash?: string) {
   const owner = structuredClone(ownerTemplate);
   const selection: ScreenerSelection = {
     evaluationSelection: { scope, formId: 'form/id', formVersionId: 'version', definitionUrl: 'urn:example:form',
       definitionVersion: '1.0.0', definitionHash: placeholder, requiredSources: ['screening'] },
     formVersionHash: placeholder, sourceRef: 'screening', screenerUrl: document.url, screenerVersion: document.version,
     screenerRawHash: placeholder, screenerHash: await hash(document), allowedTargets: [target], qualificationProfile: 'flat-first-match-v1',
+    ...(instanceMappingHash === undefined ? {} : { instanceMappingHash }),
   };
   const selectionHash = await hash(selection);
   const context = { identity: { issuer: owner.authenticated.issuer, subject: owner.authenticated.subject, clientId: 'client' },
@@ -74,6 +75,28 @@ describe('public Source Screener retention adapter', () => {
     expect(requests[0]?.headers.get('authorization')).toBe('Bearer owner-token');
     for (const key of ['tenant', 'workspace', 'environment', 'cell']) expect(requests[0]?.headers.get(`x-formspec-${key}-id`)).toBe(key);
     expect(Object.isFrozen(first.run.owner.authenticated)).toBe(true);
+  });
+
+  it('retains the original mapping-bound selection without changing legacy omission', async () => {
+    const legacy = await setup();
+    const unbound = await legacy.adapter.retain(legacy.completion);
+    expect(Object.hasOwn(unbound.selection, 'instanceMappingHash')).toBe(false);
+    const mapped = await setup(undefined, placeholder);
+    const bound = await mapped.adapter.retain(mapped.completion);
+    expect(bound.selection).toHaveProperty('instanceMappingHash', placeholder);
+    expect(bound.run.selectionHash).toBe(await hash(bound.selection));
+    expect(bound.run.selectionHash).not.toBe(unbound.run.selectionHash);
+    await expect(mapped.adapter.associate({ ...mapped.context, saved: mapped.saved, run: bound })).resolves.toMatchObject({ selectionHash: bound.run.selectionHash });
+  });
+
+  it.each(['omitted', 'replaced'])('refuses %s original mapping pin from a mapping-bound response', async mode => {
+    const fixture = await setup(view => {
+      const selection = { ...view.selection } as ScreenerSelection & { instanceMappingHash?: string };
+      if (mode === 'omitted') delete selection.instanceMappingHash;
+      else selection.instanceMappingHash = `sha256:${'b'.repeat(64)}`;
+      return { ...view, selection };
+    }, placeholder);
+    await expect(fixture.adapter.retain(fixture.completion)).rejects.toThrow();
   });
 
   it('associates the exact full saved candidate using plain JCS, retaining opaque Source owner', async () => {

@@ -149,6 +149,10 @@
         },
         "qualificationProfile": {
           "const": "flat-first-match-v1"
+        },
+        "instanceMappingHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
         }
       },
       "required": [
@@ -1167,6 +1171,10 @@
             },
             "qualificationProfile": {
               "const": "flat-first-match-v1"
+            },
+            "instanceMappingHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
             }
           },
           "required": [

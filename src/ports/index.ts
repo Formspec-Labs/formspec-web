@@ -205,3 +205,6 @@ export type { ApplicationLifecycle, ApplicationLifecycleCapabilities, Applicatio
 export type { ScreenerSelection, SourceScope, ScreenerOwner, ScreenerAnswer, ScreenerQualification,
   RetainedScreenerRun, ScreenerRunView, ScreenerAssociation, ScreenerOperationContext,
   RetainScreenerCompletion, AssociateScreenerCandidate, ScreenerRetention } from './screener-retention.ts';
+
+export type { EvaluationHydrationWire, EvaluationHydrationOwner, EvaluationProviderRegistration,
+  HttpEvaluationProviderReceipt, NativeScreenerMappingReceipt, EvaluationHydrationResult } from './evaluation-hydration.ts';

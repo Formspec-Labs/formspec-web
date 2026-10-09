@@ -12,7 +12,7 @@ import type {
 
 const ajv = new Ajv2020({ strict: false, strictNumbers: true, allErrors: false });
 addFormats(ajv);
-// Byte-for-byte Source e6c9c1 schema. Named endpoint definitions avoid the root oneOf ambiguity.
+// Byte-for-byte reviewed Source native-instance-mapping public schema (b06409f5). Named endpoint definitions avoid the root oneOf ambiguity.
 ajv.addSchema(schema, 'urn:formspec-web:source-native-screener-api');
 const validators = Object.fromEntries(['Selection', 'Create', 'RunView', 'Associate', 'Association'].map(name => [
   name, ajv.compile({ $ref: `urn:formspec-web:source-native-screener-api#/$defs/${name}` }),
