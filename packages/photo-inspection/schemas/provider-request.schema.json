@@ -1,0 +1,319 @@
+{
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "providerId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "providerVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "registrationHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "outputSchemaHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "requestHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "callHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "requestedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nativeRequest": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "enum": [
+            "hydrate",
+            "create",
+            "prepare",
+            "sign",
+            "submit"
+          ]
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "tenant_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "workspace_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "cell_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "tenant_id",
+            "workspace_id",
+            "environment_id",
+            "cell_id"
+          ],
+          "additionalProperties": false
+        },
+        "owner": {
+          "type": "object"
+        },
+        "selection": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "object",
+              "properties": {
+                "tenant_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "workspace_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "environment_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "cell_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "tenant_id",
+                "workspace_id",
+                "environment_id",
+                "cell_id"
+              ],
+              "additionalProperties": false
+            },
+            "formId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "formVersionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionUrl": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionHash": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "requiredSources": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "scope",
+            "formId",
+            "formVersionId",
+            "definitionUrl",
+            "definitionVersion",
+            "definitionHash",
+            "requiredSources"
+          ],
+          "additionalProperties": false
+        },
+        "formVersion": {
+          "type": "object"
+        },
+        "draftId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "draftVersion": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "canonicalResponse": {
+          "type": "object"
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "requestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sources": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
+      },
+      "required": [
+        "operation",
+        "scope",
+        "owner",
+        "selection",
+        "formVersion",
+        "draftId",
+        "draftVersion",
+        "canonicalResponse",
+        "candidateHash",
+        "requestHash",
+        "sources"
+      ],
+      "additionalProperties": false
+    },
+    "attachments": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "properties": {
+          "reference": {
+            "type": "object"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "contentType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "bytesBase64": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "hash",
+          "contentType",
+          "bytesBase64"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "properties": {
+        "requestBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "responseBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attachmentCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attachmentBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "totalAttachmentBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "deadlineMillis": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxEvidenceAgeSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxValiditySeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "requestBytes",
+        "responseBytes",
+        "attachmentCount",
+        "attachmentBytes",
+        "totalAttachmentBytes",
+        "concurrency",
+        "deadlineMillis",
+        "maxEvidenceAgeSeconds",
+        "maxValiditySeconds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "providerId",
+    "providerVersion",
+    "registrationHash",
+    "outputSchemaHash",
+    "requestHash",
+    "callHash",
+    "requestedAt",
+    "nativeRequest",
+    "attachments",
+    "budgets"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

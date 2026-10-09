@@ -1,0 +1,27 @@
+services:
+  photo-provider:
+    image: ${PHOTO_PROVIDER_IMAGE:?Runtime must select a reviewed immutable image digest}
+    user: "1000:1000"
+    read_only: true
+    init: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cgroup: private
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 64
+    cpus: 1.0
+    restart: "no"
+    expose: ["8080"]
+    environment:
+      FORMSPEC_PHOTO_CONFIG: /run/photo/config.json
+      FORMSPEC_PHOTO_POLICY: /run/photo/policy.json
+      FORMSPEC_PHOTO_JWKS: /run/photo/jwks.json
+      FORMSPEC_PHOTO_RECEIPTS: /var/photo/measurements.jsonl
+    volumes:
+      - ${PHOTO_PROVIDER_CONFIG_DIR:?Explicit pinned public config directory required}:/run/photo:ro
+      - ${PHOTO_PROVIDER_RECEIPT_DIR:?Explicit writable uid1000 receipt directory required}:/var/photo:rw
+    networks: [provider]
+networks:
+  provider:
+    internal: true

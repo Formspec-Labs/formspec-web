@@ -1,0 +1,457 @@
+{
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "purpose": {
+      "const": "formspec.photo.measurement.provider"
+    },
+    "registrationHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "registration": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "resolver": {
+          "const": "registeredHttpBatchV1"
+        },
+        "selection": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "object",
+              "properties": {
+                "tenant_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "workspace_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "environment_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "cell_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "tenant_id",
+                "workspace_id",
+                "environment_id",
+                "cell_id"
+              ],
+              "additionalProperties": false
+            },
+            "formId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "formVersionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionUrl": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionHash": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "requiredSources": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "scope",
+            "formId",
+            "formVersionId",
+            "definitionUrl",
+            "definitionVersion",
+            "definitionHash",
+            "requiredSources"
+          ],
+          "additionalProperties": false
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "providerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "allowDevelopmentLoopbackHttp": {
+          "type": "boolean"
+        },
+        "budgets": {
+          "type": "object",
+          "properties": {
+            "requestBytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "responseBytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "attachmentCount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "attachmentBytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "totalAttachmentBytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "concurrency": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "deadlineMillis": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxEvidenceAgeSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxValiditySeconds": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "requestBytes",
+            "responseBytes",
+            "attachmentCount",
+            "attachmentBytes",
+            "totalAttachmentBytes",
+            "concurrency",
+            "deadlineMillis",
+            "maxEvidenceAgeSeconds",
+            "maxValiditySeconds"
+          ],
+          "additionalProperties": false
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "hash": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "url",
+            "version",
+            "hash"
+          ],
+          "additionalProperties": false
+        },
+        "credentialIdentity": {
+          "type": "object",
+          "properties": {
+            "purpose": {
+              "const": "formspec.instance.resolve"
+            },
+            "scope": {
+              "type": "object",
+              "properties": {
+                "tenant_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "workspace_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "environment_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "cell_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "tenant_id",
+                "workspace_id",
+                "environment_id",
+                "cell_id"
+              ],
+              "additionalProperties": false
+            },
+            "endpoint": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "principal": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "issuer": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "audience": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "requiredScopes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              }
+            },
+            "allowedClients": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              }
+            },
+            "profile": {
+              "const": "keycloak"
+            },
+            "allowDevelopmentLoopbackHttp": {
+              "type": "boolean"
+            },
+            "clientId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "scopes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              }
+            },
+            "assurance": {
+              "const": "registeredClient"
+            },
+            "authentication": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "method": {
+                      "const": "clientSecretBasic"
+                    }
+                  },
+                  "required": [
+                    "method"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "method": {
+                      "const": "privateKeyJwt"
+                    },
+                    "tokenEndpoint": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "keyId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "method",
+                    "tokenEndpoint",
+                    "keyId"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "purpose",
+            "scope",
+            "endpoint",
+            "principal",
+            "issuer",
+            "audience",
+            "requiredScopes",
+            "allowedClients",
+            "profile",
+            "allowDevelopmentLoopbackHttp",
+            "clientId",
+            "scopes",
+            "assurance",
+            "authentication"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "resolver",
+        "selection",
+        "providerId",
+        "providerVersion",
+        "endpoint",
+        "allowDevelopmentLoopbackHttp",
+        "budgets",
+        "outputSchema",
+        "credentialIdentity"
+      ],
+      "additionalProperties": false
+    },
+    "formVersionHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "policyHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "jwksHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "serviceSubject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "photoInstanceName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "photoPointer": {
+      "type": "string",
+      "pattern": "^/",
+      "maxLength": 2048
+    },
+    "policyPointer": {
+      "type": "string",
+      "pattern": "^/",
+      "maxLength": 2048
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 15728640
+        },
+        "maxPixels": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16000000
+        },
+        "deadlineMillis": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "maxBytes",
+        "maxPixels",
+        "deadlineMillis"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "purpose",
+    "registrationHash",
+    "registration",
+    "formVersionHash",
+    "policyHash",
+    "jwksHash",
+    "serviceSubject",
+    "photoInstanceName",
+    "photoPointer",
+    "policyPointer",
+    "limits"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

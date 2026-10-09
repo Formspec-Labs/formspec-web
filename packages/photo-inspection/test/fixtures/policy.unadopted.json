@@ -1,0 +1,136 @@
+{
+  "version": "1.0",
+  "profileId": "urn:proposal:passport-basic-photo:1.0",
+  "edition": "2026-05-04",
+  "sourceUrls": [
+    "https://travel.state.gov/en/passports/renew-replace/online/upload-digital-photo.html"
+  ],
+  "byteUnitInterpretation": "Decimal54000/10000000 bytes selected for this authored profile; published KB/MB labels do not specify decimal/binary semantics.",
+  "automaticRules": [
+    {
+      "ruleId": "format",
+      "required": true,
+      "configuration": {
+        "kind": "detected-image-format",
+        "acceptedMimeTypes": [
+          "image/jpeg",
+          "image/png",
+          "image/heic",
+          "image/heif"
+        ]
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "file-size",
+      "required": true,
+      "configuration": {
+        "kind": "byte-length",
+        "minimumBytes": 54000,
+        "maximumBytes": 10000000
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "decode",
+      "required": true,
+      "configuration": {
+        "kind": "bounded-image-decode",
+        "mustDecode": true,
+        "budgetProfileRef": "urn:proposal:bounded-decode:review-required"
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "color",
+      "required": true,
+      "configuration": {
+        "kind": "image-color",
+        "mustBeColor": true
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "quality",
+      "required": true,
+      "configuration": {
+        "kind": "image-quality",
+        "requiredClass": "sharp-not-grainy-not-pixelated"
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "background",
+      "required": true,
+      "configuration": {
+        "kind": "image-background",
+        "requiredClass": "plain-white-or-off-white-no-lines-texture-objects"
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "lighting",
+      "required": true,
+      "configuration": {
+        "kind": "image-lighting",
+        "requiredClass": "even-no-face-or-background-shadow-no-washout"
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "face-position",
+      "required": true,
+      "configuration": {
+        "kind": "face-position",
+        "requiredClass": "forward-head-centered-fully-visible-shoulders-in-frame"
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "expression",
+      "required": true,
+      "configuration": {
+        "kind": "face-expression",
+        "requiredClass": "eyes-open-unobstructed-neutral-or-natural-smile-no-visible-teeth"
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "face-obstruction",
+      "required": true,
+      "configuration": {
+        "kind": "face-obstruction",
+        "requiredClass": "full-face-visible-no-glasses-no-obstructing-clothing",
+        "documentedException": "requires-qualified-review; no automatic exemption"
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    },
+    {
+      "ruleId": "visible-manipulation",
+      "required": true,
+      "configuration": {
+        "kind": "visible-image-manipulation",
+        "requiredClass": "no-observed-filter-appearance-editing-background-replacement-or-print-copy-artifacts",
+        "scope": "observed-features-only; not proof of unedited history"
+      },
+      "executorSelectionRef": "urn:proposal:unconfigured-inspection-executor"
+    }
+  ],
+  "applicantDeclarationRuleIds": [
+    "capture-recency",
+    "original-image-history"
+  ],
+  "agencyReviewRuleIds": [
+    "employee-review"
+  ],
+  "unsupportedAutomatic": "blocks-pass",
+  "permittedTransforms": [
+    "crop",
+    "reposition"
+  ],
+  "prohibitedTransforms": [
+    "appearance-filter",
+    "appearance-retouch",
+    "background-replacement"
+  ]
+}

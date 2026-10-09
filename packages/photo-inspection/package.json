@@ -1,20 +1,24 @@
 {
   "name": "@formspec-web/photo-inspection",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=20.9.0"
   },
-  "exports": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./provider": "./src/provider.mjs",
+    "./containment": "./src/containment.mjs"
+  },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test --test-concurrency=1 test/*.test.mjs"
   },
   "dependencies": {
-    "sharp": "0.35.5"
-  },
-  "devDependencies": {
+    "sharp": "0.35.5",
     "ajv": "8.20.0",
-    "ajv-formats": "3.0.1"
+    "ajv-formats": "3.0.1",
+    "canonicalize": "5.1.0",
+    "jose": "6.2.12"
   }
 }
