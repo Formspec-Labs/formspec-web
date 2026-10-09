@@ -90,7 +90,125 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
     setDraft: (response: FormResponse, status: string, version: number) => { saved = structuredClone(response); draftStatus = status; draftVersion = version; } };
 }
 
+async function multiTargetLocaleFixture(options: { omitSelected?: boolean; duplicateSelected?: boolean; appTarget?: boolean; incompatibleSelected?: boolean } = {}) {
+  const test = await fixture();
+  const candidate = JSON.parse(test.texts['native.json']);
+  const originalLocale = Object.values(candidate.documents).find((document: unknown) => !!document && typeof document === 'object' && '$formspecLocale' in document && 'locale' in document && document.locale === test.signing.initialLocale) as LocaleDocument;
+  if (!originalLocale.url) throw new Error('Fixture Locale URL is unavailable');
+  const otherDefinition = { ...test.definition, url: 'urn:test:other-definition' };
+  candidate.manifest.definitions.push({ url: otherDefinition.url, version: otherDefinition.version });
+  candidate.documents[otherDefinition.url] = otherDefinition;
+  const otherLocale = { ...originalLocale, url: 'urn:test:other-locale',
+    target: options.appTarget
+      ? { kind: 'app' as const, url: candidate.manifest.id, compatibleVersions: candidate.manifest.version }
+      : { ...originalLocale.target, url: options.duplicateSelected ? test.definition.url : otherDefinition.url },
+    ...(options.appTarget ? { strings: {} } : {}) };
+  candidate.manifest.locales.push({ url: otherLocale.url, version: otherLocale.version, locale: otherLocale.locale });
+  candidate.documents[otherLocale.url] = otherLocale;
+  const rawDigest = async (bytes: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(bytes)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  test.texts['other-locale.json'] = JSON.stringify(otherLocale);
+  test.files.locales.push({ path: 'other-locale.json', sha256: await rawDigest(test.texts['other-locale.json']) });
+  if (options.omitSelected) {
+    delete candidate.documents[originalLocale.url];
+    candidate.manifest.locales = candidate.manifest.locales.filter((ref: { url: string }) => ref.url !== originalLocale.url);
+    test.files.locales = test.files.locales.filter(pin => JSON.parse(test.texts[pin.path]).url !== originalLocale.url);
+  }
+  if (options.incompatibleSelected) {
+    originalLocale.target.compatibleVersions = '99.0.0';
+    const pin = test.files.locales.find(pin => JSON.parse(test.texts[pin.path]).url === originalLocale.url)!;
+    test.texts[pin.path] = JSON.stringify(originalLocale);
+    pin.sha256 = await rawDigest(test.texts[pin.path]);
+  }
+  test.texts['native.json'] = JSON.stringify(candidate);
+  test.files.nativeBundle.sha256 = await rawDigest(test.texts['native.json']);
+  return test;
+}
+
+async function moduleBindingFixture(selectedModule = false) {
+  const test = await fixture();
+  const candidate = JSON.parse(test.texts['native.json']) as BundleExport;
+  const resolved = dereferenceBundleExport(candidate);
+  const surface = resolved.surfaces[0];
+  const route = surface.routes.find(route => route.id === 'signing')!;
+  const registry = resolved.registries[0];
+  const module = selectedModule ? test.signing.module : { id: 'x-sibling-review', version: '0.1.0' };
+  const common = { version: '0.1.0', status: 'stable' as const, description: 'Generic sibling review', compatibility: { formspecVersion: '>=1.0.0' } };
+  const widgetName = 'x-sibling-review-widget';
+  if (selectedModule) registry.entries.find(entry => entry.name === module.id)!.contributes!.push(widgetName);
+  else {
+    candidate.manifest.modules = [...candidate.manifest.modules!, module];
+    registry.entries.push({ ...common, name: module.id, category: 'module', contributes: [widgetName] });
+  }
+  registry.entries.push({ ...common, name: widgetName, category: 'widget', widgetShape: {
+    props: { type: 'object', additionalProperties: false }, dataInputs: [{ name: 'response', required: true }],
+  } });
+  route.slots!.push({ id: 'sibling-review', slotType: 'module-widget', binding: {
+    moduleId: module.id, widgetName, config: {}, dataBindings: { response: test.signing.bindings.actor },
+  } });
+  // Dereferencing returns the document values used by the native graph.
+  test.texts['native.json'] = JSON.stringify(candidate);
+  test.files.nativeBundle.sha256 = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(test.texts['native.json'])))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  const config = resolveActiveConfig(test.config, { nativePackageSigning: { ...test.signing, modules: candidate.manifest.modules } });
+  return { ...test, config };
+}
+
 describe('explicit native package composition', () => {
+  it('scopes Source binding comparison to the explicitly selected module', async () => {
+    const test = await moduleBindingFixture();
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow('native-widget-unadmitted');
+    expect(test.requests.some(request => request.url === initialDefinitionUrl)).toBe(true);
+    expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
+  });
+
+  it('refuses a binding supplied only by another admitted module', async () => {
+    const test = await moduleBindingFixture();
+    const admitted = test.config.referenceAdapters!.formspecStack!.nativePackageSigning!;
+    const config = resolveActiveConfig(test.config, { nativePackageSigning: {
+      ...admitted, module: { id: 'x-sibling-review', version: '0.1.0' },
+    } });
+    await expect(createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow('Native source binding differs from the authored Surface');
+    expect(test.requests.every(request => !request.url.startsWith('https://server.example.test'))).toBe(true);
+  });
+
+  it('refuses a conflicting Source binding in the selected module before publication', async () => {
+    const test = await moduleBindingFixture(true);
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow('Native source binding differs from the authored Surface');
+    expect(test.requests.every(request => !request.url.startsWith('https://server.example.test'))).toBe(true);
+  });
+
+
+  it('selects the current Definition Locale when another admitted Definition uses the same language', async () => {
+    const test = await multiTargetLocaleFixture();
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow('native-resource-unadmitted');
+    // Passing publication proves Locale admission; the unchanged later multi-Definition host guard refuses.
+    expect(test.requests.some(request => request.url === initialDefinitionUrl)).toBe(true);
+    expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
+  });
+
+  it('refuses cross-target Locale fallback before publication', async () => {
+    const test = await multiTargetLocaleFixture({ omitSelected: true });
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow('Native package Locale pin is unavailable or ambiguous');
+    expect(test.requests.every(request => !request.url.startsWith('https://server.example.test'))).toBe(true);
+  });
+
+  it('refuses conflicting Locale documents for the selected target and language', async () => {
+    const test = await multiTargetLocaleFixture({ duplicateSelected: true });
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow();
+    expect(test.requests.every(request => !request.url.startsWith('https://server.example.test'))).toBe(true);
+  });
+
+  it('refuses an app Locale as fallback for the selected Definition', async () => {
+    const test = await multiTargetLocaleFixture({ omitSelected: true, appTarget: true });
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow('Native package Locale pin is unavailable or ambiguous');
+    expect(test.requests.every(request => !request.url.startsWith('https://server.example.test'))).toBe(true);
+  });
+
+  it('refuses an incompatible selected Definition Locale before publication', async () => {
+    const test = await multiTargetLocaleFixture({ incompatibleSelected: true });
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow();
+    expect(test.requests.every(request => !request.url.startsWith('https://server.example.test'))).toBe(true);
+  });
+
   it('loads an explicitly selected inline Component without a duplicate external file', async () => {
     const test = await fixture();
     const component = test.files.component.ref;

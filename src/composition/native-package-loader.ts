@@ -1,4 +1,5 @@
 import canonicalize from 'canonicalize';
+import { targetDefinitionMatches } from '@formspec-org/types';
 import { canonicalResponseHandoffBytes as handoffBytes } from '@formspec-org/integrity-canonical';
 import { resolveAuthoredSigningContent, resolveResponseAction } from '@formspec-org/engine/render';
 import { createSemanticControlRegistry } from '@formspec-org/react';
@@ -54,7 +55,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     || modulePins.some(pin => bundle.manifest.modules!.filter(module => same(module, pin)).length !== 1)) throw new Error('Native package differs from its explicit deployment pins');
   const resolved = dereferenceBundleExport(bundle);
   const localeFor = (locale: string) => {
-    const matches = localeDocuments.filter(document => document.locale === locale);
+    const matches = localeDocuments.filter(document => document.locale === locale
+      && document.target.kind === 'definition' && targetDefinitionMatches(document.target, definition));
     if (matches.length !== 1) throw new Error('Native package Locale pin is unavailable or ambiguous');
     return matches[0];
   };
@@ -62,7 +64,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   const roles = await qualifyRoles(bundle, pins);
   for (const [name, binding] of Object.entries(pins.bindings)) {
     const authored = resolved.surfaces.flatMap(surface => surface.routes.flatMap(route => (route.slots ?? []).flatMap(slot => {
-      if (slot.slotType !== 'module-widget') return [];
+      if (slot.slotType !== 'module-widget' || record(slot.binding)?.moduleId !== pins.module.id) return [];
       const source = record(record(record(slot.binding)?.dataBindings)?.[name]);
       return source ? [{ catalogRef: source.catalogRef, sourceRef: source.sourceRef }] : [];
     })));
