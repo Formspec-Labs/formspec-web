@@ -303,6 +303,9 @@ const ARRAY_ARTIFACT_SLOTS = [
   'dataSources',
   'locales',
   'mappings',
+  'responseActionDocuments',
+  'referenceDocuments',
+  'ontologies',
 ] as const;
 
 const SINGLE_ARTIFACT_SLOTS = [

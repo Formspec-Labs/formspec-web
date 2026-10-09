@@ -1,4 +1,5 @@
-import type { DataSourceLoader, DataSourcePayloadValidator, DataSourceAuthorizer } from '@formspec-org/surface';
+import reviewerInboxBundle from '../fixtures/reviewer-inbox-successor-v1.bundle.json';
+import { snapshotFiniteJson, type DataSourceLoader, type DataSourcePayloadValidator, type DataSourceAuthorizer } from '@formspec-org/surface';
 import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA, starterWidgetModule, type SurfaceWidgetModule } from '@formspec-org/surface-react';
 import { loadCanonicalModulePayloadSchemaResources, loadSurfaceBundleSchemaValidators, createSurfaceDataSourcePayloadValidator } from '../../src/adapters/schema/index.ts';
 import {
@@ -39,6 +40,9 @@ import {
   type SurfaceAdmissionState,
   type SurfaceBundleValidationProvider,
 } from '../../src/verifying-surface/index.ts';
+
+// Capture the known fixture document map as finite JSON before using the signed-payload type.
+const reviewerInboxDocuments = snapshotFiniteJson(reviewerInboxBundle.documents) as SurfaceBundleSignedPayloadV1['documents'];
 
 const APP_ID = 'https://example.gov/apps/signed-intake';
 const PUBLISHER_ID = 'https://signed.publisher.example/';
@@ -230,6 +234,51 @@ describe('admitSurfaceBundle', () => {
     });
     expect(fixture.commitRequests).toHaveLength(0);
   });
+
+  it('passes the exact fifty-document Bundle 2.4 reviewer export to graph validation', async () => {
+    expect(reviewerInboxBundle.manifest.$formspecBundle).toBe('2.4');
+    expect(Object.keys(reviewerInboxBundle.documents)).toHaveLength(50);
+    const payload = { ...signedPayload(), manifest: reviewerInboxBundle.manifest, documents: reviewerInboxDocuments };
+    const fixture = await createFixture({ verificationFactory: snapshot => ({ ...verifiedResult(snapshot), payload }) });
+    const reports: AppGraphReportProducerResult[] = [];
+    const state = await admitSurfaceBundle({ source: fixture.source, verifier: fixture.verifier,
+      request: { locator: 'https://host.example/apps/reviewer.bundle' }, validation,
+      onValidationReport: report => { reports.push(report); } });
+    // This regression qualifies the closure boundary, not every deployment/graph prerequisite.
+    expect(reports).toHaveLength(1);
+    expect(state).not.toMatchObject({ diagnosticCode: 'unmanifested-document' });
+    expect(Object.keys(payload.documents)).toHaveLength(50);
+  });
+
+  it('rejects an extra document in the exact reviewer export before graph validation or commit', async () => {
+    const url = 'urn:formspec:test:unmanifested-reviewer-document';
+    const payload = { ...signedPayload(), manifest: { ...reviewerInboxBundle.manifest, 'x-extraRefs': [{ url }] },
+      documents: { ...reviewerInboxDocuments, [url]: { $formspecResponseActions: '1.0', id: url, actions: [] } } };
+    const fixture = await createFixture({ verificationFactory: snapshot => ({ ...verifiedResult(snapshot), payload }) });
+    const onValidationReport = vi.fn();
+    const state = await admitSurfaceBundle({ source: fixture.source, verifier: fixture.verifier,
+      request: { locator: 'https://host.example/apps/reviewer.bundle' }, validation, onValidationReport });
+    expect(state).toEqual({ status: 'failure', code: 'app-graph-invalid', diagnosticCode: 'unmanifested-document' });
+    expect(onValidationReport).not.toHaveBeenCalled();
+    expect(fixture.commitRequests).toHaveLength(0);
+  });
+
+  it.each(['responseActionDocuments', 'referenceDocuments', 'ontologies'] as const)(
+    'recognizes the canonical Bundle 2.4 companion slot %s without accepting unrelated documents', async slot => {
+      const url = `urn:formspec:test:companion:${slot}`;
+      const payload = signedPayload();
+      const documents = { ...payload.documents, [url]: {} };
+      const manifest = { ...payload.manifest, $formspecBundle: '2.4', [slot]: [{ url, version: '1.0.0' }] };
+      const fixture = await createFixture({ verificationFactory: snapshot => ({ ...verifiedResult(snapshot), payload: { ...payload, manifest, documents } }) });
+      const reports: AppGraphReportProducerResult[] = [];
+      const state = await admitSurfaceBundle({ source: fixture.source, verifier: fixture.verifier,
+        request: { locator: 'https://host.example/apps/intake.bundle' }, validation,
+        onValidationReport: report => { reports.push(report); } });
+      // Empty companion content can fail graph admission; membership must reach its maintained validator.
+      expect(reports).toHaveLength(1);
+      expect(state).not.toMatchObject({ diagnosticCode: 'unmanifested-document' });
+    },
+  );
 
   it('returns fixed host codes and does not commit an invalid AppGraph', async () => {
     const fixture = await createFixture();
