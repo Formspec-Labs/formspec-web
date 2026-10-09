@@ -67,10 +67,10 @@ describe('authenticated native Screener candidate hydration', () => {
     await expect(new HttpScreenerHydration(f.config).hydrate(f.input)).rejects.toThrow();
   });
 
-  it('refuses an already signed candidate before credentials', async () => {
+  it('refuses signature bytes changed without rebinding the saved candidate before credentials', async () => {
     const f = await hydrationFixture();
     Object.assign(f.input.saved.response, { authoredSignatures: [{}] });
-    await expect(new HttpScreenerHydration(f.config).hydrate(f.input)).rejects.toThrow('local candidate');
+    await expect(new HttpScreenerHydration(f.config).hydrate(f.input)).rejects.toThrow('local digest');
     expect(f.accessToken).not.toHaveBeenCalled();
   });
 

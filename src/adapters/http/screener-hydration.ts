@@ -61,13 +61,13 @@ export class HttpScreenerHydration implements ScreenerHydration {
       || saved.draftKey.formUrl !== selected.definitionUrl || saved.draftKey.formVersion !== selected.definitionVersion
       || saved.response.definitionUrl !== selected.definitionUrl || saved.response.definitionVersion !== selected.definitionVersion
       || !equal(saved.response.data, saved.evidence.draft_state)
-      || (saved.response.authoredSignatures?.length ?? 0) > 0
       || saved.evidence.form_version_id !== selected.formVersionId || saved.evidence.status !== 'in_progress'
       || saved.evidence.draft_id !== saved.draft.id || saved.evidence.draft_version !== saved.draft.version
       || !equal(saved.response, saved.evidence.canonical_response) || association.draftId !== saved.draft.id
       || association.draftVersion !== saved.draft.version || !Number.isSafeInteger(saved.draft.version) || saved.draft.version < 1
       || !saved.draft.id || ['.', '..'].includes(saved.draft.id) || this.definition.url !== selected.definitionUrl
       || this.definition.version !== selected.definitionVersion) fail('local candidate binding mismatch');
+    // Source verifies signed snapshots; every local and returned binding covers the complete Response.
     const candidateHash = await hash(saved.response);
     const { evidenceHash, ...runPreimage } = run;
     if (candidateHash !== association.candidateHash || await hash(this.selection) !== this.selectionHash

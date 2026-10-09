@@ -1,3 +1,4 @@
+import { nativeFactsProductHttpFixture } from '../adapters/http/native-facts-product-http-fixture.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash, webcrypto } from 'node:crypto';
@@ -64,7 +65,7 @@ function fixture() {
     localeDocuments: [], location: '/', onNavigate: vi.fn() };
   return { props, host, configureRuntime, dispose };
 }
-async function actualFixture(options?: { bundle?: BundleExport; component?: ComponentDocument; lifecycle?: NonNullable<NativePackageSigningHostPolicy['controller']['applicationLifecycle']>; nativeScreener?: NativePackageSigningHostPolicy['nativeScreener']; createEngine?: NativePackageSigningHostPolicy['createEngine'] }) {
+async function actualFixture(options?: { bundle?: BundleExport; component?: ComponentDocument; lifecycle?: NonNullable<NativePackageSigningHostPolicy['controller']['applicationLifecycle']>; nativeScreener?: NativePackageSigningHostPolicy['nativeScreener']; createEngine?: NativePackageSigningHostPolicy['createEngine']; onSaved?: (response: FormResponse, revision: number) => void }) {
     const sourceBundle = options?.bundle ?? bundle;
     const admittedComponent = options?.component ?? component;
     observed.real = true; vi.stubGlobal('crypto', webcrypto);
@@ -90,9 +91,13 @@ async function actualFixture(options?: { bundle?: BundleExport; component?: Comp
     }
     const hashResponse = async (response: FormResponse) => createHash('sha256').update(canonicalResponseHandoffBytes(response)).digest('hex');
     let revision = 0;
-    const saved = async (input: { draftKey: SavedResponseDraft['draftKey']; response: FormResponse }): Promise<SavedResponseDraft> => ({ draftKey: input.draftKey, response: input.response,
-      draft: { id: 'owned-draft', version: ++revision, responseHash: await hashResponse(input.response) }, actor: { id: 'server-actor' },
-      evidence: { draft_id: 'owned-draft', draft_version: revision, form_version_id: 'publication', subject_ref: 'server-actor', canonical_response: input.response, draft_state: input.response.data, status: 'in_progress' } });
+    const saved = async (input: { draftKey: SavedResponseDraft['draftKey']; response: FormResponse }): Promise<SavedResponseDraft> => {
+      const version = ++revision;
+      options?.onSaved?.(input.response, version);
+      return { draftKey: input.draftKey, response: input.response,
+        draft: { id: 'owned-draft', version, responseHash: await hashResponse(input.response) }, actor: { id: 'server-actor' },
+        evidence: { draft_id: 'owned-draft', draft_version: version, form_version_id: 'publication', subject_ref: 'server-actor', canonical_response: input.response, draft_state: input.response.data, status: 'in_progress' } };
+    };
     const contents = (definition.extensions!['x-formspec-signing-content'] as { entries: Record<string, SigningContent> }).entries;
     const content = (locale: string) => Object.values(contents).find(content => content.locale === locale)!;
     const saveDraft = vi.fn(saved); const prepare = vi.fn(async (input: Parameters<NativePackageSigningHostPolicy['controller']['signing']['prepare']>[0]) => ({ ...await saved(input), content: content(input.locale) }));
@@ -1139,7 +1144,7 @@ describe('Runtime ownership of mounted native engine exchange', () => {
 });
 
 
-async function nativeFactsFixture(options: { eligible?: boolean; unavailable?: boolean; associationFailure?: boolean; signedPending?: boolean } = {}) {
+async function nativeFactsFixture(options: { eligible?: boolean; unavailable?: boolean; associationFailure?: boolean; signedPending?: boolean; http?: boolean; refuseSigned?: boolean } = {}) {
   const exported = structuredClone(bundle); const f = await hydrationFixture();
   const def = Object.values(exported.documents).find(document => document && typeof document === 'object' && '$formspec' in document) as FormDefinition;
   def.instances = { ...def.instances, facts: { source: 'screening', readonly: true }, ...(options.unavailable ? { other: { source: 'other', readonly: true } } : {}) };
@@ -1158,15 +1163,20 @@ async function nativeFactsFixture(options: { eligible?: boolean; unavailable?: b
   surface.routes.unshift({ id: 'eligibility', path: '/eligibility', routeClass: 'intake', title: 'Before you apply',
     slots: [{ id: 'screen', slotType: 'screener', binding: { screenerRef: screenDoc.url!, allowedTargets: ['surface:intake'] } }] });
   surface.entry = 'eligibility';
-  const retained = vi.fn<ScreenerRetention['retain']>(async request => ({ ...f.input.run,
+  let attachmentReferences: unknown[] = [];
+  const http = options.http ? await nativeFactsProductHttpFixture({ definition: def, screener: screenDoc, unavailable: options.unavailable,
+    refuseSigned: options.refuseSigned, attachmentReferences: () => attachmentReferences }) : undefined;
+  const retained = vi.fn<ScreenerRetention['retain']>(async request => http ? http.retention.retain(request) : ({ ...f.input.run,
     run: { ...f.input.run.run, qualification: { status: 'ready', target: request.target } }, acceptance: { checkedAt: f.view.qualifiedAt, qualification: { status: 'ready', target: request.target } } }));
   const associate = vi.fn<ScreenerRetention['associate']>(async request => {
+    if (http) return http.retention.associate(request);
     if (options.associationFailure) throw new Error('association ambiguous');
     return { ...f.input.association, draftId: request.saved.draft.id, draftVersion: request.saved.draft.version, candidateHash: await computeJcsSha256Digest(request.saved.response) };
   });
   const candidates: SavedResponseDraft[] = [];
   const hydrate = vi.fn<NonNullable<NativePackageSigningHostPolicy['nativeScreener']>['hydration']['hydrate']>(async request => {
     candidates.push(structuredClone(request.saved));
+    if (http) return http.hydration.hydrate(request);
     if (options.signedPending && request.saved.response.authoredSignatures?.length) throw new Error('signed facts Pending');
     const view = { ...structuredClone(f.view), draftId: request.saved.draft.id, draftVersion: request.saved.draft.version,
       candidateHash: await computeJcsSha256Digest(request.saved.response), sources: { facts: 'screening', ...(options.unavailable ? { other: 'other' } : {}) },
@@ -1176,9 +1186,11 @@ async function nativeFactsFixture(options: { eligible?: boolean; unavailable?: b
   });
   const engines: ReturnType<typeof createFormEngine>[] = [];
   const test = await actualFixture({ bundle: exported, component: authoredComponent,
+    onSaved: (response, revision) => { attachmentReferences = response.data.photo ? [structuredClone(response.data.photo)] : [];
+      if (response.authoredSignatures?.length) http?.markSigned(revision); },
     nativeScreener: { selectionKey: 'native', retention: { retain: retained, associate }, hydration: { hydrate }, context: () => f.input },
     createEngine: (definition, options) => { const engine = createFormEngine(definition, options); engines.push(engine); return engine; } });
-  return { ...test, retained, associate, hydrate, candidates, engines, options };
+  return { ...test, retained, associate, hydrate, candidates, engines, options, http };
 }
 
 async function completeNativeScreener(test: Awaited<ReturnType<typeof nativeFactsFixture>>, mounted: ReturnType<typeof render>) {
@@ -1266,6 +1278,23 @@ describe('actual native facts product caller', () => {
     mounted.unmount(); test.host.dispose();
   });
 
+  it('keeps Save committed and Prepare unavailable when a selected HTTP source remains unavailable', async () => {
+    const test = await nativeFactsFixture({ http: true, unavailable: true });
+    const mounted = render(<NativePackageRespondentHost {...test.props} location="/eligibility" />);
+    await completeNativeScreener(test, mounted);
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await vi.waitFor(() => expect(test.terminals.at(-1)?.status).toBe('completed'));
+    expect(test.host.getSnapshot().controller?.phase).toBe('saved');
+    expect(test.host.getSnapshot().nativeReadiness).toBe('pending');
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare saved response' }));
+    await vi.waitFor(() => expect(test.invokerFailures).toHaveLength(1));
+    expect((test.invokerFailures[0] as Error).message).toBe('native-facts-pending-save-required');
+    expect(test.host.getSnapshot().controller?.phase).toBe('saved');
+    expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled(); expect(test.submit).not.toHaveBeenCalled();
+    expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.http!.requests.some(request => request.url.endsWith('/evaluation-instances'))).toBe(true);
+    mounted.unmount(); test.host.dispose();
+  });
+
   it.each(['draft-id', 'draft-version', 'settled-data'] as const)('refuses fresh commitment qualification with mismatched %s', async mismatch => {
     const test = await nativeFactsFixture();
     const mounted = render(<NativePackageRespondentHost {...test.props} location="/eligibility" />);
@@ -1288,8 +1317,8 @@ describe('actual native facts product caller', () => {
     mounted.unmount(); test.host.dispose();
   });
 
-  it.each(['normal', 'committed-lost-reply', 'uncommitted-retry', 'retired-visit'] as const)('qualifies exact prepared review and commitment, preserving Signed+Pending after %s', async mode => {
-    const test = await nativeFactsFixture({ signedPending: true });
+  it.each(['normal', 'committed-lost-reply', 'uncommitted-retry', 'retired-visit', 'http-ready', 'http-refused'] as const)('qualifies exact prepared review and commitment with %s signing outcome', async mode => {
+    const test = await nativeFactsFixture({ signedPending: !mode.startsWith('http-'), http: mode.startsWith('http-'), refuseSigned: mode === 'http-refused' });
     const visitSpy = vi.spyOn(test.host, 'createSurfaceVisit');
     const originalSign = test.sign.getMockImplementation()!;
     let committed: Awaited<ReturnType<typeof originalSign>> | undefined;
@@ -1316,7 +1345,8 @@ describe('actual native facts product caller', () => {
     const preparedContext = test.candidates.at(-1)!;
     expect(preparedContext.draft).toEqual(prepared.draft); expect(preparedContext.response).toEqual(prepared.response);
     expect(test.engines.at(-1)!.getResponse({ profile: 'off' }).data).toEqual(prepared.response.data);
-    expect(test.engines.at(-1)!.getInstanceData('facts')).toEqual({ eligible: false });
+    const issued = await test.retained.mock.results[0].value;
+    expect(test.engines.at(-1)!.getInstanceData('facts')).toEqual(test.http ? { eligible: false, evidenceRef: issued.run.evidenceRef } : { eligible: false });
     mounted.rerender(<NativePackageRespondentHost {...test.props} location="/review-sign" />);
     await vi.waitFor(() => expect(test.read).toHaveBeenCalledOnce());
     expect(test.candidates.at(-1)!.draft).toEqual(prepared.draft);
@@ -1328,7 +1358,7 @@ describe('actual native facts product caller', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'I consent to electronic signing for this demo response.' }));
     await vi.waitFor(() => expect((screen.getByRole('button', { name: 'Sign demo response' }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: 'Sign demo response' }));
-    if (mode !== 'normal') {
+    if (['committed-lost-reply', 'uncommitted-retry', 'retired-visit'].includes(mode)) {
       await vi.waitFor(() => expect(test.host.getSnapshot().controller?.phase).toBe('failed'));
       const retry = await screen.findByRole('button', { name: 'Check previous signing result' });
       if (mode === 'retired-visit') {
@@ -1344,10 +1374,10 @@ describe('actual native facts product caller', () => {
       fireEvent.click(retry); fireEvent.click(retry);
     }
     await vi.waitFor(() => expect(test.host.getSnapshot().controller?.phase).toBe('signed'));
-    await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe('pending'));
+    await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe(mode === 'http-ready' ? 'ready' : 'pending'));
     expect(test.signWrites).toHaveBeenCalledOnce();
-    expect(test.sign).toHaveBeenCalledTimes(mode === 'normal' ? 1 : 2); expect(test.submit).not.toHaveBeenCalled();
-    if (mode !== 'normal') {
+    expect(test.sign).toHaveBeenCalledTimes(['normal', 'http-ready', 'http-refused'].includes(mode) ? 1 : 2); expect(test.submit).not.toHaveBeenCalled();
+    if (['committed-lost-reply', 'uncommitted-retry'].includes(mode)) {
       expect(test.sign.mock.calls[1][0].operationId).toBe(test.sign.mock.calls[0][0].operationId);
       expect(test.sign.mock.calls[1][0].preparation).toBe(test.sign.mock.calls[0][0].preparation);
     }
@@ -1361,8 +1391,27 @@ describe('actual native facts product caller', () => {
     expect(test.candidates.at(-1)!.response).toEqual(signedResult.response);
     expect(test.candidates.at(-1)!.draft).toEqual(signedResult.draft);
     expect(signedResult.response.authoredSignatures).toHaveLength(1);
-    expect(test.host.getSnapshot().runtime).toBeUndefined();
-    expect(screen.getByText('Checks pending.')).toBeDefined();
+    if (mode === 'http-ready') {
+      expect(test.host.getSnapshot().runtime).toBeDefined();
+      await vi.waitFor(() => expect(test.read).toHaveBeenCalledTimes(2));
+      expect((screen.getByRole('button', { name: 'Submit demo response' }) as HTMLButtonElement).disabled).toBe(true);
+      test.completeRead(new Blob([test.photoBytes], { type: 'image/png' }));
+      fireEvent.load(await screen.findByRole('img', { name: /saved photo/i }));
+      await vi.waitFor(() => expect((screen.getByRole('button', { name: 'Submit demo response' }) as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(screen.getByRole('button', { name: 'Submit demo response' }));
+      await vi.waitFor(() => expect(test.submit).toHaveBeenCalledOnce());
+      expect(test.submit.mock.calls[0][0].extensions!['x-formspec-response']).toEqual(signedResult.response);
+    } else {
+      expect(test.host.getSnapshot().runtime).toBeUndefined();
+      expect(screen.getByText('Checks pending.')).toBeDefined();
+    }
+    if (test.http) {
+      const signedHash = await computeJcsSha256Digest(signedResult.response);
+      const signedRequests = test.http.requests.filter(request => (request.body as { candidateHash?: string }).candidateHash === signedHash);
+      expect(signedRequests.map(request => new URL(request.url).pathname)).toEqual(['/drafts/owned-draft/screener-associations', '/drafts/owned-draft/evaluation-instances']);
+      for (const request of signedRequests) expect((request.body as { draftVersion: number }).draftVersion).toBe(signedResult.draft.version);
+      expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.sign).toHaveBeenCalledOnce();
+    }
     mounted.unmount(); test.host.dispose();
   });
 
