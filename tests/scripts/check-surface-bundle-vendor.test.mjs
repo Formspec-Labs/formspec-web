@@ -11,7 +11,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const schemaFiles = readdirSync(join(repoRoot, 'vendor/formspec-schemas'))
-  .filter((file) => file.endsWith('.schema.json')).sort();
+  .filter((file) => file.endsWith('.schema.json'));
+// The upcoming canonical inventory includes the preserved Surface 0.2 schema.
+// Keep the isolated copy/check fixture complete before Runtime distributes it.
+if (!schemaFiles.includes('surface-v0.2.schema.json')) schemaFiles.push('surface-v0.2.schema.json');
+schemaFiles.sort();
 const selector = 'vendor/formspec-schemas/locale.schema.json';
 const roots = [];
 

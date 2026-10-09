@@ -1,4 +1,5 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
+import { freezeSourceMetadata, readSourceResult, sourceErrorMessage } from './instance-source.js';
 import { diffEvalResults } from '../diff.js';
 import { FelExtensionFunctions } from '../extension-functions.js';
 import { analyzeFEL, getFELDependencies, } from '../fel/fel-api-runtime.js';
@@ -17,6 +18,7 @@ import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectTi
 import { buildWasmFelExpressionContext, mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
 import { felContextSchema, felContextSnapshot } from './fel-context.js';
 import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getAncestorBasePaths, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, safeEvaluateExpression, setNestedPathValue, setResponsePathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
+import { collectSeedFromGroups, repeatHasHostData, resolvePrePopulateFromInstance, } from './instance-seeding.js';
 import { DefaultValidationProfileResolver, } from '../validation/index.js';
 export class FormEngine {
     constructor(definition, optionsOrRuntimeContext, legacyRegistryEntries) {
@@ -33,7 +35,8 @@ export class FormEngine {
         this.optionSignals = {};
         this.optionStateSignals = {};
         this.variableSignals = {};
-        this.instanceData = {};
+        /** Own-key JSON data map; valid source names never inherit Object prototype values. */
+        this.instanceData = Object.create(null);
         this._bindConfigs = {};
         this._fieldItems = new Map();
         /** `dataType` of every field Item by base path, from the definition (FEL value tagging, scope checks). */
@@ -45,12 +48,18 @@ export class FormEngine {
         this._instanceCalculateBinds = [];
         this._displaySignalPaths = new Set();
         this._prePopulateReadonly = new Set();
+        this._seedFromResolvedPaths = new Set();
         this._calculatedFields = new Set();
         this._registryEntries = new Map();
         /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
         this._extensionFunctions = new FelExtensionFunctions();
         this._registryDocuments = [];
         this._remoteOptionsTasks = [];
+        this._instanceSourceAbort = new AbortController();
+        this._pendingInstanceSources = new Set();
+        this._sourceSeedPreservedFields = new Set();
+        this._instanceSourceOutcomes = Object.create(null);
+        this._disposed = false;
         this._instanceSourceTasks = [];
         this._variableSignalKeys = new Map();
         this._derivationTraceCache = new Map();
@@ -69,6 +78,7 @@ export class FormEngine {
         };
         const options = FormEngine.normalizeConstructorOptions(optionsOrRuntimeContext, legacyRegistryEntries);
         const { runtimeContext, registryEntries, reactiveRuntime = preactReactiveRuntime, issuerFetcher, issuerOverride, extensionFunctions, } = options;
+        this._instanceSourceResolver = options.instanceSourceResolver;
         this._rx = reactiveRuntime;
         this._issuerStore = new IssuerStore(issuerFetcher ?? new FetchIssuerFetcher());
         this._validationProfileResolver = new DefaultValidationProfileResolver();
@@ -101,6 +111,7 @@ export class FormEngine {
             this._registryDocuments = [{ entries: registryEntries }];
         }
         this.definition = resolveOptionSetsOnDefinition(this.definition);
+        this._seedFromGroups = collectSeedFromGroups(this.definition.items);
         this.initializeOptionSignals();
         this.initializeInstances();
         this.initializeBindConfigs(this.definition.items);
@@ -109,6 +120,10 @@ export class FormEngine {
         validateVariableDefinitionCycles(this._variableDefs);
         validateCalculateBindCycles(this._bindConfigs);
         this.registerItems(this.definition.items);
+        if (options.responseData) {
+            this.loadItemsData(this.definition.items, options.responseData, '');
+        }
+        this.runInstanceDependentSeeding();
         this.initializeRemoteOptions();
         this._evaluate();
         // Create form-level view model (after first evaluate so validation is available)
@@ -200,6 +215,7 @@ export class FormEngine {
     }
     async waitForInstanceSources() {
         await Promise.allSettled(this._instanceSourceTasks);
+        return freezeSourceMetadata(cloneValue(this._instanceSourceOutcomes));
     }
     setInstanceValue(name, path, value) {
         this.writeInstanceValue(name, path, value);
@@ -234,6 +250,9 @@ export class FormEngine {
             return undefined;
         }
         this.appendRepeatRow(path, item);
+        if (item.seedFrom && this._pendingInstanceSources.has(item.seedFrom.instance)) {
+            this._seedFromResolvedPaths.add(path);
+        }
         this._evaluate();
         return index;
     }
@@ -245,6 +264,9 @@ export class FormEngine {
             return;
         }
         this.rebuildRepeatRows(path, item, (rows) => rows.filter((_row, current) => current !== index));
+        if (item.seedFrom && this._pendingInstanceSources.has(item.seedFrom.instance)) {
+            this._seedFromResolvedPaths.add(path);
+        }
         this._evaluate();
     }
     /**
@@ -265,9 +287,12 @@ export class FormEngine {
             const path = prefix ? `${prefix}.${item.key}` : item.key;
             const value = data[item.key];
             if (item.type === 'field') {
+                if (this._pendingInstanceSources.size > 0)
+                    this._sourceSeedPreservedFields.add(path);
                 this.writeFieldData(path, value);
             }
             else if (item.type === 'group' && item.repeatable && this.repeats[path]) {
+                this._seedFromResolvedPaths.add(path);
                 const rows = Array.isArray(value) ? value : [];
                 if (this.repeats[path].value > rows.length) {
                     this.rebuildRepeatRows(path, item, (snapshots) => snapshots.slice(0, rows.length));
@@ -827,6 +852,8 @@ export class FormEngine {
         this._evaluate();
     }
     dispose() {
+        this._disposed = true;
+        this._instanceSourceAbort.abort();
         // The only owned WASM allocation is the resident FEL context; signals need no teardown.
         this._felContext?.handle.free();
         this._felContext = null;
@@ -860,7 +887,9 @@ export class FormEngine {
             || Object.prototype.hasOwnProperty.call(maybeOptions, 'reactiveRuntime')
             || Object.prototype.hasOwnProperty.call(maybeOptions, 'issuerFetcher')
             || Object.prototype.hasOwnProperty.call(maybeOptions, 'issuerOverride')
-            || Object.prototype.hasOwnProperty.call(maybeOptions, 'extensionFunctions'));
+            || Object.prototype.hasOwnProperty.call(maybeOptions, 'extensionFunctions')
+            || Object.prototype.hasOwnProperty.call(maybeOptions, 'responseData')
+            || Object.prototype.hasOwnProperty.call(maybeOptions, 'instanceSourceResolver'));
         if (hasOptionsShape) {
             return {
                 ...maybeOptions,
@@ -941,36 +970,118 @@ export class FormEngine {
         return /^https?:\/\//i.test(source) || source.startsWith('/') ? source : null;
     }
     initializeInstanceSource(name, instance) {
-        const source = instance.source ? FormEngine.resolveInstanceSource(instance.source) : null;
+        if (!instance.source)
+            return;
+        const resolver = this._instanceSourceResolver;
+        const source = resolver ? instance.source : FormEngine.resolveInstanceSource(instance.source);
         if (!source) {
+            this._instanceSourceOutcomes[name] = { status: 'unavailable', reason: 'Unsupported source' };
             return;
         }
-        if (instance.static && FormEngine.instanceSourceCache.has(source)) {
-            const cached = FormEngine.instanceSourceCache.get(source);
-            if (cached !== undefined) {
+        if (!resolver && instance.static && FormEngine.instanceSourceCache.has(source)) {
+            try {
+                const cached = FormEngine.instanceSourceCache.get(source);
+                this.validateInstanceSchema(name, cached);
                 this.instanceData[name] = cloneValue(cached);
+                this._instanceSourceOutcomes[name] = { status: 'loaded' };
+            }
+            catch (error) {
+                this._instanceSourceOutcomes[name] = { status: 'unavailable', reason: sourceErrorMessage(error) };
             }
             return;
         }
-        const task = fetch(source)
-            .then((response) => {
-            if (!response.ok) {
-                throw new Error(`Instance source fetch failed (${response.status})`);
-            }
-            return response.json();
-        })
-            .then((payload) => {
-            this.validateInstanceSchema(name, payload);
-            const nextValue = cloneValue(payload);
-            if (instance.static) {
-                FormEngine.instanceSourceCache.set(source, cloneValue(nextValue));
-            }
-            this.instanceData[name] = nextValue;
-            this.instanceVersion.value += 1;
-            this._evaluate();
-        })
-            .catch((error) => {
-            console.error(`Failed to load instance source '${name}':`, error);
+        // Only host-loaded sources defer fallback-dependent creation-time seeding.
+        if (resolver)
+            this._pendingInstanceSources.add(name);
+        const signal = this._instanceSourceAbort.signal;
+        const request = freezeSourceMetadata(cloneValue({
+            instanceName: name, source: instance.source,
+            definition: { url: this.definition.url, version: this.definition.version },
+            ...(instance.schema ? { schema: instance.schema } : {}),
+            static: instance.static === true, readonly: instance.readonly !== false,
+        }));
+        const task = new Promise((settle) => {
+            const abort = () => {
+                this._instanceSourceOutcomes[name] = { status: 'aborted' };
+                this._pendingInstanceSources.delete(name);
+                settle();
+            };
+            signal.addEventListener('abort', abort, { once: true });
+            let installed = false;
+            let previous;
+            let hadPrevious = false;
+            Promise.resolve().then(async () => {
+                if (signal.aborted)
+                    return;
+                let payload;
+                if (resolver) {
+                    const result = readSourceResult(await resolver(request, Object.freeze({ signal })));
+                    if (this._disposed)
+                        return;
+                    if (result.status === 'unavailable') {
+                        this._instanceSourceOutcomes[name] = result;
+                        return;
+                    }
+                    payload = result.value;
+                    if (instance.schema && !isJsonRecord(payload)) {
+                        throw new Error(`Instance '${name}' schema requires an object`);
+                    }
+                }
+                else {
+                    const response = await fetch(source, { signal });
+                    if (!response.ok)
+                        throw new Error(`Instance source fetch failed (${response.status})`);
+                    payload = await response.json();
+                }
+                if (this._disposed)
+                    return;
+                this.validateInstanceSchema(name, payload);
+                const nextValue = cloneValue(payload);
+                hadPrevious = Object.prototype.hasOwnProperty.call(this.instanceData, name);
+                previous = this.instanceData[name];
+                Object.defineProperty(this.instanceData, name, { value: nextValue, enumerable: true, writable: true, configurable: true });
+                installed = true;
+                this.instanceVersion.value += 1;
+            }).catch((error) => {
+                if (this._disposed)
+                    return;
+                this._instanceSourceOutcomes[name] = { status: 'unavailable', reason: sourceErrorMessage(error) };
+                try {
+                    console.error(`Failed to load instance source '${name}':`, error);
+                }
+                catch { /* Diagnostics must not prevent settlement. */ }
+            }).then(() => {
+                // Always release waits, even when reactive seeding or evaluation unexpectedly fails.
+                signal.removeEventListener('abort', abort);
+                try {
+                    if (this._disposed)
+                        return;
+                    this._pendingInstanceSources.delete(name);
+                    this.runInstanceDependentSeeding();
+                    this._evaluate();
+                    if (installed) {
+                        if (!resolver && instance.static)
+                            FormEngine.instanceSourceCache.set(source, cloneValue(this.instanceData[name]));
+                        this._instanceSourceOutcomes[name] = { status: 'loaded' };
+                    }
+                }
+                catch (error) {
+                    if (installed) {
+                        if (hadPrevious)
+                            Object.defineProperty(this.instanceData, name, { value: previous, enumerable: true, writable: true, configurable: true });
+                        else
+                            delete this.instanceData[name];
+                        this.instanceVersion.value += 1;
+                    }
+                    this._instanceSourceOutcomes[name] = { status: 'failed', reason: sourceErrorMessage(error) };
+                    // Primary seeding may have partially applied; this engine must be replaced.
+                    this.dispose();
+                }
+                finally {
+                    this._pendingInstanceSources.delete(name);
+                    settle();
+                }
+            });
         });
         this._instanceSourceTasks.push(task);
     }
@@ -1129,13 +1240,15 @@ export class FormEngine {
     }
     resolveInitialFieldValue(path, item) {
         const prePopulate = item.prePopulate;
-        if (prePopulate) {
-            const value = this.getInstanceData(prePopulate.instance, prePopulate.path);
-            if (value !== undefined) {
+        if (prePopulate?.editable === false)
+            this._prePopulateReadonly.add(path);
+        if (prePopulate && !this._pendingInstanceSources.has(prePopulate.instance)) {
+            const resolved = resolvePrePopulateFromInstance(item, path, this._seedFromGroups, (instanceName, instancePath) => this.getInstanceData(instanceName, instancePath), (instanceName) => this.instanceData[instanceName]);
+            if (resolved !== undefined) {
                 if (prePopulate.editable === false) {
                     this._prePopulateReadonly.add(path);
                 }
-                return cloneValue(value);
+                return cloneValue(resolved);
             }
             if (prePopulate.editable === false) {
                 this._prePopulateReadonly.add(path);
@@ -1148,6 +1261,56 @@ export class FormEngine {
             return coerceInitialValue(item, item.initialValue);
         }
         return emptyValueForItem(item);
+    }
+    runInstanceDependentSeeding() {
+        for (const { path: groupPath, item, seedFrom } of this._seedFromGroups) {
+            if (this._seedFromResolvedPaths.has(groupPath)) {
+                continue;
+            }
+            const minRepeat = item.minRepeat ?? 0;
+            if (repeatHasHostData(groupPath, this._data, this.signals, minRepeat)) {
+                this._seedFromResolvedPaths.add(groupPath);
+                continue;
+            }
+            if (this._pendingInstanceSources.has(seedFrom.instance))
+                continue;
+            if (this.instanceData[seedFrom.instance] === undefined) {
+                continue;
+            }
+            const array = getNestedValue(this.instanceData[seedFrom.instance], seedFrom.path);
+            const arrayLength = Array.isArray(array) ? array.length : 0;
+            const maxRepeat = item.maxRepeat;
+            const target = Math.max(minRepeat, maxRepeat === undefined ? arrayLength : Math.min(arrayLength, maxRepeat));
+            const repeatSignal = this.repeats[groupPath];
+            if (!repeatSignal) {
+                continue;
+            }
+            this._rx.batch(() => {
+                while (repeatSignal.value < target) {
+                    this.appendRepeatRow(groupPath, item);
+                }
+            });
+            this._seedFromResolvedPaths.add(groupPath);
+        }
+        for (const [basePath, fieldItem] of this._fieldItems.entries()) {
+            if (!fieldItem.prePopulate || this._pendingInstanceSources.has(fieldItem.prePopulate.instance)) {
+                continue;
+            }
+            const paths = Object.keys(this.signals).filter((candidate) => toBasePath(candidate) === basePath);
+            for (const path of paths) {
+                if (this._instanceSourceResolver && (this._sourceSeedPreservedFields.has(path) || this.writeSources[path]?.value != null))
+                    continue;
+                if (!isEmptyValue(this.signals[path]?.value)) {
+                    continue;
+                }
+                const next = this.resolveInitialFieldValue(path, fieldItem);
+                if (isEmptyValue(next)) {
+                    continue;
+                }
+                this.signals[path].value = cloneValue(next);
+                this._data[path] = cloneValue(next);
+            }
+        }
     }
     initializeRemoteOptions() {
         for (const bind of Object.values(this._bindConfigs)) {

@@ -105,6 +105,33 @@ function siblingModulePolicy(test: ReturnType<typeof fixture>) {
 }
 
 describe('generic native package signing session', () => {
+  it('admits a maintained native Screener entry without granting applicant authority', () => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const surfaceUrl = 'urn:test:surface', screenerUrl = 'urn:test:screener';
+    const screener = { $formspecScreener: '1.0', url: screenerUrl, version: '1.0.0',
+      title: 'Eligibility', items: [{ type: 'field', key: 'eligible', dataType: 'boolean', label: 'Eligible' }],
+      evaluation: [{ id: 'route', routes: [{ target: 'surface:intake', when: 'true' }] }] };
+    const bundle: BundleExport = { ...test.policy.bundle, manifest: { ...test.policy.bundle.manifest,
+      surfaces: [{ url: surfaceUrl }], entrySurface: surfaceUrl, screeners: [{ url: screenerUrl, version: '1.0.0' }] },
+      documents: { ...test.policy.bundle.documents, [screenerUrl]: screener,
+        [surfaceUrl]: { $formspecSurface: '0.3', id: 'surface', entry: 'screen', routes: [
+          { id: 'screen', path: '/', slots: [{ id: 'screen', slotType: 'screener',
+            binding: { screenerRef: screenerUrl, allowedTargets: ['surface:intake'] } }] },
+          { id: 'intake', path: '/intake', slots: [{ id: 'intake', slotType: 'definition-form', binding: { definitionRef: test.policy.definition.url } }] },
+        ] } } };
+    const host = createNativePackageSigningHost({ ...test.policy, bundle });
+    expect(host.getStartupRoute('/')).toMatchObject({ entryHref: '/', requiresHostState: false });
+    expect(host.getSnapshot().runtime).toBeUndefined();
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+    host.dispose();
+    for (const document of [undefined, { ...screener, version: '2.0.0' }, { ...screener, items: [] }]) {
+      const refused = createNativePackageSigningHost({ ...test.policy, bundle: { ...bundle,
+        documents: { ...bundle.documents, [screenerUrl]: document } } });
+      expect(() => refused.getStartupRoute('/')).toThrow('native-entry-route-unavailable');
+      refused.dispose();
+    }
+  });
+
   it('admits only an exact deployment-pinned image declared at its native Surface slot', () => {
     const test = fixture(); test.host.dispose(); test.engine.dispose();
     const source = 'https://travel.state.gov/example.jpeg';

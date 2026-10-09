@@ -130,6 +130,35 @@ export function useScreener(options = {}) {
             return;
         }
         setErrors({});
+        if (options.onDetermination) {
+            // Every presented field must have an explicit answer in this bounded mode.
+            for (const item of items) {
+                if (answers[item.key] === undefined || answers[item.key] === null)
+                    newErrors[item.key] = `${item.label || item.key} needs an answer`;
+            }
+            if (Object.keys(newErrors).length) {
+                setErrors(newErrors);
+                return;
+            }
+            setState('answering');
+            try {
+                if (!screenerDoc) {
+                    setErrors({ $completion: 'screener-unavailable' });
+                    return;
+                }
+                const evaluationTime = new Date().toISOString();
+                const record = wasmEvaluateScreenerDocument(screenerDoc, answers, { nowIso: evaluationTime });
+                const disposition = options.onDetermination(record, answers, evaluationTime);
+                if (disposition.status === 'accepted')
+                    setState('routed');
+                else
+                    setErrors({ $completion: disposition.reason });
+            }
+            catch {
+                setErrors({ $completion: 'screener-evaluation-or-completion-failed' });
+            }
+            return;
+        }
         let result = null;
         if (screenerDoc) {
             try {
@@ -188,8 +217,9 @@ export function useScreener(options = {}) {
         setSkipped(false);
     }, [items, options.seedAnswers]);
     const skip = useCallback(() => {
-        setSkipped(true);
-    }, []);
+        if (!options.onDetermination)
+            setSkipped(true);
+    }, [options.onDetermination]);
     return {
         state,
         answers,

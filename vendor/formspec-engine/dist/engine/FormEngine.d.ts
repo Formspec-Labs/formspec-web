@@ -1,7 +1,7 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
 import type { FormDefinition, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
 import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
-import type { SetValueOptions, WriteSource, AuthoredSignatureInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
+import type { SetValueOptions, WriteSource, AuthoredSignatureInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
 import { type FelTraceStep } from '../fel/fel-api-runtime.js';
 import type { EngineSignal, ReadonlyEngineSignal } from '../reactivity/types.js';
 import { type LocaleDocument } from '../locale.js';
@@ -25,6 +25,7 @@ export declare class FormEngine implements IFormEngine {
     readonly optionSignals: Record<string, EngineSignal<OptionEntry[]>>;
     readonly optionStateSignals: Record<string, EngineSignal<RemoteOptionsState>>;
     readonly variableSignals: Record<string, EngineSignal<FormFieldValue>>;
+    /** Own-key JSON data map; valid source names never inherit Object prototype values. */
     readonly instanceData: JsonRecord;
     readonly instanceVersion: EngineSignal<number>;
     readonly structureVersion: EngineSignal<number>;
@@ -42,12 +43,20 @@ export declare class FormEngine implements IFormEngine {
     private readonly _instanceCalculateBinds;
     private readonly _displaySignalPaths;
     private readonly _prePopulateReadonly;
+    private readonly _seedFromGroups;
+    private readonly _seedFromResolvedPaths;
     private readonly _calculatedFields;
     private readonly _registryEntries;
     /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
     private readonly _extensionFunctions;
     private _registryDocuments;
     private readonly _remoteOptionsTasks;
+    private readonly _instanceSourceResolver?;
+    private readonly _instanceSourceAbort;
+    private readonly _pendingInstanceSources;
+    private readonly _sourceSeedPreservedFields;
+    private readonly _instanceSourceOutcomes;
+    private _disposed;
     private readonly _instanceSourceTasks;
     private readonly _variableDefs;
     private readonly _variableSignalKeys;
@@ -85,7 +94,7 @@ export declare class FormEngine implements IFormEngine {
     getOptionsState(path: string): RemoteOptionsState;
     getOptionsStateSignal(path: string): EngineSignal<RemoteOptionsState> | undefined;
     waitForRemoteOptions(): Promise<void>;
-    waitForInstanceSources(): Promise<void>;
+    waitForInstanceSources(): Promise<Readonly<Record<string, InstanceSourceLoadOutcome>>>;
     setInstanceValue(name: string, path: string | undefined, value: FormFieldValue): void;
     getInstanceData(name: string, path?: string): FormFieldValue;
     getDisabledDisplay(path: string): 'hidden' | 'protected';
@@ -212,6 +221,7 @@ export declare class FormEngine implements IFormEngine {
     private registerItemChildren;
     private initializeFieldSignal;
     private resolveInitialFieldValue;
+    private runInstanceDependentSeeding;
     private initializeRemoteOptions;
     private writeInstanceValue;
     private validateInstanceSchema;

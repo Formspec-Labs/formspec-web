@@ -2,4 +2,4 @@
 export { FormspecScreener } from './FormspecScreener';
 export type { FormspecScreenerProps } from './FormspecScreener';
 export { useScreener } from './use-screener';
-export type { UseScreenerResult, UseScreenerOptions, ScreenerRoute, ScreenerRouteType, ScreenerStateSnapshot, ScreenerDocumentInput, ScreenerAnswers, ScreenerFieldValue, } from './types';
+export type { UseScreenerResult, UseScreenerOptions, ScreenerCompletionDisposition, ScreenerRoute, ScreenerRouteType, ScreenerStateSnapshot, ScreenerDocumentInput, ScreenerAnswers, ScreenerFieldValue, } from './types';

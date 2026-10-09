@@ -60,6 +60,10 @@ export type FormItem = Item & {
         path: string;
         editable?: boolean;
     };
+    seedFrom?: {
+        instance: string;
+        path: string;
+    };
     presentation?: Presentation;
     relevant?: string;
     visible?: string;

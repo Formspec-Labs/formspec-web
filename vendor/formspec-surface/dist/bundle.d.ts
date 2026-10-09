@@ -40,6 +40,7 @@
  * authenticity and deployment admission remain separate host decisions.
  */
 import type { ExperienceDocument, FormDefinition, OntologyDocument, ReferencesDocument, RegistryDocument, ResponseActionsDocument, SurfaceDocument, ThemeDocument } from '@formspec-org/types';
+import type { ScreenerDocumentHandle } from './screener-slot.js';
 import type { DataSourceCatalogHandle } from './data-source-loader.js';
 import type { MappingDocumentHandle } from './definition-form-initial-data.js';
 import { type SurfaceDiagnostic } from './diagnostics.js';
@@ -60,6 +61,7 @@ export interface BundleManifest {
     'x-generation'?: {
         anchors?: readonly string[];
     };
+    screeners?: readonly BundleArtifactRef[];
     definitions?: readonly BundleArtifactRef[];
     experience?: BundleArtifactRef;
     experiences?: readonly BundleArtifactRef[];
@@ -94,6 +96,7 @@ export interface BundleExport {
 export interface ResolvedBundle {
     manifest: BundleManifest;
     title: string | undefined;
+    screenerHandles?: readonly ScreenerDocumentHandle[];
     surfaces: readonly SurfaceDocument[];
     /**
      * The exact loaded Surface selected by App Manifest 2.4.

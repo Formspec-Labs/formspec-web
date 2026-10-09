@@ -152,6 +152,7 @@ const schemaFiles = [
   'response-actions.schema.json',
   'screener.schema.json',
   'surface.schema.json',
+  'surface-v0.2.schema.json',
   'theme.schema.json',
   'validation-mapping.schema.json',
   'validation-result.schema.json',

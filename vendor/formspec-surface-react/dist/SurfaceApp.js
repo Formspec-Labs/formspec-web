@@ -44,7 +44,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  */
 import { presentedRouteTitle } from './title-presentation.js';
 import { deriveSurfaceRuntimeGeneration } from "./runtime-generation.js";
-import { useCallback, useEffect, useMemo, useRef, useState, } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
 import { composeSurfaceApp, createThemeAuthority, createWidgetRegistry, documentRootContaminationDiagnostic, flattenRegistryEntries, generationNeedAnchors, matchRoute, mergeNeedAnchors, planMatchedRoute, resolveSurfaceStrings, routeHref, } from "@formspec-org/surface";
 import { SurfaceRouteView } from "./SurfaceRoute.js";
 import { createWidgetActionCoordinator } from "./widget-action-runtime.js";
@@ -163,6 +163,14 @@ export function SurfaceApp(props) {
             id: allocateRouteInstanceId(),
         };
     }
+    // A native Screener completion belongs to this mounted composition and visit.
+    const screenerVisit = useMemo(() => ({ id: allocateRouteInstanceId(), active: false }), [model.app, runtimeGeneration]);
+    const liveScreenerVisit = useRef(screenerVisit);
+    liveScreenerVisit.current = screenerVisit;
+    useLayoutEffect(() => {
+        screenerVisit.active = true;
+        return () => { screenerVisit.active = false; };
+    }, [screenerVisit]);
     const routePlan = useMemo(() => {
         if (!resolution.match)
             return undefined;
@@ -171,6 +179,7 @@ export function SurfaceApp(props) {
             app: model.app,
             params: { ...(props.routeParams ?? {}), ...resolution.match.params },
             experiences: bundle.experiences,
+            screenerHandles: bundle.screenerHandles,
             experienceHandles: bundle.experienceHandles,
             definitions: bundle.definitions,
             registryEntries: model.registryEntries,
@@ -287,7 +296,18 @@ export function SurfaceApp(props) {
             document.title = previous;
         };
     }, [appTitle, setDocumentTitle]);
-    return (_jsxs("div", { className: "fs-surface-app", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: [(props.header !== undefined || appTitle) && (_jsx("header", { className: "fs-surface-header", children: _jsx("div", { className: "fs-surface-header__inner", children: props.header ?? (_jsx("span", { className: "fs-surface-brand", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: appTitle })) }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: props.routeParams, onNavigate: onNavigate, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, resolveRouteTitle: props.resolveRouteTitle, strings: strings, dataSourceLoader: props.dataSourceLoader, dataSourceRevision: props.dataSourceRevision, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, onAdvance: (transition, outcome) => {
+    return (_jsxs("div", { className: "fs-surface-app", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: [(props.header !== undefined || appTitle) && (_jsx("header", { className: "fs-surface-header", children: _jsx("div", { className: "fs-surface-header__inner", children: props.header ?? (_jsx("span", { className: "fs-surface-brand", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: appTitle })) }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: props.routeParams, onNavigate: onNavigate, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, screenerInstanceId: screenerVisit.id, resolveRouteTitle: props.resolveRouteTitle, strings: strings, dataSourceLoader: props.dataSourceLoader, dataSourceRevision: props.dataSourceRevision, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, onScreenerTarget: (target) => {
+                                if (!screenerVisit.active || liveScreenerVisit.current !== screenerVisit)
+                                    return { status: 'refused', reason: 'screener-generation-stale' };
+                                const matches = model.app.routes.filter(handle => `surface:${handle.routeId}` === target);
+                                if (matches.length !== 1 || matches[0].pathCollides)
+                                    return { status: 'refused', reason: 'screener-target-not-unique' };
+                                const destination = routeHref(matches[0], routePlan.params);
+                                if (destination.refusal)
+                                    return { status: 'refused', reason: destination.refusal };
+                                onNavigate(destination.href);
+                                return { status: 'accepted' };
+                            }, onAdvance: (transition, outcome) => {
                                 // Reached only after the action reported success. The shell
                                 // navigates; it never decides that the action succeeded.
                                 // Defensive final boundary. Planning withholds collision-targeted

@@ -10,6 +10,7 @@ export function planMatchedRoute(input) {
     const route = planRoute({
         handle: input.handle,
         experiences: input.experiences,
+        screenerHandles: input.screenerHandles,
         experienceHandles: input.experienceHandles,
         definitions: input.definitions,
         registryEntries: input.registryEntries,

@@ -31,6 +31,7 @@
  *   acyclic graph, so `a` embedding `b` embedding `a` is authorable. The visited
  *   set is a termination requirement, not an optimisation.
  */
+import { type ScreenerDocumentHandle } from './screener-slot.js';
 import type { FormDefinition, RegistryEntry } from '@formspec-org/types';
 import type { ExperienceDocument } from '@formspec-org/types';
 import { type SurfaceDiagnostic } from './diagnostics.js';
@@ -63,6 +64,12 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     registryEntries: readonly RegistryEntry[];
     status: 'ready' | 'unresolved';
 } | {
+    slotType: 'screener';
+    screener?: ScreenerDocumentHandle;
+    allowedTargets: readonly string[];
+    status: 'ready' | 'unresolved';
+    reason?: string;
+} | {
     slotType: 'experience-unit';
     unit: ExperienceUnitPlan;
 } | {
@@ -93,6 +100,7 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
 });
 export interface SlotPlanContext<TComponent> {
     handle: SurfaceRouteHandle;
+    screenerHandles?: readonly ScreenerDocumentHandle[] | undefined;
     experiences: readonly ExperienceDocument[];
     /** Exact manifested source identity for qualified Experience bindings. */
     experienceHandles?: readonly ExperienceDocumentHandle[] | undefined;

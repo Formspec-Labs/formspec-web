@@ -22,7 +22,7 @@ const CONTENT_REF = 'https://formspec.org/schemas/common/1.0#/$defs/SigningConte
 describe('public canonical module payload resources', () => {
   it('returns only the exact pinned common root through the public adapter entry', async () => {
     const bytes = readFileSync(resolve(process.cwd(), 'vendor/formspec-schemas/common.schema.json'));
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe('e1a7634efc725a5257dc71945933eb8d640ceb8de93fb18dc9bc0464a8df44fb');
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe('5045b78db0ebffea56520f6e0b52a1302a65ef39f0a4bb637d61761328a5798a');
     const resources = await loadCanonicalModulePayloadSchemaResources();
     expect(resources).toEqual([{ uri: 'https://formspec.org/schemas/common/1.0', schema: JSON.parse(bytes.toString()) }]);
     const ids = resources.map(resource => resource.uri);
@@ -326,6 +326,36 @@ describe('loadSurfaceBundleSchemaValidators', () => {
         path: '/sources/0/runtime/provenance/kind',
       }),
     ]));
+  });
+
+  it('selects exact authored Surface schema versions and refuses crossed or absent identities', async () => {
+    const validate = await schemaValidator();
+    const old = validArtifacts.find(candidate => candidate.artifactKind === 'surface')!;
+    const native = {
+      artifactKind: 'surface', schemaId: 'https://formspec.org/schemas/surface/0.3',
+      document: { $formspecSurface: '0.3', id: 'eligibility', entry: 'screen', routes: [{
+        id: 'screen', path: '/', slots: [{ id: 'screen', slotType: 'screener', binding: {
+          screenerRef: 'urn:example:screener', allowedTargets: ['surface:intake'],
+        } }],
+      }] },
+    };
+    expect(validateArtifact(validate, old).ok).toBe(true);
+    expect(validateArtifact(validate, native).ok).toBe(true);
+    expect(validateArtifact(validate, { ...native, schemaId: old.schemaId }).ok).toBe(false);
+    expect(validateArtifact(validate, { ...old, schemaId: native.schemaId }).ok).toBe(false);
+    expect(validateArtifact(validate, { ...native, schemaId: undefined }).ok).toBe(true);
+    expect(validateArtifact(validate, { ...old, schemaId: undefined }).ok).toBe(true);
+    expect(validateArtifact(validate, { ...native, schemaId: undefined,
+      document: { ...native.document, $formspecSurface: '0.4' } })).toMatchObject({
+      ok: false, issues: [{ code: 'SURFACE-BUNDLE-SCHEMA-ID-MISMATCH' }],
+    });
+    expect(validateArtifact(validate, { ...native, schemaId: 'https://formspec.org/schemas/surface/0.4' }).ok).toBe(false);
+    const invalid = structuredClone(native);
+    invalid.document.routes[0].slots[0].binding.allowedTargets = [];
+    expect(validateArtifact(validate, invalid).ok).toBe(false);
+    const oldWithNativeSlot = { ...native, schemaId: old.schemaId,
+      document: { ...native.document, $formspecSurface: '0.2' } };
+    expect(validateArtifact(validate, oldWithNativeSlot).ok).toBe(false);
   });
 
   it('fails closed for unknown artifact kinds and unexpected schema ids', async () => {

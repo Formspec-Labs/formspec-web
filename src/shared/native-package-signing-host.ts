@@ -85,14 +85,14 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     return declared ? { status: 'admitted', source: request.source } : { status: 'refused' };
   } : undefined;
   const requiredHostRoutes = new Set<typeof app.routes[number]>();
-  const definitionEntryRoutes = new Set<typeof app.routes[number]>();
+  const supportedEntryRoutes = new Set<typeof app.routes[number]>();
   const signedReviewRoutes = new Set<typeof app.routes[number]>();
   const submitSource = policy.controller.roles.submit?.widgetSource;
   for (const handle of app.routes) {
     const plan = planMatchedRoute({ handle, app, definitions: bundle.definitions, experiences: bundle.experiences,
       registryEntries: flattened.entries, widgets, dataSources: bundle.dataSources, surfaceRef: bundle.surfaceRefs?.get(handle.surface),
       responseActions: bundle.responseActions, themeAuthority: createThemeAuthority({ tenantTheme: bundle.tenantTheme }),
-      staticAssetResolver,
+      staticAssetResolver, screenerHandles: bundle.screenerHandles,
       hasExecutor: true, hasWidgetActionExecutor: true });
     if (plan.slots.some(slot => slot.slotType === 'embed-route'
       && [...walkAdmittedSlots(slot.slots)].some(child => child.slotType === 'definition-form'))) {
@@ -107,7 +107,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         && slot.actionOutputs.some(output => output.name === submitSource.outputName
           && output.actionRef === policy.controller.roles.submit?.actionRef && !!output.action))) signedReviewRoutes.add(handle);
     if (slots.some(slot => slot.slotType === 'module-widget' && slot.dataInputs.some(input => input.required && input.descriptor?.source.kind === 'host-state'))) requiredHostRoutes.add(handle);
-    if (slots.some(slot => slot.slotType === 'definition-form' && slot.status === 'ready')) definitionEntryRoutes.add(handle);
+    if (slots.some(slot => (slot.slotType === 'definition-form' || slot.slotType === 'screener') && slot.status === 'ready')) supportedEntryRoutes.add(handle);
     for (const slot of slots) {
       if (slot.slotType !== 'module-widget') continue;
       if (slot.resolution.status !== 'resolved' || !slot.resolution.declared) throw new Error('native-widget-unadmitted');
@@ -352,7 +352,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; signedReviewHref?: string; signedReviewTitle?: string } {
       const match = matchRoute(app, pathname).match;
       const entry = app.entry;
-      if (!match || !entry || !definitionEntryRoutes.has(entry) || requiredHostRoutes.has(entry)) throw new Error('native-entry-route-unavailable');
+      if (!match || !entry || !supportedEntryRoutes.has(entry) || requiredHostRoutes.has(entry)) throw new Error('native-entry-route-unavailable');
       const destination = routeHref(entry);
       if (destination.refusal) throw new Error('native-entry-route-unavailable');
       let signedReviewHref: string | undefined;

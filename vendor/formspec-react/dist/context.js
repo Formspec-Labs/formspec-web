@@ -190,10 +190,8 @@ export function FormspecProvider(props) {
             registryEntries,
             issuerFetcher,
             issuerOverride,
+            responseData: initialData,
         });
-        if (initialData) {
-            eng.loadResponseData(initialData);
-        }
         return eng;
     }, [externalEngine, definition, registryEntries, runtimeContext, initialData, issuerFetcher]);
     useEffect(() => {

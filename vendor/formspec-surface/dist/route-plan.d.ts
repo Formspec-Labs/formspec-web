@@ -22,6 +22,7 @@
  * It also puts the `supplied-by-slot` walk (§5.3) on the same side of the seam
  * as the slot plan it walks, which is the only place it can be got right once.
  */
+import type { ScreenerDocumentHandle } from './screener-slot.js';
 import type { ExperienceDocument, FormDefinition, RegistryEntry } from '@formspec-org/types';
 import type { SurfaceApp, SurfaceRouteHandle } from './composition.js';
 import type { SurfaceDiagnostic } from './diagnostics.js';
@@ -39,6 +40,7 @@ export interface SurfaceRoutePlanInput<TComponent> {
     app: SurfaceApp;
     /** Route-parameter values, from the matched path and the host. */
     params?: Readonly<Record<string, string>> | undefined;
+    screenerHandles?: readonly ScreenerDocumentHandle[] | undefined;
     experiences: readonly ExperienceDocument[];
     /** Exact manifested source identity for qualified Experience bindings. */
     experienceHandles?: readonly ExperienceDocumentHandle[] | undefined;

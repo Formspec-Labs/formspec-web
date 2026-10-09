@@ -28,6 +28,7 @@ import responseSchemaJson from '../../../vendor/formspec-schemas/response.schema
 import responseActionsSchemaJson from '../../../vendor/formspec-schemas/response-actions.schema.json';
 import screenerSchemaJson from '../../../vendor/formspec-schemas/screener.schema.json';
 import surfaceSchemaJson from '../../../vendor/formspec-schemas/surface.schema.json';
+import surface02SchemaJson from '../../../vendor/formspec-schemas/surface-v0.2.schema.json';
 import themeSchemaJson from '../../../vendor/formspec-schemas/theme.schema.json';
 import validationMappingSchemaJson from '../../../vendor/formspec-schemas/validation-mapping.schema.json';
 import validationResultSchemaJson from '../../../vendor/formspec-schemas/validation-result.schema.json';
@@ -40,20 +41,27 @@ import verificationReceiptSchemaJson from '../../../vendor/formspec-schemas/veri
  * canonical schema in here before a signed bundle can be admitted.
  */
 export const ARTIFACT_SCHEMA_DOCUMENTS = Object.freeze({
-  appManifest: bundleManifestSchemaJson,
-  definition: definitionSchemaJson,
-  experience: experienceSchemaJson,
-  responseActions: responseActionsSchemaJson,
-  component: componentSchemaJson,
-  theme: themeSchemaJson,
-  references: referencesSchemaJson,
-  ontology: ontologySchemaJson,
-  registry: registrySchemaJson,
-  surface: surfaceSchemaJson,
-  screener: screenerSchemaJson,
-  dataSources: dataSourcesSchemaJson,
-  locale: localeSchemaJson,
-  mapping: mappingSchemaJson,
+  appManifest: Object.freeze([bundleManifestSchemaJson]),
+  definition: Object.freeze([definitionSchemaJson]),
+  experience: Object.freeze([experienceSchemaJson]),
+  responseActions: Object.freeze([responseActionsSchemaJson]),
+  component: Object.freeze([componentSchemaJson]),
+  theme: Object.freeze([themeSchemaJson]),
+  references: Object.freeze([referencesSchemaJson]),
+  ontology: Object.freeze([ontologySchemaJson]),
+  registry: Object.freeze([registrySchemaJson]),
+  surface: Object.freeze([surface02SchemaJson, surfaceSchemaJson]),
+  screener: Object.freeze([screenerSchemaJson]),
+  dataSources: Object.freeze([dataSourcesSchemaJson]),
+  locale: Object.freeze([localeSchemaJson]),
+  mapping: Object.freeze([mappingSchemaJson]),
+});
+
+/** Authored version markers select exact schema URIs when AppGraph omits one. */
+export const ARTIFACT_SCHEMA_IDENTITIES = Object.freeze({
+  surface: Object.freeze({ versionField: '$formspecSurface', versions: Object.freeze({
+    '0.2': surface02SchemaJson.$id, '0.3': surfaceSchemaJson.$id,
+  }) }),
 });
 
 export type SupportedArtifactKind = keyof typeof ARTIFACT_SCHEMA_DOCUMENTS;

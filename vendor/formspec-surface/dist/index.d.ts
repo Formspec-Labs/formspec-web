@@ -29,3 +29,4 @@ export { bundleIsRenderable, dereferenceBundleExport, type BundleArtifactRef, ty
 export { SURFACE_SCENARIO_DIAGNOSTIC_CODES, createSurfacePreviewRuntime, validateSurfacePreviewScenario, type SurfacePreviewRuntime, type SurfaceScenarioDiagnostic, type SurfaceScenarioDiagnosticCode, type SurfaceScenarioPayloadValidationRequest, type SurfaceScenarioPayloadValidator, type SurfaceScenarioSchemaValidationResult, type SurfaceScenarioSchemaValidator, type SurfaceScenarioValidationResult, type ValidateSurfacePreviewScenarioInput, } from './preview-scenario.js';
 export { snapshotFiniteJson, canonicalFiniteJson, type FiniteJsonValue } from "./finite-json.js";
 export { captureResponseFieldMetadata, type CapturedResponseFields, type ResponseFieldMetadataReader, } from './response-field-metadata.js';
+export * from "./screener-slot.js";

@@ -41,6 +41,13 @@ import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOut
 import type { SurfaceSemanticOutputScopeResolver } from './semantic-output.js';
 import type { WidgetActionCoordinator } from './widget-action-runtime.js';
 export interface SurfaceRouteViewProps {
+    screenerInstanceId?: string | undefined;
+    onScreenerTarget?: ((target: string) => {
+        status: 'accepted';
+    } | {
+        status: 'refused';
+        reason: string;
+    }) | undefined;
     /** Everything the core decided for this route. Nothing here re-decides it. */
     plan: SurfaceRoutePlan<SurfaceWidget>;
     resolveRouteTitle?: SurfaceRouteTitleResolver | undefined;
@@ -86,4 +93,4 @@ export interface SurfaceRouteViewProps {
      */
     onAdvance?: ((transition: PlannedTransition, outcome?: Pick<SurfaceTransitionOutcome, 'transitionBindings'>) => 'advanced' | 'refused' | void) | undefined;
 }
-export declare function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;
+export declare function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, onScreenerTarget, screenerInstanceId, }: SurfaceRouteViewProps): import("react/jsx-runtime").JSX.Element;

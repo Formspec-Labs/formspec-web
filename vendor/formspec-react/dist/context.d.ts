@@ -136,7 +136,7 @@ export interface FormspecProviderProps {
      * semantic controls. Omit for ordinary human-only rendering.
      */
     semanticControlScope?: SemanticControlScope;
-    /** Response `data` to load for edit flows (`engine.loadResponseData`: every saved repeat row is kept). */
+    /** Response `data` hydrated at engine construction (host rows win over seedFrom). */
     initialData?: Record<string, any>;
     /** Registry entries for extension field validation. */
     registryEntries?: any[];

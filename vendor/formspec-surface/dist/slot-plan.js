@@ -1,3 +1,37 @@
+/**
+ * @filedesc Slot dispatch — the only place in the stack where a `slotType`
+ * becomes something renderable.
+ *
+ * The taxonomy is closed and shipped (ADR 0150 §6.2), enforced by the schema, by
+ * `formspec-lint`, and by the app-graph validator. Until the surface-render-v10
+ * spike, **no runtime anywhere read it** (gap ledger `slot-dispatch`).
+ *
+ * Two shapes make this worth owning centrally rather than re-writing per host:
+ *
+ * 1. **It is exhaustive, and the compiler holds it.** The switch has no
+ *    `default` arm and ends in a `never` check, so a sixth slot type — which
+ *    lands through the Registry's `slot-type` contribution category, not through
+ *    a schema edit — breaks the build HERE, at the decision site. That is the
+ *    same discipline `ROUTE_CLASS_THEME_AUTHORITY` uses.
+ * 2. **It plans, it does not render.** A `SlotPlan` is data: a React binding, a
+ *    web-component binding, and a server-side pre-renderer all consume the same
+ *    plan. Putting the dispatch in one renderer means every other renderer
+ *    writes it again and disagrees with the last one.
+ *
+ * `embed-route` is planned here too, recursively, because it is a composition
+ * primitive and leaving it out means the closed taxonomy is not actually closed
+ * over. Two properties it must have, both taken from how
+ * `ui-graph-policy.ts`'s `widgetBindingsRenderedBy` walks the same edges:
+ *
+ * - **The host's theme grant carries down every embed edge.** An embedded route
+ *   paints on the host's surface (ADR 0150 §6.2), so an embedded `intake` route
+ *   inside a `proof` route does NOT get to restore tenant branding. The plan
+ *   therefore never re-resolves a grant for embedded content.
+ * - **Cycles terminate.** `routeRef` is constrained to a route id, not to an
+ *   acyclic graph, so `a` embedding `b` embedding `a` is authorable. The visited
+ *   set is a termination requirement, not an optimisation.
+ */
+import { admitScreenerPresentation } from './screener-slot.js';
 import { targetDefinitionMatches } from '@formspec-org/types';
 import { widgetActionScopeMatches } from '@formspec-org/app-graph';
 import { surfaceDiagnostic } from './diagnostics.js';
@@ -7,6 +41,7 @@ import { dataSourceAvailableToWidget, resolveDataSourceDescriptor, } from './dat
 import { generationNeedAnchors } from './need-trace.js';
 import { planDefinitionFormInitialData, } from './definition-form-initial-data.js';
 const KNOWN_SLOT_TYPES = {
+    'screener': true,
     'definition-form': true,
     'experience-unit': true,
     'module-widget': true,
@@ -42,6 +77,20 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
         return { ...shared, slotType: 'unknown', authoredSlotType };
     }
     switch (slot.slotType) {
+        case 'screener': {
+            const matches = (context.screenerHandles ?? []).filter(h => h.ref.url === binding.screenerRef);
+            const handle = matches.length === 1 ? matches[0] : undefined;
+            const allowedTargets = Array.isArray(binding.allowedTargets) && binding.allowedTargets.every(t => typeof t === 'string') ? binding.allowedTargets : [];
+            const authored = new Set(handle?.document.evaluation?.flatMap(p => p.routes.map(r => r.target)) ?? []);
+            const admission = handle ? admitScreenerPresentation(handle.document) : undefined;
+            const reason = context.handle.surface.$formspecSurface !== '0.3' ? 'surface-version-unsupported'
+                : !handle || !handle.ref.version || handle.document.url !== handle.ref.url || handle.document.version !== handle.ref.version ? 'screener-pin-unresolved'
+                    : admission?.status !== 'ready' ? admission?.reason ?? 'presentation-unsupported'
+                        : !allowedTargets.length || new Set(allowedTargets).size !== allowedTargets.length || allowedTargets.some(t => !t.startsWith('surface:') || !authored.has(t)) ? 'allowed-target-invalid' : undefined;
+            if (reason)
+                diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'The native Screener slot is unavailable.', site, { reason }));
+            return { ...shared, slotType: 'screener', ...(handle ? { screener: handle } : {}), allowedTargets, status: reason ? 'unresolved' : 'ready', ...(reason ? { reason } : {}) };
+        }
         case 'definition-form': {
             const definitionRef = typeof binding.definitionRef === 'string' ? binding.definitionRef : '';
             if (definitionRef === '') {

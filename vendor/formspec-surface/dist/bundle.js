@@ -119,6 +119,10 @@ export function dereferenceBundleExport(bundle) {
             ? []
             : [{ mappingRef: ref.handle, artifactRef: ref.url, document }];
     });
+    const screenerHandles = (bundle.manifest.screeners ?? []).flatMap(ref => {
+        const document = lookup(ref, 'Screener');
+        return document ? [{ ref, document }] : [];
+    });
     const definitions = new Map();
     for (const ref of bundle.manifest.definitions ?? []) {
         const found = lookup(ref, 'Definition');
@@ -129,6 +133,7 @@ export function dereferenceBundleExport(bundle) {
         manifest: bundle.manifest,
         title: typeof bundle.manifest.title === 'string' ? bundle.manifest.title : undefined,
         surfaces,
+        screenerHandles,
         ...(entrySurface === undefined ? {} : { entrySurface }),
         surfaceRefs,
         experiences,

@@ -23,8 +23,8 @@ export type SurfaceBundleSchemaValidators = NonNullable<
 
 type CompiledArtifactValidators = Readonly<
   Record<SupportedArtifactKind, {
-    readonly schemaId: string;
-    readonly validate: ValidateFunction;
+    readonly schemas: Readonly<Record<string, ValidateFunction>>;
+    readonly identity?: { readonly versionField: string; readonly versions: Readonly<Record<string, string>> };
   }>
 >;
 
@@ -63,8 +63,8 @@ function freezeSchemaSnapshot(value: unknown): void {
  *
  * The schemas themselves live behind an `import()` (see `canonical-schemas.ts`)
  * because admission is the only thing that reads them and admission already
- * awaits a network fetch. Every AppGraph artifact kind resolves to one vendored
- * canonical schema; unknown kinds and unexpected schema ids fail closed, so no
+ * awaits a network fetch. Every AppGraph artifact kind has an explicit inventory of vendored
+ * canonical schema URIs; unknown kinds and unexpected schema ids fail closed, so no
  * document can fall through to an implicit or always-successful validator.
  */
 export async function loadSurfaceBundleSchemaValidators(): Promise<SurfaceBundleSchemaValidators> {
@@ -78,24 +78,32 @@ export async function loadSurfaceBundleSchemaValidators(): Promise<SurfaceBundle
     }
 
     const compiled = validators[input.artifactKind];
-    if (input.schemaId !== undefined && input.schemaId !== compiled.schemaId) {
+    const schemaIds = Object.keys(compiled.schemas);
+    const version = compiled.identity && isSchemaObject(input.document)
+      ? input.document[compiled.identity.versionField] : undefined;
+    const authoredSchemaId = typeof version === 'string' && compiled.identity
+      && Object.hasOwn(compiled.identity.versions, version) ? compiled.identity.versions[version] : undefined;
+    const schemaId = input.schemaId ?? (compiled.identity ? authoredSchemaId : schemaIds[0]);
+    const validateDocument = schemaId !== undefined && Object.hasOwn(compiled.schemas, schemaId)
+      ? compiled.schemas[schemaId] : undefined;
+    if (!validateDocument || authoredSchemaId !== undefined && input.schemaId !== undefined && input.schemaId !== authoredSchemaId) {
       return invalidOutcome({
         code: 'SURFACE-BUNDLE-SCHEMA-ID-MISMATCH',
         message: `Schema '${input.schemaId}' is not supported for artifact kind '${input.artifactKind}'.`,
         details: {
-          expectedSchemaId: compiled.schemaId,
+          supportedSchemaIds: schemaIds,
           observedSchemaId: input.schemaId,
         },
       });
     }
 
-    if (compiled.validate(input.document)) {
+    if (validateDocument(input.document)) {
       return Object.freeze({ ok: true });
     }
 
     return Object.freeze({
       ok: false,
-      issues: schemaIssues(compiled.validate.errors),
+      issues: schemaIssues(validateDocument.errors),
     });
   };
   return validate;
@@ -238,14 +246,17 @@ function getCompiledArtifactValidators(): Promise<CompiledArtifactValidators> {
 }
 
 async function compileArtifactValidators(): Promise<CompiledArtifactValidators> {
-  const { ajv, artifactSchemas } = await loadCanonicalSchemaAjv();
+  const { ajv, artifactSchemas, identities } = await loadCanonicalSchemaAjv();
 
-  const entries = artifactSchemas.map(([artifactKind, schema]) => {
-    const validate = ajv.getSchema(schema.$id);
-    if (!validate) {
-      throw new Error(`Canonical schema '${schema.$id}' did not compile.`);
-    }
-    return [artifactKind, Object.freeze({ schemaId: schema.$id, validate })] as const;
+  const entries = artifactSchemas.map(([artifactKind, schemas]) => {
+    const validators = schemas.map(schema => {
+      const validate = ajv.getSchema(schema.$id);
+      if (!validate) throw new Error(`Canonical schema '${schema.$id}' did not compile.`);
+      return [schema.$id, validate] as const;
+    });
+    const identity = identities[artifactKind as keyof typeof identities];
+    return [artifactKind, Object.freeze({ schemas: Object.freeze(Object.fromEntries(validators)),
+      ...(identity ? { identity } : {}) })] as const;
   });
   compiledResponseValidator = ajv.getSchema('https://formspec.org/schemas/response/1.0');
   compiledSigningContentValidator = ajv.getSchema('https://formspec.org/schemas/common/1.0#/$defs/SigningContent');
@@ -253,7 +264,7 @@ async function compileArtifactValidators(): Promise<CompiledArtifactValidators> 
 }
 
 async function loadCanonicalSchemaAjv() {
-  const { ARTIFACT_SCHEMA_DOCUMENTS, DEPENDENCY_SCHEMA_DOCUMENTS, RESPONSE_SCHEMA_DOCUMENT } = await import(
+  const { ARTIFACT_SCHEMA_DOCUMENTS, ARTIFACT_SCHEMA_IDENTITIES, DEPENDENCY_SCHEMA_DOCUMENTS, RESPONSE_SCHEMA_DOCUMENT } = await import(
     './canonical-schemas.ts'
   );
 
@@ -262,14 +273,14 @@ async function loadCanonicalSchemaAjv() {
     ajv.addSchema(canonicalSchema(document));
   }
   const artifactSchemas = Object.entries(ARTIFACT_SCHEMA_DOCUMENTS)
-    .map(([artifactKind, document]) => [artifactKind, canonicalSchema(document)] as const);
-  for (const [, schema] of artifactSchemas) {
-    ajv.addSchema(schema);
+    .map(([artifactKind, documents]) => [artifactKind, documents.map(canonicalSchema)] as const);
+  for (const [, schemas] of artifactSchemas) {
+    for (const schema of schemas) ajv.addSchema(schema);
   }
 
   // Response is currently a dependency; retain explicit registration if that inventory changes.
   if (!ajv.getSchema(canonicalSchema(RESPONSE_SCHEMA_DOCUMENT).$id)) ajv.addSchema(canonicalSchema(RESPONSE_SCHEMA_DOCUMENT));
-  return { ajv, artifactSchemas };
+  return { ajv, artifactSchemas, identities: ARTIFACT_SCHEMA_IDENTITIES };
 }
 
 function createCanonicalAjv(): Ajv2020 {

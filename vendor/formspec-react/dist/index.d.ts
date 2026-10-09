@@ -37,7 +37,7 @@ export type { ProjectionMetadataAttrs } from './projection-metadata';
 export { createSemanticControlRegistry } from './semantic-controls';
 export type { QualifiedSemanticSubjectRef, SemanticActivateControlContext, SemanticActivateControlResult, SemanticActivateControlSuccess, SemanticArtifactIdentity, SemanticControlActivation, SemanticControlRefusal, SemanticControlRefusalReason, SemanticControlRegistration, SemanticControlRegistry, SemanticControlScope, SemanticControlTarget, SemanticResponseBinding, SemanticSetItemControlRegistration, SemanticSetItemResult, SemanticSetItemSuccess, } from './semantic-controls';
 export { FormspecScreener, useScreener } from './screener';
-export type { FormspecScreenerProps, UseScreenerResult, UseScreenerOptions, ScreenerRoute, ScreenerRouteType, ScreenerStateSnapshot, } from './screener';
+export type { FormspecScreenerProps, UseScreenerResult, UseScreenerOptions, ScreenerCompletionDisposition, ScreenerRoute, ScreenerRouteType, ScreenerStateSnapshot, } from './screener';
 export { DefaultField } from './defaults/fields/default-field';
 export { DefaultLayout } from './defaults/layout/default-layout';
 export { Wizard } from './defaults/layout/wizard';
