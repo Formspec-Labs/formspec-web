@@ -201,3 +201,7 @@ export { BrowserAuthSessionError } from './browser-auth-session.ts';
 export type { BrowserAuthSession, BrowserAuthSessionState, BrowserAuthSessionErrorCode } from './browser-auth-session.ts';
 
 export type { ApplicationLifecycle, ApplicationLifecycleCapabilities, ApplicationCaseReceipt } from './application-lifecycle.ts';
+
+export type { ScreenerSelection, SourceScope, ScreenerOwner, ScreenerAnswer, ScreenerQualification,
+  RetainedScreenerRun, ScreenerRunView, ScreenerAssociation, ScreenerOperationContext,
+  RetainScreenerCompletion, AssociateScreenerCandidate, ScreenerRetention } from './screener-retention.ts';

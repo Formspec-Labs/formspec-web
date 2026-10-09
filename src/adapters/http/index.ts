@@ -66,3 +66,5 @@ export {
   type HttpSurfaceBundleSourceConfig,
 } from './surface-bundle-source.ts';
 export type { HttpResponseSigningPolicy } from './response-signing.ts';
+
+export { HttpScreenerRetention, type HttpScreenerRetentionConfig } from './screener-retention.ts';
