@@ -208,3 +208,5 @@ export type { ScreenerSelection, SourceScope, ScreenerOwner, ScreenerAnswer, Scr
 
 export type { EvaluationHydrationWire, EvaluationHydrationOwner, EvaluationProviderRegistration,
   HttpEvaluationProviderReceipt, NativeScreenerMappingReceipt, EvaluationHydrationResult } from './evaluation-hydration.ts';
+
+export type { HydrateScreenerCandidate, HydratedScreenerCandidate, ScreenerHydration } from './screener-hydration.ts';

@@ -70,3 +70,5 @@ export type { HttpResponseSigningPolicy } from './response-signing.ts';
 export { HttpScreenerRetention, type HttpScreenerRetentionConfig } from './screener-retention.ts';
 
 export { decodeEvaluationHydrationWire } from './evaluation-hydration-wire.ts';
+
+export { HttpScreenerHydration, type HttpScreenerHydrationConfig } from './screener-hydration.ts';

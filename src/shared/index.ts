@@ -15,3 +15,5 @@ export { matchBrowserAuthCallback, completeBrowserAuthCallback, type BrowserAuth
 export { createBrowserScopedMetadataStore, type BrowserScopedMetadataConfig, type ScopedMetadataStore } from './browser-scoped-metadata.ts';
 
 export { isApplicationDraftId } from './application-draft-id.ts';
+
+export { createEvaluationInstanceResolver } from './evaluation-instance-resolver.ts';
