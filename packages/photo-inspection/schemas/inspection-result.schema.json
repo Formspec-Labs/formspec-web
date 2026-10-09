@@ -1,0 +1,1696 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "status",
+    "scope",
+    "binding",
+    "observations",
+    "source",
+    "checkedAt",
+    "evidenceRef"
+  ],
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "needs-correction",
+        "unavailable"
+      ]
+    },
+    "scope": {
+      "const": "required-basic-automatic-checks; not history or agency acceptance"
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestHash",
+        "candidateHash",
+        "policyHash",
+        "rulesEdition",
+        "attachmentRef",
+        "attachmentHash"
+      ],
+      "properties": {
+        "requestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "policyHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "rulesEdition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attachmentRef": {
+          "type": "string",
+          "format": "uri"
+        },
+        "attachmentHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ruleId",
+          "status",
+          "evidenceKind",
+          "checkedAt",
+          "executor",
+          "evidenceRef",
+          "reason",
+          "fix",
+          "result"
+        ],
+        "properties": {
+          "ruleId": {
+            "enum": [
+              "format",
+              "file-size",
+              "decode",
+              "color",
+              "quality",
+              "background",
+              "lighting",
+              "face-position",
+              "expression",
+              "face-obstruction",
+              "visible-manipulation"
+            ]
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "needs-correction",
+              "unsupported",
+              "inconclusive",
+              "requires-review"
+            ]
+          },
+          "evidenceKind": {
+            "enum": [
+              "measurement",
+              "visual-observation",
+              "unavailable"
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "executor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "version",
+                  "qualificationRef",
+                  "moduleLockHash"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "qualificationRef": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "moduleLockHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            ]
+          },
+          "evidenceRef": {
+            "type": "string",
+            "format": "uri"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fix": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "fix": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "passed",
+                    "needs-correction"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "evidenceKind": {
+                  "enum": [
+                    "measurement",
+                    "visual-observation"
+                  ]
+                },
+                "executor": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "version",
+                    "qualificationRef",
+                    "moduleLockHash"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "version": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "qualificationRef": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "moduleLockHash": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    }
+                  }
+                },
+                "result": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "format"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "detectedMimeType"
+                      ],
+                      "properties": {
+                        "detectedMimeType": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "measurement",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "file-size"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "byteLength"
+                      ],
+                      "properties": {
+                        "byteLength": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "measurement",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "decode"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "decoded"
+                      ],
+                      "properties": {
+                        "decoded": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "measurement",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "color"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "isColor"
+                      ],
+                      "properties": {
+                        "isColor": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "visual-observation",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "quality"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "sharp",
+                        "grainy",
+                        "pixelated"
+                      ],
+                      "properties": {
+                        "sharp": {
+                          "type": "boolean"
+                        },
+                        "grainy": {
+                          "type": "boolean"
+                        },
+                        "pixelated": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "visual-observation",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "background"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "plainWhiteOrOffWhite",
+                        "textureLinesOrObjects"
+                      ],
+                      "properties": {
+                        "plainWhiteOrOffWhite": {
+                          "type": "boolean"
+                        },
+                        "textureLinesOrObjects": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "visual-observation",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "lighting"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "even",
+                        "shadows",
+                        "washedOut"
+                      ],
+                      "properties": {
+                        "even": {
+                          "type": "boolean"
+                        },
+                        "shadows": {
+                          "type": "boolean"
+                        },
+                        "washedOut": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "visual-observation",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "face-position"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "forward",
+                        "headCenteredAndVisible",
+                        "shouldersInFrame"
+                      ],
+                      "properties": {
+                        "forward": {
+                          "type": "boolean"
+                        },
+                        "headCenteredAndVisible": {
+                          "type": "boolean"
+                        },
+                        "shouldersInFrame": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "visual-observation",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "expression"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "eyesOpenAndUnobstructed",
+                        "neutralOrNaturalSmile",
+                        "teethVisible"
+                      ],
+                      "properties": {
+                        "eyesOpenAndUnobstructed": {
+                          "type": "boolean"
+                        },
+                        "neutralOrNaturalSmile": {
+                          "type": "boolean"
+                        },
+                        "teethVisible": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "visual-observation",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "face-obstruction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "fullFaceVisible",
+                        "glassesOrObstruction",
+                        "exceptionClaimed"
+                      ],
+                      "properties": {
+                        "fullFaceVisible": {
+                          "type": "boolean"
+                        },
+                        "glassesOrObstruction": {
+                          "type": "boolean"
+                        },
+                        "exceptionClaimed": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "visual-observation",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "visible-manipulation"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "visibleAlterationDetected",
+                        "historyVerified"
+                      ],
+                      "properties": {
+                        "visibleAlterationDetected": {
+                          "type": "boolean"
+                        },
+                        "historyVerified": {
+                          "const": false
+                        }
+                      }
+                    }
+                  ]
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "visual-observation",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "format"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "detectedMimeType": {
+                      "enum": [
+                        "image/jpeg",
+                        "image/png",
+                        "image/heic",
+                        "image/heif"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "file-size"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "byteLength": {
+                      "minimum": 54000,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "decode"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "decoded": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "color"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "isColor": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "quality"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "sharp": {
+                      "const": true
+                    },
+                    "grainy": {
+                      "const": false
+                    },
+                    "pixelated": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "background"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "plainWhiteOrOffWhite": {
+                      "const": true
+                    },
+                    "textureLinesOrObjects": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "lighting"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "even": {
+                      "const": true
+                    },
+                    "shadows": {
+                      "const": false
+                    },
+                    "washedOut": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "face-position"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "forward": {
+                      "const": true
+                    },
+                    "headCenteredAndVisible": {
+                      "const": true
+                    },
+                    "shouldersInFrame": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "expression"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "eyesOpenAndUnobstructed": {
+                      "const": true
+                    },
+                    "neutralOrNaturalSmile": {
+                      "const": true
+                    },
+                    "teethVisible": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "face-obstruction"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "fullFaceVisible": {
+                      "const": true
+                    },
+                    "glassesOrObstruction": {
+                      "const": false
+                    },
+                    "exceptionClaimed": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "visible-manipulation"
+                },
+                "status": {
+                  "const": "passed"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "properties": {
+                    "visibleAlterationDetected": {
+                      "const": false
+                    },
+                    "historyVerified": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "face-obstruction"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "exceptionClaimed": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "exceptionClaimed"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "status": {
+                  "const": "requires-review"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "unsupported"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "evidenceKind": {
+                  "const": "unavailable"
+                },
+                "executor": {
+                  "type": "null"
+                },
+                "result": {
+                  "type": "null"
+                },
+                "fix": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "inconclusive",
+                    "requires-review"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "executor": {
+                  "type": "object"
+                },
+                "evidenceKind": {
+                  "enum": [
+                    "measurement",
+                    "visual-observation"
+                  ]
+                },
+                "fix": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "format"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "detectedMimeType": {
+                        "enum": [
+                          "image/jpeg",
+                          "image/png",
+                          "image/heic",
+                          "image/heif"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "file-size"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "byteLength": {
+                        "minimum": 54000,
+                        "maximum": 10000000
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "decode"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "decoded": {
+                        "const": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "color"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "isColor": {
+                        "const": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "quality"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "sharp": {
+                        "const": true
+                      },
+                      "grainy": {
+                        "const": false
+                      },
+                      "pixelated": {
+                        "const": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "background"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "plainWhiteOrOffWhite": {
+                        "const": true
+                      },
+                      "textureLinesOrObjects": {
+                        "const": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "lighting"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "even": {
+                        "const": true
+                      },
+                      "shadows": {
+                        "const": false
+                      },
+                      "washedOut": {
+                        "const": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "face-position"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "forward": {
+                        "const": true
+                      },
+                      "headCenteredAndVisible": {
+                        "const": true
+                      },
+                      "shouldersInFrame": {
+                        "const": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "expression"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "eyesOpenAndUnobstructed": {
+                        "const": true
+                      },
+                      "neutralOrNaturalSmile": {
+                        "const": true
+                      },
+                      "teethVisible": {
+                        "const": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "face-obstruction"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "fullFaceVisible": {
+                        "const": true
+                      },
+                      "glassesOrObstruction": {
+                        "const": false
+                      },
+                      "exceptionClaimed": {
+                        "const": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "ruleId": {
+                  "const": "visible-manipulation"
+                },
+                "status": {
+                  "const": "needs-correction"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "not": {
+                    "properties": {
+                      "visibleAlterationDetected": {
+                        "const": false
+                      },
+                      "historyVerified": {
+                        "const": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "checkedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evidenceRef": {
+      "type": "string",
+      "format": "uri"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "observations": {
+            "contains": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "needs-correction"
+                  ]
+                }
+              },
+              "required": [
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "observations"
+        ]
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "needs-correction"
+          }
+        }
+      },
+      "else": {
+        "if": {
+          "properties": {
+            "observations": {
+              "contains": {
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "unsupported",
+                      "inconclusive",
+                      "requires-review"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          },
+          "required": [
+            "observations"
+          ]
+        },
+        "then": {
+          "properties": {
+            "status": {
+              "const": "unavailable"
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "status": {
+              "const": "passed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "format"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "file-size"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "decode"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "color"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "quality"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "background"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "lighting"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "face-position"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "expression"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "face-obstruction"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "observations": {
+          "contains": {
+            "properties": {
+              "ruleId": {
+                "const": "visible-manipulation"
+              }
+            },
+            "required": [
+              "ruleId"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:proposal:image-inspection-result:d1:1.0",
+  "title": "Proposed module-owned exact-rule inspection result",
+  "description": "REVIEW DRAFT ONLY. Structural validation does not authenticate an executor or evidence. Provider additionally judges typed results against selected policy."
+}
