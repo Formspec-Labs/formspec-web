@@ -12,9 +12,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const schemaFiles = readdirSync(join(repoRoot, 'vendor/formspec-schemas'))
   .filter((file) => file.endsWith('.schema.json'));
-// The upcoming canonical inventory includes the preserved Surface 0.2 schema.
+// The canonical inventory preserves published Surface 0.2 and Locale 2.0 schemas.
 // Keep the isolated copy/check fixture complete before Runtime distributes it.
 if (!schemaFiles.includes('surface-v0.2.schema.json')) schemaFiles.push('surface-v0.2.schema.json');
+if (!schemaFiles.includes('locale-v2.0.schema.json')) schemaFiles.push('locale-v2.0.schema.json');
 schemaFiles.sort();
 const selector = 'vendor/formspec-schemas/locale.schema.json';
 const roots = [];
@@ -24,6 +25,31 @@ afterEach(() => {
 });
 
 describe('surface bundle vendor schema selection', () => {
+  it('refreshes both exact Locale versions while preserving every unselected file and checksum', () => {
+    const fixture = createFixture();
+    const before = snapshot(fixture);
+    const selected = ['locale.schema.json', 'locale-v2.0.schema.json'];
+    const result = run(fixture, '--write', ...selected.map((file) => `vendor/formspec-schemas/${file}`));
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('0 Apache-2.0 package(s), 2 canonical schema(s)');
+    for (const file of selected) {
+      expect(readFileSync(join(fixture.local, file), 'utf8')).toBe(sourceContent(file));
+    }
+    expect(JSON.parse(readFileSync(join(fixture.local, selected[0]), 'utf8')).$id)
+      .toBe('https://formspec.org/schemas/locale/2.1');
+    expect(JSON.parse(readFileSync(join(fixture.local, selected[1]), 'utf8')).$id)
+      .toBe('https://formspec.org/schemas/locale/2.0');
+    for (const file of schemaFiles.filter((name) => !selected.includes(name))) {
+      expect(readFileSync(join(fixture.local, file), 'utf8')).toBe(before[file]);
+    }
+    const sums = before.SHA256SUMS.split('\n').map((line) => {
+      const file = selected.find((name) => line.endsWith(`  ${name}`));
+      return file ? `${hash(sourceContent(file))}  ${file}` : line;
+    });
+    expect(readFileSync(join(fixture.local, 'SHA256SUMS'), 'utf8').split('\n')).toEqual(sums);
+    expect(run(fixture, ...selected.map((file) => `vendor/formspec-schemas/${file}`)).status).toBe(0);
+  });
+
   it('refreshes one schema and its checksum while preserving all other pins without builds', () => {
     const fixture = createFixture();
     const before = snapshot(fixture);
@@ -141,6 +167,10 @@ function createFixture() {
 }
 
 function sourceContent(file) {
+  if (file === 'locale.schema.json' || file === 'locale-v2.0.schema.json') {
+    const version = file === 'locale.schema.json' ? '2.1' : '2.0';
+    return `${JSON.stringify({ $id: `https://formspec.org/schemas/locale/${version}`, file, revision: 'upstream' })}\n`;
+  }
   return `${JSON.stringify({ file, revision: 'upstream' })}\n`;
 }
 

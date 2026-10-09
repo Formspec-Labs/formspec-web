@@ -144,6 +144,7 @@ const schemaFiles = [
   'experience.schema.json',
   'issuer.schema.json',
   'locale.schema.json',
+  'locale-v2.0.schema.json',
   'mapping.schema.json',
   'ontology.schema.json',
   'references.schema.json',
