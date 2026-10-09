@@ -17,6 +17,8 @@ export interface NativePackageRespondentHostProps {
   componentRouteResolver: ComponentRouteResolver;
   localeDocuments: readonly LocaleDocument[];
   location: string;
+  /** Presentation only; never restores or changes a saved response Locale. */
+  screenerLocale?: string;
   onNavigate: SurfaceAppProps['onNavigate'];
 }
 
@@ -76,7 +78,7 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     return state.formTitle || undefined;
   }, [props.host, props.componentRouteResolver, props.componentDocument, state.formTitle]);
   if (state.cleared) return null;
-  return <SurfaceApp bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate}
+  return <SurfaceApp activeLocale={props.screenerLocale} localeDocuments={locales} bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate}
     staticAssetResolver={props.host.staticAssetResolver}
     widgetModules={modules} appTitle={state.formTitle || undefined} resolveRouteTitle={resolveRouteTitle}
     sessionGeneration={sessionMarker} widgetActionExecutor={ports.widgetActionExecutor}

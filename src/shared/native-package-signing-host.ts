@@ -3,7 +3,7 @@ import { createFormEngine, preactReactiveRuntime, type IFormEngine, type Registr
 import type { SemanticControlScope } from '@formspec-org/react';
 import { captureResponseFieldMetadata, composeSurfaceApp, matchRoute, routeHref, createThemeAuthority, createWidgetRegistry, dataSourceAvailableToWidget, dereferenceBundleExport, flattenRegistryEntries, planMatchedRoute, resolveDataSourceDescriptor, type BundleExport, type SlotPlan, type SurfaceStaticAssetResolver } from '@formspec-org/surface';
 import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, responseReviewHash, starterWidgetModule, type ResponseReviewData, type ResponseReviewOptions, type ResponseReviewState } from '@formspec-org/surface-react';
-import { targetDefinitionMatches, type FormDefinition, type FormResponse, type LocaleDocument, type ValidationReport } from '@formspec-org/types';
+import { targetDefinitionMatches, type FormDefinition, type FormResponse, type LocaleDocument, type ScreenerDocument, type ValidationReport } from '@formspec-org/types';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { RespondentOwnedRuntimeInput, RespondentOwnedRuntime, RespondentSubmittedRuntimeInput } from '../app/RespondentRuntime.tsx';
@@ -86,6 +86,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   } : undefined;
   const requiredHostRoutes = new Set<typeof app.routes[number]>();
   const supportedEntryRoutes = new Set<typeof app.routes[number]>();
+  const screenerRoutes = new Map<typeof app.routes[number], readonly ScreenerDocument[]>();
   const signedReviewRoutes = new Set<typeof app.routes[number]>();
   const submitSource = policy.controller.roles.submit?.widgetSource;
   for (const handle of app.routes) {
@@ -107,6 +108,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         && slot.actionOutputs.some(output => output.name === submitSource.outputName
           && output.actionRef === policy.controller.roles.submit?.actionRef && !!output.action))) signedReviewRoutes.add(handle);
     if (slots.some(slot => slot.slotType === 'module-widget' && slot.dataInputs.some(input => input.required && input.descriptor?.source.kind === 'host-state'))) requiredHostRoutes.add(handle);
+    const screeners = slots.flatMap(slot => slot.slotType === 'screener' && slot.status === 'ready' && slot.screener ? [slot.screener.document] : []);
+    if (screeners.length && !slots.some(slot => slot.slotType === 'definition-form' || slot.slotType === 'module-widget')) screenerRoutes.set(handle, Object.freeze(screeners));
     if (slots.some(slot => (slot.slotType === 'definition-form' || slot.slotType === 'screener') && slot.status === 'ready')) supportedEntryRoutes.add(handle);
     for (const slot of slots) {
       if (slot.slotType !== 'module-widget') continue;
@@ -349,7 +352,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           || receipt.draftRef !== application.draftRef || application.status === 'submitted' && receipt.status !== 'submitted')) throw new Error('native-application-context-retired');
         application = receipt ? structuredClone(receipt) : undefined; applicationLookup = undefined; freezeMetadata(application); emit();
       } } : {}), reviewOptions, selectLocale,
-    getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; signedReviewHref?: string; signedReviewTitle?: string } {
+    getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; screenerDocuments?: readonly ScreenerDocument[]; signedReviewHref?: string; signedReviewTitle?: string } {
       const match = matchRoute(app, pathname).match;
       const entry = app.entry;
       if (!match || !entry || !supportedEntryRoutes.has(entry) || requiredHostRoutes.has(entry)) throw new Error('native-entry-route-unavailable');
@@ -364,7 +367,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           signedReviewHref = target.href; signedReviewTitle = review.route.title;
         }
       }
-      return { entryHref: destination.href, entryTitle: entry.route.title, requiresHostState: requiredHostRoutes.has(match.handle),
+      return { entryHref: destination.href, entryTitle: entry.route.title, requiresHostState: requiredHostRoutes.has(match.handle), screenerDocuments: screenerRoutes.get(match.handle),
         signedReviewHref, signedReviewTitle };
     },
     allocateSurfaceSessionMarker(sessionGeneration: number) {

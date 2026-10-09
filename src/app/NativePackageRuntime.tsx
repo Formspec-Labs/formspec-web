@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useBrowserLocation } from '@formspec-org/surface-react';
+import { createScreenerLocaleResolver } from '@formspec-org/engine/render';
 import { UI_STRINGS, type ChromeStringKey } from '@formspec-org/layout';
 import { targetDefinitionMatches } from '@formspec-org/types';
 import { localeOptionsForDefinition } from '../demo/locales.ts';
@@ -159,11 +160,12 @@ function AdmittedNativePackageRuntime({ composition, config }: { composition: Co
       && composition.browserAuthSession && config.identity.oidc?.postLogoutRedirectUri
       ? <NativePackageIdentityRecovery composition={composition} config={config} /> : null}
   </NativePackageStatus>;
-  return <NativePackageFrame boot={state.boot} selection={selection} location={location} outcome={state.outcome} onNavigate={onNavigate}>
-    <NativePackageRespondentHost host={state.boot.host} composition={state.boot.composition}
-    config={config} componentDocument={state.boot.componentDocument} localeDocuments={state.boot.localeDocuments}
-    componentRouteResolver={state.boot.componentRouteResolver}
-    location={location} onNavigate={onNavigate} />
+  const boot = state.boot;
+  return <NativePackageFrame boot={boot} selection={selection} location={location} outcome={state.outcome} onNavigate={onNavigate}>
+    {screenerLocale => <NativePackageRespondentHost screenerLocale={screenerLocale} host={boot.host} composition={boot.composition}
+    config={config} componentDocument={boot.componentDocument} localeDocuments={boot.localeDocuments}
+    componentRouteResolver={boot.componentRouteResolver}
+    location={location} onNavigate={onNavigate} />}
   </NativePackageFrame>;
 }
 
@@ -208,7 +210,7 @@ function NativePackageStatus({ failed, identityChanged, children }: { failed?: b
 }
 
 /** Recovery controls use the qualified Locale and the host's scoped authority. */
-function NativePackageFrame({ boot, selection, location, outcome, onNavigate, children }: { onNavigate: (href: string) => void; boot: NativePackageBoot; selection: string; location: string; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; children: React.ReactNode }) {
+function NativePackageFrame({ boot, selection, location, outcome, onNavigate, children }: { onNavigate: (href: string) => void; boot: NativePackageBoot; selection: string; location: string; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; children: (screenerLocale?: string) => React.ReactNode }) {
   const state = useSyncExternalStore(boot.host.subscribe, boot.host.getSnapshot, boot.host.getSnapshot);
   const [operation, setOperation] = useState<'idle' | 'locale' | 'clearing' | 'cleared' | 'clear-error' | 'locale-error' | 'refreshing' | 'refresh-error'>('idle');
   const heading = useRef<HTMLHeadingElement>(null);
@@ -220,12 +222,33 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
   const applicationText = (property: string) => locale?.strings[`$module.${boot.host.moduleId}.application.${property}`];
   const checkpoint = state.checkpointState ?? 'unsaved';
   const checkpointSuffix = { unsaved: 'Unsaved', saving: 'Saving', saved: 'Saved', failed: 'Failed' }[checkpoint];
-  const options = localeOptionsForDefinition(boot.host.definition, boot.localeDocuments);
+  const definitionOptions = localeOptionsForDefinition(boot.host.definition, boot.localeDocuments);
   const confirmation = state.submitted ?? (state.controller?.phase === 'submitted'
     && state.controller.confirmation?.recordKind === 'response' ? state.controller.confirmation : undefined);
   let startupRoute: ReturnType<typeof boot.host.getStartupRoute> | undefined;
   let routeFailed = false;
   try { startupRoute = boot.host.getStartupRoute(location); } catch { routeFailed = true; }
+  // A fresh route/session lease owns presentation only, independently of draft restoration.
+  const screenerLease = useMemo(() => {
+    let documents: ReturnType<typeof boot.host.getStartupRoute>['screenerDocuments'];
+    try { documents = boot.host.getStartupRoute(location).screenerDocuments; } catch { return undefined; }
+    if (!documents?.length) return undefined;
+    const admitted = documents.every(document => createScreenerLocaleResolver({ document,
+      localeDocuments: boot.localeDocuments, chromeKeys: Object.keys(UI_STRINGS) }).status === 'ready');
+    const codes = admitted ? [...new Set(boot.localeDocuments.filter(locale => locale.target.kind === 'screener'
+      && locale.target.url === documents[0].url).map(locale => locale.locale.toLowerCase()))]
+      .filter(code => documents.every(document => boot.localeDocuments.some(locale => locale.target.kind === 'screener'
+        && locale.target.url === document.url && locale.locale.toLowerCase() === code))) : [];
+    return { options: codes.map(code => {
+      let label = code.toUpperCase();
+      try { label = new Intl.DisplayNames([code], { type: 'language' }).of(code) ?? label; } catch { /* Use the admitted code. */ }
+      return { code, label };
+    }), initial: codes.includes(boot.initialLocale.toLowerCase()) ? boot.initialLocale.toLowerCase() : codes[0] };
+  }, [boot, location, state.sessionGeneration]);
+  const activeLease = useRef(screenerLease); activeLease.current = screenerLease;
+  const [presentation, setPresentation] = useState<{ lease: typeof screenerLease; code: string }>();
+  const screenerLocale = presentation?.lease === screenerLease ? presentation?.code : screenerLease?.initial;
+  const options = screenerLease?.options ?? definitionOptions;
   const startupBlocked = !confirmation && !state.cleared && outcome !== 'submitted'
     && !!startupRoute?.requiresHostState && !state.runtime;
   const preparing = startupBlocked && (!!state.controller?.prepared || state.controller?.phase === 'prepare');
@@ -235,7 +258,11 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
     || state.controller?.phase === 'sign' || state.controller?.phase === 'submit';
   useEffect(() => { if (operation === 'cleared' || startupBlocked && !preparing) heading.current?.focus(); }, [operation, startupBlocked, preparing]);
   async function changeLocale(code: string) {
-    if (operationPending.current) return;
+    if (operationPending.current || state.cleared) return;
+    if (screenerLease) {
+      if (activeLease.current !== screenerLease || !screenerLease.options.some(option => option.code === code)) return;
+      setPresentation({ lease: screenerLease, code }); return;
+    }
     operationPending.current = true; setOperation('locale');
     try { await boot.host.selectLocale(code); setOperation('idle'); }
     catch { setOperation('locale-error'); }
@@ -260,8 +287,8 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
     <div className="respondent-toolbar">
       <div className="respondent-toolbar__group" role="group" aria-label={text('form.language')}>
         {options.map(option => <button type="button" className="locale-button" key={option.code}
-          disabled={!state.controller || localeLocked || state.cleared || operation === 'locale' || operation === 'clearing'}
-          aria-pressed={state.locale.toLowerCase() === option.code.toLowerCase()} onClick={() => void changeLocale(option.code)}>{option.label}</button>)}
+          disabled={(!screenerLease && (!state.controller || localeLocked)) || state.cleared || operation === 'locale' || operation === 'clearing'}
+          aria-pressed={(screenerLease ? screenerLocale : state.locale)?.toLowerCase() === option.code.toLowerCase()} onClick={() => void changeLocale(option.code)}>{option.label}</button>)}
       </div>
       {(!confirmation && state.controller || operation === 'clear-error') && operation !== 'cleared' ? <button type="button" className="locale-button"
         disabled={operation === 'locale' || operation === 'clearing' || operation === 'refreshing'} onClick={() => void clear()}>
@@ -305,6 +332,6 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
     </main> : startupBlocked ? <main className="shell__status" role="status" aria-busy={preparing}>
       <h1 ref={heading} tabIndex={-1}>{formTitle}</h1>
       {!preparing ? <a className="locale-button" href={`${startupRoute!.entryHref}${selection}`}>{entryLabel}</a> : null}
-    </main> : children}
+    </main> : children(screenerLocale)}
   </div>;
 }

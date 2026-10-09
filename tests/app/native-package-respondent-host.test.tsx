@@ -156,6 +156,92 @@ function lifecycleFixture(earlyCaseCreation = true, persistentSaving = true) {
     start: vi.fn<ApplicationLifecycle['start']>(async () => receipt), load: vi.fn<ApplicationLifecycle['load']>(async () => receipt) };
   return { lifecycle, receipt };
 }
+describe('independent native Screener language', () => {
+  function screenerFixture(mutate?: (locales: LocaleDocument[], documents: NonNullable<ReturnType<typeof dereferenceBundleExport>['screenerHandles']>[number]['document'][]) => void) {
+    const candidate = JSON.parse(readFileSync(resolve('tests/fixtures/native-screener-locale-v2.1.bundle.json'), 'utf8')) as BundleExport;
+    const resolved = dereferenceBundleExport(candidate);
+    const test = fixture();
+    const locales = [...structuredClone(resolved.localeDocuments ?? [])];
+    const documents = resolved.screenerHandles!.map(handle => handle.document);
+    mutate?.(locales, documents);
+    test.host.bundle = resolved;
+    (test.host as NativePackageSigningHost).getStartupRoute = (path: string) => ({ entryHref: '/eligibility', requiresHostState: false,
+      ...(path === '/eligibility' ? { screenerDocuments: documents } : {}) });
+    const selectLocale = vi.fn(async () => { throw new Error('saved Locale version mismatch'); });
+    test.host.selectLocale = selectLocale;
+    let snapshot = test.host.getSnapshot(); const listeners = new Set<() => void>();
+    test.host.getSnapshot = () => snapshot;
+    (test.host as NativePackageSigningHost).subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+    const composition = createStubComposition();
+    composition.nativePackageRespondent = { load: async () => ({ host: test.host, composition,
+      componentDocument: component, componentRouteResolver: componentResolver(component), localeDocuments: locales,
+      moduleId: test.host.moduleId, initialLocale: 'en' }) };
+    window.history.replaceState(null, '', '/eligibility');
+    const mounted = render(<NativePackageRuntime composition={composition} config={departmentAppProfile} />);
+    return { test, locales, documents, selectLocale, mounted,
+      advanceSession: () => { snapshot = { ...snapshot, sessionGeneration: snapshot.sessionGeneration + 1 }; listeners.forEach(listener => listener()); } };
+  }
+  it('switches the exact 47-document candidate without a renewal controller or draft mutation', async () => {
+    const { test, locales, documents, selectLocale, mounted, advanceSession } = screenerFixture((locales) => {
+      const spanish = locales.find(locale => locale.target.kind === 'screener' && locale.locale === 'es-US')!;
+      locales.push({ ...spanish, locale: 'fr', target: { kind: 'screener', url: 'urn:foreign:screener' } });
+    });
+    const spanish = locales.find(locale => locale.target.kind === 'screener' && locale.locale === 'es-US')!;
+    const english = locales.find(locale => locale.target.kind === 'screener' && locale.locale === 'en')!;
+    const firstKey = documents[0].items[0].key;
+    await screen.findByText(english.strings[`${firstKey}.label`]);
+    const spanishButton = screen.getByRole('button', { name: /español/i });
+    expect(spanishButton.hasAttribute('disabled')).toBe(false);
+    expect(screen.queryByRole('button', { name: /français/i })).toBeNull();
+    const fields = mounted.container.querySelectorAll('input, select, textarea');
+    expect(fields.length).toBe(8);
+    fireEvent.click(mounted.container.querySelector('.formspec-screener-continue')!);
+    const answer = fields[0] as HTMLSelectElement;
+    fireEvent.change(answer, { target: { value: 'no' } }); expect(answer.value).toBe('no');
+    fireEvent.click(spanishButton);
+    await screen.findByText(spanish.strings[`${firstKey}.label`]);
+    expect(spanishButton.getAttribute('aria-pressed')).toBe('true'); expect(answer.value).toBe('no');
+    const requiredKey = documents[0].items[1].key;
+    expect(screen.getAllByText(spanish.strings[`${requiredKey}.requiredMessage`]).length).toBe(7);
+    fireEvent.click(screen.getByRole('button', { name: /^English$/i }));
+    await screen.findByText(english.strings[`${firstKey}.label`]); expect(answer.value).toBe('no');
+    fireEvent.click(spanishButton); act(advanceSession);
+    await screen.findByText(english.strings[`${firstKey}.label`]);
+    expect(screen.getByRole('button', { name: /^English$/i }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(spanishButton);
+    act(() => { window.history.replaceState(null, '', '/not-a-route'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    expect(screen.getByRole('button', { name: /español/i }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(spanishButton); // A retired route's detached control cannot select the new visit.
+    act(() => { window.history.replaceState(null, '', '/eligibility'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await screen.findByText(english.strings[`${firstKey}.label`]);
+    expect(screen.getByRole('button', { name: /^English$/i }).getAttribute('aria-pressed')).toBe('true');
+    expect(test.host.getSnapshot().locale).toBe('en'); expect(test.host.getSnapshot().controller).toBeUndefined();
+    expect(selectLocale).not.toHaveBeenCalled(); expect(test.configureRuntime).not.toHaveBeenCalled(); expect(test.host.widgetExecutor).not.toHaveBeenCalled();
+    mounted.unmount(); window.history.replaceState(null, '', '/');
+  });
+  it.each(['duplicate', 'dialect', 'version'])('offers no Screener language when native admission refuses %s', async kind => {
+    const { mounted } = screenerFixture(locales => {
+      const selected = locales.find(locale => locale.target.kind === 'screener')!;
+      if (kind === 'duplicate') locales.push(structuredClone(selected));
+      if (kind === 'dialect') selected.$formspecLocale = '2.0';
+      if (kind === 'version') selected.target.compatibleVersions = '>=99.0.0';
+    });
+    await screen.findByText('Before you apply', { selector: 'a' });
+    expect(mounted.container.querySelectorAll('.respondent-toolbar .locale-button').length).toBe(0);
+    mounted.unmount(); window.history.replaceState(null, '', '/');
+  });
+  it('offers only the common exact-target languages for a route with multiple Screeners', async () => {
+    const { mounted } = screenerFixture((locales, documents) => {
+      const second = { ...documents[0], url: 'urn:second:admitted-screener' }; documents.push(second);
+      const english = locales.find(locale => locale.target.kind === 'screener' && locale.locale === 'en')!;
+      locales.push({ ...english, target: { kind: 'screener', url: second.url } });
+    });
+    await screen.findByRole('button', { name: /^English$/i });
+    expect(screen.queryByRole('button', { name: /español/i })).toBeNull();
+    mounted.unmount(); window.history.replaceState(null, '', '/');
+  });
+});
+
 describe('authored optional application lifecycle', () => {
   it.each([[true, true], [true, false], [false, true], [false, false]])('admits backend options early=%s saving=%s through native controls', async (early, saving) => {
     const { lifecycle } = lifecycleFixture(early, saving);

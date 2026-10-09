@@ -145,7 +145,8 @@ describe('generic native package signing session', () => {
           { id: 'intake', path: '/intake', slots: [{ id: 'intake', slotType: 'definition-form', binding: { definitionRef: test.policy.definition.url } }] },
         ] } } };
     const host = createNativePackageSigningHost({ ...test.policy, bundle });
-    expect(host.getStartupRoute('/')).toMatchObject({ entryHref: '/', requiresHostState: false });
+    expect(host.getStartupRoute('/')).toMatchObject({ entryHref: '/', requiresHostState: false, screenerDocuments: [screener] });
+    expect(host.getStartupRoute('/intake').screenerDocuments).toBeUndefined();
     expect(host.getSnapshot().runtime).toBeUndefined();
     expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
     host.dispose();
