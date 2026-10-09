@@ -1,7 +1,7 @@
 import { targetDefinitionMatches, type ComponentDocument, type FormDefinition, type LocaleDocument, type ThemeDocument } from '@formspec-org/types';
 import type { ResponseActionsDocumentInput as ResponseActionsDocument } from '@formspec-org/engine';
 import canonicalize from 'canonicalize';
-import type { BundleExportAppGraphReportProducerRequest } from '@formspec-org/app-graph';
+import type { BundleExportAppGraphReportProducerRequest, ComponentRouteResolver } from '@formspec-org/app-graph';
 import { snapshotFiniteJson, type BundleExport } from '@formspec-org/surface';
 import type { DefinitionSource } from '../../ports/definition-source.ts';
 
@@ -22,6 +22,7 @@ interface LoadedPackage {
   locales: LocaleDocument[];
   nativeBundle: BundleExport | null;
   component: ComponentDocument | null;
+  componentRouteResolver: ComponentRouteResolver | null;
 }
 
 export type NativeBundleValidationOptions = Omit<BundleExportAppGraphReportProducerRequest,
@@ -72,6 +73,11 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
     return structuredClone((await this.getPackage()).nativeBundle);
   }
 
+  /** Reuse the immutable graph prepared by this package's completed validation. */
+  async getComponentRouteResolver(): Promise<ComponentRouteResolver | null> {
+    return (await this.getPackage()).componentRouteResolver;
+  }
+
   private async load(manifestUrl: string): Promise<LoadedPackage> {
     const manifest = new URL(manifestUrl, window.location.href);
     if (manifest.origin !== window.location.origin) throw new Error('Package must use this app origin');
@@ -114,14 +120,14 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
         files.component ? { pin: files.component, document: componentCandidate, source: new URL(files.component.path, manifest).href } : undefined)
       : null;
     return { definition, theme, responseActions, locales, nativeBundle: qualified?.bundle ?? null,
-      component: qualified?.component ?? null };
+      component: qualified?.component ?? null, componentRouteResolver: qualified?.componentRouteResolver ?? null };
   }
 
   private async qualifyNativeBundle(
     candidate: unknown, definition: FormDefinition, locales: LocaleDocument[],
     source: string, digest: string,
     external?: { pin: PinnedComponent; document: unknown; source: string },
-  ): Promise<{ bundle: BundleExport; component: ComponentDocument | null }> {
+  ): Promise<{ bundle: BundleExport; component: ComponentDocument | null; componentRouteResolver: ComponentRouteResolver }> {
     if (!isRecord(candidate) || Object.keys(candidate).some(key => key !== 'manifest' && key !== 'documents')
       || !isRecord(candidate.manifest) || !isRecord(candidate.documents)) {
       throw new Error('Package native bundle must contain manifest and documents');
@@ -192,7 +198,8 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
       throw new Error('Package native bundle Locales differ from the pinned sidecars');
     }
     const bundle = candidate as unknown as BundleExport;
-    return { bundle: structuredClone(bundle), component: structuredClone(component) };
+    if (typeof result.componentRouteResolver !== 'function') throw new Error('Package native Component route resolution is unavailable');
+    return { bundle: structuredClone(bundle), component: structuredClone(component), componentRouteResolver: result.componentRouteResolver };
   }
 }
 

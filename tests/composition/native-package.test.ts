@@ -37,6 +37,18 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
   const resolved = dereferenceBundleExport(bundle);
   const definition = [...resolved.definitions.values()][0];
   const component = JSON.parse(selectedComponentBytes);
+  component.targetSurfaceRoutes = resolved.surfaces.flatMap(surface => surface.routes.flatMap(route => (route.slots ?? [])
+    .filter(slot => slot.slotType === 'definition-form')
+    .map(slot => ({ surface: bundle.manifest.surfaces!.find(ref => ref.url === resolved.surfaceRefs!.get(surface)),
+      route: route.id, slot: slot.id, role: 'slot' }))));
+  let node = 0;
+  const identify = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return;
+    const entry = value as Record<string, unknown>;
+    if (typeof entry.component === 'string' && !entry.nodeId && !entry.bind && !entry.id) entry.id = `fixture-node-${node++}`;
+    Object.values(entry).forEach(identify);
+  };
+  identify(component.tree);
   const locales = Object.values(bundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document) as LocaleDocument[];
   const document = resolved.responseActions[0];
   const ceremony = resolved.surfaces.flatMap(surface => surface.routes.flatMap(route => route.slots ?? []))
@@ -56,7 +68,7 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
     ...(lifecycle ? { applicationLifecycle: { instance: 'draftReadiness', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' } } : {}) });
   const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
     attachmentMaxUploadBytes: 1024 * 1024, tenantBinding: { kind: 'bound', scope: { tenant: 'fixture', workspace: 'fixture', environment: 'test', cell: 'fixture' } } });
-  const texts: Record<string, string> = { 'native.json': selectedNativeBytes, 'component.json': selectedComponentBytes,
+  const texts: Record<string, string> = { 'native.json': selectedNativeBytes, 'component.json': JSON.stringify(component),
     'definition.json': JSON.stringify(definition), ...Object.fromEntries(locales.map((locale, index) => [`locale-${index}.json`, JSON.stringify(locale)])) };
   // Package pins cover raw bytes, not the independent canonical publication digest.
   const rawPin = async (path: string) => ({ path, sha256: [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(texts[path])))].map(byte => byte.toString(16).padStart(2, '0')).join('') });
@@ -179,10 +191,12 @@ describe('explicit native package composition', () => {
 
   it('selects the current Definition Locale when another admitted Definition uses the same language', async () => {
     const test = await multiTargetLocaleFixture();
-    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow('native-resource-unadmitted');
-    // Passing publication proves Locale admission; the unchanged later multi-Definition host guard refuses.
+    const boot = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    expect(boot.host.bundle.definitions.size).toBe(2);
+    expect(boot.localeDocuments).toHaveLength(3);
     expect(test.requests.some(request => request.url === initialDefinitionUrl)).toBe(true);
     expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
+    boot.host.dispose();
   });
 
   it('refuses cross-target Locale fallback before publication', async () => {

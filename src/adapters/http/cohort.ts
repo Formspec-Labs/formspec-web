@@ -31,7 +31,7 @@ import type { AnonymousSessionBridge } from './anonymous-session.ts';
 import { createDraftBindingRegistry } from './draft-binding-registry.ts';
 import { HttpDraftStore } from './draft-store.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
-import { HttpClient, type HttpClientConfig } from './http-client.ts';
+import { HttpClient, HttpAdapterError, type HttpClientConfig } from './http-client.ts';
 import { HttpSubmitTransport } from './submit-transport.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 import { assertDelegatedSignedResponseConsistency, handoffHash, HttpResponseSigning, ResponseSigningScopeFence, type HttpResponseSigningPolicy } from './response-signing.ts';
@@ -169,7 +169,15 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       const key = structuredClone(suppliedKey);
       return fence.run(key, async generation => {
         const state = await draftStore.readState!(key, () => fence.assertCurrent(key, generation));
-        const application = state && applicationLifecycle ? await applicationLifecycle.loadInCurrentScope(key, generation) : undefined;
+        let application;
+        if (state && applicationLifecycle) {
+          try { application = await applicationLifecycle.loadInCurrentScope(key, generation); }
+          catch (error) {
+            fence.assertCurrent(key, generation);
+            if (!(error instanceof HttpAdapterError) || error.status !== 503) throw error;
+            return { ...state, applicationLookup: Object.freeze({ status: 'unavailable' as const, statusCode: 503 as const }) };
+          }
+        }
         fence.assertCurrent(key, generation);
         return state && application ? { ...state, application } : state;
       });

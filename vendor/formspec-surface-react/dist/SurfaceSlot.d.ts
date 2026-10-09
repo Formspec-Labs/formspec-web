@@ -25,7 +25,7 @@
 import { type DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from 'react';
 import type { ResponseAction, ResponseActionInvocationResult, ResponseActionInvoker, ResponseActionsDocument as ReactResponseActionsDocument, SemanticArtifactIdentity, SemanticControlRegistry, SemanticControlScope, SemanticResponseBinding, SubmitResult } from '@formspec-org/react';
-import { type FormDefinition, type OntologyDocument, type ReferencesDocument, type ResponseActionsDocument as GeneratedResponseActionsDocument } from '@formspec-org/types';
+import { type FormDefinition, type ComponentDocument, type LocaleDocument, type OntologyDocument, type ReferencesDocument, type ResponseActionsDocument as GeneratedResponseActionsDocument } from '@formspec-org/types';
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type PlannedTransition, type SlotPlan, type SurfaceDiagnostic, type SurfaceSemanticOutputScope, type SurfaceStrings, type ThemeGrant } from '@formspec-org/surface';
 import { nextLevel } from './heading.js';
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionDetail, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetRouteContext } from './widget-api.js';
@@ -45,6 +45,11 @@ export interface SurfaceDefinitionFormRenderInput {
     responseActionsDocument: ReactResponseActionsDocument | undefined;
     referencesDocuments: readonly ReferencesDocument[];
     ontologyDocuments: readonly OntologyDocument[];
+    /** Host-admitted Component for this exact Definition and route/slot. */
+    componentDocument?: ComponentDocument | undefined;
+    /** Host-admitted Locale documents; only matching Definition targets apply. */
+    localeDocuments?: readonly LocaleDocument[] | undefined;
+    activeLocale?: string | undefined;
     /**
      * Data Source payload admitted before mount. Record identity, route/session
      * generation, and owner revision remain separate from Definition field data.
@@ -167,5 +172,5 @@ export declare function rendersOwnHeading(plan: SlotPlan<SurfaceWidget>): boolea
  */
 export declare function SurfaceSlotFrame(props: SurfaceSlotProps): import("react/jsx-runtime").JSX.Element | null;
 export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, }: SurfaceSlotProps): ReactNode;
-export declare function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, }: SurfaceDefinitionFormRenderInput): ReactNode;
+export declare function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, }: SurfaceDefinitionFormRenderInput): ReactNode;
 export { nextLevel };

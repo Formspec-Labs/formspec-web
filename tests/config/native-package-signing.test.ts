@@ -21,6 +21,27 @@ function fixture() {
 }
 
 describe('closed native package signing opt-in', () => {
+  it('preserves detached exact static image pins and keeps omission unavailable', () => {
+    const value = { ...fixture(), staticAssets: [{ kind: 'image', source: 'https://travel.state.gov/example.jpeg' }] };
+    const selected = nativePackageSigningConfig(value);
+    value.staticAssets[0].source = 'https://other.test/changed.jpeg';
+    expect(selected.staticAssets).toEqual([{ kind: 'image', source: 'https://travel.state.gov/example.jpeg' }]);
+    expect(nativePackageSigningConfig(fixture()).staticAssets).toBeUndefined();
+  });
+
+  it.each([
+    [],
+    [{ kind: 'video', source: 'https://travel.state.gov/example.jpeg' }],
+    [{ kind: 'image', source: 'http://travel.state.gov/example.jpeg' }],
+    [{ kind: 'image', source: 'data:image/png;base64,eA==' }],
+    [{ kind: 'image', source: 'https://user:password@travel.state.gov/example.jpeg' }],
+    [{ kind: 'image', source: 'https://travel.state.gov/example.jpeg#fragment' }],
+    [{ kind: 'image', source: 'https://travel.state.gov/example.jpeg', trusted: true }],
+    Array(2).fill({ kind: 'image', source: 'https://travel.state.gov/example.jpeg' }),
+  ].map(staticAssets => [staticAssets]))('refuses malformed static image pins %j', staticAssets => {
+    expect(() => nativePackageSigningConfig({ ...fixture(), staticAssets })).toThrow();
+  });
+
   it('leaves omitted configuration disabled and ignores environment and URL activation attempts', () => {
     expect(readNativePackageSigningConfig({})).toBeUndefined();
     expect(resolveActiveConfig(publicPortalProfile).referenceAdapters?.formspecStack?.nativePackageSigning).toBeUndefined();

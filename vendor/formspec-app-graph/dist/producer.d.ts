@@ -3,6 +3,7 @@ import type { ArtifactResolutionReport, ModuleResolutionReport } from '@formspec
 import { type ArtifactResolverRequest } from './artifact-resolver.js';
 import { type ModuleResolverAdmissionInput, type ModuleResolverSupportInput } from './module-resolver.js';
 import type { AppGraphCrossArtifactValidator, AppGraphDiagnosticReport, AppGraphEvidenceSchemaValidators, AppGraphHostEvidence, AppGraphSchemaValidators, AppGraphValidationOptions, AppGraphValidationReport } from './types.js';
+import { type ComponentRouteResolver } from './component-route-resolution.js';
 export interface AppGraphReportProducerRequest extends ArtifactResolverRequest {
     hostEvidence?: AppGraphHostEvidence;
     moduleAdmission?: ModuleResolverAdmissionInput;
@@ -21,6 +22,11 @@ export interface AppGraphReportProducerResult {
     moduleResolutionReport: ModuleResolutionReport;
     report: AppGraphValidationReport;
 }
+/** In-process result. The resolver is not part of JSON report transport. */
+export interface PreparedAppGraphReportProducerResult extends AppGraphReportProducerResult {
+    /** Pure selection over an immutable snapshot of this exact validated graph. */
+    componentRouteResolver: ComponentRouteResolver;
+}
 export type BundleExportAppGraphReportProducerRequest = Omit<AppGraphReportProducerRequest, 'loader'> & {
     /**
      * Exact canonical URL to parsed document map from a verified inline export.
@@ -30,9 +36,9 @@ export type BundleExportAppGraphReportProducerRequest = Omit<AppGraphReportProdu
      */
     documents: Readonly<Record<string, unknown>>;
 };
-export declare function produceAppGraphValidationReport(request: AppGraphReportProducerRequest): Promise<AppGraphReportProducerResult>;
+export declare function produceAppGraphValidationReport(request: AppGraphReportProducerRequest): Promise<PreparedAppGraphReportProducerResult>;
 /**
  * Run the complete resolver, module, schema, and cross-artifact pipeline over a
  * verified inline export before any consumer dereferences typed Surface data.
  */
-export declare function produceBundleExportAppGraphValidationReport(request: BundleExportAppGraphReportProducerRequest): Promise<AppGraphReportProducerResult>;
+export declare function produceBundleExportAppGraphValidationReport(request: BundleExportAppGraphReportProducerRequest): Promise<PreparedAppGraphReportProducerResult>;

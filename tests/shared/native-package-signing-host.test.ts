@@ -6,8 +6,8 @@ import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { createFormEngine } from '@formspec-org/engine/render';
 import { createSemanticControlRegistry } from '@formspec-org/react';
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
-import { composeSurfaceApp, flattenRegistryEntries, dereferenceBundleExport, resolveDataSourceDescriptor, type BundleExport } from '@formspec-org/surface';
-import { deriveSurfaceRuntimeGeneration, responseReviewHash, type ResponseReviewData } from '@formspec-org/surface-react';
+import { composeSurfaceApp, flattenRegistryEntries, dereferenceBundleExport, resolveDataSourceDescriptor, planStaticContent, type BundleExport } from '@formspec-org/surface';
+import { deriveSurfaceRuntimeGeneration, responseReviewHash, starterWidgetModule, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE, type ResponseReviewData } from '@formspec-org/surface-react';
 import type { DataSourcesDocument, FormResponse, LocaleDocument, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
 import { createNativePackageSigningHost, captureFields, type NativePackageSigningHostPolicy } from '../../src/shared/native-package-signing-host.ts';
@@ -81,7 +81,135 @@ function fixture(attachment = false) {
   return { policy, host, engine, response, read, prepare, sign, saveDraft, invalidateAuthority, assertOwner, attach, invoke, prepared, load, reviewData };
 }
 
+function siblingModulePolicy(test: ReturnType<typeof fixture>) {
+  const module = { id: 'x-sibling-review', version: '0.1.0' };
+  const registryUrl = 'urn:test:sibling-registry'; const surfaceUrl = 'urn:test:surface';
+  const common = { version: '0.1.0', status: 'stable', description: 'Generic sibling widget', compatibility: { formspecVersion: '>=1.0.0' } };
+  const registry = { $formspecRegistry: '1.1', publisher: { name: 'Test' }, published: '2026-01-01T00:00:00Z', entries: [
+    { ...common, name: module.id, category: 'module', contributes: ['x-sibling-panel', 'x-sibling-accepted'] },
+    { ...common, name: 'x-sibling-panel', category: 'widget', widgetShape: {
+      widgetName: 'StructuredPanel', props: STRUCTURED_PANEL_CONFIG_SCHEMA,
+      deliveryContractId: STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, renderedConfigNodes: STRUCTURED_PANEL_RENDERED_CONFIG_NODES,
+    } },
+    { ...common, name: 'x-sibling-accepted', category: 'widget', widgetShape: ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE },
+  ] };
+  const bundle: BundleExport = { ...test.policy.bundle, manifest: { ...test.policy.bundle.manifest,
+    modules: [...test.policy.bundle.manifest.modules!, module], registries: [{ url: registryUrl }], surfaces: [{ url: surfaceUrl }], entrySurface: surfaceUrl },
+    documents: { ...test.policy.bundle.documents, [registryUrl]: registry, [surfaceUrl]: {
+      $formspecSurface: '0.2', id: 'surface', entry: 'review', routes: [{ id: 'review', path: '/', slots: [
+        { id: 'sibling-panel', slotType: 'module-widget', binding: { moduleId: module.id, widgetName: 'StructuredPanel', config: {} } },
+      ] }],
+    } } };
+  return { ...test.policy, bundle, modules: bundle.manifest.modules,
+    registryEntries: flattenRegistryEntries(dereferenceBundleExport(bundle).registries).entries };
+}
+
 describe('generic native package signing session', () => {
+  it('admits only an exact deployment-pinned image declared at its native Surface slot', () => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const source = 'https://travel.state.gov/example.jpeg';
+    const site = { surfaceId: 'surface', routeId: 'photo', slotId: 'example' };
+    const binding = { kind: 'image' as const, content: source, alt: 'Official photo example' };
+    const surfaceUrl = 'urn:test:surface';
+    const bundle: BundleExport = { ...test.policy.bundle, manifest: { ...test.policy.bundle.manifest,
+      surfaces: [{ url: surfaceUrl }], entrySurface: surfaceUrl }, documents: { ...test.policy.bundle.documents,
+      [surfaceUrl]: { $formspecSurface: '0.2', id: site.surfaceId, entry: site.routeId,
+        routes: [{ id: site.routeId, path: '/', slots: [{ id: site.slotId, slotType: 'static-content', binding }] }] } } };
+    const staticAssets = [{ kind: 'image' as const, source }, { kind: 'image' as const, source: 'https://travel.state.gov/undeclared.jpeg' }];
+    const host = createNativePackageSigningHost({ ...test.policy, bundle, staticAssets });
+    const resolver = host.staticAssetResolver!;
+    staticAssets[0].source = 'https://other.test/changed.jpeg';
+    expect(planStaticContent({ binding, site, staticAssetResolver: resolver }).plan).toMatchObject({ kind: 'image', src: source, alt: binding.alt });
+    for (const request of [
+      { kind: 'image' as const, source: 'https://other.test/example.jpeg', site },
+      { kind: 'image' as const, source: 'http://travel.state.gov/example.jpeg', site },
+      { kind: 'image' as const, source: 'data:image/png;base64,eA==', site },
+      { kind: 'image' as const, source: 'https://travel.state.gov/undeclared.jpeg', site },
+      { kind: 'image' as const, source, site: { ...site, slotId: 'other' } },
+      { kind: 'video', source, site },
+    ]) expect(resolver(request as Parameters<typeof resolver>[0])).toEqual({ status: 'refused' });
+    const absent = createNativePackageSigningHost({ ...test.policy, bundle });
+    expect(absent.staticAssetResolver).toBeUndefined();
+    expect(planStaticContent({ binding, site }).diagnostics[0].code).toBe('STATIC-IMAGE-SOURCE-REFUSED');
+    host.dispose(); absent.dispose(); expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+  });
+
+  it('registers only explicit matching modules and keeps sibling accepted review on maintained defaults', () => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const policy = siblingModulePolicy(test); const host = createNativePackageSigningHost(policy);
+    const signing = host.widgetModules.find(module => module.moduleId === test.policy.moduleId)!;
+    const sibling = host.widgetModules.find(module => module.moduleId === 'x-sibling-review')!;
+    expect(sibling.widgets.AcceptedResponseReview).toBe(starterWidgetModule('x-sibling-review').widgets.AcceptedResponseReview);
+    expect(signing.widgets.AcceptedResponseReview).not.toBe(sibling.widgets.AcceptedResponseReview);
+    expect(Object.isFrozen(host.widgetModules)).toBe(true); host.dispose();
+  });
+
+  it.each(['missing', 'extra', 'duplicate', 'wrong-version', 'delivery'] as const)('refuses %s module registration or delivery correspondence', mode => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const policy = siblingModulePolicy(test);
+    if (mode === 'missing') policy.modules = [test.policy.bundle.manifest.modules![0]];
+    if (mode === 'extra') policy.modules = [...policy.modules!, { id: 'x-absent', version: '0.1.0' }];
+    if (mode === 'duplicate') policy.modules = [...policy.modules!, policy.modules![0]];
+    if (mode === 'wrong-version') policy.modules = [policy.modules![0], { id: 'x-sibling-review', version: '99.0.0' }];
+    if (mode === 'delivery') {
+      const registry = policy.registryEntries.map(entry => entry.name === 'x-sibling-panel' ? { ...entry,
+        widgetShape: { ...entry.widgetShape!, deliveryContractId: 'urn:test:wrong-delivery' } } : entry);
+      const changed = structuredClone(policy.bundle);
+      changed.documents = { ...changed.documents, 'urn:test:sibling-registry': {
+        ...(changed.documents['urn:test:sibling-registry'] as object), entries: registry,
+      } };
+      policy.bundle = changed; policy.registryEntries = registry;
+    }
+    expect(() => createNativePackageSigningHost(policy)).toThrow(mode === 'delivery' ? 'native-widget-unadmitted' : 'native-resource-unadmitted');
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+  });
+
+  it('refuses sibling access to applicant prepared data and action authority', async () => {
+    const test = fixture(); test.host.dispose();
+    const policy = siblingModulePolicy(test); const host = createNativePackageSigningHost(policy);
+    const lease = await host.configureRuntime({ engine: test.engine, definition: policy.definition,
+      draftKey: { formUrl: policy.definition.url, formVersion: policy.definition.version }, claim: null, activeLocale: 'en' });
+    await test.invoke(lease, 'save'); await test.invoke(lease, 'prepare');
+    await vi.waitFor(() => expect(host.getSnapshot().runtime).toBeDefined());
+    const descriptor = resolveDataSourceDescriptor(host.bundle.dataSources!, policy.bindings.response)!;
+    const request = { descriptor, context: { surfaceId: 'surface', surfaceRef: 'urn:test:surface', routeId: 'review',
+      slotId: 'sibling-panel', params: {}, sessionGeneration: host.getSnapshot().generation } };
+    expect(await host.getSnapshot().runtime!.dataSourceLoader(request)).toMatchObject({ status: 'unavailable' });
+    const admission = policy.controller.roles.sign!; const prepared = host.getSnapshot().controller!.prepared!;
+    const result = await host.widgetExecutor({ document: admission.document, actionRef: admission.actionRef, invocationId: 'sibling:sign',
+      source: { ...admission.widgetSource!, moduleId: 'x-sibling-review', slotId: 'sibling-panel' },
+      responseContext: { inputName: 'response', source: policy.bindings.response, definition: policy.definition, response: prepared.response },
+      input: { draftId: prepared.draft.id, draftVersion: prepared.draft.version, responseId: prepared.response.id!,
+        responseHash: prepared.draft.responseHash, source: prepared.content.source as never, locale: 'en', signerName: 'Actual signer', consentAccepted: true } });
+    expect('invocation' in result ? result.invocation.status : result.status).toBe('failed'); expect(JSON.stringify(result)).toContain('context-mismatch'); expect(test.sign).not.toHaveBeenCalled();
+    lease.dispose(); host.dispose(); test.engine.dispose();
+  });
+
+
+  it('admits one selected Definition within a complete five-Definition bundle', () => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const siblings = Array.from({ length: 4 }, (_, index) => ({ ...test.policy.definition, url: `urn:test:sibling-definition:${index}` }));
+    const bundle: BundleExport = { ...test.policy.bundle, manifest: { ...test.policy.bundle.manifest,
+      definitions: [...test.policy.bundle.manifest.definitions!, ...siblings.map(definition => ({ url: definition.url, version: definition.version }))] },
+    documents: { ...test.policy.bundle.documents, ...Object.fromEntries(siblings.map(definition => [definition.url, definition])) } };
+    const host = createNativePackageSigningHost({ ...test.policy, bundle });
+    expect(host.bundle.definitions.size).toBe(5);
+    expect(host.bundle.definitions.get(test.policy.definition.url)).toEqual(test.policy.definition);
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled(); host.dispose();
+  });
+
+  it.each(['missing', 'duplicate', 'wrong-version', 'different-body'] as const)('refuses a %s selected Definition resource', mode => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const bundle = structuredClone(test.policy.bundle);
+    if (mode === 'missing') bundle.manifest.definitions = [];
+    if (mode === 'duplicate') bundle.manifest.definitions = [...bundle.manifest.definitions!, bundle.manifest.definitions![0]];
+    if (mode === 'wrong-version') bundle.manifest.definitions = [{ url: test.policy.definition.url, version: '99.0.0' }];
+    if (mode === 'different-body') bundle.documents = { ...bundle.documents, [test.policy.definition.url]: { ...test.policy.definition, title: 'Different admitted body' } };
+    expect(() => createNativePackageSigningHost({ ...test.policy, bundle })).toThrow('native-resource-unadmitted');
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+  });
+
+
   it('initializes qualified submitted state without creating an engine or controller and clears only its draft key', async () => {
     const test = fixture(); test.host.dispose(); test.engine.dispose();
     const locale: LocaleDocument = { $formspecLocale: '2.0', url: 'urn:test:locale:en', version: '1', locale: 'en',
@@ -245,6 +373,26 @@ describe('generic native package signing session', () => {
     test.engine.setValue('fullName', 'Edited'); expect(await returned.dataSourceLoader(currentRequest)).toMatchObject({ status: 'unavailable' });
     returning.dispose(); lease.dispose(); test.host.dispose(); test.engine.dispose();
   });
+  it.each(['sibling', 'ambiguous', 'version'] as const)('refuses %s language selection without crossing Definition identity', async mode => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    test.invalidateAuthority.mockClear();
+    const sibling = { ...test.policy.definition, url: 'urn:test:sibling' };
+    const en: LocaleDocument = { $formspecLocale: '2.0', url: 'urn:test:locale:en', version: '1', locale: 'en',
+      target: { kind: 'definition', url: test.policy.definition.url }, strings: {} };
+    const es: LocaleDocument = { ...en, url: 'urn:test:locale:es', locale: 'es', target: { kind: 'definition',
+      url: mode === 'sibling' ? sibling.url : test.policy.definition.url, ...(mode === 'version' ? { compatibleVersions: '99.0.0' } : {}) } };
+    const locales = [en, es, ...(mode === 'ambiguous' ? [{ ...es, url: 'urn:test:locale:es:duplicate' }] : [])];
+    const bundle: BundleExport = { ...test.policy.bundle, manifest: { ...test.policy.bundle.manifest,
+      definitions: [...test.policy.bundle.manifest.definitions!, { url: sibling.url, version: sibling.version }] },
+      documents: { ...test.policy.bundle.documents, [sibling.url]: sibling, ...Object.fromEntries(locales.map(document => [document.url, document])) } };
+    const host = createNativePackageSigningHost({ ...test.policy, bundle, locales }); const engine = createFormEngine(test.policy.definition);
+    const lease = await host.configureRuntime({ engine, definition: test.policy.definition,
+      draftKey: { formUrl: test.policy.definition.url, formVersion: test.policy.definition.version }, claim: null, activeLocale: 'en' });
+    await expect(host.selectLocale('es')).rejects.toThrow('native-locale-unavailable');
+    expect(host.getSnapshot().locale).toBe('en'); expect(test.invalidateAuthority).not.toHaveBeenCalled();
+    lease.dispose(); host.dispose(); engine.dispose();
+  });
+
   it('keeps selected Locale on a returning lease, while a new session adopts the saved pin', async () => {
     const test = fixture(); test.host.dispose();
     const locales: LocaleDocument[] = ['en', 'es'].map(locale => ({ $formspecLocale: '2.0', url: `urn:test:locale:${locale}`,

@@ -64,7 +64,8 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
     actor: authenticated ? 'oidc:owner' : 'anon:owner', token: 'owner-token' as string | undefined,
     tokenGate: undefined as Promise<void> | undefined, formVersionId: 'publication-1',
     mutateSigned: undefined as ((response: FormResponse) => void) | undefined,
-    createGate: undefined as Promise<void> | undefined, patchGate: undefined as Promise<void> | undefined, signGate: undefined as Promise<void> | undefined, getGate: undefined as Promise<void> | undefined, getStatus: 200 };
+    createGate: undefined as Promise<void> | undefined, patchGate: undefined as Promise<void> | undefined, signGate: undefined as Promise<void> | undefined, getGate: undefined as Promise<void> | undefined, getStatus: 200,
+    applicationStatus: 200, applicationAbsent: false, applicationGate: undefined as Promise<void> | undefined };
   const view = () => ({ draft_id: draftId, form_version_id: state.formVersionId, subject_ref: state.actor,
     status: state.status, draft_version: state.version, draft_state: state.response.data, canonical_response: structuredClone(state.response) });
   const { fetch, requests } = recordingFetch(async request => {
@@ -73,6 +74,9 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
       subject_ref: 'anon:owner', form_id: 'conformance', expires_at: '2099-01-01T00:00:00Z' });
     if (request.url.endsWith('/application-case')) {
       expect(request.method).toBe('GET');
+      await state.applicationGate;
+      if (state.applicationStatus !== 200) return jsonResponse({ status: state.applicationStatus, title: 'unavailable', type: 'about:blank' }, state.applicationStatus);
+      if (state.applicationAbsent) return jsonResponse(null);
       return jsonResponse({ caseLedgerId: 'urn:wos:real-case', caseReference: 'APP-001', draftRef: `urn:formspec:draft:${draftId}`, status: state.status === 'submitted' ? 'submitted' : 'in-progress' });
     }
     if (request.method === 'GET') { await state.getGate; return jsonResponse(view(), state.getStatus); }
@@ -159,6 +163,52 @@ async function profileDigest(response: FormResponse): Promise<string> {
 }
 
 describe('cohort-owned Response Prepare and Sign', () => {
+  it('resumes an owned draft with explicit unavailable case status and keeps saving its exact handle', async () => {
+    const test = await fixture(true, true, false, false); await test.save();
+    test.state.applicationStatus = 503;
+    const state = await test.build().draftStore.readState!(test.draftKey);
+    expect(state).toMatchObject({ kind: 'active', response, applicationLookup: { status: 'unavailable', statusCode: 503 } });
+    expect(state?.application).toBeUndefined();
+    expect(Object.isFrozen(state?.applicationLookup)).toBe(true);
+    await test.cohort.draftStore.save(test.draftKey, { ...response, data: { ...response.data, fullName: 'Saved after unavailable lookup' } });
+    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(1);
+    test.state.applicationStatus = 200; test.state.applicationAbsent = true;
+    const absent = await test.build().draftStore.readState!(test.draftKey);
+    expect(absent?.application).toBeUndefined(); expect(absent?.applicationLookup).toBeUndefined();
+  });
+
+  it.each([401, 403, 404])('refuses case lookup %s instead of treating it as unavailable or absent', async status => {
+    const test = await fixture(true, true, false, false); await test.save(); test.state.applicationStatus = status;
+    await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toMatchObject({ status });
+  });
+
+  it('refuses native draft 503 and owner/publication mismatches before optional case recovery', async () => {
+    const test = await fixture(true, true, false, false); await test.save(); test.state.applicationStatus = 503;
+    test.state.getStatus = 503;
+    await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toMatchObject({ status: 503 });
+    test.state.getStatus = 200; test.state.actor = 'other';
+    await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toThrow('qualified publication');
+    test.state.actor = 'oidc:owner'; test.state.formVersionId = 'other';
+    await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toThrow('qualified publication');
+    expect(test.requests.filter(request => request.url.endsWith('/application-case'))).toHaveLength(0);
+  });
+
+  it('retains native submitted authority when optional case lookup is unavailable', async () => {
+    const test = await fixture(true, true, false, false); await test.save();
+    const prepared = await test.prepare(); await test.sign(prepared); test.state.status = 'submitted'; test.state.version++;
+    test.state.applicationStatus = 503;
+    const state = await test.build().draftStore.readState!(test.draftKey);
+    expect(state).toMatchObject({ kind: 'submitted', response: test.state.response, applicationLookup: { status: 'unavailable', statusCode: 503 } });
+  });
+
+  it('rejects unavailable lookup recovery after the held owner is retired', async () => {
+    const test = await fixture(true, true, false, false); await test.save(); test.state.applicationStatus = 503;
+    let release!: () => void; test.state.applicationGate = new Promise(resolve => { release = resolve; });
+    const pending = test.cohort.draftStore.readState!(test.draftKey); const refusal = expect(pending).rejects.toThrow();
+    await vi.waitFor(() => expect(test.requests.some(request => request.url.endsWith('/application-case'))).toBe(true));
+    await test.cohort.draftStore.invalidateSubject(test.draftKey.subjectRef!); release(); await refusal;
+  });
+
   it.each([true, false])('restores the existing case through GET when early creation is %s', async earlyCaseCreation => {
     const test = await fixture(true, true, false, earlyCaseCreation);
     await test.save(); await test.sign(await test.prepare());

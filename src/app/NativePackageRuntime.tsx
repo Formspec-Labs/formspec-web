@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useBrowserLocation } from '@formspec-org/surface-react';
 import { UI_STRINGS, type ChromeStringKey } from '@formspec-org/layout';
+import { targetDefinitionMatches } from '@formspec-org/types';
 import { localeOptionsForDefinition } from '../demo/locales.ts';
 import type { IdentityBinding } from '../composition/default.ts';
 import type { Composition } from '../composition/types.ts';
@@ -161,6 +162,7 @@ function AdmittedNativePackageRuntime({ composition, config }: { composition: Co
   return <NativePackageFrame boot={state.boot} selection={selection} location={location} outcome={state.outcome} onNavigate={onNavigate}>
     <NativePackageRespondentHost host={state.boot.host} composition={state.boot.composition}
     config={config} componentDocument={state.boot.componentDocument} localeDocuments={state.boot.localeDocuments}
+    componentRouteResolver={state.boot.componentRouteResolver}
     location={location} onNavigate={onNavigate} />
   </NativePackageFrame>;
 }
@@ -211,13 +213,14 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
   const [operation, setOperation] = useState<'idle' | 'locale' | 'clearing' | 'cleared' | 'clear-error' | 'locale-error' | 'refreshing' | 'refresh-error'>('idle');
   const heading = useRef<HTMLHeadingElement>(null);
   const operationPending = useRef(false);
-  const locale = boot.localeDocuments.find(document => document.locale.toLowerCase() === state.locale.toLowerCase());
+  const matchingLocales = boot.localeDocuments.filter(document => document.locale.toLowerCase() === state.locale.toLowerCase()
+    && document.target.kind === 'definition' && targetDefinitionMatches(document.target, boot.host.definition));
+  const locale = matchingLocales.length === 1 ? matchingLocales[0] : undefined;
   const text = (key: ChromeStringKey) => locale?.strings[`$ui.${key}`] ?? UI_STRINGS[key];
   const applicationText = (property: string) => locale?.strings[`$module.${boot.host.moduleId}.application.${property}`];
   const checkpoint = state.checkpointState ?? 'unsaved';
   const checkpointSuffix = { unsaved: 'Unsaved', saving: 'Saving', saved: 'Saved', failed: 'Failed' }[checkpoint];
-  const definition = locale?.target.kind === 'definition' ? boot.host.bundle.definitions.get(locale.target.url) : undefined;
-  const options = definition ? localeOptionsForDefinition(definition, boot.localeDocuments) : [];
+  const options = localeOptionsForDefinition(boot.host.definition, boot.localeDocuments);
   const confirmation = state.submitted ?? (state.controller?.phase === 'submitted'
     && state.controller.confirmation?.recordKind === 'response' ? state.controller.confirmation : undefined);
   let startupRoute: ReturnType<typeof boot.host.getStartupRoute> | undefined;
@@ -272,13 +275,15 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
         {locale?.strings[`$module.${boot.host.moduleId}.response.reviewSigned`] ?? startupRoute.signedReviewTitle ?? 'Review signed response'}
       </button> : null}
     {boot.host.applicationCapabilities && !state.cleared && operation !== 'cleared' ? <div className="native-application-status">
+      {state.applicationLookup ? <p role="status">{applicationText('statusUnavailable')
+        ?? 'Application status is unavailable. Saved progress remains available; Start and Submit are unavailable until status can be checked.'}</p> : null}
       {state.application ? <>
         <p role="status">{applicationText(state.application.status === 'submitted' ? 'submitted' : 'inProgress')
           ?? (state.application.status === 'submitted' ? 'Application submitted' : 'Application in progress')}: {state.application.caseReference}</p>
-        <button type="button" className="locale-button" disabled={operation === 'refreshing' || operation === 'clearing'
-          || !!state.controller && !['idle', 'saved', 'prepared', 'signed', 'submitted', 'refused', 'failed'].includes(state.controller.phase)}
-          onClick={() => void refreshApplication()}>{applicationText('refresh') ?? 'Refresh application status'}</button>
       </> : null}
+      {state.application || state.applicationLookup ? <button type="button" className="locale-button" disabled={operation === 'refreshing' || operation === 'clearing'
+          || !!state.controller && !['idle', 'saved', 'prepared', 'signed', 'submitted', 'refused', 'failed'].includes(state.controller.phase)}
+          onClick={() => void refreshApplication()}>{applicationText('refresh') ?? 'Refresh application status'}</button> : null}
       {!confirmation ? <p role="status">{boot.host.applicationCapabilities.persistentSaving
         ? applicationText(`checkpoint${checkpointSuffix}`)
           ?? ({ unsaved: 'Changes have not been saved', saving: 'Saving progress', saved: 'Progress saved', failed: 'Progress could not be saved. Try again.' })[checkpoint]

@@ -3,7 +3,7 @@ import { extractServiceRequestOutputs, invokeResponseActionAsync, planServiceReq
 import type { ResponseActionInvoker, SubmitResult } from '@formspec-org/react';
 import type { SurfaceWidgetActionExecutor, SurfaceWidgetActionSource } from '@formspec-org/surface-react';
 import type { FormDefinition, FormResponse, SigningContentSource, ValidationOverride } from '@formspec-org/types';
-import type { ApplicationCaseReceipt, ApplicationLifecycle } from '../ports/application-lifecycle.ts';
+import type { ApplicationCaseReceipt, ApplicationLifecycle, ApplicationCaseLookupUnavailable } from '../ports/application-lifecycle.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { AdmittedResponseAction, PreparedResponseSigning, ResponseSigning, SavedResponseDraft, SignedResponseSigning } from '../ports/response-signing.ts';
 import type { IntakeHandoff, SubmitConfirmation, SubmitTransport } from '../ports/submit-transport.ts';
@@ -37,6 +37,7 @@ export interface ResponseActionControllerSnapshot {
   phase: 'idle' | ResponseActionRole | 'saved' | 'prepared' | 'signed' | 'submitted' | 'refused' | 'failed';
   owned: boolean;
   application?: ApplicationCaseReceipt;
+  applicationLookup?: ApplicationCaseLookupUnavailable;
   reason?: ResponseActionControllerReason;
   saved?: SavedResponseDraft;
   prepared?: PreparedResponseSigning;
@@ -46,6 +47,7 @@ export interface ResponseActionControllerSnapshot {
 export interface ResponseActionControllerConfig {
   applicationLifecycle?: ApplicationLifecycle;
   restoredApplication?: ApplicationCaseReceipt;
+  restoredApplicationLookup?: ApplicationCaseLookupUnavailable;
   context: ResponseActionControllerContext;
   roles: Partial<Record<ResponseActionRole, QualifiedResponseActionRole>>;
   restoredResponse?: FormResponse;
@@ -82,6 +84,7 @@ export function createResponseActionController(config: ResponseActionControllerC
   let owned = restored !== undefined;
   let actor = context.expectedActor;
   let application = config.restoredApplication ? freeze(structuredClone(config.restoredApplication)) : undefined;
+  let applicationLookup = config.restoredApplicationLookup ? freeze(structuredClone(config.restoredApplicationLookup)) : undefined;
   let saved: SavedResponseDraft | undefined;
   // Keep the actual cohort preparation privately: its WeakMap identity authorizes Sign.
   let prepared: PreparedResponseSigning | undefined;
@@ -89,13 +92,13 @@ export function createResponseActionController(config: ResponseActionControllerC
   let busy: string | undefined;
   let confirmedDelivery: string | undefined;
   let completedSubmit: { identity: string; result: ResponseActionInvocationResult<SubmitResult> } | undefined;
-  let snapshot: ResponseActionControllerSnapshot = freeze({ phase: 'idle', owned, ...(application ? { application } : {}) });
+  let snapshot: ResponseActionControllerSnapshot = freeze({ phase: 'idle', owned, ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}) });
   const listeners = new Set<() => void>();
   const deliveries = new Map<string, Delivery>();
 
   function publish(phase: ResponseActionControllerSnapshot['phase'], reason?: ResponseActionControllerReason, confirmation?: SubmitConfirmation) {
     snapshot = freeze(structuredClone({ phase, owned, ...(reason ? { reason } : {}),
-      ...(application ? { application } : {}), ...(saved ? { saved } : {}), ...(prepared ? { prepared } : {}), ...(signed ? { signed } : {}), ...(confirmation ? { confirmation } : {}) }));
+      ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}), ...(saved ? { saved } : {}), ...(prepared ? { prepared } : {}), ...(signed ? { signed } : {}), ...(confirmation ? { confirmation } : {}) }));
     for (const listener of listeners) listener();
   }
   function current(generation: number) { if (invalidated || generation !== epoch) throw new ControllerRefusal('context-obsolete'); }
@@ -162,6 +165,7 @@ export function createResponseActionController(config: ResponseActionControllerC
     const request = requestFor(role, admission);
     await validateResponse(response);
     current(generation);
+    if (applicationLookup && (role === 'startApplication' || role === 'submit')) throw new ControllerRefusal('branch-mismatch');
     if (role === 'startApplication' && (!config.applicationLifecycle?.capabilities.earlyCaseCreation
       || config.applicationLifecycle.capabilities.formVersionId !== context.publication.formVersionId || signed)) throw new ControllerRefusal('branch-mismatch');
     if (restored?.authoredSignatures?.length && !signed) throw new ControllerRefusal('restoration-unresolved');
@@ -367,13 +371,16 @@ export function createResponseActionController(config: ResponseActionControllerC
   return {
     async refreshApplication() {
       const generation = epoch; current(generation);
-      if (!application || !config.applicationLifecycle || busy) throw new ControllerRefusal('branch-mismatch');
-      const receipt = await config.applicationLifecycle.load(context.draftKey);
-      current(generation);
-      if (!receipt || receipt.caseLedgerId !== application.caseLedgerId || receipt.draftRef !== application.draftRef
-        || application.status === 'submitted' && receipt.status !== 'submitted') throw new ControllerRefusal('context-mismatch');
-      application = freeze(structuredClone(receipt));
-      publish(snapshot.phase, snapshot.reason, snapshot.confirmation);
+      if ((!application && !applicationLookup) || !config.applicationLifecycle || busy) throw new ControllerRefusal('branch-mismatch');
+      busy = 'application-refresh';
+      try {
+        const receipt = await config.applicationLifecycle.load(context.draftKey); current(generation);
+        if (application && (!receipt || receipt.caseLedgerId !== application.caseLedgerId || receipt.draftRef !== application.draftRef
+          || application.status === 'submitted' && receipt.status !== 'submitted')) throw new ControllerRefusal('context-mismatch');
+        application = receipt ? freeze(structuredClone(receipt)) : undefined;
+        applicationLookup = undefined;
+        publish(snapshot.phase, snapshot.reason, snapshot.confirmation);
+      } finally { busy = undefined; }
     },
     definitionInvoker, widgetExecutor,
     async restoreSigned(value: SignedResponseSigning) {

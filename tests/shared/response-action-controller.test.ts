@@ -114,6 +114,51 @@ function lifecycleFixture(enabled = true) {
   return { ...fixture({ roles, applicationLifecycle: { capabilities: { earlyCaseCreation: enabled, persistentSaving: true, formVersionId: 'publication' }, load: vi.fn(async () => undefined), start: startApplication } }), startApplication };
 }
 describe('maintained application Start', () => {
+  it('keeps Save available while unavailable case status blocks Start and Submit, then retries authoritative absence', async () => {
+    const base = lifecycleFixture(); const load = vi.fn(async () => undefined);
+    const f = fixture({ roles: base.config.roles, restoredResponse: response,
+      restoredApplicationLookup: { status: 'unavailable', statusCode: 503 },
+      applicationLifecycle: { ...base.config.applicationLifecycle!, load } });
+    expect(f.controller.getSnapshot().applicationLookup).toEqual({ status: 'unavailable', statusCode: 503 });
+    expect(await f.definition('startApplication')).toMatchObject({ status: 'failed' });
+    expect(await f.definition('saveOwned')).toMatchObject({ status: 'completed' });
+    expect(f.saveDraft).toHaveBeenCalledOnce();
+    await f.definition('prepare');
+    expect(await f.widget('sign', f.controller.getSnapshot().prepared!)).toMatchObject({ status: 'completed' });
+    expect(await f.widget('submit', f.controller.getSnapshot().signed!)).toMatchObject({ status: 'failed' });
+    expect(base.startApplication).not.toHaveBeenCalled(); expect(f.submit).not.toHaveBeenCalled();
+    await f.controller.refreshApplication(); expect(load).toHaveBeenCalledOnce();
+    expect(f.controller.getSnapshot().applicationLookup).toBeUndefined();
+    expect(f.controller.getSnapshot().application).toBeUndefined();
+  });
+
+  it('retains a known association and unavailable status when retry returns null or fails', async () => {
+    const base = lifecycleFixture(); await base.definition('startApplication');
+    const application = base.controller.getSnapshot().application!;
+    const load = vi.fn(async () => undefined);
+    const f = fixture({ roles: base.config.roles, restoredResponse: response, restoredApplication: application,
+      restoredApplicationLookup: { status: 'unavailable', statusCode: 503 },
+      applicationLifecycle: { ...base.config.applicationLifecycle!, load } });
+    await expect(f.controller.refreshApplication()).rejects.toThrow();
+    expect(f.controller.getSnapshot()).toMatchObject({ application, applicationLookup: { status: 'unavailable', statusCode: 503 } });
+    load.mockRejectedValueOnce(new Error('lookup unavailable'));
+    await expect(f.controller.refreshApplication()).rejects.toThrow();
+    expect(f.controller.getSnapshot()).toMatchObject({ application, applicationLookup: { status: 'unavailable', statusCode: 503 } });
+  });
+
+  it('serializes status retry and refuses a late result after retirement', async () => {
+    const base = lifecycleFixture(); let release!: (value: undefined) => void;
+    const load = vi.fn(() => new Promise<undefined>(resolve => { release = resolve; }));
+    const f = fixture({ roles: base.config.roles, restoredResponse: response,
+      restoredApplicationLookup: { status: 'unavailable', statusCode: 503 },
+      applicationLifecycle: { ...base.config.applicationLifecycle!, load } });
+    const pending = f.controller.refreshApplication(); const refusal = expect(pending).rejects.toThrow();
+    await expect(f.controller.refreshApplication()).rejects.toThrow();
+    expect(await f.definition('saveOwned')).toMatchObject({ status: 'failed' }); expect(f.saveDraft).not.toHaveBeenCalled();
+    f.controller.invalidate(); release(undefined); await refusal;
+    expect(load).toHaveBeenCalledOnce(); expect(f.controller.getSnapshot().applicationLookup).toEqual({ status: 'unavailable', statusCode: 503 });
+  });
+
   it('creates no draft or case on startup, then checkpoints progress and starts deliberately', async () => {
     const f = lifecycleFixture(); expect(f.saveDraft).not.toHaveBeenCalled(); expect(f.startApplication).not.toHaveBeenCalled();
     const result = await f.definition('startApplication');

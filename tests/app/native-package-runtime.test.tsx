@@ -34,18 +34,42 @@ function fixture() {
   const emit = () => { for (const listener of listeners) listener(); };
   const host = {
     getStartupRoute: () => ({ entryHref: '/', entryTitle: undefined, requiresHostState: false }),
-    bundle, moduleId: 'x-demo-signing', reviewOptions: {}, configureRuntime: vi.fn(), widgetExecutor: vi.fn(),
+    bundle, definition: [...bundle.definitions.values()][0], moduleId: 'x-demo-signing', reviewOptions: {}, configureRuntime: vi.fn(), widgetExecutor: vi.fn(),
     dispose: vi.fn(), getSnapshot: () => state, subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     selectLocale: vi.fn(async (locale: string) => { state = { ...state, locale }; emit(); }),
     clearDraftAccess: vi.fn(async () => { state = { ...state, cleared: true }; emit(); }),
   } as unknown as NativePackageSigningHost;
   const composition = createStubComposition();
-  const boot: NativePackageBoot = { composition, host, componentDocument, localeDocuments, moduleId: host.moduleId, initialLocale: 'en' };
+  const boot: NativePackageBoot = { composition, host, componentDocument, componentRouteResolver: vi.fn(), localeDocuments, moduleId: host.moduleId, initialLocale: 'en' };
   const load = vi.fn(async () => boot);
   composition.nativePackageRespondent = { load };
   return { composition, boot, host, load, publish: (next: Partial<typeof state>) => { state = { ...state, ...next }; emit(); } };
 }
 describe('native package boot and scoped recovery', () => {
+  it('keeps host chrome on its selected Definition Locale when another Definition has the same language', async () => {
+    const test = fixture(); const selected = test.boot.localeDocuments.find(document => document.locale === 'en')!;
+    test.boot.localeDocuments = [{ ...selected, url: 'urn:test:sibling-locale', target: { kind: 'definition', url: 'urn:test:sibling' },
+      strings: { ...selected.strings, '$form.title': 'Wrong sibling form', '$module.x-demo-signing.application.checkpointSaved': 'Wrong sibling progress' } }, ...test.boot.localeDocuments];
+    test.host.applicationCapabilities = { earlyCaseCreation: false, persistentSaving: true, formVersionId: 'publication' };
+    test.publish({ checkpointState: 'saved' });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByText('Progress saved'); expect(screen.queryByText('Wrong sibling progress')).toBeNull();
+    expect(screen.queryByText('Wrong sibling form')).toBeNull();
+  });
+
+  it('shows unavailable case status separately from saved progress and permits explicit status retry', async () => {
+    const test = fixture();
+    test.host.applicationCapabilities = { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'publication' };
+    test.publish({ checkpointState: 'saved', applicationLookup: { status: 'unavailable', statusCode: 503 }, controller: { phase: 'saved', owned: true } });
+    test.host.refreshApplication = vi.fn(async () => { test.publish({ applicationLookup: undefined }); });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByText(/Application status is unavailable/); expect(screen.getByText('Progress saved')).toBeTruthy();
+    expect(screen.queryByText('Application in progress')).toBeNull(); expect(test.host.refreshApplication).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh application status' }));
+    await waitFor(() => expect(screen.queryByText(/Application status is unavailable/)).toBeNull());
+    expect(test.host.refreshApplication).toHaveBeenCalledOnce();
+  });
+
   it.each([true, false])('shows truthful persistent-saving %s state without a case creation request', async persistentSaving => {
     const test = fixture();
     test.host.applicationCapabilities = { earlyCaseCreation: false, persistentSaving, formVersionId: 'publication' };

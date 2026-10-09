@@ -7,9 +7,11 @@ import { cleanup, render, screen, act, fireEvent } from '@testing-library/react'
 import { dereferenceBundleExport, flattenRegistryEntries, type BundleExport } from '@formspec-org/surface';
 import { createFormEngine, hashSigningContent } from '@formspec-org/engine/render';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
+import { starterWidgetModule } from '@formspec-org/surface-react';
 import { FormspecForm, createSemanticControlRegistry } from '@formspec-org/react';
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import type { ComponentDocument, LocaleDocument, FormResponse, SigningContent, SurfaceDocument } from '@formspec-org/types';
+import type { ComponentRouteResolver } from '@formspec-org/app-graph';
 import { NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
 import { AnonymousSessionBridge } from '../../src/adapters/http/anonymous-session.ts';
 import { delegatedSignedResponseFixture } from '../adapters/http/delegated-signed-response-fixture.ts';
@@ -41,16 +43,18 @@ const component = JSON.parse(readFileSync(resolve(root, 'passport-renewal.compon
 const lifecycleRoot = resolve('public/demo-packages/d1-passport/v0.1.7');
 const lifecycleBundle = JSON.parse(readFileSync(resolve(lifecycleRoot, 'native-bundle.json'), 'utf8')) as BundleExport;
 const lifecycleComponent = JSON.parse(readFileSync(resolve(lifecycleRoot, 'passport-renewal.component.json'), 'utf8')) as ComponentDocument;
+const componentResolver = (document: ComponentDocument) => vi.fn<ComponentRouteResolver>(() => ({ status: 'ready', diagnostics: [],
+  component: { artifactKind: 'component', slot: 'component', status: 'loaded', document } }));
 beforeAll(() => initFormspecEngine());
 afterEach(() => { cleanup(); observed.forms.length = 0; observed.real = false; vi.unstubAllGlobals(); });
 function fixture() {
   const configureRuntime = vi.fn(); const dispose = vi.fn();
   const state = { generation: 0, sessionGeneration: 0, locale: 'en', formTitle: '', cleared: false, controller: undefined, runtime: undefined, submitted: undefined };
-  const host = { getStartupRoute: () => ({ entryHref: '/', entryTitle: undefined, requiresHostState: false }), moduleId: 'x-demo-signing', bundle: dereferenceBundleExport(structuredClone(bundle)), reviewOptions: {}, configureRuntime, configureSubmittedRuntime: vi.fn(), dispose,
+  const host = { getStartupRoute: () => ({ entryHref: '/', entryTitle: undefined, requiresHostState: false }), definition: [...dereferenceBundleExport(bundle).definitions.values()][0], moduleId: 'x-demo-signing', widgetModules: [starterWidgetModule('x-demo-signing', { responseReview: {} })], bundle: dereferenceBundleExport(structuredClone(bundle)), reviewOptions: {}, configureRuntime, configureSubmittedRuntime: vi.fn(), dispose,
     allocateSurfaceSessionMarker: () => 'fixture-visit',
     createSurfaceVisit: () => ({ activate: vi.fn(), dispose: vi.fn(), bindRuntime: () => ({ authorizeDataSource: () => ({ status: 'refused' as const, reason: 'unavailable' }), dataSourceLoader: () => ({ status: 'unavailable' as const, reason: 'unavailable' }), validateDataSourcePayload: () => ({ valid: true }), dataSourceRevision: () => undefined, widgetActionExecutor: vi.fn() }) }),
     widgetExecutor: vi.fn(), getSnapshot: () => state, subscribe: () => () => {}, selectLocale: vi.fn(), clearDraftAccess: vi.fn() } satisfies NativePackageSigningHost;
-  const props = { host, composition: createStubComposition(), config: departmentAppProfile, componentDocument: component,
+  const props = { host, composition: createStubComposition(), config: departmentAppProfile, componentDocument: component, componentRouteResolver: componentResolver(component),
     localeDocuments: [], location: '/', onNavigate: vi.fn() };
   return { props, host, configureRuntime, dispose };
 }
@@ -143,7 +147,7 @@ async function actualFixture(options?: { bundle?: BundleExport; component?: Comp
       } };
     };
     const composition = createStubComposition(); const navigate = vi.fn();
-    const props = { host, composition, config: departmentAppProfile, componentDocument: admittedComponent, localeDocuments: locales, location: '/', onNavigate: navigate };
+    const props = { host, composition, config: departmentAppProfile, componentDocument: admittedComponent, componentRouteResolver: componentResolver(admittedComponent), localeDocuments: locales, location: '/', onNavigate: navigate };
     return { policy, host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, invokerFailures, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, submit };
 }
 function lifecycleFixture(earlyCaseCreation = true, persistentSaving = true) {
@@ -206,6 +210,40 @@ describe('authored optional application lifecycle', () => {
 });
 
 describe('maintained native package Surface host', () => {
+  it.each([false, true])('renders a slot-selected sibling Component in an isolated native engine with different Definition=%s', async differentDefinition => {
+    const test = fixture();
+    const exported = structuredClone(bundle);
+    const selectedDefinition = test.host.definition;
+    const siblingDefinition = differentDefinition ? { ...selectedDefinition, url: 'urn:test:sibling-definition' } : selectedDefinition;
+    if (differentDefinition) {
+      exported.manifest.definitions = [...exported.manifest.definitions!, { url: siblingDefinition.url, version: siblingDefinition.version }];
+      exported.documents = { ...exported.documents, [siblingDefinition.url]: siblingDefinition };
+    }
+    const surface = Object.values(exported.documents).find(document => document && typeof document === 'object' && '$formspecSurface' in document) as SurfaceDocument;
+    surface.routes.push({ id: 'sibling', path: '/sibling', slots: [{ id: 'sibling-form', slotType: 'definition-form', binding: { definitionRef: siblingDefinition.url } }] });
+    test.host.bundle = dereferenceBundleExport(exported);
+    const siblingComponent: ComponentDocument = { ...component, url: 'urn:test:sibling-component', targetDefinition: { url: siblingDefinition.url },
+      tree: { component: 'Stack', children: [{ component: 'Text', text: 'Sibling presentation' }] } };
+    test.props.componentRouteResolver = componentResolver(siblingComponent);
+    const load = vi.spyOn(test.props.composition.draftStore, 'load');
+    const getDefinition = vi.spyOn(test.props.composition.definitionSource, 'getDefinition');
+    render(<NativePackageRespondentHost {...test.props} location="/sibling" />);
+    await screen.findByText('Sibling presentation');
+    expect(observed.forms).toHaveLength(0); expect(test.configureRuntime).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled(); expect(getDefinition).not.toHaveBeenCalled();
+    expect(test.props.componentRouteResolver).toHaveBeenCalledWith(expect.objectContaining({ route: 'sibling', slot: 'sibling-form',
+      definition: { url: siblingDefinition.url, version: siblingDefinition.version } }));
+  });
+
+  it('shows an exact slot refusal without selecting the signing Component or touching Source', () => {
+    const test = fixture();
+    test.props.componentRouteResolver.mockReturnValue({ status: 'unavailable', reason: 'component-claim-not-unique', diagnostics: [] });
+    const load = vi.spyOn(test.props.composition.draftStore, 'load');
+    render(<NativePackageRespondentHost {...test.props} />);
+    expect(screen.getByRole('alert').textContent).toContain('component-claim-not-unique');
+    expect(observed.forms).toHaveLength(0); expect(test.configureRuntime).not.toHaveBeenCalled(); expect(load).not.toHaveBeenCalled();
+  });
+
   it('configures the first runtime with the already-admitted identity subject', async () => {
     const test = await actualFixture();
     const claim = { provider: 'https://idp.example.test', adapter: 'test-oidc', subjectRef: 'oidc:admitted',
@@ -252,7 +290,7 @@ describe('maintained native package Surface host', () => {
     const createEngine = vi.fn(createFormEngine);
     const host = createNativePackageSigningHost({ ...test.policy, createEngine, clearDraftAccess: key => cohort.draftStore.delete(key) });
     const composition = createStubComposition(); composition.draftStore = cohort.draftStore;
-    composition.nativePackageRespondent = { load: async () => ({ composition, host, componentDocument: component, localeDocuments: test.policy.locales,
+    composition.nativePackageRespondent = { load: async () => ({ composition, host, componentDocument: component, componentRouteResolver: componentResolver(component), localeDocuments: test.policy.locales,
       moduleId: host.moduleId, initialLocale: 'en', resumeSubmitted: async () => {
         const state = await cohort.draftStore.readState!(key);
         if (state?.kind === 'submitted') await host.configureSubmittedRuntime({ definition, draftKey: key, claim: null, state });
@@ -269,7 +307,7 @@ describe('maintained native package Surface host', () => {
     expect(transport.requests).toHaveLength(1); mounted.unmount(); host.dispose();
     const freshHost = createNativePackageSigningHost({ ...test.policy, createEngine });
     const freshComposition = createStubComposition(); freshComposition.draftStore = cohort.draftStore;
-    freshComposition.nativePackageRespondent = { load: async () => ({ composition: freshComposition, host: freshHost, componentDocument: component,
+    freshComposition.nativePackageRespondent = { load: async () => ({ composition: freshComposition, host: freshHost, componentDocument: component, componentRouteResolver: componentResolver(component),
       localeDocuments: test.policy.locales, moduleId: freshHost.moduleId, initialLocale: 'en', resumeSubmitted: async () => {
         const state = await cohort.draftStore.readState!(key); return state?.kind ?? 'absent';
       } }) };
@@ -283,7 +321,7 @@ describe('maintained native package Surface host', () => {
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Passport renewal' }));
     restarted.unmount(); freshHost.dispose(); window.history.replaceState(null, '', '/');
   });
-  it.each(['non-slash', 'missing', 'parameter', 'collision', 'no-definition', 'embedded-required', 'embedded-definition'] as const)('qualifies the authored %s entry through maintained route plans', async variant => {
+  it.each(['non-slash', 'missing', 'parameter', 'collision', 'no-definition', 'embedded-required', 'embedded-definition', 'nested-embedded-definition', 'sibling-definition', 'missing-sibling-definition'] as const)('qualifies the authored %s entry through maintained route plans', async variant => {
     const test = await actualFixture(); test.host.dispose();
     const exported = structuredClone(test.policy.bundle);
     const surface = exported.documents[exported.manifest.entrySurface!] as SurfaceDocument;
@@ -293,20 +331,45 @@ describe('maintained native package Surface host', () => {
     if (variant === 'parameter') entry.path = '/start/{subject}';
     if (variant === 'collision') surface.routes.push({ ...structuredClone(entry), id: 'duplicate' });
     if (variant === 'no-definition') entry.slots = [{ id: 'static-entry', slotType: 'static-content', binding: { content: [] } }];
+    if (variant === 'sibling-definition' || variant === 'missing-sibling-definition') {
+      const sibling = { ...test.policy.definition, url: 'urn:test:eligibility' };
+      if (variant === 'sibling-definition') {
+        exported.manifest.definitions = [...exported.manifest.definitions!, { url: sibling.url, version: sibling.version }];
+        exported.documents = { ...exported.documents, [sibling.url]: sibling };
+      }
+      entry.slots = [{ id: 'eligibility', slotType: 'definition-form', binding: { definitionRef: sibling.url } }];
+    }
     if (variant === 'embedded-required') {
       const ceremony = surface.routes.find(route => route.path === '/review-sign')!;
       surface.routes.push({ id: 'wrapper', path: '/embedded-review', slots: [{ id: 'embedded', slotType: 'embed-route', binding: { routeRef: ceremony.id } }] });
     }
-    if (variant === 'embedded-definition') {
+    if (variant === 'embedded-definition' || variant === 'nested-embedded-definition') {
       surface.routes.push({ id: 'entry-wrapper', path: '/embedded-entry', slots: [{ id: 'embedded-form', slotType: 'embed-route', binding: { routeRef: entry.id } }] });
       surface.entry = 'entry-wrapper';
+      if (variant === 'nested-embedded-definition') {
+        surface.routes.push({ id: 'nested-entry', path: '/nested-entry', slots: [{ id: 'nested-form', slotType: 'embed-route', binding: { routeRef: 'entry-wrapper' } }] });
+        surface.entry = 'nested-entry';
+      }
+      expect(() => createNativePackageSigningHost({ ...test.policy, bundle: exported })).toThrow('native-embedded-form-unsupported');
+      expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+      return;
     }
     const host = createNativePackageSigningHost({ ...test.policy, bundle: exported });
     if (variant === 'non-slash') {
       expect(host.getStartupRoute('/review-sign')).toMatchObject({ entryHref: '/start-here', requiresHostState: true });
       expect(host.getStartupRoute('/start-here')).toMatchObject({ entryHref: '/start-here', requiresHostState: false });
+    } else if (variant === 'sibling-definition') {
+      expect(host.getStartupRoute('/')).toMatchObject({ entryHref: '/', requiresHostState: false });
+      const sibling = host.bundle.definitions.get('urn:test:eligibility')!;
+      const engine = createFormEngine(sibling);
+      try {
+        await expect(host.configureRuntime({ engine, definition: sibling,
+          draftKey: { formUrl: sibling.url, formVersion: sibling.version }, claim: null, activeLocale: 'en' }))
+          .rejects.toThrow('native-runtime-context-refused');
+      } finally { engine.dispose(); }
+      expect(host.getSnapshot().controller).toBeUndefined();
+      expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
     } else if (variant === 'embedded-required') expect(host.getStartupRoute('/embedded-review')).toMatchObject({ entryHref: '/', requiresHostState: true });
-    else if (variant === 'embedded-definition') expect(host.getStartupRoute('/review-sign')).toMatchObject({ entryHref: '/embedded-entry', requiresHostState: true });
     else expect(() => host.getStartupRoute('/review-sign')).toThrow('native-entry-route-unavailable');
     host.dispose();
   });
@@ -491,7 +554,7 @@ describe('maintained native package Surface host', () => {
     const freshHost = createNativePackageSigningHost(policy);
     props.composition.draftStore.readState = vi.fn(async () => ({ kind: 'active' as const, response: signed.response, signed, ...(application ? { application: application.receipt } : {}) }));
     props.composition.nativePackageRespondent = { load: async () => ({ composition: props.composition, host: freshHost,
-      componentDocument: selectedComponent, localeDocuments: policy.locales, moduleId: freshHost.moduleId, initialLocale: 'en' }) };
+      componentDocument: selectedComponent, componentRouteResolver: componentResolver(selectedComponent), localeDocuments: policy.locales, moduleId: freshHost.moduleId, initialLocale: 'en' }) };
     window.history.replaceState(null, '', '/?form=form&package=%2Fpackage.json');
     const restored = render(<NativePackageRuntime composition={props.composition} config={props.config} />);
     await screen.findByRole('textbox', { name: 'Full legal name *' });
@@ -528,7 +591,7 @@ describe('maintained native package Surface host', () => {
           subjectRef: claim.subjectRef, formVersionId: 'publication', application: submittedCase } });
       application.lifecycle.load.mockResolvedValue(submittedCase);
       props.composition.nativePackageRespondent = { load: async () => ({ composition: props.composition, host: terminalHost,
-        componentDocument: selectedComponent, localeDocuments: policy.locales, moduleId: terminalHost.moduleId, initialLocale: 'en' }) };
+        componentDocument: selectedComponent, componentRouteResolver: componentResolver(selectedComponent), localeDocuments: policy.locales, moduleId: terminalHost.moduleId, initialLocale: 'en' }) };
       const terminal = render(<NativePackageRuntime composition={props.composition} config={props.config} />);
       await screen.findByText('Application submitted: APP-001');
       expect(terminalHost.getSnapshot().controller).toBeUndefined(); expect(createEngine).not.toHaveBeenCalled();

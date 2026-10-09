@@ -1,4 +1,5 @@
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
+import type { ComponentRouteResolver } from '@formspec-org/app-graph';
 import { nativePackageSigningConfig, type NativePackageSigningConfig } from '../config/native-package-signing.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
@@ -13,6 +14,7 @@ export interface NativePackageBoot {
   composition: Composition;
   host: ReturnType<typeof createNativePackageSigningHost>;
   componentDocument: ComponentDocument;
+  componentRouteResolver: ComponentRouteResolver;
   localeDocuments: readonly LocaleDocument[];
   moduleId: string;
   initialLocale: string;

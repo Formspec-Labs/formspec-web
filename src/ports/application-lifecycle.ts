@@ -13,6 +13,11 @@ export interface ApplicationCaseReceipt {
   draftRef: string;
   status: 'in-progress' | 'submitted';
 }
+/** A failed case lookup leaves association unknown while the owned draft remains usable. */
+export interface ApplicationCaseLookupUnavailable {
+  readonly status: 'unavailable';
+  readonly statusCode: 503;
+}
 export interface ApplicationLifecycle {
   readonly capabilities: Readonly<ApplicationLifecycleCapabilities>;
   /** Fresh current-owner lookup; never creates a case. */

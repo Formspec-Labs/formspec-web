@@ -24,7 +24,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * deeper. {@link SurfaceSlotFrame} is both paths now.
  */
 import { selectDataSourceRevisions } from './data-source-revision.js';
-import { useCallback, useEffect, useMemo, useRef, useState, } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from 'react';
 import { createFormEngine, createMappingEngine, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
 import { FormspecForm } from '@formspec-org/react';
 import { resolveFieldReferences, targetDefinitionMatches, } from '@formspec-org/types';
@@ -292,8 +292,8 @@ function SurfaceStaticContent({ content, needAnchors, routeId, slotId, semanticO
             return (_jsx("hr", { className: "fs-surface-static-divider", ...needTraceAttributes(needAnchors) }));
     }
 }
-export function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, }) {
-    return (_jsx(DefaultSurfaceDefinitionForm, { plan: plan, grant: grant, route: route, initialData: initialData, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, responseActionsDocument: responseActionsDocument, semanticControlScope: semanticControlScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, responseActionInvoker: responseActionInvoker }));
+export function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, }) {
+    return (_jsx(DefaultSurfaceDefinitionForm, { plan: plan, grant: grant, route: route, initialData: initialData, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, responseActionsDocument: responseActionsDocument, semanticControlScope: semanticControlScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, responseActionInvoker: responseActionInvoker, componentDocument: componentDocument, localeDocuments: localeDocuments, activeLocale: activeLocale }));
 }
 function executeDefinitionFormMapping({ mapping, value, }) {
     const result = createMappingEngine(mapping).reverse(value);
@@ -433,7 +433,7 @@ function DefaultDefinitionFormSlot({ input, semanticOutputScope, }) {
         : []);
     return renderDefaultDefinitionForm(input);
 }
-function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, }) {
+function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, }) {
     const engine = useMemo(() => {
         const created = createFormEngine(plan.definition);
         if (initialData) {
@@ -443,6 +443,15 @@ function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocu
         return created;
     }, [initialData?.data, plan.definition]);
     useEffect(() => () => engine.dispose(), [engine]);
+    useLayoutEffect(() => {
+        for (const locale of localeDocuments ?? []) {
+            if (locale.target.kind === 'definition' && targetDefinitionMatches(locale.target, plan.definition)) {
+                engine.loadLocale(locale);
+            }
+        }
+        if (activeLocale !== undefined)
+            engine.setLocale(activeLocale);
+    }, [engine, localeDocuments, activeLocale, plan.definition]);
     // Human help is References-spec resolution alone: this form never renders
     // agent-audience entries or Ontology concepts.
     const references = useMemo(() => referencesDocuments.filter((document) => targetDefinitionMatches(document.targetDefinition, plan.definition)), [plan.definition, referencesDocuments]);
@@ -469,7 +478,7 @@ function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocu
             return [];
         }
     }, [references]);
-    return (_jsx(FormspecForm, { engine: engine, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, responseActionInvoker: responseActionInvoker ?? null, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
+    return (_jsx(FormspecForm, { engine: engine, componentDocument: componentDocument, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, responseActionInvoker: responseActionInvoker ?? null, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
             ? {
                 // `onSubmit` requests the renderer's declared submit control. It is
                 // a no-op because durable effects have not reached a terminal yet.

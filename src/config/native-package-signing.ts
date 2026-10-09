@@ -11,6 +11,8 @@ export interface NativePackageSigningConfig {
   modules?: readonly { id: string; version: string }[];
   /** Exact inline Component selection; omission retains the external file path. */
   component?: { handle: string; url: string; version: string };
+  /** Exact deployment-approved static image URLs; omission admits no image source. */
+  staticAssets?: readonly { kind: 'image'; source: string }[];
   initialLocale: string;
   roles: Record<Exclude<ResponseActionRole, 'startApplication'>, { artifactRef: string; actionRef: string }>
     & Partial<Record<'startApplication', { artifactRef: string; actionRef: string }>>;
@@ -30,6 +32,7 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
   closed(config, ['keyId', 'definition', 'bundle', 'module', 'initialLocale', 'roles', 'bindings', 'readiness',
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'modules') ? ['modules'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'component') ? ['component'] : []),
+    ...(config && typeof config === 'object' && Object.hasOwn(config, 'staticAssets') ? ['staticAssets'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'applicationLifecycle') ? ['applicationLifecycle'] : [])]);
   nonblank(config.keyId);
   for (const name of ['definition', 'bundle', 'module'] as const) {
@@ -48,6 +51,20 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
     if (config.modules.filter(pin => pin.id === signing.id && pin.version === signing.version).length !== 1) invalid();
   }
   nonblank(config.initialLocale);
+  if (Object.hasOwn(config, 'staticAssets')) {
+    if (!Array.isArray(config.staticAssets) || !config.staticAssets.length) invalid();
+    const sources = new Set<string>();
+    for (const pin of config.staticAssets) {
+      closed(pin, ['kind', 'source']);
+      if (pin.kind !== 'image') invalid();
+      nonblank(pin.source);
+      try {
+        const url = new URL(pin.source);
+        if (url.protocol !== 'https:' || url.username || url.password || url.hash) invalid();
+      } catch { invalid(); }
+      unique(sources, pin.source);
+    }
+  }
   if (Object.hasOwn(config, 'component')) {
     closed(config.component, ['handle', 'url', 'version']);
     nonblank(config.component.handle); absoluteUrl(config.component.url); nonblank(config.component.version);

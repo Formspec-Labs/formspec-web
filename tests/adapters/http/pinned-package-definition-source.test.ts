@@ -275,6 +275,29 @@ function componentBundle() {
 }
 
 describe('explicit inline Component selection', () => {
+  it('retains the qualified producer resolver for exact native slot selection without more fetches', async () => {
+    const candidate = componentBundle();
+    const component = { ...componentDocument(), targetSurfaceRoutes: [{
+      surface: { url: surfaceUrl, version: '1.0.0' }, route: 'start', slot: 'form', role: 'slot',
+    }], tree: { component: 'Stack', id: 'layout', children: [{ component: 'Text', id: 'intro', text: 'Authored intake' }] } };
+    candidate.documents[componentRef.url] = component;
+    const fetch = await mockNativePackage(candidate);
+    const source = new PinnedPackageDefinitionSource('/package.json', {}, componentRef);
+    await source.getNativeBundleExport();
+    const count = fetch.mock.calls.length;
+    const resolver = await source.getComponentRouteResolver();
+    expect(resolver).toBe(await source.getComponentRouteResolver());
+    const selection = { surface: { url: surfaceUrl, version: '1.0.0' }, route: 'start', slot: 'form',
+      role: 'slot' as const, definition: { url: nativeDefinition.url, version: nativeDefinition.version } };
+    const result = resolver!(selection);
+    expect(result).toMatchObject({ status: 'ready', component: { ref: componentRef, document: component } });
+    expect(resolver!({ ...selection, slot: 'other' })).toMatchObject({ status: 'unavailable', reason: 'slot-definition-mismatch' });
+    expect(fetch).toHaveBeenCalledTimes(count);
+    const bundle = await source.getNativeBundleExport();
+    bundle!.documents = { ...bundle!.documents, [componentRef.url]: {} };
+    expect(resolver!(selection)).toEqual(result);
+  });
+
   it.each([false, true])('selects one exact declared Component among siblings with reversed=%s', async reverse => {
     const candidate = componentBundle();
     const alternateRef = { ...componentRef, handle: 'alternate', url: 'urn:test:component:alternate' };

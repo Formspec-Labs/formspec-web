@@ -275,7 +275,7 @@ function routeDefinitionFormSources(surfaceHandle, route, targetDefinition) {
             : [diagnosticSourceForHandle(surfaceHandle, `/routes/${route.index}/slots`)],
     };
 }
-function isExactVersion(value) {
+export function isExactVersion(value) {
     return typeof value === 'string' && EXACT_SEMVER.test(value);
 }
 function checkExactVersion(targetVersion, candidateVersion, source, targetLabel) {
@@ -326,7 +326,8 @@ function routeClaimKey(surfaceUrl, surfaceVersion, target) {
 function ownerLabel(membership, handle) {
     return `${membership.handle} (${stringProp(record(handle.ref), 'url') ?? membership.url})`;
 }
-export function validateComponentRouteTargets(context) {
+/** Shared claim collection; callers must establish schema admission first. */
+export function collectComponentRouteClaims(context) {
     const manifestDocument = context.manifest.document;
     const manifestSurfaces = refsFromManifest(manifestDocument, 'surfaces');
     const manifestSurfaceUrls = new Set(manifestSurfaces.map((ref) => ref.url));
@@ -474,9 +475,12 @@ export function validateComponentRouteTargets(context) {
                 }));
             }
             else {
-                claims.set(key, { key, owner, source });
+                claims.set(key, { key, owner, source, component: handle, membership, target });
             }
         });
     }
-    return diagnostics;
+    return { diagnostics, claims: [...claims.values()] };
+}
+export function validateComponentRouteTargets(context) {
+    return collectComponentRouteClaims(context).diagnostics;
 }

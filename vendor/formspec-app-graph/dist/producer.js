@@ -2,6 +2,7 @@
 import { artifactResolutionGraphInput, resolveArtifacts, resolveBundleExportArtifacts, } from './artifact-resolver.js';
 import { moduleResolverInputFromAppGraph, resolveModules, snapshotModulePayloadSchemaResources, } from './module-resolver.js';
 import { validateAppGraph } from './validator.js';
+import { prepareComponentRouteResolver } from './component-route-resolution.js';
 function finishAppGraphValidationReport(request, artifactResolutionReport) {
     const graphInput = artifactResolutionGraphInput(artifactResolutionReport);
     const moduleResolutionReport = resolveModules(moduleResolverInputFromAppGraph({
@@ -12,7 +13,7 @@ function finishAppGraphValidationReport(request, artifactResolutionReport) {
         ...(request.moduleSupport ? { support: request.moduleSupport } : {}),
         ...(request.moduleSource ? { source: request.moduleSource } : {}),
     }));
-    const report = validateAppGraph({
+    const validationRequest = {
         manifest: graphInput.manifest,
         artifacts: graphInput.artifacts,
         artifactResolution: graphInput.artifactResolution,
@@ -27,11 +28,13 @@ function finishAppGraphValidationReport(request, artifactResolutionReport) {
         ...(request.evidenceSchemaValidators ? { evidenceSchemaValidators: request.evidenceSchemaValidators } : {}),
         ...(request.crossArtifactValidators ? { crossArtifactValidators: request.crossArtifactValidators } : {}),
         ...(request.validationOptions ? { options: request.validationOptions } : {}),
-    });
+    };
+    const report = validateAppGraph(validationRequest);
     return {
         artifactResolutionReport,
         moduleResolutionReport,
         report,
+        componentRouteResolver: prepareComponentRouteResolver(validationRequest, report),
     };
 }
 export async function produceAppGraphValidationReport(request) {

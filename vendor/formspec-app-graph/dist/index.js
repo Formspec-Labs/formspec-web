@@ -10,6 +10,7 @@ export { moduleResolverInputFromAppGraph, resolveModules, } from './module-resol
 export { validateComponentGraphContexts, } from './component-graph-context.js';
 export { validateAppEntry, } from './app-entry.js';
 export { validateComponentRouteTargets, } from './component-routes.js';
+export { resolveComponentRouteTarget, } from './component-route-resolution.js';
 export { validateExperienceActionRefs, } from './experience-action-refs.js';
 export { validateExperienceReferentialIntegrity, } from './experience-referential-integrity.js';
 export { validateExecutableSchemaContracts, } from './executable-schema-contracts.js';

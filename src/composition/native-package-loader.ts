@@ -45,15 +45,26 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   const source = new PinnedPackageDefinitionSource(options.packageUrl, {
     moduleAdmission: { allowedModules: [...modulePins] }, moduleSupport: { payloadSchemaResources },
   }, options.signing.component);
-  const [definition, bundle, componentDocument, localeDocuments] = await Promise.all([
-    source.getDefinition(), source.getNativeBundleExport(), source.getComponentDocument(), source.getLocaleDocuments(),
+  const [definition, bundle, componentDocument, localeDocuments, componentRouteResolver] = await Promise.all([
+    source.getDefinition(), source.getNativeBundleExport(), source.getComponentDocument(), source.getLocaleDocuments(), source.getComponentRouteResolver(),
   ]);
   const pins = options.signing;
-  if (!bundle || !componentDocument || definition.url !== pins.definition.url || definition.version !== pins.definition.version
+  if (!bundle || !componentDocument || !componentRouteResolver || definition.url !== pins.definition.url || definition.version !== pins.definition.version
     || bundle.manifest.id !== pins.bundle.id || bundle.manifest.version !== pins.bundle.version
     || bundle.manifest.modules?.length !== modulePins.length
     || modulePins.some(pin => bundle.manifest.modules!.filter(module => same(module, pin)).length !== 1)) throw new Error('Native package differs from its explicit deployment pins');
   const resolved = dereferenceBundleExport(bundle);
+  for (const surface of resolved.surfaces) {
+    const url = resolved.surfaceRefs?.get(surface);
+    const refs = bundle.manifest.surfaces?.filter(ref => ref.url === url) ?? [];
+    for (const route of surface.routes) for (const slot of route.slots ?? []) {
+      if (slot.slotType !== 'definition-form') continue;
+      const form = resolved.definitions.get(String(record(slot.binding)?.definitionRef));
+      const selected = componentRouteResolver({ surface: { url: url ?? '', version: refs.length === 1 ? refs[0].version ?? '' : '' },
+        route: route.id, slot: slot.id, role: 'slot', definition: { url: form?.url ?? '', version: form?.version ?? '' } });
+      if (selected.status !== 'ready') throw new Error(`Native form Component is unavailable: ${selected.reason}`);
+    }
+  }
   const localeFor = (locale: string) => {
     const matches = localeDocuments.filter(document => document.locale === locale
       && document.target.kind === 'definition' && targetDefinitionMatches(document.target, definition));
@@ -144,7 +155,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   if (registryEntries.diagnostics.length) throw new Error('Native Registry entries are ambiguous');
   const semantics = createSemanticControlRegistry();
   const definitionDigest = await computeJcsSha256Digest(definition);
-  const host = createNativePackageSigningHost({ bundle, definition, moduleId: pins.module.id, registryEntries: registryEntries.entries,
+  const host = createNativePackageSigningHost({ bundle, definition, moduleId: pins.module.id, modules: modulePins, staticAssets: pins.staticAssets, registryEntries: registryEntries.entries,
     locales: localeDocuments, initialLocale: pins.initialLocale,
     clearDraftAccess: async key => { formIdResolver(key.formUrl, key.formVersion); await cohort.draftStore.delete(key); owner = undefined; }, publication: { formId: publication.form_id, formVersionId: publication.form_version_id },
     applicationReadiness: pins.applicationLifecycle,
@@ -161,7 +172,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     reviewResponseDigest: handoffHash, canonicalResponseHandoffBytes: handoffBytes,
   });
   let resuming: ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>> | undefined;
-  return { composition, host, componentDocument, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale,
+  return { composition, host, componentDocument, componentRouteResolver, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale,
     resumeSubmitted: () => resuming ??= atNativeAdmissionStage('saved-access', async () => {
       // Validate retained credentials through the bridge; recovery never issues an owner.
       if (anonymousSessions && resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {

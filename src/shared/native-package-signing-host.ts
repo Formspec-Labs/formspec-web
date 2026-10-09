@@ -1,9 +1,9 @@
 import canonicalize from 'canonicalize';
 import { createFormEngine, preactReactiveRuntime, type IFormEngine, type RegistryEntry } from '@formspec-org/engine/render';
 import type { SemanticControlScope } from '@formspec-org/react';
-import { captureResponseFieldMetadata, composeSurfaceApp, matchRoute, routeHref, createThemeAuthority, createWidgetRegistry, dataSourceAvailableToWidget, dereferenceBundleExport, flattenRegistryEntries, planMatchedRoute, resolveDataSourceDescriptor, type BundleExport, type SlotPlan } from '@formspec-org/surface';
+import { captureResponseFieldMetadata, composeSurfaceApp, matchRoute, routeHref, createThemeAuthority, createWidgetRegistry, dataSourceAvailableToWidget, dereferenceBundleExport, flattenRegistryEntries, planMatchedRoute, resolveDataSourceDescriptor, type BundleExport, type SlotPlan, type SurfaceStaticAssetResolver } from '@formspec-org/surface';
 import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, responseReviewHash, starterWidgetModule, type ResponseReviewData, type ResponseReviewOptions, type ResponseReviewState } from '@formspec-org/surface-react';
-import type { FormDefinition, FormResponse, LocaleDocument, ValidationReport } from '@formspec-org/types';
+import { targetDefinitionMatches, type FormDefinition, type FormResponse, type LocaleDocument, type ValidationReport } from '@formspec-org/types';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { RespondentOwnedRuntimeInput, RespondentOwnedRuntime, RespondentSubmittedRuntimeInput } from '../app/RespondentRuntime.tsx';
@@ -14,6 +14,9 @@ import { generateIdempotencyKey } from './idempotency-key.ts';
 export interface NativePackageSigningHostPolicy {
   bundle: BundleExport;
   moduleId: string;
+  /** Explicit deployment module pins; omission preserves the single signing-module host. */
+  modules?: readonly { id: string; version: string }[];
+  staticAssets?: readonly { kind: 'image'; source: string }[];
   definition: FormDefinition;
   registryEntries: readonly RegistryEntry[];
   locales: readonly LocaleDocument[];
@@ -45,21 +48,42 @@ export interface NativePackageSigningHostPolicy {
 
 /** One host session survives form-route unmount. Renderer leases never own the ceremony. */
 export function createNativePackageSigningHost(policy: NativePackageSigningHostPolicy) {
-  policy = { ...policy, bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
+  policy = { ...policy, modules: structuredClone(policy.modules), staticAssets: structuredClone(policy.staticAssets), bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
     registryEntries: structuredClone(policy.registryEntries), locales: structuredClone(policy.locales), bindings: structuredClone(policy.bindings),
     applicationReadiness: structuredClone(policy.applicationReadiness), readiness: structuredClone(policy.readiness), publication: structuredClone(policy.publication),
     controller: { ...policy.controller, roles: structuredClone(policy.controller.roles) } };
-  freezeMetadata(policy.bundle); freezeMetadata(policy.definition); freezeMetadata(policy.registryEntries); freezeMetadata(policy.locales);
+  freezeMetadata(policy.modules); freezeMetadata(policy.staticAssets); freezeMetadata(policy.bundle); freezeMetadata(policy.definition); freezeMetadata(policy.registryEntries); freezeMetadata(policy.locales);
   freezeMetadata(policy.bindings); freezeMetadata(policy.readiness); freezeMetadata(policy.publication); freezeMetadata(policy.controller.roles);
   const bundle = dereferenceBundleExport(policy.bundle);
   const flattened = flattenRegistryEntries(bundle.registries);
   const loadedLocales = Object.values(policy.bundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document);
-  if (bundle.definitions.size !== 1 || !same(bundle.definitions.get(policy.definition.url), policy.definition)
+  const selectedDefinitions = policy.bundle.manifest.definitions?.filter(reference => reference.url === policy.definition.url) ?? [];
+  if (selectedDefinitions.length !== 1
+    || selectedDefinitions[0].version !== undefined && selectedDefinitions[0].version !== policy.definition.version
+    || !same(bundle.definitions.get(policy.definition.url), policy.definition)
     || flattened.diagnostics.length || !same(flattened.entries, policy.registryEntries)
     || loadedLocales.length !== policy.locales.length || policy.locales.some(document => loadedLocales.filter(loaded => same(loaded, document)).length !== 1)
     || !policy.bundle.manifest.modules?.some(module => module.id === policy.moduleId && module.version === '0.1.0')) throw new Error('native-resource-unadmitted');
-  const widgets = createWidgetRegistry({ registryEntries: flattened.entries, modules: [starterWidgetModule(policy.moduleId)] });
+  const modulePins = policy.modules ?? [{ id: policy.moduleId, version: '0.1.0' }];
+  if (!modulePins.length || new Set(modulePins.map(module => module.id)).size !== modulePins.length
+    || !modulePins.some(module => module.id === policy.moduleId)
+    || policy.modules && policy.bundle.manifest.modules?.length !== modulePins.length
+    || modulePins.some(pin => policy.bundle.manifest.modules?.filter(module => same(module, pin)).length !== 1)) throw new Error('native-resource-unadmitted');
+  const registerModules = (review?: ResponseReviewOptions) => modulePins.map(module => starterWidgetModule(module.id,
+    module.id === policy.moduleId && review ? { responseReview: review } : {}));
+  const widgets = createWidgetRegistry({ registryEntries: flattened.entries, modules: registerModules() });
   const app = composeSurfaceApp(bundle.surfaces, { entrySurface: bundle.entrySurface });
+  const staticAssetResolver: SurfaceStaticAssetResolver | undefined = policy.staticAssets ? request => {
+    if (request.kind !== 'image' || !policy.staticAssets!.some(pin => pin.kind === request.kind && pin.source === request.source)) return { status: 'refused' };
+    let url: URL;
+    try { url = new URL(request.source); } catch { return { status: 'refused' }; }
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) return { status: 'refused' };
+    const declared = app.routes.some(handle => handle.surfaceId === request.site.surfaceId && handle.routeId === request.site.routeId
+      && handle.route.slots?.some(slot => slot.id === request.site.slotId && slot.slotType === 'static-content'
+        && 'kind' in slot.binding && slot.binding.kind === request.kind
+        && 'content' in slot.binding && slot.binding.content === request.source));
+    return declared ? { status: 'admitted', source: request.source } : { status: 'refused' };
+  } : undefined;
   const requiredHostRoutes = new Set<typeof app.routes[number]>();
   const definitionEntryRoutes = new Set<typeof app.routes[number]>();
   const signedReviewRoutes = new Set<typeof app.routes[number]>();
@@ -68,7 +92,12 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const plan = planMatchedRoute({ handle, app, definitions: bundle.definitions, experiences: bundle.experiences,
       registryEntries: flattened.entries, widgets, dataSources: bundle.dataSources, surfaceRef: bundle.surfaceRefs?.get(handle.surface),
       responseActions: bundle.responseActions, themeAuthority: createThemeAuthority({ tenantTheme: bundle.tenantTheme }),
+      staticAssetResolver,
       hasExecutor: true, hasWidgetActionExecutor: true });
+    if (plan.slots.some(slot => slot.slotType === 'embed-route'
+      && [...walkAdmittedSlots(slot.slots)].some(child => child.slotType === 'definition-form'))) {
+      throw new Error('native-embedded-form-unsupported');
+    }
     const slots = [...walkAdmittedSlots(plan.slots)];
     if (submitSource && handle.surfaceId === submitSource.route.surfaceId
       && bundle.surfaceRefs?.get(handle.surface) === submitSource.route.surfaceRef
@@ -78,10 +107,11 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         && slot.actionOutputs.some(output => output.name === submitSource.outputName
           && output.actionRef === policy.controller.roles.submit?.actionRef && !!output.action))) signedReviewRoutes.add(handle);
     if (slots.some(slot => slot.slotType === 'module-widget' && slot.dataInputs.some(input => input.required && input.descriptor?.source.kind === 'host-state'))) requiredHostRoutes.add(handle);
-    if (slots.some(slot => slot.slotType === 'definition-form' && slot.status === 'ready' && same(slot.definition, policy.definition))) definitionEntryRoutes.add(handle);
+    if (slots.some(slot => slot.slotType === 'definition-form' && slot.status === 'ready')) definitionEntryRoutes.add(handle);
     for (const slot of slots) {
       if (slot.slotType !== 'module-widget') continue;
       if (slot.resolution.status !== 'resolved' || !slot.resolution.declared) throw new Error('native-widget-unadmitted');
+      if (slot.key.moduleId !== policy.moduleId) continue;
       const shape = slot.key.widgetName === SIGNING_CEREMONY_WIDGET_SHAPE.widgetName ? SIGNING_CEREMONY_WIDGET_SHAPE
         : slot.key.widgetName === RESPONSE_REVIEW_WIDGET_SHAPE.widgetName ? RESPONSE_REVIEW_WIDGET_SHAPE : undefined;
       if (!shape || !same(slot.resolution.entry?.widgetShape, shape)) throw new Error('native-widget-shape-unadmitted');
@@ -112,12 +142,13 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     return { name, descriptor };
   });
   let application: ResponseActionControllerSnapshot['application'];
+  let applicationLookup: ResponseActionControllerSnapshot['applicationLookup'];
   let checkpointState: 'unsaved' | 'saving' | 'saved' | 'failed' = 'unsaved';
   let pendingCheckpoint = false;
   const applicationFlags = () => {
     const paths = policy.applicationReadiness; const capabilities = policy.controller.applicationLifecycle?.capabilities;
     if (!rendererEngine || !paths || !capabilities) return;
-    rendererEngine.setInstanceValue(paths.instance, paths.canStartPath, capabilities.earlyCaseCreation);
+    rendererEngine.setInstanceValue(paths.instance, paths.canStartPath, capabilities.earlyCaseCreation && !applicationLookup);
     rendererEngine.setInstanceValue(paths.instance, paths.startedPath, !!application);
     rendererEngine.setInstanceValue(paths.instance, paths.persistentSavingPath, capabilities.persistentSaving);
   };
@@ -152,7 +183,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const reads = new Set<AbortController>();
   const sourceRevisions = new Map<string, { value: string; revision: number }>();
   const engineFactory = policy.createEngine ?? createFormEngine;
-  const applicationStatus = (): { application?: NonNullable<ResponseActionControllerSnapshot['application']> } => application ? { application } : {};
+  const applicationStatus = (): Pick<ResponseActionControllerSnapshot, 'application' | 'applicationLookup'> => ({
+    ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}) });
   const checkpointStatus = (): { checkpointState?: 'unsaved' | 'saving' | 'saved' | 'failed' } => policy.controller.applicationLifecycle ? { checkpointState } : {};
   let hostSnapshot = { ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted };
   const emit = () => { hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
@@ -163,7 +195,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function current(expected: number) { if (disposed || generation !== expected) throw new Error('native-context-obsolete'); }
   function stop(reason: Parameters<NativePackageSigningHostPolicy['invalidateAuthority']>[0]) {
-    if (reason === 'clear' || reason === 'dispose') { application = undefined; ownedResponseSeed = undefined; submitted = undefined; }
+    if (reason === 'clear' || reason === 'dispose') { application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; }
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
     authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? structuredClone(input.draftKey) : submittedKey ? structuredClone(submittedKey) : undefined);
   }
@@ -218,7 +250,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     if (restoredResponse) { ownedResponseSeed = structuredClone(restoredResponse); freezeMetadata(ownedResponseSeed); }
     unsubscribeController?.();
     const expected = authorityGeneration;
-    controller = createResponseActionController({ ...policy.controller, restoredApplication: application, restoredResponse: ownedResponseSeed,
+    controller = createResponseActionController({ ...policy.controller, restoredApplication: application, restoredApplicationLookup: applicationLookup, restoredResponse: ownedResponseSeed,
       context: { definition: policy.definition, draftKey: input.draftKey, publication: policy.publication,
         responseId: responseId!, generation: String(expected) }, signingContext: () => policy.signingContext(locale),
       validateFrozenResponse: async (response, validationTuple) => {
@@ -245,7 +277,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
     unsubscribeController = controller.subscribe(() => {
       publicSnapshot = controller!.getSnapshot();
-      application = publicSnapshot.application; applicationFlags();
+      application = publicSnapshot.application; applicationLookup = publicSnapshot.applicationLookup; applicationFlags();
       if (['saveInitial', 'saveOwned'].includes(publicSnapshot.phase) || publicSnapshot.phase === 'startApplication' && !publicSnapshot.owned) {
         pendingCheckpoint = true; checkpointState = 'saving';
       } else if (pendingCheckpoint) {
@@ -294,7 +326,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   };
   async function selectLocale(value: string) {
     if (submitted || publicSnapshot?.signed || publicSnapshot?.confirmation) throw new Error('native-locale-frozen');
-    const selected = policy.locales.find(document => document.locale.toLowerCase() === value.toLowerCase());
+    const matches = policy.locales.filter(document => document.locale.toLowerCase() === value.toLowerCase()
+      && document.target.kind === 'definition' && targetDefinitionMatches(document.target, policy.definition));
+    const selected = matches.length === 1 ? matches[0] : undefined;
     if (disposed || cleared || !input || !selected) throw new Error('native-locale-unavailable');
     value = selected.locale;
     checkpointState = 'unsaved';
@@ -302,17 +336,18 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     rendererEngine?.setLocale(value); start(saved);
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
   }
+  const widgetModules = registerModules(reviewOptions); freezeMetadata(widgetModules);
   return {
-    bundle, moduleId: policy.moduleId,
+    bundle, definition: policy.definition, moduleId: policy.moduleId, widgetModules, ...(staticAssetResolver ? { staticAssetResolver } : {}),
     ...(policy.controller.applicationLifecycle ? { applicationCapabilities: policy.controller.applicationLifecycle.capabilities,
       async refreshApplication() {
         if (controller) return controller.refreshApplication();
-        if (disposed || cleared || !submittedKey || !application) throw new Error('native-application-unavailable');
+        if (disposed || cleared || !submittedKey || (!application && !applicationLookup)) throw new Error('native-application-unavailable');
         const expected = authorityGeneration;
         const receipt = await policy.controller.applicationLifecycle!.load(submittedKey);
-        if (disposed || cleared || authorityGeneration !== expected || !receipt || receipt.caseLedgerId !== application.caseLedgerId
-          || receipt.draftRef !== application.draftRef || application.status === 'submitted' && receipt.status !== 'submitted') throw new Error('native-application-context-retired');
-        application = structuredClone(receipt); freezeMetadata(application); emit();
+        if (disposed || cleared || authorityGeneration !== expected || application && (!receipt || receipt.caseLedgerId !== application.caseLedgerId
+          || receipt.draftRef !== application.draftRef || application.status === 'submitted' && receipt.status !== 'submitted')) throw new Error('native-application-context-retired');
+        application = receipt ? structuredClone(receipt) : undefined; applicationLookup = undefined; freezeMetadata(application); emit();
       } } : {}), reviewOptions, selectLocale,
     getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; signedReviewHref?: string; signedReviewTitle?: string } {
       const match = matchRoute(app, pathname).match;
@@ -412,6 +447,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         throw new Error('native-submitted-context-refused');
       }
       application = next.state.application ? structuredClone(next.state.application) : undefined; freezeMetadata(application);
+      applicationLookup = next.state.applicationLookup ? structuredClone(next.state.applicationLookup) : undefined; freezeMetadata(applicationLookup);
       submittedKey = structuredClone(next.draftKey); freezeMetadata(submittedKey);
       responseId = response.id; locale = selectedLocale.locale;
       submitted = Object.freeze({ referenceNumber: response.id, recordKind: 'response' });
@@ -431,6 +467,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         restoredSigning: next.restoredSigning ? structuredClone(next.restoredSigning) : undefined, activeLocale: locale };
       if (!input) checkpointState = next.restoredResponse ? 'saved' : 'unsaved';
       if (!input && next.restoredApplication) { application = structuredClone(next.restoredApplication); freezeMetadata(application); }
+      if (!input && next.restoredApplicationLookup) { applicationLookup = structuredClone(next.restoredApplicationLookup); freezeMetadata(applicationLookup); }
       input = next;
       freezeMetadata(input.draftKey); freezeMetadata(input.claim); freezeMetadata(input.restoredResponse);
       rendererEngine = next.engine;
