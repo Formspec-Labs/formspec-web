@@ -12,6 +12,9 @@ import { FormspecForm, createSemanticControlRegistry } from '@formspec-org/react
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import type { ComponentDocument, LocaleDocument, FormResponse, SigningContent, SurfaceDocument } from '@formspec-org/types';
 import type { ComponentRouteResolver } from '@formspec-org/app-graph';
+import { createNativeScreenerCoordinator } from '../../src/shared/native-screener-coordinator.ts';
+import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts';
+import type { ScreenerRetention } from '../../src/ports/screener-retention.ts';
 import { NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
 import { AnonymousSessionBridge } from '../../src/adapters/http/anonymous-session.ts';
 import { delegatedSignedResponseFixture } from '../adapters/http/delegated-signed-response-fixture.ts';
@@ -221,6 +224,33 @@ describe('independent native Screener language', () => {
     expect(calls[1]?.signal.aborted).toBe(true);
     await act(async () => { finish({ status: 'refused', reason: 'retired', retry: 'same-act' }); }); window.history.replaceState(null, '', '/');
   });
+  it('uses the real Surface act with coordinator retry semantics and unchanged false answers', async () => {
+    const f = await hydrationFixture();
+    const retain = vi.fn<ScreenerRetention['retain']>().mockRejectedValueOnce(new Error('ambiguous retention')).mockImplementation(async () => {
+      const run = structuredClone(f.input.run);
+      Object.assign(run, { acceptance: { checkedAt: run.acceptance!.checkedAt, qualification: { status: 'pending', reason: 'expired' } } });
+      return run;
+    });
+    const coordinator = createNativeScreenerCoordinator({ selectionKey: 'selected-policy', retention: { retain, associate: vi.fn() },
+      hydration: { hydrate: vi.fn() }, context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent }) });
+    const { mounted } = screenerFixture(undefined, coordinator.completionPolicy);
+    await screen.findByRole('button', { name: /continue|check/i });
+    for (const field of mounted.container.querySelectorAll('select')) fireEvent.change(field, { target: { value: 'no' } });
+    const submit = mounted.container.querySelector<HTMLButtonElement>('.formspec-screener-continue')!;
+    fireEvent.click(submit);
+    await screen.findByRole('alert');
+    fireEvent.click(submit);
+    await vi.waitFor(() => expect(retain).toHaveBeenCalledTimes(2));
+    expect((await screen.findByRole('alert')).getAttribute('data-finding')).toBe('expired');
+    expect(retain.mock.calls[1][0].completionId).toBe(retain.mock.calls[0][0].completionId);
+    expect(Object.values(retain.mock.calls[1][0].answers)).toEqual(Array(8).fill(false));
+    fireEvent.click(submit);
+    await vi.waitFor(() => expect(retain).toHaveBeenCalledTimes(3));
+    expect(retain.mock.calls[2][0].completionId).not.toBe(retain.mock.calls[1][0].completionId);
+    expect(window.location.pathname).toBe('/eligibility');
+    mounted.unmount(); coordinator.dispose(); window.history.replaceState(null, '', '/');
+  });
+
   it('switches the exact 47-document candidate without a renewal controller or draft mutation', async () => {
     const { test, locales, documents, selectLocale, mounted, advanceSession } = screenerFixture((locales) => {
       const spanish = locales.find(locale => locale.target.kind === 'screener' && locale.locale === 'es-US')!;
