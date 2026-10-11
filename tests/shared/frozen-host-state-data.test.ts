@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolveDataSourceDescriptor, type DataSourceLoadRequest } from '@formspec-org/surface';
 import type { DataSourcesDocument } from '@formspec-org/types';
-import { createFrozenHostStateDataSourceRuntime } from '../../src/shared/frozen-host-state-data.ts';
+import { createFrozenHostStateDataSourceRuntime, type FrozenHostStateDataInput } from '../../src/shared/frozen-host-state-data.ts';
 
 function source(id: string): DataSourcesDocument['sources'][number] {
   return {
@@ -40,6 +40,21 @@ describe('frozen host-state data delivery', () => {
     if (!('then' in first) && first.status === 'loaded') (first.value as { answer: { value: string } }).answer.value = 'tampered';
     expect(runtime.dataSourceLoader(request)).toMatchObject({ value: { answer: { value: 'captured' } } });
     expect(runtime.validateDataSourcePayload).toBe(input.validatePayload);
+  });
+
+  it('preserves an opaque owning revision exactly through captured delivery and retirement', () => {
+    const f = fixture();
+    const revision = 'sha256:' + 'a'.repeat(64);
+    const selected: FrozenHostStateDataInput = { ...f.input, revision };
+    const runtime = createFrozenHostStateDataSourceRuntime(selected);
+    selected.revision = 'different:opaque/revision?x#y';
+    expect(runtime.dataSourceLoader(f.request)).toMatchObject({ status: 'loaded', revision });
+    f.invalidate();
+    expect(runtime.authorizeDataSource(f.request)).toMatchObject({ status: 'refused' });
+    expect(runtime.dataSourceLoader(f.request)).toMatchObject({ status: 'unavailable' });
+  });
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1, 0.5, '', '   '])('refuses invalid revision %s', revision => {
+    expect(() => createFrozenHostStateDataSourceRuntime({ ...fixture().input, revision })).toThrow();
   });
 
   it.each(['routeId', 'slotId', 'surfaceRef', 'sessionGeneration'] as const)('refuses different %s at authorization and direct load', key => {

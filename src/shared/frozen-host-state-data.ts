@@ -15,7 +15,7 @@ export interface FrozenHostStateDataInput {
   entries: readonly { descriptor: DataSourceDescriptor; value: unknown }[];
   generation: string | number;
   recordId: string;
-  revision: number;
+  revision: string | number;
   /** Checks the private owning session; generation alone is not authorization. */
   assertCurrent: () => void;
   validatePayload: DataSourcePayloadValidator;
@@ -29,7 +29,8 @@ export function createFrozenHostStateDataSourceRuntime(input: FrozenHostStateDat
   dataSourceLoader: DataSourceLoader;
   validateDataSourcePayload: DataSourcePayloadValidator;
 } {
-  if (!input.recordId.trim() || !Number.isSafeInteger(input.revision) || input.revision < 0
+  if (!input.recordId.trim()
+    || (typeof input.revision === 'string' ? !input.revision.trim() : !Number.isSafeInteger(input.revision) || input.revision < 0)
     || (typeof input.generation === 'string' ? !input.generation : !Number.isSafeInteger(input.generation))) {
     throw new Error('Host-state delivery requires an owned record, revision and generation');
   }
