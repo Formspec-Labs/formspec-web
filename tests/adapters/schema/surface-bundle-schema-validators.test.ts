@@ -272,6 +272,31 @@ const validArtifacts = Object.freeze([
 ] as const);
 
 describe('loadSurfaceBundleSchemaValidators', () => {
+  it('admits external Mapping sources while preserving exclusive Definition association', async () => {
+    const validate = await schemaValidator();
+    const fixture = validArtifacts.find(candidate => candidate.artifactKind === 'mapping')!;
+    const { definitionRef, definitionVersion, ...base } = fixture.document;
+    const document = { ...base, sourceSchema: {
+      url: 'urn:example:current-record', version: '1.0.0',
+      schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } },
+    } };
+    expect(validateArtifact(validate, { ...fixture, document }).ok).toBe(true);
+    expect(validateArtifact(validate, fixture).ok).toBe(true);
+    for (const invalid of [
+      base,
+      { ...document, definitionRef },
+      { ...document, definitionVersion },
+      { ...document, definitionRef, definitionVersion },
+      { ...document, sourceSchema: { ...document.sourceSchema, url: 'not a URI' } },
+      { ...document, sourceSchema: { ...document.sourceSchema, version: '1' } },
+      { ...document, sourceSchema: { ...document.sourceSchema, schema: null } },
+    ]) {
+      expect(validateArtifact(validate, { ...fixture, document: invalid })).toMatchObject({
+        ok: false, issues: expect.arrayContaining([expect.objectContaining({ code: 'SURFACE-BUNDLE-SCHEMA-INVALID' })]),
+      });
+    }
+  });
+
   it('accepts a canonical valid document for every AppGraph artifact kind', async () => {
     const validate = await schemaValidator();
 
