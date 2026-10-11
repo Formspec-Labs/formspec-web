@@ -6,6 +6,7 @@ import type { IdentityClaim } from '../ports/identity-provider.ts';
 import canonicalize from 'canonicalize';
 import { assertTaskCompletionRequest } from '../shared/task-response-completion.ts';
 import { createTaskComposition } from './task.ts';
+import { taskRequiresExternalHydration } from '../adapters/http/task-candidate-hydration.ts';
 import { targetDefinitionMatches } from '@formspec-org/types';
 import { canonicalResponseHandoffBytes as handoffBytes } from '@formspec-org/integrity-canonical';
 import { resolveServiceRequest, resolveAuthoredSigningContent, resolveResponseAction } from '@formspec-org/engine/render';
@@ -156,6 +157,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
       || nativePins.selectionHash !== await computeJcsSha256Digest(nativePins.selection)) throw new Error('Native Screener publication pins mismatch');
   }
   const taskPins = options.nativeTask;
+  const taskNeedsHydration = !!taskPins && taskRequiresExternalHydration(definition);
   if (taskPins) {
     const submit = roles.submit;
     if (!submit?.requestRef) throw new Error('Native task submit request is unavailable');
@@ -186,7 +188,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     };
     const signingPolicy = { keyId: pins.keyId, validateResponse: validateCanonicalFormResponse,
       validateContent, signingProfileDigest: responseSigningDigest,
-      ...(nativePins || taskPins ? { preSignCandidate: async (input: Parameters<NonNullable<HttpResponseSigningPolicy['preSignCandidate']>>[0]) => {
+      ...(nativePins || taskNeedsHydration ? { preSignCandidate: async (input: Parameters<NonNullable<HttpResponseSigningPolicy['preSignCandidate']>>[0]) => {
         if (!host?.preSignCandidate) throw new Error('Native candidate host unavailable');
         return host.preSignCandidate(input);
       } } : {}) };

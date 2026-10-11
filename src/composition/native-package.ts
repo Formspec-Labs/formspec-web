@@ -83,7 +83,7 @@ export function createNativePackageComposition(config: FormspecWebConfig, option
     if (options.nativeScreener || options.screenerCompletion || options.signing.applicationLifecycle)
       throw new Error('Native task correction cannot select initial application capabilities');
     if (validatedAttachmentMaxUploadBytes(config.referenceAdapters?.formspecStack?.attachments?.maxUploadBytes) === undefined
-      || !Object.keys(task.attachmentFieldPaths).length || Object.entries(task.attachmentFieldPaths).some(([field, path]) => !field.trim()
+      || Object.entries(task.attachmentFieldPaths).some(([field, path]) => !field.trim()
         || path !== '/' + field.replace(/\[(\d+)\]/g, '.$1').split('.').map(part => part.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')))
       throw new Error('Native task attachments require actual authored paths and a finite limit');
     if (!options.identityBinding?.accessToken || !options.identityBinding.browserAuthSession || !config.identity.oidc)

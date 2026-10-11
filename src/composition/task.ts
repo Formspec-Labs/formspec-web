@@ -7,7 +7,7 @@ import type { TaskCompletionSelection } from '../ports/task-completion.ts';
 import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
 import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
 import { HttpTaskDraftLaunch } from '../adapters/http/task-draft-launch.ts';
-import { HttpTaskCandidateHydration, assertTaskHydrationSelection, type HttpTaskCandidateHydrationConfig } from '../adapters/http/task-candidate-hydration.ts';
+import { HttpTaskCandidateHydration, assertTaskHydrationSelection, taskRequiresExternalHydration, type HttpTaskCandidateHydrationConfig } from '../adapters/http/task-candidate-hydration.ts';
 import { HttpTaskCompletion } from '../adapters/http/task-completion.ts';
 import type { HttpClientConfig } from '../adapters/http/http-client.ts';
 import type { HttpResponseSigningPolicy } from '../adapters/http/response-signing.ts';
@@ -31,7 +31,9 @@ export async function createTaskComposition(config: {
   launchOperationId: string;
   taskHydration?: Pick<HttpTaskCandidateHydrationConfig, 'selection' | 'identity' | 'receiptVerifier' | 'elapsedNow'>;
 }, lifetime: CompletionLifetime) {
-  if (!config.signing.preSignCandidate || !config.source.accessToken || !config.wos.accessToken
+  const requiresHydration = taskRequiresExternalHydration(config.definition);
+  const hasCandidateAuthority = !!config.signing.preSignCandidate || !requiresHydration && !!config.taskHydration;
+  if (!hasCandidateAuthority || !config.source.accessToken || !config.wos.accessToken
     || !config.draftKey.subjectRef || config.launch.taskId !== config.completion.taskId
     || config.definition.url !== config.completion.definitionUrl || config.definition.version !== config.completion.definitionVersion
     || config.draftKey.formUrl !== config.definition.url || config.draftKey.formVersion !== config.definition.version) {
@@ -90,7 +92,7 @@ export async function createTaskComposition(config: {
   const view = await launch.launch(launchOperationId, lifetime);
   check(); assertSynchronousGuard(wosGuard);
   const cohort = createHttpAdapterCohort({ ...cohortConfig, taskDraft: { key: selection.draftKey, view } });
-  const candidateHydration = hydration ? new HttpTaskCandidateHydration({ ...source, ...hydration,
+  const candidateHydration = hydration && requiresHydration ? new HttpTaskCandidateHydration({ ...source, ...hydration,
     definition: selection.definition, formVersionHash: selection.launch.formVersionHash,
     taskDraft: view.taskDraft!, subjectRef: selection.draftKey.subjectRef!, assertCurrent: check }, lifetime) : undefined;
   const guarded = async <T>(operation: () => Promise<T>): Promise<T> => { check(); const result = await operation(); check(); return result; };

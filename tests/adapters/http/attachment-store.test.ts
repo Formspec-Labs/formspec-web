@@ -135,3 +135,15 @@ it('preserves task upload refusal when invalid response cleanup never settles', 
   await expect(store.upload(new Blob(['a']), { filename: 'x.pdf', mimeType: 'application/pdf', fieldPath: 'proof' })).rejects.toMatchObject({ code: 'unavailable' });
   expect(cancel).toHaveBeenCalledOnce();
 });
+
+it('denies every attachment operation for an explicit empty task map before credentials or HTTP', async () => {
+  const accessToken = vi.fn(async () => 'owner'); const fetchImpl = vi.fn();
+  const store = new HttpAttachmentStore({ baseUrl: 'https://source.test', formId: 'form', accessToken, fetchImpl,
+    tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } },
+    maxUploadBytes: 1024, taskBinding: { draftId: 'task-draft', fieldPaths: {},
+      lifetime: { signal: new AbortController().signal, assertCurrent: vi.fn() } } });
+  await expect(store.upload(new Blob(['a']), { filename: 'x.pdf', mimeType: 'application/pdf', fieldPath: 'proof' })).rejects.toThrow('unselected');
+  await expect(store.read({ kind: 'attachment-ref', uri: 'urn:formspec:attachment:unselected', hash: `sha256:${'b'.repeat(64)}`,
+    size: 1, filename: 'x.pdf', mimeType: 'application/pdf' }, { fieldPath: 'proof' })).rejects.toThrow('unselected');
+  expect(accessToken).not.toHaveBeenCalled(); expect(fetchImpl).not.toHaveBeenCalled();
+});

@@ -750,23 +750,52 @@ async function correctionFixture(taskRequest = true) {
 }
 
 describe('explicit correction host through the maintained native loader', () => {
-  it('selects the task launch, completion and candidate host without initial draft creation', async () => {
+  it('selects a native-only task without external hydration or initial draft creation', async () => {
     const f = await correctionFixture();
     const boot = await createDefaultComposition(f.config, f.options).nativePackageRespondent!.load();
-    expect(boot.host.preSignCandidate).toBeTypeOf('function');
+    expect(boot.host.preSignCandidate).toBeUndefined();
     expect(boot.host.screenerCompletion).toBeUndefined();
-    expect(boot.host.getSnapshot().nativeReadiness).toBe('pending');
+    expect(boot.host.getSnapshot().nativeReadiness).not.toBe('pending');
+    expect(f.test.requests.some(request => new URL(request.url).pathname.includes('/evaluation-instances'))).toBe(false);
     const launch = f.test.requests.find(request => new URL(request.url).pathname === '/runtime/task-drafts')!;
     expect(launch.body).toEqual(f.options.nativeTask.launch);
     expect(launch.headers.get('authorization')).toBe('Bearer task-token');
     expect(launch.headers.get('idempotency-key')).toBe('stable-task-launch');
     expect(f.test.requests.some(request => request.method === 'POST' && /forms\/.*\/(drafts|sessions\/anonymous)$/.test(new URL(request.url).pathname))).toBe(false);
-    const retire = vi.spyOn(boot.host, 'retireCandidateAuthority');
     f.retire();
-    expect(retire).toHaveBeenCalledOnce();
     await expect(boot.composition.draftStore.load({ formUrl: f.test.definition.url, formVersion: f.test.definition.version, subjectRef: 'oidc:task' })).rejects.toThrow();
     boot.host.dispose();
     expect(f.release).toHaveBeenCalledOnce();
+  });
+  it('retains the candidate hydration host for an authored external source', async () => {
+    const f = await correctionFixture();
+    f.test.definition.instances!.facts = { source: 'urn:test:external', readonly: true };
+    const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    f.test.texts['definition.json'] = JSON.stringify(f.test.definition);
+    f.test.files.definition.sha256 = await rawDigest(f.test.texts['definition.json']);
+    f.test.texts['native.json'] = JSON.stringify(f.test.bundle);
+    f.test.files.nativeBundle.sha256 = await rawDigest(f.test.texts['native.json']);
+    f.test.publication.definition = structuredClone(f.test.definition);
+    f.test.publication.definition_hash = await computeJcsSha256Digest(f.test.definition);
+    f.options.nativeTask.hydration.selection.definitionHash = f.test.publication.definition_hash;
+    f.options.nativeTask.hydration.selection.requiredSources = ['urn:test:external'];
+    const boot = await createDefaultComposition(f.config, f.options).nativePackageRespondent!.load();
+    expect(boot.host.preSignCandidate).toBeTypeOf('function');
+    expect(boot.host.getSnapshot().nativeReadiness).toBe('pending');
+    boot.host.dispose();
+  });
+  it('boots a native-only task with an explicitly empty attachment map', async () => {
+    const f = await correctionFixture();
+    f.options.nativeTask.attachmentFieldPaths = {} as { photo: string };
+    const boot = await createDefaultComposition(f.config, f.options).nativePackageRespondent!.load();
+    expect(boot.host.preSignCandidate).toBeUndefined();
+    boot.host.dispose();
+  });
+  it('refuses an external source selection on a native-only Definition before launch', async () => {
+    const f = await correctionFixture();
+    f.options.nativeTask.hydration.selection.requiredSources = ['urn:test:unselected'];
+    await expect(createDefaultComposition(f.config, f.options).nativePackageRespondent!.load()).rejects.toThrow();
+    expect(f.test.requests.some(request => request.method === 'POST')).toBe(false);
   });
   it('refuses a task publication mismatch before task launch', async () => {
     const f = await correctionFixture();

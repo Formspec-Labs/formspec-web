@@ -155,6 +155,14 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
   }
 }
 
+/** The pinned Definition selects whether external candidate facts are needed. */
+export function taskRequiresExternalHydration(definition: FormDefinition): boolean {
+  const declarations = Object.values(definition.instances ?? {}).filter(instance => Object.hasOwn(instance, 'source'));
+  if (declarations.some(instance => typeof instance.source !== 'string' || !instance.source.trim()))
+    fail('invalid authored source declaration');
+  return declarations.length > 0;
+}
+
 /** Validate every operator selection before Source launch creates a durable draft. */
 export function assertTaskHydrationSelection(config: Omit<HttpTaskCandidateHydrationConfig, 'taskDraft'>): void {
   const headers = config.tenantBinding && tenantScopeHeaders(config.tenantBinding);

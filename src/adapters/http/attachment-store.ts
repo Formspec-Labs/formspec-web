@@ -29,7 +29,7 @@ export class HttpAttachmentStore implements AttachmentStore {
     if (task && Object.values(formspecTenantHeaderNames).some(name => !scope[name]?.trim()))
       throw new Error('Task attachments require all four deployment scope headers');
     if (task && (!task.draftId.trim() || ['.', '..'].includes(task.draftId) || !config.accessToken
-      || !Object.keys(task.fieldPaths).length || Object.entries(task.fieldPaths).some(([field, path]) => !field.trim()
+      || Object.entries(task.fieldPaths).some(([field, path]) => !field.trim()
         || !/^\/(?:[^~]|~[01])+$/.test(path) || path !== '/' + field.replace(/\[(\d+)\]/g, '.$1').split('.').map(part => part.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')) || config.maxUploadBytes === undefined)) throw new Error('Task attachments require explicit draft, paths, owner and finite limit');
     this.maxUploadBytes = validatedAttachmentMaxUploadBytes(config.maxUploadBytes);
   }
