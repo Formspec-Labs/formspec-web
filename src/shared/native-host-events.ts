@@ -10,7 +10,8 @@ export interface NativeHostEventCapability {
   readonly actionRef: string;
   readonly eventName: string;
   readonly handle: (context: {
-    readonly detail: SubmitResult;
+    /** Authored host-event detail may come from detailRef; the capability owns its shape. */
+    readonly detail: unknown;
     readonly signal: AbortSignal;
     readonly assertCurrent: () => void;
     readonly refreshSavedFacts: () => Promise<void>;
@@ -68,7 +69,7 @@ export function admitNativeHostEvents(input: {
       let completed = false; let closed = false;
       try {
         assertCurrent();
-        const calls: SubmitResult[] = [];
+        const calls: unknown[] = [];
         const result = await abortable(signal, invokeResponseActionAsync(input.document, input.actionRef, { ...input.ports,
           dispatchHostEvent(eventName, detail) {
             assertCurrent();
