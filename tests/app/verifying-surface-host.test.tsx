@@ -539,6 +539,10 @@ describe('VerifyingSurfaceHost', () => {
     expect(within(status).getByText('Published by Example Benefits Publisher')).toBeDefined();
     expect(detailValue(status, 'Signed publisher ID')).toBe(PUBLISHER_ID);
     expect(detailValue(status, 'Signed app ID')).toBe(APP_ID);
+    const details = status.querySelector('details')!;
+    expect(details.open).toBe(false);
+    expect(detailValue(status, 'Signed release ID')).toBe(verifiedResult(fixture.snapshot).payload.release.id);
+    expect(status.querySelector('.fs-verification-status__summary')?.textContent).not.toContain(verifiedResult(fixture.snapshot).payload.release.id);
     expect(detailValue(status, 'Publisher trust result')).toBe('authorized');
     expect(detailValue(status, 'Authenticated payload digest')).toBe('sha256:signed-payload');
     expect(detailValue(status, 'Signature method')).toBe(
