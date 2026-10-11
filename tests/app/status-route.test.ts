@@ -1,34 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { parseStatusRoute } from '../../src/app/status-route.ts';
+import { parseStatusRoute, buildStatusTrackingUri, STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
 
-describe('parseStatusRoute', () => {
-  it('returns null for the form-fill root', () => {
-    expect(parseStatusRoute('https://app.example.test/')).toBeNull();
-    expect(parseStatusRoute('https://app.example.test/?utm_source=x')).toBeNull();
+describe('authenticated status navigation', () => {
+  it('preserves the complete opaque durable case selector', () => {
+    const caseLedgerId = 'urn:wos:case:opaque/a?b#c';
+    const url = new URL('https://app.example.test/status');
+    url.searchParams.set('caseLedgerId', caseLedgerId);
+    expect(parseStatusRoute(url.href)).toEqual({ caseLedgerId });
+    expect(STATUS_ROUTE_NARROWING.identityBound).toBe(true);
   });
+  it.each([
+    '/', '/status', '/status?case=urn:wos:old', '/status?caseLedgerId=',
+    '/status?caseLedgerId=one&caseLedgerId=two', '/status?caseLedgerId=one&token=secret',
+    '/status?caseLedgerId=one#extra', '/status?caseLedgerId=%20one',
+    '/status?caseLedgerId=one%00', '/status?caseLedgerId=%ED%A0%80',
+  ])('refuses malformed or superseded selection %s', path => {
+    expect(parseStatusRoute('https://app.example.test' + path)).toBeNull();
+  });
+  it('refuses credentials and unsupported protocols', () => {
+    expect(parseStatusRoute('https://user:password@app.example.test/status?caseLedgerId=one')).toBeNull();
+    expect(parseStatusRoute('file:///status?caseLedgerId=one')).toBeNull();
+  });
+});
 
-  it('returns null for /status without a case param', () => {
-    expect(parseStatusRoute('https://app.example.test/status')).toBeNull();
-    expect(parseStatusRoute('https://app.example.test/status?ref=x')).toBeNull();
-  });
 
-  it('extracts a WOS resource URN from /status?case=', () => {
-    const parsed = parseStatusRoute('https://app.example.test/status?case=urn:wos:case_demo_0001');
-    expect(parsed).toEqual({ caseUrn: 'urn:wos:case_demo_0001' });
-  });
-
-  it('decodes a percent-encoded URN', () => {
-    const href = 'https://app.example.test/status?case=urn%3Awos%3Acase_demo_0001';
-    expect(parseStatusRoute(href)).toEqual({ caseUrn: 'urn:wos:case_demo_0001' });
-  });
-
-  it('rejects a case param that does not look like a WOS URN', () => {
-    expect(parseStatusRoute('https://app.example.test/status?case=javascript:alert(1)')).toBeNull();
-    expect(parseStatusRoute('https://app.example.test/status?case=')).toBeNull();
-  });
-
-  it('rejects the bare urn:wos: prefix without a tail (code-review F-1)', () => {
-    expect(parseStatusRoute('https://app.example.test/status?case=urn:wos:')).toBeNull();
-    expect(parseStatusRoute('https://app.example.test/status?case=urn%3Awos%3A')).toBeNull();
-  });
+it('rejects a lone surrogate before URLSearchParams can replace it', () => {
+  expect(() => buildStatusTrackingUri(String.fromCharCode(0xd800))).toThrow();
+  const id = 'urn:wos:opaque/é🌐?x#y';
+  expect(parseStatusRoute('https://app.test' + buildStatusTrackingUri(id))).toEqual({ caseLedgerId: id });
 });

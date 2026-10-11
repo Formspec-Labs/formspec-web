@@ -37,8 +37,8 @@ describe('App route selection (FW-0039 slice 1)', () => {
     });
   });
 
-  it('routes /status?case=urn:wos:... to the status runtime', async () => {
-    setHref('http://localhost/status?case=urn:wos:case_demo_000001');
+  it('routes /status?caseLedgerId=urn:wos:... to the status runtime', async () => {
+    setHref('http://localhost/status?caseLedgerId=urn:wos:case_demo_000001');
     const composition = createTestComposition({ definition: testDefinition });
     render(
       <CompositionProvider value={composition}>
@@ -127,7 +127,7 @@ describe('App route selection (FW-0039 slice 1)', () => {
     });
 
     await act(async () => {
-      navigateAppRoute('/status?case=urn:wos:case_demo_000001');
+      navigateAppRoute('/status?caseLedgerId=urn:wos:case_demo_000001');
     });
 
     await waitFor(() => {
@@ -137,7 +137,7 @@ describe('App route selection (FW-0039 slice 1)', () => {
     });
     expect(screen.queryByRole('heading', { name: testDefinition.title, level: 1 })).toBeNull();
     expect(choose).toHaveBeenCalledTimes(2);
-    expect(choose.mock.calls[1][0].href).toContain('/status?case=');
+    expect(choose.mock.calls[1][0].href).toContain('/status?caseLedgerId=');
   });
 });
 

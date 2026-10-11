@@ -1,3 +1,4 @@
+import { StatusReadError } from '../ports/status-reader.ts';
 import { describe, expect, it } from 'vitest';
 import type { FormDefinition } from '@formspec-org/types';
 import type { DefinitionSource } from '../ports/definition-source.ts';
@@ -580,38 +581,27 @@ export function defineStatusReaderConformance(
       expect(found).toEqual(sampleApplicantStatusResource);
     });
 
-    it('returns undefined for unknown status requests', async () => {
-      const subject = setup();
-      await expect(subject.adapter.readStatus({ resourceRef: 'urn:wos:missing' })).resolves
-        .toBeUndefined();
-    });
-
-    /**
-     * URN-as-possession-factor uniform-`undefined` contract per
-     * `docs/ports/status-reader.md` §"URN-as-bearer-token semantics".
-     * Adapters MUST return `undefined` for unknown URNs — not a not-found-shaped
-     * object, not an error throw, and not a different shape than the
-     * "URN exists but is not yours" branch. Distinguishing the two would make
-     * `/status?case=...` an enumeration oracle.
-     *
-     * Filed from FW-0039 closeout independent architecture review M-2 — the
-     * port doc warned but no conformance test enforced. The enforcement now
-     * applies to EVERY StatusReader adapter (stub + future production
-     * adapters).
+    /** Missing and inaccessible status share one absence result. Authenticated
+     * readers may refuse both with the same typed denial; no case existence leaks.
      */
-    it('returns uniform undefined (no throw, no shape variance) for an obviously-unknown URN', async () => {
+    it('uses uniform absence or typed denial for unknown status requests', async () => {
       const subject = setup();
-      // High-entropy URN tail guaranteed not to collide with any registered
-      // fixture in any adapter's test setup.
-      const randomTail = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_NEVER_EXISTS`;
-      const obviouslyUnknown = `urn:wos:case_test_unknown_${randomTail}`;
-      const result = await subject.adapter.readStatus({
-        subjectRef: 'subject:never-exists',
-        submissionId: obviouslyUnknown,
-        resourceRef: obviouslyUnknown,
-      });
-      // Strictly undefined — not null, not {}, not a "not-found"-shaped object.
-      expect(result).toBeUndefined();
+      const requests = [
+        { resourceRef: 'urn:wos:missing' },
+        { subjectRef: 'subject:never-exists', submissionId: 'urn:wos:case_NEVER_EXISTS',
+          resourceRef: 'urn:wos:case_NEVER_EXISTS' },
+      ];
+      const outcomes: string[] = [];
+      for (const request of requests) {
+        try {
+          const result = await subject.adapter.readStatus(request);
+          expect(result).toBeUndefined(); outcomes.push('absent');
+        } catch (error) {
+          expect(error).toBeInstanceOf(StatusReadError);
+          expect((error as StatusReadError).code).toBe('access-denied'); outcomes.push('denied');
+        }
+      }
+      expect(outcomes[0]).toBe(outcomes[1]);
     });
 
     it('rejects sidecar projection wrappers as StatusReader resources', async () => {

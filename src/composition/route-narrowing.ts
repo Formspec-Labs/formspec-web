@@ -32,7 +32,8 @@ import {
 } from '../policy/index.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
-import { buildRealIdentityProvider } from './default.ts';
+import { buildRealIdentityProvider, type IdentityBinding } from './default.ts';
+import type { StatusReader } from '../ports/status-reader.ts';
 import type { Composition } from './types.ts';
 
 /**
@@ -78,33 +79,45 @@ export interface RouteNarrowing {
    * `respondentPlace` capability is `available`, the production factory
    * wires the real identity provider; otherwise short-circuits to noop per
    * MED-4. The demo composition wires the demo identity provider when
-   * `true`; noop otherwise (matches `/status`'s identity-agnostic shape).
+   * `true`; noop otherwise.
    */
   readonly identityBound: boolean;
 }
 
 /** Construct reference HTTP ports for an explicitly selected narrowed route. */
-export function createRouteNarrowedComposition({ config = departmentAppProfile, route }: {
+export function createRouteNarrowedComposition({ config = departmentAppProfile, route, statusReader, identityBinding }: {
   config?: FormspecWebConfig;
   route: RouteNarrowing;
+  /** Protected applicant reader, supplied by the authenticated host. */
+  statusReader?: StatusReader;
+  identityBinding?: IdentityBinding;
 }): Composition {
   const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
   if (!serverUrl) throw new Error('Reference narrowed composition requires an explicit formspecServerUrl');
-  return buildProductionNarrowedComposition({ config, route, serverUrl });
+  if (statusReader && (!route.consumes.has('status') || !route.identityBound
+    || config.identity.mode !== 'oidc-required' || !config.identity.oidc
+    || !identityBinding?.browserAuthSession || !identityBinding.accessToken)) {
+    throw new Error('Status reader requires the selected authenticated OIDC session');
+  }
+  return buildProductionNarrowedComposition({ config, route, serverUrl, statusReader, identityBinding });
 }
 
 function buildProductionNarrowedComposition({
   config,
   route,
   serverUrl,
+  statusReader,
+  identityBinding,
 }: {
   config: FormspecWebConfig;
   route: RouteNarrowing;
   serverUrl: string;
+  statusReader?: StatusReader;
+  identityBinding?: IdentityBinding;
 }): Composition {
   const instanceCapabilities: InstanceCapabilities = {
     respondentPlace: 'unavailable',
-    status: 'unavailable',
+    status: statusReader ? 'available' : 'unavailable',
     documentPresentation: 'unavailable',
     // FW-0033 slice 1: narrowed routes do not accept uploads. Uniformly
     // unavailable across all narrowed-route descriptors today; if a future
@@ -157,7 +170,8 @@ function buildProductionNarrowedComposition({
   // production; revisit when FW-0078 ships a production history adapter and
   // `/history` is identity-bound but does NOT consume respondentPlace.
   const identityProvider: IdentityProvider =
-    route.identityBound && instanceCapabilities.respondentPlace === 'available'
+    statusReader && identityBinding ? identityBinding.provider
+      : route.identityBound && instanceCapabilities.respondentPlace === 'available'
       ? buildRealIdentityProvider(config, notificationDelivery, serverUrl, route.initialDefinitionUrlSentinel).provider
       : noopIdentityProvider(route.routeCite);
 
@@ -170,9 +184,10 @@ function buildProductionNarrowedComposition({
     draftStore: noopDraftStore(route.routeCite),
     submitTransport: noopSubmitTransport(route.routeCite),
     identityProvider,
+    browserAuthSession: statusReader ? identityBinding?.browserAuthSession : undefined,
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
-    statusReader: unavailableStatusReader(),
+    statusReader: statusReader ?? unavailableStatusReader(),
     attachmentStore: unavailableAttachmentStore(),
     respondentHistorySource: unavailableRespondentHistorySource(),
     // FW-0044 slice 1: narrowed routes do not submit forms (no form-fill

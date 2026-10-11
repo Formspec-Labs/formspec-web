@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createRouteNarrowedComposition,
   type RouteNarrowing,
@@ -65,5 +65,39 @@ describe('explicit narrowed HTTP composition', () => {
     it('uses only known feature keys', () => {
       expect([...route.consumes].every(isRuntimeFeatureKey)).toBe(true);
     });
+  });
+});
+
+
+describe('authenticated status reader injection', () => {
+  function selected() {
+    const session = { issuer: 'https://idp.test', subject: 'applicant', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+    const provider = { discover: async () => [], authenticate: vi.fn(), revoke: async () => {}, subscribe: () => () => {} };
+    const browserAuthSession = { getSession: async () => session, begin: async () => {}, completeCallback: async () => session,
+      completeSilentCallback: async () => {}, renew: async () => session, logout: async () => {}, completeLogoutCallback: async () => {},
+      accessToken: async () => 'current-bearer', subscribe: () => () => {}, dispose: () => {} };
+    const config: FormspecWebConfig = { ...productionConfig(), identity: { mode: 'oidc-required',
+      oidc: { issuer: session.issuer, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' } } };
+    return { config, identityBinding: { provider, browserAuthSession, accessToken: browserAuthSession.accessToken },
+      statusReader: { readStatus: vi.fn(async () => undefined) } };
+  }
+  it('uses the explicitly selected identity and reader without constructing form ports', async () => {
+    const input = selected();
+    const composition = createRouteNarrowedComposition({ ...input, route: STATUS_ROUTE_NARROWING });
+    expect(composition.identityProvider).toBe(input.identityBinding.provider);
+    expect(composition.instanceCapabilities.status).toBe('available');
+    expect(composition.instanceCapabilities.recordLifecycle).toBe('unavailable');
+    expect(() => assertCompositionCoherence(composition)).not.toThrow();
+    await composition.statusReader.readStatus({ resourceRef: 'opaque-ledger' });
+    expect(input.statusReader.readStatus).toHaveBeenCalledWith({ resourceRef: 'opaque-ledger' });
+    await expect(composition.definitionSource.getDefinition('anything')).rejects.toThrow();
+  });
+  it('rejects reader injection without the selected ordinary OIDC session', () => {
+    const input = selected();
+    expect(() => createRouteNarrowedComposition({ config: input.config, statusReader: input.statusReader,
+      route: STATUS_ROUTE_NARROWING })).toThrow('authenticated OIDC');
+    expect(() => createRouteNarrowedComposition({ ...input, config: { ...productionConfig(), identity: { mode: 'anonymous-allowed' } },
+      route: STATUS_ROUTE_NARROWING })).toThrow('authenticated OIDC');
+    expect(() => createRouteNarrowedComposition({ ...input, route: DOCUMENTS_ROUTE_NARROWING })).toThrow('authenticated OIDC');
   });
 });

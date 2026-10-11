@@ -66,7 +66,7 @@ export interface HistoryEntry {
   /**
    * Optional applicant-status URN. Set only when the entry's case is
    * reachable from the WOS applicant API; when present, the surface
-   * renders a "Track this application" link to /status?case={urn}.
+   * renders a "Track this application" link to /status?caseLedgerId={urn}.
    */
   applicantStatusRef?: string;
   /**

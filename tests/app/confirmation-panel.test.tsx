@@ -8,7 +8,7 @@ describe('ConfirmationPanel "Track this application" link (FW-0039 slice 1)', ()
     cleanup();
   });
 
-  it('renders a /status?case={urn} link when the confirmation carries a caseUrn', () => {
+  it('renders a /status?caseLedgerId={urn} link when the confirmation carries a caseUrn', () => {
     const confirmation: SubmitConfirmation = {
       referenceNumber: 'STUB-000001',
       status: 'accepted',
@@ -16,7 +16,7 @@ describe('ConfirmationPanel "Track this application" link (FW-0039 slice 1)', ()
     };
     render(<ConfirmationPanel confirmation={confirmation} />);
     const link = screen.getByRole('link', { name: /Track this application/i });
-    expect(link.getAttribute('href')).toBe('/status?case=urn%3Awos%3Acase_demo_000001');
+    expect(link.getAttribute('href')).toBe('/status?caseLedgerId=urn%3Awos%3Acase_demo_000001');
   });
 
   it('does NOT render a tracking link when the confirmation omits caseUrn and trackingUri', () => {

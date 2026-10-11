@@ -157,7 +157,7 @@ describe('HistoryRuntime (FW-0057 slice 1)', () => {
         expect(screen.queryByRole('link', { name: /Track this application/i })).not.toBeNull();
       });
       const link = screen.getByRole('link', { name: /Track this application/i });
-      expect(link.getAttribute('href')).toBe('/status?case=urn%3Awos%3Acase_demo_0001');
+      expect(link.getAttribute('href')).toBe('/status?caseLedgerId=urn%3Awos%3Acase_demo_0001');
     });
 
     it('renders a /documents link when documentRefs is non-empty', async () => {

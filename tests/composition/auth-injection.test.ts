@@ -52,7 +52,7 @@ describe('composition auth dependency injection', () => {
 
   it('leaves unavailable narrowed routes free of auth construction', () => {
     const identityBindingFactory = vi.fn(() => { throw new Error('must not construct'); });
-    const composition = chooseComposition({ config, href: 'https://web.example.test/status?case=urn:wos:case:example', identityBindingFactory });
+    const composition = chooseComposition({ config, href: 'https://web.example.test/status?caseLedgerId=urn:wos:case:example', identityBindingFactory });
     expect(composition.instanceCapabilities.respondentPlace).toBe('unavailable');
     expect(identityBindingFactory).not.toHaveBeenCalled();
   });

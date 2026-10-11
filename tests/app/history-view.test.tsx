@@ -120,7 +120,7 @@ describe('HistoryEntryItem render', () => {
       </ul>,
     );
     expect(html).toContain('Track this application');
-    expect(html).toContain('/status?case=urn%3Awos%3Acase_demo_0001');
+    expect(html).toContain('/status?caseLedgerId=urn%3Awos%3Acase_demo_0001');
   });
 
   it('renders a "documents in your library" link when documentRefs is non-empty', () => {

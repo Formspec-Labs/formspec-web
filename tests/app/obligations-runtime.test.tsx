@@ -139,7 +139,7 @@ describe('ObligationsRuntime (FW-0055 slice 1)', () => {
         expect(screen.queryByRole('link', { name: /Track this application/i })).not.toBeNull();
       });
       const link = screen.getByRole('link', { name: /Track this application/i });
-      expect(link.getAttribute('href')).toBe('/status?case=urn%3Awos%3Acase_demo_0001');
+      expect(link.getAttribute('href')).toBe('/status?caseLedgerId=urn%3Awos%3Acase_demo_0001');
     });
 
     it('does NOT render a /status link when the submissionRef cannot be resolved', async () => {

@@ -1,5 +1,6 @@
+import { StatusReadError } from '../../src/ports/status-reader.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
   StatusRuntime,
   NO_AGGREGATE_COPY,
@@ -54,7 +55,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -78,7 +79,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -93,7 +94,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -109,7 +110,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -132,7 +133,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -150,7 +151,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -164,7 +165,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -182,7 +183,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -211,7 +212,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: 'urn:wos:case_unknown_999' }}
+          route={{ caseLedgerId: 'urn:wos:case_unknown_999' }}
         />,
       );
       await waitFor(() => {
@@ -237,7 +238,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -261,7 +262,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -282,7 +283,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -315,7 +316,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -364,7 +365,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -430,7 +431,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -484,7 +485,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -541,7 +542,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -576,7 +577,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -617,7 +618,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -639,7 +640,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -665,7 +666,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         <StatusRuntime
           composition={composition}
           config={departmentAppProfile}
-          route={{ caseUrn: DEMO_URN }}
+          route={{ caseLedgerId: DEMO_URN }}
         />,
       );
       await waitFor(() => {
@@ -764,7 +765,7 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
       <StatusRuntime
         composition={composition}
         config={departmentAppProfile}
-        route={{ caseUrn: DEMO_URN }}
+        route={{ caseLedgerId: DEMO_URN }}
       />,
     );
     await waitFor(() => {
@@ -796,7 +797,7 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
       <StatusRuntime
         composition={composition}
         config={departmentAppProfile}
-        route={{ caseUrn: DEMO_URN }}
+        route={{ caseLedgerId: DEMO_URN }}
       />,
     );
     await waitFor(() => {
@@ -824,7 +825,7 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
       <StatusRuntime
         composition={composition}
         config={departmentAppProfile}
-        route={{ caseUrn: DEMO_URN }}
+        route={{ caseLedgerId: DEMO_URN }}
       />,
     );
     await waitFor(() => {
@@ -871,7 +872,7 @@ describe('StatusRuntime lifecycle badge (independent arch-review N-2)', () => {
       <StatusRuntime
         composition={composition}
         config={departmentAppProfile}
-        route={{ caseUrn: DEMO_URN }}
+        route={{ caseLedgerId: DEMO_URN }}
       />,
     );
     await waitFor(() => {
@@ -910,7 +911,7 @@ describe('StatusRuntime lifecycle badge (independent arch-review N-2)', () => {
       <StatusRuntime
         composition={composition}
         config={departmentAppProfile}
-        route={{ caseUrn: DEMO_URN }}
+        route={{ caseLedgerId: DEMO_URN }}
       />,
     );
     await waitFor(() => {
@@ -1004,7 +1005,7 @@ describe('StatusRuntime lifecycle timeline rendering (FW-0038)', () => {
       <StatusRuntime
         composition={composition}
         config={departmentAppProfile}
-        route={{ caseUrn: DEMO_URN }}
+        route={{ caseLedgerId: DEMO_URN }}
       />,
     );
     await waitFor(() => {
@@ -1046,7 +1047,7 @@ describe('StatusRuntime policy-error path (code-review F-2)', () => {
       <StatusRuntime
         composition={composition}
         config={departmentAppProfile}
-        route={{ caseUrn: DEMO_URN }}
+        route={{ caseLedgerId: DEMO_URN }}
       />,
     );
     await waitFor(() => {
@@ -1058,4 +1059,59 @@ describe('StatusRuntime policy-error path (code-review F-2)', () => {
     // (not the URN, not raw stack). Mirrors the FW-0065 plumbing.
     expect(screen.getByText(/Support reference:/i)).toBeDefined();
   });
+});
+
+
+describe('StatusRuntime host task navigation', () => {
+  afterEach(cleanup);
+  it('renders only actions supplied for actual current open tasks', async () => {
+    const detail = demoApplicantCaseDetail();
+    const renderTaskAction = vi.fn(task => <button>Open {task.title}</button>);
+    const composition = createStatusComposition();
+    render(<StatusRuntime composition={composition} config={departmentAppProfile}
+      route={{ caseLedgerId: DEMO_URN }} renderTaskAction={renderTaskAction} />);
+    await waitFor(() => expect(renderTaskAction).toHaveBeenCalledTimes(detail.openTasks.length));
+    expect(screen.getByRole('button', { name: 'Open ' + detail.openTasks[0].title })).toBeDefined();
+  });
+  it('offers no task action for a successfully read case with no open tasks', async () => {
+    const composition = createStatusComposition();
+    const detail = { ...demoApplicantCaseDetail(), openTasks: [] };
+    composition.statusReader = { readStatus: async () => detail };
+    const renderTaskAction = vi.fn();
+    render(<StatusRuntime composition={composition} config={departmentAppProfile}
+      route={{ caseLedgerId: DEMO_URN }} renderTaskAction={renderTaskAction} />);
+    await screen.findByRole('heading', { name: 'Your application status' });
+    expect(renderTaskAction).not.toHaveBeenCalled();
+  });
+});
+
+
+it('retires loaded case and task actions when the selected session changes', async () => {
+  const composition = createStatusComposition();
+  const state = { issuer: 'https://idp.test', subject: 'applicant', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+  let receive!: (value: typeof state | null) => void;
+  composition.browserAuthSession = { getSession: async () => state, accessToken: async () => 'token',
+    subscribe(listener) { receive = listener; listener(state); return () => {}; },
+    begin: async () => {}, completeCallback: async () => state, completeSilentCallback: async () => {},
+    renew: async () => state, logout: async () => {}, completeLogoutCallback: async () => {}, dispose: () => {} };
+  render(<StatusRuntime composition={composition} config={departmentAppProfile} route={{ caseLedgerId: DEMO_URN }}
+    renderTaskAction={task => <button>Open {task.title}</button>} />);
+  await screen.findByRole('button', { name: 'Open ' + demoApplicantCaseDetail().openTasks[0].title });
+  act(() => receive({ ...state, subject: 'different', revision: 2 }));
+  expect(screen.queryByRole('button', { name: /Open/ })).toBeNull();
+  expect(screen.getByText('Sign in to view your current application status.')).toBeDefined();
+  cleanup();
+});
+
+
+it.each(['access-denied', 'unavailable'] as const)('renders %s as a refusal rather than an empty owned case', async code => {
+  const composition = createStatusComposition();
+  composition.statusReader = { readStatus: async () => { throw new StatusReadError(code); } };
+  const action = vi.fn();
+  render(<StatusRuntime composition={composition} config={departmentAppProfile}
+    route={{ caseLedgerId: DEMO_URN }} renderTaskAction={action} />);
+  await screen.findByText(code === 'access-denied' ? 'This application is not available to your signed-in account.'
+    : 'We could not load this status. Try again later.');
+  expect(action).not.toHaveBeenCalled(); expect(screen.queryByRole('list', { name: /Application stages/ })).toBeNull();
+  cleanup();
 });

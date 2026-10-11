@@ -1,3 +1,4 @@
+import { buildStatusTrackingUri } from './status-route.ts';
 import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
 import type {
   FormDefinition,
@@ -632,7 +633,7 @@ function isMultiPartyStoredResponse(value: unknown): value is MultiPartyStoredRe
 }
 
 export function buildConfirmationTrackingUri(caseUrn: string): string {
-  return `/status?case=${encodeURIComponent(caseUrn)}`;
+  return buildStatusTrackingUri(caseUrn);
 }
 
 /**

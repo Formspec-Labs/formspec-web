@@ -1,3 +1,4 @@
+import { buildStatusTrackingUri } from './status-route.ts';
 /**
  * ObligationsRuntime — standalone /obligations dashboard (FW-0055 slice 1).
  *
@@ -344,7 +345,7 @@ function resolveStatusLink(
   const submission = submissionsById.get(submissionRef);
   const resourceRef = submission?.applicantStatus?.resourceRef;
   if (!resourceRef) return undefined;
-  return `/status?case=${encodeURIComponent(resourceRef)}`;
+  return buildStatusTrackingUri(resourceRef);
 }
 
 function crossSenderHeader(total: number, senderCount: number): string {

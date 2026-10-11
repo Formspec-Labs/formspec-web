@@ -219,3 +219,5 @@ export type { TaskOutcomeEvent, TaskSubmission, CompletedTaskOutcome, TaskComple
 export type { SignedTaskDraft, TaskDraftAssociation, TaskDraftLaunchSelection } from './task-draft.ts';
 
 export type { InitialMixedHydrationWire, InitialNativeRequest } from './initial-mixed-proof.ts';
+
+export { StatusReadError } from './status-reader.ts';

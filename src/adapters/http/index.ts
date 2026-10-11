@@ -82,3 +82,5 @@ export { HttpTaskCandidateHydration, type HttpTaskCandidateHydrationConfig, type
 
 export { HttpMixedProofReader } from './mixed-proof-reader.ts';
 export { decodeMixedHydration } from './mixed-proof-wire.ts';
+
+export { HttpStatusReader, type HttpStatusReaderConfig } from './status-reader.ts';

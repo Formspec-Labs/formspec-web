@@ -167,9 +167,9 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.anonSession).toHaveBeenCalled();
   });
 
-  it('chooseComposition picks the status-route factory when the URL matches /status?case=urn:wos:...', async () => {
+  it('chooseComposition picks the status-route factory when the URL matches /status?caseLedgerId=urn:wos:...', async () => {
     const composition = chooseComposition({
-      href: 'http://localhost/status?case=urn:wos:case_demo_0001',
+      href: 'http://localhost/status?caseLedgerId=urn:wos:case_demo_0001',
       config: productionConfig(),
     });
     // The status-route factory wires noop adapters that throw with FW-0068
