@@ -788,9 +788,35 @@ describe('explicit correction host through the maintained native loader', () => 
     expect(() => createDefaultComposition(config, f.options)).toThrow('explicit native signing configuration');
     expect(f.test.requests).toHaveLength(0);
   });
-  it('refuses initial prefill capabilities combined with a correction task', async () => {
+  it('accepts a selected initial-data factory for the complete native correction candidate before any effect', async () => {
     const f = await correctionFixture();
-    expect(() => createDefaultComposition(f.config, { ...f.options, initialDataSources: () => { throw new Error('unavailable prefill'); } })).toThrow('initial application capabilities');
+    const bundle = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/task-initial-data-complete-v1.bundle.json'), 'utf8')) as BundleExport;
+    const resolved = dereferenceBundleExport(bundle);
+    expect(resolved.surfaces.some(surface => surface.routes.some(route => route.slots.some(slot =>
+      slot.slotType === 'definition-form' && 'initialData' in slot.binding)))).toBe(true);
+    const signing = { ...f.config.referenceAdapters!.formspecStack!.nativePackageSigning!,
+      definition: { url: 'urn:formspec:demo:d1:passport-renewal', version: '0.3.7' },
+      bundle: { id: bundle.manifest.id!, version: bundle.manifest.version! },
+      modules: bundle.manifest.modules,
+      component: { handle: 'submit_correction', url: 'urn:formspec:demo:d1:passport-renewal:component:task', version: '0.3.9' },
+    };
+    const config = { ...f.config, referenceAdapters: { formspecStack: {
+      ...f.config.referenceAdapters!.formspecStack!, nativePackageSigning: signing,
+    } } };
+    const factory = vi.fn(() => { throw new Error('Provider requires the actual protected task visit'); });
+    expect(() => createDefaultComposition(config, { ...f.options, initialDataSources: factory })).not.toThrow();
+    expect(factory).not.toHaveBeenCalled();
+    expect(f.test.requests).toHaveLength(0);
+  });
+  it('continues to refuse initial application lifecycle mixed with a correction task', async () => {
+    const f = await correctionFixture();
+    const signing = { ...f.config.referenceAdapters!.formspecStack!.nativePackageSigning!,
+      applicationLifecycle: { instance: 'draftReadiness', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' },
+      roles: { ...f.config.referenceAdapters!.formspecStack!.nativePackageSigning!.roles,
+        startApplication: { artifactRef: 'urn:test:actions', actionRef: 'start-application' } },
+    };
+    const config = { ...f.config, referenceAdapters: { formspecStack: { ...f.config.referenceAdapters!.formspecStack!, nativePackageSigning: signing } } };
+    expect(() => createDefaultComposition(config, f.options)).toThrow('initial application capabilities');
     expect(f.test.requests).toHaveLength(0);
   });
 });

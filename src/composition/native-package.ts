@@ -80,7 +80,7 @@ export function createNativePackageComposition(config: FormspecWebConfig, option
       attachmentFieldPaths: Object.freeze({ ...task.attachmentFieldPaths }), hydration: { ...task.hydration,
         selection: structuredClone(task.hydration.selection), identity: structuredClone(task.hydration.identity),
         receiptVerifier: task.hydration.receiptVerifier ? Object.freeze({ verify: task.hydration.receiptVerifier.verify.bind(task.hydration.receiptVerifier) }) : undefined } };
-    if (options.nativeScreener || options.screenerCompletion || options.initialDataSources || options.signing.applicationLifecycle)
+    if (options.nativeScreener || options.screenerCompletion || options.signing.applicationLifecycle)
       throw new Error('Native task correction cannot select initial application capabilities');
     if (validatedAttachmentMaxUploadBytes(config.referenceAdapters?.formspecStack?.attachments?.maxUploadBytes) === undefined
       || !Object.keys(task.attachmentFieldPaths).length || Object.entries(task.attachmentFieldPaths).some(([field, path]) => !field.trim()
