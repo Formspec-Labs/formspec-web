@@ -87,7 +87,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
       await state.signGate;
       if (state.refuseSign) throw new Error('ambiguous signing failure');
       const body = request.body as { draft_version: number; canonical_response: FormResponse };
-      expect(body.draft_version).toBe(state.version);
+      if (body.draft_version !== state.version) return jsonResponse({ detail: 'stale' }, 409);
       expect(body.canonical_response).toEqual(state.response);
       const signed = await signedResponse(state.response);
       if (!state.persistSign) return jsonResponse({ ...view(), draft_version: state.version + 1, canonical_response: signed }, state.signStatus);
@@ -285,7 +285,10 @@ describe('cohort-owned Response Prepare and Sign', () => {
       operationId: generateIdempotencyKey(), draftId: 'owned-draft', version: 3 };
     test.metadata.write('response-signing-operations', [marker]);
     await test.cohort.draftStore.invalidateSubject(test.draftKey.subjectRef!);
-    await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
+    const recovering = test.build(); const state = await recovering.draftStore.readState!(test.draftKey);
+    expect(state).toMatchObject({ kind: 'active', pendingSign: { operationId: marker.operationId } });
+    expect(state?.kind === 'active' && state.signed).toBeUndefined();
+    await expect(recovering.draftStore.save(test.draftKey, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
     expect(test.metadata.read('response-signing-operations')).toEqual([marker]);
     await test.cohort.draftStore.delete(test.draftKey);
     expect(test.metadata.read('response-signing-operations')).toBeUndefined();
@@ -1053,4 +1056,201 @@ describe('exact saved Sign candidate gate', () => {
     expect(test.state.signCount).toBe(0);
   });
 
+});
+
+
+describe('owned pending Sign recovery after pre-dispatch qualification failure', () => {
+  async function pendingFixture() {
+    let ready = false;
+    const gate = vi.fn(async (_input: Parameters<CandidateGate>[0]) => { if (!ready) throw new Error('native evidence expired'); return { assertCurrent() {} }; });
+    const test = await fixture(true, true, false, undefined, gate);
+    await test.save(); const prepared = await test.prepare(); const operationId = generateIdempotencyKey();
+    await expect(test.sign(prepared, operationId)).rejects.toThrow('native evidence expired');
+    expect(test.state.signCount).toBe(0);
+    return { test, prepared, operationId, gate, ready: () => { ready = true; } };
+  }
+  it('fences the old revision, preserves its candidate, and requires fresh assent with a new Sign key', async () => {
+    const { test, operationId, gate, ready } = await pendingFixture();
+    const candidate = structuredClone(test.state.response); const revision = test.state.version; const patches = test.state.patchCount;
+    const restored = test.build();
+    const state = await restored.draftStore.readState!(test.draftKey);
+    if (state?.kind !== 'active' || !state.pendingSign) throw new Error('Pending Sign state required');
+    expect(state.pendingSign.operationId).toBe(operationId); expect(state.response).toEqual(candidate);
+    await expect(restored.draftStore.save(test.draftKey, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
+    const result = await restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state.response, source, locale: 'en-US', action }, operationId);
+    if (result.kind !== 'prepared') throw new Error('Prepared successor required');
+    const successor = structuredClone(candidate); delete successor.extensions?.['x-formspec-signing-content'];
+    expect(result.operationId).not.toBe(operationId); expect(result.preparation.response).toEqual(successor);
+    expect(result.preparation.draft.version).toBe(revision + 1); expect(test.state.patchCount).toBe(patches + 1);
+    expect(test.metadata.read('response-signing-operations')).toMatchObject([{ operationId, version: revision,
+      renewal: { operationId: result.operationId, originalCandidate: candidate, version: revision + 1 } }]);
+    await expect(restored.responseSigning!.sign({ preparation: result.preparation, operationId, action,
+      assent: { signerName: 'Ada Lovelace', consentAccepted: true } })).rejects.toThrow();
+    ready(); test.now.mockReturnValue('2026-10-10T23:45:00.000Z');
+    const signed = await restored.responseSigning!.sign({ preparation: result.preparation, operationId: result.operationId, action,
+      assent: { signerName: 'Ada Lovelace', consentAccepted: true } });
+    expect(signed.response.data).toEqual(candidate.data); expect(gate).toHaveBeenCalledTimes(2);
+    expect(signed.response.extensions?.['x-formspec-signing-content']).toMatchObject({ draftVersion: revision + 2, signedAt: '2026-10-10T23:45:00.000Z' });
+    const request = test.requests.find(item => item.url.endsWith('/sign'))!;
+    expect(request.headers.get('idempotency-key')).toBe(result.operationId);
+    expect((request.body as { draft_version: number }).draft_version).toBe(revision + 2);
+    expect(test.metadata.read('response-signing-operations')).toBeUndefined();
+  });
+  it('reconciles a lost Save reply and reloads the same prepared successor without another Save', async () => {
+    const { test, operationId } = await pendingFixture(); const candidate = structuredClone(test.state.response); const revision = test.state.version;
+    test.state.lostPatch = true;
+    const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    const result = await restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId);
+    expect(result.kind).toBe('prepared'); const patches = test.state.patchCount;
+    const reloaded = test.build(); const fresh = await reloaded.draftStore.readState!(test.draftKey);
+    expect(fresh).toMatchObject({ kind: 'active', pendingSign: { operationId } });
+    const again = await reloaded.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: fresh!.response, source, locale: 'en-US', action }, operationId);
+    expect(again).toEqual(result); expect(test.state.patchCount).toBe(patches); expect(test.state.version).toBe(revision + 1);
+    expect(test.metadata.read('response-signing-operations')).toMatchObject([{ renewal: { originalCandidate: candidate } }]);
+  });
+  it('conditionally renews an already-clean unsigned revision for a new native screening association', async () => {
+    const { test, operationId } = await pendingFixture(); const original = structuredClone(test.state.response); const revision = test.state.version;
+    const initial = test.build(); const state = await initial.draftStore.readState!(test.draftKey);
+    const first = await initial.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId);
+    if (first.kind !== 'prepared') throw new Error('Prepared successor required');
+    const fresh = test.build(); const current = await fresh.draftStore.readState!(test.draftKey); test.state.lostPatch = true;
+    const next = await fresh.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: current!.response, source, locale: 'en-US', action, renewUnsignedRevision: true }, operationId);
+    if (next.kind !== 'prepared') throw new Error('Prepared successor required');
+    expect(next.preparation.response).toEqual(first.preparation.response); expect(next.preparation.response.data).toEqual(original.data);
+    expect(next.preparation.draft.version).toBe(revision + 2); expect(next.operationId).not.toBe(first.operationId);
+    expect(test.metadata.read('response-signing-operations')).toMatchObject([{ operationId, renewal: {
+      originalCandidate: original, previousVersion: revision + 1, version: revision + 2, operationId: next.operationId } }]);
+    const patches = test.state.patchCount; const reloaded = test.build(); const reread = await reloaded.draftStore.readState!(test.draftKey);
+    expect(await reloaded.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: reread!.response, source, locale: 'en-US', action }, operationId)).toEqual(next);
+    expect(test.state.patchCount).toBe(patches);
+  });
+  it('returns the verified old signature when Sign wins the conditional Save race', async () => {
+    const { test, operationId } = await pendingFixture(); const candidate = structuredClone(test.state.response); const revision = test.state.version;
+    const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    let release!: () => void; test.state.patchGate = new Promise(resolve => { release = resolve; }); const patches = test.state.patchCount;
+    const recovery = restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId);
+    await vi.waitFor(() => expect(test.state.patchCount).toBe(patches + 1));
+    test.state.response = await signedResponse(candidate); test.state.version++; release();
+    const result = await recovery;
+    expect(result).toMatchObject({ kind: 'signed', signed: { draft: { version: revision + 1 }, response: { authoredSignatures: [expect.anything()] } } });
+    expect(test.state.response.extensions).toEqual(candidate.extensions); expect(test.metadata.read('response-signing-operations')).toBeUndefined();
+    expect(test.state.signCount).toBe(0);
+  });
+  it('reconciles old signed state after reload without creating a new preparation', async () => {
+    const { test, operationId } = await pendingFixture(); test.state.response = await signedResponse(test.state.response); test.state.version++;
+    const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    const patches = test.state.patchCount;
+    const result = await restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId);
+    expect(result.kind).toBe('signed'); expect(test.state.patchCount).toBe(patches);
+  });
+  it('refuses renewal before Save if its metadata cannot be retained', async () => {
+    const { test, operationId } = await pendingFixture(); const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    const patches = test.state.patchCount; vi.spyOn(test.metadata, 'write').mockImplementation(() => { throw new Error('metadata unavailable'); });
+    await expect(restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId)).rejects.toThrow('metadata unavailable');
+    expect(test.state.patchCount).toBe(patches); expect(test.state.signCount).toBe(0);
+  });
+  it('keeps an interrupted fence recoverable when authority retires after Save dispatch', async () => {
+    const { test, operationId } = await pendingFixture(); const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    let release!: () => void; test.state.patchGate = new Promise(resolve => { release = resolve; }); const patches = test.state.patchCount;
+    const recovery = restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId);
+    const refusal = expect(recovery).rejects.toThrow('invalidated');
+    await vi.waitFor(() => expect(test.state.patchCount).toBe(patches + 1)); restored.invalidateResponseSigningScope!(test.draftKey); release(); await refusal;
+    const fresh = test.build(); const retained = await fresh.draftStore.readState!(test.draftKey);
+    expect(retained).toMatchObject({ kind: 'active', pendingSign: { operationId } });
+    const resumed = await fresh.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: retained!.response, source, locale: 'en-US', action }, operationId);
+    expect(resumed.kind).toBe('prepared'); expect(test.state.patchCount).toBe(patches + 1);
+  });
+  it('fences a previously dispatched old Sign paused before its server revision check', async () => {
+    const { test, prepared, operationId, ready } = await pendingFixture(); ready();
+    let release!: () => void; test.state.signGate = new Promise(resolve => { release = resolve; });
+    const oldSign = test.sign(prepared, operationId); const refused = expect(oldSign).rejects.toThrow();
+    await vi.waitFor(() => expect(test.state.signCount).toBe(1));
+    const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    const renewed = await restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId);
+    expect(renewed.kind).toBe('prepared'); release(); await refused;
+    expect(test.state.response.authoredSignatures).toBeUndefined();
+    if (renewed.kind !== 'prepared') throw new Error('Prepared successor required');
+    const signed = await restored.responseSigning!.sign({ preparation: renewed.preparation, operationId: renewed.operationId, action,
+      assent: { signerName: 'Ada Lovelace', consentAccepted: true } });
+    expect(signed.response.authoredSignatures).toHaveLength(1); expect(test.state.signCount).toBe(2);
+    expect(test.requests.filter(item => item.url.endsWith('/sign')).map(item => item.headers.get('idempotency-key'))).toEqual([operationId, renewed.operationId]);
+  });
+  it.each(['candidate', 'higher-revision', 'metadata'] as const)('keeps a renewed successor closed when %s changes', async mismatch => {
+    const { test, operationId } = await pendingFixture(); const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    await restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId);
+    const patches = test.state.patchCount;
+    if (mismatch === 'candidate') test.state.response.data = { changed: true };
+    if (mismatch === 'higher-revision') test.state.version++;
+    if (mismatch === 'metadata') {
+      const markers = test.metadata.read('response-signing-operations') as { renewal: { originalCandidate: FormResponse } }[];
+      markers[0].renewal.originalCandidate.data = { changed: true }; test.metadata.write('response-signing-operations', markers);
+    }
+    await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toThrow();
+    expect(test.state.patchCount).toBe(patches); expect(test.state.signCount).toBe(0);
+  });
+  it('does not repeat the fence for a duplicate stale recovery call', async () => {
+    const { test, operationId } = await pendingFixture(); const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    const input = { draftKey: test.draftKey, definition, formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action };
+    await restored.responseSigning!.restorePending!(input, operationId); const patches = test.state.patchCount;
+    await expect(restored.responseSigning!.restorePending!(input, operationId)).rejects.toThrow(); expect(test.state.patchCount).toBe(patches);
+  });
+  it('refuses a non-durable metadata write before the conditional Save', async () => {
+    const { test, operationId } = await pendingFixture(); const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    const patches = test.state.patchCount; vi.spyOn(test.metadata, 'write').mockImplementation(() => {});
+    await expect(restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId)).rejects.toThrow();
+    expect(test.state.patchCount).toBe(patches);
+  });
+  it('cannot retry past a non-durable new Sign marker after renewal', async () => {
+    const { test, operationId, ready } = await pendingFixture(); const restored = test.build(); const state = await restored.draftStore.readState!(test.draftKey);
+    const result = await restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: state!.response, source, locale: 'en-US', action }, operationId);
+    if (result.kind !== 'prepared') throw new Error('Prepared successor required'); ready();
+    const patches = test.state.patchCount; vi.spyOn(test.metadata, 'write').mockImplementation(() => {});
+    const input = { preparation: result.preparation, operationId: result.operationId, action,
+      assent: { signerName: 'Ada Lovelace', consentAccepted: true as const } };
+    await expect(restored.responseSigning!.sign(input)).rejects.toThrow();
+    await expect(restored.responseSigning!.sign(input)).rejects.toThrow();
+    expect(test.state.patchCount).toBe(patches); expect(test.state.signCount).toBe(0);
+  });
+  it.each(['revision', 'candidate', 'marker', 'content', 'action', 'owner', 'publication'] as const)('keeps unresolved state when restored %s differs', async mismatch => {
+    const { test, operationId } = await pendingFixture(); const restored = test.build();
+    const state = await restored.draftStore.readState!(test.draftKey);
+    if (state?.kind !== 'active' || !state.pendingSign) throw new Error('Pending Sign state required');
+    const candidate = structuredClone(state.response); const selectedAction = structuredClone(action);
+    if (mismatch === 'revision') test.state.version++;
+    if (mismatch === 'owner') test.state.actor = 'oidc:other';
+    if (mismatch === 'publication') test.state.formVersionId = 'other-publication';
+    if (mismatch === 'candidate') candidate.data = { changed: true };
+    if (mismatch === 'marker') test.metadata.remove('response-signing-operations');
+    if (mismatch === 'content') candidate.extensions!['x-formspec-signing-content']!.documentHash = '0'.repeat(64);
+    if (mismatch === 'action') selectedAction.requestRef = 'unadmitted-sign-request';
+    await expect(restored.responseSigning!.restorePending!({ draftKey: test.draftKey, definition,
+      formVersionId: 'publication-1', response: candidate, source, locale: 'en-US', action: selectedAction }, operationId)).rejects.toThrow();
+    expect(test.state.signCount).toBe(0);
+  });
+});
+
+
+it.each(['formUrl', 'formVersion'] as const)('rejects a pending recovery with mismatched key %s before transport', async field => {
+  const test = await fixture(true, true, false, undefined, async () => { throw new Error('native evidence expired'); });
+  await test.save(); const prepared = await test.prepare(); const operationId = generateIdempotencyKey();
+  await expect(test.sign(prepared, operationId)).rejects.toThrow('native evidence expired');
+  const restored = test.build(); const candidate = structuredClone(test.state.response); const calls = test.requests.length;
+  await expect(restored.responseSigning!.restorePending!({ draftKey: { ...test.draftKey, [field]: 'different' }, definition,
+    formVersionId: 'publication-1', response: candidate, source, locale: 'en-US', action }, operationId)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
+  expect(test.requests).toHaveLength(calls);
 });

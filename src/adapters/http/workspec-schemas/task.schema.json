@@ -404,6 +404,15 @@
           "$ref": "#/$defs/WosResourceUrn",
           "description": "Workflow process URN this task belongs to."
         },
+        "caseLedgerId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Governed case ledger URN associated with this task's process, when available."
+        },
+        "taskRevision": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque stored revision of the current task, when available. Send this exact value when an operation requires an expected task revision."
+        },
         "workflowUrl": {
           "$ref": "#/$defs/WorkflowUrl",
           "description": "Absolute URI of the governing Workflow Document."
@@ -474,6 +483,15 @@
         "processId": {
           "$ref": "#/$defs/WosResourceUrn",
           "description": "Workflow process URN this task belongs to."
+        },
+        "caseLedgerId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Governed case ledger URN associated with this task's process, when available."
+        },
+        "taskRevision": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque stored revision of the current task, when available. Send this exact value when an operation requires an expected task revision."
         },
         "workflowUrl": {
           "$ref": "#/$defs/WorkflowUrl",
@@ -723,6 +741,45 @@
         "response": {
           "$ref": "#/$defs/ResponseValue",
           "description": "Final response payload conforming to the task's contract."
+        },
+        "signedDraft": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Signed Source draft selectors and expected values. Required by configured signed-correction tasks and optional for other submissions. These values are preconditions; the server derives the owner, current task, scope and authority and reads the signed record before committing the response.",
+          "required": [
+            "draftId",
+            "expectedSignedDraftVersion",
+            "expectedSignedResponseHash",
+            "associationHash",
+            "taskBindingHash"
+          ],
+          "properties": {
+            "draftId": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Opaque identifier of the signed Source draft."
+            },
+            "expectedSignedDraftVersion": {
+              "type": "integer",
+              "minimum": 2,
+              "description": "Expected stored signed draft version."
+            },
+            "expectedSignedResponseHash": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$",
+              "description": "Expected hash of the retained signed response."
+            },
+            "associationHash": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$",
+              "description": "Expected hash of the retained Source association."
+            },
+            "taskBindingHash": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$",
+              "description": "Expected hash of the retained current-task binding."
+            }
+          }
         },
         "submittedAt": {
           "type": "string",

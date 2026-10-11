@@ -41,11 +41,11 @@ import {
   type IdempotencyKey,
 } from '../shared/idempotency-key.ts';
 
-export function hydrateEngineFromResponse(engine: IFormEngine, response?: FormResponse): void {
-  if (!response) {
-    return;
-  }
-  hydrateEngineFromData(engine, response.data);
+export function hydrateEngineFromResponse(engine: IFormEngine, response?: FormResponse, initialData?: Record<string, unknown>): void {
+  // Draft lookup has already completed. A restored response owns all its answers,
+  // including absent fields; prefill never patches or replaces saved data.
+  const data = response ? response.data : initialData;
+  if (data) hydrateEngineFromData(engine, data);
 }
 
 /** The engine owns hydration: one row per saved repeat entry, even past maxRepeat. */

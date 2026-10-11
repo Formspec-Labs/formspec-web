@@ -1,3 +1,4 @@
+import type { ResponseActionsDocument } from '@formspec-org/types';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { webcrypto } from 'node:crypto';
@@ -8,7 +9,10 @@ import type { FormResponse, LocaleDocument } from '@formspec-org/types';
 import type { SigningContent } from '@formspec-org/types';
 import { createFormEngine } from '@formspec-org/engine/render';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
+import * as engineInitialization from '@formspec-org/engine/init-formspec-engine';
 import { delegatedSignedResponseFixture } from '../adapters/http/delegated-signed-response-fixture.ts';
+import type { ScreenerSelection } from '../../src/ports/screener-retention.ts';
+import type { NativeScreenerHydrationFactory, NativeScreenerHydrationFactoryContext } from '../../src/adapters/http/initial-mixed-screener-hydration.ts';
 import type { BrowserAuthSessionState } from '../../src/ports/browser-auth-session.ts';
 import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts';
 import * as nativeHostModule from '../../src/shared/native-package-signing-host.ts';
@@ -200,19 +204,100 @@ async function completeStudioFixture(scoped: boolean) {
       route: 'signing', ceremonySlot: 'ceremony', reviewSlot: 'review' } } : {}) };
   const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
     tenantBinding: { kind: 'bound', scope: { tenant: 'fixture', workspace: 'fixture', environment: 'test', cell: 'fixture' } } });
-  return { ...test, config };
+  const screenerSlot = intakeSurface.routes.flatMap(route => route.slots ?? []).find(slot => slot.slotType === 'screener')!;
+  const screenerRef = (screenerSlot.binding as { screenerRef: string }).screenerRef;
+  const screener = resolved.screenerHandles!.find(handle => handle.ref.url === screenerRef)!.document;
+  const session = { issuer: 'https://idp.test', subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+  const browserAuthSession = { getSession: async () => session, begin: async () => {}, completeCallback: async () => session,
+    completeSilentCallback: async () => {}, renew: async () => session, logout: async () => {}, completeLogoutCallback: async () => {},
+    accessToken: async () => 'fixture-bearer', subscribe: () => () => {}, dispose: () => {} };
+  const provider = { discover: vi.fn(async () => []), authenticate: vi.fn(), revoke: vi.fn(async () => {}), subscribe: vi.fn(() => () => {}) };
+  const selection: ScreenerSelection = { evaluationSelection: {
+    scope: { tenant_id: 'fixture', workspace_id: 'fixture', environment_id: 'test', cell_id: 'fixture' },
+    formId: test.publication.form_id, formVersionId: test.publication.form_version_id,
+    definitionUrl: definition.url!, definitionVersion: definition.version, definitionHash: test.publication.definition_hash,
+    requiredSources: Object.values(definition.instances ?? {}).flatMap(instance => instance.source ? [instance.source] : []) },
+    formVersionHash: test.publication.definition_hash, sourceRef: definition.instances!.eligibility.source!, screenerUrl: screener.url!, screenerVersion: screener.version!,
+    screenerRawHash: `sha256:${await rawDigest(JSON.stringify(screener))}`, screenerHash: await computeJcsSha256Digest(screener),
+    allowedTargets: ['surface:intake', 'surface:paper-help'], qualificationProfile: 'flat-first-match-v1',
+    // Syntactic fixture pin only: no Mapping or hydration operation is qualified by this package-load test.
+    instanceMappingHash: await computeJcsSha256Digest({ purpose: 'unexecuted-test-mapping-policy' }) };
+  // Package admission requires selected capabilities; this test does not execute sources or accept a screening result.
+  const initialDataSources = vi.fn(() => { throw new Error('Initial data was not selected for execution'); });
+  const hostEvents = Object.entries(bundle.documents).flatMap(([artifactRef, raw]) => {
+    const document = raw as ResponseActionsDocument;
+    return document.targetDefinition?.url === definition.url ? (document.actions ?? []).flatMap(action => {
+      const effect = action.effects?.length === 1 ? action.effects[0] : undefined;
+      return effect?.type === 'hostEvent' && !Object.values(signing.roles).some(role => role.actionRef === action.id)
+        ? [{ artifactRef, actionRef: action.id, eventName: effect.eventName, handle: async () => { throw new Error('Unexecuted fixture host capability'); } }] : [];
+    }) : [];
+  });
+  const options = { packageUrl: '/package.json', initialDefinitionUrl, initialDataSources, hostEvents,
+    nativeScreener: { selection, selectionHash: await computeJcsSha256Digest(selection), selectionKey: 'fixture',
+      entryGate: { protectedTargets: ['surface:intake'] } },
+    identityBinding: { provider, accessToken: async () => 'fixture-bearer', browserAuthSession } };
+  const authenticatedConfig = { ...config, ports: { ...config.ports, identityProvider: 'oidc' as const }, identity: {
+    mode: 'oidc-required' as const, oidc: { issuer: session.issuer, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const } } };
+  return { ...test, config: authenticatedConfig, options, initialDataSources };
 }
 
 describe('explicit native package composition', () => {
+  it('awaits runtime then tools for an admitted initial-data Mapping before publishing the host', async () => {
+    const test = await completeStudioFixture(true); const order: string[] = [];
+    let release: (() => void) | undefined;
+    vi.spyOn(engineInitialization, 'initFormspecEngine').mockImplementation(async () => { order.push('runtime'); });
+    vi.spyOn(engineInitialization, 'initFormspecEngineTools').mockImplementation(async () => {
+      order.push('tools-start'); await new Promise<void>(resolve => { release = resolve; }); order.push('tools-ready');
+    });
+    let published = false;
+    const pending = createDefaultComposition(test.config, test.options).nativePackageRespondent!.load().then(boot => { published = true; return boot; });
+    await vi.waitFor(() => expect(order).toEqual(['runtime', 'tools-start']));
+    expect(published).toBe(false); expect(test.initialDataSources).not.toHaveBeenCalled();
+    release!(); const boot = await pending;
+    expect(order).toEqual(['runtime', 'tools-start', 'tools-ready']); boot.host.dispose();
+  });
+  it('refuses boot when required tools initialization fails', async () => {
+    const test = await completeStudioFixture(true);
+    vi.spyOn(engineInitialization, 'initFormspecEngineTools').mockRejectedValue(new Error('selected-tools-unavailable'));
+    await expect(createDefaultComposition(test.config, test.options).nativePackageRespondent!.load()).rejects.toThrow('selected-tools-unavailable');
+    expect(test.initialDataSources).not.toHaveBeenCalled();
+    expect(test.requests.filter(request => request.url.startsWith('https://server.example.test'))).toHaveLength(0);
+  });
+  it('keeps tools unloaded for a package without initial-data Mapping', async () => {
+    const test = await fixture(); const tools = vi.spyOn(engineInitialization, 'initFormspecEngineTools');
+    const boot = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    expect(tools).not.toHaveBeenCalled(); boot.host.dispose();
+  });
+
+  it.each(['admitted', 'host-refused'] as const)('owns an injected hydration provider through %s', async mode => {
+    const test = await completeStudioFixture(true);
+    const dispose = vi.fn(), retireFacts = vi.fn(), hydrate = vi.fn(async () => { throw new Error('not selected for execution'); });
+    const hydrationFactory = vi.fn((_context: NativeScreenerHydrationFactoryContext) => ({ dispose, retireFacts, hydrate }));
+    const nativeScreener: typeof test.options.nativeScreener & { hydrationFactory: NativeScreenerHydrationFactory } = { ...test.options.nativeScreener, hydrationFactory };
+    const options = { ...test.options, nativeScreener, ...(mode === 'host-refused' ? { initialDataSources: undefined } : {}) };
+    const composition = createDefaultComposition(test.config, options);
+    nativeScreener.hydrationFactory = () => { throw new Error('late caller substitution'); };
+    if (mode === 'host-refused') {
+      await expect(composition.nativePackageRespondent!.load()).rejects.toThrow('native-initial-data-source-capability-unavailable');
+    } else {
+      const boot = await composition.nativePackageRespondent!.load();
+      expect(dispose).not.toHaveBeenCalled(); boot.host.dispose();
+    }
+    expect(hydrationFactory).toHaveBeenCalledOnce();
+    expect(hydrationFactory.mock.calls[0][0]).toMatchObject({ publication: test.publication, selection: test.options.nativeScreener.selection });
+    expect(dispose).toHaveBeenCalledOnce(); expect(hydrate).not.toHaveBeenCalled();
+  });
+
   it('loads the exact Studio two-ceremony package with explicit intake selection', async () => {
     const test = await completeStudioFixture(true);
-    const boot = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    const boot = await createDefaultComposition(test.config, test.options).nativePackageRespondent!.load();
     expect(boot.host.bundle.surfaces).toHaveLength(5);
+    expect(test.initialDataSources).not.toHaveBeenCalled();
     boot.host.dispose();
   });
   it('refuses the same complete two-ceremony package without selection', async () => {
     const test = await completeStudioFixture(false);
-    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load()).rejects.toThrow();
+    await expect(createDefaultComposition(test.config, test.options).nativePackageRespondent!.load()).rejects.toThrow();
     expect(test.requests.filter(request => request.url.startsWith('https://server.example.test'))).toHaveLength(0);
   });
 
@@ -525,7 +610,7 @@ describe('explicit native package composition', () => {
       const boot = await composition.nativePackageRespondent!.load();
       // A stale initial read has a different issuer and would fail before retained-run lookup.
       await expect(boot.host.preSignCandidate!({ saved: selected.input.saved, operationId: 'act', assertCurrent() {} })).rejects.toThrow('retained run unavailable');
-      const retire = vi.spyOn(boot.host, 'retireScreenerAuthority');
+      const retire = vi.spyOn(boot.host, 'retireCandidateAuthority');
       onSession({ ...session, revision: 3 });
       expect(retire).toHaveBeenCalledOnce();
       expect(boot.host.getSnapshot().nativeReadiness).toBe('pending');
@@ -606,5 +691,106 @@ describe('trusted native Screener completion DI', () => {
     const test = await fixture();
     const boot = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
     expect(boot.screenerCompletion).toBeUndefined();
+  });
+});
+
+async function correctionFixture(taskRequest = true) {
+  const test = await fixture('oidc:task');
+  const state = { issuer: 'https://idp.test', subject: 'task-owner', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+  let listener!: (value: BrowserAuthSessionState | null) => void;
+  const release = vi.fn();
+  const browserAuthSession = { getSession: vi.fn(async () => state), begin: async () => {}, completeCallback: async () => state,
+    completeSilentCallback: async () => {}, renew: async () => state, logout: async () => {}, completeLogoutCallback: async () => {},
+    accessToken: async () => 'task-token', subscribe: vi.fn((next: typeof listener) => { listener = next; return release; }), dispose: () => {} };
+  const provider = { discover: vi.fn(async () => []), authenticate: vi.fn(), revoke: vi.fn(async () => {}), subscribe: vi.fn(() => () => {}) };
+  const config = { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: {
+    mode: 'oidc-required' as const, oidc: { issuer: state.issuer, clientId: 'task-client', redirectUri: '/callback', minAssurance: 'L2' as const } } };
+  const processId = 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db';
+  const taskId = `${processId}/tasks/correction`;
+  if (taskRequest) {
+    const submit = test.document.actions.find(action => action.id === 'submit')!;
+    const effect = submit.effects![0];
+    if (effect.type !== 'serviceRequest') throw new Error('Expected fixture submit request');
+    const request = test.document['x-formspec-runtime']!.requests.find(request => request.id === effect.requestRef)!;
+    request.request = { method: 'POST', pathTemplate: '/api/v1/tasks/{taskId}/response',
+      pathBindings: { taskId: { from: 'input', path: 'taskId' } },
+      bodyDefaults: { definitionUrl: test.definition.url, definitionVersion: test.definition.version },
+      bodyBindings: { '/response': { from: 'input', path: 'frozenResponse' }, '/signedDraft': { from: 'input', path: 'signedDraft' } } };
+    request.outputs = { task: { path: '/taskId', exposure: 'transition' }, status: { path: '/newStatus', exposure: 'internal' } };
+    test.texts['native.json'] = JSON.stringify(test.bundle);
+    test.files.nativeBundle.sha256 = [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(test.texts['native.json'])))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+  const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url,
+    definitionVersion: test.definition.version, status: 'in-progress' as const, data: {} };
+  const launched = { draft_id: 'task-draft', draft_version: 1, subject_ref: 'oidc:task', form_version_id: test.publication.form_version_id,
+    canonical_response: response, draft_state: response.data, status: 'in_progress',
+    taskDraft: { version: 1, associationHash: `sha256:${'b'.repeat(64)}`, taskBindingHash: `sha256:${'c'.repeat(64)}` } };
+  const ordinaryFetch = test.fetch.getMockImplementation()!;
+  test.fetch.mockImplementation(async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/runtime/task-drafts') {
+      test.requests.push({ url: url.href, method: init?.method ?? 'GET', body: JSON.parse(init!.body as string), headers: new Headers(init?.headers) });
+      return Response.json(launched);
+    }
+    return ordinaryFetch(input, init);
+  });
+  const options = { packageUrl: '/package.json', initialDefinitionUrl, identityBinding: { provider, accessToken: async () => 'task-token', browserAuthSession },
+    nativeTask: { launch: { version: 1 as const, taskId, expectedTaskRevision: 'actual-task-revision',
+      formVersionId: test.publication.form_version_id, formVersionHash: `sha256:${'a'.repeat(64)}` },
+      completion: { taskId, processId, definitionUrl: test.definition.url, definitionVersion: test.definition.version },
+      launchOperationId: 'stable-task-launch', subjectRef: 'oidc:task',
+      wos: { baseUrl: 'https://wos.test', accessToken: 'wos-token' }, assertCurrentWos: vi.fn(),
+      hydration: { selection: { scope: { tenant_id: 'fixture', workspace_id: 'fixture', environment_id: 'test', cell_id: 'fixture' },
+        formId: test.publication.form_id, formVersionId: test.publication.form_version_id, definitionUrl: test.definition.url,
+        definitionVersion: test.definition.version, definitionHash: test.publication.definition_hash,
+        requiredSources: Object.values(test.definition.instances ?? {}).flatMap(instance => typeof instance.source === 'string' ? [instance.source] : []) },
+        identity: { issuer: state.issuer, subject: state.subject, clientId: 'task-client' } },
+      attachmentFieldPaths: { photo: '/photo' } } };
+  return { test, config, options, launched, release, retire: () => listener({ ...state, revision: 2 }) };
+}
+
+describe('explicit correction host through the maintained native loader', () => {
+  it('selects the task launch, completion and candidate host without initial draft creation', async () => {
+    const f = await correctionFixture();
+    const boot = await createDefaultComposition(f.config, f.options).nativePackageRespondent!.load();
+    expect(boot.host.preSignCandidate).toBeTypeOf('function');
+    expect(boot.host.screenerCompletion).toBeUndefined();
+    expect(boot.host.getSnapshot().nativeReadiness).toBe('pending');
+    const launch = f.test.requests.find(request => new URL(request.url).pathname === '/runtime/task-drafts')!;
+    expect(launch.body).toEqual(f.options.nativeTask.launch);
+    expect(launch.headers.get('authorization')).toBe('Bearer task-token');
+    expect(launch.headers.get('idempotency-key')).toBe('stable-task-launch');
+    expect(f.test.requests.some(request => request.method === 'POST' && /forms\/.*\/(drafts|sessions\/anonymous)$/.test(new URL(request.url).pathname))).toBe(false);
+    const retire = vi.spyOn(boot.host, 'retireCandidateAuthority');
+    f.retire();
+    expect(retire).toHaveBeenCalledOnce();
+    await expect(boot.composition.draftStore.load({ formUrl: f.test.definition.url, formVersion: f.test.definition.version, subjectRef: 'oidc:task' })).rejects.toThrow();
+    boot.host.dispose();
+    expect(f.release).toHaveBeenCalledOnce();
+  });
+  it('refuses a task publication mismatch before task launch', async () => {
+    const f = await correctionFixture();
+    f.options.nativeTask.hydration.selection.formVersionId = 'different-publication';
+    await expect(createDefaultComposition(f.config, f.options).nativePackageRespondent!.load()).rejects.toThrow('publication pins mismatch');
+    expect(f.test.requests.some(request => request.method === 'POST')).toBe(false);
+    expect(f.release).toHaveBeenCalledOnce();
+  });
+  it('refuses an intake Submit request before launching a task draft', async () => {
+    const f = await correctionFixture(false);
+    await expect(createDefaultComposition(f.config, f.options).nativePackageRespondent!.load()).rejects.toThrow('action-unadmitted');
+    expect(f.test.requests.some(request => request.method === 'POST')).toBe(false);
+  });
+  it('refuses task selection without native signing configuration', async () => {
+    const f = await correctionFixture();
+    const formspecStack = { ...f.config.referenceAdapters!.formspecStack! };
+    Reflect.deleteProperty(formspecStack, 'nativePackageSigning');
+    const config = { ...f.config, referenceAdapters: { ...f.config.referenceAdapters, formspecStack } };
+    expect(() => createDefaultComposition(config, f.options)).toThrow('explicit native signing configuration');
+    expect(f.test.requests).toHaveLength(0);
+  });
+  it('refuses initial prefill capabilities combined with a correction task', async () => {
+    const f = await correctionFixture();
+    expect(() => createDefaultComposition(f.config, { ...f.options, initialDataSources: () => { throw new Error('unavailable prefill'); } })).toThrow('initial application capabilities');
+    expect(f.test.requests).toHaveLength(0);
   });
 });

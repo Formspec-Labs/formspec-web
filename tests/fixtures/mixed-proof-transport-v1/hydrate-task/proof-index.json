@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "references": {
+    "native": {},
+    "images": {},
+    "initialContext": {},
+    "taskContext": {
+      "alphaContext": {
+        "proofObject": {
+          "object_artifact_id": "context-observation-69f6bb20b7c1b08a0ff1a5e26c1656d3b6f563fbc8bca345f4b11887d7528462",
+          "aggregate_type": "task_context",
+          "aggregate_id": "sha256:b4deea0dab07d6427060fa959e047a0b325511ff05cf11d56dc334f2cd1e45aa",
+          "object_kind": "immutable:task-context-observation:v1",
+          "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-69f6bb20b7c1b08a0ff1a5e26c1656d3b6f563fbc8bca345f4b11887d7528462",
+          "content_type": "application/json",
+          "checksum_sha256": "sha256:37ef5cf46ff3cf49e5ab50ff04def76591d6204877fbcfb2e0b7223febda7edd",
+          "byte_length": 272731
+        },
+        "originalProofs": {
+          "kind": "mixed",
+          "proofs": {
+            "native": {},
+            "images": {},
+            "initialContext": {
+              "alphaContext": {
+                "object_artifact_id": "context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "aggregate_type": "initial_context",
+                "aggregate_id": "sha256:9212f45a97a7a085b3d0bd58a832163d5ac035e662223d42c2ec6e1449e74d33",
+                "object_kind": "immutable:initial-context-observation:v1",
+                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "content_type": "application/json",
+                "checksum_sha256": "sha256:27fef6585e3095c99d4f6091ff7b5f1f1a73963ea9bfb56c86462cb39be65f92",
+                "byte_length": 5732
+              },
+              "betaContext": {
+                "object_artifact_id": "context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "aggregate_type": "initial_context",
+                "aggregate_id": "sha256:9212f45a97a7a085b3d0bd58a832163d5ac035e662223d42c2ec6e1449e74d33",
+                "object_kind": "immutable:initial-context-observation:v1",
+                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "content_type": "application/json",
+                "checksum_sha256": "sha256:27fef6585e3095c99d4f6091ff7b5f1f1a73963ea9bfb56c86462cb39be65f92",
+                "byte_length": 5732
+              },
+              "gammaContext": {
+                "object_artifact_id": "context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "aggregate_type": "initial_context",
+                "aggregate_id": "sha256:9212f45a97a7a085b3d0bd58a832163d5ac035e662223d42c2ec6e1449e74d33",
+                "object_kind": "immutable:initial-context-observation:v1",
+                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "content_type": "application/json",
+                "checksum_sha256": "sha256:27fef6585e3095c99d4f6091ff7b5f1f1a73963ea9bfb56c86462cb39be65f92",
+                "byte_length": 5732
+              }
+            }
+          }
+        }
+      },
+      "betaContext": {
+        "proofObject": {
+          "object_artifact_id": "context-observation-69f6bb20b7c1b08a0ff1a5e26c1656d3b6f563fbc8bca345f4b11887d7528462",
+          "aggregate_type": "task_context",
+          "aggregate_id": "sha256:b4deea0dab07d6427060fa959e047a0b325511ff05cf11d56dc334f2cd1e45aa",
+          "object_kind": "immutable:task-context-observation:v1",
+          "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-69f6bb20b7c1b08a0ff1a5e26c1656d3b6f563fbc8bca345f4b11887d7528462",
+          "content_type": "application/json",
+          "checksum_sha256": "sha256:37ef5cf46ff3cf49e5ab50ff04def76591d6204877fbcfb2e0b7223febda7edd",
+          "byte_length": 272731
+        },
+        "originalProofs": {
+          "kind": "mixed",
+          "proofs": {
+            "native": {},
+            "images": {},
+            "initialContext": {
+              "alphaContext": {
+                "object_artifact_id": "context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "aggregate_type": "initial_context",
+                "aggregate_id": "sha256:9212f45a97a7a085b3d0bd58a832163d5ac035e662223d42c2ec6e1449e74d33",
+                "object_kind": "immutable:initial-context-observation:v1",
+                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "content_type": "application/json",
+                "checksum_sha256": "sha256:27fef6585e3095c99d4f6091ff7b5f1f1a73963ea9bfb56c86462cb39be65f92",
+                "byte_length": 5732
+              },
+              "betaContext": {
+                "object_artifact_id": "context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "aggregate_type": "initial_context",
+                "aggregate_id": "sha256:9212f45a97a7a085b3d0bd58a832163d5ac035e662223d42c2ec6e1449e74d33",
+                "object_kind": "immutable:initial-context-observation:v1",
+                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "content_type": "application/json",
+                "checksum_sha256": "sha256:27fef6585e3095c99d4f6091ff7b5f1f1a73963ea9bfb56c86462cb39be65f92",
+                "byte_length": 5732
+              },
+              "gammaContext": {
+                "object_artifact_id": "context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "aggregate_type": "initial_context",
+                "aggregate_id": "sha256:9212f45a97a7a085b3d0bd58a832163d5ac035e662223d42c2ec6e1449e74d33",
+                "object_kind": "immutable:initial-context-observation:v1",
+                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "content_type": "application/json",
+                "checksum_sha256": "sha256:27fef6585e3095c99d4f6091ff7b5f1f1a73963ea9bfb56c86462cb39be65f92",
+                "byte_length": 5732
+              }
+            }
+          }
+        }
+      },
+      "gammaContext": {
+        "proofObject": {
+          "object_artifact_id": "context-observation-69f6bb20b7c1b08a0ff1a5e26c1656d3b6f563fbc8bca345f4b11887d7528462",
+          "aggregate_type": "task_context",
+          "aggregate_id": "sha256:b4deea0dab07d6427060fa959e047a0b325511ff05cf11d56dc334f2cd1e45aa",
+          "object_kind": "immutable:task-context-observation:v1",
+          "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-69f6bb20b7c1b08a0ff1a5e26c1656d3b6f563fbc8bca345f4b11887d7528462",
+          "content_type": "application/json",
+          "checksum_sha256": "sha256:37ef5cf46ff3cf49e5ab50ff04def76591d6204877fbcfb2e0b7223febda7edd",
+          "byte_length": 272731
+        },
+        "originalProofs": {
+          "kind": "mixed",
+          "proofs": {
+            "native": {},
+            "images": {},
+            "initialContext": {
+              "alphaContext": {
+                "object_artifact_id": "context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "aggregate_type": "initial_context",
+                "aggregate_id": "sha256:9212f45a97a7a085b3d0bd58a832163d5ac035e662223d42c2ec6e1449e74d33",
+                "object_kind": "immutable:initial-context-observation:v1",
+                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "content_type": "application/json",
+                "checksum_sha256": "sha256:27fef6585e3095c99d4f6091ff7b5f1f1a73963ea9bfb56c86462cb39be65f92",
+                "byte_length": 5732
+              },
+              "betaContext": {
+                "object_artifact_id": "context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "aggregate_type": "initial_context",
+                "aggregate_id": "sha256:9212f45a97a7a085b3d0bd58a832163d5ac035e662223d42c2ec6e1449e74d33",
+                "object_kind": "immutable:initial-context-observation:v1",
+                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "content_type": "application/json",
+                "checksum_sha256": "sha256:27fef6585e3095c99d4f6091ff7b5f1f1a73963ea9bfb56c86462cb39be65f92",
+                "byte_length": 5732
+              },
+              "gammaContext": {
+                "object_artifact_id": "context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "aggregate_type": "initial_context",
+                "aggregate_id": "sha256:9212f45a97a7a085b3d0bd58a832163d5ac035e662223d42c2ec6e1449e74d33",
+                "object_kind": "immutable:initial-context-observation:v1",
+                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-dadaec5aadd95264b3739f5f065e8908ac6d1f2dc82e7f2336ac2188799641c8",
+                "content_type": "application/json",
+                "checksum_sha256": "sha256:27fef6585e3095c99d4f6091ff7b5f1f1a73963ea9bfb56c86462cb39be65f92",
+                "byte_length": 5732
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "buffers": [
+    {
+      "key": "sha256:595dbdafc76848d058436f46a8880a1b5336c20df993762b3d39c27c298c19b3",
+      "bytes": 0
+    },
+    {
+      "key": "sha256:806eac501fb52cd485856a12d1fc937f733cea7fbee2c295f1ae7cb13fb72418",
+      "bytes": 1
+    }
+  ]
+}

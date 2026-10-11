@@ -4,8 +4,8 @@ import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical
 import { decodeCoseSign1WithMethodUri } from '@formspec-org/integrity-cose';
 import { targetDefinitionMatches, type FormResponse } from '@formspec-org/types';
 import type { DraftKey, DraftStore } from '../../ports/draft-store.ts';
-import { ResponseSigningUnresolvedError, type AdmittedResponseAction, type SaveResponseDraftInput, type SavedResponseDraft, type VerifiedDraftEvidence, type PrepareResponseSigningInput, type PreparedResponseSigning, type ResponseSigning, type SignPreparedResponseInput, type SignedResponseSigning } from '../../ports/response-signing.ts';
-import { assertUuidV7IdempotencyKey, isUuidV7IdempotencyKey } from '../../shared/idempotency-key.ts';
+import { ResponseSigningUnresolvedError, type AdmittedResponseAction, type SaveResponseDraftInput, type SavedResponseDraft, type VerifiedDraftEvidence, type PrepareResponseSigningInput, type PreparedResponseSigning, type ResponseSigning, type SignPreparedResponseInput, type SignedResponseSigning, type RestoredPendingResponseSigning } from '../../ports/response-signing.ts';
+import { assertUuidV7IdempotencyKey, isUuidV7IdempotencyKey, generateIdempotencyKey } from '../../shared/idempotency-key.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 import type { DraftBindingRegistry } from './draft-binding-registry.ts';
 import type { HttpClient } from './http-client.ts';
@@ -74,10 +74,12 @@ interface DraftView {
   draft_state: unknown;
   canonical_response: FormResponse;
   status: 'in_progress';
+  taskDraft?: VerifiedDraftEvidence['taskDraft'];
 }
 interface PreparationContext {
   input: PrepareResponseSigningInput | SaveResponseDraftInput;
   generation: number;
+  renewalOperationId?: string;
 }
 interface FrozenAct {
   identity: string;
@@ -88,7 +90,10 @@ interface FrozenAct {
   result?: SignedResponseSigning;
   pending?: Promise<SignedResponseSigning>;
 }
-interface PendingMarker { scope: string; operationId: string; draftId: string; version: number }
+interface PendingMarker {
+  scope: string; operationId: string; draftId: string; version: number;
+  renewal?: { operationId: string; version: number; previousVersion?: number; originalCandidate: FormResponse; originalHash: string; successorHash: string };
+}
 
 export interface HttpResponseSigningConfig extends HttpResponseSigningPolicy {
   client: HttpClient;
@@ -199,6 +204,7 @@ export class HttpResponseSigning implements ResponseSigning {
       draft_id: view.draft_id, form_version_id: view.form_version_id, subject_ref: view.subject_ref,
       draft_version: view.draft_version, draft_state: view.draft_state as Record<string, unknown>,
       canonical_response: view.canonical_response, status: view.status,
+      ...(view.taskDraft === undefined ? {} : { taskDraft: view.taskDraft }),
     };
     return freeze(structuredClone({ draftKey: key, response: view.canonical_response,
       draft: { id: view.draft_id, version: view.draft_version, responseHash: await handoffHash(view.canonical_response) },
@@ -262,7 +268,11 @@ export class HttpResponseSigning implements ResponseSigning {
     const pending = this.config.fence.run(context.input.draftKey, async () => {
       let act = previous;
       if (!act) {
-        this.refuseUnresolved(context.input.draftKey);
+        if (context.renewalOperationId) {
+          const marker = this.pendingMarkerFor(context.input.draftKey, input.preparation.draft.id);
+          if (input.operationId !== context.renewalOperationId || marker.renewal?.operationId !== input.operationId
+            || marker.renewal.version !== input.preparation.draft.version) throw new ResponseSigningUnresolvedError();
+        } else this.refuseUnresolved(context.input.draftKey);
         if (input.assent.consentAccepted !== true || !input.assent.signerName.trim()) throw new Error('Actual signer name and consent are required');
         // Capture time and detached act before the first network mutation; retries reuse them.
         const signedAt = (this.config.now ?? (() => new Date().toISOString()))();
@@ -279,8 +289,8 @@ export class HttpResponseSigning implements ResponseSigning {
         this.validateAction(act);
         if (!await this.config.validateResponse(candidate)) throw new Error('Signing candidate failed the Response schema');
         this.current(context);
-        this.acts.set(input.operationId, act);
         this.mark(act);
+        this.acts.set(input.operationId, act);
       }
       const result = await this.execute(act);
       act.result = result;
@@ -308,6 +318,110 @@ export class HttpResponseSigning implements ResponseSigning {
     this.writeMarkers(this.markers().filter(marker => marker.scope !== scope));
     this.writeCreateMarkers(this.createMarkers().filter(marker => marker.scope !== scope));
   }
+  hasPending(key: DraftKey): boolean {
+    return this.markers().some(marker => marker.scope === this.config.fence.scopeFor(key));
+  }
+  private pendingMarkerFor(key: DraftKey, draftId: string): PendingMarker {
+    const scope = this.config.fence.scopeFor(key);
+    const matches = this.markers().filter(marker => marker.scope === scope);
+    if (this.createMarkers().some(marker => marker.scope === scope) || matches.length !== 1
+      || matches[0].draftId !== draftId || !isUuidV7IdempotencyKey(matches[0].operationId)) throw new ResponseSigningUnresolvedError();
+    return freeze(structuredClone(matches[0]));
+  }
+  async pendingRecoveryFor(key: DraftKey, draftId: string, version: number, response: FormResponse) {
+    const marker = this.pendingMarkerFor(key, draftId);
+    const unsigned = structuredClone(response); delete unsigned.authoredSignatures;
+    const original = marker.renewal?.originalCandidate ?? unsigned;
+    const successor = structuredClone(original); delete successor.extensions?.['x-formspec-signing-content'];
+    if (marker.renewal && (await handoffHash(original) !== marker.renewal.originalHash
+      || await handoffHash(successor) !== marker.renewal.successorHash)) throw new ResponseSigningUnresolvedError();
+    if (response.authoredSignatures?.length) {
+      if (version !== marker.version + 1 || !same(unsigned, original)) throw new ResponseSigningUnresolvedError();
+    } else if (version === marker.version) {
+      if (!same(response, original)) throw new ResponseSigningUnresolvedError();
+    } else if (marker.renewal && (version === marker.renewal.version || version === marker.renewal.previousVersion)) {
+      if (!same(response, successor)) throw new ResponseSigningUnresolvedError();
+    } else throw new ResponseSigningUnresolvedError();
+    return { marker, original, successor };
+  }
+
+  restorePending(input: PrepareResponseSigningInput & { readonly renewUnsignedRevision?: true }, operationId: string): Promise<RestoredPendingResponseSigning> {
+    input = freeze(structuredClone(input));
+    assertUuidV7IdempotencyKey(operationId);
+    return this.config.fence.run(input.draftKey, async generation => {
+      if (!input.formVersionId || !input.response.id || !input.response.displayedLocale
+        || input.draftKey.formUrl !== input.definition.url || input.draftKey.formVersion !== input.definition.version
+        || input.response.definitionUrl !== input.definition.url || input.response.definitionVersion !== input.definition.version) throw new ResponseSigningUnresolvedError();
+      const binding = this.config.bindings.get(input.draftKey);
+      if (!binding || !Number.isSafeInteger(binding.draftVersion)) throw new ResponseSigningUnresolvedError();
+      const context: PreparationContext = { input, generation };
+      let saved = await this.read(context, binding.draftId);
+      // A concurrent old Sign may have won after the caller's qualified read.
+      if (saved.draft_version !== binding.draftVersion && !(saved.draft_version === binding.draftVersion! + 1 && saved.canonical_response.authoredSignatures?.length)) throw new ResponseSigningUnresolvedError();
+      const recovery = await this.pendingRecoveryFor(input.draftKey, saved.draft_id, saved.draft_version, saved.canonical_response);
+      let marker = recovery.marker;
+      if (marker.operationId !== operationId || input.response.status !== 'completed'
+        || !same(input.response, saved.canonical_response) && !(saved.canonical_response.authoredSignatures?.length && same(input.response, recovery.original))) throw new ResponseSigningUnresolvedError();
+      const commitment = recovery.original.extensions?.['x-formspec-signing-content'];
+      const content = resolveAuthoredSigningContent({ ...input, response: recovery.original, validateContent: this.config.validateContent });
+      if (!commitment || commitment.version !== '1.0' || commitment.draftId !== saved.draft_id
+        || commitment.draftVersion !== marker.version || commitment.actorRef !== saved.subject_ref
+        || typeof commitment.signerName !== 'string' || !commitment.signerName.trim()
+        || commitment.consentAccepted !== true || !Number.isFinite(Date.parse(commitment.signedAt))
+        || !same(commitment.content, content) || commitment.documentHashAlgorithm !== 'sha-256'
+        || commitment.documentHash !== await hashSigningContent(content, this.config.validateContent)) throw new ResponseSigningUnresolvedError();
+      const originalPreparation = freeze({ ...await this.savedResult(input.draftKey, { ...saved,
+        draft_version: marker.version, canonical_response: recovery.original, draft_state: recovery.original.data }), content });
+      const signInput = freeze({ preparation: originalPreparation, operationId, action: input.action,
+        assent: { signerName: commitment.signerName, consentAccepted: true as const } });
+      const oldAct: FrozenAct = { context, identity: canonicalize(signInput)!, input: signInput, candidate: recovery.original, version: marker.version };
+      this.validateAction(oldAct); this.current(context);
+      if (!saved.canonical_response.authoredSignatures?.length && input.renewUnsignedRevision
+        && marker.renewal && saved.draft_version === marker.renewal.version) {
+        // A new native screening visit needs a new immutable revision association.
+        // Persist its exact predecessor and new operation before conditional Save.
+        const next = freeze({ ...marker, renewal: { ...marker.renewal, previousVersion: saved.draft_version,
+          version: saved.draft_version + 1, operationId: generateIdempotencyKey() } });
+        this.current(context);
+        if (!same(this.pendingMarkerFor(input.draftKey, saved.draft_id), marker)) throw new ResponseSigningUnresolvedError();
+        this.writeMarkers(this.markers().map(value => value.scope === marker.scope ? next : value));
+        if (!same(this.pendingMarkerFor(input.draftKey, saved.draft_id), next)) throw new ResponseSigningUnresolvedError();
+        marker = next;
+      }
+      if (!saved.canonical_response.authoredSignatures?.length && (saved.draft_version === marker.version
+        || saved.draft_version === marker.renewal?.previousVersion)) {
+        if (!await this.config.validateResponse(recovery.successor)) throw new ResponseSigningUnresolvedError();
+        if (!marker.renewal) {
+          marker = freeze({ ...marker, renewal: { operationId: generateIdempotencyKey(), version: marker.version + 1,
+            originalCandidate: recovery.original, originalHash: await handoffHash(recovery.original), successorHash: await handoffHash(recovery.successor) } });
+          this.current(context);
+          const currentMarker = this.pendingMarkerFor(input.draftKey, saved.draft_id);
+          if (!same(currentMarker, recovery.marker)) throw new ResponseSigningUnresolvedError();
+          this.writeMarkers(this.markers().map(value => value.scope === marker.scope ? marker : value));
+          // A failed/non-durable metadata write cannot authorize the mutation.
+          if (!same(this.pendingMarkerFor(input.draftKey, saved.draft_id), marker)) throw new ResponseSigningUnresolvedError();
+        }
+        this.current(context);
+        try { await this.config.drafts.save(input.draftKey, recovery.successor); }
+        catch { this.current(context); }
+        saved = await this.read(context, saved.draft_id);
+      }
+      this.current(context);
+      if (saved.canonical_response.authoredSignatures?.length) {
+        const signed = await this.acceptSigned(oldAct, saved); this.unmark(oldAct);
+        return freeze({ kind: 'signed' as const, signed });
+      }
+      if (!marker.renewal || saved.draft_version !== marker.renewal.version || !same(saved.canonical_response, recovery.successor)) throw new ResponseSigningUnresolvedError();
+      this.config.bindings.put(input.draftKey, { draftId: saved.draft_id, draftVersion: saved.draft_version, response: saved.canonical_response });
+      const prepared = freeze({ ...await this.savedResult(input.draftKey, saved), content });
+      this.current(context);
+      if (!same(this.pendingMarkerFor(input.draftKey, saved.draft_id), marker)) throw new ResponseSigningUnresolvedError();
+      context.renewalOperationId = marker.renewal.operationId;
+      this.preparations.set(prepared, context);
+      return freeze({ kind: 'prepared' as const, preparation: prepared, operationId: marker.renewal.operationId });
+    });
+  }
+
   assertEditable(key: DraftKey): void { this.refuseUnresolved(key); }
 
   private async execute(act: FrozenAct): Promise<SignedResponseSigning> {
@@ -315,7 +429,7 @@ export class HttpResponseSigning implements ResponseSigning {
     const id = input.preparation.draft.id;
     let saved = await this.read(context, id);
     if (saved.draft_version === act.version + 1) return this.acceptSigned(act, saved);
-    if (saved.draft_version === input.preparation.draft.version && same(saved.canonical_response, input.preparation.response)) {
+    if (saved.draft_version !== act.version && saved.draft_version === input.preparation.draft.version && same(saved.canonical_response, input.preparation.response)) {
       this.current(context);
       try {
         await this.config.drafts.save(context.input.draftKey, act.candidate);
@@ -443,7 +557,14 @@ export class HttpResponseSigning implements ResponseSigning {
     const value = this.config.resumeMetadata?.read('response-signing-operations');
     if (value === undefined) return [];
     if (!Array.isArray(value) || value.some(marker => !marker || typeof marker.scope !== 'string'
-      || typeof marker.operationId !== 'string' || typeof marker.draftId !== 'string' || !Number.isSafeInteger(marker.version))) {
+      || typeof marker.operationId !== 'string' || typeof marker.draftId !== 'string' || !Number.isSafeInteger(marker.version)
+      || marker.renewal && (!isUuidV7IdempotencyKey(marker.renewal.operationId) || marker.renewal.operationId === marker.operationId
+        || !Number.isSafeInteger(marker.renewal.version) || marker.renewal.version <= marker.version
+        || (marker.renewal.previousVersion === undefined ? marker.renewal.version !== marker.version + 1
+          : !Number.isSafeInteger(marker.renewal.previousVersion) || marker.renewal.previousVersion < marker.version + 1
+            || marker.renewal.version !== marker.renewal.previousVersion + 1)
+        || !marker.renewal.originalCandidate
+        || !/^[a-f0-9]{64}$/.test(marker.renewal.originalHash) || !/^[a-f0-9]{64}$/.test(marker.renewal.successorHash)))) {
       throw new ResponseSigningUnresolvedError();
     }
     return value;
@@ -460,9 +581,17 @@ export class HttpResponseSigning implements ResponseSigning {
     }
   }
   private mark(act: FrozenAct): void {
-    this.writeMarkers([...this.markers(), { scope: this.config.fence.scopeFor(act.context.input.draftKey),
-      operationId: act.input.operationId, draftId: act.input.preparation.draft.id, version: act.version }]);
+    const scope = this.config.fence.scopeFor(act.context.input.draftKey);
+    const markers = this.markers();
+    if (act.context.renewalOperationId) {
+      const marker = this.pendingMarkerFor(act.context.input.draftKey, act.input.preparation.draft.id);
+      if (marker.renewal?.operationId !== act.input.operationId || marker.renewal.version !== act.input.preparation.draft.version) throw new ResponseSigningUnresolvedError();
+    } else if (markers.some(marker => marker.scope === scope)) throw new ResponseSigningUnresolvedError();
+    const marker = { scope, operationId: act.input.operationId, draftId: act.input.preparation.draft.id, version: act.version };
+    this.writeMarkers([...markers.filter(value => value.scope !== scope), marker]);
+    if (!same(this.pendingMarkerFor(act.context.input.draftKey, marker.draftId), marker)) throw new ResponseSigningUnresolvedError();
   }
+
   private unmark(act: FrozenAct): void { this.writeMarkers(this.markers().filter(marker => marker.operationId !== act.input.operationId)); }
 }
 

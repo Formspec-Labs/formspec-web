@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { stubScreenerDocumentSource } from '../../src/adapters/stub/screener-document-source.ts';
+import * as mainHelpers from '../../src/app/main-helpers.ts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { App } from '../../src/app/App.tsx';
 import { CompositionProvider } from '../../src/app/CompositionProvider.tsx';
 import { navigateAppRoute } from '../../src/app/route-transition.ts';
 import { useRoutedComposition } from '../../src/app/routed-composition.ts';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 
 describe('App route selection (FW-0039 slice 1)', () => {
@@ -17,11 +19,12 @@ describe('App route selection (FW-0039 slice 1)', () => {
   afterEach(() => {
     setHref(originalHref);
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it('routes / to the form runtime (existing default)', async () => {
     setHref('http://localhost/');
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     render(
       <CompositionProvider value={composition}>
         <App config={departmentAppProfile} />
@@ -29,14 +32,14 @@ describe('App route selection (FW-0039 slice 1)', () => {
     );
     await waitFor(() => {
       expect(
-        screen.queryByRole('heading', { name: /Demo Benefits Intake/i, level: 1 }),
+        screen.queryByRole('heading', { name: testDefinition.title, level: 1 }),
       ).not.toBeNull();
     });
   });
 
   it('routes /status?case=urn:wos:... to the status runtime', async () => {
     setHref('http://localhost/status?case=urn:wos:case_demo_000001');
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     render(
       <CompositionProvider value={composition}>
         <App config={departmentAppProfile} />
@@ -51,7 +54,7 @@ describe('App route selection (FW-0039 slice 1)', () => {
 
   it('routes /obligations to the obligations runtime (FW-0055 slice 1)', async () => {
     setHref('http://localhost/obligations');
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     render(
       <CompositionProvider value={composition}>
         <App config={departmentAppProfile} />
@@ -66,7 +69,7 @@ describe('App route selection (FW-0039 slice 1)', () => {
 
   it('routes /documents to the documents runtime (FW-0056 slice 1)', async () => {
     setHref('http://localhost/documents');
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     render(
       <CompositionProvider value={composition}>
         <App config={departmentAppProfile} />
@@ -81,7 +84,7 @@ describe('App route selection (FW-0039 slice 1)', () => {
 
   it('routes /history to the history runtime (FW-0057 slice 1)', async () => {
     setHref('http://localhost/history');
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     render(
       <CompositionProvider value={composition}>
         <App config={departmentAppProfile} />
@@ -95,8 +98,11 @@ describe('App route selection (FW-0039 slice 1)', () => {
   });
 
   it('routes /screener?doc=URN to the screener runtime (FW-0046 slice 1)', async () => {
-    setHref('http://localhost/screener?doc=urn:demo:formspec-web:screener:benefits-or-grant');
-    const composition = createStubComposition();
+    setHref('http://localhost/screener?doc=urn:test:screener');
+    const composition = createTestComposition({ definition: testDefinition, screenerDocumentSource: stubScreenerDocumentSource([{
+      $formspecScreener: '1.0', url: 'urn:test:screener', version: '1.0.0', title: 'Which form is right for you?',
+      targetDefinition: { url: testDefinition.url }, items: [], evaluation: [{ id: 'routing', strategy: 'first-match', routes: [{ condition: 'true', target: testDefinition.url }] }],
+    }]) });
     render(
       <CompositionProvider value={composition}>
         <App config={departmentAppProfile} />
@@ -111,10 +117,12 @@ describe('App route selection (FW-0039 slice 1)', () => {
 
   it('explicit route transitions recompute composition and mounted runtime', async () => {
     setHref('http://localhost:3000/');
+    const choose = vi.spyOn(mainHelpers, 'chooseComposition').mockImplementation(() =>
+      createTestComposition({ definition: testDefinition }));
     render(<RoutedAppHarness />);
     await waitFor(() => {
       expect(
-        screen.queryByRole('heading', { name: /Demo Benefits Intake/i, level: 1 }),
+        screen.queryByRole('heading', { name: testDefinition.title, level: 1 }),
       ).not.toBeNull();
     });
 
@@ -127,7 +135,9 @@ describe('App route selection (FW-0039 slice 1)', () => {
         screen.queryByRole('heading', { name: /Your application status/i, level: 1 }),
       ).not.toBeNull();
     });
-    expect(screen.queryByRole('heading', { name: /Demo Benefits Intake/i, level: 1 })).toBeNull();
+    expect(screen.queryByRole('heading', { name: testDefinition.title, level: 1 })).toBeNull();
+    expect(choose).toHaveBeenCalledTimes(2);
+    expect(choose.mock.calls[1][0].href).toContain('/status?case=');
   });
 });
 

@@ -7,7 +7,7 @@ import type { EvaluationHydrationWire, NativeScreenerMappingReceipt } from '../.
 import type { FormDefinition } from '@formspec-org/types';
 import { recordingFetch } from './test-fetch.ts';
 
-export async function hydrationFixture(options: { extraSource?: boolean; outputSchemaHash?: string; data?: Record<string, unknown>; mutate?: (view: EvaluationHydrationWire) => void | Promise<void> } = {}) {
+export async function hydrationFixture(options: { extraSource?: boolean; taskSource?: boolean; outputSchemaHash?: string; data?: Record<string, unknown>; mutate?: (view: EvaluationHydrationWire) => void | Promise<void> } = {}) {
   const digest = `sha256:${'a'.repeat(64)}`;
   const at = '2026-10-09T12:00:00Z';
   const expires = '2026-10-09T12:01:00Z';
@@ -15,9 +15,9 @@ export async function hydrationFixture(options: { extraSource?: boolean; outputS
   const owner = { sessionId: 'session', subjectRef: 'source-subject', authenticated: { issuer: 'https://issuer.example', subject: 'oidc',
     clientId: 'client', principalId: 'principal', profile: 'profile', actorRef: 'separate-actor', subjectRef: 'source-subject', sessionId: 'session' } };
   const definition: FormDefinition = { $formspec: '1.0', url: 'urn:test:form', version: '1.0.0', title: 'Hydration', items: [{ type: 'field', key: 'flag', label: 'Flag', dataType: 'boolean' }],
-    instances: { facts: { source: 'screening', readonly: true }, ...(options.extraSource ? { photo: { source: 'photo', readonly: true } } : {}) } };
+    instances: { facts: { source: 'screening', readonly: true }, ...(options.extraSource ? { photo: { source: 'photo', readonly: true } } : {}), ...(options.taskSource ? { taskContext: { source: 'task', readonly: true } } : {}) } };
   const evaluationSelection = { scope, formId: 'form/id', formVersionId: 'version', definitionUrl: definition.url!,
-    definitionVersion: definition.version, definitionHash: await hash(definition), requiredSources: ['screening', ...(options.extraSource ? ['photo'] : [])] };
+    definitionVersion: definition.version, definitionHash: await hash(definition), requiredSources: ['screening', ...(options.extraSource ? ['photo'] : []), ...(options.taskSource ? ['task'] : [])] };
   const rules = [{ sourcePath: 'target', targetPath: 'eligible', transform: 'valueMap', valueMap: { forward: { 'urn:test:target': false }, unmapped: 'error' } },
     { sourcePath: 'evidenceRef', targetPath: 'evidenceRef', transform: 'preserve' }];
   const document = '{"type":"object","properties":{"eligible":{"type":"boolean"},"evidenceRef":{"type":"string"}},"required":["eligible","evidenceRef"],"additionalProperties":false}';
@@ -45,7 +45,7 @@ export async function hydrationFixture(options: { extraSource?: boolean; outputS
     } } as SavedResponseDraft;
   const association: ScreenerAssociation = { scope, owner, draftId: saved.draft.id, draftVersion: saved.draft.version, candidateHash: await hash(saved.response),
     selectionHash, runId: 'run', runRevision: 1, evidenceHash: run.run.evidenceHash, associatedAt: at };
-  const sources = { facts: 'screening', ...(options.extraSource ? { photo: 'photo' } : {}) };
+  const sources = { facts: 'screening', ...(options.extraSource ? { photo: 'photo' } : {}), ...(options.taskSource ? { taskContext: 'task' } : {}) };
   const request = { operation: 'hydrate' as const, scope, owner, selection: evaluationSelection, formVersionHash: digest,
     draftId: saved.draft.id, draftVersion: saved.draft.version, candidateHash: association.candidateHash, sources };
   const requestHash = await hash(request);
@@ -59,7 +59,7 @@ export async function hydrationFixture(options: { extraSource?: boolean; outputS
   Object.assign(receipt, { receiptHash: await hash(preimage) });
   const view: EvaluationHydrationWire = { version: 1, purpose: 'formspec.instance.hydrate', ...request, requestHash,
     attachmentBindings: [], qualifiedAt: at, results: [{ status: 'qualified', instanceName: 'facts', sourceRef: 'screening', data, dataHash: await hash(data),
-      evidenceRef: run.run.evidenceRef, issuedAt: at, expiresAt: expires }, ...(options.extraSource ? [{ status: 'unavailable' as const, instanceName: 'photo', sourceRef: 'photo', reason: 'not-qualified' }] : [])], providerReceipt: receipt };
+      evidenceRef: run.run.evidenceRef, issuedAt: at, expiresAt: expires }, ...(options.extraSource ? [{ status: 'unavailable' as const, instanceName: 'photo', sourceRef: 'photo', reason: 'not-qualified' }] : []), ...(options.taskSource ? [{ status: 'unavailable' as const, instanceName: 'taskContext', sourceRef: 'task', reason: 'not-qualified' }] : [])], providerReceipt: receipt };
   let elapsed = 0;
   const context = { identity: { issuer: owner.authenticated.issuer, subject: owner.authenticated.subject, clientId: owner.authenticated.clientId }, signal: new AbortController().signal, assertCurrent: vi.fn() };
   const accessToken = vi.fn(async () => 'owner-token');

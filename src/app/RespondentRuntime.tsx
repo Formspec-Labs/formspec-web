@@ -53,7 +53,7 @@ import {
 import type { Composition } from '../composition/types.ts';
 import { DraftVersionConflictError, type DraftReadState, type DraftKey } from '../ports/draft-store.ts';
 import type { ApplicationCaseReceipt, ApplicationCaseLookupUnavailable } from '../ports/application-lifecycle.ts';
-import type { SignedResponseSigning } from '../ports/response-signing.ts';
+import type { PendingResponseSigning, SignedResponseSigning } from '../ports/response-signing.ts';
 import type { ReviewerShare } from '../ports/reviewer-session.ts';
 import { respondentSessionToken } from '../ports/reviewer-session.ts';
 import type {
@@ -166,6 +166,8 @@ export interface ResolvedRespondentFormInput {
   readonly localeDocuments?: readonly LocaleDocument[];
   readonly activeLocale?: string;
   readonly componentDocument?: ComponentDocument;
+  /** Surface-qualified pre-mount data; an actual saved response always takes precedence. */
+  readonly initialData?: SurfaceDefinitionFormRenderInput['initialData'];
   /** Establish ownership after restore and before controls mount; release resources if setup throws. */
   /** Trusted native source policy; supplied before any engine source task starts. */
   readonly instanceSourceResolver?: InstanceSourceResolver;
@@ -202,6 +204,7 @@ export interface RespondentOwnedRuntimeInput {
   readonly claim: IdentityClaim | null;
   readonly restoredResponse?: FormResponse;
   readonly restoredSigning?: SignedResponseSigning;
+  readonly restoredPendingSign?: PendingResponseSigning;
   readonly restoredApplication?: ApplicationCaseReceipt;
   readonly restoredApplicationLookup?: ApplicationCaseLookupUnavailable;
   readonly activeLocale: string;
@@ -615,6 +618,7 @@ function RespondentController({
     form?.configureRuntime,
     form?.configureSubmittedRuntime,
     form?.definition,
+    form?.initialData,
     form?.localeDocuments,
     form?.registryEntries,
     form?.responseActionsDocument,
@@ -1551,6 +1555,7 @@ async function createReadyState(
   };
   let recoveredDraft: FormResponse | undefined;
   let recoveredSigning: SignedResponseSigning | undefined;
+  let recoveredPendingSign: PendingResponseSigning | undefined;
   let recoveredApplication: ApplicationCaseReceipt | undefined;
   let recoveredApplicationLookup: ApplicationCaseLookupUnavailable | undefined;
   if (form?.configureSubmittedRuntime) {
@@ -1571,6 +1576,7 @@ async function createReadyState(
     }
     recoveredDraft = state?.response;
     recoveredSigning = state?.kind === 'active' ? state.signed : undefined;
+    recoveredPendingSign = state?.kind === 'active' ? state.pendingSign : undefined;
     recoveredApplication = state?.application;
     recoveredApplicationLookup = state?.applicationLookup;
   }
@@ -1615,7 +1621,7 @@ async function createReadyState(
     } else {
       engine.setLocale(activeLocale);
     }
-    hydrateEngineFromResponse(engine, draft);
+    hydrateEngineFromResponse(engine, draft, form?.initialData?.data);
     const resolvedIssuer = await engine.getResolvedIssuer();
     if (form?.configureRuntime) {
       if (runtimeProfile.enabled.has('trustedReviewer')) {
@@ -1623,7 +1629,7 @@ async function createReadyState(
       }
       const configured = await form.configureRuntime({ engine, definition, exchangeEngine,
         draftKey: multiPartyState ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef) : draftKey, claim,
-        restoredResponse: draft ? structuredClone(draft) : undefined, restoredSigning: recoveredSigning, restoredApplication: recoveredApplication,
+        restoredResponse: draft ? structuredClone(draft) : undefined, restoredSigning: recoveredSigning, restoredPendingSign: recoveredPendingSign, restoredApplication: recoveredApplication,
         restoredApplicationLookup: recoveredApplicationLookup, activeLocale });
       if (!configured || typeof configured.responseActionInvoker !== 'function'
         || typeof configured.invalidate !== 'function'

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 
 describe('form-load boundary catches RuntimePolicyError', () => {
   it('renders a plain-language unavailable page and surfaces the typed code', async () => {
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     // Force a policy conflict: org requires status; form forbids it.
     composition.orgRuntimePolicy = {
       features: { ...composition.orgRuntimePolicy.features, status: 'required' },

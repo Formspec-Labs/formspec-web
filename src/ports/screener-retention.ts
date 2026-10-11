@@ -106,3 +106,10 @@ export interface ScreenerRetention {
   retain(request: RetainScreenerCompletion): Promise<ScreenerRunView>;
   associate(request: AssociateScreenerCandidate): Promise<ScreenerAssociation>;
 }
+
+/** Source-owned explicit run selector; the command grants no evaluation authority. */
+export interface NativeCurrentCheck {
+  readonly selectionHash: string;
+  readonly runId: string;
+  readonly runRevision: number;
+}

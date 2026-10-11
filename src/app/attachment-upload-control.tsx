@@ -250,7 +250,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
 
       const uploaded = await Promise.allSettled(
         incoming.map(async (file, index) =>
-          uploadOne(attachmentStore, file, (progressPercent) => {
+          uploadOne(attachmentStore, file, field.path, (progressPercent) => {
             setPending((prev) =>
               prev.map((row) =>
                 row.key === seedRows[index].key && row.kind === 'uploading'
@@ -293,7 +293,7 @@ export function FormspecWebAttachmentControl({ field, node }: FieldComponentProp
         writeBack(nextRefs);
       }
     },
-    [attachmentStore, multiple, writeBack],
+    [attachmentStore, field.path, multiple, writeBack],
   );
 
   const handleFiles = useCallback(
@@ -874,10 +874,12 @@ function restoreFocusBeforeRemoval(region: HTMLElement | null, targets: readonly
 async function uploadOne(
   store: AttachmentStore,
   file: File,
+  fieldPath: string,
   onProgress: (progressPercent: number) => void,
 ): Promise<AttachmentRef> {
   if (isResumableAttachmentStore(store)) {
     return store.uploadResumable(file, {
+      fieldPath,
       filename: file.name,
       mimeType: file.type || 'application/octet-stream',
     }, {
@@ -890,6 +892,7 @@ async function uploadOne(
     });
   }
   return store.upload(file, {
+    fieldPath,
     filename: file.name,
     mimeType: file.type || 'application/octet-stream',
   });

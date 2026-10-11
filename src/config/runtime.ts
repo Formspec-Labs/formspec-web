@@ -1,3 +1,4 @@
+import type {} from '../browser-environment.d.ts';
 import type { AssuranceLevel } from '../ports/identity-provider.ts';
 import { readNativePackageSigningConfig } from './native-package-signing.ts';
 import { validatedAttachmentMaxUploadBytes } from './attachment-policy.ts';

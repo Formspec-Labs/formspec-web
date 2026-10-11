@@ -11,7 +11,7 @@
 
 import type { FormResponse } from '@formspec-org/types';
 import type { ApplicationCaseReceipt, ApplicationCaseLookupUnavailable } from './application-lifecycle.ts';
-import type { SignedResponseSigning } from './response-signing.ts';
+import type { SignedResponseSigning, PendingResponseSigning } from './response-signing.ts';
 
 export type { FormResponse } from '@formspec-org/types';
 
@@ -29,7 +29,7 @@ export interface DraftKey {
 }
 
 /** State qualified from the same owned draft read; submitted is the actual server draft status. */
-export type DraftReadState = { kind: 'active'; response: FormResponse; signed?: SignedResponseSigning; application?: ApplicationCaseReceipt; applicationLookup?: ApplicationCaseLookupUnavailable } | {
+export type DraftReadState = { kind: 'active'; response: FormResponse; signed?: SignedResponseSigning; pendingSign?: PendingResponseSigning; application?: ApplicationCaseReceipt; applicationLookup?: ApplicationCaseLookupUnavailable } | {
   kind: 'submitted'; response: FormResponse; draft: { id: string; version: number };
   subjectRef: string; formVersionId: string; application?: ApplicationCaseReceipt; applicationLookup?: ApplicationCaseLookupUnavailable;
 };

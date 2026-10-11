@@ -30,6 +30,16 @@ export interface JsonRequestOptions {
   assertBeforeDispatch?: () => void;
 }
 
+/** Actual bounded response bytes beside a diagnostic parsed value; parsing does not qualify evidence. */
+export interface HttpJsonResponseWithBytes<T> {
+  readonly value: T;
+  readonly utf8Bytes: Uint8Array<ArrayBuffer>;
+}
+interface ResponsePayload<T> {
+  readonly value: T;
+  readonly utf8Bytes?: Uint8Array<ArrayBuffer>;
+}
+
 export class HttpAdapterError extends Error {
   readonly status: number;
   readonly problem?: ProblemJson;
@@ -68,6 +78,20 @@ export class HttpClient {
     return this.requestJson<T>('POST', path, { ...options, body });
   }
 
+  async postJsonWithBytes<T>(path: string, body: unknown, options: JsonRequestOptions): Promise<HttpJsonResponseWithBytes<T>> {
+    return this.requestJsonWithBytes<T>('POST', path, { ...options, body });
+  }
+
+  /** Selected protected-object POST; bounded raw bytes retain their original encoding. */
+  async postJsonForBytes(path: string, body: unknown, options: JsonRequestOptions): Promise<Uint8Array<ArrayBuffer>> {
+    if (!Number.isSafeInteger(options.maxResponseBytes) || !options.maxResponseBytes || options.maxResponseBytes < 1) {
+      throw new Error('Raw object response requires an admitted byte limit');
+    }
+    const payload = await this.requestJsonPayload<Uint8Array<ArrayBuffer>>('POST', path,
+      { ...options, body, requireNoStore: true }, true);
+    return payload.value;
+  }
+
   async patchJson<T>(path: string, body: unknown, options?: JsonRequestOptions): Promise<T> {
     return this.requestJson<T>('PATCH', path, { ...options, body });
   }
@@ -77,13 +101,28 @@ export class HttpClient {
     path: string,
     options: JsonRequestOptions = {},
   ): Promise<T> {
+    return (await this.requestJsonPayload<T>(method, path, options)).value;
+  }
+
+  async requestJsonWithBytes<T>(method: 'GET' | 'POST' | 'PATCH', path: string,
+    options: JsonRequestOptions): Promise<HttpJsonResponseWithBytes<T>> {
+    if (!Number.isSafeInteger(options.maxResponseBytes) || !options.maxResponseBytes || options.maxResponseBytes < 1) {
+      throw new Error('Raw JSON response requires an admitted byte limit');
+    }
+    const payload = await this.requestJsonPayload<T>(method, path, { ...options, requireJson: true });
+    if (!payload.utf8Bytes) throw new Error('Raw JSON response bytes unavailable');
+    return Object.freeze({ value: payload.value, utf8Bytes: payload.utf8Bytes });
+  }
+
+  private async requestJsonPayload<T>(method: 'GET' | 'POST' | 'PATCH', path: string,
+    options: JsonRequestOptions, binary = false): Promise<ResponsePayload<T>> {
     const lifetime = requestLifetime(options);
     const { signal } = lifetime;
     let response: Response | undefined;
     try {
       const check = () => { signal?.throwIfAborted(); options.assertCurrent?.(); };
       check();
-      const headers = await withAbort(this.headersFor(options), signal);
+      const headers = await withAbort(this.headersFor(options, binary), signal);
       check();
       const admission: unknown = options.assertBeforeDispatch?.();
       if (admission !== undefined) {
@@ -102,7 +141,8 @@ export class HttpClient {
       void pendingResponse.then(value => { if (signal?.aborted) cancelBody(value); }, () => {});
       response = await withAbort(pendingResponse, signal);
       check();
-      const payload = await readResponsePayload(response, options, signal);
+      const result = await readResponsePayload(response, options, signal, binary);
+      const payload = result.value;
       check();
       if (!response.ok || (options.successStatuses !== undefined && !options.successStatuses.includes(response.status))) {
         const problem = isProblemJson(payload) ? payload : undefined;
@@ -114,16 +154,16 @@ export class HttpClient {
       if (options.requireNoStore && !response.headers.get('cache-control')?.split(',').some(value => value.trim().toLowerCase() === 'no-store')) {
         throw new Error('HTTP response must prohibit storage');
       }
-      return payload as T;
+      return { value: payload as T, utf8Bytes: result.utf8Bytes };
     } finally {
       if (response) cancelBody(response);
       lifetime.dispose();
     }
   }
 
-  private async headersFor(options: JsonRequestOptions): Promise<Headers> {
+  private async headersFor(options: JsonRequestOptions, binary = false): Promise<Headers> {
     const headers = new Headers(options.headers);
-    headers.set('accept', 'application/json');
+    headers.set('accept', binary ? 'application/octet-stream' : 'application/json');
     if (options.body !== undefined) {
       headers.set('content-type', 'application/json');
     }
@@ -186,13 +226,20 @@ async function withAbort<T>(pending: Promise<T>, signal?: AbortSignal): Promise<
   }
 }
 
-async function readResponsePayload(response: Response, options: JsonRequestOptions, signal?: AbortSignal): Promise<unknown> {
+async function readResponsePayload(response: Response, options: JsonRequestOptions, signal?: AbortSignal, binary = false): Promise<ResponsePayload<unknown>> {
   const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
-  if (options.requireJson && !/^application\/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)/i.test(contentType)) {
+  const raw = binary && response.ok;
+  if (raw && (!/^application\/octet-stream(?:\s*;|$)/i.test(contentType)
+    || response.headers.get('x-content-type-options')?.trim().toLowerCase() !== 'nosniff')) {
+    cancelBody(response);
+    throw new Error('HTTP object response must contain protected octet-stream bytes');
+  }
+  if (!raw && options.requireJson && !/^application\/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)/i.test(contentType)) {
     void response.body?.cancel().catch(() => {});
     throw new Error('HTTP response must contain JSON');
   }
   let text: string;
+  let utf8Bytes: Uint8Array<ArrayBuffer> | undefined;
   if (options.maxResponseBytes === undefined) text = await withAbort(response.text(), signal);
   else {
     const limit = options.maxResponseBytes;
@@ -211,14 +258,15 @@ async function readResponsePayload(response: Response, options: JsonRequestOptio
       const joined = new Uint8Array(bytes);
       let offset = 0;
       for (const chunk of chunks) { joined.set(chunk, offset); offset += chunk.byteLength; }
+      if (raw) return { value: joined };
       text = new TextDecoder('utf-8', { fatal: true }).decode(joined);
+      utf8Bytes = joined;
     } finally {
       void reader?.cancel().catch(() => {});
     }
   }
-  if (!text) return undefined;
-  if (!contentType.includes('json')) return text;
-  return JSON.parse(text) as unknown;
+  const value: unknown = !text ? undefined : !contentType.includes('json') ? text : JSON.parse(text);
+  return { value, utf8Bytes };
 }
 
 function cancelBody(response: Response): void {

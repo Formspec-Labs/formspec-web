@@ -4,7 +4,7 @@ import { createFormEngine } from '@formspec-org/engine';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { DraftVersionConflictError, type DraftKey } from '../../src/ports/draft-store.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 
@@ -34,7 +34,7 @@ beforeAll(() => initFormspecEngine());
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function setup({ deletionFails = false, partyRef, conflict = true, multiParty = false, localPackagePreview = false }: { deletionFails?: boolean; partyRef?: string; conflict?: boolean; multiParty?: boolean; localPackagePreview?: boolean } = {}) {
-  const base = createStubComposition();
+  const base = createTestComposition({ definition: testDefinition });
   let cleared = false;
   const conflictKeys: DraftKey[] = [];
   const load = vi.fn(async (key: DraftKey): Promise<FormResponse | undefined> => {

@@ -8,6 +8,22 @@ import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import { idempotencyKey, jsonResponse, recordingFetch } from './test-fetch.ts';
 
 describe('HttpSubmitTransport', () => {
+  it.each(['inherited', 'accessor'])('refuses %s selector fields before credentials or HTTP effects', async kind => {
+    const plain = { selectionHash: `sha256:${'a'.repeat(64)}`, runId: 'fresh-run', runRevision: 1 };
+    const getter = vi.fn(() => plain.runId);
+    const selector = kind === 'inherited' ? Object.create(plain) as typeof plain : { ...plain };
+    if (kind === 'accessor') Object.defineProperty(selector, 'runId', { get: getter, enumerable: true });
+    const { fetch, requests } = recordingFetch(() => jsonResponse({ response_id: sampleFormResponse.id, status: 'accepted' }));
+    const draftIdResolver = vi.fn(() => 'draft-1');
+    const accessToken = vi.fn(() => 'token');
+    const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver, accessToken });
+    await expect(adapter.submit(sampleIntakeHandoff, generateIdempotencyKey(), undefined, { nativeCurrentCheck: selector })).rejects.toThrow();
+    expect(getter).not.toHaveBeenCalled();
+    expect(draftIdResolver).not.toHaveBeenCalled();
+    expect(accessToken).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(0);
+  });
+
   it.each<[string, Record<string, unknown> | undefined]>([
     ['absent extensions', undefined],
     ['answer-only extensions', { 'x-formspec-response-data': sampleFormResponse.data }],
@@ -121,6 +137,26 @@ describe('HttpSubmitTransport', () => {
     expect(requests[0]?.body).toEqual(requests[1]?.body);
     expect(requests[1]?.body).toMatchObject({ canonical_response: snapshot, response_id: snapshot.id, response_data: snapshot.data });
     expect(requests[1]?.headers.get('authorization')).toBe('Bearer test-token');
+  });
+
+  it('freezes the explicit native run selector beside unchanged canonical response for same-key retry', async () => {
+    const snapshot = { ...sampleFormResponse, id: 'same-signed-response' };
+    const { fetch, requests } = recordingFetch(() => requests.length === 1
+      ? jsonResponse({ title: 'temporary failure' }, 503)
+      : jsonResponse({ response_id: snapshot.id, status: 'accepted' }));
+    const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver: () => 'signed-draft' });
+    const handoff = { ...sampleIntakeHandoff, extensions: { 'x-formspec-response': snapshot } };
+    const original = JSON.stringify(snapshot); const key = generateIdempotencyKey();
+    const nativeCurrentCheck = { selectionHash: `sha256:${'a'.repeat(64)}`, runId: 'fresh-run', runRevision: 1 };
+    const options = { nativeCurrentCheck };
+    await expect(adapter.submit(handoff, key, () => {}, options)).rejects.toMatchObject({ status: 503 });
+    nativeCurrentCheck.runId = 'different-run';
+    await expect(adapter.submit(handoff, key, () => {}, options)).rejects.toThrow(/preserve.*native|selector/);
+    expect(requests).toHaveLength(1);
+    await expect(adapter.submit(handoff, key, () => {}, { nativeCurrentCheck: { ...nativeCurrentCheck, runId: 'fresh-run' } })).resolves.toMatchObject({ referenceNumber: snapshot.id });
+    expect(requests[0].body).toEqual(requests[1].body);
+    expect(requests[1].body).toMatchObject({ nativeCurrentCheck: { ...nativeCurrentCheck, runId: 'fresh-run' }, canonical_response: snapshot });
+    expect(JSON.stringify(snapshot)).toBe(original);
   });
 
   it('refuses changed canonical lifecycle values under a failed operation retry key', async () => {

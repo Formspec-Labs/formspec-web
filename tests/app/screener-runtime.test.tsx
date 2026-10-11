@@ -53,7 +53,7 @@ import { stubAttachmentStore } from '../../src/adapters/stub/attachment-store.ts
 import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-queue.ts';
 import { stubPaymentRailAdapter } from '../../src/adapters/stub/payment-rail-adapter.ts';
 import { stubEmbedTransport } from '../../src/adapters/stub/embed-transport.ts';
-import { stubFormRuntimePolicyExtractor } from '../../src/adapters/stub/form-runtime-policy-extractor.ts';
+import { EmptyFormRuntimePolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 import type { Composition } from '../../src/composition/types.ts';
 import type {
@@ -129,7 +129,7 @@ function buildComposition(options: BuildOptions = {}): Composition {
     ...unavailablePreallocatedFeaturePorts(),
     instanceCapabilities,
     orgRuntimePolicy,
-    formRuntimePolicyExtractor: stubFormRuntimePolicyExtractor(),
+    formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
   });
 }
 

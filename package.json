@@ -18,7 +18,10 @@
     "./ports": "./src/ports/index.ts",
     "./shared": "./src/shared/index.ts",
     "./verifying-surface": "./src/verifying-surface/index.ts",
-    "./profiles": "./src/profiles/index.ts"
+    "./profiles": "./src/profiles/index.ts",
+    "./native-package-runtime": "./src/native-package-runtime/index.ts",
+    "./adapters/source-worker": "./src/adapters/source-worker/index.ts",
+    "./adapters/source-proof": "./src/adapters/source-proof/index.ts"
   },
   "license": "Apache-2.0",
   "description": "Public reference UI for Formspec — respondent renderer (MVP) + verifier (post-MVP) + selective-proof viewer (post-MVP). Hexagonal architecture per web ADR-0009.",

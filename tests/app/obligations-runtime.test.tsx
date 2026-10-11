@@ -13,7 +13,7 @@ import {
 } from './obligations-view.test.tsx';
 import { EmptyFormRuntimePolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import type { Composition } from '../../src/composition/types.ts';
 import type {
@@ -228,7 +228,7 @@ describe('ObligationsRuntime (FW-0055 slice 1)', () => {
 
   describe('policy-disabled paths', () => {
     it('renders "Obligations are not shared" with the site-unavailable copy when instance-unavailable', async () => {
-      const composition = createStubComposition();
+      const composition = createTestComposition({ definition: testDefinition });
       // Switch to production composition with respondentPlace unavailable.
       const productionComposition: Composition = {
         ...composition,
@@ -263,7 +263,7 @@ describe('ObligationsRuntime (FW-0055 slice 1)', () => {
     });
 
     it('renders "Obligations are not shared" with the issuer-forbidden copy when org-forbidden', async () => {
-      const composition = createStubComposition();
+      const composition = createTestComposition({ definition: testDefinition });
       composition.orgRuntimePolicy = {
         features: { respondentPlace: 'forbidden', status: 'allowed' },
       };
@@ -335,7 +335,7 @@ describe('ObligationsRuntime (FW-0055 slice 1)', () => {
 
   describe('adapter-error path', () => {
     it('renders a friendly error when readPlace throws', async () => {
-      const composition = createStubComposition();
+      const composition = createTestComposition({ definition: testDefinition });
       composition.respondentPlaceSource = {
         readPlace: vi.fn(async () => {
           throw new Error('adapter blew up');
@@ -417,7 +417,7 @@ function compositionWithObligations(obligations: RespondentObligation[]): Compos
 }
 
 function compositionWithSnapshot(snapshot: RespondentPlaceSnapshot): Composition {
-  const composition = createStubComposition();
+  const composition = createTestComposition({ definition: testDefinition });
   composition.respondentPlaceSource = {
     readPlace: vi.fn(async () => snapshot),
   };
@@ -428,7 +428,7 @@ function productionCompositionWithIdentity(
   identityProvider: IdentityProvider,
   obligations: RespondentObligation[],
 ): Composition {
-  const composition = createStubComposition();
+  const composition = createTestComposition({ definition: testDefinition });
   return {
     ...composition,
     mode: 'production',

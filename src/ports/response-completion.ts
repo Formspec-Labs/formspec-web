@@ -1,6 +1,6 @@
 import type { RuntimeRequest } from '@formspec-org/types';
 import type { SignedResponseSigning } from './response-signing.ts';
-import type { SubmitConfirmation } from './submit-transport.ts';
+import type { SubmitConfirmation, SubmitOptions } from './submit-transport.ts';
 import type { CompletedTaskOutcome } from './task-completion.ts';
 
 export interface CompletionLifetime {
@@ -11,6 +11,7 @@ export interface CompletionLifetime {
 export interface CaptureResponseCompletion {
   readonly signed: SignedResponseSigning;
   readonly request: RuntimeRequest;
+  readonly submitOptions?: SubmitOptions;
   readonly invocationInput: Readonly<Record<string, unknown>>;
 }
 /** Only the creating strategy can execute this preparation; implementations retain identity privately. */

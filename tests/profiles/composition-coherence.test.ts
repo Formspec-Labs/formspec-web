@@ -1,10 +1,10 @@
+import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { describe, expect, it } from 'vitest';
-import { createStubComposition } from '../../src/composition/stub.ts';
-import { createDefaultComposition } from '../../src/composition/default.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
+import { createUnavailableComposition } from '../../src/composition/unavailable.ts';
 import {
   createRouteNarrowedComposition,
   type RouteNarrowing,
-  type RouteNarrowingMode,
 } from '../../src/composition/route-narrowing.ts';
 import { DOCUMENTS_ROUTE_NARROWING } from '../../src/app/documents-route.ts';
 import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts';
@@ -35,7 +35,7 @@ import { SCREENER_ROUTE_NARROWING } from '../../src/app/screener-route.ts';
 import type { ReviewerSession } from '../../src/ports/reviewer-session.ts';
 import type { ReviewThreadStore } from '../../src/ports/review-thread-store.ts';
 
-// Build a minimal production-mode CompositionLike directly. `createDefaultComposition()`
+// Build a minimal production-mode CompositionLike directly. `createUnavailableComposition('urn:test:form')`
 // short-circuits to the demo composition when no formspecServerUrl is configured, which
 // would let the demo-mode tests below pass for the wrong reason.
 function productionCompositionLike(overrides: Partial<CompositionLike> = {}): CompositionLike {
@@ -96,29 +96,28 @@ const NARROWED_DESCRIPTORS: ReadonlyArray<readonly [string, RouteNarrowing]> = [
   ['HISTORY_ROUTE_NARROWING (FW-0057)', HISTORY_ROUTE_NARROWING],
   ['SCREENER_ROUTE_NARROWING (FW-0046)', SCREENER_ROUTE_NARROWING],
 ];
-const NARROWED_MODES: readonly RouteNarrowingMode[] = ['default', 'stub'];
-
 function* narrowedCompositionCoherenceCases(): Generator<{
   name: string;
   build: () => ReturnType<typeof createRouteNarrowedComposition>;
 }> {
   for (const [label, route] of NARROWED_DESCRIPTORS) {
-    for (const mode of NARROWED_MODES) {
-      yield {
-        name: `${mode} mode × ${label} is coherent`,
-        build: () => createRouteNarrowedComposition({ mode, route }),
-      };
-    }
+    yield {
+      name: `${label} is coherent`,
+      build: () => createRouteNarrowedComposition({ route, config: {
+        ...departmentAppProfile,
+        referenceAdapters: { formspecStack: { formspecServerUrl: 'https://service.example.test', tenantHeaderDialect: 'formspec' } },
+      } }),
+    };
   }
 }
 
 describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-0011 §Rationale #1)', () => {
   it('stub composition is coherent (demo mode + demo-stub adapters + demo-stub declarations)', () => {
-    expect(() => assertCompositionCoherence(createStubComposition())).not.toThrow();
+    expect(() => assertCompositionCoherence(createTestComposition({ definition: testDefinition }))).not.toThrow();
   });
 
   it('default composition is coherent (production mode + unavailable sentinels + unavailable declarations)', () => {
-    expect(() => assertCompositionCoherence(createDefaultComposition())).not.toThrow();
+    expect(() => assertCompositionCoherence(createUnavailableComposition('urn:test:form'))).not.toThrow();
   });
 
   describe('narrowed-route compositions cohere across every (mode, descriptor) combo (FW-0070)', () => {
@@ -130,7 +129,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
   });
 
   it('flags an adapter marked unavailable but declared anything other than unavailable', () => {
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     const replacement = {
       readPlace: async () => {
         throw new Error('forced');
@@ -146,7 +145,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
   });
 
   it('flags an unavailable declaration with no matching sentinel adapter', () => {
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     (composition.instanceCapabilities as Record<string, unknown>).status = 'unavailable';
     expect(() => assertCompositionCoherence(composition)).toThrow(/status/);
     expect(() => assertCompositionCoherence(composition)).toThrow(/sentinel|unavailable/);
@@ -204,7 +203,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
   });
 
   it('flags an adapter that is neither unavailable-marked nor demo-stub-marked when the declaration says demo-stub', () => {
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     (composition as { statusReader: unknown }).statusReader = {
       readStatus: async () => ({}) as never,
     };
@@ -212,7 +211,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
   });
 
   it('does not crash when a real (unmarked) adapter is paired with declaration "available"', () => {
-    const composition = createDefaultComposition();
+    const composition = createUnavailableComposition('urn:test:form');
     (composition as { statusReader: unknown }).statusReader = {
       readStatus: async () => ({}) as never,
     };

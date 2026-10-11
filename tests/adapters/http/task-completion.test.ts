@@ -8,7 +8,8 @@ import { jsonResponse } from './test-fetch.ts';
 const processId = 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db';
 const selection = { processId, taskId: `${processId}/tasks/photo-correction`,
   definitionUrl: sampleFormResponse.definitionUrl, definitionVersion: sampleFormResponse.definitionVersion };
-const submission: TaskSubmission = { definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion,
+const signedDraft = { draftId: 'actual-source-draft', expectedSignedDraftVersion: 3, expectedSignedResponseHash: `sha256:${'a'.repeat(64)}`, associationHash: `sha256:${'b'.repeat(64)}`, taskBindingHash: `sha256:${'c'.repeat(64)}` };
+const submission: TaskSubmission = { signedDraft, definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion,
   response: { ...sampleFormResponse, status: 'completed', authoredSignatures: [RESPONSE_SCHEMA_DOCUMENT.properties.authoredSignatures.examples[0][0]] as TaskSubmission['response']['authoredSignatures'] } };
 const outcome = { taskId: selection.taskId, processId, outcome: 'completed', newStatus: 'submitted', occurredAt: '2026-10-09T12:00:00Z' };
 const lifetime = () => ({ signal: new AbortController().signal, assertCurrent: () => {} });
@@ -58,4 +59,21 @@ describe('inactive typed WOS task completion adapter', () => {
     await vi.waitFor(() => expect(accessToken).toHaveBeenCalledOnce()); current = false; release('wos-token');
     await expect(pending).rejects.toThrow('retired'); expect(fetchImpl).not.toHaveBeenCalled();
   });
+});
+
+
+it('forwards exact Source signed selectors and refuses malformed selectors before credentials', async () => {
+  const signedDraft = { draftId: 'actual-source-draft', expectedSignedDraftVersion: 3,
+    expectedSignedResponseHash: `sha256:${'a'.repeat(64)}`, associationHash: `sha256:${'b'.repeat(64)}`,
+    taskBindingHash: `sha256:${'c'.repeat(64)}` };
+  const fetchImpl = vi.fn(async () => jsonResponse(outcome));
+  const accessToken = vi.fn(() => 'wos-token');
+  const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken, fetchImpl, assertCurrentAuth: () => {} });
+  const actual = { ...submission, signedDraft };
+  await adapter.complete(actual, 'same-operation', lifetime());
+  expect(JSON.parse((fetchImpl.mock.calls[0] as unknown as [unknown, RequestInit])[1].body as string)).toEqual(actual);
+  accessToken.mockClear(); fetchImpl.mockClear();
+  await expect(adapter.complete({ ...actual, signedDraft: { ...signedDraft, expectedSignedDraftVersion: 1 } },
+    'same-operation', lifetime())).rejects.toThrow('candidate mismatch');
+  expect(accessToken).not.toHaveBeenCalled(); expect(fetchImpl).not.toHaveBeenCalled();
 });

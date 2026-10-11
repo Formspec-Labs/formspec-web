@@ -5,7 +5,7 @@ import { invokeResponseActionAsync } from '@formspec-org/engine';
 import { createSemanticControlRegistry, type ResponseActionInvoker, type SemanticControlScope, type SubmitResult } from '@formspec-org/react';
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
 import { RespondentDefinitionController, type RespondentOwnedRuntime, type RespondentOwnedRuntimeInput, type ResolvedRespondentFormInput } from '../../src/app/RespondentRuntime.tsx';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { DraftVersionConflictError, type DraftKey } from '../../src/ports/draft-store.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 
@@ -29,7 +29,7 @@ afterEach(cleanup);
 
 describe('draft recovery inside a definition-form Surface slot', () => {
   it('configures owned execution after hydration and before mounting the authored Component', async () => {
-    const base = createStubComposition();
+    const base = createTestComposition({ definition: testDefinition });
     const restored: FormResponse = { $formspecResponse: '1.0', id: 'retained-response',
       definitionUrl: definition.url, definitionVersion: definition.version, status: 'in-progress',
       authored: '2026-10-06T00:00:00Z', data: { name: 'Retained answer' } };
@@ -69,7 +69,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     });
     const runtime = ownedRuntime();
     runtime.dispose.mockImplementation(() => { calls.push('runtime'); });
-    const view = render(<RespondentDefinitionController composition={anonymousComposition(createStubComposition())}
+    const view = render(<RespondentDefinitionController composition={anonymousComposition(createTestComposition({ definition: testDefinition }))}
       config={departmentAppProfile} form={{ ...resolvedForm(), configureRuntime }} />);
     await waitFor(() => expect(configureRuntime).toHaveBeenCalledOnce());
     view.unmount();
@@ -80,7 +80,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
   });
 
   it('refuses incomplete owned execution rather than falling back to the legacy factory', async () => {
-    const composition = anonymousComposition(createStubComposition());
+    const composition = anonymousComposition(createTestComposition({ definition: testDefinition }));
     const factory = vi.fn(() => null);
     composition.responseActionInvoker = factory;
     const runtime = ownedRuntime();
@@ -94,7 +94,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
   });
 
   it('refuses the legacy submit event when the configured runtime owns execution', async () => {
-    const composition = anonymousComposition(createStubComposition());
+    const composition = anonymousComposition(createTestComposition({ definition: testDefinition }));
     const save = vi.spyOn(composition.draftStore, 'save');
     const submit = vi.spyOn(composition.submitTransport, 'submit');
     const factory = vi.fn(() => null); composition.responseActionInvoker = factory;
@@ -123,7 +123,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     expect(factory).not.toHaveBeenCalled();
   });
   it('preserves the supplied Surface invoker and semantic scope without invoking the legacy submit transport', async () => {
-    const base = createStubComposition();
+    const base = createTestComposition({ definition: testDefinition });
     const factory = vi.fn(() => null);
     const submit = vi.fn(base.submitTransport.submit);
     const registry = createSemanticControlRegistry();
@@ -170,7 +170,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     const pending = new Promise<void>(resolve => { finish = resolve; });
     runtime.responseActionInvoker.mockImplementation(input => invokeResponseActionAsync<SubmitResult>(input.document, input.actionRef,
       { ...input.ports, dispatchEffect: () => pending, resolveIdempotencyKey: () => 'owned-prepare' }, input.nodeId, input.invocationContext));
-    const composition = anonymousComposition(createStubComposition()); const submit = vi.spyOn(composition.submitTransport, 'submit');
+    const composition = anonymousComposition(createTestComposition({ definition: testDefinition })); const submit = vi.spyOn(composition.submitTransport, 'submit');
     render(<RespondentDefinitionController composition={composition} config={departmentAppProfile} form={ownedPrepareForm(runtime, completed)} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Prepare owned response' }));
     await waitFor(() => expect(runtime.responseActionInvoker).toHaveBeenCalledOnce()); expect(completed).not.toHaveBeenCalled();
@@ -182,7 +182,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
   });
 
   it('keeps the unsigned action terminal waiting for its actual submit confirmation', async () => {
-    const composition = anonymousComposition(createStubComposition()); const original = composition.submitTransport.submit;
+    const composition = anonymousComposition(createTestComposition({ definition: testDefinition })); const original = composition.submitTransport.submit;
     let finish!: () => void; const pending = new Promise<void>(resolve => { finish = resolve; });
     const submit = vi.fn(async (...args: Parameters<typeof original>) => { await pending; return original(...args); });
     composition.submitTransport = { submit }; const completed = vi.fn();
@@ -201,7 +201,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     const runtime = { ...ownedRuntime(), getCompletionGeneration: vi.fn().mockReturnValueOnce(1).mockReturnValue(2) };
     runtime.responseActionInvoker.mockImplementation(input => invokeResponseActionAsync<SubmitResult>(input.document, input.actionRef,
       { ...input.ports, dispatchEffect: async () => {}, resolveIdempotencyKey: () => 'owned-prepare' }, input.nodeId, input.invocationContext));
-    const completed = vi.fn(); render(<RespondentDefinitionController composition={anonymousComposition(createStubComposition())}
+    const completed = vi.fn(); render(<RespondentDefinitionController composition={anonymousComposition(createTestComposition({ definition: testDefinition }))}
       config={departmentAppProfile} form={ownedPrepareForm(runtime, completed)} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Prepare owned response' }));
     await screen.findByText('Completed.'); await act(async () => {});
@@ -212,7 +212,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     const failed = ownedRuntime(); const completed = vi.fn();
     failed.responseActionInvoker.mockImplementation(input => invokeResponseActionAsync<SubmitResult>(input.document, input.actionRef,
       { ...input.ports, dispatchEffect: async () => { throw new Error('owned-prepare-failed'); } }, input.nodeId, input.invocationContext));
-    const composition = anonymousComposition(createStubComposition());
+    const composition = anonymousComposition(createTestComposition({ definition: testDefinition }));
     const first = render(<RespondentDefinitionController composition={composition} config={departmentAppProfile} form={ownedPrepareForm(failed, completed)} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Prepare owned response' }));
     await waitFor(() => expect(failed.responseActionInvoker).toHaveBeenCalledOnce()); await act(async () => {});
@@ -228,7 +228,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
   });
 
   it('uses a subordinate recovery heading and returns focus locally after restart in the chosen language', async () => {
-    const base = createStubComposition();
+    const base = createTestComposition({ definition: testDefinition });
     let cleared = false;
     const load = vi.fn(async (key: DraftKey): Promise<FormResponse | undefined> => {
       if (cleared) return undefined;
@@ -276,7 +276,7 @@ function resolvedForm(): ResolvedRespondentFormInput {
     targetDefinition: { url: definition.url } }, registryEntries: [], responseActionsDocument: undefined };
 }
 
-function anonymousComposition(base: ReturnType<typeof createStubComposition>) {
+function anonymousComposition(base: ReturnType<typeof createTestComposition>) {
   return { ...base, identityProvider: { ...base.identityProvider, discover: async () => [],
     subscribe(listener: (claim: null) => void) { listener(null); return () => {}; } } };
 }

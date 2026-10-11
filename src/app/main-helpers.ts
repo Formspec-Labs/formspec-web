@@ -36,39 +36,34 @@ export function chooseComposition({
   identityBindingFactory?: () => IdentityBinding;
 }): Composition {
   if (parseStatusRoute(href)) {
-    return createRouteNarrowedComposition({ mode: 'default', config, route: STATUS_ROUTE_NARROWING });
+    return createRouteNarrowedComposition({ config, route: STATUS_ROUTE_NARROWING });
   }
   if (parseObligationsRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: OBLIGATIONS_ROUTE_NARROWING,
     });
   }
   if (parseDocumentsRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: DOCUMENTS_ROUTE_NARROWING,
     });
   }
   if (parseHistoryRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: HISTORY_ROUTE_NARROWING,
     });
   }
   if (parseScreenerRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: SCREENER_ROUTE_NARROWING,
     });
   }
   if (parseReviewerRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: REVIEWER_ROUTE_NARROWING,
     });

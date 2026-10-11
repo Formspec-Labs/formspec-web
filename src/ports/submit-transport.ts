@@ -9,6 +9,7 @@
  */
 
 import type { IntakeHandoff } from '@formspec-org/types';
+import type { NativeCurrentCheck } from './screener-retention.ts';
 import type { WosResourceUrn } from './status-reader.ts';
 
 export type { IntakeHandoff } from '@formspec-org/types';
@@ -37,6 +38,10 @@ export interface SubmitConfirmation {
 /** Reference fields rendered by a receipt; recovery need not invent transport status. */
 export type SubmitReceiptReference = Pick<SubmitConfirmation, 'referenceNumber' | 'recordKind' | 'trackingUri' | 'caseUrn'> & Partial<Pick<SubmitConfirmation, 'status'>>;
 
+export interface SubmitOptions {
+  /** Explicit external check selection; never part of the canonical Response. */
+  readonly nativeCurrentCheck?: NativeCurrentCheck;
+}
 export interface SubmitTransport {
   /**
    * Submit one validated response.
@@ -44,5 +49,5 @@ export interface SubmitTransport {
    * `idempotencyKey` MUST be a client-generated UUIDv7 (queue EXT-14).
    * The same key passed twice MUST yield the same response.
    */
-  submit(handoff: IntakeHandoff, idempotencyKey: string, assertCurrent?: () => void): Promise<SubmitConfirmation>;
+  submit(handoff: IntakeHandoff, idempotencyKey: string, assertCurrent?: () => void, options?: SubmitOptions): Promise<SubmitConfirmation>;
 }

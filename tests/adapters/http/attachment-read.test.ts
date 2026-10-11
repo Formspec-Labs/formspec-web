@@ -33,8 +33,8 @@ describe('HttpAttachmentStore owned read', () => {
     expect(blob.type).toBe('image/png');
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
     expect(frozen.retainedExtra).toBe('preserved');
-    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe(`https://server.test${path}`);
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string | URL, RequestInit];
+    expect(String(url)).toBe(`https://server.test${path}`);
     expect(init).toMatchObject({ method: 'GET', redirect: 'error' });
     expect(new Headers(init.headers).get('authorization')).toBe('Bearer private-test-token');
     expect(new Headers(init.headers).has('idempotency-key')).toBe(false);

@@ -30,7 +30,7 @@ import type { SubmitTransport } from '../../src/ports/submit-transport.ts';
 import { sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
 import type { ResolvedRespondentFormInput } from '../../src/app/RespondentRuntime.tsx';
 import type * as RespondentRuntimeModule from '../../src/app/RespondentRuntime.tsx';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { createHttpAdapterCohort } from '../../src/adapters/http/cohort.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
@@ -61,11 +61,11 @@ function fixture() {
     allocateSurfaceSessionMarker: () => 'fixture-visit',
     createSurfaceVisit: () => ({ activate: vi.fn(), dispose: vi.fn(), bindRuntime: () => ({ authorizeDataSource: () => ({ status: 'refused' as const, reason: 'unavailable' }), dataSourceLoader: () => ({ status: 'unavailable' as const, reason: 'unavailable' }), validateDataSourcePayload: () => ({ valid: true }), dataSourceRevision: () => undefined, widgetActionExecutor: vi.fn() }) }),
     widgetExecutor: vi.fn(), getSnapshot: () => state, subscribe: () => () => {}, selectLocale: vi.fn(), clearDraftAccess: vi.fn() } satisfies NativePackageSigningHost;
-  const props = { host, composition: createStubComposition(), config: departmentAppProfile, componentDocument: component, componentRouteResolver: componentResolver(component),
+  const props = { host, composition: createTestComposition({ definition: testDefinition }), config: departmentAppProfile, componentDocument: component, componentRouteResolver: componentResolver(component),
     localeDocuments: [], location: '/', onNavigate: vi.fn() };
   return { props, host, configureRuntime, dispose };
 }
-async function actualFixture(options?: { bundle?: BundleExport; component?: ComponentDocument; lifecycle?: NonNullable<NativePackageSigningHostPolicy['controller']['applicationLifecycle']>; nativeScreener?: NativePackageSigningHostPolicy['nativeScreener']; createEngine?: NativePackageSigningHostPolicy['createEngine']; onSaved?: (response: FormResponse, revision: number) => void }) {
+async function actualFixture(options?: { bundle?: BundleExport; component?: ComponentDocument; lifecycle?: NonNullable<NativePackageSigningHostPolicy['controller']['applicationLifecycle']>; candidateHydration?: NativePackageSigningHostPolicy['candidateHydration']; nativeScreener?: NativePackageSigningHostPolicy['nativeScreener']; screenerEntryGate?: NativePackageSigningHostPolicy['screenerEntryGate']; createEngine?: NativePackageSigningHostPolicy['createEngine']; onSaved?: (response: FormResponse, revision: number) => void }) {
     const sourceBundle = options?.bundle ?? bundle;
     const admittedComponent = options?.component ?? component;
     observed.real = true; vi.stubGlobal('crypto', webcrypto);
@@ -131,7 +131,7 @@ async function actualFixture(options?: { bundle?: BundleExport; component?: Comp
     let completeRead!: (blob: Blob) => void;
     const read = vi.fn(async () => new Promise<Blob>(resolve => { completeRead = resolve; }));
     const clear = vi.fn(async () => {}); const invalidateAuthority = vi.fn();
-    const policy: NativePackageSigningHostPolicy = { nativeScreener: options?.nativeScreener, createEngine: options?.createEngine, bundle: sourceBundle, definition, moduleId: binding.moduleId, locales, initialLocale: 'en',
+    const policy: NativePackageSigningHostPolicy = { candidateHydration: options?.candidateHydration, screenerEntryGate: options?.screenerEntryGate, nativeScreener: options?.nativeScreener, createEngine: options?.createEngine, bundle: sourceBundle, definition, moduleId: binding.moduleId, locales, initialLocale: 'en',
       registryEntries: flattenRegistryEntries(resolved.registries).entries, publication: { formId: 'form', formVersionId: 'publication' },
       readiness: { instance: 'draftReadiness', readyPath: 'ready', ownedPath: 'owned' }, clearDraftAccess: clear,
       applicationReadiness: options?.lifecycle ? { instance: 'draftReadiness', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' } : undefined,
@@ -169,7 +169,7 @@ async function actualFixture(options?: { bundle?: BundleExport; component?: Comp
         terminals.push({ status: terminal.status, valid: terminal.detail?.validationReport?.valid }); return result;
       } };
     };
-    const composition = createStubComposition(); const navigate = vi.fn();
+    const composition = createTestComposition({ definition: testDefinition }); const navigate = vi.fn();
     const props = { host, composition, config: departmentAppProfile, componentDocument: admittedComponent, componentRouteResolver: componentResolver(admittedComponent), localeDocuments: locales, location: '/', onNavigate: navigate };
     return { policy, host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, getRuntimeInput: () => runtimeInput, invokerFailures, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, signWrites, submit };
 }
@@ -195,7 +195,7 @@ describe('independent native Screener language', () => {
     let snapshot = test.host.getSnapshot(); const listeners = new Set<() => void>();
     test.host.getSnapshot = () => snapshot;
     (test.host as NativePackageSigningHost).subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     composition.nativePackageRespondent = { load: async () => ({ host: test.host, composition,
       componentDocument: component, componentRouteResolver: componentResolver(component), localeDocuments: locales,
       moduleId: test.host.moduleId, initialLocale: 'en', screenerCompletion }) };
@@ -465,7 +465,7 @@ describe('maintained native package Surface host', () => {
         signingProfileDigest: async response => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex') } });
     const createEngine = vi.fn(createFormEngine);
     const host = createNativePackageSigningHost({ ...test.policy, createEngine, clearDraftAccess: key => cohort.draftStore.delete(key) });
-    const composition = createStubComposition(); composition.draftStore = cohort.draftStore;
+    const composition = createTestComposition({ definition: testDefinition }); composition.draftStore = cohort.draftStore;
     composition.nativePackageRespondent = { load: async () => ({ composition, host, componentDocument: component, componentRouteResolver: componentResolver(component), localeDocuments: test.policy.locales,
       moduleId: host.moduleId, initialLocale: 'en', resumeSubmitted: async () => {
         const state = await cohort.draftStore.readState!(key);
@@ -482,7 +482,7 @@ describe('maintained native package Surface host', () => {
     await screen.findByRole('heading', { name: 'Acceso guardado borrado' }); expect(values.size).toBe(0);
     expect(transport.requests).toHaveLength(1); mounted.unmount(); host.dispose();
     const freshHost = createNativePackageSigningHost({ ...test.policy, createEngine });
-    const freshComposition = createStubComposition(); freshComposition.draftStore = cohort.draftStore;
+    const freshComposition = createTestComposition({ definition: testDefinition }); freshComposition.draftStore = cohort.draftStore;
     freshComposition.nativePackageRespondent = { load: async () => ({ composition: freshComposition, host: freshHost, componentDocument: component, componentRouteResolver: componentResolver(component),
       localeDocuments: test.policy.locales, moduleId: freshHost.moduleId, initialLocale: 'en', resumeSubmitted: async () => {
         const state = await cohort.draftStore.readState!(key); return state?.kind ?? 'absent';
@@ -611,7 +611,7 @@ describe('maintained native package Surface host', () => {
       engine = input.engine; const configured = await configure(input);
       return { ...configured, responseActionInvoker: async action => { const result = await configured.responseActionInvoker(action); invocations.push(result); return result; } };
     };
-    const composition = createStubComposition(); composition.draftStore = cohort.draftStore;
+    const composition = createTestComposition({ definition: testDefinition }); composition.draftStore = cohort.draftStore;
     composition.identityProvider.authenticate = async () => ({ provider: 'test-owner', adapter: 'test', subjectRef: 'server-actor',
       credentialType: 'other', subjectBinding: 'respondent', assuranceLevel: 'L1', privacyTier: 'anonymous' });
     composition.identityProvider.subscribe = () => () => {};
@@ -778,6 +778,21 @@ describe('maintained native package Surface host', () => {
       terminal.unmount(); terminalHost.dispose();
     }
   }, 15000);
+  it('forwards host selection to real navigation anchors while preserving bare callbacks', () => {
+    const test = fixture();
+    const signRoute = test.host.bundle.surfaces.flatMap(surface => surface.routes).find(route => route.path === '/review-sign')!;
+    signRoute.navigation = { ...signRoute.navigation, visible: true };
+    const resolveNavigationHref = vi.fn((href: string) => `${href}?form=neutral&package=%2Fneutral.json`);
+    const mounted = render(<NativePackageRespondentHost {...test.props} resolveNavigationHref={resolveNavigationHref} />);
+    const anchor = mounted.container.querySelector<HTMLAnchorElement>('nav a[href^="/review-sign"]')!;
+    expect(anchor).not.toBeNull();
+    expect(anchor.getAttribute('href')).toBe('/review-sign?form=neutral&package=%2Fneutral.json');
+    expect(test.props.onNavigate).not.toHaveBeenCalled();
+    fireEvent.click(anchor);
+    expect(test.props.onNavigate).toHaveBeenCalledExactlyOnceWith('/review-sign');
+    mounted.rerender(<NativePackageRespondentHost {...test.props} resolveNavigationHref={href => `${href}?form=successor`} />);
+    expect(anchor.getAttribute('href')).toBe('/review-sign?form=successor');
+  });
   it('mounts the actual authored r5 Definition slot and passes the qualified Component and ownership seam unchanged', () => {
     const test = fixture(); const mounted = render(<NativePackageRespondentHost {...test.props} />);
     expect(screen.getByTestId('admitted-form')).toBeDefined();
@@ -1182,12 +1197,13 @@ async function nativeFactsFixture(options: { eligible?: boolean; unavailable?: b
       candidateHash: await computeJcsSha256Digest(request.saved.response), sources: { facts: 'screening', ...(options.unavailable ? { other: 'other' } : {}) },
       selection: { ...f.view.selection, definitionUrl: def.url!, definitionVersion: def.version },
       results: [{ ...f.view.results[0], data: { eligible: options.eligible ?? false } }, ...(options.unavailable ? [{ status: 'unavailable' as const, instanceName: 'other', sourceRef: 'other', reason: 'not-qualified' }] : [])] };
-    return { view, assertCurrent: request.assertCurrent, assertReady: () => { request.assertCurrent(); if (options.unavailable) throw new Error('selected source unavailable'); } };
+    return { view, ...(request.nativeCurrentCheck ? { nativeCurrentCheck: request.nativeCurrentCheck } : {}), assertCurrent: request.assertCurrent, assertReady: () => { request.assertCurrent(); if (options.unavailable) throw new Error('selected source unavailable'); } };
   });
   const engines: ReturnType<typeof createFormEngine>[] = [];
   const test = await actualFixture({ bundle: exported, component: authoredComponent,
     onSaved: (response, revision) => { attachmentReferences = response.data.photo ? [structuredClone(response.data.photo)] : [];
       if (response.authoredSignatures?.length) http?.markSigned(revision); },
+    screenerEntryGate: { protectedTargets: ['surface:intake'] },
     nativeScreener: { selectionKey: 'native', retention: { retain: retained, associate }, hydration: { hydrate }, context: () => f.input },
     createEngine: (definition, options) => { const engine = createFormEngine(definition, options); engines.push(engine); return engine; } });
   return { ...test, retained, associate, hydrate, candidates, engines, options, http };
@@ -1317,7 +1333,7 @@ describe('actual native facts product caller', () => {
     mounted.unmount(); test.host.dispose();
   });
 
-  it.each(['normal', 'committed-lost-reply', 'uncommitted-retry', 'retired-visit', 'http-ready', 'http-refused'] as const)('qualifies exact prepared review and commitment with %s signing outcome', async mode => {
+  it.each(['normal', 'committed-lost-reply', 'uncommitted-retry', 'retired-visit', 'http-legacy', 'http-refused', 'current-recovery'] as const)('qualifies exact prepared review and commitment with %s signing outcome', async mode => {
     const test = await nativeFactsFixture({ signedPending: !mode.startsWith('http-'), http: mode.startsWith('http-'), refuseSigned: mode === 'http-refused' });
     const visitSpy = vi.spyOn(test.host, 'createSurfaceVisit');
     const originalSign = test.sign.getMockImplementation()!;
@@ -1374,9 +1390,9 @@ describe('actual native facts product caller', () => {
       fireEvent.click(retry); fireEvent.click(retry);
     }
     await vi.waitFor(() => expect(test.host.getSnapshot().controller?.phase).toBe('signed'));
-    await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe(mode === 'http-ready' ? 'ready' : 'pending'));
+    await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe('pending'));
     expect(test.signWrites).toHaveBeenCalledOnce();
-    expect(test.sign).toHaveBeenCalledTimes(['normal', 'http-ready', 'http-refused'].includes(mode) ? 1 : 2); expect(test.submit).not.toHaveBeenCalled();
+    expect(test.sign).toHaveBeenCalledTimes(['normal', 'http-legacy', 'http-refused', 'current-recovery'].includes(mode) ? 1 : 2); expect(test.submit).not.toHaveBeenCalled();
     if (['committed-lost-reply', 'uncommitted-retry'].includes(mode)) {
       expect(test.sign.mock.calls[1][0].operationId).toBe(test.sign.mock.calls[0][0].operationId);
       expect(test.sign.mock.calls[1][0].preparation).toBe(test.sign.mock.calls[0][0].preparation);
@@ -1391,28 +1407,92 @@ describe('actual native facts product caller', () => {
     expect(test.candidates.at(-1)!.response).toEqual(signedResult.response);
     expect(test.candidates.at(-1)!.draft).toEqual(signedResult.draft);
     expect(signedResult.response.authoredSignatures).toHaveLength(1);
-    if (mode === 'http-ready') {
-      expect(test.host.getSnapshot().runtime).toBeDefined();
-      await vi.waitFor(() => expect(test.read).toHaveBeenCalledTimes(2));
-      expect((screen.getByRole('button', { name: 'Submit demo response' }) as HTMLButtonElement).disabled).toBe(true);
-      test.completeRead(new Blob([test.photoBytes], { type: 'image/png' }));
-      fireEvent.load(await screen.findByRole('img', { name: /saved photo/i }));
-      await vi.waitFor(() => expect((screen.getByRole('button', { name: 'Submit demo response' }) as HTMLButtonElement).disabled).toBe(false));
-      fireEvent.click(screen.getByRole('button', { name: 'Submit demo response' }));
-      await vi.waitFor(() => expect(test.submit).toHaveBeenCalledOnce());
-      expect(test.submit.mock.calls[0][0].extensions!['x-formspec-response']).toEqual(signedResult.response);
-    } else {
-      expect(test.host.getSnapshot().runtime).toBeUndefined();
-      expect(screen.getByText('Checks pending.')).toBeDefined();
+    expect(test.host.getSnapshot().runtime).toBeUndefined();
+    expect(screen.getByText('Checks pending.')).toBeDefined();
+    if (mode === 'current-recovery') {
+      const frozen = JSON.stringify(signedResult);
+      const writes = { save: test.saveDraft.mock.calls.length, prepare: test.prepare.mock.calls.length, sign: test.sign.mock.calls.length };
+      const associations = test.associate.mock.calls.length;
+      test.options.signedPending = false;
+      const retain = test.retained.getMockImplementation()!;
+      test.retained.mockImplementation(async request => {
+        const issued = await retain(request);
+        return { ...issued, run: { ...issued.run, runId: 'authored-fresh-recovery-run' } };
+      });
+      fireEvent.click(screen.getByRole('link', { name: 'Before you apply' }));
+      expect(test.navigate).toHaveBeenLastCalledWith('/eligibility');
+      mounted.rerender(<NativePackageRespondentHost {...test.props} location="/eligibility" />);
+      for (const field of mounted.container.querySelectorAll('select')) fireEvent.change(field, { target: { value: 'yes' } });
+      fireEvent.click(await screen.findByRole('button', { name: /continue|check/i }));
+      await vi.waitFor(() => expect(test.retained).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(test.navigate).toHaveBeenLastCalledWith('/'));
+      mounted.rerender(<NativePackageRespondentHost {...test.props} location="/" />);
+      await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe('ready'));
+      mounted.rerender(<NativePackageRespondentHost {...test.props} location="/review-sign" />);
+      await vi.waitFor(() => expect(test.host.getSnapshot().runtime).toBeDefined());
+      expect(test.hydrate.mock.calls.at(-1)![0].nativeCurrentCheck?.runId).toBe('authored-fresh-recovery-run');
+      expect(JSON.stringify(test.host.getSnapshot().controller!.signed)).toBe(frozen);
+      expect(test.saveDraft).toHaveBeenCalledTimes(writes.save);
+      expect(test.prepare).toHaveBeenCalledTimes(writes.prepare);
+      expect(test.sign).toHaveBeenCalledTimes(writes.sign);
+      expect(test.associate).toHaveBeenCalledTimes(associations);
+      const retiredOwner = test.hydrate.mock.calls.at(-1)![0].assertCurrent;
+      test.host.dispose();
+      expect(retiredOwner).toThrow();
     }
     if (test.http) {
       const signedHash = await computeJcsSha256Digest(signedResult.response);
       const signedRequests = test.http.requests.filter(request => (request.body as { candidateHash?: string }).candidateHash === signedHash);
-      expect(signedRequests.map(request => new URL(request.url).pathname)).toEqual(['/drafts/owned-draft/screener-associations', '/drafts/owned-draft/evaluation-instances']);
+      expect(signedRequests.map(request => new URL(request.url).pathname)).toEqual([]);
       for (const request of signedRequests) expect((request.body as { draftVersion: number }).draftVersion).toBe(signedResult.draft.version);
       expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.sign).toHaveBeenCalledOnce();
     }
     mounted.unmount(); test.host.dispose();
   });
 
+});
+
+
+describe('generic saved candidate hydration without an entry Screener', () => {
+  it('keeps a committed Save when checked candidate facts are unavailable', async () => {
+    const qualifySaved = vi.fn<NonNullable<NativePackageSigningHostPolicy['candidateHydration']>['qualifySaved']>(async (_saved, lifetime) => {
+      lifetime.signal.throwIfAborted(); lifetime.assertCurrent(); throw new Error('selected task origin unavailable');
+    });
+    const retireFacts = vi.fn(); const dispose = vi.fn();
+    const test = await actualFixture({ candidateHydration: { qualifySaved, retireFacts, dispose } });
+    expect(test.host.screenerCompletion).toBeUndefined();
+    expect(test.host.preSignCandidate).toBeTypeOf('function');
+    const mounted = render(<NativePackageRespondentHost {...test.props} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
+    await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(qualifySaved).toHaveBeenCalled());
+    await vi.waitFor(() => expect(test.host.getSnapshot().controller?.saved).toBeDefined());
+    expect(test.host.getSnapshot().nativeReadiness).toBe('pending');
+    expect(test.prepare).not.toHaveBeenCalled();
+    mounted.unmount(); test.host.dispose();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+});
+
+it('uses selected generic candidate facts for the maintained isolated check and pre-sign path', async () => {
+  const base = await hydrationFixture();
+  const ready = vi.fn();
+  const qualifySaved = vi.fn<NonNullable<NativePackageSigningHostPolicy['candidateHydration']>['qualifySaved']>(async (saved, lifetime) => {
+    lifetime.assertCurrent(); lifetime.signal.throwIfAborted();
+    return { view: { ...base.view, selection: { ...base.view.selection, definitionUrl: test.policy.definition.url,
+      definitionVersion: test.policy.definition.version, requiredSources: [] }, draftId: saved.draft.id,
+      draftVersion: saved.draft.version, candidateHash: await computeJcsSha256Digest(saved.response), sources: {}, results: [], providerReceipt: null },
+      assertCurrent: () => { lifetime.signal.throwIfAborted(); lifetime.assertCurrent(); }, assertReady: ready };
+  });
+  const test = await actualFixture({ candidateHydration: { qualifySaved, retireFacts: vi.fn(), dispose: vi.fn() } });
+  const mounted = render(<NativePackageRespondentHost {...test.props} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
+  await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe('ready'));
+  const saved = test.host.getSnapshot().controller!.saved!;
+  const proof = await test.host.preSignCandidate!({ saved, operationId: 'generic-sign', assertCurrent: vi.fn() });
+  proof.assertCurrent();
+  expect(qualifySaved).toHaveBeenCalledTimes(2);
+  expect(ready).toHaveBeenCalled();
+  expect(test.host.screenerCompletion).toBeUndefined();
+  mounted.unmount(); test.host.dispose();
 });

@@ -1,0 +1,3267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:formspec:server:evaluation-instance-proof-read:1",
+  "$defs": {
+    "task_draft_sign_schema__Scope": {
+      "type": "object",
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "workspace_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "environment_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "cell_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "tenant_id",
+        "workspace_id",
+        "environment_id",
+        "cell_id"
+      ],
+      "additionalProperties": false
+    },
+    "task_draft_sign_schema__Owner": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "subjectRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "authenticated": {
+          "type": "object",
+          "properties": {
+            "issuer": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "subject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "principalId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "profile": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "actorRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "subjectRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "clientId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "issuer",
+            "subject",
+            "principalId",
+            "profile",
+            "actorRef",
+            "subjectRef",
+            "sessionId",
+            "clientId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "sessionId",
+        "subjectRef",
+        "authenticated"
+      ],
+      "additionalProperties": false
+    },
+    "task_draft_sign_schema__Selection": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "object",
+          "properties": {
+            "tenant_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "workspace_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "cell_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "tenant_id",
+            "workspace_id",
+            "environment_id",
+            "cell_id"
+          ],
+          "additionalProperties": false
+        },
+        "formId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "formVersionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definitionUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definitionVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definitionHash": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "requiredSources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "scope",
+        "formId",
+        "formVersionId",
+        "definitionUrl",
+        "definitionVersion",
+        "definitionHash",
+        "requiredSources"
+      ],
+      "additionalProperties": false
+    },
+    "task_draft_sign_schema__FullFormVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "form_version_id",
+        "form_id",
+        "definition_url",
+        "definition_version",
+        "definition_json",
+        "definition_hash",
+        "locale_refs_json",
+        "runtime_config_json",
+        "created_by",
+        "status",
+        "theme_ref",
+        "references_json",
+        "ontology_json",
+        "component_document_json",
+        "app_graph_validation_report_json",
+        "component_graph_json",
+        "host_evidence_json"
+      ],
+      "properties": {
+        "form_version_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "form_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definition_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definition_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definition_json": {
+          "type": "string"
+        },
+        "definition_hash": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "locale_refs_json": {
+          "type": "string"
+        },
+        "runtime_config_json": {
+          "type": "string"
+        },
+        "created_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "active",
+            "retired"
+          ]
+        },
+        "theme_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "references_json": {},
+        "ontology_json": {},
+        "component_document_json": {},
+        "app_graph_validation_report_json": {},
+        "component_graph_json": {},
+        "host_evidence_json": {}
+      }
+    },
+    "evaluation_composition_v2_schema__Hydration": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "purpose": {
+          "const": "formspec.instance.hydrate"
+        },
+        "operation": {
+          "const": "hydrate"
+        },
+        "scope": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Scope"
+        },
+        "owner": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Owner"
+        },
+        "selection": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Selection"
+        },
+        "draftId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "draftVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "formVersionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "requestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sources": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "attachmentBindings": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {}
+        },
+        "qualifiedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evaluation_composition_v2_schema__Result"
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "providerReceipt": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__ComposedReceipt"
+        }
+      },
+      "required": [
+        "version",
+        "purpose",
+        "operation",
+        "scope",
+        "owner",
+        "selection",
+        "draftId",
+        "draftVersion",
+        "candidateHash",
+        "formVersionHash",
+        "requestHash",
+        "sources",
+        "attachmentBindings",
+        "qualifiedAt",
+        "results",
+        "providerReceipt"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__Scope": {
+      "type": "object",
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "workspace_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "environment_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "cell_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "tenant_id",
+        "workspace_id",
+        "environment_id",
+        "cell_id"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__Owner": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "subjectRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "authenticated": {
+          "type": "object",
+          "properties": {
+            "issuer": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "subject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "principalId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "profile": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "actorRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "subjectRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "clientId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "issuer",
+            "subject",
+            "principalId",
+            "profile",
+            "actorRef",
+            "subjectRef",
+            "sessionId",
+            "clientId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "sessionId",
+        "subjectRef",
+        "authenticated"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__Selection": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "object",
+          "properties": {
+            "tenant_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "workspace_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "cell_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "tenant_id",
+            "workspace_id",
+            "environment_id",
+            "cell_id"
+          ],
+          "additionalProperties": false
+        },
+        "formId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "formVersionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definitionUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definitionVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "definitionHash": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "requiredSources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "scope",
+        "formId",
+        "formVersionId",
+        "definitionUrl",
+        "definitionVersion",
+        "definitionHash",
+        "requiredSources"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__Result": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Qualified"
+        },
+        {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Pending"
+        },
+        {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Unavailable"
+        }
+      ]
+    },
+    "evaluation_composition_v2_schema__Qualified": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "qualified"
+        },
+        "instanceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "data": {},
+        "dataHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evidenceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "status",
+        "instanceName",
+        "sourceRef",
+        "data",
+        "dataHash",
+        "evidenceRef",
+        "issuedAt",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__Pending": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "pending"
+        },
+        "instanceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "status",
+        "instanceName",
+        "sourceRef",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__Unavailable": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "unavailable"
+        },
+        "instanceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "status",
+        "instanceName",
+        "sourceRef",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__ComposedReceipt": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "composedSources"
+        },
+        "version": {
+          "const": 2
+        },
+        "purpose": {
+          "const": "formspec.instance.compose"
+        },
+        "registration": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__CompositionRegistration"
+        },
+        "requestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "resolvedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "validUntil": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contributions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evaluation_composition_v2_schema__Contribution"
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "receiptHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "kind",
+        "version",
+        "purpose",
+        "registration",
+        "requestHash",
+        "resolvedAt",
+        "validUntil",
+        "contributions",
+        "receiptHash"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__CompositionRegistration": {
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "providerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "registrationHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "publicDescriptor": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__CompositionPolicy"
+        },
+        "outputSchemaHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "maxEvidenceAgeSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "maxValiditySeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 900
+        }
+      },
+      "required": [
+        "providerId",
+        "providerVersion",
+        "registrationHash",
+        "publicDescriptor",
+        "outputSchemaHash",
+        "maxEvidenceAgeSeconds",
+        "maxValiditySeconds"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__CompositionPolicy": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "resolver": {
+          "const": "mixedSourceComposition"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "providerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "selection": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Selection"
+        },
+        "formVersionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "outputSchema": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__OutputSchema"
+        },
+        "budgets": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Budgets"
+        },
+        "owners": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/evaluation_composition_v2_schema__NativeOwner"
+              },
+              {
+                "$ref": "#/$defs/evaluation_composition_v2_schema__ImageOwner"
+              },
+              {
+                "$ref": "#/$defs/evaluation_composition_v2_schema__UnavailableOwner"
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "version",
+        "resolver",
+        "providerId",
+        "providerVersion",
+        "selection",
+        "formVersionHash",
+        "outputSchema",
+        "budgets",
+        "owners"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__OutputSchema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "const": "urn:formspec:server:evaluation-composition:2"
+        },
+        "version": {
+          "const": "2"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "document": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        }
+      },
+      "required": [
+        "url",
+        "version",
+        "hash",
+        "document"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__Budgets": {
+      "type": "object",
+      "properties": {
+        "deadlineMillis": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "responseBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2097152
+        },
+        "maxEvidenceAgeSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "maxValiditySeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 900
+        }
+      },
+      "required": [
+        "deadlineMillis",
+        "concurrency",
+        "responseBytes",
+        "maxEvidenceAgeSeconds",
+        "maxValiditySeconds"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__NativeOwner": {
+      "type": "object",
+      "properties": {
+        "instanceName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+$",
+          "maxLength": 128
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "resolverKind": {
+          "const": "nativeScreenerMapping"
+        },
+        "registrationHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "attachmentMode": {
+          "const": "metadataOnly"
+        },
+        "executorAdmissionHash": {
+          "type": "null"
+        },
+        "unavailableReason": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "instanceName",
+        "sourceRef",
+        "resolverKind",
+        "registrationHash",
+        "attachmentMode",
+        "executorAdmissionHash",
+        "unavailableReason"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__ImageOwner": {
+      "type": "object",
+      "properties": {
+        "instanceName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+$",
+          "maxLength": 128
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "resolverKind": {
+          "const": "structuredImageMapping"
+        },
+        "registrationHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "attachmentMode": {
+          "const": "verifiedBytes"
+        },
+        "executorAdmissionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "unavailableReason": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "instanceName",
+        "sourceRef",
+        "resolverKind",
+        "registrationHash",
+        "attachmentMode",
+        "executorAdmissionHash",
+        "unavailableReason"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__UnavailableOwner": {
+      "type": "object",
+      "properties": {
+        "instanceName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+$",
+          "maxLength": 128
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "resolverKind": {
+          "const": "unavailable"
+        },
+        "registrationHash": {
+          "type": "null"
+        },
+        "attachmentMode": {
+          "const": "metadataOnly"
+        },
+        "executorAdmissionHash": {
+          "type": "null"
+        },
+        "unavailableReason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "instanceName",
+        "sourceRef",
+        "resolverKind",
+        "registrationHash",
+        "attachmentMode",
+        "executorAdmissionHash",
+        "unavailableReason"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__Contribution": {
+      "type": "object",
+      "properties": {
+        "instanceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "resultHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "receipt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/evaluation_composition_v2_schema__NativeReceipt"
+            },
+            {
+              "$ref": "#/$defs/evaluation_composition_v2_schema__ImageReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "instanceName",
+        "sourceRef",
+        "resultHash",
+        "receipt"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__NativeReceipt": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "nativeScreenerMapping"
+        },
+        "version": {
+          "const": 1
+        },
+        "purpose": {
+          "const": "formspec.instance.native-screener.map"
+        },
+        "registration": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__NativeRegistration"
+        },
+        "requestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "resolvedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "proof": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__NativeProof"
+        },
+        "receiptHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "kind",
+        "version",
+        "purpose",
+        "registration",
+        "requestHash",
+        "resolvedAt",
+        "proof",
+        "receiptHash"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__NativeRegistration": {
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "providerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "registrationHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "publicDescriptor": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__NativePolicy"
+        },
+        "outputSchemaHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "maxEvidenceAgeSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "maxValiditySeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 900
+        }
+      },
+      "required": [
+        "providerId",
+        "providerVersion",
+        "registrationHash",
+        "publicDescriptor",
+        "outputSchemaHash",
+        "maxEvidenceAgeSeconds",
+        "maxValiditySeconds"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__NativePolicy": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "resolver": {
+          "const": "nativeScreenerMapping"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "providerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "selection": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "object",
+              "properties": {
+                "tenant_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "workspace_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "environment_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "cell_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "tenant_id",
+                "workspace_id",
+                "environment_id",
+                "cell_id"
+              ],
+              "additionalProperties": false
+            },
+            "formId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "formVersionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionUrl": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionHash": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "requiredSources": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "scope",
+            "formId",
+            "formVersionId",
+            "definitionUrl",
+            "definitionVersion",
+            "definitionHash",
+            "requiredSources"
+          ],
+          "additionalProperties": false
+        },
+        "formVersionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "screenerSelectionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "instanceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_]+$"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object"
+          }
+        },
+        "rulesHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "document": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 16384
+            }
+          },
+          "required": [
+            "url",
+            "version",
+            "hash",
+            "document"
+          ],
+          "additionalProperties": false
+        },
+        "budgets": {
+          "type": "object",
+          "properties": {
+            "maxEvidenceAgeSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300
+            },
+            "maxValiditySeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 900
+            }
+          },
+          "required": [
+            "maxEvidenceAgeSeconds",
+            "maxValiditySeconds"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "resolver",
+        "providerId",
+        "providerVersion",
+        "selection",
+        "formVersionHash",
+        "screenerSelectionHash",
+        "instanceName",
+        "sourceRef",
+        "rules",
+        "rulesHash",
+        "outputSchema",
+        "budgets"
+      ],
+      "additionalProperties": false,
+      "title": "Native retained screening instance mapping configuration"
+    },
+    "evaluation_composition_v2_schema__NativeProof": {
+      "type": "object",
+      "properties": {
+        "association": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Association"
+        },
+        "evidenceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "evidenceHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "instanceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "dataHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "association",
+        "evidenceRef",
+        "evidenceHash",
+        "issuedAt",
+        "expiresAt",
+        "instanceName",
+        "sourceRef",
+        "dataHash"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__Association": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "object",
+          "properties": {
+            "tenant_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "workspace_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "cell_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "tenant_id",
+            "workspace_id",
+            "environment_id",
+            "cell_id"
+          ],
+          "additionalProperties": false
+        },
+        "draftId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "draftVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "selectionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "subjectRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "authenticated": {
+              "type": "object",
+              "properties": {
+                "issuer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subject": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "principalId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "profile": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "actorRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subjectRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "clientId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "issuer",
+                "subject",
+                "principalId",
+                "profile",
+                "actorRef",
+                "subjectRef",
+                "sessionId",
+                "clientId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sessionId",
+            "subjectRef",
+            "authenticated"
+          ],
+          "additionalProperties": false
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "runRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "evidenceHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "associatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "scope",
+        "draftId",
+        "draftVersion",
+        "candidateHash",
+        "selectionHash",
+        "owner",
+        "runId",
+        "runRevision",
+        "evidenceHash",
+        "associatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__ImageReceipt": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "structuredImageMapping"
+        },
+        "version": {
+          "const": 1
+        },
+        "purpose": {
+          "const": "formspec.instance.structured-image.map"
+        },
+        "registration": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__ImageRegistration"
+        },
+        "requestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "runHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "dataHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "receiptHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "instanceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "evidenceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "kind",
+        "version",
+        "purpose",
+        "registration",
+        "requestHash",
+        "runHash",
+        "dataHash",
+        "receiptHash",
+        "instanceName",
+        "sourceRef",
+        "evidenceRef",
+        "issuedAt",
+        "completedAt",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__ImageRegistration": {
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "providerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "registrationHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "publicDescriptor": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__ImagePolicy"
+        },
+        "outputSchemaHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "maxEvidenceAgeSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "maxValiditySeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 900
+        }
+      },
+      "required": [
+        "providerId",
+        "providerVersion",
+        "registrationHash",
+        "publicDescriptor",
+        "outputSchemaHash",
+        "maxEvidenceAgeSeconds",
+        "maxValiditySeconds"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__ImagePolicy": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "providerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "instanceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "selection": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Selection"
+        },
+        "formVersionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "type": "object"
+          }
+        },
+        "rulesHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "outputSchema": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__LeafOutputSchema"
+        },
+        "resolver": {
+          "const": "structuredImageMapping"
+        },
+        "attachmentDataPointer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "executor": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__ImageExecutor"
+        },
+        "inputRequirements": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__ImageRequirements"
+        },
+        "budgets": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__ImageBudgets"
+        }
+      },
+      "required": [
+        "version",
+        "providerId",
+        "providerVersion",
+        "instanceName",
+        "sourceRef",
+        "selection",
+        "formVersionHash",
+        "rules",
+        "rulesHash",
+        "outputSchema",
+        "resolver",
+        "attachmentDataPointer",
+        "executor",
+        "inputRequirements",
+        "budgets"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__LeafOutputSchema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "document": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        }
+      },
+      "required": [
+        "url",
+        "version",
+        "hash",
+        "document"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__ImageExecutor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "qualificationRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "moduleLockHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "configHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "admissionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "implementationHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "observationSchema": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__LeafOutputSchema"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "qualificationRef",
+        "moduleLockHash",
+        "configHash",
+        "admissionHash",
+        "implementationHash",
+        "observationSchema"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__ImageRequirements": {
+      "type": "object",
+      "properties": {
+        "requiredDefinitionFields": {
+          "type": "object",
+          "maxProperties": 128,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "requiredContextPointers": {
+          "type": "object",
+          "maxProperties": 128,
+          "additionalProperties": {
+            "enum": [
+              "boolean",
+              "string",
+              "number",
+              "integer",
+              "object",
+              "array"
+            ]
+          }
+        }
+      },
+      "required": [
+        "requiredDefinitionFields",
+        "requiredContextPointers"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation_composition_v2_schema__ImageBudgets": {
+      "type": "object",
+      "properties": {
+        "inputBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "pixels": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16000000
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "deadlineMillis": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000
+        },
+        "maxEvidenceAgeSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "maxValiditySeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 900
+        }
+      },
+      "required": [
+        "inputBytes",
+        "pixels",
+        "frames",
+        "deadlineMillis",
+        "maxEvidenceAgeSeconds",
+        "maxValiditySeconds"
+      ],
+      "additionalProperties": false
+    },
+    "InitialHydrateNativeRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "scope",
+        "owner",
+        "selection",
+        "formVersion",
+        "draftId",
+        "draftVersion",
+        "canonicalResponse",
+        "candidateHash",
+        "requestHash",
+        "sources"
+      ],
+      "properties": {
+        "operation": {
+          "const": "hydrate"
+        },
+        "scope": {
+          "$ref": "#/$defs/task_draft_sign_schema__Scope"
+        },
+        "owner": {
+          "$ref": "#/$defs/task_draft_sign_schema__Owner"
+        },
+        "selection": {
+          "$ref": "#/$defs/task_draft_sign_schema__Selection"
+        },
+        "formVersion": {
+          "$ref": "#/$defs/task_draft_sign_schema__FullFormVersion"
+        },
+        "draftId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "draftVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740990
+        },
+        "canonicalResponse": {
+          "type": "object"
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "requestHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sources": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 64,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
+      }
+    },
+    "native_screener_api_schema__Selection": {
+      "type": "object",
+      "properties": {
+        "evaluationSelection": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "object",
+              "properties": {
+                "tenant_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "workspace_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "environment_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "cell_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "tenant_id",
+                "workspace_id",
+                "environment_id",
+                "cell_id"
+              ],
+              "additionalProperties": false
+            },
+            "formId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "formVersionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionUrl": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "definitionHash": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "requiredSources": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "scope",
+            "formId",
+            "formVersionId",
+            "definitionUrl",
+            "definitionVersion",
+            "definitionHash",
+            "requiredSources"
+          ],
+          "additionalProperties": false
+        },
+        "formVersionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "screenerUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "screenerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "screenerRawHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "screenerHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "allowedTargets": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        },
+        "qualificationProfile": {
+          "const": "flat-first-match-v1"
+        },
+        "instanceMappingHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "evaluationSelection",
+        "formVersionHash",
+        "sourceRef",
+        "screenerUrl",
+        "screenerVersion",
+        "screenerRawHash",
+        "screenerHash",
+        "allowedTargets",
+        "qualificationProfile"
+      ],
+      "additionalProperties": false
+    },
+    "native_screener_api_schema__Run": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "tenant_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "workspace_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "cell_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "tenant_id",
+            "workspace_id",
+            "environment_id",
+            "cell_id"
+          ],
+          "additionalProperties": false
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "selectionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "subjectRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "authenticated": {
+              "type": "object",
+              "properties": {
+                "issuer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subject": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "principalId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "profile": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "actorRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subjectRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "clientId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "issuer",
+                "subject",
+                "principalId",
+                "profile",
+                "actorRef",
+                "subjectRef",
+                "sessionId",
+                "clientId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sessionId",
+            "subjectRef",
+            "authenticated"
+          ],
+          "additionalProperties": false
+        },
+        "answers": {
+          "type": "object",
+          "maxProperties": 128,
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "const": "answered"
+                  },
+                  "value": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  }
+                },
+                "required": [
+                  "state",
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "enum": [
+                      "declined",
+                      "not-presented"
+                    ]
+                  },
+                  "value": {
+                    "type": "null"
+                  }
+                },
+                "required": [
+                  "state",
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "answersHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evaluatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "determination": {
+          "$ref": "#/$defs/native_screener_api_schema__NativeDetermination"
+        },
+        "determinationHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "qualification": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "ready"
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "status",
+                "target"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "pending"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "status",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "evidenceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "evidenceHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "version",
+        "scope",
+        "runId",
+        "revision",
+        "selectionHash",
+        "owner",
+        "answers",
+        "answersHash",
+        "evaluatedAt",
+        "determination",
+        "determinationHash",
+        "qualification",
+        "evidenceRef",
+        "evidenceHash"
+      ],
+      "additionalProperties": false
+    },
+    "native_screener_api_schema__NativeDetermination": {
+      "title": "Formspec Determination Record",
+      "description": "A Formspec Determination Record \u2014 the structured output artifact produced by evaluating a Screener Document against respondent inputs. A Determination Record captures the complete evaluation outcome: which routes matched, which were eliminated and why, computed scores, the respondent's input values with answer states, and evaluation metadata. The record references the specific screener version that produced it via the (screener.url, screener.version) tuple. Determination Records are immutable once produced; status may transition from 'completed' to 'expired' when the screener's resultValidity duration elapses, but the evaluation data itself is never modified. Status 'unavailable' indicates the screener was outside its availability window and no evaluation was performed.",
+      "type": "object",
+      "required": [
+        "$formspecDetermination",
+        "screener",
+        "timestamp",
+        "evaluationVersion",
+        "status",
+        "overrides",
+        "phases",
+        "inputs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$formspecDetermination": {
+          "type": "string",
+          "const": "1.0",
+          "description": "Determination Record specification version. MUST be '1.0'.",
+          "examples": [
+            "1.0"
+          ],
+          "x-lm": {
+            "critical": true,
+            "intent": "Version pin for Determination Record compatibility. Processors MUST reject records with an unrecognized version."
+          }
+        },
+        "screener": {
+          "type": "object",
+          "description": "Reference to the Screener Document that produced this record. The (url, version) tuple uniquely identifies the screener revision whose evaluation logic was applied.",
+          "required": [
+            "url",
+            "version"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "Canonical URI of the screener that produced this record.",
+              "examples": [
+                "urn:example:grants-eligibility-screener",
+                "https://agency.gov/screeners/benefit-eligibility"
+              ]
+            },
+            "version": {
+              "type": "string",
+              "description": "Semantic version of the screener that produced this record.",
+              "examples": [
+                "1.0.0",
+                "2.1.0"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "x-lm": {
+            "critical": true,
+            "intent": "Provenance link to the exact screener revision. Enables auditing and reproducibility."
+          }
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 date-time when the evaluation completed.",
+          "examples": [
+            "2026-03-31T14:30:00Z"
+          ]
+        },
+        "evaluationVersion": {
+          "type": "string",
+          "description": "The version of the Screener Document's evaluation logic that was applied. Reflects the evaluationBinding policy: if 'submission', this is the screener version at session start; if 'completion', the version at evaluation time.",
+          "examples": [
+            "1.0.0"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "partial",
+            "expired",
+            "unavailable"
+          ],
+          "description": "'completed': all items answered and evaluation finished. 'partial': not all items answered; evaluation ran on available data. 'expired': result validity duration exceeded post-evaluation. 'unavailable': screener was outside its availability window, no evaluation performed.",
+          "examples": [
+            "completed"
+          ],
+          "x-lm": {
+            "critical": true,
+            "intent": "Evaluation outcome status. Consuming applications MUST check status before acting on matched routes."
+          }
+        },
+        "overrides": {
+          "type": "object",
+          "description": "Results of override route evaluation. Override routes are hoisted out of their declaring phase and evaluated before all phases.",
+          "required": [
+            "matched",
+            "halted"
+          ],
+          "properties": {
+            "matched": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/native_screener_api_schema__NativeDetermination__defs_RouteResult"
+              },
+              "description": "Override routes that fired. Empty array when no overrides matched."
+            },
+            "halted": {
+              "type": "boolean",
+              "description": "true if a terminal override halted the pipeline. When true, the phases array is empty because no phases were evaluated."
+            }
+          },
+          "additionalProperties": false
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/native_screener_api_schema__NativeDetermination__defs_PhaseResult"
+          },
+          "description": "Per-phase evaluation results in declaration order. Empty array if overrides halted the pipeline."
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/native_screener_api_schema__NativeDetermination__defs_InputEntry"
+          },
+          "description": "Map of item path to { value, state } for every screener item. Keys use Formspec path syntax including indexed repeat paths (e.g., 'group[0].field').",
+          "x-lm": {
+            "critical": true,
+            "intent": "Complete snapshot of respondent inputs at evaluation time. Enables auditing and replay without re-collecting data."
+          }
+        },
+        "validity": {
+          "type": "object",
+          "description": "Expiration metadata derived from the screener's resultValidity duration. Omitted when the screener does not declare resultValidity.",
+          "properties": {
+            "validUntil": {
+              "type": "string",
+              "format": "date-time",
+              "description": "When this Determination Record expires. Computed as timestamp + resultValidity.",
+              "examples": [
+                "2026-04-14T14:30:00Z"
+              ]
+            },
+            "resultValidity": {
+              "type": "string",
+              "description": "The original ISO 8601 duration from the Screener Document.",
+              "examples": [
+                "P14D",
+                "P90D"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "extensions": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^x-"
+          },
+          "description": "Extension data on the Determination Record. Uses the same x-prefixed extension mechanism as other Formspec documents."
+        }
+      },
+      "$defs": {
+        "PhaseResult": {
+          "type": "object",
+          "description": "Evaluation result for a single phase in the pipeline. Captures the phase's status, strategy, matched and eliminated routes, and any phase-level warnings.",
+          "required": [
+            "id",
+            "status",
+            "strategy",
+            "matched",
+            "eliminated"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Phase identifier, matching the 'id' of the corresponding Phase in the Screener Document."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "evaluated",
+                "skipped",
+                "unsupported-strategy"
+              ],
+              "description": "'evaluated': phase ran normally. 'skipped': phase's activeWhen expression evaluated to false. 'unsupported-strategy': processor does not support this phase's strategy (Core conformance only requires 'first-match')."
+            },
+            "strategy": {
+              "type": "string",
+              "description": "The evaluation strategy that was used (or would have been used if skipped/unsupported)."
+            },
+            "matched": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/native_screener_api_schema__NativeDetermination__defs_RouteResult"
+              },
+              "description": "Routes that matched in this phase."
+            },
+            "eliminated": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/native_screener_api_schema__NativeDetermination__defs_RouteResult"
+              },
+              "description": "Routes that did not match in this phase, with reasons for elimination."
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "Phase-level warnings emitted during evaluation (e.g., 'below-minimum' when fan-out matches fewer than config.minMatches).",
+              "examples": [
+                [
+                  "below-minimum"
+                ]
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "RouteResult": {
+          "type": "object",
+          "description": "A single route's evaluation outcome within a phase or override block. Present in both 'matched' and 'eliminated' arrays. Eliminated results include a reason explaining why the route did not match.",
+          "required": [
+            "target"
+          ],
+          "properties": {
+            "target": {
+              "type": "string",
+              "description": "The route's target URI. Matches the 'target' property of the corresponding Route in the Screener Document."
+            },
+            "label": {
+              "type": "string",
+              "description": "The route's human-readable label, copied from the Screener Document."
+            },
+            "message": {
+              "type": "string",
+              "description": "The route's respondent-facing message. Preserved so consuming applications can display it without re-reading the Screener Document. If the Screener Route contained {{expression}} interpolation sequences, the message is the post-interpolation result."
+            },
+            "score": {
+              "type": "number",
+              "description": "The computed score for score-threshold routes. Present only when the route was evaluated under a 'score-threshold' strategy."
+            },
+            "reason": {
+              "type": "string",
+              "description": "Why the route was eliminated: 'condition-false', 'below-threshold', 'max-exceeded', 'null-score'. Present only in the 'eliminated' array. 'null-score' indicates the score expression evaluated to null (e.g., due to non-relevant items).",
+              "examples": [
+                "condition-false",
+                "below-threshold",
+                "null-score"
+              ]
+            },
+            "metadata": {
+              "type": "object",
+              "description": "The route's arbitrary metadata, copied from the Screener Document without interpretation.",
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "InputEntry": {
+          "type": "object",
+          "description": "A single screener item's captured value and answer state at evaluation time. The key in the inputs map is the item's Formspec path, which may include indexed repeat paths (e.g., 'group[0].field') for items inside repeatable groups.",
+          "required": [
+            "state"
+          ],
+          "properties": {
+            "value": {
+              "description": "The item's value at evaluation time. May be any JSON type (string, number, boolean, array, object, null). null when state is 'declined' or 'not-presented'."
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "answered",
+                "declined",
+                "not-presented"
+              ],
+              "description": "'answered': respondent provided a value. 'declined': item was presented but respondent explicitly declined to answer. 'not-presented': item was not shown to the respondent (e.g., relevance was false)."
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "native_screener_api_schema__NativeDetermination__defs_RouteResult": {
+      "type": "object",
+      "description": "A single route's evaluation outcome within a phase or override block. Present in both 'matched' and 'eliminated' arrays. Eliminated results include a reason explaining why the route did not match.",
+      "required": [
+        "target"
+      ],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "The route's target URI. Matches the 'target' property of the corresponding Route in the Screener Document."
+        },
+        "label": {
+          "type": "string",
+          "description": "The route's human-readable label, copied from the Screener Document."
+        },
+        "message": {
+          "type": "string",
+          "description": "The route's respondent-facing message. Preserved so consuming applications can display it without re-reading the Screener Document. If the Screener Route contained {{expression}} interpolation sequences, the message is the post-interpolation result."
+        },
+        "score": {
+          "type": "number",
+          "description": "The computed score for score-threshold routes. Present only when the route was evaluated under a 'score-threshold' strategy."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why the route was eliminated: 'condition-false', 'below-threshold', 'max-exceeded', 'null-score'. Present only in the 'eliminated' array. 'null-score' indicates the score expression evaluated to null (e.g., due to non-relevant items).",
+          "examples": [
+            "condition-false",
+            "below-threshold",
+            "null-score"
+          ]
+        },
+        "metadata": {
+          "type": "object",
+          "description": "The route's arbitrary metadata, copied from the Screener Document without interpretation.",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "native_screener_api_schema__NativeDetermination__defs_PhaseResult": {
+      "type": "object",
+      "description": "Evaluation result for a single phase in the pipeline. Captures the phase's status, strategy, matched and eliminated routes, and any phase-level warnings.",
+      "required": [
+        "id",
+        "status",
+        "strategy",
+        "matched",
+        "eliminated"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Phase identifier, matching the 'id' of the corresponding Phase in the Screener Document."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "evaluated",
+            "skipped",
+            "unsupported-strategy"
+          ],
+          "description": "'evaluated': phase ran normally. 'skipped': phase's activeWhen expression evaluated to false. 'unsupported-strategy': processor does not support this phase's strategy (Core conformance only requires 'first-match')."
+        },
+        "strategy": {
+          "type": "string",
+          "description": "The evaluation strategy that was used (or would have been used if skipped/unsupported)."
+        },
+        "matched": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/native_screener_api_schema__NativeDetermination__defs_RouteResult"
+          },
+          "description": "Routes that matched in this phase."
+        },
+        "eliminated": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/native_screener_api_schema__NativeDetermination__defs_RouteResult"
+          },
+          "description": "Routes that did not match in this phase, with reasons for elimination."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Phase-level warnings emitted during evaluation (e.g., 'below-minimum' when fan-out matches fewer than config.minMatches).",
+          "examples": [
+            [
+              "below-minimum"
+            ]
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "native_screener_api_schema__NativeDetermination__defs_InputEntry": {
+      "type": "object",
+      "description": "A single screener item's captured value and answer state at evaluation time. The key in the inputs map is the item's Formspec path, which may include indexed repeat paths (e.g., 'group[0].field') for items inside repeatable groups.",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "value": {
+          "description": "The item's value at evaluation time. May be any JSON type (string, number, boolean, array, object, null). null when state is 'declined' or 'not-presented'."
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "answered",
+            "declined",
+            "not-presented"
+          ],
+          "description": "'answered': respondent provided a value. 'declined': item was presented but respondent explicitly declined to answer. 'not-presented': item was not shown to the respondent (e.g., relevance was false)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "native_screener_api_schema__Association": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "object",
+          "properties": {
+            "tenant_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "workspace_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "cell_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "tenant_id",
+            "workspace_id",
+            "environment_id",
+            "cell_id"
+          ],
+          "additionalProperties": false
+        },
+        "draftId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "draftVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "selectionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "subjectRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "authenticated": {
+              "type": "object",
+              "properties": {
+                "issuer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subject": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "principalId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "profile": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "actorRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subjectRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "clientId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "issuer",
+                "subject",
+                "principalId",
+                "profile",
+                "actorRef",
+                "subjectRef",
+                "sessionId",
+                "clientId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sessionId",
+            "subjectRef",
+            "authenticated"
+          ],
+          "additionalProperties": false
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "runRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "evidenceHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "associatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "scope",
+        "draftId",
+        "draftVersion",
+        "candidateHash",
+        "selectionHash",
+        "owner",
+        "runId",
+        "runRevision",
+        "evidenceHash",
+        "associatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "Command": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hydration": {
+          "$ref": "#/$defs/evaluation_composition_v2_schema__Hydration"
+        },
+        "instanceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "hydration",
+        "instanceName"
+      ]
+    },
+    "Response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "native"
+            },
+            "version": {
+              "const": 1
+            },
+            "instanceName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "request": {
+              "$ref": "#/$defs/InitialHydrateNativeRequest"
+            },
+            "records": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "snapshot": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "selectionHash": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "selection": {
+                      "$ref": "#/$defs/native_screener_api_schema__Selection"
+                    },
+                    "formVersion": {
+                      "$ref": "#/$defs/task_draft_sign_schema__FullFormVersion"
+                    },
+                    "screenerBytes": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                      },
+                      "minItems": 1,
+                      "maxItems": 2097152
+                    }
+                  },
+                  "required": [
+                    "selectionHash",
+                    "selection",
+                    "formVersion",
+                    "screenerBytes"
+                  ]
+                },
+                "run": {
+                  "$ref": "#/$defs/native_screener_api_schema__Run"
+                },
+                "association": {
+                  "$ref": "#/$defs/native_screener_api_schema__Association"
+                }
+              },
+              "required": [
+                "snapshot",
+                "run",
+                "association"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "version",
+            "instanceName",
+            "request",
+            "records"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "image"
+            },
+            "version": {
+              "const": 1
+            },
+            "instanceName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "request": {
+              "$ref": "#/$defs/InitialHydrateNativeRequest"
+            },
+            "run": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "object": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "object_artifact_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "aggregate_type": {
+                      "const": "structured_image_run"
+                    },
+                    "aggregate_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "object_kind": {
+                      "enum": [
+                        "immutable:structured-image-run:v1",
+                        "immutable:structured-image-diagnostic:v1"
+                      ]
+                    },
+                    "object_uri": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "content_type": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "checksum_sha256": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "byte_length": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 33619968
+                    }
+                  },
+                  "required": [
+                    "object_artifact_id",
+                    "aggregate_type",
+                    "aggregate_id",
+                    "object_kind",
+                    "object_uri",
+                    "content_type",
+                    "checksum_sha256",
+                    "byte_length"
+                  ]
+                },
+                "bytesBase64": {
+                  "type": "string",
+                  "minLength": 4,
+                  "maxLength": 2796204,
+                  "contentEncoding": "base64"
+                }
+              },
+              "required": [
+                "object",
+                "bytesBase64"
+              ]
+            },
+            "diagnostics": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "object": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "object_artifact_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "aggregate_type": {
+                        "const": "structured_image_run"
+                      },
+                      "aggregate_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "object_kind": {
+                        "enum": [
+                          "immutable:structured-image-run:v1",
+                          "immutable:structured-image-diagnostic:v1"
+                        ]
+                      },
+                      "object_uri": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "content_type": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "checksum_sha256": {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      },
+                      "byte_length": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 33619968
+                      }
+                    },
+                    "required": [
+                      "object_artifact_id",
+                      "aggregate_type",
+                      "aggregate_id",
+                      "object_kind",
+                      "object_uri",
+                      "content_type",
+                      "checksum_sha256",
+                      "byte_length"
+                    ]
+                  },
+                  "bytesBase64": {
+                    "type": "string",
+                    "minLength": 4,
+                    "maxLength": 44826624,
+                    "contentEncoding": "base64"
+                  }
+                },
+                "required": [
+                  "object",
+                  "bytesBase64"
+                ]
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "version",
+            "instanceName",
+            "request",
+            "run",
+            "diagnostics"
+          ]
+        }
+      ]
+    }
+  },
+  "$ref": "#/$defs/Response"
+}

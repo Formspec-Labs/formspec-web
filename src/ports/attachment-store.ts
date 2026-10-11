@@ -17,6 +17,8 @@
  */
 
 export interface AttachmentUploadMetadata {
+  /** Actual authored field path; task adapters resolve it through their selected path map. */
+  readonly fieldPath?: string;
   /** Respondent-chosen filename, surfaced in receipts and UI. */
   readonly filename: string;
   /** Browser-reported MIME type; adopter MAY override server-side. */
@@ -84,7 +86,7 @@ export interface AttachmentStore {
    * adapters validate its reference and retained bytes before returning a Blob.
    * The caller owns preview URLs and discards results from obsolete sessions.
    */
-  read?(descriptor: unknown, options?: { signal?: AbortSignal }): Promise<Blob>;
+  read?(descriptor: unknown, options?: { signal?: AbortSignal; fieldPath?: string }): Promise<Blob>;
   /**
    * Optional: lifecycle hook the renderer calls when the respondent removes
    * an AttachmentRef from the field value before submit. Adopters who back

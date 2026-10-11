@@ -1,7 +1,14 @@
+import { initFormspecEngine, initFormspecEngineTools } from '@formspec-org/engine/init-formspec-engine';
+import type { ScreenerHydration } from '../ports/screener-hydration.ts';
+import type { SavedCandidateHydration } from '../ports/evaluation-hydration.ts';
+import type { HttpResponseSigningPolicy } from '../adapters/http/response-signing.ts';
+import type { IdentityClaim } from '../ports/identity-provider.ts';
 import canonicalize from 'canonicalize';
+import { assertTaskCompletionRequest } from '../shared/task-response-completion.ts';
+import { createTaskComposition } from './task.ts';
 import { targetDefinitionMatches } from '@formspec-org/types';
 import { canonicalResponseHandoffBytes as handoffBytes } from '@formspec-org/integrity-canonical';
-import { resolveAuthoredSigningContent, resolveResponseAction } from '@formspec-org/engine/render';
+import { resolveServiceRequest, resolveAuthoredSigningContent, resolveResponseAction } from '@formspec-org/engine/render';
 import { createSemanticControlRegistry } from '@formspec-org/react';
 import { dereferenceBundleExport, flattenRegistryEntries, type BundleExport } from '@formspec-org/surface';
 import { SIGNING_CEREMONY_WIDGET_SHAPE } from '@formspec-org/surface-react';
@@ -69,6 +76,12 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
       if (selected.status !== 'ready') throw new Error(`Native form Component is unavailable: ${selected.reason}`);
     }
   }
+  const needsInitialDataMapping = resolved.surfaces.some(surface => surface.routes.some(route => (route.slots ?? []).some(slot =>
+    slot.slotType === 'definition-form' && typeof record(record(slot.binding)?.initialData)?.mappingRef === 'string')));
+  if (needsInitialDataMapping) {
+    await initFormspecEngine();
+    await initFormspecEngineTools();
+  }
   const localeFor = (locale: string) => {
     const matches = localeDocuments.filter(document => document.locale === locale
       && document.target.kind === 'definition' && targetDefinitionMatches(document.target, definition));
@@ -120,6 +133,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     return publication.form_id;
   };
   const resumeMetadata = createBrowserDraftResumeMetadataStore({ ...base,
+    ...(options.nativeTask ? { taskContext: { taskId: options.nativeTask.launch.taskId,
+      expectedTaskRevision: options.nativeTask.launch.expectedTaskRevision } } : {}),
     ...(options.identityBinding ? { identityContext: { issuer: config.identity.oidc!.issuer, clientId: config.identity.oidc!.clientId } } : {}) });
   const anonymousSessions = options.identityBinding ? undefined : new AnonymousSessionBridge({ ...base, resumeMetadata, formIdResolver,
     validateFormContext: async (url, version) => { formIdResolver(url, version); } });
@@ -140,23 +155,66 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
       || selected.definitionHash !== publication.definition_hash || !nativePins.selectionKey.trim()
       || nativePins.selectionHash !== await computeJcsSha256Digest(nativePins.selection)) throw new Error('Native Screener publication pins mismatch');
   }
-  const cohort = createHttpAdapterCohort({ ...base, accessToken: ownedAccessToken, resumeMetadata, formIdResolver, anonymousSessions,
+  const taskPins = options.nativeTask;
+  if (taskPins) {
+    const submit = roles.submit;
+    if (!submit?.requestRef) throw new Error('Native task submit request is unavailable');
+    assertTaskCompletionRequest(taskPins.completion, resolveServiceRequest(submit.document['x-formspec-runtime'], submit.requestRef));
+  }
+  const session = options.identityBinding?.browserAuthSession;
+  let authState: BrowserAuthSessionState | null = null;
+  let authSequence = 0; let authLifetime = new AbortController();
+  const releaseAuth = nativePins || taskPins ? session!.subscribe(next => {
+    authSequence++; authLifetime.abort(); authLifetime = new AbortController(); authState = next ? structuredClone(next) : null;
+    host?.retireCandidateAuthority?.();
+  }) : undefined;
+  let taskCandidate: SavedCandidateHydration | undefined;
+  let selectedScreenerHydration: ScreenerHydration | undefined;
+  try {
+    if (nativePins || taskPins) {
+      const sequence = authSequence;
+      const initial = await session!.getSession();
+      if (sequence === authSequence) authState = initial ? structuredClone(initial) : null;
+    }
+    const taskCurrent = () => {
+      authLifetime.signal.throwIfAborted();
+      const state = authState;
+      if (!state || state.issuer !== config.identity.oidc!.issuer || !Number.isFinite(Date.parse(state.expiresAt))
+        || Date.parse(state.expiresAt) <= Date.now() || state.subject !== taskPins!.hydration.identity.subject
+        || state.issuer !== taskPins!.hydration.identity.issuer || config.identity.oidc!.clientId !== taskPins!.hydration.identity.clientId)
+        throw new Error('Native task browser session retired');
+    };
+    const signingPolicy = { keyId: pins.keyId, validateResponse: validateCanonicalFormResponse,
+      validateContent, signingProfileDigest: responseSigningDigest,
+      ...(nativePins || taskPins ? { preSignCandidate: async (input: Parameters<NonNullable<HttpResponseSigningPolicy['preSignCandidate']>>[0]) => {
+        if (!host?.preSignCandidate) throw new Error('Native candidate host unavailable');
+        return host.preSignCandidate(input);
+      } } : {}) };
+    if (taskPins && (taskPins.launch.formVersionId !== publication.form_version_id
+      || taskPins.hydration.selection.formId !== publication.form_id || taskPins.hydration.selection.definitionHash !== publication.definition_hash
+      || taskPins.hydration.selection.formVersionId !== publication.form_version_id)) throw new Error('Native task publication pins mismatch');
+    const taskCohort = taskPins ? await createTaskComposition({ source: { ...base, accessToken: ownedAccessToken },
+      wos: taskPins.wos, launch: taskPins.launch, completion: taskPins.completion,
+      draftKey: { formUrl: definition.url, formVersion: definition.version, subjectRef: taskPins.subjectRef },
+      formId: publication.form_id, definition, locales: localeDocuments, signing: signingPolicy, resumeMetadata,
+      assertCurrentSource: taskCurrent, assertCurrentWos: taskPins.assertCurrentWos,
+      launchOperationId: taskPins.launchOperationId, taskHydration: taskPins.hydration },
+      { signal: authLifetime.signal, assertCurrent: taskCurrent }) : undefined;
+    taskCandidate = taskCohort?.candidateHydration;
+  const cohort = taskCohort ?? createHttpAdapterCohort({ ...base, accessToken: ownedAccessToken, resumeMetadata, formIdResolver, anonymousSessions,
     applicationLifecycle: lifecycleCapabilities ? { capabilities: lifecycleCapabilities, action: roles.startApplication as AdmittedResponseAction } : undefined,
     qualifiedDraftState: { definition, formVersionId: publication.form_version_id, localeDocuments },
-    responseSigning: { keyId: pins.keyId, validateResponse: validateCanonicalFormResponse,
-      validateContent, signingProfileDigest: responseSigningDigest,
-      ...(nativePins ? { preSignCandidate: async input => {
-        if (!host?.preSignCandidate) throw new Error('Native Screener host unavailable');
-        return host.preSignCandidate(input);
-      } } : {}) } });
-  let owner: { key: DraftKey; actor: string } | undefined;
+    responseSigning: signingPolicy });
+  let owner: { key: DraftKey; actor: string } | undefined = taskCohort ? { key: { formUrl: definition.url, formVersion: definition.version, subjectRef: taskPins!.subjectRef }, actor: taskPins!.subjectRef } : undefined;
   const remember = <T extends SavedResponseDraft>(result: T): T => {
     owner = { key: structuredClone(result.draftKey), actor: result.actor.id }; return result;
   };
+  const signingPort: ResponseSigning = cohort.responseSigning!;
   const signing: ResponseSigning = {
     saveDraft: input => cohort.responseSigning!.saveDraft(input).then(remember),
     prepare: input => diagnoseNativePrepare(() => cohort.responseSigning!.prepare(input)).then(remember),
     sign: input => cohort.responseSigning!.sign(input).then(remember),
+    ...(signingPort.restorePending ? { restorePending: (input: Parameters<NonNullable<ResponseSigning['restorePending']>>[0], operationId: string) => signingPort.restorePending!(input, operationId).then(result => result.kind === 'signed' ? { ...result, signed: remember(result.signed) } : { ...result, preparation: remember(result.preparation) }) } : {}),
   };
   const draftStore = { ...cohort.draftStore, readState: async (key: DraftKey) => {
     const state = await cohort.draftStore.readState!(key);
@@ -165,6 +223,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   } };
   const attachmentStore = new HttpAttachmentStore({ ...base, formId: publication.form_id,
     maxUploadBytes: adapter!.attachments?.maxUploadBytes,
+    ...(taskCohort ? { taskBinding: { draftId: taskCohort.launched.draft_id, fieldPaths: taskPins!.attachmentFieldPaths,
+      lifetime: { signal: authLifetime.signal, assertCurrent: taskCurrent } } } : {}),
     accessToken: ownedAccessToken
       ?? (async () => (await anonymousSessions!.sessionForForm(definition.url, definition.version)).sessionToken) });
   const composition = freezeComposition({ ...deferred, nativePackageRespondent: undefined, definitionSource: source,
@@ -174,23 +234,13 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   if (registryEntries.diagnostics.length) throw new Error('Native Registry entries are ambiguous');
   const semantics = createSemanticControlRegistry();
   const definitionDigest = await computeJcsSha256Digest(definition);
-  const session = options.identityBinding?.browserAuthSession;
-  let authState: BrowserAuthSessionState | null = null;
-  let authSequence = 0; let authLifetime = new AbortController();
-  const releaseAuth = nativePins ? session!.subscribe(next => {
-    authSequence++; authLifetime.abort(); authLifetime = new AbortController(); authState = next ? structuredClone(next) : null;
-    host?.retireScreenerAuthority?.();
-  }) : undefined;
-  try {
-    if (nativePins) {
-      const sequence = authSequence;
-      const initial = await session!.getSession();
-      if (sequence === authSequence) authState = initial ? structuredClone(initial) : null;
-    }
-    host = createNativePackageSigningHost({
+    host = createNativePackageSigningHost({ candidateHydration: taskCohort?.candidateHydration, initialDataSources: options.initialDataSources, hostEvents: options.hostEvents, screenerEntryGate: nativePins?.entryGate,
       ...(nativePins ? { nativeScreener: { selectionKey: nativePins.selectionKey,
         retention: new HttpScreenerRetention({ ...base, accessToken: ownedAccessToken, ...nativePins }),
-        hydration: new HttpScreenerHydration({ ...base, accessToken: ownedAccessToken, ...nativePins, definition }),
+        hydration: selectedScreenerHydration = nativePins.hydrationFactory
+          ? nativePins.hydrationFactory({ source: { ...base, accessToken: ownedAccessToken }, definition, publication,
+            selection: nativePins.selection, selectionHash: nativePins.selectionHash, compositionRegistrationHash: nativePins.compositionRegistrationHash })
+          : new HttpScreenerHydration({ ...base, accessToken: ownedAccessToken, ...nativePins, definition }),
         context: () => {
           const state = authState; const sequence = authSequence; const lifetime = authLifetime;
           const assertCurrent = () => { lifetime.signal.throwIfAborted();
@@ -198,19 +248,19 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
               || Date.parse(state.expiresAt) <= Date.now() || !Number.isFinite(Date.parse(state.expiresAt))) throw new Error('Native Screener browser session retired'); };
           assertCurrent();
           return { identity: { issuer: state!.issuer, subject: state!.subject, clientId: config.identity.oidc!.clientId }, signal: lifetime.signal, assertCurrent };
-        } } } : {}), signingScope: signingScope?.identity, bundle, definition, moduleId: pins.module.id, modules: modulePins, staticAssets: pins.staticAssets, registryEntries: registryEntries.entries,
+        } } } : {}), signingScope: signingScope?.identity, bundle, definition, moduleId: pins.module.id, modules: modulePins, structuredPanelWidgets: pins.structuredPanelWidgets, staticAssets: pins.staticAssets, registryEntries: registryEntries.entries,
       locales: localeDocuments, initialLocale: pins.initialLocale,
       clearDraftAccess: async key => { formIdResolver(key.formUrl, key.formVersion); await cohort.draftStore.delete(key); owner = undefined; }, publication: { formId: publication.form_id, formVersionId: publication.form_version_id },
       applicationReadiness: pins.applicationLifecycle,
-      controller: { applicationLifecycle: cohort.applicationLifecycle, roles, signing, submitTransport: cohort.submitTransport, validateResponse: validateCanonicalFormResponse, hashResponse: handoffHash },
-      buildHandoff: (response, report, context) => buildIntakeHandoff({ definition, response, validationReport: report,
-        draftKey: context.draftKey, claim: context.claim, idempotencyKey: generateIdempotencyKey() }),
+      controller: { ...(taskCohort ? { completion: taskCohort.completion } : {}), applicationLifecycle: cohort.applicationLifecycle, roles, signing, submitTransport: cohort.submitTransport, validateResponse: validateCanonicalFormResponse, hashResponse: handoffHash },
+      ...(!taskCohort ? { buildHandoff: (response: Parameters<typeof buildIntakeHandoff>[0]['response'], report: Parameters<typeof buildIntakeHandoff>[0]['validationReport'], context: { draftKey: DraftKey; claim: IdentityClaim | null }) => buildIntakeHandoff({ definition, response, validationReport: report,
+        draftKey: context.draftKey, claim: context.claim, idempotencyKey: generateIdempotencyKey() }) } : {}),
       semanticScope: (responseId, renderInstance) => ({ registry: semantics, renderInstanceId: `native:${renderInstance}`,
         definitionArtifact: { artifactRef: definition.url, artifactDigest: definitionDigest },
         responseActionsArtifact: { artifactRef: roles.saveInitial.artifactRef, artifactDigest: roles.saveInitial.artifactDigest }, responseId }),
       readiness: pins.readiness, bindings: pins.bindings, actionLabels, signingContext,
       validatePayload: createSigningDataSourcePayloadValidator(), attachmentStore,
-      assertOwner: (key, actor) => { if (!owner || !same(owner.key, key) || owner.actor !== actor) throw new Error('Native private draft owner is unavailable or differs'); },
+      assertOwner: (key, actor) => { if (taskPins) taskCurrent(); if (!owner || !same(owner.key, key) || owner.actor !== actor) throw new Error('Native private draft owner is unavailable or differs'); },
       invalidateAuthority: (_reason, key) => { if (key) cohort.invalidateResponseSigningScope!(key); },
       reviewResponseDigest: handoffHash, canonicalResponseHandoffBytes: handoffBytes,
     });
@@ -237,6 +287,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
           if (!claim) return 'absent';
         }
         const draftKey = { formUrl: definition.url, formVersion: definition.version, subjectRef: claim?.subjectRef };
+        if (taskPins && claim?.subjectRef !== taskPins.subjectRef) throw new Error('Native task recovery owner mismatch');
         const state = await draftStore.readState(draftKey);
         if (state?.kind === 'submitted') await admittedHost.configureSubmittedRuntime({ definition, draftKey, claim, state });
         return state?.kind ?? 'absent';
@@ -244,7 +295,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   } catch (error) {
     releaseAuth?.();
     authLifetime.abort();
-    host?.dispose();
+    if (host) host.dispose(); else { taskCandidate?.dispose(); selectedScreenerHydration?.dispose?.(); }
     throw error;
   }
 }

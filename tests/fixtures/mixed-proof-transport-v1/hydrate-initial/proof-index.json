@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "references": {
+    "native": {},
+    "images": {},
+    "initialContext": {
+      "alphaContext": {
+        "object_artifact_id": "context-observation-6f518ddc95982ae137e711b1de64e17f56e83bfcac6d670415cf4f9d504d1e7f",
+        "aggregate_type": "initial_context",
+        "aggregate_id": "sha256:d552fe61d59ac8eb1a4e81f45e006c1cd1d4f7045e18050bf115986bb0bd9c19",
+        "object_kind": "immutable:initial-context-observation:v1",
+        "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-6f518ddc95982ae137e711b1de64e17f56e83bfcac6d670415cf4f9d504d1e7f",
+        "content_type": "application/json",
+        "checksum_sha256": "sha256:88fb55fdb80a95ef74df46a9148d2565898a81500181a3df09a4829dd5ded9fd",
+        "byte_length": 4495
+      },
+      "betaContext": {
+        "object_artifact_id": "context-observation-6f518ddc95982ae137e711b1de64e17f56e83bfcac6d670415cf4f9d504d1e7f",
+        "aggregate_type": "initial_context",
+        "aggregate_id": "sha256:d552fe61d59ac8eb1a4e81f45e006c1cd1d4f7045e18050bf115986bb0bd9c19",
+        "object_kind": "immutable:initial-context-observation:v1",
+        "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-6f518ddc95982ae137e711b1de64e17f56e83bfcac6d670415cf4f9d504d1e7f",
+        "content_type": "application/json",
+        "checksum_sha256": "sha256:88fb55fdb80a95ef74df46a9148d2565898a81500181a3df09a4829dd5ded9fd",
+        "byte_length": 4495
+      },
+      "gammaContext": {
+        "object_artifact_id": "context-observation-6f518ddc95982ae137e711b1de64e17f56e83bfcac6d670415cf4f9d504d1e7f",
+        "aggregate_type": "initial_context",
+        "aggregate_id": "sha256:d552fe61d59ac8eb1a4e81f45e006c1cd1d4f7045e18050bf115986bb0bd9c19",
+        "object_kind": "immutable:initial-context-observation:v1",
+        "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-6f518ddc95982ae137e711b1de64e17f56e83bfcac6d670415cf4f9d504d1e7f",
+        "content_type": "application/json",
+        "checksum_sha256": "sha256:88fb55fdb80a95ef74df46a9148d2565898a81500181a3df09a4829dd5ded9fd",
+        "byte_length": 4495
+      }
+    },
+    "taskContext": {}
+  },
+  "buffers": [
+    {
+      "key": "sha256:16ee46c53706d4fae8f43a96f717f081575bb2b114f35d91706850cc69a91a03",
+      "bytes": 0
+    }
+  ]
+}

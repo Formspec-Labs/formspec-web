@@ -1,4 +1,6 @@
-import type { NativeScreenerCompositionPins } from './native-package.ts';
+import type { NativeHostEventCapability } from '../shared/native-host-events.ts';
+import type { NativeInitialDataSourceFactory } from '../shared/native-package-signing-host.ts';
+import type { NativeScreenerCompositionPins, NativeTaskCompositionPins } from './native-package.ts';
 import type { SurfaceScreenerCompletionPolicy } from '@formspec-org/surface-react';
 import { OidcBrowserAuthSession } from '../adapters/identity/oidc-browser-session.ts';
 import type { BrowserAuthSession } from '../ports/browser-auth-session.ts';
@@ -34,9 +36,9 @@ import {
   TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
-import { MagicLinkAdapter } from '../adapters/identity/magic-link.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
-import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
+import { unavailableNotificationDelivery } from '../adapters/unavailable/notification-delivery.ts';
+import type { NotificationDelivery } from '../ports/notification-delivery.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
 import { unavailableLifecycleActionClient } from '../adapters/unavailable/lifecycle-action-client.ts';
@@ -57,18 +59,16 @@ import {
   type InstanceCapabilities,
   type OrgRuntimePolicy,
 } from '../policy/index.ts';
-import { demoSampleFormUrl } from '../demo/index.ts';
 import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
-import { createDemoComposition } from './demo.ts';
+import { createUnavailableComposition } from './unavailable.ts';
 import type { Composition } from './types.ts';
 import type { SurfaceRouteState } from '../ports/surface-router.ts';
 
 /**
- * Default composition for the OSS reference deployment. Without an explicit
- * FORMSPEC server URL it stays in demo mode; production mode is selected by
- * runtime env and wires the M4 HTTP reference adapters.
+ * Reference HTTP composition. Form routes require an explicit server and
+ * initial Definition URL. Application-owned sample wiring stays external.
  *
  * Narrowed-route compositions (`/status` per FW-0068, `/obligations` per
  * FW-0055, `/documents` per FW-0056) live in `./route-narrowing.ts` and are
@@ -77,6 +77,7 @@ import type { SurfaceRouteState } from '../ports/surface-router.ts';
  */
 export interface DefaultCompositionOptions {
   initialDefinitionUrl?: string;
+  notificationDelivery?: NotificationDelivery;
   packageUrl?: string;
   selectedResponseId?: string;
   surfaceRoute?: SurfaceRouteState;
@@ -85,6 +86,9 @@ export interface DefaultCompositionOptions {
   /** Explicit trusted host policy for native package Screener completion. */
   screenerCompletion?: SurfaceScreenerCompletionPolicy;
   nativeScreener?: NativeScreenerCompositionPins;
+  nativeTask?: NativeTaskCompositionPins;
+  initialDataSources?: NativeInitialDataSourceFactory;
+  hostEvents?: readonly NativeHostEventCapability[];
 }
 
 export function createDefaultComposition(
@@ -93,6 +97,7 @@ export function createDefaultComposition(
 ): Composition {
   const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
   const nativeSigning = readNativePackageSigningConfig(config.referenceAdapters?.formspecStack);
+  if (options.nativeTask && !nativeSigning) throw new Error('Native task correction requires explicit native signing configuration');
   if (nativeSigning) {
     if (respondentSurfaceDeploymentIsConfigured(config)) throw new Error('Native package and signed Surface deployments cannot both be active');
     if (!serverUrl || !options.packageUrl) throw new Error('Native package signing requires an explicit package URL and server');
@@ -100,23 +105,23 @@ export function createDefaultComposition(
     const identityBinding = config.ports.identityProvider === 'oidc'
       ? options.identityBinding ?? (config.identity.oidc ? createOidcIdentityBinding(config.identity.oidc) : undefined)
       : undefined;
-    return createNativePackageComposition(config, { signing: nativeSigning, packageUrl: options.packageUrl, identityBinding, screenerCompletion: options.screenerCompletion, nativeScreener: options.nativeScreener,
-      initialDefinitionUrl: options.initialDefinitionUrl ?? productionInitialDefinitionUrl(serverUrl) });
+    return createNativePackageComposition(config, { signing: nativeSigning, packageUrl: options.packageUrl, identityBinding, screenerCompletion: options.screenerCompletion, nativeScreener: options.nativeScreener, nativeTask: options.nativeTask, initialDataSources: options.initialDataSources, hostEvents: options.hostEvents,
+      initialDefinitionUrl: requiredInitialDefinitionUrl(options.initialDefinitionUrl) });
   }
   if (!serverUrl) {
-    return createDemoComposition();
+    throw new Error('Reference composition requires an explicit formspecServerUrl');
   }
   assertReferenceHttpDataPorts(config);
   if (config.identity.mode === 'oidc-required' && config.ports.identityProvider !== 'oidc') {
     throw new Error('OIDC-required identity policy requires the OIDC provider');
   }
 
-  const notificationDelivery = stubNotificationDelivery();
+  const notificationDelivery = options.notificationDelivery ?? unavailableNotificationDelivery();
   const baseHttpConfig = {
     baseUrl: serverUrl,
     tenantBinding: config.tenantBinding,
   };
-  const initialDefinitionUrl = options.initialDefinitionUrl ?? productionInitialDefinitionUrl(serverUrl);
+  const initialDefinitionUrl = requiredInitialDefinitionUrl(options.initialDefinitionUrl);
   const packageSource = options.packageUrl ? new PinnedPackageDefinitionSource(options.packageUrl) : undefined;
   const resumeMetadata = options.packageUrl
     ? createBrowserDraftResumeMetadataStore(baseHttpConfig)
@@ -174,7 +179,7 @@ export function createDefaultComposition(
   if (options.packageUrl) {
     // Local authored-package preview uses shared host controls with real server
     // attachment custody, drafts, and submission.
-    const preview = createDemoComposition();
+    const preview = createUnavailableComposition(initialDefinitionUrl);
     const source = packageSource!;
     return freezeComposition({
       ...preview,
@@ -368,18 +373,19 @@ export function createDefaultComposition(
  */
 export function buildRealIdentityProvider(
   config: FormspecWebConfig,
-  notificationDelivery: ReturnType<typeof stubNotificationDelivery>,
+  notificationDelivery: NotificationDelivery,
   serverUrl: string,
+  initialDefinitionUrl?: string,
 ): IdentityBinding {
   const baseHttpConfig = {
     baseUrl: serverUrl,
     tenantBinding: config.tenantBinding,
   };
-  const initialDefinitionUrl = productionInitialDefinitionUrl(serverUrl);
+  if (config.ports.identityProvider === 'anonymous' && !initialDefinitionUrl) throw new Error('Anonymous identity requires an explicit initialDefinitionUrl');
   const anonymousSessions = new AnonymousSessionBridge(baseHttpConfig);
   return identityProviderFor(config, notificationDelivery, {
     anonymousSessions,
-    initialDefinitionUrl,
+    initialDefinitionUrl: initialDefinitionUrl ?? '',
   });
 }
 
@@ -401,7 +407,7 @@ export interface IdentityBinding {
 
 function identityProviderFor(
   config: FormspecWebConfig,
-  notificationDelivery: ReturnType<typeof stubNotificationDelivery>,
+  _notificationDelivery: NotificationDelivery,
   productionContext?: {
     anonymousSessions: AnonymousSessionBridge;
     initialDefinitionUrl: string;
@@ -426,27 +432,6 @@ function identityProviderFor(
     return createOidcIdentityBinding(config.identity.oidc);
   }
 
-  const magicLink =
-    config.identity.mode === 'anonymous-allowed' ? config.identity.magicLink : undefined;
-  if (config.ports.identityProvider === 'magic-link' && magicLink) {
-    return {
-      provider: new MagicLinkAdapter({
-        notificationDelivery,
-        callbackUrl: magicLink.callbackPath,
-        to: 'respondent@example.test',
-        minAssurance: magicLink.minAssurance,
-        exchange: async () => ({
-          provider: 'magic-link',
-          adapter: 'magic-link@0',
-          subjectRef: 'magic-link:pending',
-          credentialType: 'provider-assertion',
-          subjectBinding: 'respondent',
-          assuranceLevel: magicLink.minAssurance,
-          privacyTier: 'pseudonymous',
-        }),
-      }),
-    };
-  }
 
   throw new Error(`Selected identity provider is not configured: ${config.ports.identityProvider}`);
 }
@@ -463,10 +448,7 @@ export function createConfiguredBrowserAuthSession(config: OidcClientConfig): Br
   return new OidcBrowserAuthSession(config);
 }
 
-function productionInitialDefinitionUrl(serverUrl: string): string {
-  return `${serverUrl.replace(/\/+$/, '')}/runtime/forms/${demoFormId()}`;
-}
-
-function demoFormId(): string {
-  return demoSampleFormUrl.split('/').filter(Boolean).at(-1) ?? 'demo-intake';
+function requiredInitialDefinitionUrl(value: string | undefined): string {
+  if (typeof value !== 'string' || !value.trim()) throw new Error('Form composition requires an explicit initialDefinitionUrl');
+  return value;
 }

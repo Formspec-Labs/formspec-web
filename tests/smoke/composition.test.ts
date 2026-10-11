@@ -1,8 +1,7 @@
 import type { BrowserAuthSession } from '../../src/ports/browser-auth-session.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { createDefaultComposition as buildDefaultComposition } from '../../src/composition/default.ts';
-import { createDemoComposition } from '../../src/composition/demo.ts';
 import {
   createRouteNarrowedComposition,
   type RouteNarrowing,
@@ -14,13 +13,13 @@ import { applyBrandTheme, getUpstreamTokenRegistry } from '../../src/theme/theme
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { OidcAdapter, type OidcClientDriver } from '../../src/adapters/identity/oidc.ts';
 import {
+  sampleFormDefinition,
   sampleFormResponse,
   sampleIntakeHandoff,
 } from '../../src/adapter-conformance/fixtures.ts';
 import { buildIntakeHandoff } from '../../src/app/respondent-flow.ts';
 import type { PortCompositionConfig } from '../../src/config/types.ts';
 import { departmentAppProfile, publicPortalProfile } from '../../src/profiles/profiles.ts';
-import { demoSampleForm } from '../../src/demo/index.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
 
 describe('composition root smoke', () => {
@@ -30,8 +29,8 @@ describe('composition root smoke', () => {
     vi.unstubAllGlobals();
   });
 
-  it('createStubComposition wires all current ports', () => {
-    const c = createStubComposition();
+  it('createTestComposition wires all current ports', () => {
+    const c = createTestComposition({ definition: testDefinition });
     expect(c.definitionSource).toBeDefined();
     expect(c.draftStore).toBeDefined();
     expect(c.submitTransport).toBeDefined();
@@ -41,23 +40,8 @@ describe('composition root smoke', () => {
     expect(c.statusReader).toBeDefined();
   });
 
-  it('createDemoComposition wires stubs and registers the sample form fixture', async () => {
-    const c = createDemoComposition();
-    const definition = await c.definitionSource.getDefinition(demoSampleForm.url, demoSampleForm.version);
-    const localeDocuments = await c.definitionSource.getLocaleDocuments?.(
-      demoSampleForm.url,
-      demoSampleForm.version,
-    );
-    expect(c.mode).toBe('demo');
-    expect(definition.title).toBe('Demo Benefits Intake');
-    expect(localeDocuments?.map((document) => document.locale)).toEqual(['en', 'es']);
-  });
-
-  it('createDefaultComposition falls back to demo mode without server env', () => {
-    const c = createDefaultComposition();
-    expect(c.definitionSource).toBeDefined();
-    expect(c.identityProvider).toBeDefined();
-    expect(c.mode).toBe('demo');
+  it('refuses missing service selection', () => {
+    expect(() => createDefaultComposition()).toThrow('explicit formspecServerUrl');
   });
 
   it('createDefaultComposition wires HTTP adapters when server env is present', () => {
@@ -74,7 +58,7 @@ describe('composition root smoke', () => {
     });
     expect(c.mode).toBe('production');
     expect(c.initialDefinitionUrl).toBe(
-      'https://formspec-server.example.test/runtime/forms/demo-intake',
+      sampleFormDefinition.url,
     );
   });
 
@@ -146,8 +130,8 @@ describe('composition root smoke', () => {
     };
     const { fetch, requests } = recordingFetch((request) => {
       const path = new URL(request.url).pathname;
-      if (request.method === 'GET' && path === '/runtime/forms/demo-intake') {
-        return jsonResponse({ definition: demoSampleForm });
+      if (request.method === 'GET' && path === '/runtime/forms/conformance') {
+        return jsonResponse({ definition: sampleFormDefinition });
       }
       return jsonResponse({ title: `unexpected ${request.method} ${path}` }, 500);
     });
@@ -182,19 +166,19 @@ describe('composition root smoke', () => {
     let draftCounter = 0;
     const { fetch, requests } = recordingFetch((request) => {
       const path = new URL(request.url).pathname;
-      if (request.method === 'POST' && path === '/runtime/forms/demo-intake/sessions/anonymous') {
+      if (request.method === 'POST' && path === '/runtime/forms/conformance/sessions/anonymous') {
         return jsonResponse({
           session_id: 'server-session-id',
           session_token: 'anonymous-token-1',
           subject_ref: 'anon:server-subject',
-          form_id: 'demo-intake',
+          form_id: 'conformance',
           expires_at: '2099-01-01T00:00:00.000Z',
         });
       }
-      if (request.method === 'GET' && path === '/runtime/forms/demo-intake') {
-        return jsonResponse({ definition: demoSampleForm });
+      if (request.method === 'GET' && path === '/runtime/forms/conformance') {
+        return jsonResponse({ definition: sampleFormDefinition });
       }
-      if (request.method === 'POST' && path === '/runtime/forms/demo-intake/drafts') {
+      if (request.method === 'POST' && path === '/runtime/forms/conformance/drafts') {
         draftCounter += 1;
         return jsonResponse({ draft_id: `draft-http-${draftCounter}`, draft_version: 1 });
       }
@@ -264,9 +248,9 @@ describe('composition root smoke', () => {
 
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`))
       .toEqual([
-        'POST /runtime/forms/demo-intake/sessions/anonymous',
-        'GET /runtime/forms/demo-intake',
-        'POST /runtime/forms/demo-intake/drafts',
+        'POST /runtime/forms/conformance/sessions/anonymous',
+        'GET /runtime/forms/conformance',
+        'POST /runtime/forms/conformance/drafts',
         'PATCH /drafts/draft-http-1',
         'POST /drafts/draft-http-1/submit',
       ]);
@@ -289,7 +273,7 @@ describe('composition root smoke', () => {
   });
 
   it('SubmitTransport is idempotent on the same key', async () => {
-    const { submitTransport } = createStubComposition();
+    const { submitTransport } = createTestComposition({ definition: testDefinition });
     const key = generateIdempotencyKey();
     const first = await submitTransport.submit(sampleIntakeHandoff, key);
     const second = await submitTransport.submit(sampleIntakeHandoff, key);
@@ -297,7 +281,7 @@ describe('composition root smoke', () => {
   });
 
   it('SubmitTransport returns a new reference number on a new key', async () => {
-    const { submitTransport } = createStubComposition();
+    const { submitTransport } = createTestComposition({ definition: testDefinition });
     const first = await submitTransport.submit(sampleIntakeHandoff, generateIdempotencyKey());
     const second = await submitTransport.submit(sampleIntakeHandoff, generateIdempotencyKey());
     expect(second.referenceNumber).not.toBe(first.referenceNumber);
@@ -314,24 +298,8 @@ describe('composition root smoke', () => {
   ];
 
   describe.each(NARROWED_DESCRIPTORS)('createRouteNarrowedComposition smoke — %s', (_label, route) => {
-    it('stub mode wires shell-required slots; form-shaped ports noop', async () => {
-      const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      expect(c.mode).toBe('demo');
-      expect(c.statusReader).toBeDefined();
-      expect(c.respondentPlaceSource).toBeDefined();
-      expect(c.instanceCapabilities.status).toBeDefined();
-      expect(c.instanceCapabilities.respondentPlace).toBeDefined();
-      expect(c.instanceCapabilities.documentPresentation).toBeDefined();
-      expect(c.orgRuntimePolicy.features).toBeDefined();
-      expect(c.formRuntimePolicyExtractor).toBeDefined();
-      await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(/FW-0068/);
-      await expect(c.draftStore.load({ formUrl: 'https://x', subjectRef: 's' })).rejects.toThrow(/FW-0068/);
-      await expect(c.submitTransport.submit({} as never, 'k')).rejects.toThrow(/FW-0068/);
-    });
-
     it('production mode keeps unavailable sentinels on the gated keys', () => {
       const c = createRouteNarrowedComposition({
-        mode: 'default',
         config: productionFromDeptProfile(),
         route,
       });
@@ -341,31 +309,10 @@ describe('composition root smoke', () => {
       expect(c.instanceCapabilities.documentPresentation).toBe('unavailable');
     });
 
-    it('stub mode resolves the demo URN through statusReader regardless of descriptor', async () => {
-      const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      await expect(c.statusReader.readStatus({ resourceRef: 'urn:wos:case_demo_0001' }))
-        .resolves.toBeDefined();
-    });
-
-    it('stub mode populates the respondent-place snapshot regardless of descriptor (FW-0068 Finding 1 reshape)', async () => {
-      const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      const snapshot = await c.respondentPlaceSource.readPlace({});
-      expect(snapshot.obligations).toBeDefined();
-      expect(snapshot.documents).toBeDefined();
-    });
-
-    it('identity provider matches descriptor identityBound flag (stub mode)', async () => {
-      const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      if (route.identityBound) {
-        await expect(c.identityProvider.discover()).resolves.toBeDefined();
-      } else {
-        await expect(c.identityProvider.discover()).rejects.toThrow(/FW-0068/);
-      }
-    });
   });
 
   it('IdentityProvider subscribe receives initial null then update on authenticate', async () => {
-    const { identityProvider } = createStubComposition();
+    const { identityProvider } = createTestComposition({ definition: testDefinition });
     const received: Array<unknown> = [];
     const unsubscribe = identityProvider.subscribe((c) => received.push(c));
     expect(received).toEqual([null]);
@@ -422,7 +369,8 @@ function productionFromDeptProfile(): Parameters<typeof createDefaultComposition
 // Real factory instances own listeners and timers; release them between hosts.
 const authSessions: BrowserAuthSession[] = [];
 function createDefaultComposition(...args: Parameters<typeof buildDefaultComposition>) {
-  const composition = buildDefaultComposition(...args);
+  const [config, options] = args;
+  const composition = buildDefaultComposition(config, { initialDefinitionUrl: sampleFormDefinition.url, ...options });
   if (composition.browserAuthSession) authSessions.push(composition.browserAuthSession);
   return composition;
 }

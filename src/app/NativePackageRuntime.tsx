@@ -99,19 +99,25 @@ function NativePackageSignIn({ composition, config }: { composition: Composition
   </main>;
 }
 
+function admittedNativeNavigationPath(href: string): string {
+  const next = new URL(href, window.location.href);
+  if (next.origin !== window.location.origin || next.search || next.hash) {
+    throw new Error('Native package navigation requires an admitted local route');
+  }
+  return next.pathname;
+}
+
 function AdmittedNativePackageRuntime({ composition, config }: { composition: Composition; config: FormspecWebConfig }) {
   const [state, setState] = useState<{ owner?: Composition; boot?: NativePackageBoot; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; failed?: boolean; identityChanged?: boolean; failureStage?: string }>({});
   const lifetime = useMemo(() => ({ generation: 0 }), [composition]);
   const [location, navigate] = useBrowserLocation(window.location.pathname);
   const selection = useMemo(() => window.location.search, [composition]);
   const onNavigate = useCallback((href: string) => {
-    const next = new URL(href, window.location.href);
-    if (next.origin !== window.location.origin || next.search || next.hash) {
-      throw new Error('Native package navigation requires an admitted local route');
-    }
-    navigate(next.pathname);
-    window.history.replaceState(window.history.state, '', `${next.pathname}${selection}`);
+    const pathname = admittedNativeNavigationPath(href);
+    navigate(pathname);
+    window.history.replaceState(window.history.state, '', `${pathname}${selection}`);
   }, [navigate, selection]);
+  const resolveNavigationHref = useCallback((href: string) => `${admittedNativeNavigationPath(href)}${selection}`, [selection]);
 
   useEffect(() => {
     const generation = ++lifetime.generation;
@@ -166,7 +172,7 @@ function AdmittedNativePackageRuntime({ composition, config }: { composition: Co
     {screenerLocale => <NativePackageRespondentHost screenerCompletion={boot.screenerCompletion} screenerLocale={screenerLocale} host={boot.host} composition={boot.composition}
     config={config} componentDocument={boot.componentDocument} localeDocuments={boot.localeDocuments}
     componentRouteResolver={boot.componentRouteResolver}
-    location={location} onNavigate={onNavigate} />}
+    location={location} onNavigate={onNavigate} resolveNavigationHref={resolveNavigationHref} />}
   </NativePackageFrame>;
 }
 
@@ -250,9 +256,11 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
   const [presentation, setPresentation] = useState<{ lease: typeof screenerLease; code: string }>();
   const screenerLocale = presentation?.lease === screenerLease ? presentation?.code : screenerLease?.initial;
   const options = screenerLease?.options ?? definitionOptions;
+  // Keep the owned native preparation or signature mounted while it qualifies current sources.
+  const ownedNativeSigningState = state.nativeReadiness !== undefined && state.controller?.owned === true && !!(state.controller.prepared || state.controller.signed);
   const startupBlocked = !confirmation && !state.cleared && outcome !== 'submitted'
-    && !!startupRoute?.requiresHostState && !state.runtime;
-  const preparing = startupBlocked && (!!state.controller?.prepared || state.controller?.phase === 'prepare');
+    && (!!startupRoute?.requiresScreener || !!startupRoute?.requiresHostState && !state.runtime && !ownedNativeSigningState);
+  const preparing = startupBlocked && !startupRoute?.requiresScreener && (!!state.controller?.prepared || state.controller?.phase === 'prepare');
   const formTitle = locale?.strings['$form.title'] ?? state.formTitle;
   const entryLabel = startupRoute?.entryTitle ?? formTitle;
   const localeLocked = !!confirmation || !!state.controller?.signed || !!state.controller?.confirmation
@@ -296,11 +304,11 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
         {text(operation === 'clearing' ? 'receipt.clearing' : 'receipt.clear')}
       </button> : null}
     </div>
-    {!confirmation && !state.cleared && operation === 'idle' && state.runtime && state.controller?.signed
-      && ['signed', 'refused', 'failed'].includes(state.controller.phase)
+    {!confirmation && !state.cleared && operation === 'idle' && state.runtime && (state.controller?.signed || state.controller?.pendingSign)
+      && ['prepared', 'signed', 'refused', 'failed'].includes(state.controller.phase)
       && startupRoute?.signedReviewHref ? <button type="button" className="locale-button"
         onClick={() => onNavigate(startupRoute.signedReviewHref!)}>
-        {locale?.strings[`$module.${boot.host.moduleId}.response.reviewSigned`] ?? startupRoute.signedReviewTitle ?? 'Review signed response'}
+        {state.controller?.pendingSign ? 'Review previous signing attempt' : locale?.strings[`$module.${boot.host.moduleId}.response.reviewSigned`] ?? startupRoute.signedReviewTitle ?? 'Review signed response'}
       </button> : null}
     {boot.host.applicationCapabilities && !state.cleared && operation !== 'cleared'
       && (state.applicationLookup || state.application || !confirmation && state.editableSessionActive) ? <SessionStatus>

@@ -14,9 +14,9 @@ import { OidcAssuranceError } from '../../src/adapters/identity/oidc.ts';
 import type { BrowserAuthSessionState } from '../../src/ports/browser-auth-session.ts';
 import type { NativePackageBoot } from '../../src/composition/native-package.ts';
 import type { NativePackageSigningHost } from '../../src/shared/native-package-signing-host.ts';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
-const observed = vi.hoisted(() => ({ choose: vi.fn(), props: undefined as { location: string; onNavigate: (href: string) => void } | undefined }));
+const observed = vi.hoisted(() => ({ choose: vi.fn(), props: undefined as { location: string; onNavigate: (href: string) => void; resolveNavigationHref: (href: string) => string } | undefined }));
 vi.mock('../../src/app/NativePackageRespondentHost.tsx', () => ({ NativePackageRespondentHost: (props: typeof observed.props) => {
   observed.props = props; return <div data-testid="native-route">{props?.location}</div>;
 } }));
@@ -39,7 +39,7 @@ function fixture() {
     selectLocale: vi.fn(async (locale: string) => { state = { ...state, locale }; emit(); }),
     clearDraftAccess: vi.fn(async () => { state = { ...state, cleared: true }; emit(); }),
   } as unknown as NativePackageSigningHost;
-  const composition = createStubComposition();
+  const composition = createTestComposition({ definition: testDefinition });
   const boot: NativePackageBoot = { composition, host, componentDocument, componentRouteResolver: vi.fn(), localeDocuments, moduleId: host.moduleId, initialLocale: 'en' };
   const load = vi.fn(async () => boot);
   composition.nativePackageRespondent = { load };
@@ -335,10 +335,22 @@ describe('native package boot and scoped recovery', () => {
     render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
     await screen.findByRole('alert'); expect(screen.queryByTestId('native-route')).toBeNull(); expect(screen.queryByRole('link')).toBeNull();
   });
+  it('keeps bare link destinations when no package selection query exists', async () => {
+    const test = fixture(); render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByTestId('native-route');
+    expect(observed.props!.resolveNavigationHref('/review-sign')).toBe('/review-sign');
+    expect(window.location.pathname).toBe('/');
+  });
   it('keeps one package owner and selection query through authored navigation and browser history', async () => {
     window.history.replaceState(null, '', '/?form=public-form&package=%2Fpackage.json');
     const test = fixture(); render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
     await screen.findByTestId('native-route');
+    const initialHref = window.location.href;
+    expect(observed.props!.resolveNavigationHref('/review-sign')).toBe('/review-sign?form=public-form&package=%2Fpackage.json');
+    expect(window.location.href).toBe(initialHref);
+    for (const refused of ['https://outside.example/review-sign', '/review-sign?actor=untrusted', '/review-sign#untrusted']) {
+      expect(() => observed.props!.resolveNavigationHref(refused)).toThrow();
+    }
     act(() => observed.props!.onNavigate('/review-sign'));
     expect(window.location.pathname).toBe('/review-sign'); expect(window.location.search).toBe('?form=public-form&package=%2Fpackage.json');
     expect(screen.getByTestId('native-route').textContent).toBe('/review-sign');
@@ -360,7 +372,7 @@ describe('native package boot and scoped recovery', () => {
     expect(screen.getByRole('link', { name: 'Renovación de pasaporte' }).getAttribute('href')).toBe('/');
   });
   it('refuses a missing or failed acquisition without exposing internal errors', async () => {
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     const mounted = render(<NativePackageRuntime composition={composition} config={departmentAppProfile} />);
     await screen.findByRole('alert');
     const test = fixture(); test.composition.nativePackageRespondent = { load: async () => { throw new Error('private-token'); } };
@@ -406,4 +418,32 @@ describe('native package boot and scoped recovery', () => {
     expect(document.activeElement).toBe(heading); expect(test.host.clearDraftAccess).toHaveBeenCalledTimes(2);
   });
 
+});
+
+it('offers review of an owned pending act after fresh host facts without replaying Sign or saving answers', async () => {
+  const test = fixture();
+  test.host.getStartupRoute = () => ({ entryHref: '/', requiresHostState: false, signedReviewHref: '/review-previous' });
+  test.publish({ nativeReadiness: 'pending', runtime: undefined,
+    controller: { phase: 'prepared', owned: true, pendingSign: true, prepared: {} } as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']> });
+  render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+  await screen.findByTestId('native-route');
+  expect(screen.queryByRole('button', { name: 'Review previous signing attempt' })).toBeNull();
+  act(() => test.publish({ nativeReadiness: 'ready', runtime: {} as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['runtime']> }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Review previous signing attempt' }));
+  await waitFor(() => expect(observed.props?.location).toBe('/review-previous'));
+  expect(test.host.widgetExecutor).not.toHaveBeenCalled();
+});
+
+it.each(['prepared', 'signed'] as const)('keeps current owned native %s mounted through pending qualification', async phase => {
+  const test = fixture(); test.host.getStartupRoute = () => ({ entryHref: '/', requiresHostState: true });
+  test.publish({ nativeReadiness: 'pending', runtime: undefined,
+    controller: { phase, owned: true, [phase]: {} } as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']> });
+  render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+  await screen.findByTestId('native-route');
+  act(() => test.publish({ nativeReadiness: 'ready', runtime: {} as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['runtime']> }));
+  expect(screen.queryByTestId('native-route')).not.toBeNull();
+  act(() => test.publish({ nativeReadiness: 'pending', runtime: undefined }));
+  expect(screen.queryByTestId('native-route')).not.toBeNull();
+  act(() => test.publish({ controller: { phase, owned: false, [phase]: {} } as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']> }));
+  await waitFor(() => expect(screen.queryByTestId('native-route')).toBeNull());
 });

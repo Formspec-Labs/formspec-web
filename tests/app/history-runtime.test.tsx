@@ -9,7 +9,7 @@ import {
 } from '../../src/app/HistoryRuntime.tsx';
 import { EmptyFormRuntimePolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import { unavailableRespondentHistorySource } from '../../src/adapters/unavailable/respondent-history-source.ts';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import type { Composition } from '../../src/composition/types.ts';
 import type {
@@ -278,7 +278,7 @@ describe('HistoryRuntime (FW-0057 slice 1)', () => {
 
   describe('policy-disabled paths', () => {
     it('renders "Your history is not available" with the site-unavailable copy when instance-unavailable', async () => {
-      const composition = createStubComposition();
+      const composition = createTestComposition({ definition: testDefinition });
       const productionComposition: Composition = {
         ...composition,
         mode: 'production',
@@ -307,7 +307,7 @@ describe('HistoryRuntime (FW-0057 slice 1)', () => {
     });
 
     it('renders the sender-forbidden copy when org-forbidden', async () => {
-      const composition = createStubComposition();
+      const composition = createTestComposition({ definition: testDefinition });
       composition.orgRuntimePolicy = {
         features: {
           ...composition.orgRuntimePolicy.features,
@@ -353,7 +353,7 @@ describe('HistoryRuntime (FW-0057 slice 1)', () => {
 
   describe('adapter-error path', () => {
     it('renders a friendly error when readHistory throws', async () => {
-      const composition = createStubComposition();
+      const composition = createTestComposition({ definition: testDefinition });
       composition.respondentHistorySource = {
         readHistory: vi.fn(async () => {
           throw new Error('adapter blew up');
@@ -436,7 +436,7 @@ function snapshotWith(entries: HistoryEntry[]): HistorySnapshot {
 }
 
 function compositionWithEntries(entries: HistoryEntry[]): Composition {
-  const composition = createStubComposition();
+  const composition = createTestComposition({ definition: testDefinition });
   composition.respondentHistorySource = {
     readHistory: vi.fn(async () => snapshotWith(entries)),
   };
@@ -447,7 +447,7 @@ function productionCompositionWithIdentity(
   identityProvider: IdentityProvider,
   entries: HistoryEntry[],
 ): Composition {
-  const composition = createStubComposition();
+  const composition = createTestComposition({ definition: testDefinition });
   return {
     ...composition,
     mode: 'production',

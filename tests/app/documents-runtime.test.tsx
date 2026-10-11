@@ -14,7 +14,7 @@ import {
 } from './documents-view.test.tsx';
 import { EmptyFormRuntimePolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
 import { unavailableRespondentPlaceSource } from '../../src/adapters/unavailable/respondent-place-source.ts';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import type { Composition } from '../../src/composition/types.ts';
 import type {
@@ -326,7 +326,7 @@ describe('DocumentsRuntime (FW-0056 slice 1)', () => {
 
   describe('policy-disabled paths', () => {
     it('renders "Your documents are not available" with the site-unavailable copy when instance-unavailable', async () => {
-      const composition = createStubComposition();
+      const composition = createTestComposition({ definition: testDefinition });
       const productionComposition: Composition = {
         ...composition,
         mode: 'production',
@@ -357,7 +357,7 @@ describe('DocumentsRuntime (FW-0056 slice 1)', () => {
     });
 
     it('renders the issuer-forbidden copy when org-forbidden', async () => {
-      const composition = createStubComposition();
+      const composition = createTestComposition({ definition: testDefinition });
       composition.orgRuntimePolicy = {
         features: {
           respondentPlace: 'forbidden',
@@ -439,7 +439,7 @@ describe('DocumentsRuntime (FW-0056 slice 1)', () => {
 
   describe('adapter-error path', () => {
     it('renders a friendly error when readPlace throws', async () => {
-      const composition = createStubComposition();
+      const composition = createTestComposition({ definition: testDefinition });
       composition.respondentPlaceSource = {
         readPlace: vi.fn(async () => {
           throw new Error('adapter blew up');
@@ -552,7 +552,7 @@ function compositionWithDocuments(documents: RespondentDocumentRecord[]): Compos
 }
 
 function compositionWithSnapshot(snapshot: RespondentPlaceSnapshot): Composition {
-  const composition = createStubComposition();
+  const composition = createTestComposition({ definition: testDefinition });
   composition.respondentPlaceSource = {
     readPlace: vi.fn(async () => snapshot),
   };
@@ -563,7 +563,7 @@ function productionCompositionWithIdentity(
   identityProvider: IdentityProvider,
   documents: RespondentDocumentRecord[],
 ): Composition {
-  const composition = createStubComposition();
+  const composition = createTestComposition({ definition: testDefinition });
   return {
     ...composition,
     mode: 'production',

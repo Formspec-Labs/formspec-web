@@ -28,6 +28,7 @@ export {
   type AccessTokenProvider,
   type FetchLike,
   type HttpClientConfig,
+  type HttpJsonResponseWithBytes,
   type JsonRequestOptions,
 } from './http-client.ts';
 export {
@@ -74,3 +75,10 @@ export { decodeEvaluationHydrationWire } from './evaluation-hydration-wire.ts';
 export { HttpScreenerHydration, type HttpScreenerHydrationConfig } from './screener-hydration.ts';
 
 export { HttpTaskCompletion } from './task-completion.ts';
+
+export { HttpTaskDraftLaunch } from './task-draft-launch.ts';
+
+export { HttpTaskCandidateHydration, type HttpTaskCandidateHydrationConfig, type TaskHydrationReceiptVerifier } from './task-candidate-hydration.ts';
+
+export { HttpMixedProofReader } from './mixed-proof-reader.ts';
+export { decodeMixedHydration } from './mixed-proof-wire.ts';

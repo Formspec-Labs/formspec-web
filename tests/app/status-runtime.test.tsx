@@ -6,9 +6,9 @@ import {
   PER_CASE_HEADER,
 } from '../../src/app/StatusRuntime.tsx';
 import { EmptyFormRuntimePolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
-import { demoApplicantCaseDetail } from '../../src/demo/respondent-place.ts';
+import { demoApplicantCaseDetail, demoLifecycleActionSnapshot } from '../../src/demo/respondent-place.ts';
 import type { Composition } from '../../src/composition/types.ts';
 import type {
   ApplicantCaseDetail,
@@ -18,6 +18,21 @@ import type {
   LifecycleActionSnapshot,
 } from '../../src/ports/index.ts';
 import { unavailableLifecycleActionClient } from '../../src/adapters/unavailable/lifecycle-action-client.ts';
+
+import { stubStatusReader } from '../../src/adapters/stub/status-reader.ts';
+import { stubLifecycleActionClient } from '../../src/adapters/stub/lifecycle-action-client.ts';
+
+function createStatusComposition(): Composition {
+  return createTestComposition({ definition: testDefinition,
+    statusReader: stubStatusReader([['urn:wos:case_demo_0001', demoApplicantCaseDetail()]]),
+    lifecycleActionClient: stubLifecycleActionClient({ initialSnapshots: [demoLifecycleActionSnapshot()] }),
+    orgRuntimePolicy: { features: { status: 'allowed', recordLifecycle: 'allowed' }, recordLifecycle: {
+      correctable: { enabled: true, correctableFieldSet: ['/fullName', '/householdSize', '/address/street'], window: { state: 'open' }, requiresReason: true, requiresEvidence: false },
+      withdrawable: { enabled: true, window: { state: 'open' }, requiresReason: true, preDeterminationKernelMode: 'applicant-withdrawn', partyScope: 'any-party' },
+      disputable: { enabled: true, signerOnly: true, requiresReason: true },
+    } },
+  });
+}
 
 const DEMO_URN = 'urn:wos:case_demo_0001';
 
@@ -31,7 +46,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     let composition: Composition;
 
     beforeEach(() => {
-      composition = createStubComposition();
+      composition = createStatusComposition();
     });
 
     it('renders the page heading + 5-stage strip with current step marked', async () => {
@@ -191,7 +206,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
 
   describe('not-found path', () => {
     it('renders the unknown-URN copy when the adapter returns undefined', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       render(
         <StatusRuntime
           composition={composition}
@@ -213,7 +228,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
 
   describe('policy-disabled paths', () => {
     it('renders "Status not shared" with the issuer-forbidden copy when org-forbidden', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       composition.orgRuntimePolicy = {
         features: { respondentPlace: 'allowed', status: 'forbidden' },
       };
@@ -235,7 +250,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('renders "Status not shared" with the site-unavailable copy when instance-unavailable', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       (composition.instanceCapabilities as Record<string, unknown>).status = 'unavailable';
       composition.orgRuntimePolicy = {
         features: { respondentPlace: 'allowed', status: 'allowed' },
@@ -259,7 +274,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('renders lifecycle-unavailable copy without calling the lifecycle adapter when recordLifecycle is unavailable', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       (composition.instanceCapabilities as Record<string, unknown>).recordLifecycle = 'unavailable';
       composition.lifecycleActionClient = unavailableLifecycleActionClient();
       const spy = vi.spyOn(composition.lifecycleActionClient, 'readLifecycle');
@@ -281,7 +296,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
 
   describe('recordLifecycle per-act policy guards (FW-0038 remediation)', () => {
     it('disables an action when the resolved policy window is closed', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       composition.orgRuntimePolicy = {
         ...composition.orgRuntimePolicy,
         recordLifecycle: {
@@ -312,7 +327,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('requires evidence from resolved correctable policy before submitting', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       composition.orgRuntimePolicy = {
         ...composition.orgRuntimePolicy,
         recordLifecycle: {
@@ -380,7 +395,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('allows withdrawal without a reason when resolved policy does not require one', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       composition.orgRuntimePolicy = {
         ...composition.orgRuntimePolicy,
         recordLifecycle: {
@@ -433,7 +448,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('does not expose or submit post-determination review without withdrawal policy authorization', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       composition.orgRuntimePolicy = {
         ...composition.orgRuntimePolicy,
         recordLifecycle: {
@@ -487,7 +502,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('submits post-determination review only when withdrawal policy enables it', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       composition.orgRuntimePolicy = {
         ...composition.orgRuntimePolicy,
         recordLifecycle: {
@@ -542,7 +557,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('disables all-party withdrawal because approval orchestration is deferred', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       composition.orgRuntimePolicy = {
         ...composition.orgRuntimePolicy,
         recordLifecycle: {
@@ -577,7 +592,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('honors signer-only dispute availability from resolved policy and actor-scoped snapshot', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       composition.orgRuntimePolicy = {
         ...composition.orgRuntimePolicy,
         recordLifecycle: {
@@ -617,7 +632,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
 
   describe('identity discipline (arch-review F-9)', () => {
     it('NEVER calls identityProvider.authenticate() or .discover()', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       const authenticate = vi.spyOn(composition.identityProvider, 'authenticate');
       const discover = vi.spyOn(composition.identityProvider, 'discover');
       render(
@@ -639,7 +654,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
 
   describe('adapter-error path', () => {
     it('renders a friendly error when readStatus throws', async () => {
-      const composition = createStubComposition();
+      const composition = createStatusComposition();
       composition.statusReader = {
         readStatus: vi.fn(async () => {
           throw new Error('adapter blew up');
@@ -732,7 +747,7 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
   });
 
   it('lifecycle-changed → completed lights the Closed cell', async () => {
-    const composition = createStubComposition();
+    const composition = createStatusComposition();
     const detail: ApplicantCaseDetail = {
       ...demoApplicantCaseDetail(),
       statusTimeline: [
@@ -764,7 +779,7 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
   });
 
   it('lifecycle-changed → terminated lights the Closed cell', async () => {
-    const composition = createStubComposition();
+    const composition = createStatusComposition();
     const detail: ApplicantCaseDetail = {
       ...demoApplicantCaseDetail(),
       statusTimeline: [
@@ -796,7 +811,7 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
   });
 
   it('decision-reached lights the Issued cell', async () => {
-    const composition = createStubComposition();
+    const composition = createStatusComposition();
     const detail: ApplicantCaseDetail = {
       ...demoApplicantCaseDetail(),
       statusTimeline: [
@@ -838,7 +853,7 @@ describe('StatusRuntime lifecycle badge (independent arch-review N-2)', () => {
   });
 
   it('lifecycle-changed → suspended renders the Paused badge and keeps prior stage on the strip', async () => {
-    const composition = createStubComposition();
+    const composition = createStatusComposition();
     const detail: ApplicantCaseDetail = {
       ...demoApplicantCaseDetail(),
       statusTimeline: [
@@ -877,7 +892,7 @@ describe('StatusRuntime lifecycle badge (independent arch-review N-2)', () => {
   });
 
   it('lifecycle-changed → migrating renders the Updating badge and keeps prior stage on the strip', async () => {
-    const composition = createStubComposition();
+    const composition = createStatusComposition();
     const detail: ApplicantCaseDetail = {
       ...demoApplicantCaseDetail(),
       statusTimeline: [
@@ -922,7 +937,7 @@ describe('StatusRuntime lifecycle timeline rendering (FW-0038)', () => {
   });
 
   it('renders correction, withdrawal, dispute, and consent-revocation events behind the vocabulary firewall', async () => {
-    const composition = createStubComposition();
+    const composition = createStatusComposition();
     const lifecycle: LifecycleActionSnapshot = {
       caseUrn: DEMO_URN,
       actions: [
@@ -1021,7 +1036,7 @@ describe('StatusRuntime policy-error path (code-review F-2)', () => {
   });
 
   it('renders the policy-error page with the typed code when org policy is malformed', async () => {
-    const composition = createStubComposition();
+    const composition = createStatusComposition();
     // Inject an org policy with an unknown mode — validateInput throws
     // InvalidRuntimePolicyError before the status decision runs.
     composition.orgRuntimePolicy = {

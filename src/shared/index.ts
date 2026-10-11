@@ -20,3 +20,4 @@ export { createEvaluationInstanceResolver } from './evaluation-instance-resolver
 
 export { createIntakeResponseCompletion } from './intake-response-completion.ts';
 export { createTaskResponseCompletion } from './task-response-completion.ts';
+export { replaceNativeFormEngine, type NativeEngineReplacement, type NativeEngineReplacementInput } from './native-engine-replacement.ts';

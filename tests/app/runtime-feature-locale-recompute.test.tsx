@@ -1,6 +1,7 @@
+import type { LocaleDocument } from '@formspec-org/types';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import {
@@ -24,7 +25,13 @@ describe('locale change + runtime-feature recompute (ADR-0011 §Resolution)', ()
   });
 
   it('locale change with no locale-conditional features does NOT restart createReadyState', async () => {
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
+    const documents: LocaleDocument[] = ['en', 'es'].map(locale => ({
+      $formspecLocale: '2.0', url: `urn:test:locale:${locale}`, version: '1.0.0', locale,
+      target: { kind: 'definition', url: testDefinition.url },
+      strings: { '$form.title': locale === 'es' ? 'Formulario de prueba' : testDefinition.title },
+    }));
+    composition.definitionSource = { ...composition.definitionSource, getLocaleDocuments: async () => documents };
     const definitionSpy = vi.spyOn(composition.definitionSource, 'getDefinition');
 
     render(<RespondentRuntime composition={composition} config={departmentAppProfile} />);
@@ -32,14 +39,9 @@ describe('locale change + runtime-feature recompute (ADR-0011 §Resolution)', ()
       expect(definitionSpy).toHaveBeenCalledTimes(1);
     });
 
-    // Find any locale button that's not the currently-pressed one and click it.
-    const localeButtons = screen.queryAllByRole('button', { pressed: false });
-    const localeButton = localeButtons.find((btn) => btn.className.includes('locale-button'));
-    if (localeButton) {
-      await act(async () => {
-        localeButton.click();
-      });
-    }
+    const localeButton = await screen.findByRole('button', { name: /español/i });
+    await act(async () => { localeButton.click(); });
+    await waitFor(() => expect(localeButton.getAttribute('aria-pressed')).toBe('true'));
 
     // No restart → no second getDefinition call.
     expect(definitionSpy).toHaveBeenCalledTimes(1);
