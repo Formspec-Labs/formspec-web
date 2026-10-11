@@ -25,6 +25,7 @@ import { computeJcsSha256Digest } from '../adapters/http/response-action-ledger.
 import type { HydratedEvaluationCandidate, SavedCandidateHydration } from '../ports/evaluation-hydration.ts';
 import type { SavedResponseDraft } from '../ports/response-signing.ts';
 import { generateIdempotencyKey } from './idempotency-key.ts';
+import { createNativeQualificationReporter, type NativeQualificationStage } from '../composition/native-package-action-diagnostic.ts';
 
 export type NativeInitialDataSourceFactory = (context: {
   readonly bundle: ReturnType<typeof dereferenceBundleExport>;
@@ -261,6 +262,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const reads = new Set<AbortController>();
   const sourceRevisions = new Map<string, { value: string; revision: number }>();
   const engineFactory = policy.createEngine ?? createFormEngine;
+  const reportQualification = createNativeQualificationReporter();
   const screener = policy.nativeScreener ? createNativeScreenerCoordinator({ ...policy.nativeScreener, routeContext: policy.nativeScreener.context, onRouteChange: () => emit(), context: () => {
     const parent = policy.nativeScreener!.context(); const expectedAuthority = authorityGeneration;
     const expectedVisit = visitEpoch; const lease = rendererLease; const lifetime = nativeLifetime; const expectedSequence = qualificationSequence;
@@ -282,7 +284,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     resolve: target => app.routes.filter(handle => `surface:${handle.routeId}` === target && !handle.pathCollides && !routeHref(handle).refusal),
     accepted: target => !!screener?.routeAllowed(target, entrySlot.screener!.document) }) : undefined;
   const unavailableSources = () => ({ status: 'unavailable' as const, reason: 'native-facts-pending' });
-  function retireNative() {
+  function retireNative(reason: 'visit-change' | 'renderer-dispose' | 'authority-change' | 'sign-retry-retired' = 'authority-change') {
+    if (nativeCandidate || runtime) reportQualification('candidate-lifetime', new Error(reason));
     controller?.retireSignRetry();
     qualificationSequence++; nativeStage?.abort(); nativeStage = undefined;
     nativeLifetime.abort(); nativeLifetime = new AbortController(); native?.retireFacts();
@@ -309,15 +312,20 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       if (disposed || cleared || sequence !== qualificationSequence || expectedAuthority !== authorityGeneration || expectedVisit !== visitEpoch
         || lease && (!lease.active || rendererLease !== lease)) throw new Error('native-facts-context-retired');
     };
+    let diagnosticStage: NativeQualificationStage = 'source-qualification';
     try {
       const facts = await abortable(AbortSignal.any([stage.signal, ...(caller ? [caller.signal] : [])]), qualifySaved(saved, assertCurrent)); assertCurrent();
+      diagnosticStage = 'renderer-exchange';
       if (!await installFacts(facts, saved, old, lease, AbortSignal.any([stage.signal, nativeLifetime.signal, ...(caller ? [caller.signal] : [])]), assertCurrent)) {
         nativeReadiness = 'needs-save'; emit(); return;
       }
       nativeCandidate = { saved: structuredClone(saved), facts };
+      diagnosticStage = 'source-ready';
       facts.assertReady(); nativeReadiness = 'ready';
-      if (publicSnapshot?.prepared || publicSnapshot?.signed) await delivery(publicSnapshot);
-    } catch { if (sequence === qualificationSequence && expectedAuthority === authorityGeneration && expectedVisit === visitEpoch && !disposed) nativeReadiness = 'pending'; }
+      reportQualification(diagnosticStage);
+      diagnosticStage = 'review-delivery';
+      if (publicSnapshot?.prepared || publicSnapshot?.signed) { await delivery(publicSnapshot); reportQualification(diagnosticStage); }
+    } catch (error) { reportQualification(diagnosticStage, error); if (sequence === qualificationSequence && expectedAuthority === authorityGeneration && expectedVisit === visitEpoch && !disposed) nativeReadiness = 'pending'; }
     finally { clearTimeout(timer); emit(); }
   }
   async function installFacts(facts: HydratedEvaluationCandidate, saved: SavedResponseDraft,
@@ -634,9 +642,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return {
         activate() {
           if (disposed || cleared || sessionGeneration !== authorityGeneration) throw new Error('native-visit-retired');
-          ticket = ++visitEpoch; retireNative(); for (const read of reads) read.abort(); reads.clear();
+          ticket = ++visitEpoch; retireNative('visit-change'); for (const read of reads) read.abort(); reads.clear();
         },
-        dispose() { if (ticket === visitEpoch) { visitEpoch++; retireNative(); for (const read of reads) read.abort(); reads.clear(); } ticket = undefined; },
+        dispose() { if (ticket === visitEpoch) { visitEpoch++; retireNative('visit-change'); for (const read of reads) read.abort(); reads.clear(); } ticket = undefined; },
         bindRuntime() {
           const initial = createNativeInitialDataSourceRuntime({ sessionGeneration: marker, assertCurrent: assertVisit,
             sites: initialDataSites.map(site => ({ descriptor: site.descriptor, context: { surfaceId: site.handle.surfaceId,
@@ -669,7 +677,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
               const result = await controller.retrySign();
               // The durable result is already published; later retirement affects only this visit.
               try { assertVisit(); authority.signal.throwIfAborted(); assertSynchronousGuard(authority.assertCurrent.bind(authority)); }
-              catch { retireNative(); }
+              catch { retireNative('sign-retry-retired'); }
               return result;
             } } : {}),
             authorizeDataSource: ((request) => {
@@ -839,7 +847,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       invalidate: () => { if (active) { active = false; lease.active = false; stop('clear'); if (rendererEngine === leasedEngine) rendererEngine = undefined; emit(); } },
       dispose: () => {
         active = false; lease.active = false; release(); releaseTitle(); leasedEngine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
-        if (rendererLease === lease) { rendererLease = undefined; retireNative(); }
+        if (rendererLease === lease) { rendererLease = undefined; retireNative('renderer-dispose'); }
         if (rendererEngine === leasedEngine) { rendererEngine = undefined; emit(); }
       } };
 

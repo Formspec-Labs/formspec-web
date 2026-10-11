@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { nativeFactsProductHttpFixture } from '../adapters/http/native-facts-product-http-fixture.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -1494,5 +1495,43 @@ it('uses selected generic candidate facts for the maintained isolated check and 
   expect(qualifySaved).toHaveBeenCalledTimes(2);
   expect(ready).toHaveBeenCalled();
   expect(test.host.screenerCompletion).toBeUndefined();
+  mounted.unmount(); test.host.dispose();
+});
+
+// Discriminate route-change cleanup from real Source/proof failures without business reads.
+it('native route transition rebuilds prepared sources after the old renderer unmounts', async () => {
+  const test = await nativeFactsFixture();
+  let signingRoute = false; let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const held: Parameters<NonNullable<NativePackageSigningHostPolicy['nativeScreener']>['hydration']['hydrate']>[0][] = [];
+  const hydrate = test.hydrate.getMockImplementation()!;
+  test.hydrate.mockImplementation(async request => { if (signingRoute) { held.push(request); await gate; } return hydrate(request); });
+  const visit = vi.spyOn(test.host, 'createSurfaceVisit');
+  function Harness() {
+    const [location, setLocation] = useState('/eligibility');
+    return <NativePackageRespondentHost {...test.props} location={location} onNavigate={href => { test.navigate(href); signingRoute = href === '/review-sign'; setLocation(href); }} />;
+  }
+  const mounted = render(<Harness />);
+  await screen.findByRole('button', { name: /continue|check/i });
+  for (const field of mounted.container.querySelectorAll('select')) fireEvent.change(field, { target: { value: 'yes' } });
+  fireEvent.click(mounted.container.querySelector('.formspec-screener-continue')!);
+  await screen.findByRole('button', { name: 'Save draft' });
+  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+  await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe('ready'));
+  fireEvent.click(screen.getByRole('button', { name: 'Prepare saved response' }));
+  await vi.waitFor(() => expect(held.length).toBeGreaterThan(0));
+  await act(async () => { await Promise.resolve(); });
+  expect(test.host.getSnapshot().controller?.prepared).toBeDefined();
+  expect(test.host.getSnapshot().nativeReadiness).toBe('pending');
+  expect(held.at(-1)!.signal.aborted).toBe(false);
+  await act(async () => { release(); });
+  await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe('ready'));
+  await vi.waitFor(() => expect(test.host.getSnapshot().runtime).toBeDefined());
+  await vi.waitFor(() => expect(test.read).toHaveBeenCalledOnce());
+  test.completeRead(new Blob([test.photoBytes], { type: 'image/png' }));
+  fireEvent.load(await screen.findByRole('img', { name: /saved photo/i }));
+  await screen.findByRole('textbox', { name: 'Your name for this demonstration' });
+  expect(visit.mock.results[0].value.bindRuntime().authorizeDataSource({} as never)).toEqual({ status: 'refused', reason: 'native-visit-retired' });
+  expect(test.prepare).toHaveBeenCalledOnce(); expect(test.sign).not.toHaveBeenCalled(); expect(test.submit).not.toHaveBeenCalled();
   mounted.unmount(); test.host.dispose();
 });
