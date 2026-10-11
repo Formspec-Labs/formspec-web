@@ -116,7 +116,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const panelPins = policy.structuredPanelWidgets ?? [];
   if (policy.structuredPanelWidgets && (!panelPins.length || new Set(panelPins.map(pin => pin.moduleId)).size !== panelPins.length
     || panelPins.some(pin => !modulePins.some(module => module.id === pin.moduleId)
-      || !['0.1.0', '0.1.1'].includes(pin.registryEntryVersion)))) throw new Error('native-resource-unadmitted');
+      || !['0.1.0', '0.1.1', '0.1.2'].includes(pin.registryEntryVersion)))) throw new Error('native-resource-unadmitted');
   const panelVersions = new Map(panelPins.map(pin => [pin.moduleId, pin.registryEntryVersion]));
   const registerModules = (review?: ResponseReviewOptions) => modulePins.map(module => starterWidgetModule(module.id, {
     ...(module.id === policy.moduleId && review ? { responseReview: review } : {}),

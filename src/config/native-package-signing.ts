@@ -5,7 +5,7 @@ import type { ResponseActionRole } from '../shared/response-action-controller.ts
 
 export interface NativeStructuredPanelWidget {
   readonly moduleId: string;
-  readonly registryEntryVersion: '0.1.0' | '0.1.1';
+  readonly registryEntryVersion: '0.1.0' | '0.1.1' | '0.1.2';
 }
 
 export interface NativePackageSigningConfig {
@@ -67,7 +67,7 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
     const selected = Array.isArray(config.modules) ? config.modules : [config.module]; const ids = new Set<string>();
     for (const pin of config.structuredPanelWidgets) {
       closed(pin, ['moduleId', 'registryEntryVersion']); nonblank(pin.moduleId); unique(ids, pin.moduleId);
-      if ((pin.registryEntryVersion !== '0.1.0' && pin.registryEntryVersion !== '0.1.1')
+      if ((pin.registryEntryVersion !== '0.1.0' && pin.registryEntryVersion !== '0.1.1' && pin.registryEntryVersion !== '0.1.2')
         || !selected.some(module => module.id === pin.moduleId)) invalid();
     }
   }
