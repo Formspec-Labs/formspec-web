@@ -30,6 +30,11 @@ export interface JsonRequestOptions {
   assertBeforeDispatch?: () => void;
 }
 
+/** Explicit base MIME types for protected raw success bytes; octet-stream remains the default. */
+export interface RawByteRequestOptions extends JsonRequestOptions {
+  readonly successMimeTypes?: readonly string[];
+}
+
 /** Actual bounded response bytes beside a diagnostic parsed value; parsing does not qualify evidence. */
 export interface HttpJsonResponseWithBytes<T> {
   readonly value: T;
@@ -83,12 +88,17 @@ export class HttpClient {
   }
 
   /** Selected protected-object POST; bounded raw bytes retain their original encoding. */
-  async postJsonForBytes(path: string, body: unknown, options: JsonRequestOptions): Promise<Uint8Array<ArrayBuffer>> {
+  async postJsonForBytes(path: string, body: unknown, options: RawByteRequestOptions): Promise<Uint8Array<ArrayBuffer>> {
     if (!Number.isSafeInteger(options.maxResponseBytes) || !options.maxResponseBytes || options.maxResponseBytes < 1) {
       throw new Error('Raw object response requires an admitted byte limit');
     }
+    const mimeTypes = Object.freeze([...(options.successMimeTypes ?? ['application/octet-stream'])]);
+    if (!mimeTypes.length || mimeTypes.some(value => typeof value !== 'string'
+      || !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(value))) {
+      throw new Error('Raw object response requires explicit base MIME types');
+    }
     const payload = await this.requestJsonPayload<Uint8Array<ArrayBuffer>>('POST', path,
-      { ...options, body, requireNoStore: true }, true);
+      { ...options, body, requireNoStore: true }, true, mimeTypes);
     return payload.value;
   }
 
@@ -115,14 +125,14 @@ export class HttpClient {
   }
 
   private async requestJsonPayload<T>(method: 'GET' | 'POST' | 'PATCH', path: string,
-    options: JsonRequestOptions, binary = false): Promise<ResponsePayload<T>> {
+    options: JsonRequestOptions, binary = false, mimeTypes: readonly string[] = []): Promise<ResponsePayload<T>> {
     const lifetime = requestLifetime(options);
     const { signal } = lifetime;
     let response: Response | undefined;
     try {
       const check = () => { signal?.throwIfAborted(); options.assertCurrent?.(); };
       check();
-      const headers = await withAbort(this.headersFor(options, binary), signal);
+      const headers = await withAbort(this.headersFor(options, binary, mimeTypes), signal);
       check();
       const admission: unknown = options.assertBeforeDispatch?.();
       if (admission !== undefined) {
@@ -141,7 +151,7 @@ export class HttpClient {
       void pendingResponse.then(value => { if (signal?.aborted) cancelBody(value); }, () => {});
       response = await withAbort(pendingResponse, signal);
       check();
-      const result = await readResponsePayload(response, options, signal, binary);
+      const result = await readResponsePayload(response, options, signal, binary, mimeTypes);
       const payload = result.value;
       check();
       if (!response.ok || (options.successStatuses !== undefined && !options.successStatuses.includes(response.status))) {
@@ -161,9 +171,9 @@ export class HttpClient {
     }
   }
 
-  private async headersFor(options: JsonRequestOptions, binary = false): Promise<Headers> {
+  private async headersFor(options: JsonRequestOptions, binary = false, mimeTypes: readonly string[] = []): Promise<Headers> {
     const headers = new Headers(options.headers);
-    headers.set('accept', binary ? 'application/octet-stream' : 'application/json');
+    headers.set('accept', binary ? mimeTypes.join(', ') : 'application/json');
     if (options.body !== undefined) {
       headers.set('content-type', 'application/json');
     }
@@ -226,13 +236,13 @@ async function withAbort<T>(pending: Promise<T>, signal?: AbortSignal): Promise<
   }
 }
 
-async function readResponsePayload(response: Response, options: JsonRequestOptions, signal?: AbortSignal, binary = false): Promise<ResponsePayload<unknown>> {
+async function readResponsePayload(response: Response, options: JsonRequestOptions, signal?: AbortSignal, binary = false, mimeTypes: readonly string[] = []): Promise<ResponsePayload<unknown>> {
   const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
   const raw = binary && response.ok;
-  if (raw && (!/^application\/octet-stream(?:\s*;|$)/i.test(contentType)
+  if (raw && (!mimeTypes.includes(contentType.split(';')[0]!.trim())
     || response.headers.get('x-content-type-options')?.trim().toLowerCase() !== 'nosniff')) {
     cancelBody(response);
-    throw new Error('HTTP object response must contain protected octet-stream bytes');
+    throw new Error('HTTP object response must contain protected admitted MIME bytes');
   }
   if (!raw && options.requireJson && !/^application\/(?:[a-z0-9.+-]+\+)?json(?:\s*;|$)/i.test(contentType)) {
     void response.body?.cancel().catch(() => {});

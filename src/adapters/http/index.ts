@@ -30,6 +30,7 @@ export {
   type HttpClientConfig,
   type HttpJsonResponseWithBytes,
   type JsonRequestOptions,
+  type RawByteRequestOptions,
 } from './http-client.ts';
 export {
   HttpSubmitTransport,
