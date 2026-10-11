@@ -653,7 +653,15 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           return {
             ...(native ? { retrySigningResult: async () => {
               assertVisit();
-              const authority = policy.nativeScreener!.context(); authority.signal.throwIfAborted();
+              const expectedAuthority = authorityGeneration; const lease = rendererLease;
+              const authority = policy.nativeScreener?.context() ?? {
+                signal: nativeLifetime.signal,
+                assertCurrent() {
+                  if (disposed || cleared || expectedAuthority !== authorityGeneration
+                    || lease && (!lease.active || rendererLease !== lease)) throw new Error('native-sign-retry-retired');
+                },
+              };
+              authority.signal.throwIfAborted();
               assertSynchronousGuard(authority.assertCurrent.bind(authority));
               const candidate = publicSnapshot?.prepared;
               if (!controller || !input || !candidate) throw new Error('native-sign-retry-unavailable');

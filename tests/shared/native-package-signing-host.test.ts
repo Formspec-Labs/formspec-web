@@ -814,6 +814,48 @@ describe('explicit reviewed-candidate facts renewal', () => {
       changeProvenance: () => { data = { qualified: true, evidenceRef: 'proof-two' }; },
       correct: () => { data = { qualified: true, evidenceRef: 'proof-three' }; }, refuse: () => { refuse = true; }, hold: (value: Promise<void>) => { hold = value; } };
   }
+  it('reconciles a failed task Sign through candidate authority without a Screener context', async () => {
+    const test = nativeFixture();
+    expect(test.policy.nativeScreener).toBeUndefined();
+    const generation = test.host.getSnapshot().sessionGeneration;
+    const marker = test.host.allocateSurfaceSessionMarker(generation);
+    const visit = test.host.createSurfaceVisit(marker, generation); visit.activate();
+    const ports = visit.bindRuntime();
+    await test.prepared(); await test.assent();
+    test.sign.mockRejectedValueOnce(new Error('Sign result not received'));
+    expect((await test.signAction()).status).toBe('failed');
+    expect(test.host.getSnapshot().controller?.retrySignAvailable).toBe(true);
+    const result = await ports.retrySigningResult!();
+    expect(('invocation' in result ? result.invocation : result).status).toBe('completed');
+    expect(test.sign).toHaveBeenCalledTimes(2);
+    expect(test.host.getSnapshot().controller?.signed).toBeDefined();
+    expect(test.assertOwner).toHaveBeenCalled();
+    visit.dispose(); test.cleanup();
+  });
+  it('refuses changed task ownership before retrying a Sign effect', async () => {
+    const test = nativeFixture();
+    const generation = test.host.getSnapshot().sessionGeneration;
+    const marker = test.host.allocateSurfaceSessionMarker(generation);
+    const visit = test.host.createSurfaceVisit(marker, generation); visit.activate();
+    const ports = visit.bindRuntime(); await test.prepared(); await test.assent();
+    test.sign.mockRejectedValueOnce(new Error('Sign result not received'));
+    expect((await test.signAction()).status).toBe('failed');
+    test.assertOwner.mockImplementationOnce(() => { throw new Error('Task owner retired'); });
+    await expect(ports.retrySigningResult!()).rejects.toThrow('Task owner retired');
+    expect(test.sign).toHaveBeenCalledTimes(1); visit.dispose(); test.cleanup();
+  });
+  it('refuses a retired task retry visit before any further Sign effect', async () => {
+    const test = nativeFixture();
+    const generation = test.host.getSnapshot().sessionGeneration;
+    const marker = test.host.allocateSurfaceSessionMarker(generation);
+    const visit = test.host.createSurfaceVisit(marker, generation); visit.activate();
+    const ports = visit.bindRuntime(); await test.prepared(); await test.assent();
+    test.sign.mockRejectedValueOnce(new Error('Sign result not received'));
+    expect((await test.signAction()).status).toBe('failed');
+    visit.dispose();
+    await expect(ports.retrySigningResult!()).rejects.toThrow('native-visit-retired');
+    expect(test.sign).toHaveBeenCalledTimes(1); test.cleanup();
+  });
   it('renews expired exact photo facts after two minutes of reading, preserving completed review', async () => {
     const test = nativeFixture(); await test.prepared(); await test.assent(); const before = test.qualify.mock.calls.length;
     test.advance(120_000);
