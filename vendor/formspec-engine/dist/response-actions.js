@@ -56,6 +56,47 @@ export function planResponseActionEffects(action) {
         durable: isDurableResponseActionEffect(effect),
     }));
 }
+function immutableSnapshot(value) {
+    const snapshot = structuredClone(value);
+    const seen = new WeakSet();
+    const freeze = (item) => {
+        if (!item || typeof item !== 'object' || seen.has(item))
+            return;
+        seen.add(item);
+        for (const child of Object.values(item))
+            freeze(child);
+        Object.freeze(item);
+    };
+    freeze(snapshot);
+    return snapshot;
+}
+/** Capture once, before preceding effects can mutate the invocation input. */
+function hostEventDetailResolver(detail, action, ports, invocationId) {
+    let snapshot;
+    let snapshotError;
+    if (action.effects?.some(effect => effect.type === 'hostEvent' && effect.detailRef !== undefined)) {
+        try {
+            snapshot = immutableSnapshot({ detail, action });
+        }
+        catch (error) {
+            snapshotError = error;
+        }
+    }
+    return (effect, effectIndex, attempt, effects) => {
+        if (effect.detailRef === undefined)
+            return detail;
+        if (snapshotError)
+            throw snapshotError;
+        if (!snapshot || !ports.evaluateEffectExpression)
+            throw new Error('missing effect expression evaluator');
+        const value = ports.evaluateEffectExpression(effect.detailRef, snapshot.detail, snapshot.action, immutableSnapshot({ effectIndex, invocation: { id: invocationId, attempt: attempt + 1 }, effects: effects.slice(0, effectIndex) }));
+        if (isPromiseLike(value)) {
+            void Promise.resolve(value).catch(() => undefined);
+            throw new Error('effect expression evaluator must be synchronous');
+        }
+        return value;
+    };
+}
 /**
  * Validation tuple lookup keyed by StandardResponseActionIntent.
  * Built from the generated VM master-table const so the engine's intent
@@ -564,6 +605,7 @@ function invokeResponseActionInternal(document, actionRef, ports, nodeId, invoca
         return invokeResponseActionEffectsAsync(resolution.action, resolution, validationTuple, detail, invocationFacts, ports, emitLifecycle);
     }
     const effectTrace = [];
+    const resolveHostEventDetail = hostEventDetailResolver(detail, resolution.action, ports, invocationId);
     const transitionBindings = Object.create(null);
     const frozenIdempotencyKeys = new Map();
     const retriedEffects = new Set();
@@ -595,7 +637,7 @@ function invokeResponseActionInternal(document, actionRef, ports, nodeId, invoca
                     effectForDispatch = effectWithIdempotencyKey(effect, idempotencyKey);
                 }
                 if (effect.type === 'hostEvent' && typeof effect.eventName === 'string') {
-                    ports.dispatchHostEvent(effect.eventName, detail, resolution.action);
+                    ports.dispatchHostEvent(effect.eventName, resolveHostEventDetail(effect, effectIndex, attempt, effectTrace), resolution.action);
                     outcome = normalizeEffectDispatch(effect, undefined).outcome;
                 }
                 else if (!ports.dispatchEffect) {
@@ -716,6 +758,7 @@ function invokeResponseActionInternal(document, actionRef, ports, nodeId, invoca
 async function invokeResponseActionEffectsAsync(action, resolution, validationTuple, detail, invocationFacts, ports, emitLifecycle) {
     const effects = action.effects ?? [];
     const effectTrace = [];
+    const resolveHostEventDetail = hostEventDetailResolver(detail, action, ports, invocationFacts.invocationId);
     const transitionBindings = Object.create(null);
     const frozenIdempotencyKeys = new Map();
     const retriedEffects = new Set();
@@ -744,7 +787,7 @@ async function invokeResponseActionEffectsAsync(action, resolution, validationTu
                     effectForDispatch = effectWithIdempotencyKey(effect, idempotencyKey);
                 }
                 if (effect.type === 'hostEvent' && typeof effect.eventName === 'string') {
-                    ports.dispatchHostEvent(effect.eventName, detail, action);
+                    ports.dispatchHostEvent(effect.eventName, resolveHostEventDetail(effect, effectIndex, attempt, effectTrace), action);
                     outcome = normalizeEffectDispatch(effect, undefined).outcome;
                 }
                 else if (!ports.dispatchEffect) {

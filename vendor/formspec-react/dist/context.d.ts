@@ -67,7 +67,7 @@ export interface FormspecContextValue {
     /** Callback invoked on form submission. Absent means no built-in submit button. */
     onSubmit?: (result: SubmitResult) => void;
     /** Callback invoked for every declared hostEvent effect. */
-    onHostEvent?: (eventName: string, result: SubmitResult, action: ResponseAction) => void;
+    onHostEvent?: (eventName: string, detail: unknown, action: ResponseAction) => void;
     /** Callback invoked when ActionButton actionRef resolution produces a finding. */
     onActionFinding?: (finding: ActionRefFinding) => void;
     /** Callback invoked after every ActionButton invocation terminal. */
@@ -76,6 +76,8 @@ export interface FormspecContextValue {
     responseActionInvoker?: ResponseActionInvoker<SubmitResult> | null;
     /** Host precondition evaluator for Response Actions that declare FEL preconditions. */
     evaluateActionPrecondition?: (precondition: Precondition, action: ResponseAction) => ResponseActionPreconditionResult;
+    /** Effect-time FEL evaluator; receives an immutable invocation snapshot. */
+    evaluateActionEffectExpression?: ResponseActionInvocationPorts<SubmitResult>['evaluateEffectExpression'];
     /** Host durable-effect adapter for non-hostEvent Response Action effects. */
     dispatchActionEffect?: (effect: EffectRequest, result: SubmitResult, action: ResponseAction, context: ResponseActionEffectDispatchContext) => ResponseActionEffectOutcome | void;
     /** Host idempotency-key resolver for durable Response Action effects. */
@@ -162,7 +164,7 @@ export interface FormspecProviderProps {
      */
     showValidationSummary?: boolean;
     /** Callback invoked for every declared hostEvent effect. */
-    onHostEvent?: (eventName: string, result: SubmitResult, action: ResponseAction) => void;
+    onHostEvent?: (eventName: string, detail: unknown, action: ResponseAction) => void;
     /** Callback for ActionButton actionRef resolution findings. */
     onActionFinding?: (finding: ActionRefFinding) => void;
     /** Callback invoked after every ActionButton invocation terminal. */
@@ -171,6 +173,8 @@ export interface FormspecProviderProps {
     responseActionInvoker?: ResponseActionInvoker<SubmitResult> | null;
     /** Host precondition evaluator for Response Actions that declare FEL preconditions. */
     evaluateActionPrecondition?: (precondition: Precondition, action: ResponseAction) => ResponseActionPreconditionResult;
+    /** Effect-time FEL evaluator; receives an immutable invocation snapshot. */
+    evaluateActionEffectExpression?: ResponseActionInvocationPorts<SubmitResult>['evaluateEffectExpression'];
     /** Host durable-effect adapter for non-hostEvent Response Action effects. */
     dispatchActionEffect?: (effect: EffectRequest, result: SubmitResult, action: ResponseAction, context: ResponseActionEffectDispatchContext) => ResponseActionEffectOutcome | void;
     /** Host idempotency-key resolver for durable Response Action effects. */

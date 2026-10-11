@@ -13,11 +13,12 @@ import {
 import {
   createDemoSubmitResponseActions,
   createFormEngine,
+  evaluateResponseActionEffectExpression,
   type IFormEngine,
   type InstanceSourceResolver,
   type ResolvedIssuer,
 } from '@formspec-org/engine';
-import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
+import { initFormspecEngine, initFormspecEngineTools } from '@formspec-org/engine/init-formspec-engine';
 import {
   FormspecNode,
   FormspecFormContent,
@@ -1162,6 +1163,13 @@ function RespondentController({
               registryEntries={form ? [...form.registryEntries] : undefined}
               responseActionsDocument={responseActionsDocument}
               responseActionInvoker={responseActionInvoker}
+              evaluateActionEffectExpression={(expression, snapshot, action, context) =>
+                evaluateResponseActionEffectExpression(expression, {
+                  fields: snapshot.response.data,
+                  bindings: { response: snapshot.response, action,
+                    validation: { lastReport: snapshot.validationReport },
+                    invocation: context.invocation, effects: context.effects },
+                })}
               semanticControlScope={respondentState.ownedRuntime?.semanticControlScope ?? form?.semanticControlScope}
               components={{
                 fields: {
@@ -1540,6 +1548,10 @@ async function createReadyState(
         composition.definitionSource.getThemeDocument?.(composition.initialDefinitionUrl),
         composition.definitionSource.getResponseActionsDocument?.(composition.initialDefinitionUrl),
       ]);
+  if (authoredResponseActions?.actions.some(action => action.effects?.some(effect =>
+    effect.type === 'hostEvent' && effect.detailRef !== undefined))) {
+    await initFormspecEngineTools();
+  }
   const verifiedComponentGraph = componentGraphHasCompletedEvidence({ componentGraph, hostEvidence })
     ? componentGraph ?? null
     : null;
