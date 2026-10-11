@@ -100,6 +100,9 @@ export declare const CEREMONY_FRAME_RENDERED_CONFIG_NODES: readonly [{
     readonly pointerPattern: "";
     readonly kind: "ceremony-frame";
 }];
-export declare function starterWidgetModule(moduleId: string, options?: {
+export interface StarterWidgetModuleOptions {
     responseReview?: ResponseReviewOptions;
-}): SurfaceWidgetModule;
+    /** Explicit deployment support for the maintained whole-panel props schema. */
+    structuredPanelRegistryEntryVersion?: '0.1.0' | '0.1.1';
+}
+export declare function starterWidgetModule(moduleId: string, options?: StarterWidgetModuleOptions): SurfaceWidgetModule;
