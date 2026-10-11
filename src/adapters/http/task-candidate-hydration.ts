@@ -14,7 +14,7 @@ import { HttpClient, type HttpClientConfig } from './http-client.ts';
 
 /** Selected owning proof implementation; schema decoding alone cannot qualify facts. */
 export interface TaskHydrationReceiptVerifier {
-  verify(input: Readonly<{ view: EvaluationHydrationWire; saved: SavedResponseDraft }>, lifetime: CompletionLifetime): Promise<Readonly<{
+  verify(input: Readonly<{ view: EvaluationHydrationWire; saved: SavedResponseDraft; hydrationBytes: Uint8Array<ArrayBuffer> }>, lifetime: CompletionLifetime): Promise<Readonly<{
     /** Remaining original proof validity measured from request dispatch, never a renewed lease. */
     validForMilliseconds: number;
   }>>;
@@ -109,11 +109,11 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
     const sources = Object.fromEntries(entries.map(([name, value]) => [name, value.source!]));
     const candidateHash = await hash(saved.response);
     check();
-    const raw = await this.client.postJson<unknown>(`/drafts/${encodeURIComponent(saved.draft.id)}/evaluation-instances`,
+    const raw = await this.client.postJsonWithBytes<unknown>(`/drafts/${encodeURIComponent(saved.draft.id)}/evaluation-instances`,
       { draftVersion: saved.draft.version, candidateHash }, { signal, assertCurrent: check, assertBeforeDispatch: check,
         successStatuses: [200], requireJson: true, requireNoStore: true, timeoutMs: 10_000, maxResponseBytes: 2 * 1024 * 1024 });
     check();
-    const view = snapshotFiniteJson(decodeEvaluationHydrationWire(raw)) as unknown as EvaluationHydrationWire;
+    const view = snapshotFiniteJson(decodeEvaluationHydrationWire(raw.value)) as unknown as EvaluationHydrationWire;
     const owner = view.owner;
     if (!equal(view.scope, selection.scope) || !equal(view.selection, selection) || view.formVersionHash !== formVersionHash
       || view.draftId !== saved.draft.id || view.draftVersion !== saved.draft.version || view.candidateHash !== candidateHash
@@ -138,7 +138,7 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
     let deadline = Infinity;
     if (qualified) {
       if (!view.providerReceipt || !this.verifier) fail('task-origin proof verifier unavailable');
-      const proof = await abortable(signal, this.verifier({ view, saved }, { signal, assertCurrent: check }));
+      const proof = await abortable(signal, this.verifier({ view, saved, hydrationBytes: raw.utf8Bytes.slice() }, { signal, assertCurrent: check }));
       if (!Number.isSafeInteger(proof.validForMilliseconds) || proof.validForMilliseconds <= 0 || !Number.isFinite(started + proof.validForMilliseconds)) fail('original proof validity unavailable');
       deadline = started + proof.validForMilliseconds;
     }
