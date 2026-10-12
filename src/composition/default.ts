@@ -61,6 +61,7 @@ import {
 } from '../policy/index.ts';
 import type { AccessTokenProvider } from '../adapters/http/http-client.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
+import type { DefinitionSource } from '../ports/definition-source.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
 import { createUnavailableComposition } from './unavailable.ts';
 import type { Composition } from './types.ts';
@@ -197,7 +198,7 @@ export function createDefaultComposition(
           ?? (async () => (await anonymousSessions.sessionForForm(initialDefinitionUrl)).sessionToken),
       }),
       initialDefinitionUrl,
-      definitionSource: source,
+      definitionSource: bindPackagePreviewDefinitionSource(source, initialDefinitionUrl),
       draftStore: publishedDefinitionDraftStore(
         draftStore,
         () => source.getDefinition(),
@@ -361,6 +362,36 @@ export function createDefaultComposition(
     ]),
   };
   return freezeComposition(composition);
+}
+
+/** Bind the server form selector while keeping the package's canonical identity. */
+function bindPackagePreviewDefinitionSource(
+  source: PinnedPackageDefinitionSource,
+  initialDefinitionUrl: string,
+): DefinitionSource {
+  const getDefinition = async (url: string, version?: string) => {
+    if (url !== initialDefinitionUrl) throw new Error('Package preview Definition selection mismatch');
+    return source.getDefinition(undefined, version);
+  };
+  return {
+    getDefinition,
+    async getThemeDocument(url, version) {
+      await getDefinition(url, version);
+      return source.getThemeDocument();
+    },
+    async getResponseActionsDocument(url, version) {
+      await getDefinition(url, version);
+      return source.getResponseActionsDocument();
+    },
+    async getLocaleDocuments(url, version) {
+      await getDefinition(url, version);
+      return source.getLocaleDocuments();
+    },
+    async getComponentDocument(url, version) {
+      await getDefinition(url, version);
+      return source.getComponentDocument();
+    },
+  };
 }
 
 /**

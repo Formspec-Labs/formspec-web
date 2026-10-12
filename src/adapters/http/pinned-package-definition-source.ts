@@ -57,7 +57,13 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
     return this.loaded ??= this.load(this.manifestUrl);
   }
 
-  async getDefinition(): Promise<FormDefinition> { return structuredClone((await this.getPackage()).definition); }
+  async getDefinition(url?: string, version?: string): Promise<FormDefinition> {
+    const { definition } = await this.getPackage();
+    if ((url !== undefined && url !== definition.url) || (version !== undefined && version !== definition.version)) {
+      throw new Error('Package Definition selection mismatch');
+    }
+    return structuredClone(definition);
+  }
   async getLocaleDocuments(): Promise<LocaleDocument[]> { return structuredClone((await this.getPackage()).locales); }
   async getThemeDocument(): Promise<ThemeDocument | null> { return structuredClone((await this.getPackage()).theme); }
   async getResponseActionsDocument(): Promise<ResponseActionsDocument | null> {

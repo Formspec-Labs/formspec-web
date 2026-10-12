@@ -162,6 +162,9 @@ export interface NotificationDeliveryConformanceSubject {
 
 export interface StatusReaderConformanceSubject {
   adapter: StatusReader;
+  /** Selected read and owning applicant API shape; omitted values retain the timeline fixture. */
+  resourceRef?: string;
+  statusResource?: ApplicantStatusResource;
   registerStatus(key: string, resource: ApplicantStatusResource): void | Promise<void>;
 }
 
@@ -573,12 +576,13 @@ export function defineStatusReaderConformance(
   describe(name, () => {
     it('round-trips a WOS applicant API status resource', async () => {
       const subject = setup();
-      const resourceRef = sampleApplicantStatusProjection.resourceRef;
+      const resourceRef = subject.resourceRef ?? sampleApplicantStatusProjection.resourceRef;
+      const statusResource = subject.statusResource ?? sampleApplicantStatusResource;
       if (!resourceRef) throw new Error('sample status resource needs resourceRef');
-      await subject.registerStatus(resourceRef, sampleApplicantStatusResource);
+      await subject.registerStatus(resourceRef, statusResource);
       const found = await subject.adapter.readStatus({ resourceRef });
       expect(isApplicantStatusResource(roundTripJson(found))).toBe(true);
-      expect(found).toEqual(sampleApplicantStatusResource);
+      expect(found).toEqual(statusResource);
     });
 
     /** Missing and inaccessible status share one absence result. Authenticated

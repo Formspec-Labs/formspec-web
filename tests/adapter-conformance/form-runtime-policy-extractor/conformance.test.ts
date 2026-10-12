@@ -11,6 +11,7 @@ import {
   SafeAddressPolicyExtractor,
   TrustedReviewerPolicyExtractor,
 } from '../../../src/adapters/composing/form-runtime-policy-extractor.ts';
+import { DemoFormPolicyExtractor, stubFormRuntimePolicyExtractor } from '../../../src/adapters/stub/form-runtime-policy-extractor.ts';
 import { sampleFormDefinition } from '../../../src/adapter-conformance/fixtures.ts';
 import { defineFormRuntimePolicyExtractorConformance } from '../_framework/conformance.ts';
 
@@ -182,4 +183,14 @@ defineFormRuntimePolicyExtractorConformance(
     adapter: new SafeAddressPolicyExtractor(),
     definition: safeAddressDefinition,
   }),
+);
+
+defineFormRuntimePolicyExtractorConformance(
+  'DemoFormPolicyExtractor conformance (neutral Definition)',
+  () => ({ adapter: new DemoFormPolicyExtractor(), definition: sampleFormDefinition }),
+);
+
+defineFormRuntimePolicyExtractorConformance(
+  'stubFormRuntimePolicyExtractor conformance (neutral Definition)',
+  () => ({ adapter: stubFormRuntimePolicyExtractor(), definition: sampleFormDefinition }),
 );

@@ -5,11 +5,40 @@ import { loadCanonicalModulePayloadSchemaResources } from '../../../src/adapters
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
 import { PinnedPackageDefinitionSource } from '../../../src/adapters/http/pinned-package-definition-source.ts';
+import type { DefinitionSource } from '../../../src/ports/definition-source.ts';
 import { sampleFormDefinition } from '../../../src/adapter-conformance/fixtures.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('PinnedPackageDefinitionSource', () => {
+  it.each([
+    ['https://other.example/definition', sampleFormDefinition.version],
+    [sampleFormDefinition.url, '99.0.0'],
+    ['', sampleFormDefinition.version],
+    [sampleFormDefinition.url, ''],
+  ])('refuses a requested Definition outside the package pin: %s @ %s', async (url, version) => {
+    const fetch = await mockNativePackage();
+    const source = new PinnedPackageDefinitionSource('/package.json');
+    const port: DefinitionSource = source;
+    await expect(port.getDefinition(url, version)).rejects.toThrow('Package Definition selection mismatch');
+    expect(await source.getDefinition()).toEqual(nativeDefinition);
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('shares the verified package across exact, unversioned and native Definition reads with isolated caller copies', async () => {
+    const fetch = await mockNativePackage();
+    const source = new PinnedPackageDefinitionSource('/package.json');
+    const port: DefinitionSource = source;
+    const [exact, unversioned, native] = await Promise.all([
+      port.getDefinition(sampleFormDefinition.url, sampleFormDefinition.version),
+      port.getDefinition(sampleFormDefinition.url), source.getDefinition(),
+    ]);
+    expect(exact).toEqual(nativeDefinition); expect(unversioned).toEqual(nativeDefinition); expect(native).toEqual(nativeDefinition);
+    exact.title = 'Caller mutation';
+    expect(await source.getDefinition()).toEqual(nativeDefinition);
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
   it('loads the exact authored application-lifecycle public package through canonical admission', async () => {
     vi.stubGlobal('crypto', webcrypto);
     const root = resolve('public/demo-packages/d1-passport/v0.1.7');
