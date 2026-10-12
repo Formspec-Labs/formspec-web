@@ -1,0 +1,16 @@
+{
+  "$formspecTheme": "1.0",
+  "targetDefinition": {
+    "url": "urn:experiment:ds82-subset"
+  },
+  "selectors": [
+    {
+      "match": {
+        "dataType": "choice"
+      },
+      "apply": {
+        "widget": "RadioGroup"
+      }
+    }
+  ]
+}

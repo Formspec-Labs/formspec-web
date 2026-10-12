@@ -1,0 +1,25 @@
+{
+  "$formspecBundle": "2.4",
+  "version": "2.0.0",
+  "id": "https://demo.formspec.org/apps/weekly-certification",
+  "name": "weekly-certification",
+  "title": "Weekly Benefits Certification",
+  "description": "The app as one thing: every document this page composes, named by its canonical identity and pinned to the version this release was verified with. The page loads nothing that is not named here — it resolves each reference through the stack's artifact resolver against the documents it ships, and refuses a document whose identity or version does not match its pin. Canonical URLs are identities, not locations: the host resolves them to bytes (here, the site's own copies, also served under form-v2/ for readers and verifiers). Not composed: the retired version 1 Definition (its migration into version 2 lives inside version 2), the Issuer documents (the Definition points at them itself), and the claimant record (a data instance the Definition names, fetched at load). Signing this bundle — the release digest a host admits — is the next step this demo does not take.",
+  "definitions": [
+    { "url": "https://demo.formspec.org/ui/weekly-certification", "version": "2.0.0" }
+  ],
+  "theme": { "url": "https://demo.formspec.org/ui/weekly-certification/theme", "version": "0.3.0" },
+  "locales": [
+    { "url": "https://demo.formspec.org/ui/weekly-certification/locales/en", "version": "1.0.0", "locale": "en" },
+    { "url": "https://demo.formspec.org/ui/weekly-certification/locales/es", "version": "1.0.0", "locale": "es" }
+  ],
+  "responseActions": { "url": "https://demo.formspec.org/ui/weekly-certification/response-actions", "version": "0.1.0" },
+  "references": { "url": "https://demo.formspec.org/ui/weekly-certification/references", "version": "0.1.0" },
+  "ontology": { "url": "https://demo.formspec.org/ui/weekly-certification/ontology", "version": "2.0.0" },
+  "registries": [
+    { "url": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification.registry.json" }
+  ],
+  "mappings": [
+    { "url": "https://demo.formspec.org/ui/weekly-certification/mappings/legacy-weekly-record", "version": "1.0.0", "handle": "legacy-weekly-record" }
+  ]
+}

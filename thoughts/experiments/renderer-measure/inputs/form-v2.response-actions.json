@@ -1,0 +1,23 @@
+{
+  "$formspecResponseActions": "1.0",
+  "version": "0.1.0",
+  "name": "weekly-certification-actions",
+  "title": "Weekly Benefits Certification — submit",
+  "description": "What the form can do with a completed Response: one action, `submit`. The renderer draws its button inside the form (labelled through the Locale, `$action.submit.label`) and, on activation, validates with the `on-submit` profile — every rule, not just the live ones. `blocking: block-on-error` stops there when any rule fails: the form opens its validation summary and focuses the first invalid answer, and nothing else happens. When every rule passes, `persistence: complete-response` marks the Response `completed` and the `hostEvent` effect raises `formspec-submit` to the page with the Response and its validation report. The page decides what happens next; here it shows the answers in a modal and submits nothing anywhere.",
+  "targetDefinition": {
+    "url": "https://demo.formspec.org/ui/weekly-certification"
+  },
+  "actions": [
+    {
+      "id": "submit",
+      "intent": "submit",
+      "label": { "ref": "$action.submit.label" },
+      "validation": {
+        "profile": "on-submit",
+        "blocking": "block-on-error",
+        "persistence": "complete-response"
+      },
+      "effects": [{ "type": "hostEvent", "eventName": "formspec-submit" }]
+    }
+  ]
+}

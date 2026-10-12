@@ -1,0 +1,18 @@
+{
+  "$formspecIssuer": "1.0",
+  "url": "https://demo.formspec.org/issuers/labor",
+  "version": "1.0.0",
+  "kind": "organization",
+  "name": {
+    "en": "Department of Labor",
+    "es": "Departamento de Trabajo"
+  },
+  "shortName": "Labor",
+  "description": {
+    "en": "The department the Division of Unemployment Insurance belongs to — the parent in the issuer chain, reached through the division document's `parentOrganization` and shown as the breadcrumb under the division's name. One organization can publish many forms; a Definition points at the office asking, and the chain says whose office it is.",
+    "es": "El departamento al que pertenece la División de Seguro de Desempleo: el organismo matriz en la cadena del emisor."
+  },
+  "jurisdiction": { "level": "state" },
+  "homepage": "https://demo.formspec.org/",
+  "defaultLanguage": "en"
+}

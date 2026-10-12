@@ -1,0 +1,17 @@
+{
+  "$formspec": "1.0",
+  "title": "File Upload",
+  "items": [
+    {
+      "key": "resume",
+      "type": "field",
+      "dataType": "attachment",
+      "label": "Upload Resume",
+      "presentation": {
+        "widgetHint": "FileUpload",
+        "accept": ".pdf,.doc,.docx",
+        "maxSize": 5242880
+      }
+    }
+  ]
+}

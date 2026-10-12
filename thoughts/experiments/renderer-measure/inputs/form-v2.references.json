@@ -1,0 +1,73 @@
+{
+  "$formspecReferences": "1.0",
+  "version": "0.1.0",
+  "url": "https://demo.formspec.org/ui/weekly-certification/references",
+  "name": "weekly-certification-references",
+  "title": "Weekly Benefits Certification — help links and statutes",
+  "description": "What stands behind the questions, bound to them by path. `audience` decides who sees a reference: `human` ones become the \"Help me answer this question\" link under the question; `agent` ones — the statutes — are for software helping someone fill the form (the Assistant card reads them through `formspec.field.help`) and never appear on the page; `both` shows to everyone. `target: \"#\"` binds to the whole form. `priority` orders them when a question has several; `type` says what kind of source it is.",
+  "targetDefinition": {
+    "url": "https://demo.formspec.org/ui/weekly-certification"
+  },
+  "references": [
+    {
+      "id": "how-to-certify",
+      "target": "#",
+      "type": "guidance",
+      "audience": "both",
+      "priority": "background",
+      "title": "How to certify for weekly benefits",
+      "description": "A federal walkthrough of unemployment insurance, for anyone who wants the process in one place before answering.",
+      "uri": "https://www.dol.gov/agencies/eta/unemployment-insurance"
+    },
+    {
+      "id": "able-available",
+      "target": "eligibility.ableAndAvailable",
+      "type": "regulation",
+      "audience": "agent",
+      "priority": "primary",
+      "title": "20 CFR 604.3 — able and available requirement",
+      "description": "The federal rule the first question comes from: a claimant must be able to work, available for work, and actively seeking it to be paid for the week.",
+      "uri": "https://www.law.cornell.edu/cfr/text/20/604.3"
+    },
+    {
+      "id": "refusal",
+      "target": "eligibility.refusedWork",
+      "type": "regulation",
+      "audience": "agent",
+      "priority": "primary",
+      "title": "26 U.S.C. 3304(a)(5) — refusal of suitable work",
+      "description": "The federal statute behind the refusal question: conditions under which refusing new work may not deny compensation.",
+      "uri": "https://www.law.cornell.edu/uscode/text/26/3304"
+    },
+    {
+      "id": "work-this-week",
+      "target": "eligibility.work.workedThisWeek",
+      "type": "guidance",
+      "audience": "human",
+      "priority": "primary",
+      "title": "Reporting work and earnings for the week",
+      "description": "How to report the week's work and earnings — part time, per diem, self-employment and gig work all count, and the pay reported is what was earned, not what was received.",
+      "uri": "https://www.dol.gov/agencies/eta/unemployment-insurance"
+    },
+    {
+      "id": "work-type",
+      "target": "eligibility.work.jobs[*].workType",
+      "type": "guidance",
+      "audience": "human",
+      "priority": "primary",
+      "title": "Regular employment, self-employment, and gig work",
+      "description": "What separates regular employment, self-employment and gig work for reporting purposes, since each is asked for differently.",
+      "uri": "https://www.dol.gov/agencies/eta/unemployment-insurance"
+    },
+    {
+      "id": "false-statements",
+      "target": "certification.certified",
+      "type": "regulation",
+      "audience": "agent",
+      "priority": "primary",
+      "title": "18 U.S.C. 1001 — false statements",
+      "description": "The federal statute behind the certification checkbox: knowingly false statements carry penalties, which is why the form asks for an explicit attestation.",
+      "uri": "https://www.law.cornell.edu/uscode/text/18/1001"
+    }
+  ]
+}

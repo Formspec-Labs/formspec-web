@@ -1,0 +1,27 @@
+{
+  "$formspecResponseActions": "1.0",
+  "version": "1.0.0",
+  "targetDefinition": {
+    "url": "urn:experiment:ds82-subset"
+  },
+  "actions": [
+    {
+      "id": "submit",
+      "intent": "submit",
+      "label": {
+        "literal": "Submit"
+      },
+      "validation": {
+        "profile": "on-submit",
+        "blocking": "non-blocking",
+        "persistence": "none"
+      },
+      "effects": [
+        {
+          "type": "hostEvent",
+          "eventName": "formspec-submit"
+        }
+      ]
+    }
+  ]
+}

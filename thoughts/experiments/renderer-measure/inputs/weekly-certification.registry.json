@@ -1,0 +1,1127 @@
+{
+  "$formspecRegistry": "1.1",
+  "publisher": {
+    "name": "Formspec Labs",
+    "url": "https://github.com/Formspec-Labs/formspec-demo"
+  },
+  "published": "2026-09-16T00:00:00Z",
+  "entries": [
+    {
+      "name": "x-weekly-cert-able-and-available",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether, for the certification week, the claimant was able to work and available to accept full-time work — \"Yes\" when ready to start work but not yet offered a job; \"No\" when something (health, hospitalization, transportation, childcare, caregiving, travel, a schedule conflict) prevented accepting a full-time job.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#able-and-available",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "able-and-available",
+      "metadata": {
+        "displayName": "Able and available for work",
+        "sources": [
+          {
+            "title": "20 CFR 604.3 — able and available requirement",
+            "uri": "https://www.law.cornell.edu/cfr/text/20/604.3"
+          }
+        ]
+      },
+      "equivalents": [
+        {
+          "concept": "https://www.law.cornell.edu/cfr/text/20/604.3",
+          "system": "https://www.law.cornell.edu/cfr/text",
+          "code": "20 CFR 604.3",
+          "display": "Able and available requirement",
+          "type": "exact"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-not-available-reason",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The claimant's own account of what prevented them from being able and available for work, with the dates it applied.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#not-available-reason",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "not-available-reason",
+      "metadata": {
+        "displayName": "Reason not able and available"
+      },
+      "relations": [
+        {
+          "concept": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#able-and-available",
+          "type": "x-explains",
+          "display": "explains: Able and available for work"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-seeking-work",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant actively looked for work during the certification week.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#seeking-work",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "seeking-work",
+      "metadata": {
+        "displayName": "Actively seeking work",
+        "sources": [
+          {
+            "title": "42 U.S.C. 503(a)(12) — able to work, available to work, and actively seeking work",
+            "uri": "https://www.law.cornell.edu/uscode/text/42/503"
+          }
+        ]
+      },
+      "equivalents": [
+        {
+          "concept": "https://www.law.cornell.edu/uscode/text/42/503#a_12",
+          "system": "https://www.law.cornell.edu/uscode/text",
+          "code": "42 U.S.C. 503(a)(12)",
+          "display": "Actively seeking work",
+          "type": "exact"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-not-seeking-reason",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The claimant's own account of why they did not actively seek work during the week.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#not-seeking-reason",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "not-seeking-reason",
+      "metadata": {
+        "displayName": "Reason not seeking work"
+      },
+      "relations": [
+        {
+          "concept": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#seeking-work",
+          "type": "x-explains",
+          "display": "explains: Actively seeking work"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-refused-work",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant refused an offer of work during the certification week. Whether the refused work was suitable is decided by the agency, not the claimant.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#refused-work",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "refused-work",
+      "metadata": {
+        "displayName": "Refused work",
+        "sources": [
+          {
+            "title": "26 U.S.C. 3304(a)(5) — conditions under which refusing new work may not deny compensation",
+            "uri": "https://www.law.cornell.edu/uscode/text/26/3304"
+          }
+        ]
+      },
+      "equivalents": [
+        {
+          "concept": "https://www.law.cornell.edu/uscode/text/26/3304#a_5",
+          "system": "https://www.law.cornell.edu/uscode/text",
+          "code": "26 U.S.C. 3304(a)(5)",
+          "display": "Refusal of suitable work",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-refusal-reason",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The claimant's description of the work offered and why it was refused.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#refusal-reason",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "refusal-reason",
+      "metadata": {
+        "displayName": "Reason for refusal"
+      },
+      "relations": [
+        {
+          "concept": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#refused-work",
+          "type": "x-explains",
+          "display": "explains: Refused work"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-in-school",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant attended school or job training during the week — including a regularly scheduled break of four weeks or less; not a part-time class, union training, or self-enrichment course that does not interfere with accepting employment.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#in-school",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "in-school",
+      "metadata": {
+        "displayName": "Attending school or training",
+        "sources": [
+          {
+            "title": "26 U.S.C. 3304(a)(8) — training with the approval of the State agency",
+            "uri": "https://www.law.cornell.edu/uscode/text/26/3304"
+          }
+        ]
+      },
+      "equivalents": [
+        {
+          "concept": "https://www.law.cornell.edu/uscode/text/26/3304#a_8",
+          "system": "https://www.law.cornell.edu/uscode/text",
+          "code": "26 U.S.C. 3304(a)(8)",
+          "display": "In training approved by the State agency",
+          "type": "close"
+        },
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#EducationInProgressIndicator",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:EducationInProgressIndicator",
+          "display": "Education in progress",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-progress-satisfactory",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant's attendance and progress in the school or training were satisfactory for the week.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#progress-satisfactory",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "progress-satisfactory",
+      "metadata": {
+        "displayName": "Attendance and progress satisfactory"
+      }
+    },
+    {
+      "name": "x-weekly-cert-progress-reason",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The claimant's own account of why attendance or progress was unsatisfactory.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#progress-reason",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "progress-reason",
+      "metadata": {
+        "displayName": "Reason progress unsatisfactory"
+      },
+      "relations": [
+        {
+          "concept": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#progress-satisfactory",
+          "type": "x-explains",
+          "display": "explains: Attendance and progress satisfactory"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-holiday-pay-received",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant received holiday or vacation pay for the certification week.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#holiday-pay-received",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "holiday-pay-received",
+      "metadata": {
+        "displayName": "Holiday or vacation pay received"
+      }
+    },
+    {
+      "name": "x-weekly-cert-holiday-pay-amount",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The gross amount of holiday or vacation pay for the week, before deductions, in whole dollars (9999 stands for more than $9,999).",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#holiday-pay-amount",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "holiday-pay-amount",
+      "metadata": {
+        "displayName": "Holiday or vacation pay amount"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd#WagesGrossPayAmount",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd",
+          "code": "hs:WagesGrossPayAmount",
+          "display": "Gross pay before deductions",
+          "type": "exact"
+        },
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#PaymentAmount",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:PaymentAmount",
+          "display": "Amount paid",
+          "type": "broader"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-returning-to-payer",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant expects to return to work for the employer that paid the holiday or vacation pay.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#returning-to-payer",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "returning-to-payer",
+      "metadata": {
+        "displayName": "Returning to the paying employer"
+      }
+    },
+    {
+      "name": "x-weekly-cert-expected-return-date",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The date the claimant expects to return to work for that employer; an approximate date is acceptable.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#expected-return-date",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "expected-return-date",
+      "metadata": {
+        "displayName": "Expected return-to-work date"
+      },
+      "equivalents": [
+        {
+          "concept": "https://schema.org/startDate",
+          "system": "https://schema.org",
+          "code": "startDate",
+          "display": "Start date (of an employment role)",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-employer-on-record",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "One employer in the agency's record for this claimant, from whom a pension or retirement payment could come.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#employer-on-record",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "employer-on-record",
+      "metadata": {
+        "displayName": "Employer on record"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#PersonFormerEmploymentAssociation",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:PersonFormerEmploymentAssociation",
+          "display": "Former employment",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-pension-payer-name",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The name of an employer in the agency's record for this claimant. Supplied by the record; the claimant cannot change it.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#pension-payer-name",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "pension-payer-name",
+      "metadata": {
+        "displayName": "Employer on record, name"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd#EmployerName",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd",
+          "code": "hs:EmployerName",
+          "display": "Employer name",
+          "type": "exact"
+        },
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#OrganizationName",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:OrganizationName",
+          "display": "Organization name",
+          "type": "broader"
+        },
+        {
+          "concept": "https://schema.org/legalName",
+          "system": "https://schema.org",
+          "code": "legalName",
+          "display": "Legal name",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-pension-received",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant received money from a retirement account or pension from that employer — a monthly payment, a one-time payment, or a withdrawal from an employer plan such as a 401(k), 403(b) or 457(b). Paying into a plan without receiving money is \"No\".",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#pension-received",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "pension-received",
+      "metadata": {
+        "displayName": "Pension or retirement payment received",
+        "sources": [
+          {
+            "title": "26 U.S.C. 3304(a)(15) — reduction of compensation for a pension, retirement pay or annuity based on previous work",
+            "uri": "https://www.law.cornell.edu/uscode/text/26/3304"
+          }
+        ]
+      },
+      "equivalents": [
+        {
+          "concept": "https://www.law.cornell.edu/uscode/text/26/3304#a_15",
+          "system": "https://www.law.cornell.edu/uscode/text",
+          "code": "26 U.S.C. 3304(a)(15)",
+          "display": "Pension, retirement or retired pay received, based on previous work",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-pension-amount-changed",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the amount the claimant receives from that employer's pension or retirement plan has changed.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#pension-amount-changed",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "pension-amount-changed",
+      "metadata": {
+        "displayName": "Pension amount changed"
+      }
+    },
+    {
+      "name": "x-weekly-cert-worked-this-week",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant worked at any time between the first and last day of the certification week for any employer — part time and per diem, self-employment and gig work included.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#worked-this-week",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "worked-this-week",
+      "metadata": {
+        "displayName": "Worked during the week"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#PersonEmployedIndicator",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:PersonEmployedIndicator",
+          "display": "Person employed",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-rtw-date-correct",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the return-to-work date the agency holds for this claimant is correct.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#rtw-date-correct",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "rtw-date-correct",
+      "metadata": {
+        "displayName": "Return-to-work date on record is correct"
+      }
+    },
+    {
+      "name": "x-weekly-cert-returned-at-all",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant returned to work at all, when the date on record was wrong.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#returned-at-all",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "returned-at-all",
+      "metadata": {
+        "displayName": "Returned to work at all"
+      }
+    },
+    {
+      "name": "x-weekly-cert-rtw-corrected-date",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The date the claimant actually returned to work, replacing the date on record.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#rtw-corrected-date",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "rtw-corrected-date",
+      "metadata": {
+        "displayName": "Corrected return-to-work date"
+      },
+      "equivalents": [
+        {
+          "concept": "https://schema.org/startDate",
+          "system": "https://schema.org",
+          "code": "startDate",
+          "display": "Start date (of an employment role)",
+          "type": "close"
+        }
+      ],
+      "relations": [
+        {
+          "concept": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#rtw-date-correct",
+          "type": "x-corrects",
+          "display": "corrects: Return-to-work date on record is correct"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-rtw-hours",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whole hours the claimant worked during the week for the employer they returned to.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#rtw-hours",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "rtw-hours",
+      "metadata": {
+        "displayName": "Hours worked, return-to-work employer"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#EmployeeHoursWeeklyQuantity",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:EmployeeHoursWeeklyQuantity",
+          "display": "Hours worked in a week",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-rtw-minutes",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Minutes beyond the whole hours worked during the week for the employer they returned to; with the hours, one quantity.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#rtw-minutes",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "rtw-minutes",
+      "metadata": {
+        "displayName": "Minutes worked, return-to-work employer"
+      }
+    },
+    {
+      "name": "x-weekly-cert-rtw-gross-earnings",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The gross amount earned, or expected to be paid, from the employer the claimant returned to, for the week: total pay before deductions, tips included, in whole dollars.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#rtw-gross-earnings",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "rtw-gross-earnings",
+      "metadata": {
+        "displayName": "Gross earnings, return-to-work employer"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd#WagesGrossPayAmount",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd",
+          "code": "hs:WagesGrossPayAmount",
+          "display": "Gross pay before deductions",
+          "type": "exact"
+        },
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#PaymentAmount",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:PaymentAmount",
+          "display": "Amount paid",
+          "type": "broader"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-ldw-date-correct",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the last day of work the agency holds for this claimant is correct.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#ldw-date-correct",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "ldw-date-correct",
+      "metadata": {
+        "displayName": "Last day of work on record is correct"
+      }
+    },
+    {
+      "name": "x-weekly-cert-ldw-corrected-date",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The claimant's actual last day of work, replacing the date on record.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#ldw-corrected-date",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "ldw-corrected-date",
+      "metadata": {
+        "displayName": "Corrected last day of work"
+      },
+      "equivalents": [
+        {
+          "concept": "https://schema.org/endDate",
+          "system": "https://schema.org",
+          "code": "endDate",
+          "display": "End date (of an employment role)",
+          "type": "close"
+        }
+      ],
+      "relations": [
+        {
+          "concept": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#ldw-date-correct",
+          "type": "x-corrects",
+          "display": "corrects: Last day of work on record is correct"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-ldw-hours",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whole hours the claimant worked during the week for the employer of their last day of work.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#ldw-hours",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "ldw-hours",
+      "metadata": {
+        "displayName": "Hours worked, last employer"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#EmployeeHoursWeeklyQuantity",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:EmployeeHoursWeeklyQuantity",
+          "display": "Hours worked in a week",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-ldw-minutes",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Minutes beyond the whole hours worked during the week for that employer; with the hours, one quantity.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#ldw-minutes",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "ldw-minutes",
+      "metadata": {
+        "displayName": "Minutes worked, last employer"
+      }
+    },
+    {
+      "name": "x-weekly-cert-ldw-gross-earnings",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The gross amount earned, or expected to be paid, from that employer for the week: total pay before deductions, tips included, in whole dollars.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#ldw-gross-earnings",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "ldw-gross-earnings",
+      "metadata": {
+        "displayName": "Gross earnings, last employer"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd#WagesGrossPayAmount",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd",
+          "code": "hs:WagesGrossPayAmount",
+          "display": "Gross pay before deductions",
+          "type": "exact"
+        },
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#PaymentAmount",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:PaymentAmount",
+          "display": "Amount paid",
+          "type": "broader"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "One job the claimant worked during the certification week: the employer, its address, hours, earnings and kind of work. Up to four.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job",
+      "metadata": {
+        "displayName": "Job worked during the week"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#PersonEmploymentAssociation",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:PersonEmploymentAssociation",
+          "display": "Person employment association",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-employer-name",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The name of the employer for this job.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-employer-name",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-employer-name",
+      "metadata": {
+        "displayName": "Employer name"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd#EmployerName",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd",
+          "code": "hs:EmployerName",
+          "display": "Employer name",
+          "type": "exact"
+        },
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#OrganizationName",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:OrganizationName",
+          "display": "Organization name",
+          "type": "broader"
+        },
+        {
+          "concept": "https://schema.org/legalName",
+          "system": "https://schema.org",
+          "code": "legalName",
+          "display": "Legal name",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-street",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The street address of the employer for this job.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-street",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-street",
+      "metadata": {
+        "displayName": "Employer street address"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#StreetFullText",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:StreetFullText",
+          "display": "Street",
+          "type": "exact"
+        },
+        {
+          "concept": "https://schema.org/streetAddress",
+          "system": "https://schema.org",
+          "code": "streetAddress",
+          "display": "Street address",
+          "type": "exact"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-city",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The city of the employer's address.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-city",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-city",
+      "metadata": {
+        "displayName": "Employer city"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#AddressCityName",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:AddressCityName",
+          "display": "City name",
+          "type": "exact"
+        },
+        {
+          "concept": "https://schema.org/addressLocality",
+          "system": "https://schema.org",
+          "code": "addressLocality",
+          "display": "Locality",
+          "type": "exact"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-state",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The state of the employer's address, as a USPS two-letter code.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-state",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-state",
+      "metadata": {
+        "displayName": "Employer state"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#AddressState",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:AddressState",
+          "display": "State",
+          "type": "exact"
+        },
+        {
+          "concept": "https://schema.org/addressRegion",
+          "system": "https://schema.org",
+          "code": "addressRegion",
+          "display": "Region",
+          "type": "exact"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-zip",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The ZIP code of the employer's address.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-zip",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-zip",
+      "metadata": {
+        "displayName": "Employer ZIP code"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#AddressPostalCode",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:AddressPostalCode",
+          "display": "Postal code",
+          "type": "exact"
+        },
+        {
+          "concept": "https://schema.org/postalCode",
+          "system": "https://schema.org",
+          "code": "postalCode",
+          "display": "Postal code",
+          "type": "exact"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-phone",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The employer's telephone number, if the claimant has it.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-phone",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-phone",
+      "metadata": {
+        "displayName": "Employer phone number"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#TelephoneNumberFullID",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:TelephoneNumberFullID",
+          "display": "Telephone number",
+          "type": "exact"
+        },
+        {
+          "concept": "https://schema.org/telephone",
+          "system": "https://schema.org",
+          "code": "telephone",
+          "display": "Telephone",
+          "type": "exact"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-hours",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whole hours the claimant worked at this job during the week.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-hours",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-hours",
+      "metadata": {
+        "displayName": "Hours worked"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#EmployeeHoursWeeklyQuantity",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:EmployeeHoursWeeklyQuantity",
+          "display": "Hours worked in a week",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-minutes",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Minutes beyond the whole hours worked at this job during the week; with the hours, one quantity.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-minutes",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-minutes",
+      "metadata": {
+        "displayName": "Minutes worked"
+      }
+    },
+    {
+      "name": "x-weekly-cert-job-gross-earnings",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The gross amount earned, or expected to be paid, from this job for the week: total pay before deductions, tips included, in whole dollars.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-gross-earnings",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-gross-earnings",
+      "metadata": {
+        "displayName": "Gross earnings"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd#WagesGrossPayAmount",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/domains/hs.xsd",
+          "code": "hs:WagesGrossPayAmount",
+          "display": "Gross pay before deductions",
+          "type": "exact"
+        },
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#PaymentAmount",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:PaymentAmount",
+          "display": "Amount paid",
+          "type": "broader"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-worked-all-hours",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether the claimant worked every hour this employer offered during the week.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-worked-all-hours",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-worked-all-hours",
+      "metadata": {
+        "displayName": "Worked all hours offered"
+      }
+    },
+    {
+      "name": "x-weekly-cert-job-not-all-hours-reason",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The claimant's own account of why they did not work all the hours offered.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-not-all-hours-reason",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-not-all-hours-reason",
+      "metadata": {
+        "displayName": "Reason not all hours worked"
+      },
+      "relations": [
+        {
+          "concept": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-worked-all-hours",
+          "type": "x-explains",
+          "display": "explains: Worked all hours offered"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-job-work-type",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "Whether this job was regular employment, self-employment, or gig work.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#job-work-type",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "job-work-type",
+      "metadata": {
+        "displayName": "Kind of work"
+      },
+      "equivalents": [
+        {
+          "concept": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd#EmployeeOccupationCategoryText",
+          "system": "https://docs.oasis-open.org/niemopen/niem-model/v6.0/ps02/xsd/niem-core.xsd",
+          "code": "nc:EmployeeOccupationCategoryText",
+          "display": "Kind of job",
+          "type": "close"
+        },
+        {
+          "concept": "https://schema.org/employmentType",
+          "system": "https://schema.org",
+          "code": "employmentType",
+          "display": "Employment type",
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "name": "x-weekly-cert-certified",
+      "category": "concept",
+      "version": "1.0.0",
+      "status": "draft",
+      "description": "The claimant's attestation that every answer is truthful, made knowing that false or misleading information can mean loss of benefits, fines and penalties.",
+      "compatibility": {
+        "formspecVersion": "^1.0.0"
+      },
+      "conceptUri": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification#certified",
+      "conceptSystem": "https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification",
+      "conceptCode": "certified",
+      "metadata": {
+        "displayName": "Certification of truthfulness",
+        "sources": [
+          {
+            "title": "18 U.S.C. 1001 — false statements",
+            "uri": "https://www.law.cornell.edu/uscode/text/18/1001"
+          }
+        ]
+      }
+    }
+  ],
+  "extensions": {
+    "x-formspec-demo": {
+      "description": "The weekly-certification concept vocabulary: one concept per answer the form collects (43 entries), each with a plain definition, the law it rests on where one was read, equivalents in NIEM 6.0, federal law and schema.org by resolved URI with SKOS mapping types, and — in relations[], never in equivalents — the two relations the form's Definition cannot express itself: an answer that explains a fact, a date that corrects a record. Which item asks each concept is the Ontology document's fact, not this one's. The demo publishes the vocabulary at its own origin, every concept URI resolving to its definition at https://formspec-labs.github.io/formspec-demo/vocab/weekly-certification. Generated from app/scripts/concepts.mjs by app/scripts/generate-vocabulary.mjs — edit the table, not this file."
+    }
+  }
+}

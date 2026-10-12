@@ -1,0 +1,23 @@
+{
+  "$formspecIssuer": "1.0",
+  "url": "https://demo.formspec.org/issuers/unemployment",
+  "version": "1.0.0",
+  "kind": "department",
+  "name": {
+    "en": "Division of Unemployment Insurance",
+    "es": "División de Seguro de Desempleo"
+  },
+  "shortName": "UI",
+  "description": {
+    "en": "The division that administers unemployment insurance — the office that asks a claimant to certify each week. In this demo the form's Definition points here (`issuer.url`), the renderer draws this name and the department above the form, and the submitted Response pins this document's `url` and `version` as `displayedIssuer`. Host-relative `parentOrganization`, no logo or contact invented for the demo.",
+    "es": "La división que administra el seguro de desempleo: la oficina que pide al reclamante certificar cada semana."
+  },
+  "departmentName": {
+    "en": "Division of Unemployment Insurance",
+    "es": "División de Seguro de Desempleo"
+  },
+  "parentOrganization": "issuer/labor.issuer.json",
+  "jurisdiction": { "level": "state" },
+  "homepage": "https://demo.formspec.org/",
+  "defaultLanguage": "en"
+}
