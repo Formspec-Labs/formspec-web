@@ -205,9 +205,51 @@ export const ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA = {
     },
     allOf: RESPONSE_REVIEW_STATE_SCHEMA.allOf,
 };
+/** Closed task-origin branch. The host verifies Sign/task/artifact links and current access. */
+export const ACCEPTED_TASK_RESPONSE_REVIEW_SIGN_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    required: ["recordRef", "recordHash"],
+    properties: {
+        recordRef: { type: "string", pattern: "^urn:formspec:task-draft-sign:sha256:[a-f0-9]{64}$" },
+        recordHash: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+    },
+};
+export const ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA = {
+    ...ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA,
+    required: [...ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA.required.filter(key => key !== "handoffId"), "taskSign"],
+    properties: {
+        ...Object.fromEntries(Object.entries(ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA.properties)
+            .filter(([key]) => key !== "handoffId")),
+        taskSign: ACCEPTED_TASK_RESPONSE_REVIEW_SIGN_SCHEMA,
+    },
+};
+export const ACCEPTED_TASK_RESPONSE_REVIEW_DATA_SCHEMA = {
+    ...ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA,
+    properties: { ...ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA.properties, presentation: ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA },
+};
+export const ACCEPTED_TASK_RESPONSE_REVIEW_STATE_SCHEMA = {
+    ...ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA,
+    required: [...ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA.required.filter(key => key !== "handoffId"), "taskSign"],
+    properties: {
+        ...Object.fromEntries(Object.entries(ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA.properties)
+            .filter(([key]) => key !== "handoffId")),
+        taskSign: ACCEPTED_TASK_RESPONSE_REVIEW_SIGN_SCHEMA,
+    },
+};
+export const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA = {
+    oneOf: [ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA],
+};
+export const ACCEPTED_RESPONSE_REVIEW_DATA_UNION_SCHEMA = {
+    ...ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA,
+    properties: { ...ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA.properties, presentation: ACCEPTED_RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA },
+};
+export const ACCEPTED_RESPONSE_REVIEW_STATE_UNION_SCHEMA = {
+    oneOf: [ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_STATE_SCHEMA],
+};
 export const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA = {
-    oneOf: [RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA],
+    oneOf: [RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA],
 };
 export const RESPONSE_REVIEW_STATE_UNION_SCHEMA = {
-    oneOf: [RESPONSE_REVIEW_STATE_SCHEMA, ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA],
+    oneOf: [RESPONSE_REVIEW_STATE_SCHEMA, ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_STATE_SCHEMA],
 };

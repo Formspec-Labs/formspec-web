@@ -1,6 +1,6 @@
 {
   "name": "@formspec-org/layout",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "type": "module",
   "license": "Apache-2.0",
   "main": "dist/index.js",
@@ -19,6 +19,7 @@
     "dist"
   ],
   "dependencies": {
-    "@formspec-org/types": "file:../formspec-types"
-  }
+    "@formspec-org/types": "^0.2.1"
+  },
+  "description": "Layout algorithm for resolving Formspec theme pages, grids, and component arrangements"
 }

@@ -75,7 +75,7 @@ export const CEREMONY_FRAME_RENDERED_CONFIG_NODES = [
 ];
 export function starterWidgetModule(moduleId, options = {}) {
     const structuredPanelVersion = options.structuredPanelRegistryEntryVersion ?? '0.1.0';
-    if (structuredPanelVersion !== '0.1.0' && structuredPanelVersion !== '0.1.1') {
+    if (structuredPanelVersion !== '0.1.0' && structuredPanelVersion !== '0.1.1' && structuredPanelVersion !== '0.1.2') {
         throw new Error('Unsupported StructuredPanel Registry entry version');
     }
     const contract = (deliveryContractId, renderedConfigNodes, registryEntryVersion = '0.1.0') => ({

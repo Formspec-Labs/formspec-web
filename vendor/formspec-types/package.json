@@ -1,7 +1,7 @@
 {
   "name": "@formspec-org/types",
   "description": "TypeScript type definitions generated from Formspec JSON schemas",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "type": "module",
   "license": "Apache-2.0",
   "main": "dist/index.js",
@@ -13,5 +13,7 @@
     }
   },
   "sideEffects": false,
-  "files": ["dist"]
+  "files": [
+    "dist"
+  ]
 }

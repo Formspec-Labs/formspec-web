@@ -117,6 +117,7 @@ export function planDefinitionFormInitialData(input) {
         };
     }
     if (valid(input.definition.version) === null ||
+        typeof mapping.document.definitionVersion !== 'string' ||
         validRange(mapping.document.definitionVersion) === null ||
         !satisfies(input.definition.version, mapping.document.definitionVersion)) {
         return {

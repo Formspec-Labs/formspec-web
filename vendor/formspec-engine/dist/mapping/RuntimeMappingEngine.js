@@ -122,10 +122,10 @@ export class RuntimeMappingEngine {
         this.doc = mappingDocument;
     }
     forward(source) {
-        return this.execute('forward', source ?? {});
+        return this.execute('forward', this.doc.sourceSchema ? source : source ?? {});
     }
     reverse(source) {
-        return this.execute('reverse', source ?? {});
+        return this.execute('reverse', this.doc.sourceSchema ? source : source ?? {});
     }
     execute(direction, source) {
         if (!isWasmToolsReady()) {
@@ -169,6 +169,10 @@ export class RuntimeMappingEngine {
         const appliedRules = wasmResult.rulesApplied;
         // If direction was blocked, return early (WASM already set INVALID_DOCUMENT diagnostic)
         if (diagnostics.some(d => d.errorCode === 'INVALID_DOCUMENT')) {
+            return { direction, output, appliedRules, diagnostics };
+        }
+        // External reverse output is the schema-validated JSON source.
+        if (direction === 'reverse' && this.doc.sourceSchema) {
             return { direction, output, appliedRules, diagnostics };
         }
         // ── Adapter post-processing (TS-only — formatting, not evaluation) ──

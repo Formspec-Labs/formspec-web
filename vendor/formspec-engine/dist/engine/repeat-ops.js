@@ -52,8 +52,8 @@ export function snapshotRepeatGroupTree(items, prefix, readFieldValue, getRepeat
     }
     return snapshot;
 }
-/** Restore nested field values after repeat rows were reindexed. */
-export function applyRepeatGroupTreeSnapshot(items, prefix, snapshot, writeField) {
+/** Restore nested field values and, when requested, repeat structure after rows were reindexed. */
+export function applyRepeatGroupTreeSnapshot(items, prefix, snapshot, writeField, prepareRepeat) {
     for (const item of items) {
         const path = `${prefix}.${item.key}`;
         if (item.type === 'field') {
@@ -63,12 +63,13 @@ export function applyRepeatGroupTreeSnapshot(items, prefix, snapshot, writeField
         if (item.type === 'group') {
             if (item.repeatable) {
                 const rows = Array.isArray(snapshot?.[item.key]) ? snapshot[item.key] : [];
+                prepareRepeat?.(path, item, rows.length);
                 for (let index = 0; index < rows.length; index += 1) {
-                    applyRepeatGroupTreeSnapshot(item.children ?? [], `${path}[${index}]`, rows[index] ?? {}, writeField);
+                    applyRepeatGroupTreeSnapshot(item.children ?? [], `${path}[${index}]`, rows[index] ?? {}, writeField, prepareRepeat);
                 }
             }
             else {
-                applyRepeatGroupTreeSnapshot(item.children ?? [], path, snapshot?.[item.key], writeField);
+                applyRepeatGroupTreeSnapshot(item.children ?? [], path, snapshot?.[item.key], writeField, prepareRepeat);
             }
         }
     }

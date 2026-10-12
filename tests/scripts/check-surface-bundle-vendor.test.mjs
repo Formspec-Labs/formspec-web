@@ -25,6 +25,53 @@ afterEach(() => {
 });
 
 describe('surface bundle vendor schema selection', () => {
+  it('refreshes source public/runtime metadata and preserves local tooling and unselected packages', () => {
+    const fixture = createFixture();
+    const { sourceManifest, local, originalLocal, unselected, unselectedBytes } = addPackageFixture(fixture);
+    const schemas = snapshot(fixture);
+    const result = run(fixture, '--write', 'vendor/formspec-types');
+    expect(result.status, result.stderr).toBe(0);
+    const refreshed = JSON.parse(readFileSync(join(local, 'package.json'), 'utf8'));
+    for (const field of publicRuntimeFields) {
+      expect(refreshed[field], field).toEqual(sourceManifest[field]);
+      expect(Object.hasOwn(refreshed, field), field).toBe(Object.hasOwn(sourceManifest, field));
+    }
+    expect(refreshed.scripts).toEqual(originalLocal.scripts);
+    expect(refreshed.devDependencies).toEqual(originalLocal.devDependencies);
+    expect(readFileSync(unselected, 'utf8')).toBe(unselectedBytes);
+    expect(snapshot(fixture)).toEqual(schemas);
+    expect(run(fixture, 'vendor/formspec-types').status).toBe(0);
+  });
+
+  it('refuses drift in every public/runtime field in read mode without changing files', () => {
+    const fixture = createFixture();
+    const { local } = addPackageFixture(fixture);
+    const result = run(fixture, '--write', 'vendor/formspec-types');
+    expect(result.status, result.stderr).toBe(0);
+    const path = join(local, 'package.json');
+    const refreshed = JSON.parse(readFileSync(path, 'utf8'));
+    for (const field of publicRuntimeFields) {
+      const changed = { ...refreshed, [field]: 'stale' };
+      const bytes = `${JSON.stringify(changed)}\n`;
+      writeFileSync(path, bytes);
+      const check = run(fixture, 'vendor/formspec-types');
+      expect(check.status, field).toBe(1);
+      expect(check.stderr).toContain(`package.json ${field} differs from upstream public/runtime metadata`);
+      expect(readFileSync(path, 'utf8')).toBe(bytes);
+    }
+  });
+
+  it('retains local metadata when the real TypeScript build fails', () => {
+    const fixture = createFixture();
+    const { local, source } = addPackageFixture(fixture);
+    const before = readFileSync(join(local, 'package.json'), 'utf8');
+    writeFileSync(join(source, 'src/index.ts'), 'const broken: string = 42;\n');
+    const result = run(fixture, '--write', 'vendor/formspec-types');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Upstream package build failed');
+    expect(readFileSync(join(local, 'package.json'), 'utf8')).toBe(before);
+  });
+
   it('refreshes both exact Locale versions while preserving every unselected file and checksum', () => {
     const fixture = createFixture();
     const before = snapshot(fixture);
@@ -193,4 +240,36 @@ function run(fixture, ...args) {
       INTEGRITY_STACK_SOURCE_DIR: fixture.integrity,
     },
   });
+}
+
+
+const publicRuntimeFields = ['name', 'version', 'description', 'main', 'types', 'exports',
+  'files', 'sideEffects', 'dependencies', 'peerDependencies'];
+
+function addPackageFixture(fixture) {
+  const source = join(fixture.upstream, 'packages/formspec-types');
+  const local = join(fixture.web, 'vendor/formspec-types');
+  mkdirSync(join(source, 'src'), { recursive: true });
+  mkdirSync(local, { recursive: true });
+  mkdirSync(join(fixture.upstream, 'node_modules/.bin'), { recursive: true });
+  symlinkSync(join(repoRoot, 'node_modules/.bin/tsc'), join(fixture.upstream, 'node_modules/.bin/tsc'));
+  writeFileSync(join(source, 'src/index.ts'), 'export const fixture = 1;\n');
+  writeFileSync(join(source, 'tsconfig.json'), JSON.stringify({
+    compilerOptions: { declaration: true, module: 'ESNext', target: 'ES2020', skipLibCheck: true },
+    include: ['src/**/*.ts'],
+  }));
+  const sourceManifest = { name: '@fixture/types', version: '2.1.0', description: 'Maintained types',
+    main: 'dist/index.js', types: 'dist/index.d.ts', exports: { '.': './dist/index.js' }, files: ['dist'],
+    sideEffects: false, dependencies: { 'maintained-runtime': '^2.0.0' }, license: 'Apache-2.0',
+    scripts: { build: 'source-only-build' }, devDependencies: { 'source-only-tool': '*' } };
+  const originalLocal = { name: '@fixture/old', version: '0.1.0', peerDependencies: { 'retired-peer': '*' },
+    scripts: { build: 'vendor-only-build' }, devDependencies: { 'vendor-only-tool': '*' }, license: 'Apache-2.0' };
+  writeFileSync(join(source, 'package.json'), JSON.stringify(sourceManifest));
+  writeFileSync(join(local, 'package.json'), JSON.stringify(originalLocal));
+  for (const directory of [source, local]) writeFileSync(join(directory, 'LICENSE'), 'Apache License\nVersion 2.0\n');
+  const unselected = join(fixture.web, 'vendor/formspec-react/package.json');
+  mkdirSync(dirname(unselected), { recursive: true });
+  const unselectedBytes = '{ "version": "retained-unselected" }\n';
+  writeFileSync(unselected, unselectedBytes);
+  return { source, sourceManifest, local, originalLocal, unselected, unselectedBytes };
 }

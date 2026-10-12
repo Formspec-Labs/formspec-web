@@ -548,6 +548,52 @@ export declare const STRUCTURED_PANEL_CONFIG_SCHEMA: {
                         readonly responsiveMode: {
                             readonly enum: readonly ["stack", "scroll"];
                         };
+                        readonly orderBy: {
+                            readonly type: "array";
+                            readonly minItems: 1;
+                            readonly items: {
+                                readonly oneOf: readonly [{
+                                    readonly type: "object";
+                                    readonly additionalProperties: false;
+                                    readonly required: readonly ["path", "kind", "values"];
+                                    readonly properties: {
+                                        readonly path: {
+                                            readonly type: "string";
+                                            readonly pattern: "^(?!.*(?:^|\\.)(?:__proto__|prototype|constructor)(?:\\.|$))[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$";
+                                        };
+                                        readonly kind: {
+                                            readonly const: "priority";
+                                        };
+                                        readonly values: {
+                                            readonly type: "array";
+                                            readonly minItems: 1;
+                                            readonly uniqueItems: true;
+                                            readonly items: {
+                                                readonly type: "string";
+                                                readonly minLength: 1;
+                                            };
+                                        };
+                                    };
+                                }, {
+                                    readonly type: "object";
+                                    readonly additionalProperties: false;
+                                    readonly required: readonly ["path", "kind", "direction"];
+                                    readonly properties: {
+                                        readonly path: {
+                                            readonly type: "string";
+                                            readonly pattern: "^(?!.*(?:^|\\.)(?:__proto__|prototype|constructor)(?:\\.|$))[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$";
+                                        };
+                                        readonly kind: {
+                                            readonly enum: readonly ["date-time", "string"];
+                                        };
+                                        readonly direction: {
+                                            readonly enum: readonly ["asc", "desc"];
+                                        };
+                                    };
+                                }];
+                            };
+                            readonly description: "Stable row ordering. Priority strings follow the listed sequence; other strings tie. Missing or invalid values sort last in either direction. Date-time keys compare known-offset RFC3339 instants with fractional precision; leap seconds and unknown -00:00 offsets are invalid. String keys compare ordinal UTF-16 values. Equal keys retain input order.";
+                        };
                         readonly columns: {
                             readonly type: "array";
                             readonly items: {

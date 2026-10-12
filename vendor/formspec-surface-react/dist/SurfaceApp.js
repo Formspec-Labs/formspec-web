@@ -375,6 +375,9 @@ export function SurfaceNav({ app, location, routeParams, onNavigate, resolveNavi
                                         ? "route-params"
                                         : undefined;
                                 return (_jsx("li", { children: unavailableReason ? (_jsx("span", { role: "link", "data-nav-route": handle.routeId, "data-nav-unavailable": unavailableReason, "aria-disabled": "true", ...traceAttributes, children: navigationLabel })) : (_jsx("a", { href: resolveNavigationHref ? resolveNavigationHref(href) : href, "data-nav-route": handle.routeId, "aria-current": href === location ? "page" : undefined, ...traceAttributes, onClick: (event) => {
+                                            if (event.defaultPrevented || event.button !== 0 || event.ctrlKey ||
+                                                event.metaKey || event.shiftKey || event.altKey)
+                                                return;
                                             event.preventDefault();
                                             setMenuOpen(false);
                                             onNavigate(href);

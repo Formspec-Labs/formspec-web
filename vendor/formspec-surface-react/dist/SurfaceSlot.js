@@ -204,6 +204,8 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
                 onDefinitionActionResult,
                 onActionCompleted,
                 responseActionInvoker: definitionActionInvoker,
+                localeDocuments,
+                activeLocale,
             };
             const semanticControlScope = resolveSemanticControlScope?.({
                 plan: renderInput.plan,

@@ -69,9 +69,8 @@ export function emptyValueForItem(item) {
         case 'attachment':
         case 'uri':
         case 'choice':
-            return null;
         case 'boolean':
-            return false;
+            return null;
         case 'multiChoice':
             return [];
         default:

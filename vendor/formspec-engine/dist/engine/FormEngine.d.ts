@@ -111,7 +111,7 @@ export declare class FormEngine implements IFormEngine {
     loadResponseData(data: JsonRecord): void;
     private loadItemsData;
     private appendRepeatRow;
-    /** Re-keys repeat `path` to the rows `select` keeps from a snapshot of every current row. O(rows). */
+    /** Re-keys repeat `path` to the rows `select` keeps, preserving nested shape, values, and write sources. */
     private rebuildRepeatRows;
     compileExpression(expression: string, currentItemName?: string): () => FormFieldValue;
     setValue(name: string, value: FormFieldValue, options?: SetValueOptions): void;

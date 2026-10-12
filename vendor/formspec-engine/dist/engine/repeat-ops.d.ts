@@ -21,5 +21,5 @@ export declare function clearRepeatIndexedSubtree(options: {
 }): void;
 /** Snapshot nested field values under a repeat prefix (used when removing a repeat row). */
 export declare function snapshotRepeatGroupTree(items: FormItem[], prefix: string, readFieldValue: (path: string) => unknown, getRepeatCount: (path: string) => number): Record<string, unknown>;
-/** Restore nested field values after repeat rows were reindexed. */
-export declare function applyRepeatGroupTreeSnapshot(items: FormItem[], prefix: string, snapshot: Record<string, unknown> | undefined, writeField: (path: string, value: unknown) => void): void;
+/** Restore nested field values and, when requested, repeat structure after rows were reindexed. */
+export declare function applyRepeatGroupTreeSnapshot(items: FormItem[], prefix: string, snapshot: Record<string, unknown> | undefined, writeField: (path: string, value: unknown) => void, prepareRepeat?: (path: string, item: FormItem, count: number) => void): void;

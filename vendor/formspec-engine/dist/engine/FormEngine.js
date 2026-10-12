@@ -319,7 +319,7 @@ export class FormEngine {
             this.structureVersion.value += 1;
         });
     }
-    /** Re-keys repeat `path` to the rows `select` keeps from a snapshot of every current row. O(rows). */
+    /** Re-keys repeat `path` to the rows `select` keeps, preserving nested shape, values, and write sources. */
     rebuildRepeatRows(path, item, select) {
         const snapshots = [];
         const sourceSnapshots = [];
@@ -340,6 +340,12 @@ export class FormEngine {
                     this._data[fieldPath] = v;
                     if (this.signals[fieldPath]) {
                         this.signals[fieldPath].value = v;
+                    }
+                }, (repeatPath, repeatItem, count) => {
+                    this.clearRepeatSubtree(repeatPath);
+                    this.repeats[repeatPath].value = count;
+                    for (let index = 0; index < count; index += 1) {
+                        this.registerItemChildren(repeatItem.children ?? [], `${repeatPath}[${index}]`);
                     }
                 });
                 const sources = kept.get(rows[current]);

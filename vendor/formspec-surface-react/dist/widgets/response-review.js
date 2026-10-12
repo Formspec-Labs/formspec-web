@@ -5,7 +5,7 @@ import canonicalize from "canonicalize";
 import { snapshotFiniteJson, } from "@formspec-org/surface";
 import { Heading, nextLevel } from "../heading.js";
 import { WidgetEmptyState } from "./empty-state.js";
-import { RESPONSE_REVIEW_COPY_KEYS, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, } from './response-review-metadata.js';
+import { RESPONSE_REVIEW_COPY_KEYS, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA, } from './response-review-metadata.js';
 export * from './response-review-metadata.js';
 const object = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const text = (v) => typeof v === "string" && v.length > 0;
@@ -81,11 +81,22 @@ function capture(props) {
                     r.authoredSignatures.length === 0)))
             return undefined;
         if (p.phase === "accepted-record") {
-            if (!text(p.handoffId) || Object.keys(p).some(key => !own(ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA.properties, key)))
+            const task = own(p, "taskSign");
+            const schema = task ? ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA : ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA;
+            if (Object.keys(p).some(key => !own(schema.properties, key)))
+                return undefined;
+            if (task) {
+                if (!object(p.taskSign) || Object.keys(p.taskSign).some(key => key !== "recordRef" && key !== "recordHash") ||
+                    typeof p.taskSign.recordHash !== "string" || !/^sha256:[a-f0-9]{64}$/.test(p.taskSign.recordHash) ||
+                    p.taskSign.recordRef !== `urn:formspec:task-draft-sign:${p.taskSign.recordHash}` ||
+                    !Array.isArray(r.authoredSignatures) || r.authoredSignatures.length === 0)
+                    return undefined;
+            }
+            else if (!text(p.handoffId))
                 return undefined;
         }
         else if (!text(p.actorRef) || !object(p.draft) || !text(p.draft.id) ||
-            !Number.isSafeInteger(p.draft.version) || p.draft.version < 0 || own(p, "handoffId"))
+            !Number.isSafeInteger(p.draft.version) || p.draft.version < 0 || (own(p, "handoffId") || own(p, "taskSign")))
             return undefined;
         for (const m of Object.values(p.fields)) {
             if (!object(m) ||
@@ -362,7 +373,9 @@ function ReviewBody({ capture: c, options, }) {
         const common = { status, responseHash: p.responseHash, locale: p.locale,
             ...(contextIdentity ? { contextIdentity } : {}) };
         if (p.phase === "accepted-record") {
-            options.onAcceptedReviewState?.({ ...common, phase: p.phase, handoffId: p.handoffId });
+            options.onAcceptedReviewState?.(p.taskSign
+                ? { ...common, phase: p.phase, taskSign: p.taskSign }
+                : { ...common, phase: p.phase, handoffId: p.handoffId });
         }
         else {
             options.onReviewState?.({ ...common, phase: p.phase, actorRef: p.actorRef, draft: p.draft });
@@ -422,7 +435,7 @@ function ReviewBody({ capture: c, options, }) {
         return (_jsx(WidgetEmptyState, { children: failed ? c.copy.unavailable : c.copy.pending }));
     const render = (nodes, level) => nodes.map((node) => node.kind === "group" ? (_jsxs("section", { className: "fs-response-review-group", children: [_jsx(Heading, { level: level, children: node.label }), render(node.children, nextLevel(level))] }, node.path)) : (_jsxs("dl", { className: "fs-response-review-row", "data-response-path": node.path, children: [_jsx("dt", { children: node.label }), _jsx("dd", { children: node.attachment ? (_jsx(Attachment, { capture: c, node: node, read: readAttachment, onStatus: onStatus })) : (_jsx(Value, { node: node, copy: c.copy })) })] }, node.path)));
     return (_jsxs("section", { className: "fs-response-review", "aria-label": c.copy.heading, lang: p.locale, children: [_jsx(Heading, { level: c.headingLevel, children: c.copy.heading }), _jsx("p", { className: "fs-response-review-intro", children: p.phase === "accepted-record" ? c.copy.acceptedRecord
-                    : p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), _jsxs("dl", { className: "fs-response-review-context", children: [_jsxs("div", { children: [_jsx("dt", { children: c.copy.responseId }), _jsx("dd", { children: r.id })] }), p.phase !== "accepted-record" ? _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }) : null, _jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: r.authoredSignatures?.length ?? 0 })] })] }), render(c.nodes, nextLevel(c.headingLevel))] }));
+                    : p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), _jsxs("dl", { className: "fs-response-review-context", children: [p.phase !== "accepted-record" ? _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }) : null, _jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: r.authoredSignatures?.length ?? 0 })] })] }), render(c.nodes, nextLevel(c.headingLevel)), _jsxs("details", { className: "fs-response-review-record-details", children: [_jsx("summary", { children: c.copy.responseId }), _jsx("p", { children: r.id })] })] }));
 }
 function unavailableCopy(props) {
     try {

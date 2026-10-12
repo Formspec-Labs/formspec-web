@@ -21,6 +21,14 @@ const path = {
     type: 'string',
     pattern: '^(?!.*(?:^|\\.)(?:__proto__|prototype|constructor)(?:\\.|$))[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)*$',
 };
+const tableOrderKey = {
+    oneOf: [
+        { type: 'object', additionalProperties: false, required: ['path', 'kind', 'values'],
+            properties: { path, kind: { const: 'priority' }, values: { type: 'array', minItems: 1, uniqueItems: true, items: text } } },
+        { type: 'object', additionalProperties: false, required: ['path', 'kind', 'direction'],
+            properties: { path, kind: { enum: ['date-time', 'string'] }, direction: { enum: ['asc', 'desc'] } } },
+    ],
+};
 const selectorPath = { anyOf: [{ const: '' }, path] };
 const generation = { $ref: 'https://formspec.org/schemas/common/1.0#/$defs/Generation' };
 const generated = { 'x-generation': generation };
@@ -92,6 +100,8 @@ export const STRUCTURED_PANEL_CONFIG_SCHEMA = {
                     { type: 'object', additionalProperties: false, required: ['type', 'id', 'path', 'columns'],
                         properties: { ...blockProperties, type: { const: 'table' }, path, caption: text,
                             responsiveMode: { enum: ['stack', 'scroll'] },
+                            orderBy: { type: 'array', minItems: 1, items: tableOrderKey,
+                                description: 'Stable row ordering. Priority strings follow the listed sequence; other strings tie. Missing or invalid values sort last in either direction. Date-time keys compare known-offset RFC3339 instants with fractional precision; leap seconds and unknown -00:00 offsets are invalid. String keys compare ordinal UTF-16 values. Equal keys retain input order.' },
                             columns: { type: 'array', items: {
                                     type: 'object', additionalProperties: false, required: ['id', 'label', 'path'],
                                     properties: { id, label: text, path, numeric: { type: 'boolean' }, ...generated },

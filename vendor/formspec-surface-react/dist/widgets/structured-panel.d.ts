@@ -1,3 +1,5 @@
+import { type StructuredTableOrderKey } from './structured-table-ordering.js';
+export type { StructuredTableOrderKey } from './structured-table-ordering.js';
 import type { SurfaceWidgetProps } from '../widget-api.js';
 import type { ModuleWidgetEmptyWhen, ModuleWidgetStateViewsConfig } from '../widget-state.js';
 interface GeneratedFromNeeds {
@@ -45,6 +47,8 @@ export interface StructuredTableBlockConfig extends StructuredBlockBase {
     caption?: string;
     responsiveMode?: 'stack' | 'scroll';
     columns: readonly StructuredTableColumnConfig[];
+    /** Stable authored ordering; missing/invalid keys sort last. */
+    orderBy?: readonly StructuredTableOrderKey[];
     rowAction?: StructuredTableRowActionConfig;
 }
 export interface StructuredProgressBlockConfig extends StructuredBlockBase {

@@ -1,4 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { orderStructuredTableRows } from './structured-table-ordering.js';
 /**
  * @filedesc A reusable, data-only panel for declarative application surfaces.
  *
@@ -184,6 +185,11 @@ function StructuredActionButton({ action, label, emphasis, anchors, input, emitA
     const actionButton = useRef(null);
     const confirmButton = useRef(null);
     const restoreActionFocus = useRef(false);
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
     const [status, setStatus] = useState('idle');
     useEffect(() => {
         if (status === 'confirming') {
@@ -210,12 +216,15 @@ function StructuredActionButton({ action, label, emphasis, anchors, input, emitA
             return;
         setStatus('pending');
         void emission.completion.then((feedback) => {
+            if (!mounted.current)
+                return;
             setStatus(feedback.status === 'completed'
                 ? 'completed'
                 : feedback.status === 'obsolete'
                     ? 'idle'
                     : 'failed');
-        }).catch(() => setStatus('failed'));
+        }).catch(() => { if (mounted.current)
+            setStatus('failed'); });
     };
     if (status === 'confirming' && confirmation) {
         return (_jsxs("div", { className: "fs-structured-panel__confirmation", role: "group", "aria-labelledby": confirmationHeadingId, "data-action-confirmation": "", ...traceAttributes(confirmation.anchors), children: [_jsx("strong", { id: confirmationHeadingId, children: confirmation.heading }), _jsx("p", { children: confirmation.body }), _jsxs("div", { className: "fs-structured-panel__confirmation-actions", children: [_jsx("button", { ref: confirmButton, className: "fs-structured-panel__action", type: "button", "data-emphasis": "danger", onClick: invoke, ...traceAttributes(confirmation.anchors), children: confirmation.confirmLabel }), _jsx("button", { className: "fs-structured-panel__action", type: "button", "data-emphasis": "secondary", onClick: () => {
@@ -314,7 +323,7 @@ function renderList(block, data, headingLevel) {
 function renderedTableRows(block, data) {
     const rawRows = readStructuredPanelPath(data, block.path);
     return Array.isArray(rawRows)
-        ? rawRows.filter((row) => record(row) !== undefined)
+        ? orderStructuredTableRows(rawRows.filter((row) => record(row) !== undefined), block.orderBy, readStructuredPanelPath)
         : [];
 }
 function renderedTableColumns(block) {
@@ -379,7 +388,14 @@ function renderTable(block, data, headingLevel, availableActions, emitAction) {
         return (_jsx("div", { className: "fs-structured-panel__table-scroll", "data-responsive-mode": responsiveMode, role: "region", tabIndex: 0, "aria-label": caption ?? nonEmptyString(block.title) ?? safeId(block.id), children: _jsxs("table", { className: "fs-structured-panel__table", children: [caption ? _jsx("caption", { children: caption }) : null, _jsx("thead", { children: _jsxs("tr", { children: [columns.map((column) => (_jsx("th", { scope: "col", "data-column-id": column.id, "data-numeric": column.numeric ? 'true' : undefined, ...traceAttributes(column.anchors), children: column.label }, column.id))), rowAction ? (_jsx("th", { scope: "col", "data-column-id": "action", ...traceAttributes(rowAction.anchors), children: rowAction.columnLabel })) : null] }) }), _jsx("tbody", { children: rows.map((row, rowIndex) => (_jsxs("tr", { children: [columns.map((column) => (_jsx("td", { "data-column-id": column.id, "data-column-label": column.label, "data-numeric": column.numeric ? 'true' : undefined, ...traceAttributes(column.anchors), children: scalarText(readStructuredPanelPath(row, column.path)) ?? '' }, column.id))), rowAction ? (_jsx("td", { "data-column-id": "action", "data-column-label": rowAction.columnLabel, ...traceAttributes(rowAction.anchors), children: rowAction.config.payload !== undefined &&
                                         selectedActionPayload(rowAction.config.payload, row) === undefined
                                         ? null
-                                        : (_jsx(StructuredActionButton, { action: rowAction.action, label: rowAction.label, emphasis: rowAction.emphasis, anchors: rowAction.anchors, input: selectedActionPayload(rowAction.config.payload, row), emitAction: emitAction, rowAction: true, pendingLabel: nonEmptyString(rowAction.config.pendingLabel), successMessage: nonEmptyString(rowAction.config.successMessage), failureMessage: nonEmptyString(rowAction.config.failureMessage), confirmation: rowAction.confirmation })) })) : null] }, `row-${rowIndex}`))) })] }) }));
+                                        : (_jsx(StructuredActionButton, { action: rowAction.action, label: rowAction.label, emphasis: rowAction.emphasis, anchors: rowAction.anchors, input: selectedActionPayload(rowAction.config.payload, row), emitAction: emitAction, rowAction: true, pendingLabel: nonEmptyString(rowAction.config.pendingLabel), successMessage: nonEmptyString(rowAction.config.successMessage), failureMessage: nonEmptyString(rowAction.config.failureMessage), confirmation: rowAction.confirmation }, JSON.stringify([
+                                            rowAction.action.outputName, rowAction.action.actionRef, rowAction.action.intent,
+                                            selectedActionPayload(rowAction.config.payload, row),
+                                            rowAction.label, rowAction.emphasis, rowAction.anchors, rowAction.confirmation,
+                                            nonEmptyString(rowAction.config.pendingLabel),
+                                            nonEmptyString(rowAction.config.successMessage),
+                                            nonEmptyString(rowAction.config.failureMessage),
+                                        ]))) })) : null] }, `row-${rowIndex}`))) })] }) }));
     });
 }
 function renderProgress(block, data, headingLevel) {

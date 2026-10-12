@@ -16,6 +16,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const formspecRoot = resolve(root, process.env.FORMSPEC_SOURCE_DIR ?? '../formspec');
@@ -32,6 +33,15 @@ const maxVendoredDistBytes = 100 * 1024;
 const args = process.argv.slice(2);
 const write = args.includes('--write');
 const only = args.filter((arg) => !arg.startsWith('--'));
+
+// These packages retain the maintained source API and runtime dependency metadata.
+// The small signing/integrity copies use separate vendor packaging.
+const maintainedManifestPackages = new Set([
+  'vendor/formspec-types', 'vendor/formspec-engine', 'vendor/formspec-app-graph',
+  'vendor/formspec-layout', 'vendor/formspec-react', 'vendor/formspec-surface', 'vendor/formspec-surface-react',
+]);
+const publicRuntimeFields = ['name', 'version', 'description', 'main', 'types', 'exports',
+  'files', 'sideEffects', 'dependencies', 'peerDependencies'];
 
 const packages = [
   {
@@ -226,8 +236,13 @@ let totalBytes = 0;
 let sourceBudgetBytes = 0;
 try {
   for (const [index, pkg] of selectedPackages.entries()) {
+    const sourceManifest = readJson(join(pkg.source, 'package.json'));
+    const localManifestPath = join(root, pkg.local, 'package.json');
+    const localManifest = readJson(localManifestPath);
+    if (maintainedManifestPackages.has(pkg.local) && !write) {
+      assertPublicRuntimeMetadata(sourceManifest, localManifest, pkg.local);
+    }
     if (pkg.licenseSource === 'package') {
-      const sourceManifest = readJson(join(pkg.source, 'package.json'));
       if (sourceManifest.license !== 'Apache-2.0') {
         throw new Error(`${pkg.source}/package.json does not declare Apache-2.0.`);
       }
@@ -251,6 +266,13 @@ try {
         rmSync(join(root, pkg.local, dir), { recursive: true, force: true });
         copyPath(join(pkg.source, dir), join(root, pkg.local, dir));
       }
+      if (maintainedManifestPackages.has(pkg.local)) {
+        for (const field of publicRuntimeFields) {
+          if (Object.hasOwn(sourceManifest, field)) localManifest[field] = sourceManifest[field];
+          else delete localManifest[field];
+        }
+        writeFileSync(localManifestPath, `${JSON.stringify(localManifest, null, 2)}\n`);
+      }
       const localLicense = join(root, pkg.local, 'LICENSE');
       if (!existsSync(localLicense)) {
         const packageLicense = join(pkg.source, 'LICENSE');
@@ -261,7 +283,6 @@ try {
       }
     }
 
-    const localManifest = readJson(join(root, pkg.local, 'package.json'));
     if (localManifest.license !== 'Apache-2.0') {
       throw new Error(`${pkg.local}/package.json must declare Apache-2.0.`);
     }
@@ -295,6 +316,15 @@ if (sourceBudgetBytes > maxVendoredDistBytes) {
 console.log(
   `surface bundle vendor ${write ? 'refresh' : 'check'} passed: ${selectedPackages.length} Apache-2.0 package(s), ${selectedSchemaFiles.length} canonical schema(s), ${sourceBudgetBytes} verification bytes, ${schemaBytes} schema bytes, ${totalBytes} total built bytes`,
 );
+
+function assertPublicRuntimeMetadata(source, local, label) {
+  for (const field of publicRuntimeFields) {
+    if (Object.hasOwn(source, field) !== Object.hasOwn(local, field)
+      || !isDeepStrictEqual(source[field], local[field])) {
+      throw new Error(`${label}/package.json ${field} differs from upstream public/runtime metadata.`);
+    }
+  }
+}
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
