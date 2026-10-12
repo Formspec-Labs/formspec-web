@@ -147,7 +147,6 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
 
   it('status-route narrowed composition does NOT invoke HTTP adapter constructors in production mode (FW-0068 via FW-0070)', () => {
     createRouteNarrowedComposition({
-      mode: 'default',
       config: productionConfig(),
       route: STATUS_ROUTE_NARROWING,
     });
@@ -160,7 +159,7 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
   });
 
   it('createDefaultComposition (full-app) DOES invoke the HTTP constructors when configured (differential)', () => {
-    createDefaultComposition(productionConfig());
+    createDefaultComposition(productionConfig(), { initialDefinitionUrl: 'https://service.example.test/runtime/forms/test-form' });
 
     expect(spies.httpDef).toHaveBeenCalled();
     expect(spies.httpDraft).toHaveBeenCalled();
@@ -168,9 +167,9 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     expect(spies.anonSession).toHaveBeenCalled();
   });
 
-  it('chooseComposition picks the status-route factory when the URL matches /status?case=urn:wos:...', async () => {
+  it('chooseComposition picks the status-route factory when the URL matches /status?caseLedgerId=urn:wos:...', async () => {
     const composition = chooseComposition({
-      href: 'http://localhost/status?case=urn:wos:case_demo_0001',
+      href: 'http://localhost/status?caseLedgerId=urn:wos:case_demo_0001',
       config: productionConfig(),
     });
     // The status-route factory wires noop adapters that throw with FW-0068
@@ -181,7 +180,7 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
 
   it('chooseComposition picks the full-app factory when the URL is /', () => {
     chooseComposition({
-      href: 'http://localhost/',
+      href: 'http://localhost/?form=test-form',
       config: productionConfig(),
     });
     // The full-app factory in production mode constructs the HTTP adapters.
@@ -248,7 +247,6 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     // runtime cost. MED-4: short-circuit to noopIdentityProvider when the
     // gated respondent-place capability is unavailable.
     const c = createRouteNarrowedComposition({
-      mode: 'default',
       config: productionConfig(),
       route: OBLIGATIONS_ROUTE_NARROWING,
     });
@@ -265,7 +263,7 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
   });
 
   it('createDefaultComposition (full-app) DOES construct the OIDC identity adapter when configured (differential)', () => {
-    createDefaultComposition(productionConfig());
+    createDefaultComposition(productionConfig(), { initialDefinitionUrl: 'https://service.example.test/runtime/forms/test-form' });
     // Full-app composition wires the real OidcAdapter — proves the obligations-
     // route factory's narrowing is a deliberate short-circuit, not a
     // tautology of the test setup.
@@ -301,7 +299,6 @@ describe('status-route composition boot narrowing (FW-0068, closes FW-0039 H-1)'
     // gated respondent-place capability is available. Production today
     // always declares unavailable, so the noop branch fires.
     const c = createRouteNarrowedComposition({
-      mode: 'default',
       config: productionConfig(),
       route: DOCUMENTS_ROUTE_NARROWING,
     });

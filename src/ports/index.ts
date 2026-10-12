@@ -207,11 +207,17 @@ export type { ScreenerSelection, SourceScope, ScreenerOwner, ScreenerAnswer, Scr
   RetainScreenerCompletion, AssociateScreenerCandidate, ScreenerRetention } from './screener-retention.ts';
 
 export type { EvaluationHydrationWire, EvaluationHydrationOwner, EvaluationProviderRegistration,
-  HttpEvaluationProviderReceipt, NativeScreenerMappingReceipt, EvaluationHydrationResult } from './evaluation-hydration.ts';
+  HydratedEvaluationCandidate, SavedCandidateHydration, HttpEvaluationProviderReceipt, NativeScreenerMappingReceipt, EvaluationHydrationResult } from './evaluation-hydration.ts';
 
-export type { HydrateScreenerCandidate, HydratedScreenerCandidate, ScreenerHydration } from './screener-hydration.ts';
+export type { HydrateScreenerCandidate, ScreenerHydration } from './screener-hydration.ts';
 
 export type { CompletionLifetime, CaptureResponseCompletion, PreparedResponseCompletion,
   ResponseCompletionResult, ResponseCompletion } from './response-completion.ts';
 export { ResponseCompletionRefusal } from './response-completion.ts';
 export type { TaskOutcomeEvent, TaskSubmission, CompletedTaskOutcome, TaskCompletionSelection, TaskCompletion } from './task-completion.ts';
+
+export type { SignedTaskDraft, TaskDraftAssociation, TaskDraftLaunchSelection } from './task-draft.ts';
+
+export type { InitialMixedHydrationWire, InitialNativeRequest } from './initial-mixed-proof.ts';
+
+export { StatusReadError } from './status-reader.ts';

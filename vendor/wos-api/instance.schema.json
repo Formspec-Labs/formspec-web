@@ -1,0 +1,2028 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.formspec.io/wos-api/instance/v1",
+  "title": "WOS API Workflow Process",
+  "description": "Public API resource schema for WOS workflow processes. Greenfield per ADR 0082 D-15 step 4. The base `WorkflowProcess` resource carries identity, workflow binding, lifecycle posture, current configuration, and `caseState` only; governance, tasks, timers, holds, and related cross-case links are subresources (D-3). The `?include=` aggregation seam exposes a closed taxonomy of subresources for single-call UI views without re-introducing GraphQL-style open composition. The kernel anti-design `caseStateMutations: Record<string, unknown>` is structurally inexpressible: state-mutation events are projected through `EvaluationResult.mutations: CaseStateMutation[]` with closed `mutationKind` and `verificationLevel` taxonomies (D-6) drawn from `wos-workflow.schema.json#/$defs/MutationSource` and `#/$defs/VerificationLevel`.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/WorkflowProcess"
+    },
+    {
+      "$ref": "#/$defs/CaseLedgerProjection"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessWithIncludes"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessPage"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessList"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessListOptions"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessCreateRequest"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessCreateResponse"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessGovernance"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessTimerList"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessHoldList"
+    },
+    {
+      "$ref": "#/$defs/WorkflowProcessRelatedList"
+    },
+    {
+      "$ref": "#/$defs/CompensationLogEntry"
+    },
+    {
+      "$ref": "#/$defs/CompensationLogEntryPage"
+    },
+    {
+      "$ref": "#/$defs/EvaluationResult"
+    },
+    {
+      "$ref": "#/$defs/EventSubmissionRequest"
+    },
+    {
+      "$ref": "#/$defs/EventSubmissionResponse"
+    },
+    {
+      "$ref": "#/$defs/RuntimeDrainStep"
+    },
+    {
+      "$ref": "#/$defs/RuntimeDrainStepList"
+    },
+    {
+      "$ref": "#/$defs/CorrelationGroupResult"
+    },
+    {
+      "$ref": "#/$defs/CustodyReceipt"
+    },
+    {
+      "$ref": "#/$defs/PerInstanceCorrelationResult"
+    },
+    {
+      "$ref": "#/$defs/SuspendInstanceRequest"
+    },
+    {
+      "$ref": "#/$defs/ResumeInstanceRequest"
+    },
+    {
+      "$ref": "#/$defs/TerminateInstanceRequest"
+    },
+    {
+      "$ref": "#/$defs/MigrateInstanceRequest"
+    },
+    {
+      "$ref": "#/$defs/MigrationResult"
+    },
+    {
+      "$ref": "#/$defs/ProcessLifecycleRequest"
+    },
+    {
+      "$ref": "#/$defs/ProcessLifecycleResponse"
+    },
+    {
+      "$ref": "#/$defs/LifecycleState"
+    }
+  ],
+  "$defs": {
+    "ActorRef": {
+      "$ref": "https://schemas.formspec.io/wos-api/_common/v1#/$defs/ActorRef",
+      "description": "Stable actor reference from the identity/governance subsystem (ADR 0082 D-9). Hoisted to `_common.schema.json` per PLN-0404."
+    },
+    "WosResourceUrn": {
+      "$ref": "https://schemas.formspec.io/wos-api/_common/v1#/$defs/WosResourceUrn",
+      "description": "Public WOS API resource URN (ADR 0082 D-4). Hoisted to `_common.schema.json` per PLN-0404."
+    },
+    "WorkflowUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Absolute URI of the governing WOS Workflow Document. Together with `workflowVersion` pins the exact author-time document controlling this instance's lifecycle, case-state schema, and contract bindings.",
+      "examples": [
+        "https://agency.gov/workflows/benefits-adjudication"
+      ],
+      "x-wos": {
+        "openStringKind": "uri"
+      }
+    },
+    "ImpactLevel": {
+      "$ref": "https://schemas.formspec.io/wos-api/task/v1#/$defs/ImpactLevel",
+      "description": "Closed-with-vendor-extension kernel impact-level taxonomy (Kernel S6) cross-`$ref`d from `task.schema.json` per ADR 0082 D-14 (`$ref` kernel/governance types from existing schemas instead of redefining). The kernel makes `impactLevel` REQUIRED on every Workflow Document (`wos-workflow.schema.json#/$defs/ImpactLevel`); this projection surfaces the value at instance scope so clients can branch on rights-/safety-impacting cases without re-fetching the workflow."
+    },
+    "OutcomeCode": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Machine-readable terminal-outcome marker populated only when `lifecycleState == completed` (Kernel S6 final-state `outcomeCode`). Identifier-shaped so downstream systems can branch on completion semantics without parsing state names. Absent on non-completed cases.",
+      "examples": [
+        "approved",
+        "denied",
+        "withdrawn"
+      ],
+      "x-wos": {
+        "openStringKind": "identifier"
+      }
+    },
+    "MilestoneId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable milestone identifier from the workflow document (Kernel S4 milestones; kernel:661-672). Sorted lexicographically when surfaced as a set.",
+      "examples": [
+        "eligibility-confirmed",
+        "intake-complete"
+      ],
+      "x-wos": {
+        "openStringKind": "identifier"
+      }
+    },
+    "ExpirableTimestamp": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "const": "never"
+        }
+      ],
+      "description": "RFC 3339 UTC timestamp or the literal `never` sentinel for indefinite-duration semantics (ADR 0082 D-10). Used by continuation-of-services exits and similar policy-bounded windows."
+    },
+    "DcrConstraintZoneState": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-instance state of one DCR constraint zone declared on a `compound` lifecycle state (advanced/advanced-governance.md \u00a71.2; advanced-governance.md:116-176). Carries the zone identifier, current escalation level (none \u2192 caution \u2192 breach), and the most recent trigger timestamp. Companion: Agent B's `dcrZoneViolation` Facts record kind on `provenance.schema.json` carries the per-event detail; this $def is the live state projection on `WorkflowProcess`.",
+      "required": [
+        "zoneId",
+        "currentLevel"
+      ],
+      "properties": {
+        "zoneId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable DCR-zone identifier from the workflow's advanced-governance constraint-zone declaration.",
+          "x-wos": {
+            "openStringKind": "identifier"
+          },
+          "examples": [
+            "appeal-window-zone"
+          ]
+        },
+        "currentLevel": {
+          "enum": [
+            "none",
+            "caution",
+            "breach"
+          ],
+          "description": "Closed escalation level of the zone. `none` is nominal; `caution` is a warning posture (constraint approaching breach threshold); `breach` is an active constraint violation. Closed-no-extension by design.",
+          "examples": [
+            "caution"
+          ]
+        },
+        "lastTriggered": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp the zone last transitioned out of `none`. Absent when the zone has never triggered."
+        },
+        "pendingActivities": {
+          "type": "array",
+          "description": "Activity identifiers currently in the 'pending' marking within this DCR zone.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "x-wos": {
+              "openStringKind": "identifier"
+            }
+          }
+        },
+        "violatedRelations": {
+          "type": "array",
+          "description": "DCR relations currently in violation within this zone.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "relationType",
+              "source",
+              "target"
+            ],
+            "properties": {
+              "relationType": {
+                "enum": [
+                  "condition",
+                  "response",
+                  "include",
+                  "exclude",
+                  "milestone"
+                ],
+                "description": "Closed DCR relation type per advanced-governance.md."
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "x-wos": {
+                  "openStringKind": "identifier"
+                },
+                "description": "Identifier of the constraint zone whose relation was violated."
+              },
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "x-wos": {
+                  "openStringKind": "identifier"
+                },
+                "description": "Identifier of the constraint zone or actor that is the target of the violated relation."
+              }
+            }
+          }
+        }
+      }
+    },
+    "LifecycleState": {
+      "type": "string",
+      "description": "Closed instance lifecycle posture (ADR 0082 D-12). Byte-aligned mirror of the kernel `InstanceStatus` enum at `wos-workflow.schema.json#/$defs/InstanceStatus` \u2014 itself the name-promoted alias of the inline `status` field on `wos-process.schema.json` (ADR 0082 D-13 gate 6 enforces this byte-parity). Closed-no-extension by design: `active` accepts events normally; `suspended` is paused; `migrating` is mid-definition-version-change; `completed` reached a top-level final state; `terminated` was explicitly terminated; `stalled` exhausted the commit retry budget (ADR 0070 D-5). The kernel taxonomy is closed; if a deployment needs new lifecycle postures, the kernel grows them and the API mirror tracks.",
+      "enum": [
+        "active",
+        "suspended",
+        "migrating",
+        "completed",
+        "terminated",
+        "stalled"
+      ],
+      "examples": [
+        "active",
+        "completed",
+        "stalled"
+      ],
+      "x-wos": {
+        "mirror": "wos-workflow.schema.json#/$defs/InstanceStatus"
+      }
+    },
+    "ConfigurationStateId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Single active leaf-state identifier in the kernel lifecycle hierarchy (Kernel S4.2). Dot-separated path of the leaf state within the lifecycle (for example `review.initial`).",
+      "examples": [
+        "intake",
+        "review.initial",
+        "eligibility.income-check"
+      ],
+      "x-wos": {
+        "openStringKind": "identifier"
+      }
+    },
+    "CaseStateValue": {
+      "description": "Current case-file field values, carried as an opaque JSON value (typically an object whose keys are case-file field names declared in the governing Workflow Document's `caseFile.fields` per Kernel S5.2). The case-file shape is workflow-defined, not API-defined: per-workflow structural validation is the reference server's responsibility against the resolved Workflow Document; this contract treats the value as opaque-shaped. Mutation projection is via `CaseStateMutation`, whose `mutationKind` and `verificationLevel` taxonomies are closed (ADR 0082 D-6).",
+      "examples": [
+        {
+          "applicantName": "Jane Doe",
+          "income": 42000,
+          "householdSize": 3
+        }
+      ]
+    },
+    "CompensationLogEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single entry in the kernel compensation log (Kernel \u00a79.5). Appended when the processor initiates a compensation sequence after a partial correlation-group fan-out failure or an explicit revert action. Read-only at the public API layer.",
+      "required": [
+        "compensationId",
+        "status",
+        "startedAt"
+      ],
+      "properties": {
+        "compensationId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Processor-assigned compensation identifier within this instance.",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "executing",
+            "succeeded",
+            "failed"
+          ],
+          "description": "Closed compensation lifecycle. pending: queued but not started. executing: revert steps in progress. succeeded: all revert steps completed. failed: one or more revert steps could not be applied."
+        },
+        "pivotStep": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identifier of the pivot step \u2014 the transition or mutation whose rollback triggered this compensation.",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "revertSteps": {
+          "type": "array",
+          "description": "Ordered identifiers of the revert steps to execute.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "x-wos": {
+              "openStringKind": "identifier"
+            }
+          }
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 UTC timestamp when compensation began."
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 UTC timestamp when compensation reached a terminal state (succeeded or failed). Absent while status is pending or executing."
+        }
+      }
+    },
+    "CompensationLogEntryPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cursor-paginated compensation log page (ADR 0082 D-7).",
+      "required": [
+        "items",
+        "hasMore"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "description": "Compensation log entries in this page.",
+          "items": {
+            "$ref": "#/$defs/CompensationLogEntry"
+          }
+        },
+        "cursor": {
+          "$ref": "https://schemas.formspec.io/wos-api/pagination/v1#/$defs/CursorToken",
+          "description": "Opaque token for the next page. Omitted when hasMore is false."
+        },
+        "hasMore": {
+          "type": "boolean",
+          "description": "True when another page is available."
+        }
+      }
+    },
+    "MutationKind": {
+      "type": "string",
+      "description": "Origin of a case-state mutation (ADR 0082 D-6). Byte-aligned mirror of the kernel `MutationSource` open enum at `wos-workflow.schema.json#/$defs/MutationSource` (ADR 0082 D-13 gate 6). Reserved literals: `agent-extracted` (an agent extracted the value); `system-fetched` (from an external system of record); `human-entered` (direct user entry); `human-corrected` (a corrective edit on a prior value); `computed` (from a derivation expression); `self-attested` (from an applicant assertion). Vendor extensions MUST use an `^x-[a-z][a-z0-9-]*$` prefix per the kernel pattern.",
+      "oneOf": [
+        {
+          "enum": [
+            "human-entered",
+            "human-corrected",
+            "agent-extracted",
+            "system-fetched",
+            "computed",
+            "self-attested"
+          ]
+        },
+        {
+          "pattern": "^x-[a-z][a-z0-9-]*$"
+        }
+      ],
+      "examples": [
+        "agent-extracted",
+        "human-entered"
+      ],
+      "x-wos": {
+        "mirror": "wos-workflow.schema.json#/$defs/MutationSource"
+      }
+    },
+    "VerificationLevel": {
+      "type": "string",
+      "description": "Verification strength of a case-state mutation (ADR 0082 D-6). Byte-aligned mirror of the kernel `VerificationLevel` open enum at `wos-workflow.schema.json#/$defs/VerificationLevel` (ADR 0082 D-13 gate 6). Reserved literals: `independent` (corroborated by an independent source); `attested` (signed attestation by a named actor); `corroborated` (consistent with at least one other recorded source); `authoritative` (carried by an authoritative source of record). Vendor extensions MUST use an `^x-[a-z][a-z0-9-]*$` prefix per the kernel pattern.",
+      "oneOf": [
+        {
+          "enum": [
+            "independent",
+            "attested",
+            "corroborated",
+            "authoritative"
+          ]
+        },
+        {
+          "pattern": "^x-[a-z][a-z0-9-]*$"
+        }
+      ],
+      "examples": [
+        "attested"
+      ],
+      "x-wos": {
+        "mirror": "wos-workflow.schema.json#/$defs/VerificationLevel"
+      }
+    },
+    "CaseStateMutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single field-level case-state mutation event (ADR 0082 D-6). Replaces the explicit anti-design `caseStateMutations: Record<string, unknown>` from the prior `case-portal/src/ports/types.ts`: the wire shape requires `fieldPath`, `newValue`, `mutationKind`, and `verificationLevel`, so an open-taxonomy mutation bag is structurally inexpressible.",
+      "required": [
+        "fieldPath",
+        "newValue",
+        "mutationKind",
+        "verificationLevel"
+      ],
+      "properties": {
+        "fieldPath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "JSON-pointer or dotted path identifying the case-file field this mutation writes (Kernel S5.4).",
+          "examples": [
+            "/applicantName",
+            "income",
+            "/medical/recentEvidence/0"
+          ],
+          "x-wos": {
+            "openStringKind": "pathExpression"
+          }
+        },
+        "previousValue": {
+          "description": "Value at this `fieldPath` immediately before the mutation. Any JSON value, including `null`. Omitted when the field had no prior value (first write)."
+        },
+        "newValue": {
+          "description": "Value at this `fieldPath` immediately after the mutation. Any JSON value, including `null` for an explicit erasure marker."
+        },
+        "mutationKind": {
+          "$ref": "#/$defs/MutationKind",
+          "description": "Closed-with-vendor-extension origin classification."
+        },
+        "verificationLevel": {
+          "$ref": "#/$defs/VerificationLevel",
+          "description": "Closed-with-vendor-extension verification strength."
+        },
+        "actorRef": {
+          "$ref": "#/$defs/ActorRef",
+          "description": "Actor URN that authored or attested the mutation. OPTIONAL when the runtime cannot canonically resolve a single actor (for example a `computed` mutation derived purely from prior case state)."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp when the mutation was applied (ADR 0069).",
+          "examples": [
+            "2026-04-19T12:00:00Z"
+          ]
+        }
+      }
+    },
+    "EvaluationOutcomeEventName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of an event that fired during the evaluation. Reserved kernel events follow the `$`-prefix convention (Kernel S4.10); document-authored events are bare identifiers.",
+      "examples": [
+        "applicantResponseReceived",
+        "$timeout.task"
+      ],
+      "x-wos": {
+        "openStringKind": "tagLabel"
+      }
+    },
+    "EvaluationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Result of evaluating a single event against an instance (ADR 0082 D-6). Carries the lifecycle configuration before and after the evaluation, the events that fired during the evaluation, and a typed array of case-state mutations. The kernel anti-design `caseStateMutations: Record<string, unknown>` is replaced by `mutations: CaseStateMutation[]`; the closed `mutationKind` and `verificationLevel` taxonomies make the open-bag form structurally inexpressible.",
+      "required": [
+        "previousConfiguration",
+        "newConfiguration",
+        "eventsFired",
+        "mutations"
+      ],
+      "properties": {
+        "previousConfiguration": {
+          "type": "array",
+          "description": "Active leaf-state configuration immediately before the evaluation.",
+          "items": {
+            "$ref": "#/$defs/ConfigurationStateId"
+          }
+        },
+        "newConfiguration": {
+          "type": "array",
+          "description": "Active leaf-state configuration immediately after the evaluation.",
+          "items": {
+            "$ref": "#/$defs/ConfigurationStateId"
+          }
+        },
+        "eventsFired": {
+          "type": "array",
+          "description": "Events that fired during the evaluation, in evaluation order.",
+          "items": {
+            "$ref": "#/$defs/EvaluationOutcomeEventName"
+          }
+        },
+        "mutations": {
+          "type": "array",
+          "description": "Typed array of case-state mutations applied during the evaluation. Empty when no mutations occurred.",
+          "items": {
+            "$ref": "#/$defs/CaseStateMutation"
+          }
+        }
+      }
+    },
+    "WorkflowProcess": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Public workflow-process resource (ADR 0082 D-3). Carries identity, workflow binding, lifecycle posture, current configuration, `impactLevel` (Kernel S6 proportionality index), and `caseState` only; subresources are accessed via dedicated endpoints or the closed `?include=` aggregation seam (`WorkflowProcessWithIncludes`). Mirrors structural fields from the kernel runtime artifact `wos-process.schema.json` but is a wire projection: identifiers are URNs (D-4), `lifecycleState` is the closed posture taxonomy (not the kernel raw `status`), and subresource fields (`activeTasks`, `timers`, `holds`, etc.) are intentionally absent.",
+      "required": [
+        "id",
+        "caseLedgerId",
+        "processId",
+        "workflowUrl",
+        "workflowVersion",
+        "lifecycleState",
+        "impactLevel",
+        "configuration",
+        "caseState",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Stable public URN for this runtime process projection. In the case/process route surface this is the canonical runtime-process identity; the durable case ledger is carried separately by `caseLedgerId`."
+        },
+        "caseLedgerId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Durable governed case-ledger URN (`urn:wos:<tenant>_case_<ulid>`). Multiple workflow runtime processes may append to the same case ledger."
+        },
+        "processId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Workflow runtime process URN (`urn:wos:<tenant>_process_<ulid>`) that owns this live execution projection. Direct case-ledger appends omit process identity; `WorkflowProcess` resources always carry it."
+        },
+        "workflowUrl": {
+          "$ref": "#/$defs/WorkflowUrl",
+          "description": "Absolute URI of the governing WOS Workflow Document."
+        },
+        "workflowVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Version of the Workflow Document pinned at instance creation (Kernel S9.6). Running instances remain on their creation-time version unless explicitly migrated.",
+          "examples": [
+            "1.0.0",
+            "2025.3.0"
+          ],
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "lifecycleState": {
+          "$ref": "#/$defs/LifecycleState",
+          "description": "Closed lifecycle posture for this instance."
+        },
+        "impactLevel": {
+          "$ref": "#/$defs/ImpactLevel",
+          "description": "Closed-with-vendor-extension kernel impact level (Kernel S6; kernel:826) projected from the governing Workflow Document. REQUIRED \u2014 the kernel makes `impactLevel` REQUIRED on every Workflow Document and uses it as a proportionality index for governance, AI-oversight, and review-protocol gating; surfacing it on the case projection lets clients branch on `rights-impacting` / `safety-impacting` cases without re-fetching the workflow."
+        },
+        "configuration": {
+          "type": "array",
+          "description": "Ordered active leaf-state configuration at the time of this projection (Kernel S4.2). Empty for terminal instances.",
+          "items": {
+            "$ref": "#/$defs/ConfigurationStateId"
+          }
+        },
+        "stalledSince": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp recording when the instance entered `stalled` posture (ADR 0070 D-5). REQUIRED on the wire whenever `lifecycleState == stalled`; absent otherwise."
+        },
+        "outcomeCode": {
+          "$ref": "#/$defs/OutcomeCode",
+          "description": "Machine-readable terminal-outcome marker. Populated only when `lifecycleState == completed` (Kernel S6 final-state `outcomeCode`); absent on every other lifecycle state."
+        },
+        "milestonesFired": {
+          "type": "array",
+          "description": "Set of milestone identifiers fired on this case so far (Kernel S4 milestones; kernel:661-672). Sorted lexicographically. Companion: Agent B's `milestoneFired` literal on `FactsRecordKind` carries the per-event detail; this field is the cumulative set on the live instance projection.",
+          "items": {
+            "$ref": "#/$defs/MilestoneId"
+          }
+        },
+        "continuationOfServicesActive": {
+          "type": "boolean",
+          "description": "True when the case is operating under a continuation-of-services policy (governance \u00a73.6 \u2014 `AppealMechanism.continuationOfServices`; workflow-governance.md:154-158). Surfaces the existence of the policy without leaking the underlying policy rationale; the staff caseworker uses this to avoid premature termination during an active appeal window."
+        },
+        "continuationOfServicesEndsAt": {
+          "$ref": "#/$defs/ExpirableTimestamp",
+          "description": "Absolute UTC RFC 3339 timestamp at which the active continuation-of-services window closes, or the literal `never` for indefinite continuation (governance \u00a73.6). Present only when `continuationOfServicesActive == true`."
+        },
+        "dcrZones": {
+          "type": "array",
+          "description": "Per-instance DCR constraint-zone state (advanced/advanced-governance.md \u00a71.2). Empty when the workflow declares no constraint zones or none have transitioned out of `none`. Cross-cite Agent B's `dcrZoneViolation` Facts record kind for the per-event detail in provenance.",
+          "items": {
+            "$ref": "#/$defs/DcrConstraintZoneState"
+          }
+        },
+        "caseState": {
+          "$ref": "#/$defs/CaseStateValue",
+          "description": "Authoritative case-file snapshot at this projection point (Kernel S5)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp when the instance was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp when the projection was last refreshed."
+        },
+        "tenant": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$",
+          "description": "Deployment tenant for this workflow process (ADR 0068 D-1.1). Single DNS label: lowercase ASCII letter first, then lowercase letters, digits, or hyphen, length 1 to 63."
+        },
+        "correlationKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Cross-case correlation identifier used by the kernel to route events to related instances (Kernel S9.4). OPTIONAL; absent when no correlation is in effect.",
+          "examples": [
+            "household-1234"
+          ],
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        }
+      }
+    },
+    "CaseLedgerEventSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Latest direct case-ledger event summary for `GET /api/v1/cases/{case_id}`. This summarizes the durable case provenance chain keyed by the case ledger, not workflow-process provenance rows.",
+      "required": [
+        "eventId",
+        "sequence",
+        "eventHash",
+        "previousHash",
+        "timestamp"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Storage-local provenance row identifier for the direct case-ledger event."
+        },
+        "event": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Registered WOS event literal carried by the provenance payload when present. This is the authoritative D26 dispatch value; the case-ledger projection does not expose the redundant inner `recordKind` discriminator.",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Monotonic sequence number within the direct case-ledger provenance chain."
+        },
+        "eventHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Hash-chain digest for this direct case-ledger event."
+        },
+        "previousHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Hash-chain predecessor digest for this direct case-ledger event."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp when the event row was appended."
+        }
+      }
+    },
+    "CaseLedgerProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Durable case-ledger projection returned by `GET /api/v1/cases/{case_id}`. Unlike `WorkflowProcess`, this resource is keyed by the governed case ledger and may have zero workflow processes when the case was created through the direct genesis append surface.",
+      "required": [
+        "caseLedgerId",
+        "eventCount",
+        "processCount",
+        "processes"
+      ],
+      "properties": {
+        "caseLedgerId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Durable governed case-ledger URN (`urn:wos:<tenant>_case_<ulid>`)."
+        },
+        "eventCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of direct case-ledger provenance events keyed by this case ledger. Process-routed provenance remains attached to each workflow process."
+        },
+        "latestEvent": {
+          "$ref": "#/$defs/CaseLedgerEventSummary",
+          "description": "Latest direct case-ledger event when the case has a direct provenance chain. Absent for process-only cases."
+        },
+        "processCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of workflow runtime processes currently bound to this durable case ledger."
+        },
+        "processes": {
+          "type": "array",
+          "description": "Workflow process projections bound to this case ledger. Empty for a direct case-ledger genesis with no process started yet.",
+          "items": {
+            "$ref": "#/$defs/WorkflowProcess"
+          }
+        }
+      }
+    },
+    "DelegationEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single delegation record visible on a workflow process (governance S11). Mirrors the WOS governance `Delegation` model; full details live on the `governance` domain when it ratifies (ADR 0082 D-15 step 5). This shape is the minimum projection needed by the case view.",
+      "required": [
+        "id",
+        "delegator",
+        "delegate",
+        "authority"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Stable URN for this delegation."
+        },
+        "delegator": {
+          "$ref": "#/$defs/ActorRef",
+          "description": "Actor granting the delegation."
+        },
+        "delegate": {
+          "$ref": "#/$defs/ActorRef",
+          "description": "Actor receiving the delegated authority."
+        },
+        "authority": {
+          "oneOf": [
+            {
+              "enum": [
+                "signing",
+                "determination",
+                "review",
+                "override"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^x-[a-z][a-z0-9-]*$"
+            }
+          ],
+          "description": "Closed-with-vendor-extension delegation authority kind (governance S11.2). Vendor extensions MUST use an `x-` prefix.",
+          "examples": [
+            "determination"
+          ]
+        },
+        "effectiveDate": {
+          "type": "string",
+          "format": "date",
+          "description": "ISO 8601 date the delegation becomes active. Omitted when not date-bounded."
+        },
+        "expirationDate": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date"
+            },
+            {
+              "const": "never"
+            }
+          ],
+          "description": "ISO 8601 date the delegation expires, or the literal `never` for indefinite delegations (ADR 0082 D-10 sentinel pattern)."
+        },
+        "revoked": {
+          "type": "boolean",
+          "description": "True when the delegation has been revoked. Revoked delegations remain visible for audit but do not authorize new actions."
+        }
+      }
+    },
+    "ReviewState": {
+      "description": "Closed review-protocol posture for a workflow process (governance S4). Reserved literals: `none` (no review attached); `pending` (review required but not started); `in-review` (review actively underway); `cleared` (review completed and approved); `flagged` (review identified an issue requiring resolution). Vendor extensions MUST use an `x-` prefix.",
+      "oneOf": [
+        {
+          "enum": [
+            "none",
+            "pending",
+            "in-review",
+            "cleared",
+            "flagged"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^x-[a-z][a-z0-9-]*$"
+        }
+      ],
+      "examples": [
+        "in-review"
+      ]
+    },
+    "WorkflowProcessGovernance": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Governance subresource for a workflow process (ADR 0082 D-3). Returns the active delegation set and the current review-protocol posture. Full delegation/review records live on the dedicated `governance` domain when it ratifies.",
+      "required": [
+        "processId",
+        "delegations",
+        "reviewState"
+      ],
+      "properties": {
+        "processId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Workflow process this governance projection belongs to."
+        },
+        "delegations": {
+          "type": "array",
+          "description": "Delegations currently in effect for this instance, ordered by `effectiveDate` ascending.",
+          "items": {
+            "$ref": "#/$defs/DelegationEntry"
+          }
+        },
+        "reviewState": {
+          "$ref": "#/$defs/ReviewState",
+          "description": "Closed review-protocol posture for this instance."
+        },
+        "adverseDecisionPolicyActive": {
+          "type": "boolean",
+          "description": "When true, the workflow's adverse-decision policy is active for this case. The case portal SHOULD surface notices about appeal rights, deadlines, and continuation-of-services windows."
+        },
+        "reviewProtocolActive": {
+          "$ref": "https://schemas.formspec.io/wos-api/task/v1#/$defs/ReviewProtocolKind",
+          "description": "The review protocol currently active on this workflow process. Projected from the workflow's review-protocol declaration. Present only when a review-protocol-governed transition is in the active configuration."
+        },
+        "activeEscalation": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Current escalation posture for this instance. Present only when an escalation chain is actively walking. Absent when the instance is not escalated.",
+          "required": [
+            "level"
+          ],
+          "properties": {
+            "level": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Current escalation level (1-based)."
+            },
+            "escalatedTo": {
+              "$ref": "#/$defs/ActorRef",
+              "description": "Actor URN the case or task was reassigned to."
+            },
+            "escalatedAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "RFC 3339 UTC timestamp when this escalation level fired."
+            },
+            "reason": {
+              "$ref": "https://schemas.formspec.io/wos-api/governance/v1#/$defs/EscalationReason",
+              "description": "Cause that triggered the escalation."
+            }
+          }
+        },
+        "activeHoldsCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of currently active holds on this instance. The holds subresource carries the per-hold detail."
+        },
+        "activeGovernanceRules": {
+          "type": "array",
+          "description": "Governance rules currently active on this instance's state configuration.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ruleId",
+              "ruleKind",
+              "activatedAt"
+            ],
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "minLength": 1,
+                "x-wos": {
+                  "openStringKind": "identifier"
+                },
+                "description": "Stable identifier of the governance rule that is currently active on this instance."
+              },
+              "ruleKind": {
+                "enum": [
+                  "lifecycle-hook",
+                  "contract-hook",
+                  "review-protocol",
+                  "due-process-notice",
+                  "assertion-gate"
+                ],
+                "description": "Closed governance rule kind taxonomy."
+              },
+              "triggerTag": {
+                "type": "string",
+                "minLength": 1,
+                "x-wos": {
+                  "openStringKind": "identifier"
+                },
+                "description": "Semantic tag that triggered activation of this governance rule."
+              },
+              "activatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "RFC 3339 timestamp recording when this governance rule became active."
+              }
+            }
+          }
+        }
+      }
+    },
+    "TimerEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single durable timer projection for a workflow process. Mirrors `wos-process.schema.json#/$defs/TimerState`; `event` retains the kernel raw event name without the API-layer URN rewrite because timers fire kernel events, not API resources.",
+      "required": [
+        "timerId",
+        "deadline",
+        "event"
+      ],
+      "properties": {
+        "timerId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable processor-assigned timer identifier within this instance.",
+          "examples": [
+            "review-deadline"
+          ],
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "deadline": {
+          "type": "string",
+          "format": "date-time",
+          "minLength": 1,
+          "description": "UTC RFC 3339 timestamp at which this timer fires.",
+          "x-wos": {
+            "openStringKind": "timestamp"
+          }
+        },
+        "absoluteDeadline": {
+          "type": "boolean",
+          "default": false,
+          "description": "True for a fixed authored deadline; business calendars preserve its instant across restoration."
+        },
+        "event": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Kernel event name dispatched when the timer fires. Typically a `$timeout.*` kernel-generated event (Kernel S4.10).",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "scopeState": {
+          "$ref": "#/$defs/ConfigurationStateId",
+          "description": "Lifecycle state at which this timer is scoped. The timer cancels automatically when the scope state is exited (Kernel S9.7)."
+        }
+      },
+      "x-wos": {
+        "mirror": "wos-process.schema.json#/$defs/TimerState"
+      }
+    },
+    "WorkflowProcessTimerList": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Timers subresource for a workflow process (ADR 0082 D-3). Returns the durable timer set; this is a small, bounded set per instance, so the response is not cursor-paginated.",
+      "required": [
+        "processId",
+        "items"
+      ],
+      "properties": {
+        "processId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Workflow process these timers belong to."
+        },
+        "items": {
+          "type": "array",
+          "description": "Active timers, ordered by `deadline` ascending.",
+          "items": {
+            "$ref": "#/$defs/TimerEntry"
+          }
+        }
+      }
+    },
+    "HoldEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single typed hold projection on a workflow process (governance S12). Carries the hold reason, expected duration (or the literal `indefinite` for legal-hold), and the resume trigger.",
+      "required": [
+        "id",
+        "holdType",
+        "expectedDuration",
+        "engagedAt"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Stable URN for this hold."
+        },
+        "holdType": {
+          "oneOf": [
+            {
+              "enum": [
+                "pending-applicant-response",
+                "pending-external-verification",
+                "pending-legal-review",
+                "pending-legislation",
+                "pending-related-case",
+                "voluntary-hold",
+                "legal-hold"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^x-[a-z][a-z0-9-]*$"
+            }
+          ],
+          "description": "Closed-with-vendor-extension hold reason (governance S12.2). Vendor extensions MUST use an `x-` prefix."
+        },
+        "expectedDuration": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^P(?!$)(?:\\d+Y)?(?:\\d+M)?(?:\\d+D)?(?:\\d+BD)?(?:T(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$"
+            },
+            {
+              "const": "indefinite"
+            }
+          ],
+          "description": "ISO 8601 duration (with the WOS `P<N>BD` business-day extension), or the literal `indefinite` for `legal-hold` policies."
+        },
+        "resumeTrigger": {
+          "$ref": "#/$defs/EvaluationOutcomeEventName",
+          "description": "Kernel event name that resumes the case from this hold. Omitted when `holdType == legal-hold`."
+        },
+        "engagedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp when the hold was engaged."
+        },
+        "expectedReleaseAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp when the hold's expected duration elapses. Omitted when `expectedDuration == indefinite`."
+        }
+      }
+    },
+    "WorkflowProcessHoldList": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Holds subresource for a workflow process (ADR 0082 D-3). Returns active holds; small, bounded set per instance, so not cursor-paginated.",
+      "required": [
+        "processId",
+        "items"
+      ],
+      "properties": {
+        "processId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Workflow process these holds belong to."
+        },
+        "items": {
+          "type": "array",
+          "description": "Engaged holds, ordered by `engagedAt` ascending.",
+          "items": {
+            "$ref": "#/$defs/HoldEntry"
+          }
+        }
+      }
+    },
+    "RelatedCaseLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single cross-case related-instance link (Kernel S5.5; kernel:775). Lets clients navigate from a case to its parent appeal, sibling household members, replaced predecessor, or freely-labelled `related`/`supersedes` peer per kernel reservations.",
+      "required": [
+        "processId",
+        "relationship"
+      ],
+      "properties": {
+        "processId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Related workflow process URN."
+        },
+        "relationship": {
+          "oneOf": [
+            {
+              "enum": [
+                "parent",
+                "child",
+                "sibling",
+                "predecessor",
+                "successor",
+                "appeals",
+                "appealed-by",
+                "related",
+                "supersedes"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^x-[a-z][a-z0-9-]*$"
+            }
+          ],
+          "description": "Closed-with-vendor-extension relationship kind. Reserved literals reconcile two prior taxonomies: kernel S5.5 reserves `related` and `supersedes`; the API previously carried `predecessor|successor|appeals|appealed-by` plus the family triplet `parent|child|sibling`. The merged set is now authoritative. Vendor extensions MUST use an `x-` prefix.",
+          "examples": [
+            "appeals",
+            "related",
+            "supersedes"
+          ]
+        },
+        "bidirectional": {
+          "type": "boolean",
+          "description": "When true, the relationship is symmetric \u2014 a corresponding `RelatedCaseLink` exists on the peer case pointing back at this one (Kernel S5.5; kernel:775). Defaults to `false` when absent: directional links (`predecessor \u2192 successor`, `appeals \u2192 appealed-by`) are the common case; symmetric kinds like `sibling`/`related` typically set this `true`. The default is implicit-`false`."
+        },
+        "semanticLabel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-form prose label disambiguating the relationship (Kernel S5.5; kernel:775). Open prose \u2014 rendering concern, not contract; useful when several `related` links exist on the same case and the operator needs to tell them apart in a UI.",
+          "x-wos": {
+            "openStringKind": "prose"
+          },
+          "examples": [
+            "Joint application \u2014 spouse",
+            "Companion fraud investigation"
+          ]
+        },
+        "establishedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp when the relationship was established."
+        }
+      }
+    },
+    "WorkflowProcessRelatedList": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Related-cases subresource for a workflow process (ADR 0082 D-3). Returns the cross-case link set; not cursor-paginated because related-case sets are small.",
+      "required": [
+        "processId",
+        "items"
+      ],
+      "properties": {
+        "processId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Workflow process these links originate from."
+        },
+        "items": {
+          "type": "array",
+          "description": "Outbound related-case links.",
+          "items": {
+            "$ref": "#/$defs/RelatedCaseLink"
+          }
+        }
+      }
+    },
+    "IncludeKind": {
+      "enum": [
+        "compensation",
+        "governance",
+        "tasks",
+        "timers",
+        "holds",
+        "related"
+      ],
+      "description": "Closed `?include=` aggregation seam for `GET /api/v1/cases/{case_id}/processes/{process_id}` (ADR 0082 D-3). No vendor extensions: the aggregation surface is closed by design so server cost is bounded and the GraphQL-style open composition the platform thesis rejects stays inexpressible.",
+      "examples": [
+        "governance",
+        "tasks"
+      ]
+    },
+    "WorkflowProcessWithIncludes": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Aggregated single-instance response for `GET /api/v1/cases/{case_id}/processes/{process_id}?include=...` (ADR 0082 D-3). The `instance` envelope is the same `WorkflowProcess` shape that lives at `GET /api/v1/cases/{case_id}/processes/{process_id}` with no `?include=`; subresource fields appear only when their literal is present in the query parameter. Per-section limits (for example `tasks(limit=10)`) are enforced server-side; the inline `tasks` shape projects `TaskListItem` from `task.schema.json` so list views inside the aggregation match the standalone task list.",
+      "required": [
+        "instance"
+      ],
+      "properties": {
+        "instance": {
+          "$ref": "#/$defs/WorkflowProcess",
+          "description": "Base workflow-process projection."
+        },
+        "compensation": {
+          "$ref": "#/$defs/CompensationLogEntryPage",
+          "description": "Compensation log subresource. Present only when `include=compensation` was requested. Returns cursor-paginated entries; clients consume the full log via `GET /api/v1/cases/{case_id}/processes/{process_id}/compensation` for pagination."
+        },
+        "governance": {
+          "$ref": "#/$defs/WorkflowProcessGovernance",
+          "description": "Governance subresource. Present only when `include=governance` was requested."
+        },
+        "tasks": {
+          "type": "array",
+          "description": "Task list projection (lighter `TaskListItem` shape from `task.schema.json`). Present only when `include=tasks` was requested. Capped per-section by the server; clients consume the full task list via `GET /api/v1/cases/{case_id}/processes/{process_id}/tasks` for cursor pagination.",
+          "items": {
+            "$ref": "https://schemas.formspec.io/wos-api/task/v1#/$defs/TaskListItem"
+          }
+        },
+        "timers": {
+          "$ref": "#/$defs/WorkflowProcessTimerList",
+          "description": "Timers subresource. Present only when `include=timers` was requested."
+        },
+        "holds": {
+          "$ref": "#/$defs/WorkflowProcessHoldList",
+          "description": "Holds subresource. Present only when `include=holds` was requested."
+        },
+        "related": {
+          "$ref": "#/$defs/WorkflowProcessRelatedList",
+          "description": "Related-cases subresource. Present only when `include=related` was requested."
+        }
+      }
+    },
+    "WorkflowProcessListOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Reserved directory-style workflow-process list query fields (ADR 0082 D-7). The reference server's case-scoped `GET /api/v1/cases/{case_id}/processes` route currently returns an unpaginated `WorkflowProcessList` and does not consume this shape.",
+      "properties": {
+        "lifecycleState": {
+          "$ref": "#/$defs/LifecycleState",
+          "description": "Filter to instances in the supplied lifecycle posture. Repeating the query parameter narrows to a posture set."
+        },
+        "workflowUrl": {
+          "$ref": "#/$defs/WorkflowUrl",
+          "description": "Filter to instances of the supplied Workflow Document URL."
+        },
+        "createdAfter": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Inclusive UTC RFC 3339 lower bound on `createdAt` (ADR 0069)."
+        },
+        "createdBefore": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Exclusive UTC RFC 3339 upper bound on `createdAt`."
+        },
+        "tenant": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$",
+          "description": "Tenant scope filter (ADR 0068 D-1.1). MUST agree with the `X-WOS-Tenant` header when both are present; the server rejects mismatches with `WOS-1422`."
+        },
+        "include": {
+          "type": "array",
+          "description": "Closed list of subresources to embed (`?include=...`). Repeated query parameter or comma-separated form. Per-section limits are enforced server-side.",
+          "items": {
+            "$ref": "#/$defs/IncludeKind"
+          }
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque resume token returned by the previous page (ADR 0082 D-7).",
+          "x-wos": {
+            "openStringKind": "opaque-token"
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Maximum number of instances requested for this page."
+        }
+      }
+    },
+    "WorkflowProcessPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cursor-paginated workflow-process page (ADR 0082 D-7).",
+      "required": [
+        "items",
+        "hasMore"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "description": "Case-instance projections in this page.",
+          "items": {
+            "$ref": "#/$defs/WorkflowProcess"
+          }
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque token for the next page. Omitted when hasMore is false.",
+          "x-wos": {
+            "openStringKind": "opaque-token"
+          }
+        },
+        "hasMore": {
+          "type": "boolean",
+          "description": "True when another page is available from the server."
+        }
+      }
+    },
+    "WorkflowProcessList": {
+      "type": "array",
+      "description": "Unpaginated list of workflow-process projections bound to one durable case ledger. This is the wire response for `GET /api/v1/cases/{case_id}/processes` in the reference server; cursor-paginated process directory browsing remains out of scope for the case-scoped subresource.",
+      "items": {
+        "$ref": "#/$defs/WorkflowProcess"
+      }
+    },
+    "WorkflowProcessCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Request body for `POST /api/v1/cases/{case_id}/processes` in the reference server. Servers create or accept the process identifier, bind it to the durable case ledger, pin `definitionVersion` when supplied, and set the initial `caseState` from `initialCaseState` when present.",
+      "required": [
+        "definitionUrl"
+      ],
+      "properties": {
+        "definitionUrl": {
+          "$ref": "#/$defs/WorkflowUrl",
+          "description": "Absolute URI of the WOS Workflow Document this process is created against."
+        },
+        "definitionVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional pinned Workflow Document version for this process.",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "processId": {
+          "$ref": "https://schemas.formspec.io/wos-api/_common/v1#/$defs/ProcessPathId",
+          "description": "Optional caller-supplied workflow process TypeID or WOS process URN. When omitted, the server allocates a new process TypeID for the supplied case ledger."
+        },
+        "tenant": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$",
+          "description": "Explicit deployment tenant for this instance (ADR 0068 D-1.1). When omitted, the server resolves it from `X-WOS-Tenant`."
+        },
+        "initialCaseState": {
+          "$ref": "#/$defs/CaseStateValue",
+          "description": "Optional initial case-state object applied to the newly bound process."
+        }
+      }
+    },
+    "IntakeHandoffOutcome": {
+      "enum": [
+        "accepted",
+        "attachToExistingCase",
+        "deferred"
+      ],
+      "description": "Closed-no-extension outcome of `acceptIntakeHandoff` policy evaluation (ADR 0073 D-7; Kernel S11.4.1 step 5). Reserved literals: `accepted` -- the handoff was accepted and a new governed case was born (corresponds to the kernel `accepted + createGovernedCase` policy decision and emits the `intakeAccepted` + `caseCreated` Facts `recordKind` values); `attachToExistingCase` -- the handoff was accepted and attached to a pre-existing governed case (kernel `accepted + attachToExistingCase`; emits `intakeAccepted` only); `deferred` -- the handoff was received but withheld from governed-case mutation pending later host action (kernel `deferred`; emits `intakeDeferred`). Closed-no-extension because the kernel-defined acceptance vocabulary is normative; vendor extension would create rival case-truth semantics (ADR 0073 D-1).",
+      "examples": [
+        "accepted",
+        "attachToExistingCase",
+        "deferred"
+      ]
+    },
+    "WorkflowProcessCreateResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Reserved intake-handoff creation response envelope (ADR 0073 D-7; Kernel S11.4). The reference server's case-scoped `POST /api/v1/cases/{case_id}/processes` route returns `WorkflowProcess` directly; this envelope remains available for adapters that expose `acceptIntakeHandoff` policy outcomes as a separate contract.",
+      "required": [
+        "instance",
+        "outcome"
+      ],
+      "properties": {
+        "instance": {
+          "$ref": "#/$defs/WorkflowProcess",
+          "description": "Created (or attached-to) workflow-process projection."
+        },
+        "outcome": {
+          "$ref": "#/$defs/IntakeHandoffOutcome",
+          "description": "Resolved acceptance policy decision per ADR 0073 D-7."
+        },
+        "attachedToInstanceId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "URN of the pre-existing governed-workflow process the handoff was attached to. REQUIRED when `outcome == attachToExistingCase`; absent otherwise. The `instance` field carries the full projection of that same case after attachment so clients can render the result without a follow-up GET."
+        },
+        "deferralReason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Free-prose host-supplied reason for deferral. REQUIRED when `outcome == deferred`; absent otherwise. Used to render the operator-facing 'why' on the case-portal pending-intake list. Length-bounded to keep the response shape predictable.",
+          "x-wos": {
+            "openStringKind": "prose"
+          }
+        }
+      }
+    },
+    "EventSubmissionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Request body for workflow input submission through `POST /api/v1/cases/{case_id}/processes/{process_id}/inputs` (Kernel S4.9 + S11.3 `processEvent`). Submits an authored event for evaluation against the running process; the server runs the kernel transition algorithm and returns the resulting `EvaluationResult` plus the post-evaluation `lifecycleState`. The `Idempotency-Key` HTTP header is REQUIRED (ADR 0082 D-16); a repeat request within the retention window returns the original `EventSubmissionResponse` unchanged. Submissions to a process whose `lifecycleState` is not `active` (Kernel S11.5) are rejected with `WOS-1409`.",
+      "required": [
+        "eventName",
+        "actorRef"
+      ],
+      "properties": {
+        "eventName": {
+          "$ref": "#/$defs/EvaluationOutcomeEventName",
+          "description": "Name of the event to deliver. Document-authored events are bare identifiers; kernel-reserved synthetic events (the `$`-prefix family per Kernel S4.10) MUST NOT be submitted by callers -- they are processor-emitted only and the server rejects them with `WOS-1422`."
+        },
+        "payload": {
+          "$ref": "#/$defs/CaseStateValue",
+          "description": "Optional event payload, carried as the same opaque-shaped JSON value used for `caseState`. Workflow-defined: validated by the server against the workflow's declared event-payload schema (when present, per Kernel S4.10) before evaluation; rejection is `WOS-1422`. Reusing `CaseStateValue` keeps the wire envelope closed at the API boundary while the per-payload shape stays workflow-driven."
+        },
+        "actorRef": {
+          "$ref": "#/$defs/ActorRef",
+          "description": "Actor URN authoring this event submission (ADR 0082 D-9). REQUIRED -- every mutation carries an actor for Facts-tier provenance (Kernel S3 + S8.2)."
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional client-asserted UTC RFC 3339 timestamp at which the originating real-world event occurred. The server records this verbatim on the resulting `stateTransition` record but uses its own clock for kernel time semantics (ADR 0069). Omitted when the caller has no out-of-band timing claim."
+        },
+        "correlationKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional cross-case correlation identifier the server uses to fan out related-instance events (Kernel S9.4). When omitted the server uses the instance's stored `correlationKey` from `WorkflowProcess.correlationKey`.",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        }
+      }
+    },
+    "PerInstanceCorrelationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-instance result of a correlation-keyed event fan-out (Kernel S9.4). Records the outcome the server reached against one related instance when a single submitted event was fanned out across the correlation group. `status` is closed-no-extension because the fan-out outcome space is normative \u2014 the kernel either evaluated, refused, or skipped the related instance, and inventing a fourth outcome would create a rival case-truth semantics the platform thesis rejects.",
+      "required": [
+        "processId",
+        "status"
+      ],
+      "properties": {
+        "processId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Related workflow process URN the server attempted to fan out to."
+        },
+        "status": {
+          "enum": [
+            "succeeded",
+            "failed",
+            "skipped"
+          ],
+          "description": "Closed-no-extension outcome of the per-instance evaluation. `succeeded` -- the server evaluated the event against this instance and committed the resulting transition; `failed` -- the server attempted the evaluation and the kernel refused (lifecycle posture, validation, or runtime error -- `failureCode` carries the WOS error code); `skipped` -- the server elected not to evaluate (e.g., the instance was outside the caller's scope per ADR 0068 or the kernel correlation predicate excluded it). New outcomes require a major schema bump.",
+          "examples": [
+            "succeeded",
+            "failed",
+            "skipped"
+          ]
+        },
+        "failureCode": {
+          "$ref": "https://schemas.formspec.io/wos-api/error/v1#/$defs/ErrorCode",
+          "description": "Stable WOS error code classifying the per-instance failure. REQUIRED when `status == failed`; absent on `succeeded` or `skipped`. Drawn from the public registry (`error-registry.md`) -- typically `WOS-1409` (lifecycle-posture mismatch) or `WOS-1422` (payload validation against the related instance's workflow event schema)."
+        },
+        "evaluatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp at which the per-instance evaluation completed (ADR 0069). Omitted on `skipped` because no evaluation occurred. Drawn from the server clock."
+        }
+      }
+    },
+    "CorrelationGroupResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-event fan-out result envelope reported on `EventSubmissionResponse` when the submitted event triggered a correlation-group fan-out (Kernel S9.4). The server runs the kernel transition algorithm against each related instance independently and reports the typed per-instance outcome here -- best-effort-with-typed-failure semantics, NOT all-or-nothing. When `allSucceeded == false`, callers MUST inspect `perInstanceResults` to determine compensation. The shape makes silent partial-failure structurally impossible: every related instance the server attempted is named, and a missing entry is itself a contract bug.",
+      "required": [
+        "correlationKey",
+        "perInstanceResults",
+        "allSucceeded"
+      ],
+      "properties": {
+        "correlationKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Cross-case correlation identifier this fan-out group is keyed on (Kernel S9.4). Equals the resolved correlation key the server used -- either the request's explicit `correlationKey` or the instance's stored `WorkflowProcess.correlationKey` when the request omitted one.",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "perInstanceResults": {
+          "type": "array",
+          "description": "Typed per-instance outcomes, one entry per related instance the server attempted to fan out to. Order follows the kernel's correlation-group enumeration order (deterministic per Kernel S9.4); the originating instance the request targeted MAY be included or omitted at server discretion -- callers MUST NOT depend on its presence here because `EventSubmissionResponse.evaluationResult` already carries that result.",
+          "items": {
+            "$ref": "#/$defs/PerInstanceCorrelationResult"
+          }
+        },
+        "allSucceeded": {
+          "type": "boolean",
+          "description": "Convenience marker -- `true` when every entry in `perInstanceResults` has `status == succeeded`, `false` otherwise. When `false`, callers MUST inspect `perInstanceResults` for the per-instance failure surface to drive compensation (cross-cite ADR 0070 cross-layer failure and compensation when ratified)."
+        }
+      }
+    },
+    "CustodyReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Trellis custody-anchoring receipt for a workflow process. Projected from the Trellis canonical-event-hash anchor receipt produced when the WOS processor appends provenance records through the custodyHook seam (Kernel \u00a710.5). Read-only at the public API layer \u2014 the write path is internal (processor \u2192 Trellis via custodyHook).",
+      "required": [
+        "processId",
+        "canonicalEventHash",
+        "anchoredAt"
+      ],
+      "properties": {
+        "processId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Workflow process URN this custody receipt anchors."
+        },
+        "canonicalEventHash": {
+          "type": "string",
+          "pattern": "^(?:sha256:)?[a-f0-9]{64}$",
+          "description": "Trellis canonical-event-hash text for the anchored event. Current Trellis service receipts use `sha256:<lowercase hex>`; older local fixtures may use bare lowercase hex. This is the cryptographic proof that the case's provenance records were anchored on Trellis \u2014 a verifier recomputes the hash from the provenance byte stream and compares against this value."
+        },
+        "anchoredAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 UTC timestamp when the Trellis anchor was confirmed."
+        },
+        "anchorTarget": {
+          "type": "string",
+          "format": "uri",
+          "description": "Trellis anchor target URI (e.g. OpenTimestamps calendar URL, Rekor transparency log entry, Trillian Merkle tree path). Absent when the deployment uses an anchorless Trellis posture."
+        },
+        "provenanceRecordId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Optional Facts-tier provenance record URN whose canonical event this receipt anchors. Absent when the receipt covers a batch of records."
+        },
+        "custodyPosture": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Trellis trust-profile label declared in the workflow's custody block (e.g. 'profile-b', 'lightweight'). Matches the trust-profile the custodyHook was configured with at append time.",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        }
+      }
+    },
+    "EventSubmissionResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Response body for `POST /api/v1/cases/{case_id}/processes/{process_id}/inputs`. Wraps the kernel `EvaluationResult` (which carries `previousConfiguration`, `newConfiguration`, `eventsFired`, `mutations`) plus the post-evaluation lifecycle posture and the URN of the Facts-tier provenance record the evaluation produced. Clients drive the case-portal UI off the embedded `evaluationResult.mutations` typed array (ADR 0082 D-6) -- the kernel anti-design `caseStateMutations: Record<string, unknown>` is structurally inexpressible. When the submission triggered correlation-group fan-out (Kernel S9.4), `correlationGroupResult` carries the typed per-instance outcomes; absence means no fan-out occurred (single-instance evaluation only).",
+      "required": [
+        "evaluationResult",
+        "newLifecycleState",
+        "evaluatedAt"
+      ],
+      "properties": {
+        "evaluationResult": {
+          "$ref": "#/$defs/EvaluationResult",
+          "description": "Result of running the kernel transition algorithm against the supplied event."
+        },
+        "newLifecycleState": {
+          "$ref": "#/$defs/LifecycleState",
+          "description": "Lifecycle posture after this evaluation. Equal to the prior state when the event was unmatched or the transition was within `active`; transitions to `completed` when the firing transition entered a top-level final state (Kernel S11.5)."
+        },
+        "evaluatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp at which the kernel evaluation completed (ADR 0069). Drawn from the server clock, not from the caller's `occurredAt`."
+        },
+        "provenanceRecordId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "URN of the Facts-tier `stateTransition` (or `unmatchedEvent`) provenance record produced by this evaluation (Kernel S11.3). Clients can dereference it via `GET /api/v1/cases/{case_id}/processes/{process_id}/provenance` for full reasoning/counterfactual/narrative tier data (ADR 0082 D-5). Omitted only when the underlying processor cannot canonically resolve a single producer record (e.g., a no-op evaluation against a `completed` instance is rejected upstream with `WOS-1409` and never reaches this shape)."
+        },
+        "correlationGroupResult": {
+          "$ref": "#/$defs/CorrelationGroupResult",
+          "description": "Typed per-instance fan-out outcomes when the submission triggered a correlation-group fan-out (Kernel S9.4). Present only when fan-out occurred; absent when the event was evaluated against a single instance only. Best-effort-with-typed-failure semantics: when `allSucceeded == false`, callers MUST inspect `perInstanceResults` for compensation."
+        }
+      }
+    },
+    "RuntimeDrainStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Summary of one runtime drain step returned by `POST /api/v1/cases/{case_id}/processes/{process_id}/drain`.",
+      "required": [
+        "transitionsCount",
+        "provenanceCount",
+        "createdTaskIds",
+        "emittedEvents"
+      ],
+      "properties": {
+        "processedEvent": {
+          "type": "string",
+          "description": "Event name processed by this drain step, when a queued event was present.",
+          "x-wos": {
+            "openStringKind": "tagLabel"
+          }
+        },
+        "transitionsCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of workflow state transitions committed during this drain step."
+        },
+        "provenanceCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of provenance rows emitted during this drain step."
+        },
+        "createdTaskIds": {
+          "type": "array",
+          "description": "Task identifiers created during this drain step.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "x-wos": {
+              "openStringKind": "identifier"
+            }
+          }
+        },
+        "emittedEvents": {
+          "type": "array",
+          "description": "Workflow event names emitted during this drain step.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "x-wos": {
+              "openStringKind": "tagLabel"
+            }
+          }
+        }
+      }
+    },
+    "RuntimeDrainStepList": {
+      "type": "array",
+      "description": "Ordered runtime drain step summaries returned by `POST /api/v1/cases/{case_id}/processes/{process_id}/drain`.",
+      "items": {
+        "$ref": "#/$defs/RuntimeDrainStep"
+      }
+    },
+    "SuspendInstanceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Request body for `POST /api/v1/cases/{case_id}/processes/{process_id}/suspend` (Kernel S11.3 `suspend`). Sets `lifecycleState` to `suspended` and produces an `instanceSuspended` Facts-tier provenance record. The `Idempotency-Key` HTTP header is REQUIRED (ADR 0082 D-16); a repeat request within the retention window returns the original `WorkflowProcess` unchanged. Submissions to an instance whose `lifecycleState` is not `active` are rejected with `WOS-1409`.",
+      "required": [
+        "reason",
+        "actorRef"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Operator-supplied prose reason for the suspension. Length-bounded to keep the wire envelope predictable; surfaced verbatim on the `instanceSuspended` Facts-tier provenance record.",
+          "x-wos": {
+            "openStringKind": "prose"
+          }
+        },
+        "actorRef": {
+          "$ref": "#/$defs/ActorRef",
+          "description": "Actor URN authorizing the suspension (ADR 0082 D-9). REQUIRED -- every lifecycle-control mutation carries an actor."
+        },
+        "holdUntil": {
+          "$ref": "#/$defs/ExpirableTimestamp",
+          "description": "Optional UTC RFC 3339 timestamp (or the `never` sentinel) at which the suspension is intended to lift. The server uses this to surface an expected resume time on `WorkflowProcessHoldList`; it does NOT auto-resume -- `POST /api/v1/cases/{case_id}/processes/{process_id}/resume` is still required (Kernel S11.3 `resume`). Omitted when no expected lift is known."
+        }
+      }
+    },
+    "ResumeInstanceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Request body for `POST /api/v1/cases/{case_id}/processes/{process_id}/resume` (Kernel S11.3 `resume`). Sets `lifecycleState` from `suspended` back to `active` and produces an `instanceResumed` Facts-tier provenance record. Pending events queued during the suspension are evaluated in delivery order after the status flip (Kernel S11.5). The `Idempotency-Key` HTTP header is REQUIRED (ADR 0082 D-16); a repeat request within the retention window returns the original `WorkflowProcess` unchanged. Submissions to an instance whose `lifecycleState` is not `suspended` are rejected with `WOS-1409`.",
+      "required": [
+        "actorRef"
+      ],
+      "properties": {
+        "actorRef": {
+          "$ref": "#/$defs/ActorRef",
+          "description": "Actor URN authorizing the resume (ADR 0082 D-9). REQUIRED."
+        },
+        "justification": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Optional operator-supplied prose recording why the suspension is being lifted. Length-bounded; surfaced verbatim on the `instanceResumed` Facts-tier provenance record. Omitted when no separate justification is needed beyond the actor identity.",
+          "x-wos": {
+            "openStringKind": "prose"
+          }
+        }
+      }
+    },
+    "TerminationKind": {
+      "description": "Closed-with-vendor-extension classifier for an irreversible `terminate` operation (Kernel S11.3). Reserved literals: `policy-violation` (a governance check determined the case must end without completion); `applicant-withdrawn` (the applicant or authorized agent withdrew the underlying request); `duplicate` (the case was identified as a duplicate of another and the canonical instance carries the work); `error` (the case entered an unrecoverable error posture); `administrative` (operator-initiated closure for a reason outside the other literals). Vendor extensions MUST use an `x-` prefix per ADR 0082 D-12.",
+      "oneOf": [
+        {
+          "enum": [
+            "policy-violation",
+            "applicant-withdrawn",
+            "duplicate",
+            "error",
+            "administrative"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^x-[a-z][a-z0-9-]*$"
+        }
+      ],
+      "examples": [
+        "applicant-withdrawn",
+        "duplicate"
+      ]
+    },
+    "TerminateInstanceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Request body for `POST /api/v1/cases/{case_id}/processes/{process_id}/terminate` (Kernel S11.3 `terminate`). Sets `lifecycleState` to `terminated` (irreversible per Kernel S11.5) and produces an `instanceTerminated` Facts-tier provenance record. The `Idempotency-Key` HTTP header is REQUIRED (ADR 0082 D-16); a repeat request within the retention window returns the original `WorkflowProcess` unchanged. Submissions to an instance whose `lifecycleState` is `completed` or already `terminated` are rejected with `WOS-1409`.",
+      "required": [
+        "reason",
+        "terminationKind",
+        "actorRef"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Operator-supplied prose reason for the termination. Length-bounded; surfaced verbatim on the `instanceTerminated` Facts-tier provenance record. The `terminationKind` is the machine-readable classifier; `reason` is the free-prose explanation.",
+          "x-wos": {
+            "openStringKind": "prose"
+          }
+        },
+        "terminationKind": {
+          "$ref": "#/$defs/TerminationKind",
+          "description": "Closed-with-vendor-extension machine-readable classifier (ADR 0082 D-12)."
+        },
+        "actorRef": {
+          "$ref": "#/$defs/ActorRef",
+          "description": "Actor URN authorizing the termination (ADR 0082 D-9). REQUIRED."
+        }
+      }
+    },
+    "ProcessLifecycleRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional request envelope for ADR 0093 dual-identity case/process lifecycle routes (`POST /api/v1/cases/{case_id}/processes/{process_id}/suspend|resume|terminate`). These routes validate the case/process binding before applying the lifecycle mutation; the wire body carries only an optional operator rationale. The canonical process-scoped lifecycle contracts with full actor and idempotency requirements remain `SuspendInstanceRequest`, `ResumeInstanceRequest`, and `TerminateInstanceRequest` on the primary instance routes per Kernel S11.3.",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Optional operator-supplied prose rationale for the lifecycle transition. Length-bounded when present; surfaced on the corresponding Facts-tier provenance record when the deployment records one.",
+          "x-wos": {
+            "openStringKind": "prose"
+          }
+        }
+      }
+    },
+    "ProcessLifecycleResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Response envelope for ADR 0093 dual-identity case/process lifecycle routes after a successful suspend, resume, or terminate. Returns the stable process and case-ledger identifiers together with the resulting `lifecycleState`.",
+      "required": [
+        "processId",
+        "caseLedgerId",
+        "lifecycleState"
+      ],
+      "properties": {
+        "processId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Workflow process resource URN for the bound process."
+        },
+        "caseLedgerId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "Durable case-ledger resource URN the process is bound to."
+        },
+        "lifecycleState": {
+          "$ref": "#/$defs/LifecycleState",
+          "description": "Instance lifecycle posture after the mutation commits."
+        }
+      }
+    },
+    "FieldPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_./-]+$",
+      "description": "Case-file field path used by migration-map entries (Kernel S5.4). Dotted or slash-pointer-shaped per workflow; constrained character set keeps the wire envelope predictable.",
+      "examples": [
+        "applicantName",
+        "/medical/recentEvidence/0",
+        "income"
+      ],
+      "x-wos": {
+        "openStringKind": "pathExpression"
+      }
+    },
+    "FieldRename": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single rename instruction inside a `MigrationMap.fieldRenames` array. Carried as a typed object instead of an open key-value map so D-12 closed-taxonomy discipline holds at the API boundary; the array is ordered, but the kernel migration algorithm applies renames as a set.",
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/FieldPath",
+          "description": "Old case-file field path."
+        },
+        "to": {
+          "$ref": "#/$defs/FieldPath",
+          "description": "New case-file field path."
+        }
+      }
+    },
+    "FieldDefault": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single default-value instruction inside a `MigrationMap.fieldDefaults` array. Replaces an open key-value map: each entry is a typed `{path, value}` pair where `value` is any JSON shape declared in the new Workflow Document's `caseFile.fields`. The wire envelope stays closed at the API boundary; the value-space is workflow-driven and validated server-side.",
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/FieldPath",
+          "description": "Case-file field path that receives the default."
+        },
+        "value": {
+          "description": "Default value for the keyed field. Any JSON value, including `null` for an explicit null-marker. Shape is constrained by the new Workflow Document's `caseFile.fields` declaration (Kernel S5.2) and validated server-side; the wire envelope leaves the value opaque-shaped to keep the contract workflow-driven."
+        }
+      }
+    },
+    "FieldCoercion": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Single type-coercion instruction inside a `MigrationMap.fieldCoercions` array. The target type is a closed-no-extension JSON type taxonomy because the JSON type system is normatively closed.",
+      "required": [
+        "path",
+        "targetType"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/FieldPath",
+          "description": "Case-file field path whose value is coerced."
+        },
+        "targetType": {
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "array",
+            "object"
+          ],
+          "description": "Closed-no-extension JSON type the existing value is coerced to before the new definition's validation runs. Coercion is best-effort; failure aborts the migration with `WOS-1422` and leaves the instance on its prior version (Kernel S11.2 atomicity)."
+        }
+      }
+    },
+    "MigrationMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Case-state transformation map applied during instance migration (Kernel S11.2 step 2). Mirrors the kernel four-key bag (`fieldRenames | fieldRemovals | fieldDefaults | fieldCoercions`) but exposes each as a typed array of `{path, ...}` objects rather than open key-value maps so D-12 closed-taxonomy discipline holds at the API boundary. Every array is OPTIONAL -- an empty `MigrationMap` is valid and means 'no case-state transformation needed' (the new definition is structurally identical at the case-file level, only behavior changes). The server applies the four operations in fixed order: `fieldRemovals` -> `fieldRenames` -> `fieldDefaults` -> `fieldCoercions`.",
+      "properties": {
+        "fieldRenames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldRename"
+          },
+          "description": "Renames applied after removals so a rename never targets a removed field. Order within the array is preserved on the wire but the migration algorithm applies them as a set (no rename may chain through another rename's `from`)."
+        },
+        "fieldRemovals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldPath"
+          },
+          "description": "Field paths to remove from the case-file before the new definition's validation runs. Removed fields are NOT recoverable post-migration; provenance records the original values."
+        },
+        "fieldDefaults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldDefault"
+          },
+          "description": "Default values for case-file fields newly introduced by the target definition. Applied after renames so a default never overwrites a value that was renamed into the path."
+        },
+        "fieldCoercions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldCoercion"
+          },
+          "description": "Type coercions applied last so the existing values (post-rename, post-default) match the new definition's `caseFile.fields` types."
+        }
+      },
+      "examples": [
+        {
+          "fieldRenames": [
+            {
+              "from": "applicantName",
+              "to": "applicant.fullName"
+            }
+          ],
+          "fieldRemovals": [
+            "deprecatedFlag"
+          ],
+          "fieldDefaults": [
+            {
+              "path": "newReviewQueue",
+              "value": "default"
+            }
+          ],
+          "fieldCoercions": [
+            {
+              "path": "income",
+              "targetType": "number"
+            }
+          ]
+        }
+      ]
+    },
+    "MigrateInstanceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Request body for `POST /api/v1/cases/{case_id}/processes/{process_id}/migrate` (Kernel S11.2 `migrate`; ADR 0071 D-2). Atomically updates the governing Workflow Document version and applies a case-state transformation map; on success produces an `instanceMigrated` Facts-tier record AND a `migrationPinChanged` Facts-tier record (ADR 0071 D-4 -- `migrationPinChanged` is the cross-layer provenance kind that anchors the chain transition for downstream verification). The `Idempotency-Key` HTTP header is REQUIRED (ADR 0082 D-16); a repeat request within the retention window returns the original `MigrationResult` unchanged. Migration is atomic: any step failure leaves the instance on its prior version (Kernel S11.2). Submissions to an instance whose `lifecycleState` is `completed` or `terminated` are rejected with `WOS-1409`; submissions whose target definition lacks a state currently in the configuration are rejected with `WOS-1422` (kernel `stateNotFound`).",
+      "required": [
+        "targetDefinitionVersion",
+        "migrationMap",
+        "actorRef",
+        "justification"
+      ],
+      "properties": {
+        "targetDefinitionUrl": {
+          "$ref": "#/$defs/WorkflowUrl",
+          "description": "Optional absolute URI of a different Workflow Document to migrate to. Omitted when migrating to a newer version of the same `workflowUrl` (the common case). When supplied the server validates that the target document declares the same `correlationKey` family as the source."
+        },
+        "targetDefinitionVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Version string of the target Workflow Document (Kernel S9.6). Pairs with the resolved `targetDefinitionUrl` (or the instance's existing `workflowUrl` when omitted) to pin the new governing document.",
+          "examples": [
+            "1.1.0",
+            "2026.4.0"
+          ],
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "migrationMap": {
+          "$ref": "#/$defs/MigrationMap",
+          "description": "Case-state transformation bag (Kernel S11.2 step 2). MAY be the empty object when no case-state transformation is needed."
+        },
+        "actorRef": {
+          "$ref": "#/$defs/ActorRef",
+          "description": "Actor URN authorizing the migration (ADR 0082 D-9). REQUIRED."
+        },
+        "justification": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Operator-supplied prose justification for the migration. REQUIRED -- migration is a high-impact governance event under ADR 0071, and the audit trail demands a recorded 'why' alongside the actor identity. Surfaced verbatim on the `migrationPinChanged` Facts-tier record.",
+          "x-wos": {
+            "openStringKind": "prose"
+          }
+        }
+      }
+    },
+    "MigrationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Response body for `POST /api/v1/cases/{case_id}/processes/{process_id}/migrate`. Carries the post-migration `WorkflowProcess` projection plus the URNs of the two Facts-tier provenance records produced by the operation (`instanceMigrated` per Kernel S11.3 and `migrationPinChanged` per ADR 0071 D-4). Clients can dereference either via `GET /api/v1/cases/{case_id}/processes/{process_id}/provenance` (ADR 0082 D-5).",
+      "required": [
+        "instance",
+        "migratedAt",
+        "instanceMigratedRecordId",
+        "migrationPinChangedRecordId",
+        "previousWorkflowVersion",
+        "newWorkflowVersion"
+      ],
+      "properties": {
+        "instance": {
+          "$ref": "#/$defs/WorkflowProcess",
+          "description": "Post-migration workflow-process projection. Carries the new `workflowVersion` (and `workflowUrl` when changed)."
+        },
+        "migratedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC RFC 3339 timestamp at which the migration committed (ADR 0069). Drawn from the server clock."
+        },
+        "instanceMigratedRecordId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "URN of the `instanceMigrated` Facts-tier provenance record (Kernel S11.3)."
+        },
+        "migrationPinChangedRecordId": {
+          "$ref": "#/$defs/WosResourceUrn",
+          "description": "URN of the `migrationPinChanged` Facts-tier provenance record (ADR 0071 D-4). Anchors the cross-layer chain transition for offline verifier reconstruction."
+        },
+        "previousWorkflowVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Workflow Document version the instance was on immediately before this migration (Kernel S9.6).",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "newWorkflowVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Workflow Document version the instance is on immediately after this migration.",
+          "x-wos": {
+            "openStringKind": "identifier"
+          }
+        },
+        "previousWorkflowUrl": {
+          "$ref": "#/$defs/WorkflowUrl",
+          "description": "Workflow Document URI the instance was on immediately before this migration. Omitted when the migration stayed on the same URL (the common in-place version-bump case)."
+        },
+        "newWorkflowUrl": {
+          "$ref": "#/$defs/WorkflowUrl",
+          "description": "Workflow Document URI the instance is on immediately after this migration. Omitted when the migration stayed on the same URL."
+        }
+      }
+    }
+  }
+}

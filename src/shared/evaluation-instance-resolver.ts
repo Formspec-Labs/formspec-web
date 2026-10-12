@@ -1,8 +1,8 @@
 import type { InstanceSourceResolver } from '@formspec-org/engine/render';
-import type { HydratedScreenerCandidate } from '../ports/screener-hydration.ts';
+import type { HydratedEvaluationCandidate } from '../ports/evaluation-hydration.ts';
 
 /** One frozen saved-candidate context, shared by renderer and isolated engines. No URL fallback. */
-export function createEvaluationInstanceResolver(context: HydratedScreenerCandidate): InstanceSourceResolver {
+export function createEvaluationInstanceResolver(context: HydratedEvaluationCandidate): InstanceSourceResolver {
   const { view } = context;
   const assertCurrent = context.assertCurrent.bind(context);
   return async (request, options) => {

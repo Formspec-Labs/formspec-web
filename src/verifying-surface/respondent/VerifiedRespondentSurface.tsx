@@ -15,6 +15,7 @@ import {
 } from '@formspec-org/surface-react';
 import type { FormspecWebConfig, RespondentSurfaceBundleConfig } from '../../config/types.ts';
 import type { Composition } from '../../composition/types.ts';
+import { createDefaultComposition } from '../../composition/default.ts';
 import type { SubmitConfirmation } from '../../ports/submit-transport.ts';
 import {
   loadSurfaceBundleSchemaValidators,
@@ -43,6 +44,8 @@ import { respondentWidgetModule } from './widget-module.ts';
 
 export interface VerifiedRespondentSurfaceProps {
   readonly composition: Composition;
+  /** Trusted host wiring, selected only after the definition passes Surface admission. */
+  readonly formCompositionFactory?: (definitionUrl: string) => Composition;
   readonly config: FormspecWebConfig;
   readonly bundleConfig: RespondentSurfaceBundleConfig;
   readonly sessionStore?: RespondentReceiptSessionStore;
@@ -52,6 +55,7 @@ export interface VerifiedRespondentSurfaceProps {
 
 export function VerifiedRespondentSurface({
   composition,
+  formCompositionFactory,
   config,
   bundleConfig,
   sessionStore: suppliedSessionStore,
@@ -98,6 +102,7 @@ export function VerifiedRespondentSurface({
           {...input}
           key={input.admission.snapshot.identity}
           composition={composition}
+          formCompositionFactory={formCompositionFactory}
           config={config}
           location={location}
           navigate={navigate}
@@ -113,6 +118,8 @@ export function VerifiedRespondentSurface({
 
 interface AdmittedRespondentSurfaceProps extends AdmittedSurfaceRenderInput {
   readonly composition: Composition;
+  /** Trusted host wiring, selected only after the definition passes Surface admission. */
+  readonly formCompositionFactory?: (definitionUrl: string) => Composition;
   readonly config: FormspecWebConfig;
   readonly location: string;
   readonly navigate: (href: string) => void;
@@ -124,7 +131,7 @@ interface AdmittedRespondentSurfaceProps extends AdmittedSurfaceRenderInput {
 
 function AdmittedRespondentSurface({
   admission,
-  composition,
+  formCompositionFactory,
   config,
   location,
   navigate,
@@ -196,6 +203,8 @@ function AdmittedRespondentSurface({
     setConfirmedCaseRef(confirmation.referenceNumber);
   }, [appId, now, releaseIdentity, sessionStore]);
 
+  const formCompositions = useMemo(() => new Map<string, Composition>(), [config, formCompositionFactory, releaseIdentity]);
+
   const renderDefinitionForm = useCallback(
     (input: SurfaceDefinitionFormRenderInput): ReactNode => {
       const themeKey = JSON.stringify(input.grant.themeDocument);
@@ -206,9 +215,17 @@ function AdmittedRespondentSurface({
       const registryEntries = stableRegistryEntries.current.get(registryKey)
         ?? input.plan.registryEntries;
       stableRegistryEntries.current.set(registryKey, registryEntries);
+      const definitionUrl = input.plan.definition.url;
+      let formComposition = formCompositions.get(definitionUrl);
+      if (!formComposition) {
+        formComposition = formCompositionFactory?.(definitionUrl)
+          ?? createDefaultComposition(config, { initialDefinitionUrl: definitionUrl });
+        if (formComposition.initialDefinitionUrl !== definitionUrl) throw new Error('Admitted form composition selection mismatch');
+        formCompositions.set(definitionUrl, formComposition);
+      }
       return (
         <RespondentDefinitionController
-          composition={composition}
+          composition={formComposition}
           config={config}
           form={{
             definition: input.plan.definition,
@@ -225,7 +242,7 @@ function AdmittedRespondentSurface({
         />
       );
     },
-    [composition, config, definitionLocales, locale.activeLocale, onSubmitConfirmed],
+    [config, definitionLocales, formCompositionFactory, formCompositions, locale.activeLocale, onSubmitConfirmed],
   );
 
   if (locale.status !== 'ready' || !locale.strings) {

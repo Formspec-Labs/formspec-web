@@ -8,12 +8,42 @@ import { jsonResponse } from './test-fetch.ts';
 const processId = 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db';
 const selection = { processId, taskId: `${processId}/tasks/photo-correction`,
   definitionUrl: sampleFormResponse.definitionUrl, definitionVersion: sampleFormResponse.definitionVersion };
-const submission: TaskSubmission = { definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion,
+const signedDraft = { draftId: 'actual-source-draft', expectedSignedDraftVersion: 3, expectedSignedResponseHash: `sha256:${'a'.repeat(64)}`, associationHash: `sha256:${'b'.repeat(64)}`, taskBindingHash: `sha256:${'c'.repeat(64)}` };
+const submission: TaskSubmission = { signedDraft, definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion,
   response: { ...sampleFormResponse, status: 'completed', authoredSignatures: [RESPONSE_SCHEMA_DOCUMENT.properties.authoredSignatures.examples[0][0]] as TaskSubmission['response']['authoredSignatures'] } };
 const outcome = { taskId: selection.taskId, processId, outcome: 'completed', newStatus: 'submitted', occurredAt: '2026-10-09T12:00:00Z' };
 const lifetime = () => ({ signal: new AbortController().signal, assertCurrent: () => {} });
 
 describe('inactive typed WOS task completion adapter', () => {
+  it('keeps signed draft selectors optional for other task submissions', async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(outcome));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'wos-token', fetchImpl,
+      assertCurrentAuth: () => {} });
+    const actual = { definitionUrl: submission.definitionUrl, definitionVersion: submission.definitionVersion,
+      response: submission.response };
+    expect(await adapter.complete(actual, 'signed-operation', lifetime())).toEqual(outcome);
+    expect(JSON.parse(fetchImpl.mock.calls[0][1]!.body as string)).toEqual(actual);
+    expect(JSON.parse(fetchImpl.mock.calls[0][1]!.body as string)).not.toHaveProperty('signedDraft');
+  });
+  it.each([
+    { ...signedDraft, draftId: '' },
+    { ...signedDraft, expectedSignedDraftVersion: 1 },
+    { ...signedDraft, expectedSignedDraftVersion: 2.5 },
+    { ...signedDraft, expectedSignedResponseHash: 'a'.repeat(64) },
+    { ...signedDraft, associationHash: `sha256:${'B'.repeat(64)}` },
+    { ...signedDraft, taskBindingHash: `sha256:${'c'.repeat(63)}` },
+    { ...signedDraft, owner: 'client-selected-owner' },
+    null,
+    ...Object.keys(signedDraft).map(key => Object.fromEntries(Object.entries(signedDraft).filter(([name]) => name !== key))),
+  ])('refuses malformed signed draft selectors before credentials: %j', async candidate => {
+    const accessToken = vi.fn(() => 'wos-token'); const fetchImpl = vi.fn();
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken, fetchImpl,
+      assertCurrentAuth: () => {} });
+    await expect(adapter.complete({ ...submission, signedDraft: candidate } as unknown as TaskSubmission,
+      'signed-operation', lifetime())).rejects.toThrow('candidate mismatch');
+    expect(accessToken).not.toHaveBeenCalled(); expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it.each(['', ' key', 'key ', 'line\nbreak', 'non-ascii-é', 'a'.repeat(257)])('refuses malformed key before credentials: %j', async operationId => {
     const accessToken = vi.fn(() => 'wos-token'); const fetchImpl = vi.fn();
     const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken, fetchImpl, assertCurrentAuth: () => {} });

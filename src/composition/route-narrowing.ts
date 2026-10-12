@@ -1,38 +1,4 @@
-/**
- * Parameterized route-narrowing factory (FW-0070, FW-0080).
- *
- * Replaces the 4 × 3 = 12 sibling factory functions that landed inline
- * across FW-0068 (`/status`), FW-0055 (`/obligations`), and FW-0056
- * (`/documents`). Each narrowed-route call site supplies a `RouteNarrowing`
- * descriptor (co-located with the route parser in `src/app/*-route.ts`)
- * and selects mode; the factory body encodes the wiring rules every
- * sibling factory previously duplicated:
- *
- * - Form-shaped MVP ports (`definitionSource`, `draftStore`,
- *   `submitTransport`) are unconditionally noop. No narrowed route reads
- *   them — that is the definition of "narrowed."
- * - `statusReader` is the demo stub in `'stub'` mode, the unavailable
- *   sentinel in `'default'` mode. Uniform across narrowed routes per the
- *   FW-0068 Finding 1 reshape (instanceCapabilities describes deployment
- *   posture, not per-surface narrowing).
- * - `respondentPlaceSource` mirrors `statusReader` — demo stub in `'stub'`
- *   mode (the place sidecar is non-trivial in demo so the post-FW-0068
- *   reshape kept the demo stub even on `/status`), unavailable sentinel in
- *   `'default'` mode.
- * - `respondentHistorySource` is driven by `consumes.has('crossIssuerHistory')`:
- *   demo factory wires the stub + declares `'demo-stub'` when consumed,
- *   sentinel + `'unavailable'` otherwise. Production always wires the
- *   sentinel today (XS-2 token bag is upstream-queued); when the
- *   production adapter ships, wire it conditionally on the same membership
- *   check.
- * - Identity provider: per `identityBound` + the MED-4 gate (production
- *   wires the real provider only when `respondentPlace === 'available'`;
- *   today's posture is always `'unavailable'`, so production always
- *   short-circuits to noop).
- *
- * All output funnels through `freezeComposition` per FW-0068 §Acceptance
- * #1 — the coherence assertion still runs at construction time.
- */
+/** Reference narrowed-route wiring; application-owned sample ports must be supplied explicitly. */
 import { EmptyFormRuntimePolicyExtractor } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import {
   noopDefinitionSource,
@@ -40,18 +6,9 @@ import {
   noopIdentityProvider,
   noopSubmitTransport,
 } from '../adapters/noop-for-narrowed-route/index.ts';
-import { stubIdentityProvider } from '../adapters/stub/identity-provider.ts';
-import { stubNotificationDelivery } from '../adapters/stub/notification-delivery.ts';
-import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
-import { createStubTrustedReviewerAdapters } from '../adapters/stub/review-thread-store.ts';
-import { stubStatusReader } from '../adapters/stub/status-reader.ts';
+import { unavailableNotificationDelivery } from '../adapters/unavailable/notification-delivery.ts';
 import { createHttpReviewerSession } from '../adapters/http/reviewer-session.ts';
 import { createHttpReviewThreadStore } from '../adapters/http/review-thread-store.ts';
-import {
-  demoApplicantCaseDetail,
-  demoLifecycleActionSnapshot,
-  demoRespondentPlaceSnapshot,
-} from '../demo/respondent-place.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
 import { unavailableLifecycleActionClient } from '../adapters/unavailable/lifecycle-action-client.ts';
@@ -66,11 +23,6 @@ import { unavailableScreenerDocumentSource } from '../adapters/unavailable/scree
 import { unavailableStatusReader } from '../adapters/unavailable/status-reader.ts';
 import { unavailableSurfaceBundleSource } from '../adapters/unavailable/surface-bundle-source.ts';
 import { unavailableSurfaceBundleVerifier } from '../adapters/unavailable/surface-bundle-verifier.ts';
-import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
-import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
-import { stubLifecycleActionClient } from '../adapters/stub/lifecycle-action-client.ts';
-import { demoHistorySnapshot } from '../demo/respondent-history.ts';
-import { demoScreenerCatalog } from '../demo/screener.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import {
   freezeComposition,
@@ -80,7 +32,8 @@ import {
 } from '../policy/index.ts';
 import type { IdentityProvider } from '../ports/identity-provider.ts';
 import { departmentAppProfile } from '../profiles/profiles.ts';
-import { buildRealIdentityProvider } from './default.ts';
+import { buildRealIdentityProvider, type IdentityBinding } from './default.ts';
+import type { StatusReader } from '../ports/status-reader.ts';
 import type { Composition } from './types.ts';
 
 /**
@@ -94,7 +47,7 @@ import type { Composition } from './types.ts';
  * Set entry — no new boolean flag on this interface. Membership drives
  * adapter wiring for every key that has per-route narrowing semantics
  * today (`crossIssuerHistory`); per the FW-0068 Finding 1 reshape,
- * `respondentPlace` + `status` keep uniform demo-stub / unavailable
+ * `respondentPlace` + `status` keep uniform unavailable
  * wiring across narrowed routes regardless of membership, but their
  * presence in the set documents the route's intent honestly.
  *
@@ -116,8 +69,7 @@ export interface RouteNarrowing {
   /**
    * Closed-set of `RuntimeFeatureKey` values the route reads. Per-route
    * narrowed wiring derives from membership: today only
-   * `crossIssuerHistory` drives a wiring switch (demo factory chooses
-   * stub vs sentinel + `'demo-stub'` vs `'unavailable'` declaration).
+   * `crossIssuerHistory` drives a wiring switch (the reference factory selects configured adapters).
    * `fileUpload` and `offlineSubmit` have no narrowed-route consumer
    * today — they stay uniformly `'unavailable'` across descriptors.
    */
@@ -127,58 +79,45 @@ export interface RouteNarrowing {
    * `respondentPlace` capability is `available`, the production factory
    * wires the real identity provider; otherwise short-circuits to noop per
    * MED-4. The demo composition wires the demo identity provider when
-   * `true`; noop otherwise (matches `/status`'s identity-agnostic shape).
+   * `true`; noop otherwise.
    */
   readonly identityBound: boolean;
 }
 
-export type RouteNarrowingMode = 'default' | 'stub';
-
-/**
- * Builds a route-narrowed Composition from a descriptor. The 12 named
- * sibling factories collapse to three callers of this helper (one per
- * route descriptor); the demo-mode shape collapses into `'stub'`,
- * matching the existing `createDemoComposition` → `createStubComposition`
- * one-line delegation.
- *
- * Naming note: caller-side `mode: 'stub'` produces a Composition whose
- * `composition.mode === 'demo'` (the runtime tag the React shell + the
- * coherence assertion consume). Caller and runtime tags differ deliberately
- * — caller names the FACTORY MODE (which adapters wire), runtime names the
- * DEPLOYMENT POSTURE (which the shell renders). Same delegation pattern as
- * `createDemoComposition` → `createStubComposition`.
- */
-export function createRouteNarrowedComposition({
-  mode,
-  config = departmentAppProfile,
-  route,
-}: {
-  mode: RouteNarrowingMode;
+/** Construct reference HTTP ports for an explicitly selected narrowed route. */
+export function createRouteNarrowedComposition({ config = departmentAppProfile, route, statusReader, identityBinding }: {
   config?: FormspecWebConfig;
   route: RouteNarrowing;
+  /** Protected applicant reader, supplied by the authenticated host. */
+  statusReader?: StatusReader;
+  identityBinding?: IdentityBinding;
 }): Composition {
-  if (mode === 'default') {
-    const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
-    if (!serverUrl) {
-      return createRouteNarrowedComposition({ mode: 'stub', config, route });
-    }
-    return buildProductionNarrowedComposition({ config, route, serverUrl });
+  const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
+  if (!serverUrl) throw new Error('Reference narrowed composition requires an explicit formspecServerUrl');
+  if (statusReader && (!route.consumes.has('status') || !route.identityBound
+    || config.identity.mode !== 'oidc-required' || !config.identity.oidc
+    || !identityBinding?.browserAuthSession || !identityBinding.accessToken)) {
+    throw new Error('Status reader requires the selected authenticated OIDC session');
   }
-  return buildDemoNarrowedComposition({ route });
+  return buildProductionNarrowedComposition({ config, route, serverUrl, statusReader, identityBinding });
 }
 
 function buildProductionNarrowedComposition({
   config,
   route,
   serverUrl,
+  statusReader,
+  identityBinding,
 }: {
   config: FormspecWebConfig;
   route: RouteNarrowing;
   serverUrl: string;
+  statusReader?: StatusReader;
+  identityBinding?: IdentityBinding;
 }): Composition {
   const instanceCapabilities: InstanceCapabilities = {
     respondentPlace: 'unavailable',
-    status: 'unavailable',
+    status: statusReader ? 'available' : 'unavailable',
     documentPresentation: 'unavailable',
     // FW-0033 slice 1: narrowed routes do not accept uploads. Uniformly
     // unavailable across all narrowed-route descriptors today; if a future
@@ -219,7 +158,7 @@ function buildProductionNarrowedComposition({
     multiParty: 'unavailable',
     recordLifecycle: 'unavailable',
   };
-  const notificationDelivery = stubNotificationDelivery();
+  const notificationDelivery = unavailableNotificationDelivery();
   // MED-4: identity is only wired when the gated respondent-place capability
   // is `available`. Today's production posture always declares
   // `unavailable`, so identity-bound routes short-circuit to noop and never
@@ -231,8 +170,9 @@ function buildProductionNarrowedComposition({
   // production; revisit when FW-0078 ships a production history adapter and
   // `/history` is identity-bound but does NOT consume respondentPlace.
   const identityProvider: IdentityProvider =
-    route.identityBound && instanceCapabilities.respondentPlace === 'available'
-      ? buildRealIdentityProvider(config, notificationDelivery, serverUrl).provider
+    statusReader && identityBinding ? identityBinding.provider
+      : route.identityBound && instanceCapabilities.respondentPlace === 'available'
+      ? buildRealIdentityProvider(config, notificationDelivery, serverUrl, route.initialDefinitionUrlSentinel).provider
       : noopIdentityProvider(route.routeCite);
 
   const composition: Composition = {
@@ -244,9 +184,10 @@ function buildProductionNarrowedComposition({
     draftStore: noopDraftStore(route.routeCite),
     submitTransport: noopSubmitTransport(route.routeCite),
     identityProvider,
+    browserAuthSession: statusReader ? identityBinding?.browserAuthSession : undefined,
     notificationDelivery,
     respondentPlaceSource: unavailableRespondentPlaceSource(),
-    statusReader: unavailableStatusReader(),
+    statusReader: statusReader ?? unavailableStatusReader(),
     attachmentStore: unavailableAttachmentStore(),
     respondentHistorySource: unavailableRespondentHistorySource(),
     // FW-0044 slice 1: narrowed routes do not submit forms (no form-fill
@@ -285,104 +226,6 @@ function buildProductionNarrowedComposition({
   return freezeComposition(composition);
 }
 
-function buildDemoNarrowedComposition({ route }: { route: RouteNarrowing }): Composition {
-  // FW-0068 Finding 1 reshape: instanceCapabilities describes deployment
-  // posture, not per-surface narrowing. Every demo narrowed route declares
-  // the same `demo-stub` posture as the full stub composition and wires the
-  // same demo stub adapters.
-  const trustedReviewerAdapters = route.consumes.has('trustedReviewer')
-    ? createStubTrustedReviewerAdapters()
-    : undefined;
-  const composition: Composition = {
-    mode: 'demo',
-    initialDefinitionUrl: route.initialDefinitionUrlSentinel,
-    definitionSource: noopDefinitionSource(route.routeCite),
-    surfaceBundleSource: unavailableSurfaceBundleSource(),
-    surfaceBundleVerifier: unavailableSurfaceBundleVerifier(),
-    draftStore: noopDraftStore(route.routeCite),
-    submitTransport: noopSubmitTransport(route.routeCite),
-    identityProvider: route.identityBound
-      ? stubIdentityProvider()
-      : noopIdentityProvider(route.routeCite),
-    respondentPlaceSource: stubRespondentPlaceSource(demoRespondentPlaceSnapshot()),
-    statusReader: stubStatusReader([
-      ['urn:wos:case_demo_0001', demoApplicantCaseDetail()],
-    ]),
-    attachmentStore: unavailableAttachmentStore(),
-    respondentHistorySource: route.consumes.has('crossIssuerHistory')
-      ? stubRespondentHistorySource(demoHistorySnapshot())
-      : unavailableRespondentHistorySource(),
-    // FW-0044 slice 1: no narrowed route renders a form; no queue affordance
-    // is reachable. Uniform unavailable across all descriptors regardless of
-    // mode (the sentinel pairs with the 'unavailable' declaration).
-    offlineSubmitQueue: unavailableOfflineSubmitQueue(),
-    // FW-0027 slice 1: no narrowed route renders a form; no payment
-    // affordance is reachable. Uniform unavailable regardless of mode.
-    paymentRailAdapter: unavailablePaymentRailAdapter(),
-    // FW-0040 slice 1: no narrowed route mounts in a host iframe; no
-    // embed-transport substrate is reachable. Uniform unavailable
-    // regardless of mode.
-    embedTransport: unavailableEmbedTransport(),
-    // FW-0046 slice 1: only the /screener route consumes the screener
-    // catalog. Other narrowed routes wire the unavailable sentinel +
-    // declare 'unavailable' because they don't render the screener.
-    screenerDocumentSource: route.consumes.has('screener')
-      ? stubScreenerDocumentSource(demoScreenerCatalog())
-      : unavailableScreenerDocumentSource(),
-    reviewerSession: trustedReviewerAdapters?.reviewerSession ?? unavailableReviewerSession(),
-    reviewThreadStore: trustedReviewerAdapters?.reviewThreadStore ?? unavailableReviewThreadStore(),
-    safeAddressDirectory: unavailableSafeAddressDirectory(),
-    lifecycleActionClient: route.consumes.has('recordLifecycle')
-      ? stubLifecycleActionClient({ initialSnapshots: [demoLifecycleActionSnapshot()] })
-      : unavailableLifecycleActionClient(),
-    instanceCapabilities: {
-      respondentPlace: 'demo-stub',
-      status: 'demo-stub',
-      // FW-0056 design line 121 + arch-review MED-1: no demo VP stack
-      // exists anywhere, so the demo composition declares
-      // documentPresentation unavailable. The shared-slot independent-
-      // declarations rule (composition-coherence.ts) accepts this: the
-      // unavailable declaration opts out of the slot, and the demo-stub-
-      // marked place adapter satisfies only the respondentPlace key.
-      documentPresentation: 'unavailable',
-      // FW-0033 slice 1: narrowed routes (status / obligations / documents)
-      // do not render forms, so upload affordance is not reachable. Both
-      // stub mode and production mode declare unavailable to match the wired
-      // sentinel.
-      fileUpload: 'unavailable',
-      // FW-0057 slice 1: only the /history route consumes the cross-issuer
-      // history adapter. Other narrowed routes (status / obligations /
-      // documents) wire the unavailable sentinel + declare 'unavailable'
-      // because they don't render history.
-      crossIssuerHistory: route.consumes.has('crossIssuerHistory') ? 'demo-stub' : 'unavailable',
-      // FW-0044 slice 1: narrowed routes do not submit forms; uniform
-      // unavailable to match the wired sentinel.
-      offlineSubmit: 'unavailable',
-      // FW-0027 slice 1: narrowed routes do not submit forms; uniform
-      // unavailable to match the wired sentinel.
-      payment: 'unavailable',
-      // FW-0040 slice 1: narrowed routes do not mount forms in host
-      // iframes; uniform unavailable to match the wired sentinel.
-      embed: 'unavailable',
-      // FW-0046 slice 1: only the /screener descriptor consumes the
-      // screener catalog. Other narrowed routes wire the sentinel +
-      // declare 'unavailable' because they don't render pre-flight
-      // routing.
-      screener: route.consumes.has('screener') ? 'demo-stub' : 'unavailable',
-      trustedReviewer: route.consumes.has('trustedReviewer') ? 'demo-stub' : 'unavailable',
-      preparerFiling: 'unavailable',
-      bringYourOwnAssistant: 'unavailable',
-      safeAddress: 'unavailable',
-      duressAware: 'unavailable',
-      multiParty: 'unavailable',
-      recordLifecycle: route.consumes.has('recordLifecycle') ? 'demo-stub' : 'unavailable',
-    },
-    orgRuntimePolicy: defaultOrgRuntimePolicy(),
-    formRuntimePolicyExtractor: new EmptyFormRuntimePolicyExtractor(),
-  };
-  return freezeComposition(composition);
-}
-
 function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
   return {
     features: {
@@ -402,27 +245,6 @@ function defaultOrgRuntimePolicy(): OrgRuntimePolicy {
       duressAware: 'allowed',
       multiParty: 'allowed',
       recordLifecycle: 'allowed',
-    },
-    recordLifecycle: {
-      correctable: {
-        enabled: true,
-        correctableFieldSet: ['/fullName', '/householdSize', '/address/street'],
-        window: { state: 'open' },
-        requiresReason: true,
-        requiresEvidence: false,
-      },
-      withdrawable: {
-        enabled: true,
-        window: { state: 'closes-at', closesAt: '2026-06-24T23:59:59.000Z' },
-        requiresReason: true,
-        preDeterminationKernelMode: 'applicant-withdrawn',
-        partyScope: 'any-party',
-      },
-      disputable: {
-        enabled: true,
-        signerOnly: true,
-        requiresReason: true,
-      },
     },
     // FW-0040 slice 1: narrowed routes don't mount in host iframes, so
     // the allow-list is irrelevant — fail-closed default mirrors the

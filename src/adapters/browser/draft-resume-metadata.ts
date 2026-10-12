@@ -5,12 +5,17 @@ import type { HttpClientConfig } from '../http/http-client.ts';
 export type DraftResumeMetadataStore = ScopedMetadataStore;
 
 export function createBrowserDraftResumeMetadataStore(
-  config: Pick<HttpClientConfig, 'baseUrl' | 'tenantBinding'> & { identityContext?: { issuer: string; clientId: string } },
+  config: Pick<HttpClientConfig, 'baseUrl' | 'tenantBinding'> & { identityContext?: { issuer: string; clientId: string }; taskContext?: { taskId: string; expectedTaskRevision: string } },
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
 ): DraftResumeMetadataStore {
+  if (config.taskContext && (typeof config.taskContext.taskId !== 'string' || !config.taskContext.taskId.trim()
+    || typeof config.taskContext.expectedTaskRevision !== 'string' || !config.taskContext.expectedTaskRevision.trim())) {
+    throw new Error('Task draft resume metadata requires an exact task and revision');
+  }
   const context = {
     endpoint: new URL(config.baseUrl).href.replace(/\/+$/, ''),
     ...(config.identityContext ? { identity: { issuer: config.identityContext.issuer, clientId: config.identityContext.clientId } } : {}),
+    ...(config.taskContext ? { task: { taskId: config.taskContext.taskId, expectedTaskRevision: config.taskContext.expectedTaskRevision } } : {}),
     tenantBinding: config.tenantBinding ? {
       kind: config.tenantBinding.kind,
       scope: (() => {

@@ -1,3 +1,4 @@
+import { buildStatusTrackingUri } from './status-route.ts';
 /**
  * Shared history render helpers (FW-0057 slice 1).
  *
@@ -87,7 +88,7 @@ export function HistoryEntryItem({ entry }: { entry: HistoryEntry }) {
       <small>{describeTimestamp(entry.kind, entry.timestamp)}</small>
       {hasStatusLink ? (
         <p className="history-list__cross-link">
-          <a href={`/status?case=${encodeURIComponent(entry.applicantStatusRef as string)}`}>
+          <a href={buildStatusTrackingUri(entry.applicantStatusRef as string)}>
             Track this application
           </a>
         </p>

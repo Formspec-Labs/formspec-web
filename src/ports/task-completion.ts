@@ -1,3 +1,4 @@
+import type { SignedTaskDraft } from './task-draft.ts';
 import type { CompletionLifetime } from './response-completion.ts';
 import type { FormResponse } from '@formspec-org/types';
 import type { WosResourceUrn } from './status-reader.ts';
@@ -16,6 +17,7 @@ export interface TaskSubmission {
   readonly definitionUrl: string;
   readonly definitionVersion: string;
   readonly response: FormResponse;
+  readonly signedDraft?: SignedTaskDraft;
 }
 export type CompletedTaskOutcome = TaskOutcomeEvent & { readonly outcome: 'completed'; readonly newStatus: 'submitted' };
 

@@ -1,3 +1,4 @@
+import type { TaskDraftAssociation } from '../../ports/task-draft.ts';
 import canonicalize from 'canonicalize';
 import type { DraftKey, DraftReadState, DraftStore, FormResponse } from '../../ports/draft-store.ts';
 import { createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
@@ -6,6 +7,8 @@ import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 
 export interface HttpDraftStoreConfig extends HttpClientConfig {
   formIdResolver?: FormIdResolver;
+  /** Task-owned drafts must never create an ordinary initial draft after losing their binding. */
+  requireExistingBinding?: boolean;
   anonymousSessionToken?: string | ((key: DraftKey) => Promise<string | undefined> | string | undefined);
   /**
    * Cohort-supplied shared binding registry (FW-0064). When omitted, the
@@ -28,11 +31,13 @@ interface DraftView {
 export interface OwnedDraftView {
   draft_id: string; draft_version: number; draft_state: Record<string, unknown>; canonical_response: FormResponse;
   form_version_id?: string; subject_ref?: string; status?: string;
+  taskDraft?: TaskDraftAssociation;
 }
 
 export class HttpDraftStore implements DraftStore {
   readonly readState?: (key: DraftKey, assertCurrent?: () => void) => Promise<DraftReadState | undefined>;
   private readonly client: HttpClient;
+  private readonly requireExistingBinding: boolean;
   private readonly formIdResolver: FormIdResolver;
   private readonly anonymousSessionToken?: HttpDraftStoreConfig['anonymousSessionToken'];
   private readonly bindings: DraftBindingRegistry;
@@ -45,6 +50,7 @@ export class HttpDraftStore implements DraftStore {
 
   constructor(config: HttpDraftStoreConfig) {
     this.client = new HttpClient(config);
+    this.requireExistingBinding = config.requireExistingBinding === true;
     this.formIdResolver = config.formIdResolver ?? defaultFormIdResolver;
     this.anonymousSessionToken = config.anonymousSessionToken;
     this.bindings = config.bindingRegistry ?? createDraftBindingRegistry();
@@ -125,6 +131,7 @@ export class HttpDraftStore implements DraftStore {
       : await this.resolveAnonymousSessionToken(key);
     current();
     if (!existing) {
+      if (this.requireExistingBinding) throw new Error('Task draft binding is unavailable; relaunch the owning task');
       await this.createDraft(key, response, {
         anonymousSessionToken,
         respondentSubject,

@@ -3,6 +3,11 @@ import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE } from '@fo
 import type { NativeSigningScopeSelection } from '../shared/native-signing-scope.ts';
 import type { ResponseActionRole } from '../shared/response-action-controller.ts';
 
+export interface NativeStructuredPanelWidget {
+  readonly moduleId: string;
+  readonly registryEntryVersion: '0.1.0' | '0.1.1' | '0.1.2';
+}
+
 export interface NativePackageSigningConfig {
   keyId: string;
   definition: { url: string; version: string };
@@ -10,6 +15,8 @@ export interface NativePackageSigningConfig {
   module: { id: string; version: string };
   /** Explicit package module pins; omission admits only the signing module. */
   modules?: readonly { id: string; version: string }[];
+  /** Explicit supported StructuredPanel version for each selected module. */
+  structuredPanelWidgets?: readonly NativeStructuredPanelWidget[];
   /** Exact inline Component selection; omission retains the external file path. */
   component?: { handle: string; url: string; version: string };
   /** Exact deployment-approved static image URLs; omission admits no image source. */
@@ -35,6 +42,7 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
   closed(config, ['keyId', 'definition', 'bundle', 'module', 'initialLocale', 'roles', 'bindings', 'readiness',
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'signingScope') ? ['signingScope'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'modules') ? ['modules'] : []),
+    ...(config && typeof config === 'object' && Object.hasOwn(config, 'structuredPanelWidgets') ? ['structuredPanelWidgets'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'component') ? ['component'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'staticAssets') ? ['staticAssets'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'applicationLifecycle') ? ['applicationLifecycle'] : [])]);
@@ -53,6 +61,15 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
     }
     const signing = config.module as { id: string; version: string };
     if (config.modules.filter(pin => pin.id === signing.id && pin.version === signing.version).length !== 1) invalid();
+  }
+  if (Object.hasOwn(config, 'structuredPanelWidgets')) {
+    if (!Array.isArray(config.structuredPanelWidgets) || !config.structuredPanelWidgets.length) invalid();
+    const selected = Array.isArray(config.modules) ? config.modules : [config.module]; const ids = new Set<string>();
+    for (const pin of config.structuredPanelWidgets) {
+      closed(pin, ['moduleId', 'registryEntryVersion']); nonblank(pin.moduleId); unique(ids, pin.moduleId);
+      if ((pin.registryEntryVersion !== '0.1.0' && pin.registryEntryVersion !== '0.1.1' && pin.registryEntryVersion !== '0.1.2')
+        || !selected.some(module => module.id === pin.moduleId)) invalid();
+    }
   }
   if (Object.hasOwn(config, 'signingScope')) {
     const scope = config.signingScope;

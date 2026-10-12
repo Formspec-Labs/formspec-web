@@ -63,3 +63,87 @@ describe('HttpAttachmentStore', () => {
     await expect(store.upload(new Blob(['x']), { filename: 'x.png', mimeType: 'image/png' })).rejects.toMatchObject({ code: 'unavailable' });
   });
 });
+
+describe('task-bound attachment route selection', () => {
+  it('preserves the task descriptor and raw bytes through the draft and actual field path', async () => {
+    const bytes = new Blob(['abc'], { type: 'application/pdf' });
+    const uploadId = `upload_${'a'.repeat(64)}`;
+    const ref = { kind: 'attachment-ref' as const, uri: `urn:formspec:attachment:${uploadId}`, hash: `sha256:${'b'.repeat(64)}`,
+      size: 3, filename: 'proof.pdf', mimeType: 'application/pdf', upload_id: uploadId,
+      read_url: `/runtime/drafts/task-draft/attachments/${uploadId}?dataPath=%2Fproof` };
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => Response.json(ref, { status: 201, headers: { 'cache-control': 'private, no-store' } }));
+    const store = new HttpAttachmentStore({ baseUrl: 'https://source.test', tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } }, formId: 'form', accessToken: 'current-owner', fetchImpl,
+      maxUploadBytes: 1024, taskBinding: { draftId: 'task-draft', fieldPaths: { proof: '/proof' },
+        lifetime: { signal: new AbortController().signal, assertCurrent: vi.fn() } } });
+    expect(await store.upload(bytes, { filename: 'proof.pdf', mimeType: bytes.type, fieldPath: 'proof' })).toEqual(ref);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(new URL(String(url)).pathname).toBe('/runtime/drafts/task-draft/attachments');
+    expect(new URL(String(url)).searchParams.get('dataPath')).toBe('/proof');
+    expect(init!.body).toBe(bytes);
+    expect(new Headers(init!.headers).get('authorization')).toBe('Bearer current-owner');
+  });
+  it('refuses an unselected field or other task descriptor before HTTP', async () => {
+    const fetchImpl = vi.fn();
+    const store = new HttpAttachmentStore({ baseUrl: 'https://source.test', tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } }, formId: 'form', accessToken: 'current-owner', fetchImpl,
+      maxUploadBytes: 1024, taskBinding: { draftId: 'task-draft', fieldPaths: { proof: '/proof' },
+        lifetime: { signal: new AbortController().signal, assertCurrent: vi.fn() } } });
+    await expect(store.upload(new Blob(['a']), { filename: 'x.pdf', mimeType: 'application/pdf', fieldPath: 'other' })).rejects.toThrow('unselected');
+    const uploadId = `upload_${'a'.repeat(64)}`;
+    await expect(store.read({ kind: 'attachment-ref', uri: `urn:formspec:attachment:${uploadId}`, hash: `sha256:${'b'.repeat(64)}`,
+      size: 1, filename: 'x.pdf', mimeType: 'application/pdf', read_url: `/runtime/drafts/other/attachments/${uploadId}?dataPath=%2Fproof` },
+      { fieldPath: 'proof' })).rejects.toThrow('draft or path');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+it('bounds a task upload when injected transport ignores abort and cancels its late body', async () => {
+  const abort = new AbortController();
+  let release!: (response: Response) => void;
+  let started!: () => void;
+  const entered = new Promise<void>(resolve => { started = resolve; });
+  const fetchImpl = vi.fn(() => { started(); return new Promise<Response>(resolve => { release = resolve; }); });
+  const store = new HttpAttachmentStore({ baseUrl: 'https://source.test', formId: 'form', accessToken: 'owner', fetchImpl,
+    tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } },
+    maxUploadBytes: 1024, taskBinding: { draftId: 'task-draft', fieldPaths: { proof: '/proof' },
+      lifetime: { signal: abort.signal, assertCurrent: vi.fn() } } });
+  const pending = store.upload(new Blob(['a']), { filename: 'proof.pdf', mimeType: 'application/pdf', fieldPath: 'proof' });
+  await entered;
+  abort.abort(new Error('task owner retired'));
+  await expect(pending).rejects.toMatchObject({ code: 'network' });
+  const cancel = vi.fn();
+  release(new Response(new ReadableStream({ cancel })));
+  await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+});
+
+it.each(['toString', 'constructor', '__proto__'])('rejects inherited task path %s before credentials', async fieldPath => {
+  const accessToken = vi.fn(async () => 'owner'); const fetchImpl = vi.fn();
+  const store = new HttpAttachmentStore({ baseUrl: 'https://source.test', formId: 'form', accessToken, fetchImpl,
+    tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } },
+    maxUploadBytes: 1024, taskBinding: { draftId: 'task-draft', fieldPaths: { proof: '/proof' },
+      lifetime: { signal: new AbortController().signal, assertCurrent: vi.fn() } } });
+  await expect(store.upload(new Blob(['a']), { filename: 'x.pdf', mimeType: 'application/pdf', fieldPath })).rejects.toThrow('unselected');
+  expect(accessToken).not.toHaveBeenCalled(); expect(fetchImpl).not.toHaveBeenCalled();
+});
+
+it('preserves task upload refusal when invalid response cleanup never settles', async () => {
+  const cancel = vi.fn(() => new Promise<void>(() => {}));
+  const fetchImpl = vi.fn(async () => new Response(new ReadableStream({ cancel }), { status: 403 }));
+  const store = new HttpAttachmentStore({ baseUrl: 'https://source.test', formId: 'form', accessToken: 'owner', fetchImpl,
+    tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } },
+    maxUploadBytes: 1024, taskBinding: { draftId: 'task-draft', fieldPaths: { proof: '/proof' },
+      lifetime: { signal: new AbortController().signal, assertCurrent: vi.fn() } } });
+  await expect(store.upload(new Blob(['a']), { filename: 'x.pdf', mimeType: 'application/pdf', fieldPath: 'proof' })).rejects.toMatchObject({ code: 'unavailable' });
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
+it('denies every attachment operation for an explicit empty task map before credentials or HTTP', async () => {
+  const accessToken = vi.fn(async () => 'owner'); const fetchImpl = vi.fn();
+  const store = new HttpAttachmentStore({ baseUrl: 'https://source.test', formId: 'form', accessToken, fetchImpl,
+    tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } },
+    maxUploadBytes: 1024, taskBinding: { draftId: 'task-draft', fieldPaths: {},
+      lifetime: { signal: new AbortController().signal, assertCurrent: vi.fn() } } });
+  await expect(store.upload(new Blob(['a']), { filename: 'x.pdf', mimeType: 'application/pdf', fieldPath: 'proof' })).rejects.toThrow('unselected');
+  await expect(store.read({ kind: 'attachment-ref', uri: 'urn:formspec:attachment:unselected', hash: `sha256:${'b'.repeat(64)}`,
+    size: 1, filename: 'x.pdf', mimeType: 'application/pdf' }, { fieldPath: 'proof' })).rejects.toThrow('unselected');
+  expect(accessToken).not.toHaveBeenCalled(); expect(fetchImpl).not.toHaveBeenCalled();
+});

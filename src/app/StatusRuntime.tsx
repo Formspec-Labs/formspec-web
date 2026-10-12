@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { StatusReadError } from '../ports/status-reader.ts';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type { Composition } from '../composition/types.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import type {
@@ -40,16 +41,20 @@ interface StatusRuntimeProps {
   composition: Composition;
   config: FormspecWebConfig;
   route: StatusRouteParams;
+  /** Host supplies current-task navigation; summaries never authorize a launch. */
+  renderTaskAction?: (task: ApplicantTaskSummary) => ReactNode;
 }
 
 type StatusViewState =
   | { kind: 'loading' }
+  | { kind: 'sign-in-required' }
   | { kind: 'disabled'; cause: DisabledCause | undefined }
   | { kind: 'policy-error'; error: RuntimePolicyError }
   | { kind: 'ready'; detail: ApplicantCaseDetail; lifecycle: LifecycleViewState }
   | { kind: 'ready-reduced'; resource: ApplicantStatusResource; lifecycle: LifecycleViewState }
   | { kind: 'not-found' }
-  | { kind: 'adapter-error' };
+  | { kind: 'adapter-error' }
+  | { kind: 'access-denied' };
 
 type LifecycleViewState =
   | { kind: 'disabled'; cause: DisabledCause | undefined }
@@ -69,7 +74,7 @@ type LifecycleViewState =
 export const NO_AGGREGATE_COPY = 'Timing for similar applications is not yet available on this site.';
 export const PER_CASE_HEADER = 'Time since each step on your application';
 
-export function StatusRuntime({ composition, route }: StatusRuntimeProps) {
+export function StatusRuntime({ composition, route, renderTaskAction }: StatusRuntimeProps) {
   const [view, setView] = useState<StatusViewState>({ kind: 'loading' });
 
   useEffect(() => {
@@ -116,17 +121,46 @@ export function StatusRuntime({ composition, route }: StatusRuntimeProps) {
     const lifecycleEnabled = profile.enabled.has('recordLifecycle');
     const lifecycleDisabledCause = profile.disabled.get('recordLifecycle')?.cause;
 
-    void Promise.allSettled([
-      composition.statusReader.readStatus({ resourceRef: route.caseUrn }),
+    const session = composition.browserAuthSession;
+    let selectedSession: string | undefined;
+    let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+    const retire = () => { if (cancelled) return; cancelled = true; setView({ kind: 'sign-in-required' }); };
+    const unsubscribe = session?.subscribe(state => {
+      if (cancelled) return;
+      if (!state || !Number.isFinite(Date.parse(state.expiresAt)) || Date.parse(state.expiresAt) <= Date.now()) {
+        retire(); return;
+      }
+      const key = JSON.stringify([state.issuer, state.subject, state.revision, state.expiresAt]);
+      if (selectedSession !== undefined && selectedSession !== key) { retire(); return; }
+      selectedSession = key;
+      const checkExpiry = () => {
+        if (cancelled) return;
+        const remaining = Date.parse(state.expiresAt) - Date.now();
+        if (remaining <= 0) retire();
+        else expiryTimer = setTimeout(checkExpiry, Math.min(remaining, 2_147_483_647));
+      };
+      clearTimeout(expiryTimer); checkExpiry();
+    });
+    const read = async () => {
+      if (session && !await session.getSession()) { retire(); return; }
+      if (cancelled) return;
+      return Promise.allSettled([
+      composition.statusReader.readStatus({ resourceRef: route.caseLedgerId }),
       lifecycleEnabled
-        ? composition.lifecycleActionClient.readLifecycle({ caseUrn: route.caseUrn })
+        ? composition.lifecycleActionClient.readLifecycle({ caseUrn: route.caseLedgerId })
         : Promise.resolve(undefined),
-    ])
-      .then(([statusResult, lifecycleResult]) => {
+      ]);
+    };
+    void read().then(results => {
+        if (!results) return;
+        const [statusResult, lifecycleResult] = results;
         if (cancelled) return;
         if (statusResult.status === 'rejected') {
           console.error('StatusRuntime: readStatus failed', statusResult.reason);
-          setView({ kind: 'adapter-error' });
+          setView({ kind: statusResult.reason instanceof StatusReadError
+            ? statusResult.reason.code === 'sign-in-required' ? 'sign-in-required'
+              : statusResult.reason.code === 'access-denied' ? 'access-denied' : 'adapter-error'
+            : 'adapter-error' });
           return;
         }
         const resource = statusResult.value;
@@ -154,8 +188,24 @@ export function StatusRuntime({ composition, route }: StatusRuntimeProps) {
 
     return () => {
       cancelled = true;
+      unsubscribe?.();
+      clearTimeout(expiryTimer);
     };
-  }, [composition, route.caseUrn]);
+  }, [composition, route.caseLedgerId]);
+
+  if (view.kind === 'access-denied') {
+    return <section className="status-surface" aria-labelledby="status-title">
+      <h1 id="status-title">Your application status</h1>
+      <p>This application is not available to your signed-in account.</p>
+    </section>;
+  }
+
+  if (view.kind === 'sign-in-required') {
+    return <section className="status-surface" aria-labelledby="status-title">
+      <h1 id="status-title">Your application status</h1>
+      <p>Sign in to view your current application status.</p>
+    </section>;
+  }
 
   if (view.kind === 'loading') {
     return (
@@ -201,7 +251,7 @@ export function StatusRuntime({ composition, route }: StatusRuntimeProps) {
         resource={view.resource}
         lifecycle={view.lifecycle}
         lifecycleActionClient={composition.lifecycleActionClient}
-        caseUrn={route.caseUrn}
+        caseUrn={route.caseLedgerId}
       />
     );
   }
@@ -209,9 +259,10 @@ export function StatusRuntime({ composition, route }: StatusRuntimeProps) {
   return (
     <ReadyStatus
       detail={view.detail}
+      renderTaskAction={renderTaskAction}
       lifecycle={view.lifecycle}
       lifecycleActionClient={composition.lifecycleActionClient}
-      caseUrn={route.caseUrn}
+      caseUrn={route.caseLedgerId}
     />
   );
 }
@@ -297,11 +348,13 @@ function ReducedStatus({
 
 function ReadyStatus({
   detail,
+  renderTaskAction,
   lifecycle,
   lifecycleActionClient,
   caseUrn,
 }: {
   detail: ApplicantCaseDetail;
+  renderTaskAction?: (task: ApplicantTaskSummary) => ReactNode;
   lifecycle: LifecycleViewState;
   lifecycleActionClient: LifecycleActionClient;
   caseUrn: string;
@@ -319,7 +372,7 @@ function ReadyStatus({
 
       <TimingStrip timeline={detail.statusTimeline} />
 
-      {detail.openTasks.length > 0 ? <NextTasks tasks={detail.openTasks} /> : null}
+      {detail.openTasks.length > 0 ? <NextTasks tasks={detail.openTasks} renderTaskAction={renderTaskAction} /> : null}
 
       {detail.aiInvolvement ? <AiDisclosure involvement={detail.aiInvolvement} /> : null}
 
@@ -1107,7 +1160,7 @@ function TimingStrip({ timeline }: { timeline: readonly ApplicantStatusTimelineE
   );
 }
 
-function NextTasks({ tasks }: { tasks: readonly ApplicantTaskSummary[] }) {
+function NextTasks({ tasks, renderTaskAction }: { tasks: readonly ApplicantTaskSummary[]; renderTaskAction?: (task: ApplicantTaskSummary) => ReactNode }) {
   return (
     <section className="status-next-tasks" aria-labelledby="status-next-tasks-title">
       <h2 id="status-next-tasks-title">What you owe next</h2>
@@ -1116,6 +1169,7 @@ function NextTasks({ tasks }: { tasks: readonly ApplicantTaskSummary[] }) {
           <li key={task.id} className="status-next-tasks__item">
             <strong>{task.title}</strong>
             {task.deadline ? <span>Due {formatDate(task.deadline)}</span> : null}
+            {renderTaskAction?.(task)}
           </li>
         ))}
       </ul>

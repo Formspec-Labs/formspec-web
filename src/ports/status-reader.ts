@@ -156,3 +156,11 @@ export interface StatusRequest {
 export interface StatusReader {
   readStatus(request: StatusRequest): Promise<ApplicantStatusResource | undefined>;
 }
+
+/** Applicant read failures never stand in for a successfully read empty case. */
+export class StatusReadError extends Error {
+  constructor(readonly code: 'sign-in-required' | 'access-denied' | 'unavailable') {
+    super('Application status ' + code);
+    this.name = 'StatusReadError';
+  }
+}

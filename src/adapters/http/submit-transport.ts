@@ -4,8 +4,10 @@ import type {
   IntakeHandoff,
   SubmitConfirmation,
   SubmitTransport,
+  SubmitOptions,
 } from '../../ports/submit-transport.ts';
 import { assertUuidV7IdempotencyKey } from '../../shared/idempotency-key.ts';
+import { snapshotNativeCurrentCheck } from './native-current-check.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 
 export interface HttpSubmitTransportConfig extends HttpClientConfig {
@@ -30,7 +32,7 @@ export class HttpSubmitTransport implements SubmitTransport {
   private readonly responseDataResolver?: HttpSubmitTransportConfig['responseDataResolver'];
   private readonly anonymousSessionToken?: HttpSubmitTransportConfig['anonymousSessionToken'];
   private readonly signingRequested?: HttpSubmitTransportConfig['signingRequested'];
-  private readonly finalizedHandoffs = new Map<string, IntakeHandoff>();
+  private readonly finalizedHandoffs = new Map<string, { handoff: IntakeHandoff; options: SubmitOptions }>();
   private readonly replay = new Map<string, Promise<SubmitConfirmation>>();
 
   constructor(config: HttpSubmitTransportConfig) {
@@ -42,23 +44,26 @@ export class HttpSubmitTransport implements SubmitTransport {
     this.signingRequested = config.signingRequested;
   }
 
-  async submit(handoff: IntakeHandoff, idempotencyKey: string, assertCurrent: () => void = () => {}): Promise<SubmitConfirmation> {
+  async submit(handoff: IntakeHandoff, idempotencyKey: string, assertCurrent: () => void = () => {}, options: SubmitOptions = {}): Promise<SubmitConfirmation> {
     const check = () => assertSynchronousGuard(assertCurrent);
     check();
     assertUuidV7IdempotencyKey(idempotencyKey);
     requireCanonicalResponse(handoff);
+    const selectedOptions = snapshotSubmitOptions(options);
     const finalized = this.finalizedHandoffs.get(idempotencyKey);
-    if (finalized && canonicalize(finalized) !== canonicalize(handoff)) {
+    if (finalized && canonicalize(finalized.handoff) !== canonicalize(handoff)) {
       throw new Error('A submission retry must preserve the finalized Response snapshot');
     }
-    const snapshot = finalized ?? structuredClone(handoff);
+    if (finalized && canonicalize(finalized.options) !== canonicalize(selectedOptions)) throw new Error('A submission retry must preserve its native selector');
+    const snapshot = finalized?.handoff ?? structuredClone(handoff);
+    const capturedOptions = finalized?.options ?? selectedOptions;
     const canonicalResponse = requireCanonicalResponse(snapshot);
-    this.finalizedHandoffs.set(idempotencyKey, snapshot);
+    this.finalizedHandoffs.set(idempotencyKey, { handoff: snapshot, options: capturedOptions });
     const existing = this.replay.get(idempotencyKey);
     if (existing) {
       return existing;
     }
-    const submission = this.submitOnce(snapshot, canonicalResponse, idempotencyKey, check);
+    const submission = this.submitOnce(snapshot, canonicalResponse, idempotencyKey, check, capturedOptions);
     this.replay.set(idempotencyKey, submission);
     try {
       return await submission;
@@ -73,6 +78,7 @@ export class HttpSubmitTransport implements SubmitTransport {
     snapshot: CanonicalResponse,
     idempotencyKey: string,
     assertCurrent: () => void,
+    options: SubmitOptions,
   ): Promise<SubmitConfirmation> {
     const draftId = await this.draftIdResolver(handoff);
     assertSynchronousGuard(assertCurrent);
@@ -95,6 +101,7 @@ export class HttpSubmitTransport implements SubmitTransport {
         response_id: configuredId ?? snapshotId,
         response_data: snapshot.data,
         canonical_response: snapshot,
+        ...(options.nativeCurrentCheck ? { nativeCurrentCheck: options.nativeCurrentCheck } : {}),
         subject_ref: handoff.subjectRef ?? null,
         party_ref: partyRefFromHandoff(handoff) ?? null,
         anonymous_session_token: token,
@@ -149,4 +156,12 @@ function partyRefFromHandoff(handoff: IntakeHandoff): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function snapshotSubmitOptions(options: SubmitOptions): SubmitOptions {
+  if (!options || typeof options !== 'object' || Array.isArray(options)
+    || Object.keys(options).some(key => key !== 'nativeCurrentCheck')) throw new Error('Invalid native selector options');
+  const value = options.nativeCurrentCheck;
+  if (value === undefined) return Object.freeze({});
+  return Object.freeze({ nativeCurrentCheck: snapshotNativeCurrentCheck(value) });
 }

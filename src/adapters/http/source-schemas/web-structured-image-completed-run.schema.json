@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:formspec:web:structured-image-completed-run:1",
+  "description": "Web closed companion of exact Source structured_image.rs DTO for completed proof reads. Not an owning Source schema or evidence qualification.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "request": {
+      "$ref": "urn:formspec:server:evaluation-instance-proof-read:1#/$defs/InitialHydrateNativeRequest"
+    },
+    "registration": {
+      "$ref": "urn:formspec:server:evaluation-composition:2#/$defs/ImageRegistration"
+    },
+    "attachmentReference": {},
+    "inputDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "inputByteLength": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "const": "completed"
+        },
+        "version": {
+          "const": 1
+        },
+        "invocationId": {
+          "type": "string"
+        },
+        "requestBindingHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "executorConfigHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "inputDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "observations": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "document": {},
+            "canonicalOutputDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "document",
+            "canonicalOutputDigest"
+          ]
+        },
+        "measuredFacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "byteLength": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "detectedFormat": {
+              "type": "string"
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "frameCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "decodeComplete": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "byteLength",
+            "detectedFormat",
+            "width",
+            "height",
+            "frameCount",
+            "decodeComplete"
+          ]
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "startedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "completedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "elapsedMillis": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "startedAt",
+            "completedAt",
+            "elapsedMillis"
+          ]
+        },
+        "diagnosticArtifactRefs": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "byteLength": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "hostOwnedLocator": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "digest",
+              "byteLength",
+              "hostOwnedLocator"
+            ]
+          }
+        }
+      },
+      "required": [
+        "outcome",
+        "version",
+        "invocationId",
+        "requestBindingHash",
+        "executorConfigHash",
+        "inputDigest",
+        "observations",
+        "measuredFacts",
+        "execution",
+        "diagnosticArtifactRefs"
+      ]
+    },
+    "retainedDiagnostics": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "enum": [
+              "rawOutput",
+              "preparedInputs",
+              "executionMetadata"
+            ]
+          },
+          "hostOwnedLocator": {
+            "type": "string"
+          },
+          "object": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "object_artifact_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "aggregate_type": {
+                "const": "structured_image_run"
+              },
+              "aggregate_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "object_kind": {
+                "enum": [
+                  "immutable:structured-image-run:v1",
+                  "immutable:structured-image-diagnostic:v1"
+                ]
+              },
+              "object_uri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "content_type": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "checksum_sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "byte_length": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 33619968
+              }
+            },
+            "required": [
+              "object_artifact_id",
+              "aggregate_type",
+              "aggregate_id",
+              "object_kind",
+              "object_uri",
+              "content_type",
+              "checksum_sha256",
+              "byte_length"
+            ]
+          }
+        },
+        "required": [
+          "role",
+          "hostOwnedLocator",
+          "object"
+        ]
+      }
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "runHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "version",
+    "request",
+    "registration",
+    "attachmentReference",
+    "inputDigest",
+    "inputByteLength",
+    "outcome",
+    "retainedDiagnostics",
+    "issuedAt",
+    "completedAt",
+    "expiresAt",
+    "runHash"
+  ]
+}

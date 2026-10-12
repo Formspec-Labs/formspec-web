@@ -30,7 +30,6 @@ export function SurfaceVerificationStatus({
       <div className="fs-verification-status__summary">
         <strong>Verified app</strong>
         <span>Published by {trust.publisherDisplayName}</span>
-        <span>Release {payload.release.id}</span>
       </div>
       <details>
         <summary>Verification details</summary>
@@ -39,6 +38,8 @@ export function SurfaceVerificationStatus({
           <dd>{payload.publisher.id}</dd>
           <dt>Signed app ID</dt>
           <dd>{payload.manifest.id}</dd>
+          <dt>Signed release ID</dt>
+          <dd>{payload.release.id}</dd>
           <dt>Signed release sequence</dt>
           <dd>{payload.release.sequence}</dd>
           <dt>Trusted signing key</dt>

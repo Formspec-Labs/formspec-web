@@ -90,8 +90,8 @@ test('demo submit click-through opens an accessible status page (FW-0039 slice 1
   expect(accessibilityScanResults.violations).toEqual([]);
 });
 
-test('direct /status?case=urn:wos:case_demo_0001 renders the demo case (FW-0039 slice 1)', async ({ page }) => {
-  await page.goto('/status?case=urn:wos:case_demo_0001');
+test('direct /status?caseLedgerId=urn:wos:case_demo_0001 renders the demo case (FW-0039 slice 1)', async ({ page }) => {
+  await page.goto('/status?caseLedgerId=urn:wos:case_demo_0001');
   await expect(page.getByRole('heading', { name: 'Your application status', level: 1 })).toBeVisible();
   await expect(page.getByText('Timing for similar applications is not yet available on this site.')).toBeVisible();
   await expect(page.getByText('Time since each step on your application')).toBeVisible();

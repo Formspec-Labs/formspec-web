@@ -1,4 +1,8 @@
-import type { ScreenerAssociation, ScreenerOwner, ScreenerSelection, SourceScope } from './screener-retention.ts';
+import type { MixedHydrationWire } from './mixed-proof.ts';
+import type { InitialMixedHydrationWire } from './initial-mixed-proof.ts';
+import type { SavedResponseDraft } from './response-signing.ts';
+import type { CompletionLifetime } from './response-completion.ts';
+import type { ScreenerAssociation, ScreenerOwner, ScreenerSelection, SourceScope, NativeCurrentCheck } from './screener-retention.ts';
 
 /** Public Source wire types only. Schema validity does not establish candidate or freshness authority. */
 export interface EvaluationHydrationOwner {
@@ -97,4 +101,20 @@ export interface EvaluationHydrationWire {
   readonly qualifiedAt: string;
   readonly results: readonly EvaluationHydrationResult[];
   readonly providerReceipt: HttpEvaluationProviderReceipt | NativeScreenerMappingReceipt | ComposedSourcesReceipt | null;
+}
+
+/** Checked facts for one exact saved candidate; Source retains admission authority. */
+export interface HydratedEvaluationCandidate {
+  readonly nativeCurrentCheck?: NativeCurrentCheck;
+  readonly view: EvaluationHydrationWire | InitialMixedHydrationWire | MixedHydrationWire;
+  readonly assertCurrent: () => void;
+  readonly assertReady: () => void;
+  /** Local verified lifetime decision; authority retirement still throws. */
+  readonly refreshRequired?: () => boolean;
+}
+/** Host-selected candidate facts, independent of entry routing or Screener retention. */
+export interface SavedCandidateHydration {
+  qualifySaved(saved: SavedResponseDraft, lifetime: CompletionLifetime): Promise<HydratedEvaluationCandidate>;
+  retireFacts(): void;
+  dispose(): void;
 }

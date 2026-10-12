@@ -1,5 +1,6 @@
 import { createDefaultComposition, type IdentityBinding } from '../composition/default.ts';
 import { createRouteNarrowedComposition } from '../composition/route-narrowing.ts';
+import type { StatusReader } from '../ports/status-reader.ts';
 import type { Composition } from '../composition/types.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
 import { DOCUMENTS_ROUTE_NARROWING, parseDocumentsRoute } from './documents-route.ts';
@@ -30,45 +31,44 @@ export function chooseComposition({
   href,
   config,
   identityBindingFactory,
+  statusReader,
 }: {
   href: string;
   config: FormspecWebConfig;
   identityBindingFactory?: () => IdentityBinding;
+  statusReader?: StatusReader;
 }): Composition {
-  if (parseStatusRoute(href)) {
-    return createRouteNarrowedComposition({ mode: 'default', config, route: STATUS_ROUTE_NARROWING });
+  if (new URL(href).pathname === '/status') {
+    if (!parseStatusRoute(href)) throw new Error('Invalid status case selection');
+    return createRouteNarrowedComposition({ config, route: STATUS_ROUTE_NARROWING,
+      statusReader, identityBinding: statusReader ? identityBindingFactory?.() : undefined });
   }
   if (parseObligationsRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: OBLIGATIONS_ROUTE_NARROWING,
     });
   }
   if (parseDocumentsRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: DOCUMENTS_ROUTE_NARROWING,
     });
   }
   if (parseHistoryRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: HISTORY_ROUTE_NARROWING,
     });
   }
   if (parseScreenerRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: SCREENER_ROUTE_NARROWING,
     });
   }
   if (parseReviewerRoute(href)) {
     return createRouteNarrowedComposition({
-      mode: 'default',
       config,
       route: REVIEWER_ROUTE_NARROWING,
     });

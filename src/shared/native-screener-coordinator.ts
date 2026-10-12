@@ -1,8 +1,10 @@
+import canonicalize from 'canonicalize';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
 import type { SurfaceScreenerCompletionPolicy, SurfaceScreenerCompletionRequest } from '@formspec-org/surface-react';
 import type { SavedResponseDraft } from '../ports/response-signing.ts';
 import type { ScreenerOperationContext, ScreenerRetention, ScreenerRunView } from '../ports/screener-retention.ts';
-import type { HydratedScreenerCandidate, ScreenerHydration } from '../ports/screener-hydration.ts';
+import type { HydratedEvaluationCandidate } from '../ports/evaluation-hydration.ts';
+import type { ScreenerHydration } from '../ports/screener-hydration.ts';
 
 export interface NativeScreenerCoordinatorConfig {
   readonly selectionKey: string;
@@ -10,6 +12,10 @@ export interface NativeScreenerCoordinatorConfig {
   readonly hydration: ScreenerHydration;
   /** Trusted synchronous capture of the current owner/publication and operation lifetime. */
   readonly context: () => ScreenerOperationContext;
+  /** Route-independent owner/publication authority, retained across normal navigation. */
+  readonly routeContext?: () => ScreenerOperationContext;
+  readonly onRouteChange?: () => void;
+  readonly elapsedNow?: () => number;
 }
 interface Operation extends ScreenerOperationContext {
   readonly wait: <T>(task: Promise<T>) => Promise<T>;
@@ -23,7 +29,34 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
   let run: ScreenerRunView | undefined;
   let active: Operation | undefined;
   let disposed = false;
-  const retireFacts = () => { const previous = active; active = undefined; previous?.retire(); };
+  const elapsedNow = config.elapsedNow ?? (() => performance.now());
+  let lastElapsed = -Infinity;
+  const clock = () => {
+    const value = elapsedNow();
+    if (!Number.isFinite(value) || value < lastElapsed) throw new Error('Screener elapsed clock unavailable');
+    lastElapsed = value; return value;
+  };
+  let route: { run: ScreenerRunView; identity: string; deadline: number; assertOwner: () => void } | undefined;
+  let expiry: ReturnType<typeof setTimeout> | undefined;
+  const retireRoute = (notify = true) => {
+    route = undefined;
+    if (expiry !== undefined) clearTimeout(expiry);
+    expiry = undefined;
+    if (notify) config.onRouteChange?.();
+  };
+  function routeAllowed(target: string, document: { url?: string; version: string }): boolean {
+    try {
+      if (disposed || !route || route.run !== run || clock() >= route.deadline) throw new Error('Screener route expired');
+      assertSynchronousGuard(route.assertOwner);
+      const owner = (config.routeContext ?? context)();
+      owner.signal.throwIfAborted(); assertSynchronousGuard(owner.assertCurrent.bind(owner));
+      if (JSON.stringify(owner.identity) !== route.identity) throw new Error('Screener route owner changed');
+      if (run?.selection.screenerUrl !== document.url || run.selection.screenerVersion !== document.version
+        || run.acceptance?.qualification.status !== 'ready' || run.acceptance.qualification.target !== target) return false;
+      return true;
+    } catch { retireRoute(false); return false; }
+  }
+  const retireFacts = () => { const previous = active; active = undefined; previous?.retire(); hydration.retireFacts?.(); };
   function begin(extra?: AbortSignal, caller?: () => void): Operation {
     retireFacts();
     if (disposed) throw new Error('Native Screener coordinator disposed');
@@ -73,7 +106,12 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
   const completionPolicy = Object.freeze({ mode: 'host-required' as const, selectionKey,
     complete: async (request: SurfaceScreenerCompletionRequest) => {
       // A new attempt cannot fall back to an older run after an ambiguous or refused result.
-      run = undefined;
+      run = undefined; retireRoute();
+      const started = clock();
+      const routeOwner = (config.routeContext ?? context)();
+      routeOwner.signal.throwIfAborted(); assertSynchronousGuard(routeOwner.assertCurrent.bind(routeOwner));
+      const routeIdentity = JSON.stringify(routeOwner.identity);
+      const assertOwner = () => { routeOwner.signal.throwIfAborted(); assertSynchronousGuard(routeOwner.assertCurrent.bind(routeOwner)); };
       const operation = begin(request.signal);
       try {
         if (request.selectionKey !== selectionKey) throw new Error('Native Screener selection mismatch');
@@ -92,34 +130,57 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
         }
         // Keep the exact port-issued object; serializing it would discard retention provenance.
         run = retained;
+        const validity = retained.run.determination.validity as { validUntil?: string } | undefined;
+        const until = validity?.validUntil;
+        // Date.parse truncates submillisecond fractions. Reserve one millisecond so
+        // endpoint truncation can only shorten authority, never extend original validity.
+        const remaining = until === undefined && !input.document.resultValidity ? Infinity
+          : Date.parse(until ?? '') - Date.parse(retained.acceptance!.checkedAt) - 1;
+        const deadline = started + remaining;
+        assertOwner();
+        const owner = (config.routeContext ?? context)();
+        owner.signal.throwIfAborted(); assertSynchronousGuard(owner.assertCurrent.bind(owner));
+        if (JSON.stringify(owner.identity) !== routeIdentity || !(remaining > 0) || clock() >= deadline) {
+          run = undefined;
+          return { status: 'refused' as const, reason: 'native-screener-route-expired', retry: 'new-act' as const };
+        }
+        route = { run: retained, identity: routeIdentity, deadline, assertOwner };
+        if (Number.isFinite(deadline)) expiry = setTimeout(() => retireRoute(), Math.min(deadline - clock(), 2_147_483_647));
+        config.onRouteChange?.();
         return { status: 'accepted' as const };
       } finally { finish(operation); }
     },
   }) satisfies SurfaceScreenerCompletionPolicy;
-  async function qualifySaved(saved: SavedResponseDraft, caller?: () => void): Promise<HydratedScreenerCandidate> {
+  async function qualifySaved(saved: SavedResponseDraft, caller?: () => void): Promise<HydratedEvaluationCandidate> {
     const operation = begin(undefined, caller);
     try {
       const issued = run;
       if (!issued) throw new Error('Native Screener retained run unavailable');
       const candidate = structuredClone(saved);
-      const association = await operation.wait(retention.associate({ saved: candidate, run: issued,
-        identity: operation.identity, signal: operation.signal, assertCurrent: operation.assertCurrent }));
+      const currentCheck = !!candidate.response.authoredSignatures?.length;
+      const nativeCurrentCheck = currentCheck ? Object.freeze({ selectionHash: issued.run.selectionHash,
+        runId: issued.run.runId, runRevision: issued.run.revision }) : undefined;
+      const binding = nativeCurrentCheck ? { nativeCurrentCheck }
+        : { association: await operation.wait(retention.associate({ saved: candidate, run: issued,
+          identity: operation.identity, signal: operation.signal, assertCurrent: operation.assertCurrent })) };
       operation.assertCurrent();
-      const facts = await operation.wait(hydration.hydrate({ saved: candidate, run: issued, association,
+      const facts = await operation.wait(hydration.hydrate({ saved: candidate, run: issued, ...binding,
         identity: operation.identity, signal: operation.signal, assertCurrent: operation.assertCurrent }));
       operation.assertCurrent(); facts.assertCurrent();
-      return Object.freeze({ view: facts.view,
+      if (nativeCurrentCheck && canonicalize(facts.nativeCurrentCheck) !== canonicalize(nativeCurrentCheck)) throw new Error('Native current check proof selector mismatch');
+      return Object.freeze({ view: facts.view, ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}),
+        ...(facts.refreshRequired ? { refreshRequired: () => { operation.assertCurrent(); return facts.refreshRequired!(); } } : {}),
         assertCurrent: () => { operation.assertCurrent(); facts.assertCurrent(); },
         assertReady: () => { operation.assertCurrent(); facts.assertReady(); } });
     } catch (error) { finish(operation); throw error; }
   }
-  return Object.freeze({ completionPolicy, qualifySaved, retireFacts,
+  return Object.freeze({ completionPolicy, qualifySaved, retireFacts, routeAllowed,
     preSignCandidate: async (input: { saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }) => {
       const facts = await qualifySaved(input.saved, input.assertCurrent);
       facts.assertReady();
       return Object.freeze({ assertCurrent: facts.assertCurrent });
     },
-    dispose: () => { if (disposed) return; disposed = true; run = undefined; retireFacts(); },
+    dispose: () => { if (disposed) return; disposed = true; run = undefined; retireRoute(); retireFacts(); hydration.dispose?.(); },
   });
 }
 function primitiveAnswers(answers: SurfaceScreenerCompletionRequest['answers']): Record<string, string | number | boolean> {

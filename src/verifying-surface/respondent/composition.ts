@@ -8,7 +8,7 @@ import type {
   PublisherTrustPolicy,
   SurfaceBundleReleasePolicy,
 } from '@formspec-org/surface-bundle-signing';
-import { createDefaultComposition } from '../../composition/default.ts';
+import { createUnavailableComposition } from '../../composition/unavailable.ts';
 import type { Composition } from '../../composition/types.ts';
 import type {
   FormspecWebConfig,
@@ -39,10 +39,7 @@ export function createRespondentSurfaceComposition(
   if (!bundleConfig) {
     throw new Error('The signed respondent Surface deployment is not fully configured.');
   }
-  const base = createDefaultComposition(config);
-  if (base.mode !== 'production') {
-    throw new Error('The signed respondent Surface requires the production HTTP composition.');
-  }
+  const base = createUnavailableComposition('');
 
   const verification = bundleConfig.verification;
   const keyResolver = new StaticKeyResolver(

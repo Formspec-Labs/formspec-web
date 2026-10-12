@@ -74,12 +74,16 @@ export const CEREMONY_FRAME_RENDERED_CONFIG_NODES = [
     { pointerPattern: '', kind: 'ceremony-frame' },
 ];
 export function starterWidgetModule(moduleId, options = {}) {
-    const contract = (deliveryContractId, renderedConfigNodes) => ({
+    const structuredPanelVersion = options.structuredPanelRegistryEntryVersion ?? '0.1.0';
+    if (structuredPanelVersion !== '0.1.0' && structuredPanelVersion !== '0.1.1') {
+        throw new Error('Unsupported StructuredPanel Registry entry version');
+    }
+    const contract = (deliveryContractId, renderedConfigNodes, registryEntryVersion = '0.1.0') => ({
         deliveryContractId,
-        registryEntryVersion: '0.1.0',
+        registryEntryVersion,
         renderedConfigNodes,
     });
-    const structuredPanelContract = contract(STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES);
+    const structuredPanelContract = contract(STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, structuredPanelVersion);
     const queueTableContract = contract(QUEUE_TABLE_DELIVERY_CONTRACT_ID, QUEUE_TABLE_RENDERED_CONFIG_NODES);
     const receiptPanelContract = contract(RECEIPT_PANEL_DELIVERY_CONTRACT_ID, RECEIPT_PANEL_RENDERED_CONFIG_NODES);
     const signingCeremonyContract = contract(SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES);

@@ -1,3 +1,4 @@
+import type { TaskDraftAssociation } from './task-draft.ts';
 import type { FormDefinition, FormResponse, ResponseActionsDocument, SigningContent, SigningContentSource } from '@formspec-org/types';
 import type { DraftKey } from './draft-store.ts';
 
@@ -29,6 +30,7 @@ export interface VerifiedDraftEvidence {
   readonly draft_state: Record<string, unknown>;
   readonly canonical_response: FormResponse;
   readonly status: 'in_progress';
+  readonly taskDraft?: TaskDraftAssociation;
 }
 
 export interface SavedResponseDraft {
@@ -63,15 +65,25 @@ export interface SignPreparedResponseInput {
   action: Readonly<AdmittedResponseAction>;
 }
 
+/** An exact saved commitment awaiting reconciliation; this grants no fresh signing act. */
+export interface PendingResponseSigning extends PreparedResponseSigning {
+  readonly operationId: string;
+}
+
 export interface SignedResponseSigning extends PreparedResponseSigning {
   /** Server-produced delegated evidence consistency; no claim of local cryptographic verification. */
   readonly verification: Readonly<{ mode: 'delegated-service-key'; provider: string; keyId: string }>;
 }
 
+export type RestoredPendingResponseSigning =
+  | { readonly kind: 'prepared'; readonly preparation: PreparedResponseSigning; readonly operationId: string }
+  | { readonly kind: 'signed'; readonly signed: SignedResponseSigning };
+
 export interface ResponseSigning {
   saveDraft(input: SaveResponseDraftInput): Promise<SavedResponseDraft>;
   prepare(input: PrepareResponseSigningInput): Promise<PreparedResponseSigning>;
   sign(input: SignPreparedResponseInput): Promise<SignedResponseSigning>;
+  restorePending?(input: PrepareResponseSigningInput & { readonly renewUnsignedRevision?: true }, operationId: string): Promise<RestoredPendingResponseSigning>;
 }
 
 export class ResponseSigningUnresolvedError extends Error {

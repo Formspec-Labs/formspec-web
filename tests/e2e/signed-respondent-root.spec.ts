@@ -37,7 +37,8 @@ test.describe('signed respondent production root', () => {
     await expect(verification).toContainText(
       'Published by Example Benefits Publisher',
     );
-    await expect(verification).toContainText('Release respondent-e2e-2026-07-28');
+    await verification.getByText('Verification details', { exact: true }).click();
+    await expect(verification).toContainText('respondent-e2e-2026-07-28');
     await expect(page).toHaveTitle(BUNDLE_TITLE);
     await expect(page.locator('h1')).toHaveCount(1);
 

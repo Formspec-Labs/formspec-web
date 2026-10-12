@@ -93,7 +93,7 @@ function errorMessage(error) {
 }
 function ActionButtonNode({ node }) {
     const chrome = useChromeText();
-    const { engine, onSubmit, recordSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
+    const { engine, onSubmit, recordSubmit, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, evaluateActionEffectExpression, dispatchActionEffect, resolveActionIdempotencyKey, responseActionsDocument, resolveActionRef, semanticControlScope, currentSemanticResponseBinding, } = useFormspecContext();
     const form = useForm();
     const actionRef = actionRefFor(node);
     const resolution = resolveActionRef(actionRef, node.id);
@@ -131,6 +131,7 @@ function ActionButtonNode({ node }) {
         }
     }, [findingKey, onActionFinding]);
     const invoke = useCallback(async (invocationContext) => {
+        let submittedDetail = null;
         const ports = {
             submit: ({ profile, validationTuple }) => {
                 const result = form.submit({
@@ -140,6 +141,7 @@ function ActionButtonNode({ node }) {
                         ? { id: semanticControlScope.responseId }
                         : {}),
                 });
+                submittedDetail = result;
                 recordSubmit(result);
                 // Move focus to the first invalid field in this provider's form, as the webcomponent submit does.
                 const report = result.validationReport;
@@ -150,11 +152,12 @@ function ActionButtonNode({ node }) {
             },
             dispatchHostEvent: (eventName, detail, action) => {
                 onHostEvent?.(eventName, detail, action);
-                if (eventName === 'formspec-submit') {
-                    onSubmit?.(detail);
+                if (eventName === 'formspec-submit' && submittedDetail) {
+                    onSubmit?.(submittedDetail);
                 }
             },
             ...(evaluateActionPrecondition ? { evaluatePrecondition: evaluateActionPrecondition } : {}),
+            ...(evaluateActionEffectExpression ? { evaluateEffectExpression: evaluateActionEffectExpression } : {}),
             ...(dispatchActionEffect ? { dispatchEffect: dispatchActionEffect } : {}),
             ...(resolveActionIdempotencyKey ? { resolveIdempotencyKey: resolveActionIdempotencyKey } : {}),
         };
@@ -207,6 +210,7 @@ function ActionButtonNode({ node }) {
         actionRef,
         dispatchActionEffect,
         evaluateActionPrecondition,
+        evaluateActionEffectExpression,
         form,
         node.id,
         onActionFinding,

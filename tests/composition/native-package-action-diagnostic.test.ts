@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpAdapterError } from '../../src/adapters/http/http-client.ts';
-import { diagnoseNativePrepare, nativePrepareDiagnostic } from '../../src/composition/native-package-action-diagnostic.ts';
+import { createNativeQualificationReporter, diagnoseNativePrepare, nativePrepareDiagnostic } from '../../src/composition/native-package-action-diagnostic.ts';
 
 afterEach(() => vi.restoreAllMocks());
 describe('bounded native Prepare diagnostic', () => {
@@ -26,5 +26,26 @@ describe('bounded native Prepare diagnostic', () => {
     const prepared = { private: 'preserved' };
     expect(await diagnoseNativePrepare(async () => prepared)).toBe(prepared);
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('closed native qualification diagnostic', () => {
+  it('distinguishes success, later retirement, and HTTP failure without private context', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const report = createNativeQualificationReporter();
+    report('source-ready'); report('candidate-lifetime', new Error('renderer-dispose'));
+    report('source-qualification', new HttpAdapterError('private token identity URL', 409, undefined, { response: 'secret' }));
+    expect(warn.mock.calls.map(call => JSON.parse(call[1]))).toEqual([
+      { stage: 'source-ready', reason: 'ready' }, { stage: 'candidate-lifetime', reason: 'renderer-retired' },
+      { stage: 'source-qualification', reason: 'http-refused', status: 409 },
+    ]);
+  });
+  it('limits each host to 32 closed events and isolates console failure', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => { throw new Error('observer failed'); });
+    const report = createNativeQualificationReporter();
+    for (let index = 0; index < 40; index++) expect(() => report('source-qualification', new Error('private response'))).not.toThrow();
+    expect(warn).toHaveBeenCalledTimes(32);
+    const next = createNativeQualificationReporter(); next('source-qualification', new HttpAdapterError('private', 999));
+    expect(JSON.parse(warn.mock.calls.at(-1)![1])).toEqual({ stage: 'source-qualification', reason: 'qualification-failed' });
   });
 });

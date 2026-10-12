@@ -1,10 +1,7 @@
 export { createDefaultComposition, buildRealIdentityProvider, createOidcIdentityBinding, createConfiguredBrowserAuthSession, type IdentityBinding, type DefaultCompositionOptions } from './default.ts';
-export { createDemoComposition } from './demo.ts';
-export { createStubComposition } from './stub.ts';
 export {
   createRouteNarrowedComposition,
   type RouteNarrowing,
-  type RouteNarrowingMode,
 } from './route-narrowing.ts';
 export {
   STATUS_ROUTE_NARROWING,
@@ -16,3 +13,12 @@ export {
   DOCUMENTS_ROUTE_NARROWING,
 } from '../app/documents-route.ts';
 export type { Composition } from './types.ts';
+
+export type { NativeInitialDataSourceFactory, NativeInitialDataSourcePorts } from '../shared/native-package-signing-host.ts';
+export { createNativePackageComposition, type NativePackageCompositionOptions, type NativeScreenerCompositionPins, type NativeTaskCompositionPins } from './native-package.ts';
+
+export { createUnavailableComposition } from './unavailable.ts';
+
+export { createTaskComposition } from './task.ts';
+
+export type { NativeHostEventCapability } from '../shared/native-host-events.ts';

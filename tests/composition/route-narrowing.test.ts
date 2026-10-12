@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createRouteNarrowedComposition,
   type RouteNarrowing,
@@ -45,235 +45,59 @@ function referenceHttpDataPorts(ports: PortCompositionConfig): PortCompositionCo
   };
 }
 
-describe('createRouteNarrowedComposition — descriptor contracts (FW-0070)', () => {
-  describe.each(ALL_DESCRIPTORS)('descriptor %j', (route) => {
-    it('default mode without server URL short-circuits to stub', () => {
-      const composition = createRouteNarrowedComposition({ mode: 'default', route });
-      expect(composition.mode).toBe('demo');
+describe('explicit narrowed HTTP composition', () => {
+  describe.each(ALL_DESCRIPTORS)('descriptor %j', route => {
+    it('refuses absent server selection', () => {
+      expect(() => createRouteNarrowedComposition({ route })).toThrow('explicit formspecServerUrl');
     });
-
-    it('default mode with server URL produces a production composition', () => {
-      const composition = createRouteNarrowedComposition({
-        mode: 'default',
-        config: productionConfig(),
-        route,
-      });
+    it('declares only configured route capabilities', async () => {
+      const composition = createRouteNarrowedComposition({ config: productionConfig(), route });
       expect(composition.mode).toBe('production');
+      expect(() => assertCompositionCoherence(composition)).not.toThrow();
+      expect(composition.instanceCapabilities.trustedReviewer).toBe(route.consumes.has('trustedReviewer') ? 'available' : 'unavailable');
+      expect(composition.instanceCapabilities.status).toBe('unavailable');
+      expect(composition.instanceCapabilities.respondentPlace).toBe('unavailable');
+      expect(composition.formRuntimePolicyExtractor.extract(sampleFormDefinition).features).toEqual({});
+      await expect(composition.definitionSource.getDefinition('urn:test:form')).rejects.toThrow();
+      await expect(composition.draftStore.load({ formUrl: 'urn:test:form', subjectRef: 'test-owner' })).rejects.toThrow();
+      await expect(composition.submitTransport.submit({} as never, 'operation')).rejects.toThrow();
     });
-
-    it('stub mode produces a demo composition', () => {
-      const composition = createRouteNarrowedComposition({ mode: 'stub', route });
-      expect(composition.mode).toBe('demo');
-    });
-
-    it('result passes assertCompositionCoherence in both modes', () => {
-      const stubComposition = createRouteNarrowedComposition({ mode: 'stub', route });
-      expect(() => assertCompositionCoherence(stubComposition)).not.toThrow();
-      const productionComposition = createRouteNarrowedComposition({
-        mode: 'default',
-        config: productionConfig(),
-        route,
-      });
-      expect(() => assertCompositionCoherence(productionComposition)).not.toThrow();
-    });
-
-    it('form-shaped MVP ports throw with the route cite on call (production)', async () => {
-      const c = createRouteNarrowedComposition({
-        mode: 'default',
-        config: productionConfig(),
-        route,
-      });
-      await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(
-        /FW-0068/,
-      );
-      await expect(
-        c.draftStore.load({ formUrl: 'https://x', subjectRef: 's' }),
-      ).rejects.toThrow(/FW-0068/);
-      await expect(c.submitTransport.submit({} as never, 'k')).rejects.toThrow(/FW-0068/);
-    });
-
-    it('form-shaped MVP ports throw with the route cite on call (stub)', async () => {
-      const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      await expect(c.definitionSource.getDefinition('https://x')).rejects.toThrow(
-        /FW-0068/,
-      );
-      await expect(c.submitTransport.submit({} as never, 'k')).rejects.toThrow(/FW-0068/);
-    });
-
-    it('initialDefinitionUrl mirrors the descriptor sentinel', () => {
-      const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      expect(c.initialDefinitionUrl).toBe(route.initialDefinitionUrlSentinel);
-    });
-
-    it('orgRuntimePolicy allows every closed-taxonomy feature key', () => {
-      const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      expect(c.orgRuntimePolicy.features).toMatchObject({
-        respondentPlace: 'allowed',
-        status: 'allowed',
-        documentPresentation: 'allowed',
-        fileUpload: 'allowed',
-        crossIssuerHistory: 'allowed',
-        offlineSubmit: 'allowed',
-        payment: 'allowed',
-      });
-    });
-
-    it('formRuntimePolicyExtractor returns empty form policy (routes synthesize per-surface)', () => {
-      const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      expect(c.formRuntimePolicyExtractor.extract(sampleFormDefinition)).toEqual({ features: {} });
+    it('uses only known feature keys', () => {
+      expect([...route.consumes].every(isRuntimeFeatureKey)).toBe(true);
     });
   });
 });
 
-describe('createRouteNarrowedComposition — identity-bound vs identity-agnostic surfaces (FW-0070)', () => {
-  it('identityBound=true: stub mode wires the demo identity provider (real, not noop)', async () => {
-    const c = createRouteNarrowedComposition({
-      mode: 'stub',
-      route: OBLIGATIONS_ROUTE_NARROWING,
-    });
-    await expect(c.identityProvider.discover()).resolves.toBeDefined();
+
+describe('authenticated status reader injection', () => {
+  function selected() {
+    const session = { issuer: 'https://idp.test', subject: 'applicant', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+    const provider = { discover: async () => [], authenticate: vi.fn(), revoke: async () => {}, subscribe: () => () => {} };
+    const browserAuthSession = { getSession: async () => session, begin: async () => {}, completeCallback: async () => session,
+      completeSilentCallback: async () => {}, renew: async () => session, logout: async () => {}, completeLogoutCallback: async () => {},
+      accessToken: async () => 'current-bearer', subscribe: () => () => {}, dispose: () => {} };
+    const config: FormspecWebConfig = { ...productionConfig(), identity: { mode: 'oidc-required',
+      oidc: { issuer: session.issuer, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' } } };
+    return { config, identityBinding: { provider, browserAuthSession, accessToken: browserAuthSession.accessToken },
+      statusReader: { readStatus: vi.fn(async () => undefined) } };
+  }
+  it('uses the explicitly selected identity and reader without constructing form ports', async () => {
+    const input = selected();
+    const composition = createRouteNarrowedComposition({ ...input, route: STATUS_ROUTE_NARROWING });
+    expect(composition.identityProvider).toBe(input.identityBinding.provider);
+    expect(composition.instanceCapabilities.status).toBe('available');
+    expect(composition.instanceCapabilities.recordLifecycle).toBe('unavailable');
+    expect(() => assertCompositionCoherence(composition)).not.toThrow();
+    await composition.statusReader.readStatus({ resourceRef: 'opaque-ledger' });
+    expect(input.statusReader.readStatus).toHaveBeenCalledWith({ resourceRef: 'opaque-ledger' });
+    await expect(composition.definitionSource.getDefinition('anything')).rejects.toThrow();
   });
-
-  it('identityBound=false: stub mode wires the noop identity provider', async () => {
-    const c = createRouteNarrowedComposition({
-      mode: 'stub',
-      route: STATUS_ROUTE_NARROWING,
-    });
-    await expect(c.identityProvider.discover()).rejects.toThrow(/FW-0068/);
-  });
-
-  it('identityBound=true: production mode short-circuits to noop while respondentPlace is unavailable (MED-4)', async () => {
-    const c = createRouteNarrowedComposition({
-      mode: 'default',
-      config: productionConfig(),
-      route: DOCUMENTS_ROUTE_NARROWING,
-    });
-    expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
-    await expect(c.identityProvider.discover()).rejects.toThrow(/FW-0068/);
-  });
-});
-
-describe('createRouteNarrowedComposition — per-mode wiring posture (FW-0070)', () => {
-  it('stub mode preserves the FW-0068 Finding 1 reshape — respondentPlace stays demo-stub on /status', async () => {
-    const c = createRouteNarrowedComposition({
-      mode: 'stub',
-      route: STATUS_ROUTE_NARROWING,
-    });
-    expect(c.instanceCapabilities.respondentPlace).toBe('demo-stub');
-    expect(c.instanceCapabilities.status).toBe('demo-stub');
-    const snapshot = await c.respondentPlaceSource.readPlace({});
-    expect(snapshot.obligations).toBeDefined();
-  });
-
-  it('production mode declares unavailable for the gated keys on every descriptor', () => {
-    for (const route of ALL_DESCRIPTORS) {
-      const c = createRouteNarrowedComposition({
-        mode: 'default',
-        config: productionConfig(),
-        route,
-      });
-      expect(c.instanceCapabilities.respondentPlace).toBe('unavailable');
-      expect(c.instanceCapabilities.status).toBe('unavailable');
-      expect(c.instanceCapabilities.documentPresentation).toBe('unavailable');
-    }
-  });
-
-  it('status reader resolves the demo URN under stub mode regardless of descriptor', async () => {
-    for (const route of ALL_DESCRIPTORS) {
-      const c = createRouteNarrowedComposition({ mode: 'stub', route });
-      await expect(
-        c.statusReader.readStatus({ resourceRef: 'urn:wos:case_demo_0001' }),
-      ).resolves.toBeDefined();
-    }
-  });
-
-  it('status route consumes the lifecycle action client in stub mode only on /status', async () => {
-    const status = createRouteNarrowedComposition({ mode: 'stub', route: STATUS_ROUTE_NARROWING });
-    expect(status.instanceCapabilities.recordLifecycle).toBe('demo-stub');
-    await expect(
-      status.lifecycleActionClient.readLifecycle({ caseUrn: 'urn:wos:case_demo_0001' }),
-    ).resolves.toBeDefined();
-
-    const obligations = createRouteNarrowedComposition({
-      mode: 'stub',
-      route: OBLIGATIONS_ROUTE_NARROWING,
-    });
-    expect(obligations.instanceCapabilities.recordLifecycle).toBe('unavailable');
-    await expect(
-      obligations.lifecycleActionClient.readLifecycle({ caseUrn: 'urn:wos:case_demo_0001' }),
-    ).rejects.toThrow();
-  });
-});
-
-describe('createRouteNarrowedComposition — crossIssuerHistory consumption (FW-0057, FW-0080)', () => {
-  it('descriptor consumes crossIssuerHistory: stub mode wires the history stub + declares demo-stub', async () => {
-    expect(HISTORY_ROUTE_NARROWING.consumes.has('crossIssuerHistory')).toBe(true);
-    const c = createRouteNarrowedComposition({ mode: 'stub', route: HISTORY_ROUTE_NARROWING });
-    expect(c.instanceCapabilities.crossIssuerHistory).toBe('demo-stub');
-    const snapshot = await c.respondentHistorySource.readHistory({});
-    expect(snapshot.entries.length).toBeGreaterThan(0);
-  });
-
-  it('descriptor does NOT consume crossIssuerHistory: stub mode wires the unavailable sentinel + declares unavailable', async () => {
-    expect(STATUS_ROUTE_NARROWING.consumes.has('crossIssuerHistory')).toBe(false);
-    const c = createRouteNarrowedComposition({ mode: 'stub', route: STATUS_ROUTE_NARROWING });
-    expect(c.instanceCapabilities.crossIssuerHistory).toBe('unavailable');
-    await expect(c.respondentHistorySource.readHistory({})).rejects.toThrow();
-  });
-
-  it('production mode always wires the sentinel today (XS-2 not yet shipped)', async () => {
-    const c = createRouteNarrowedComposition({
-      mode: 'default',
-      config: productionConfig(),
-      route: HISTORY_ROUTE_NARROWING,
-    });
-    expect(c.instanceCapabilities.crossIssuerHistory).toBe('unavailable');
-    await expect(c.respondentHistorySource.readHistory({})).rejects.toThrow();
-  });
-});
-
-// FW-0080: the `consumes*` boolean ladder (consumesRespondentPlace /
-// consumesStatus / consumesHistory) consolidated into a single
-// `consumes: ReadonlySet<RuntimeFeatureKey>` driven by the closed
-// RuntimeFeatureKey taxonomy. Adding a future feature key with a narrowed
-// surface needs ONE Set entry, not a new boolean flag on RouteNarrowing.
-describe('RouteNarrowing.consumes — closed-taxonomy Set shape (FW-0080)', () => {
-  it.each(ALL_DESCRIPTORS)('descriptor %j carries a ReadonlySet<RuntimeFeatureKey>', (route) => {
-    expect(route.consumes).toBeInstanceOf(Set);
-    for (const key of route.consumes) {
-      expect(isRuntimeFeatureKey(key)).toBe(true);
-    }
-  });
-
-  it('STATUS_ROUTE_NARROWING consumes exactly {recordLifecycle,status}', () => {
-    expect(Array.from(STATUS_ROUTE_NARROWING.consumes).sort()).toEqual([
-      'recordLifecycle',
-      'status',
-    ]);
-  });
-
-  it('OBLIGATIONS_ROUTE_NARROWING consumes exactly {respondentPlace}', () => {
-    expect(Array.from(OBLIGATIONS_ROUTE_NARROWING.consumes).sort()).toEqual(['respondentPlace']);
-  });
-
-  it('DOCUMENTS_ROUTE_NARROWING consumes exactly {respondentPlace}', () => {
-    expect(Array.from(DOCUMENTS_ROUTE_NARROWING.consumes).sort()).toEqual(['respondentPlace']);
-  });
-
-  it('HISTORY_ROUTE_NARROWING consumes exactly {crossIssuerHistory}', () => {
-    expect(Array.from(HISTORY_ROUTE_NARROWING.consumes).sort()).toEqual(['crossIssuerHistory']);
-  });
-
-  it('REVIEWER_ROUTE_NARROWING consumes exactly {trustedReviewer}', () => {
-    expect(Array.from(REVIEWER_ROUTE_NARROWING.consumes).sort()).toEqual(['trustedReviewer']);
-  });
-
-  it('no descriptor consumes fileUpload / offlineSubmit / payment / embed today (no narrowed-route consumer)', () => {
-    for (const route of ALL_DESCRIPTORS) {
-      expect(route.consumes.has('fileUpload')).toBe(false);
-      expect(route.consumes.has('offlineSubmit')).toBe(false);
-      expect(route.consumes.has('payment')).toBe(false);
-      expect(route.consumes.has('embed')).toBe(false);
-    }
+  it('rejects reader injection without the selected ordinary OIDC session', () => {
+    const input = selected();
+    expect(() => createRouteNarrowedComposition({ config: input.config, statusReader: input.statusReader,
+      route: STATUS_ROUTE_NARROWING })).toThrow('authenticated OIDC');
+    expect(() => createRouteNarrowedComposition({ ...input, config: { ...productionConfig(), identity: { mode: 'anonymous-allowed' } },
+      route: STATUS_ROUTE_NARROWING })).toThrow('authenticated OIDC');
+    expect(() => createRouteNarrowedComposition({ ...input, route: DOCUMENTS_ROUTE_NARROWING })).toThrow('authenticated OIDC');
   });
 });

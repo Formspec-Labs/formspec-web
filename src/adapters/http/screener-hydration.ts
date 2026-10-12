@@ -1,7 +1,8 @@
 import canonicalize from 'canonicalize';
 import type { FormDefinition } from '@formspec-org/types';
 import type { EvaluationHydrationResult, EvaluationHydrationWire, NativeScreenerMappingReceipt } from '../../ports/evaluation-hydration.ts';
-import type { HydrateScreenerCandidate, HydratedScreenerCandidate, ScreenerHydration } from '../../ports/screener-hydration.ts';
+import type { HydratedEvaluationCandidate } from '../../ports/evaluation-hydration.ts';
+import type { HydrateScreenerCandidate, ScreenerHydration } from '../../ports/screener-hydration.ts';
 import type { ScreenerSelection } from '../../ports/screener-retention.ts';
 import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
@@ -45,7 +46,8 @@ export class HttpScreenerHydration implements ScreenerHydration {
       || !/^sha256:[0-9a-f]{64}$/.test(this.selection.instanceMappingHash ?? '')) fail('selection scope mismatch');
     this.client = new HttpClient(config);
   }
-  async hydrate(input: HydrateScreenerCandidate): Promise<HydratedScreenerCandidate> {
+  async hydrate(input: HydrateScreenerCandidate): Promise<HydratedEvaluationCandidate> {
+    if (input.nativeCurrentCheck !== undefined) fail('current checks require the selected mixed proof verifier');
     const { signal, assertCurrent } = input;
     const check = () => { signal.throwIfAborted(); assertCurrent(); };
     check();
@@ -171,7 +173,7 @@ export class HttpScreenerHydration implements ScreenerHydration {
       || !equal(proof.association, association) || proof.evidenceHash !== original.run.evidenceHash
       || proof.evidenceRef !== original.run.evidenceRef || clock(proof.issuedAt) !== clock(original.run.evaluatedAt)
       || clock(proof.expiresAt) !== clock(String(object(original.run.determination.validity).validUntil))
-      || clock(association.associatedAt) < clock(proof.issuedAt) || clock(receipt.resolvedAt) < clock(association.associatedAt)
+      || clock(association!.associatedAt) < clock(proof.issuedAt) || clock(receipt.resolvedAt) < clock(association!.associatedAt)
       || clock(receipt.resolvedAt) > clock(view.qualifiedAt)) fail('native receipt or original policy mismatch');
   }
 }

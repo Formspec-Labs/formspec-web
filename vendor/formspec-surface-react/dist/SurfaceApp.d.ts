@@ -114,6 +114,8 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
     /** Current path, e.g. `window.location.pathname`. */
     location: string;
     onNavigate: (href: string) => void;
+    /** Pure host link destination; callbacks still receive the admitted route. */
+    resolveNavigationHref?: ((href: string) => string) | undefined;
     /**
      * Values for route parameters, so parameterised routes can be linked.
      *
@@ -226,11 +228,13 @@ export interface SurfaceNavProps {
      * parameter values render as unavailable text with no link or click handler.
      */
     onNavigate: (href: string) => void;
+    /** Pure host link destination; callbacks still receive the admitted route. */
+    resolveNavigationHref?: ((href: string) => string) | undefined;
     label?: string | undefined;
     menuLabel?: string | undefined;
     resolveRouteTitle?: SurfaceRouteTitleResolver | undefined;
 }
-export declare function SurfaceNav({ app, location, routeParams, onNavigate, label, menuLabel, resolveRouteTitle, }: SurfaceNavProps): import("react/jsx-runtime").JSX.Element | null;
+export declare function SurfaceNav({ app, location, routeParams, onNavigate, resolveNavigationHref, label, menuLabel, resolveRouteTitle, }: SurfaceNavProps): import("react/jsx-runtime").JSX.Element | null;
 /**
  * Address-bar location plus a navigate function, for hosts with no router.
  *

@@ -19,6 +19,7 @@ import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
  * reference deployment.
  */
 
+import { ResponseSigningUnresolvedError } from '../../ports/response-signing.ts';
 import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
 import { resolveAuthoredSigningContent } from '@formspec-org/engine/render';
 import canonicalize from 'canonicalize';
@@ -26,7 +27,7 @@ import { formspecTenantHeaderNames, tenantScopeHeaders } from '../../profiles/te
 import type { DraftKey, DraftStore } from '../../ports/draft-store.ts';
 import type { ApplicationLifecycle, ApplicationLifecycleCapabilities } from '../../ports/application-lifecycle.ts';
 import { HttpApplicationLifecycle } from './application-lifecycle.ts';
-import type { AdmittedResponseAction, ResponseSigning } from '../../ports/response-signing.ts';
+import type { AdmittedResponseAction, ResponseSigning, VerifiedDraftEvidence } from '../../ports/response-signing.ts';
 import type { IntakeHandoff, SubmitTransport } from '../../ports/submit-transport.ts';
 import type { AnonymousSessionBridge } from './anonymous-session.ts';
 import { createDraftBindingRegistry } from './draft-binding-registry.ts';
@@ -40,6 +41,8 @@ import { assertDelegatedSignedResponseConsistency, handoffHash, HttpResponseSign
 export type { DraftBindingRegistry, DraftBindingSnapshot } from './draft-binding-registry.ts';
 
 export interface HttpAdapterCohortConfig extends HttpClientConfig {
+  /** Actual Source launch result supplied by the task composition owner. */
+  taskDraft?: { key: DraftKey; view: VerifiedDraftEvidence };
   applicationLifecycle?: { capabilities: ApplicationLifecycleCapabilities; action: AdmittedResponseAction };
   formIdResolver?: FormIdResolver;
   /**
@@ -80,20 +83,36 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
   if (config.applicationLifecycle && (!config.qualifiedDraftState || !config.responseSigning)) throw new Error('Application lifecycle requires a qualified signing publication');
   const resolveFormId = config.formIdResolver ?? defaultFormIdResolver;
   const registry = createDraftBindingRegistry({ resumeMetadata: config.resumeMetadata, formIdResolver: config.formIdResolver });
+  if (config.taskDraft) {
+    const { key, view } = structuredClone(config.taskDraft);
+    if (!config.responseSigning || !config.qualifiedDraftState || config.anonymousSessions || config.applicationLifecycle
+      || !view.taskDraft || key.subjectRef !== view.subject_ref
+      || key.formUrl !== config.qualifiedDraftState.definition.url || key.formVersion !== config.qualifiedDraftState.definition.version
+      || view.form_version_id !== config.qualifiedDraftState.formVersionId) throw new Error('Task draft cohort selection mismatch');
+    registry.put(key, { draftId: view.draft_id, draftVersion: view.draft_version, response: view.canonical_response });
+  }
   const { applicationLifecycle: lifecycleCapabilities, anonymousSessions, responseIdResolver, responseDataResolver, signingRequested,
-    resumeMetadata: _resumeMetadata, responseSigning: signingPolicyInput, qualifiedDraftState: statePolicyInput, ...httpConfig } = config;
+    taskDraft: taskDraftSelection, resumeMetadata: _resumeMetadata, responseSigning: signingPolicyInput, qualifiedDraftState: statePolicyInput, ...httpConfig } = config;
   const signingPolicy = signingPolicyInput ? Object.freeze({ ...signingPolicyInput }) : undefined;
   const statePolicy = statePolicyInput ? structuredClone(statePolicyInput) : undefined;
   const ownerFor = async (key: DraftKey) => {
+    if (taskDraftSelection) {
+      if (key.subjectRef !== taskDraftSelection.view.subject_ref || key.formUrl !== taskDraftSelection.key.formUrl
+        || key.formVersion !== taskDraftSelection.key.formVersion || key.partyRef !== taskDraftSelection.key.partyRef) {
+        throw new Error('Task draft owner selection mismatch');
+      }
+      return { subjectRef: taskDraftSelection.view.subject_ref };
+    }
     if (key.subjectRef && !key.subjectRef.startsWith('anon:')) return { subjectRef: key.subjectRef };
     if (!anonymousSessions) throw new Error('Signing requires an owned anonymous session');
     const session = await anonymousSessions.sessionForForm(key.formUrl, key.formVersion, true);
     if (key.subjectRef && key.subjectRef !== session.subjectRef) throw new Error('Signing actor differs from the server owner');
     return { token: session.sessionToken, subjectRef: session.subjectRef };
   };
-  const draftStore = new HttpDraftStore({
+  const draftStore: HttpDraftStore = new HttpDraftStore({
     ...httpConfig,
     bindingRegistry: registry,
+    requireExistingBinding: taskDraftSelection !== undefined,
     qualifyReadState: statePolicy ? async (key, view, current) => {
       const owner = await ownerFor(key); current();
       const response = view.canonical_response;
@@ -102,10 +121,29 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
         || view.subject_ref !== owner.subjectRef || !response.id?.trim()
         || !Number.isSafeInteger(view.draft_version) || view.draft_version < 1
         || !['in_progress', 'submitted'].includes(view.status ?? '')) throw new Error('Owned draft state differs from its qualified publication');
-      if (view.status === 'in_progress' && !response.authoredSignatures?.length) {
-        if (response.extensions?.['x-formspec-signing-content']) {
-          responseSigning.assertEditable(key);
-          throw new Error('Active draft has incomplete signing evidence');
+      if (view.status === 'in_progress' && (!response.authoredSignatures?.length || responseSigning.hasPending(key))) {
+        if (response.extensions?.['x-formspec-signing-content'] || responseSigning.hasPending(key)) {
+          const recovery = await responseSigning.pendingRecoveryFor(key, view.draft_id, view.draft_version, response); current();
+          const original = recovery.original;
+          const commitment = original.extensions?.['x-formspec-signing-content'];
+          if (!commitment) throw new ResponseSigningUnresolvedError();
+          const operationId = recovery.marker.operationId;
+          const displayed = response.displayedLocale;
+          const locales = displayed && statePolicy.localeDocuments.filter(document => document.url === displayed.url
+            && document.version === displayed.version && document.locale.toLowerCase() === displayed.locale.toLowerCase()
+            && document.target.kind === 'definition' && document.target.url === statePolicy.definition.url);
+          if (response.status !== 'completed' || !locales || locales.length !== 1
+            || commitment.actorRef !== owner.subjectRef || commitment.draftId !== view.draft_id
+            || commitment.draftVersion !== recovery.marker.version || commitment.content.locale.toLowerCase() !== displayed!.locale.toLowerCase()) throw new Error('Active draft has incomplete signing evidence');
+          const content = resolveAuthoredSigningContent({ definition: statePolicy.definition, response: original,
+            source: commitment.content.source, locale: commitment.content.locale, validateContent: signingPolicy!.validateContent });
+          if (canonicalize(content) !== canonicalize(commitment.content)) throw new Error('Active draft has incomplete signing evidence');
+          const responseHash = await handoffHash(response); current();
+          return { kind: 'active', response, pendingSign: { operationId, content, response, draftKey: key,
+            draft: { id: view.draft_id, version: view.draft_version, responseHash }, actor: { id: owner.subjectRef },
+            evidence: { draft_id: view.draft_id, draft_version: view.draft_version, form_version_id: view.form_version_id!,
+              subject_ref: owner.subjectRef, draft_state: view.draft_state, canonical_response: response, status: 'in_progress',
+              ...(view.taskDraft === undefined ? {} : { taskDraft: view.taskDraft }) } } };
         }
         return { kind: 'active', response };
       }
@@ -128,7 +166,8 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
         return { kind: 'active', response, signed: { draftKey: key, response, content,
           draft: { id: view.draft_id, version: view.draft_version, responseHash }, actor: { id: owner.subjectRef },
           evidence: { draft_id: view.draft_id, draft_version: view.draft_version, form_version_id: view.form_version_id!,
-            subject_ref: owner.subjectRef, draft_state: view.draft_state, canonical_response: response, status: 'in_progress' },
+            subject_ref: owner.subjectRef, draft_state: view.draft_state, canonical_response: response, status: 'in_progress',
+            ...(view.taskDraft === undefined ? {} : { taskDraft: view.taskDraft }) },
           verification: { mode: 'delegated-service-key', provider: response.authoredSignatures![0].signatureProvider, keyId: signingPolicy!.keyId } } };
       }
       return { kind: 'submitted', response, draft: { id: view.draft_id, version: view.draft_version },
@@ -144,7 +183,9 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       })
       : undefined,
   });
-  const submitTransport = new HttpSubmitTransport({
+  const submitTransport: SubmitTransport = taskDraftSelection ? {
+    submit: async () => { throw new Error('Task drafts require typed task completion'); },
+  } : new HttpSubmitTransport({
     ...httpConfig,
     draftIdResolver: (handoff) => registry.get(draftKeyFromHandoff(handoff))?.draftId,
     responseIdResolver,
@@ -158,7 +199,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
   const fence = new ResponseSigningScopeFence(key => JSON.stringify({
     formId: resolveFormId(key.formUrl, key.formVersion), subject: key.subjectRef ?? null, party: key.partyRef ?? null,
   }));
-  const responseSigning = new HttpResponseSigning({
+  const responseSigning: HttpResponseSigning = new HttpResponseSigning({
     ...signingPolicy, client: new HttpClient(httpConfig), drafts: draftStore, bindings: registry, fence,
     formIdFor: key => resolveFormId(key.formUrl, key.formVersion),
     resumeMetadata: config.resumeMetadata,
@@ -203,7 +244,8 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     },
   };
   const scopedSubmit: SubmitTransport = {
-    submit: (handoff, operationId, assertCurrent = () => {}) => {
+    submit: (handoff, operationId, assertCurrent = () => {}, options) => {
+      const capturedOptions = options === undefined ? undefined : structuredClone(options);
       assertSynchronousGuard(assertCurrent);
       const key = draftKeyFromHandoff(handoff);
       return fence.run(key, async generation => {
@@ -217,7 +259,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
         return submitTransport.submit(handoff, operationId, () => {
           fence.assertCurrent(key, generation);
           assertSynchronousGuard(assertCurrent);
-        });
+        }, capturedOptions);
       });
     },
   };

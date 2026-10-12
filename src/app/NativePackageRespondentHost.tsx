@@ -22,6 +22,7 @@ export interface NativePackageRespondentHostProps {
   screenerLocale?: string;
   screenerCompletion?: SurfaceAppProps['screenerCompletion'];
   onNavigate: SurfaceAppProps['onNavigate'];
+  resolveNavigationHref?: SurfaceAppProps['resolveNavigationHref'];
 }
 
 /** Local qualified package rendering; policy and service authority remain host-owned. */
@@ -58,11 +59,11 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
         activeLocale: state.locale || undefined })}</Fragment>;
     }
     const key = canonicalize({ definition: slot.plan.definition, theme: slot.grant.themeDocument,
-      registry: slot.plan.registryEntries, actions: slot.responseActionsDocument, route: slot.route, locale: state.locale })!;
+      registry: slot.plan.registryEntries, actions: slot.responseActionsDocument, route: slot.route, locale: state.locale, initialData: slot.initialData })!;
     let entry = forms.get(key);
     if (!entry) {
       entry = { completed: slot.onActionCompleted, form: { definition: slot.plan.definition, themeDocument: slot.grant.themeDocument,
-        registryEntries: slot.plan.registryEntries, responseActionsDocument: slot.responseActionsDocument,
+        registryEntries: slot.plan.registryEntries, responseActionsDocument: slot.responseActionsDocument, initialData: slot.initialData,
         localeDocuments: slotLocales, activeLocale: state.locale || undefined, componentDocument,
         instanceSourceResolver: props.host.instanceSourceResolver, configureRuntime: props.host.configureRuntime, configureSubmittedRuntime: props.composition.draftStore.readState ? props.host.configureSubmittedRuntime : undefined, onActionCompleted: (action, result) => entry!.completed?.(action, result) } };
       forms.set(key, entry);
@@ -96,7 +97,7 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     {state.nativeReadiness && state.nativeReadiness !== 'ready' ? <SessionStatus>
       <p role="status" lang="en">{state.nativeReadiness === 'needs-save' ? 'Updated answers need saving.' : 'Checks pending.'}</p>
     </SessionStatus> : null}
-    <SurfaceApp screenerCompletion={props.screenerCompletion ?? props.host.screenerCompletion} activeLocale={props.screenerLocale} localeDocuments={locales} bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate}
+    <SurfaceApp screenerCompletion={props.screenerCompletion ?? props.host.screenerCompletion} activeLocale={props.screenerLocale} localeDocuments={locales} bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate} resolveNavigationHref={props.resolveNavigationHref}
     staticAssetResolver={props.host.staticAssetResolver}
     widgetModules={modules} appTitle={state.formTitle || undefined} resolveRouteTitle={resolveRouteTitle}
     sessionGeneration={sessionMarker} widgetActionExecutor={ports.widgetActionExecutor}

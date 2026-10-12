@@ -13,7 +13,10 @@ Adapter contract:
 - Do not return the Respondent Library sidecar's `ApplicantStatusProjection`
   wrapper from this port; that wrapper is only a cache/reference field in
   `RespondentPlaceSource`.
-- Return `undefined` for unknown or inaccessible status requests.
+- Treat unknown and inaccessible status requests uniformly: return `undefined`
+  or throw `StatusReadError` with code `access-denied` for both.
+- Use `sign-in-required` for a missing or retired authentication session and
+  `unavailable` for incomplete reads or service failures. These are never empty cases.
 - Keep authorization and applicant-scope filtering in the adapter/upstream
   service, not in the React shell.
 
@@ -23,36 +26,29 @@ Run the conformance suite with:
 npm test -- tests/adapter-conformance/status-reader
 ```
 
-## URN-as-bearer-token semantics (FW-0039 slice 1)
+## Authenticated durable case navigation
 
-The `/status?case={WosResourceUrn}` route (FW-0039 slice 1) hands the URN
-through the request unchanged. The slice's accountless-access honesty
-depends on **two adapter-side responsibilities** the port does not enforce:
+The maintained `/status?caseLedgerId=<opaque>` route carries one complete durable
+case selector. The identifier supplies navigation only. The host requires
+ordinary OpenID Connect sign-in, and WOS checks original applicant ownership,
+tenant scope, accepted intake association and current task permissions. Task
+revision, definition/publication selections and persisted expiry come from
+current owning reads after sign-in, never from this URL.
 
-1. **Rate-limit unknown-URN probes.** WOS URNs follow the
-   `stack-common-typeid` grammar (`urn:wos:case_{tenant}_{uuidv7_base32}`).
-   The UUIDv7 tail is high-entropy but not opaque-token-class; a determined
-   attacker can probe at scale without rate limiting. Production adapters
-   MUST rate-limit unknown-URN reads server-side.
-2. **Return uniform `undefined` for every unknown lookup.** Adapters MUST
-   return strict `undefined` (not a not-found-shaped object, not an error
-   throw, not a different shape than the "URN exists but is not yours"
-   branch) for any unknown URN. The consumer (`StatusRuntime`) renders the
-   same plain-language copy in both cases. Distinguishing the two would
-   make `/status?case=...` an enumeration oracle. Tenant-scope filtering
-   remains the adapter's responsibility per the contract above; the
-   failure shape stays `undefined`. **Enforcement:** the shared conformance
-   suite case `returns uniform undefined (no throw, no shape variance) for
-   an obviously-unknown URN` in
-   `tests/adapter-conformance/status-reader/conformance.test.ts` exercises
-   this contract on every adapter; CI fails if an adapter returns anything
-   other than `undefined`.
+`HttpStatusReader` reads the selected durable case through
+`GET /api/v1/applicant/cases/{encodeURIComponent(caseLedgerId)}`. Its server must
+implement the owner-checked durable-case read; the older reference service's
+process scan and unconditional empty task lists do not qualify this adapter.
+A successful owned read can contain no open tasks. Missing ownership, absent or
+ambiguous accepted intake, incomplete native delivery and failed reads cannot
+stand in for that result. The current backend successor remains independently
+qualified by its owner before deployment.
 
-Adopters whose threat model rejects the URN-as-bearer-token model wire a
-different adapter (magic-link rotation, browser-bound proof, OAuth scope
-check) — the port stays unchanged either way. Future hardening rows
-(FW-0054 long-life-receipt portal; FW-0041 public-terminal hygiene) layer
-on top.
+Missing and foreign cases share the same denial. The shared conformance suite
+accepts uniform `undefined` or uniform typed `access-denied`; the authenticated
+HTTP adapter uses typed denial for both HTTP 403 and 404. It never presents a
+case as empty because a read failed. `StatusRuntime` removes loaded status and
+task actions when its selected browser session retires, changes or expires.
 
 ## Disabled-status rendering
 

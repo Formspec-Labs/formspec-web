@@ -43,7 +43,7 @@ export class HttpTaskCompletion implements TaskCompletion {
     const check = () => { lifetime.signal.throwIfAborted(); assertSynchronousGuard(lifetime.assertCurrent);
       assertSynchronousGuard(this.assertCurrentAuth); };
     check(); const body = snapshotFiniteJson(submission) as unknown as TaskSubmission;
-    if (!submissionShape(body) || Object.keys(body).sort().join(',') !== 'definitionUrl,definitionVersion,response'
+    if (!submissionShape(body) || !['definitionUrl,definitionVersion,response', 'definitionUrl,definitionVersion,response,signedDraft'].includes(Object.keys(body).sort().join(','))
       || body.definitionUrl !== this.selection.definitionUrl || body.definitionVersion !== this.selection.definitionVersion
       || body.response.definitionUrl !== body.definitionUrl || body.response.definitionVersion !== body.definitionVersion
       || body.response.status !== 'completed' || !body.response.authoredSignatures?.length

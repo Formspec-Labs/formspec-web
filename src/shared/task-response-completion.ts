@@ -11,13 +11,7 @@ import { assertSynchronousGuard } from './synchronous-guard.ts';
 export function createTaskResponseCompletion(config: { selection: TaskCompletionSelection; transport: TaskCompletion }): ResponseCompletion {
   const selection = snapshotFiniteJson(config.selection) as unknown as TaskCompletionSelection;
   const preparations = new WeakMap<PreparedResponseCompletion, { submission: TaskSubmission; operationId?: string }>();
-  const admit = (request: RuntimeRequest) => {
-    if (canonicalize(request.successStatuses) !== '[200]') throw new ResponseCompletionRefusal('action-unadmitted');
-    for (const [name, output] of Object.entries(request.outputs ?? {})) {
-      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(name) || !['/taskId', '/processId', '/outcome', '/newStatus', '/occurredAt', '/actorRef', '/provenanceRecordRef'].includes(output.path)
-        || (output.exposure !== undefined && !['internal', 'transition'].includes(output.exposure))) throw new ResponseCompletionRefusal('outputs-unsupported');
-    }
-  };
+  const admit = (request: RuntimeRequest) => assertTaskCompletionRequest(selection, request);
   return {
     kind: 'task', admit,
     async capture(input, lifetime) {
@@ -27,9 +21,15 @@ export function createTaskResponseCompletion(config: { selection: TaskCompletion
       const invocationInput = snapshotFiniteJson(input.invocationInput) as unknown as typeof input.invocationInput;
       if (signed.response.definitionUrl !== selection.definitionUrl || signed.response.definitionVersion !== selection.definitionVersion
         || signed.response.status !== 'completed' || !signed.response.authoredSignatures?.length) throw new Error('Task completion candidate mismatch');
-      const submission: TaskSubmission = { definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion, response: signed.response };
+      const signedDraft = signed.evidence.taskDraft?.signedDraft;
+      if (!signedDraft || signedDraft.draftId !== signed.draft.id
+        || signedDraft.expectedSignedDraftVersion !== signed.draft.version
+        || signedDraft.associationHash !== signed.evidence.taskDraft!.associationHash
+        || signedDraft.taskBindingHash !== signed.evidence.taskDraft!.taskBindingHash) throw new ResponseCompletionRefusal('context-mismatch');
+      const submission: TaskSubmission = { definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion,
+        response: signed.response, signedDraft };
       const planned = planServiceRequest(input.request, { input: { ...invocationInput, taskId: selection.taskId,
-        draftId: signed.draft.id, draftVersion: signed.draft.version, frozenResponse: signed.response }, route: {}, session: {} });
+        draftId: signed.draft.id, draftVersion: signed.draft.version, frozenResponse: signed.response, signedDraft }, route: {}, session: {} });
       if (planned.method !== 'POST' || planned.path !== `/api/v1/tasks/${encodeURIComponent(selection.taskId)}/response`
         || Object.keys(planned.headers).length || canonicalize(planned.body) !== canonicalize(submission)) throw new ResponseCompletionRefusal('action-unadmitted');
       check(); const prepared = Object.freeze({ kind: 'task' as const }); preparations.set(prepared, { submission: snapshotFiniteJson(submission) as unknown as TaskSubmission }); return prepared;
@@ -46,4 +46,18 @@ export function createTaskResponseCompletion(config: { selection: TaskCompletion
       return { kind: 'task', outcome, evidence: outcome };
     },
   };
+}
+
+/** Preflight the maintained task request before any durable Source launch. */
+export function assertTaskCompletionRequest(selection: TaskCompletionSelection, request: RuntimeRequest): void {
+  const expected = { method: 'POST', pathTemplate: '/api/v1/tasks/{taskId}/response',
+    pathBindings: { taskId: { from: 'input', path: 'taskId' } },
+    bodyDefaults: { definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion },
+    bodyBindings: { '/response': { from: 'input', path: 'frozenResponse' }, '/signedDraft': { from: 'input', path: 'signedDraft' } } };
+  if (request.adapter !== 'http-json' || canonicalize(request.request) !== canonicalize(expected)
+    || canonicalize(request.successStatuses) !== '[200]') throw new ResponseCompletionRefusal('action-unadmitted');
+  for (const [name, output] of Object.entries(request.outputs ?? {})) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(name) || !['/taskId', '/processId', '/outcome', '/newStatus', '/occurredAt', '/actorRef', '/provenanceRecordRef'].includes(output.path)
+      || (output.exposure !== undefined && !['internal', 'transition'].includes(output.exposure))) throw new ResponseCompletionRefusal('outputs-unsupported');
+  }
 }

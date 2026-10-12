@@ -4,7 +4,7 @@ import { createFormEngine } from '@formspec-org/engine';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import type { DraftKey, DraftStore } from '../../src/ports/draft-store.ts';
 import type { SubmitTransport } from '../../src/ports/submit-transport.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
@@ -37,7 +37,7 @@ function setup(draft?: FormResponse, documents: LocaleDocument[] = [spanish], ov
   draftStore?: Partial<DraftStore>;
 } = {}) {
   const save = vi.fn(async (_key: DraftKey, _response: FormResponse): Promise<void> => {});
-  const base = createStubComposition();
+  const base = createTestComposition({ definition: testDefinition });
   const composition = {
     ...base, initialDefinitionUrl: definition.url,
     definitionSource: {

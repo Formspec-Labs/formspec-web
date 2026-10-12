@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SurfaceScreenerCompletionRequest } from '@formspec-org/surface-react';
+import type { ScreenerHydration } from '../../src/ports/screener-hydration.ts';
 import type { ScreenerRetention, ScreenerRunView } from '../../src/ports/screener-retention.ts';
 import { HttpScreenerRetention } from '../../src/adapters/http/screener-retention.ts';
 import { computeJcsSha256Digest as hash } from '../../src/adapters/http/response-action-ledger.ts';
@@ -8,13 +9,15 @@ import { HttpScreenerHydration } from '../../src/adapters/http/screener-hydratio
 import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts';
 import { createNativeScreenerCoordinator } from '../../src/shared/native-screener-coordinator.ts';
 
-async function fixture(extraSource = false) {
+async function fixture(extraSource = false, routingOnly = false) {
   const f = await hydrationFixture({ extraSource });
   const retained = vi.fn<ScreenerRetention['retain']>(async () => f.input.run);
   const associated = vi.fn<ScreenerRetention['associate']>(async () => f.input.association);
   const context = () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent });
-  const coordinator = createNativeScreenerCoordinator({ selectionKey: 'selected', retention: { retain: retained, associate: associated },
-    hydration: new HttpScreenerHydration(f.config), context });
+  let routeElapsed = 0;
+  const hydrated = vi.fn<ScreenerHydration['hydrate']>(async input => ({ view: f.view, ...(input.nativeCurrentCheck ? { nativeCurrentCheck: input.nativeCurrentCheck } : {}), assertCurrent: f.input.assertCurrent, assertReady: f.input.assertCurrent }));
+  const coordinator = createNativeScreenerCoordinator({ elapsedNow: () => routeElapsed, routeContext: context, selectionKey: 'selected', retention: { retain: retained, associate: associated },
+    hydration: routingOnly ? { hydrate: hydrated } : new HttpScreenerHydration(f.config), context });
   const surface = new AbortController();
   const request: SurfaceScreenerCompletionRequest = { completionId: 'same-original-act', selectionKey: 'selected',
     document: { $formspecScreener: '1.0', url: 'urn:test:screener', version: '1', title: 'Screen', items: [], evaluation: [] },
@@ -23,10 +26,78 @@ async function fixture(extraSource = false) {
       evaluationVersion: '1', status: 'completed', overrides: { matched: [], halted: false }, phases: [], inputs: {} },
     evaluationTime: 'untrusted', allowedTargets: ['urn:test:target'], route: { surfaceId: 'surface', routeId: 'route', routeClass: undefined, params: {} },
     slotId: 'screener', visitId: 'visit', runtimeGeneration: 'render', signal: surface.signal };
-  return { ...f, coordinator, retained, associated, surface, request };
+  return { ...f, coordinator, retained, associated, hydrated, surface, request, setRouteElapsed: (value: number) => { routeElapsed = value; } };
 }
 
 describe('same-session native Screener coordination', () => {
+  it('denies fresh and foreign destinations, retaining only the exact accepted selected document target', async () => {
+    const f = await fixture();
+    const document = { url: f.input.run.selection.screenerUrl, version: f.input.run.selection.screenerVersion };
+    expect(f.coordinator.routeAllowed(f.request.target, document)).toBe(false);
+    await f.coordinator.completionPolicy.complete(f.request);
+    expect(f.coordinator.routeAllowed(f.request.target, document)).toBe(true);
+    expect(f.coordinator.routeAllowed('surface:foreign', document)).toBe(false);
+    expect(f.coordinator.routeAllowed(f.request.target, { ...document, version: 'foreign' })).toBe(false);
+    f.surface.abort();
+    expect(f.coordinator.routeAllowed(f.request.target, document)).toBe(true);
+    f.coordinator.dispose();
+    expect(f.coordinator.routeAllowed(f.request.target, document)).toBe(false);
+  });
+
+  it('counts transport time against original acceptance validity and refuses expired navigation', async () => {
+    const f = await fixture();
+    Object.assign(f.input.run.run.determination, { validity: { validUntil: new Date(Date.parse(f.input.run.acceptance!.checkedAt) + 1000).toISOString() } });
+    f.retained.mockImplementationOnce(async () => { f.setRouteElapsed(600); return f.input.run; });
+    await expect(f.coordinator.completionPolicy.complete(f.request)).resolves.toEqual({ status: 'accepted' });
+    const document = { url: f.input.run.selection.screenerUrl, version: f.input.run.selection.screenerVersion };
+    expect(f.coordinator.routeAllowed(f.request.target, document)).toBe(true);
+    f.setRouteElapsed(1000);
+    expect(f.coordinator.routeAllowed(f.request.target, document)).toBe(false);
+    f.coordinator.dispose();
+  });
+
+  it('refuses submillisecond validity instead of rounding its remaining duration upward', async () => {
+    const f = await fixture();
+    Object.assign(f.input.run, { acceptance: { checkedAt: '2026-10-09T10:00:00.0009Z', qualification: { status: 'ready', target: f.request.target } } });
+    Object.assign(f.input.run.run.determination, { validity: { validUntil: '2026-10-09T10:00:00.0011Z' } });
+    await expect(f.coordinator.completionPolicy.complete(f.request)).resolves.toMatchObject({ status: 'refused' });
+    f.coordinator.dispose();
+  });
+
+  it.each([Number.NaN, -1])('permanently refuses invalid or rewound elapsed clock %s', async value => {
+    const f = await fixture();
+    await f.coordinator.completionPolicy.complete(f.request);
+    const document = { url: f.input.run.selection.screenerUrl, version: f.input.run.selection.screenerVersion };
+    f.setRouteElapsed(100);
+    expect(f.coordinator.routeAllowed(f.request.target, document)).toBe(true);
+    f.setRouteElapsed(value);
+    expect(f.coordinator.routeAllowed(f.request.target, document)).toBe(false);
+    f.setRouteElapsed(101);
+    expect(f.coordinator.routeAllowed(f.request.target, document)).toBe(false);
+    f.coordinator.dispose();
+  });
+
+  it('refuses a retention result that arrives after its original route validity', async () => {
+    const f = await fixture();
+    Object.assign(f.input.run.run.determination, { validity: { validUntil: new Date(Date.parse(f.input.run.acceptance!.checkedAt) + 1000).toISOString() } });
+    f.retained.mockImplementationOnce(async () => { f.setRouteElapsed(1001); return f.input.run; });
+    await expect(f.coordinator.completionPolicy.complete(f.request)).resolves.toMatchObject({ status: 'refused' });
+    f.coordinator.dispose();
+  });
+
+  it('uses the exact fresh retained run for signed current checks without replacing the historical association', async () => {
+    const f = await fixture(false, true); await f.coordinator.completionPolicy.complete(f.request);
+    // This exercises routing only; Source owns cryptographic admission of real signed responses.
+    const signed = { ...f.input.saved, response: { ...f.input.saved.response, authoredSignatures: [{}] } } as unknown as typeof f.input.saved;
+    const facts = await f.coordinator.qualifySaved(signed);
+    expect(f.associated).not.toHaveBeenCalled();
+    expect(f.hydrated.mock.calls[0][0]).toMatchObject({ saved: signed, run: f.input.run,
+      nativeCurrentCheck: { selectionHash: f.input.run.run.selectionHash, runId: f.input.run.run.runId, runRevision: f.input.run.run.revision } });
+    expect(f.hydrated.mock.calls[0][0]).not.toHaveProperty('association');
+    expect(facts.nativeCurrentCheck).toEqual({ selectionHash: f.input.run.run.selectionHash, runId: f.input.run.run.runId, runRevision: f.input.run.run.revision });
+    f.coordinator.dispose();
+  });
+
   it('retains the original attempt and false answers, then associates and hydrates the exact saved candidate with issued run identity', async () => {
     const f = await fixture();
     await expect(f.coordinator.completionPolicy.complete(f.request)).resolves.toEqual({ status: 'accepted' });

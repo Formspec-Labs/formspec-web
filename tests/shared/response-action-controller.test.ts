@@ -211,6 +211,30 @@ describe('generic admitted Response Action controller', () => {
       verification: { ...previous.verification, provider: value.authoredSignatures![0].signatureProvider } };
     return { signed, test: fixture({ restoredResponse: value }) };
   }
+  it('publishes a reconciled signature before downstream qualification and never creates a successor act', async () => {
+    const { signed } = await restoredSignedFixture(); const unsigned = structuredClone(signed.response); delete unsigned.authoredSignatures;
+    const value = { ...await evidence(unsigned, signed.draft.version - 1), content, operationId: '01a12800-0000-7000-8000-000000000001' };
+    const baseline = fixture(); let observedSigned = false;
+    const restorePending = vi.fn(async () => ({ kind: 'signed' as const, signed }));
+    const test = fixture({ restoredResponse: unsigned, signing: { ...baseline.config.signing, restorePending },
+      afterCommittedDraft: async () => { observedSigned = !!test.controller.getSnapshot().signed; throw new Error('facts unavailable'); } });
+    await test.controller.restorePending(value);
+    expect(observedSigned).toBe(true); expect(test.controller.getSnapshot()).toMatchObject({ phase: 'signed', signed });
+    expect(test.controller.getSnapshot().prepared).toBeUndefined(); expect(test.controller.getSnapshot().pendingSign).toBeUndefined();
+    expect(baseline.sign).not.toHaveBeenCalled(); expect(baseline.prepare).not.toHaveBeenCalled();
+  });
+  it.each(['unsigned', 'provider', 'key'] as const)('refuses malformed reconciled signed result: %s', async mismatch => {
+    const { signed } = await restoredSignedFixture(); const unsigned = structuredClone(signed.response); delete unsigned.authoredSignatures;
+    const value = { ...await evidence(unsigned, signed.draft.version - 1), content, operationId: '01a12800-0000-7000-8000-000000000001' };
+    const candidate = structuredClone(signed);
+    if (mismatch === 'unsigned') Object.assign(candidate, await evidence(unsigned, signed.draft.version));
+    if (mismatch === 'provider') candidate.verification.provider = 'different-provider';
+    if (mismatch === 'key') candidate.verification.keyId = '';
+    const baseline = fixture(); const test = fixture({ restoredResponse: unsigned,
+      signing: { ...baseline.config.signing, restorePending: async () => ({ kind: 'signed' as const, signed: candidate }) } });
+    await expect(test.controller.restorePending(value)).rejects.toThrow('context-mismatch');
+    expect(test.controller.getSnapshot().signed).toBeUndefined(); expect(test.submit).not.toHaveBeenCalled();
+  });
   it('restores qualified signed evidence without writes and requires fresh review before Submit', async () => {
     const { signed, test } = await restoredSignedFixture();
     test.reviewReady.mockReturnValue(false);
@@ -667,12 +691,22 @@ describe('typed response completion', () => {
     request.request = { method: 'POST', pathTemplate: '/api/v1/tasks/{taskId}/response',
       pathBindings: { taskId: { from: 'input', path: 'taskId' } },
       bodyDefaults: { definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion },
-      bodyBindings: { '/response': { from: 'input', path: 'frozenResponse' } } };
+      bodyBindings: { '/response': { from: 'input', path: 'frozenResponse' }, '/signedDraft': { from: 'input', path: 'signedDraft' } } };
     request.outputs = { task: { path: '/taskId', exposure: 'transition' }, status: { path: '/newStatus', exposure: 'internal' },
       ...(optionalOutput ? { actor: { path: '/actorRef', exposure: 'internal' as const } } : {}) };
     const complete = vi.fn(async (_submission: TaskSubmission, _operationId: string, _lifetime: CompletionLifetime) => ({ taskId: selection.taskId, processId: selection.processId,
       outcome: 'completed' as const, newStatus: 'submitted' as const, occurredAt: '2026-10-09T12:00:00Z' }));
-    return { ...fixture({ roles, completion: createTaskResponseCompletion({ selection, transport: { complete } }) }), complete };
+    const test = fixture({ roles, completion: createTaskResponseCompletion({ selection, transport: { complete } }) });
+    const sign = test.sign.getMockImplementation()!;
+    test.sign.mockImplementation(async input => {
+      const actual = await sign(input);
+      const signedDraft = { draftId: actual.draft.id, expectedSignedDraftVersion: actual.draft.version,
+        expectedSignedResponseHash: `sha256:${'a'.repeat(64)}`, associationHash: `sha256:${'b'.repeat(64)}`,
+        taskBindingHash: `sha256:${'c'.repeat(64)}` };
+      return { ...actual, evidence: { ...actual.evidence, taskDraft: { version: 1,
+        associationHash: signedDraft.associationHash, taskBindingHash: signedDraft.taskBindingHash, signedDraft } } };
+    });
+    return { ...test, complete };
   }
   it('publishes the actual task outcome, preserves full signed bytes, and caches the completed act', async () => {
     const test = taskFixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
@@ -681,7 +715,7 @@ describe('typed response completion', () => {
     expect('invocation' in first ? first.invocation.status : first.status).toBe('completed');
     expect(test.complete).toHaveBeenCalledOnce();
     expect(test.complete.mock.calls[0][0]).toEqual({ definitionUrl: selection.definitionUrl,
-      definitionVersion: selection.definitionVersion, response: signed.response });
+      definitionVersion: selection.definitionVersion, response: signed.response, signedDraft: signed.evidence.taskDraft!.signedDraft });
     expect(test.controller.getSnapshot()).toMatchObject({ phase: 'submitted', completion: { kind: 'task', outcome: {
       taskId: selection.taskId, processId: selection.processId, outcome: 'completed', newStatus: 'submitted' } } });
     expect(test.controller.getSnapshot().confirmation).toBeUndefined();
@@ -747,4 +781,36 @@ describe('typed response completion', () => {
     await test.widget('submit', signed);
     expect(signed.response.data.changed).toBeUndefined(); expect(test.submit).toHaveBeenCalledOnce();
   });
+});
+
+
+describe('restored pending signing act', () => {
+  it('uses the renewed operation key after fresh review and refuses new Save or Prepare acts', async () => {
+    const value = { ...await evidence(response, 33), content, operationId: '01a12800-0000-7000-8000-000000000001' };
+    const baseline = fixture(); const newKey = '01a12800-0000-7000-8000-000000000002'; const restorePending = vi.fn(async () => ({ kind: 'prepared' as const, preparation: value, operationId: newKey }));
+    const test = fixture({ restoredResponse: response, signing: { ...baseline.config.signing, restorePending } });
+    await test.controller.restorePending(value);
+    expect(test.controller.getSnapshot()).toMatchObject({ phase: 'prepared', pendingSign: true, prepared: value });
+    await test.definition('saveOwned'); await test.definition('prepare');
+    expect(baseline.saveDraft).not.toHaveBeenCalled(); expect(baseline.prepare).not.toHaveBeenCalled();
+    test.reviewReady.mockReturnValue(false);
+    await test.widget('sign', value); expect(baseline.sign).not.toHaveBeenCalled();
+    test.reviewReady.mockReturnValue(true); await test.widget('sign', value, 'renewed-reviewed-act');
+    expect(baseline.sign.mock.calls[0][0].operationId).toBe(newKey);
+  });
+});
+
+
+it('captures the pending operation key and candidate before asynchronous restoration', async () => {
+  const original = { ...await evidence(structuredClone(response), 33), content, operationId: '01a12800-0000-7000-8000-000000000001' };
+  const value = structuredClone(original); const baseline = fixture(); let finish!: () => void;
+  const restorePending = vi.fn((_input: Parameters<NonNullable<ResponseActionControllerConfig['signing']['restorePending']>>[0], _operationId: string) => new Promise<{ kind: 'prepared'; preparation: PreparedResponseSigning; operationId: string }>(resolve => { finish = () => resolve({ kind: 'prepared', preparation: original, operationId: original.operationId }); }));
+  const test = fixture({ restoredResponse: structuredClone(response), signing: { ...baseline.config.signing, restorePending } });
+  const restoring = test.controller.restorePending(value);
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  value.operationId = '01a12800-0000-7000-8000-000000000002'; value.response.data = { changed: true };
+  finish(); await restoring;
+  await test.widget('sign', original);
+  expect(restorePending.mock.calls[0][1]).toBe(original.operationId);
+  expect(baseline.sign.mock.calls[0][0].operationId).toBe(original.operationId);
 });

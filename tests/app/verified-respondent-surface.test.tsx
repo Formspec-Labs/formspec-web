@@ -24,7 +24,7 @@ import type {
   RespondentSurfaceBundleConfig,
 } from '../../src/config/types.ts';
 import { publicPortalProfile } from '../../src/profiles/profiles.ts';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { demoSampleForm } from '../../src/demo/index.ts';
 import { stubDraftStore } from '../../src/adapters/stub/draft-store.ts';
 import {
@@ -118,6 +118,7 @@ describe('verified respondent Surface integration', () => {
       <VerifiedRespondentSurface
         bundleConfig={bundleConfig}
         composition={fixture.composition}
+        formCompositionFactory={fixture.formCompositionFactory}
         config={publicPortalProfile}
         now={() => new Date(CHECKED_AT)}
         preferredLocales={['en']}
@@ -130,6 +131,7 @@ describe('verified respondent Surface integration', () => {
     expect(screen.queryByRole('heading', { name: 'Demo Benefits Intake' })).toBeNull();
     expect(document.querySelectorAll('h1')).toHaveLength(1);
     expect(fixture.definitionSourceGet).not.toHaveBeenCalled();
+    expect(fixture.formCompositionFactory).toHaveBeenCalledWith(RESPONDENT_DEFINITION.url);
     const intake = document.querySelector<HTMLElement>('[data-route="apply"]');
     expect(intake?.getAttribute('data-tenant-theme')).toBe('admitted');
     expect(intake?.style.getPropertyValue('--formspec-color-primary')).toBe(TENANT_COLOR);
@@ -153,6 +155,7 @@ describe('verified respondent Surface integration', () => {
       <VerifiedRespondentSurface
         bundleConfig={bundleConfig}
         composition={fixture.composition}
+        formCompositionFactory={fixture.formCompositionFactory}
         config={publicPortalProfile}
         now={() => new Date(CHECKED_AT)}
         preferredLocales={['en']}
@@ -184,6 +187,7 @@ describe('verified respondent Surface integration', () => {
     expect(fixture.submit).toHaveBeenCalledTimes(2);
     expect(fixture.draftLoad).toHaveBeenCalledTimes(loadsBeforeConfirmedSubmit);
     expect(fixture.definitionSourceGet).not.toHaveBeenCalled();
+    expect(fixture.formCompositionFactory).toHaveBeenCalledWith(RESPONDENT_DEFINITION.url);
     expect(fixture.acquire).toHaveBeenCalledTimes(2);
     expect(fixture.verify).toHaveBeenCalledTimes(2);
     const status = screen.getByLabelText('App verification');
@@ -201,6 +205,7 @@ describe('verified respondent Surface integration', () => {
       <VerifiedRespondentSurface
         bundleConfig={bundleConfig}
         composition={fixture.composition}
+        formCompositionFactory={fixture.formCompositionFactory}
         config={publicPortalProfile}
         now={() => new Date(CHECKED_AT)}
         preferredLocales={['en']}
@@ -224,6 +229,7 @@ interface Fixture {
   readonly source: SurfaceBundleSource;
   readonly verifier: SurfaceBundleVerifier;
   readonly composition: Composition;
+  readonly formCompositionFactory: (definitionUrl: string) => Composition;
   readonly acquire: ReturnType<typeof vi.fn>;
   readonly verify: ReturnType<typeof vi.fn>;
   readonly commitRelease: ReturnType<typeof vi.fn>;
@@ -273,9 +279,10 @@ async function createFixture(options: FixtureOptions = {}): Promise<Fixture> {
       trackingUri: 'https://status.example.gov/CASE-301',
     };
   });
-  const base = createStubComposition();
+  const base = createTestComposition({ definition: testDefinition });
   const composition: Composition = {
     ...base,
+    initialDefinitionUrl: RESPONDENT_DEFINITION.url,
     definitionSource: {
       getDefinition: definitionSourceGet,
     },
@@ -294,6 +301,10 @@ async function createFixture(options: FixtureOptions = {}): Promise<Fixture> {
     source,
     verifier,
     composition,
+    formCompositionFactory: vi.fn((definitionUrl: string) => {
+      expect(definitionUrl).toBe(RESPONDENT_DEFINITION.url);
+      return composition;
+    }),
     acquire,
     verify,
     commitRelease,

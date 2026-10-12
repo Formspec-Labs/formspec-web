@@ -6,11 +6,11 @@ import type { SurfaceWidgetActionExecutor, SurfaceWidgetActionSource } from '@fo
 import type { FormDefinition, FormResponse, SigningContentSource, ValidationOverride } from '@formspec-org/types';
 import type { ApplicationCaseReceipt, ApplicationLifecycle, ApplicationCaseLookupUnavailable } from '../ports/application-lifecycle.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
-import type { AdmittedResponseAction, PreparedResponseSigning, ResponseSigning, SavedResponseDraft, SignedResponseSigning } from '../ports/response-signing.ts';
-import type { IntakeHandoff, SubmitConfirmation, SubmitTransport } from '../ports/submit-transport.ts';
+import type { AdmittedResponseAction, PendingResponseSigning, PreparedResponseSigning, ResponseSigning, SavedResponseDraft, SignedResponseSigning } from '../ports/response-signing.ts';
+import type { IntakeHandoff, SubmitConfirmation, SubmitTransport, SubmitOptions } from '../ports/submit-transport.ts';
 import type { ResponseCompletion, PreparedResponseCompletion, ResponseCompletionResult } from '../ports/response-completion.ts';
 import { createIntakeResponseCompletion } from './intake-response-completion.ts';
-import { generateIdempotencyKey } from './idempotency-key.ts';
+import { generateIdempotencyKey, isUuidV7IdempotencyKey } from './idempotency-key.ts';
 
 export type ResponseActionRole = 'startApplication' | 'saveInitial' | 'saveOwned' | 'prepare' | 'sign' | 'submit' | 'paper';
 export type ResponseActionControllerReason = 'action-unadmitted' | 'context-mismatch' | 'response-invalid' | 'branch-mismatch' | 'outputs-unsupported' | 'review-unready' | 'operation-conflict' | 'operation-pending' | 'context-obsolete' | 'restoration-unresolved' | 'port-failed';
@@ -42,6 +42,7 @@ export interface ResponseActionControllerSnapshot {
   application?: ApplicationCaseReceipt;
   applicationLookup?: ApplicationCaseLookupUnavailable;
   retrySignAvailable?: true;
+  pendingSign?: true;
   reason?: ResponseActionControllerReason;
   saved?: SavedResponseDraft;
   prepared?: PreparedResponseSigning;
@@ -59,6 +60,7 @@ export interface ResponseActionControllerConfig {
   signing: ResponseSigning;
   submitTransport?: SubmitTransport;
   completion?: ResponseCompletion;
+  captureSubmitOptions?: (signed: SignedResponseSigning) => SubmitOptions | Promise<SubmitOptions>;
   validateResponse: (response: unknown) => boolean | Promise<boolean>;
   validateFrozenResponse: (response: FormResponse, tuple: ValidationOverride) =>
     (SubmitResult & { validationTuple: ValidationOverride }) | Promise<SubmitResult & { validationTuple: ValidationOverride }>;
@@ -108,6 +110,7 @@ export function createResponseActionController(config: ResponseActionControllerC
   let saved: SavedResponseDraft | undefined;
   // Keep the actual cohort preparation privately: its WeakMap identity authorizes Sign.
   let prepared: PreparedResponseSigning | undefined;
+  let pendingOperationId: string | undefined;
   let signed: SignedResponseSigning | undefined;
   let busy: string | undefined;
   let retryableSign: SignRetry | undefined;
@@ -119,7 +122,7 @@ export function createResponseActionController(config: ResponseActionControllerC
   const deliveries = new Map<string, Delivery>();
 
   function publish(phase: ResponseActionControllerSnapshot['phase'], reason?: ResponseActionControllerReason) {
-    snapshot = freeze(structuredClone({ phase, owned, ...(retryableSign && !busy ? { retrySignAvailable: true } : {}), ...(reason ? { reason } : {}),
+    snapshot = freeze(structuredClone({ phase, owned, ...(pendingOperationId ? { pendingSign: true } : {}), ...(retryableSign && !busy ? { retrySignAvailable: true } : {}), ...(reason ? { reason } : {}),
       ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}), ...(saved ? { saved } : {}), ...(prepared ? { prepared } : {}), ...(signed ? { signed } : {}), ...(completionResult ? { completion: completionResult, ...(completionResult.kind === 'intake' ? { confirmation: completionResult.confirmation } : {}) } : {}) }));
     for (const listener of listeners) listener();
   }
@@ -186,6 +189,13 @@ export function createResponseActionController(config: ResponseActionControllerC
       throw new ControllerRefusal('context-mismatch');
     }
   }
+  function checkRestoredSigned(result: SignedResponseSigning, wording: { source: SigningContentSource; locale: string }) {
+    if ((context.draftKey.subjectRef && result.actor.id !== context.draftKey.subjectRef)
+      || !same(result.content, result.response.extensions?.['x-formspec-signing-content']?.content)
+      || !same(result.content.source, wording.source) || result.content.locale !== wording.locale
+      || result.response.authoredSignatures?.length !== 1 || result.verification?.mode !== 'delegated-service-key'
+      || result.verification.provider !== result.response.authoredSignatures[0].signatureProvider || !result.verification.keyId) throw new ControllerRefusal('context-mismatch');
+  }
   function review(result: PreparedResponseSigning | SignedResponseSigning, stage: 'unsigned' | 'signed', wording: { source: SigningContentSource; locale: string }) {
     if (!same(result.content.source, wording.source) || result.content.locale !== wording.locale
       || !config.reviewReady(freeze(structuredClone({ response: result.response, draft: result.draft, actor: result.actor,
@@ -193,6 +203,7 @@ export function createResponseActionController(config: ResponseActionControllerC
   }
   async function perform(role: ResponseActionRole, admission: QualifiedResponseActionRole, response: FormResponse,
     input: Record<string, unknown>, deliveryId: string, source: unknown, generation: number, signRetry?: SignRetry) {
+    if (pendingOperationId && role !== 'sign') throw new ControllerRefusal('operation-conflict');
     const request = requestFor(role, admission);
     const recoveringSign = role === 'sign' && config.reconcileSignRetries && signRetry !== undefined
       && deliveries.get(deliveryId)?.signRetry === signRetry;
@@ -231,7 +242,7 @@ export function createResponseActionController(config: ResponseActionControllerC
     if (!delivery) {
       if ((role === 'saveInitial' && owned) || (role === 'saveOwned' && !owned) || (role === 'prepare' && (!owned || !saved))
         || (role === 'sign' && signed) || ((role === 'saveInitial' || role === 'saveOwned' || role === 'prepare') && signed)) throw new ControllerRefusal('branch-mismatch');
-      delivery = { identity, operationId: generateIdempotencyKey(), baselineDraft: subject?.draft ?? null };
+      delivery = { identity, operationId: pendingOperationId ?? generateIdempotencyKey(), baselineDraft: subject?.draft ?? null };
       deliveries.set(deliveryId, delivery);
     }
     const operation = delivery;
@@ -297,12 +308,16 @@ export function createResponseActionController(config: ResponseActionControllerC
         current(generation); await checkEvidence(signature); current(generation);
         if (!same(signature.content, prepared!.content) || !signature.response.authoredSignatures?.length
           || signature.verification.mode !== 'delegated-service-key' || !signature.verification.provider || !signature.verification.keyId) throw new ControllerRefusal('context-mismatch');
-        retryableSign = undefined;
+        retryableSign = undefined; pendingOperationId = undefined;
         signed = signature; saved = signature; result = signature;
         publish('signed');
       } else {
         const completionLifetime = { signal: lifetime.signal, assertCurrent: () => current(generation) };
-        operation.completionPreparation ??= await completion!.capture({ signed: signed!, request: request!, invocationInput: input }, completionLifetime);
+        if (!operation.completionPreparation) {
+          const submitOptions = await config.captureSubmitOptions?.(signed!); current(generation);
+          if (completion!.kind === 'task' && submitOptions?.nativeCurrentCheck) throw new ControllerRefusal('branch-mismatch');
+          operation.completionPreparation = await completion!.capture({ signed: signed!, request: request!, invocationInput: input, submitOptions }, completionLifetime);
+        }
         current(generation);
         review(signed!, 'signed', wording);
         const result = freeze(structuredClone(await completion!.complete(operation.completionPreparation, operation.operationId, completionLifetime)));
@@ -442,6 +457,34 @@ export function createResponseActionController(config: ResponseActionControllerC
       } finally { busy = undefined; }
     },
     definitionInvoker, widgetExecutor,
+    async restorePending(value: PendingResponseSigning, renewUnsignedRevision?: true) {
+      value = freeze(structuredClone(value));
+      const generation = epoch; current(generation);
+      if (completion?.kind === 'task' || !restored || prepared || signed || saved || busy || completionResult || !config.signing.restorePending
+        || !same(value.response, restored)) throw new ControllerRefusal('restoration-unresolved');
+      await checkEvidence(value, restored); current(generation);
+      const admission = roles.sign;
+      if (!admission?.requestRef) throw new ControllerRefusal('action-unadmitted');
+      const wording = config.signingContext();
+      const result = await config.signing.restorePending({ draftKey: context.draftKey, definition: context.definition,
+        formVersionId: context.publication.formVersionId, response: restored, ...(renewUnsignedRevision ? { renewUnsignedRevision } : {}), ...wording, action: { ...admission, requestRef: admission.requestRef } }, value.operationId);
+      current(generation);
+      const selected = result.kind === 'signed' ? result.signed : result.preparation;
+      await checkEvidence(selected, selected.response); current(generation);
+      if (!same(selected.content, value.content)) throw new ControllerRefusal('context-mismatch');
+      if (result.kind === 'signed') {
+        const unsigned = structuredClone(selected.response); delete unsigned.authoredSignatures;
+        const previous = structuredClone(value.response); delete previous.authoredSignatures;
+        if (!same(unsigned, previous)) throw new ControllerRefusal('context-mismatch');
+        checkRestoredSigned(result.signed, wording);
+        signed = result.signed; saved = signed; actor = signed.actor.id; publish('signed');
+        await afterCommit(signed);
+      } else {
+        const successor = structuredClone(value.response); delete successor.extensions?.['x-formspec-signing-content'];
+        if (!same(selected.response, successor) || !isUuidV7IdempotencyKey(result.operationId)) throw new ControllerRefusal('context-mismatch');
+        prepared = result.preparation; saved = prepared; actor = prepared.actor.id; pendingOperationId = result.operationId; publish('prepared');
+      }
+    },
     async restoreSigned(value: SignedResponseSigning) {
       const generation = epoch;
       current(generation);
@@ -449,12 +492,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       const result = freeze(structuredClone(value));
       await checkEvidence(result, restored); current(generation);
       const wording = config.signingContext();
-      if ((context.draftKey.subjectRef && result.actor.id !== context.draftKey.subjectRef)
-        || !same(result.content, result.response.extensions?.['x-formspec-signing-content']?.content)
-        || !same(result.content.source, wording.source) || result.content.locale !== wording.locale
-        || result.response.authoredSignatures?.length !== 1 || result.verification.mode !== 'delegated-service-key'
-        || result.verification.provider !== result.response.authoredSignatures[0].signatureProvider || !result.verification.keyId
-        || prepared || signed || saved || busy || completionResult) throw new ControllerRefusal('context-mismatch');
+      checkRestoredSigned(result, wording);
       signed = result; saved = result; actor = result.actor.id; owned = true;
       publish('signed');
       await afterCommit(result);

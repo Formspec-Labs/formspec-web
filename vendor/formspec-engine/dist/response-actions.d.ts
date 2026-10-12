@@ -68,6 +68,15 @@ export interface ResponseActionEffectDispatchContext {
     attempt: number;
     idempotencyKey?: string;
 }
+/** Effect-time inputs: only completed prior effects enter this snapshot. */
+export interface ResponseActionEffectExpressionContext {
+    readonly effectIndex: number;
+    readonly invocation: Readonly<{
+        id: string;
+        attempt: number;
+    }>;
+    readonly effects: readonly ResponseActionEffectOutcome[];
+}
 export type ResponseActionEffectClass = 'transient' | 'browser-local' | 'durable';
 export interface PlannedResponseActionEffect {
     /** Zero-based declaration order. */
@@ -153,7 +162,14 @@ export interface ResponseActionInvocationPorts<TDetail> {
      * input without manufacturing a Response.
      */
     prepareAppAction?: ((action: ResponseAction) => TDetail | null) | undefined;
-    dispatchHostEvent: (eventName: string, detail: TDetail, action: ResponseAction) => void;
+    dispatchHostEvent: (eventName: string, detail: unknown, action: ResponseAction) => void;
+    /**
+     * Evaluate authored transient FEL using the immutable invocation detail.
+     * The host must enforce the §6.4 binding catalog and throw on errors or
+     * unsupported expressions. evaluateResponseActionEffectExpression provides
+     * a native adapter for fields and object bindings.
+     */
+    evaluateEffectExpression?: (expression: string, detail: TDetail, action: ResponseAction, context: ResponseActionEffectExpressionContext) => unknown;
     dispatchEffect?: (effect: EffectRequest, detail: TDetail, action: ResponseAction, context: ResponseActionEffectDispatchContext) => ResponseActionEffectDispatchValue;
     resolveIdempotencyKey?: (effect: EffectRequest, action: ResponseAction, context: ResponseActionIdempotencyKeyContext) => string;
     evaluatePrecondition?: (precondition: Precondition, action: ResponseAction) => ResponseActionPreconditionResult;

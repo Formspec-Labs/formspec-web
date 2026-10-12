@@ -133,7 +133,7 @@ function autoPlacedDefinitionActions(document, definition) {
  * Accepts either a pre-built `engine` or a raw `definition` (creates engine internally).
  */
 export function FormspecProvider(props) {
-    const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, semanticControlScope, initialData, registryEntries, resolveFieldHelp, admitFieldHelpUri = admitDefaultFieldHelpUri, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, showValidationSummary = false, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
+    const { engine: externalEngine, definition, componentDocument, componentGraph, hostEvidence, themeDocument, responseActionsDocument, semanticControlScope, initialData, registryEntries, resolveFieldHelp, admitFieldHelpUri = admitDefaultFieldHelpUri, runtimeContext, issuerFetcher, issuerOverride, components = {}, onSubmit, showValidationSummary = false, onHostEvent, onActionFinding, onActionResult, responseActionInvoker, evaluateActionPrecondition, evaluateActionEffectExpression, dispatchActionEffect, resolveActionIdempotencyKey, children, } = props;
     const shouldEmitThemeTokens = props.emitThemeTokens ?? true;
     const semanticResponseState = useMemo(() => ({
         responseRevision: semanticControlScope?.initialResponseRevision ?? 0,
@@ -377,6 +377,7 @@ export function FormspecProvider(props) {
         onActionResult,
         responseActionInvoker,
         evaluateActionPrecondition,
+        evaluateActionEffectExpression,
         dispatchActionEffect,
         resolveActionIdempotencyKey,
         resolveActionRef,

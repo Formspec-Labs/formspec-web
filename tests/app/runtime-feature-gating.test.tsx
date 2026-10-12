@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { createStubComposition } from '../../src/composition/stub.ts';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { EmptyFormRuntimePolicyExtractor } from '../../src/adapters/composing/form-runtime-policy-extractor.ts';
@@ -9,7 +9,7 @@ import { unavailableStatusReader } from '../../src/adapters/unavailable/status-r
 
 describe('seeded feature gating on ResolvedRuntimeProfile (Codex Finding 2)', () => {
   it('disabled respondentPlace + disabled status -> neither adapter is called and the panel does not render', async () => {
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
     // Swap to unavailable adapters + matching declarations, in demo mode so
     // the identity policy gate stays satisfied. Override the form policy so
     // both features resolve to `not-requested` (the resolver's default when
@@ -40,8 +40,9 @@ describe('seeded feature gating on ResolvedRuntimeProfile (Codex Finding 2)', ()
   });
 
   it('enabled respondentPlace + disabled status -> readPlace called, readStatus skipped per submission', async () => {
-    const composition = createStubComposition();
-    // Stub composition default form policy opts both features in as 'optional'.
+    const composition = createTestComposition({ definition: testDefinition });
+    composition.formRuntimePolicyExtractor = { extract: () => ({ features: { respondentPlace: 'optional', status: 'optional' } }) };
+    // Explicit test policy opts both features in as 'optional'.
     // Force status off at the org layer; respondentPlace stays enabled.
     composition.orgRuntimePolicy = {
       features: { respondentPlace: 'allowed', status: 'forbidden' },
@@ -63,7 +64,8 @@ describe('seeded feature gating on ResolvedRuntimeProfile (Codex Finding 2)', ()
   });
 
   it('all-enabled (default demo) -> readPlace called and the panel renders fully', async () => {
-    const composition = createStubComposition();
+    const composition = createTestComposition({ definition: testDefinition });
+    composition.formRuntimePolicyExtractor = { extract: () => ({ features: { respondentPlace: 'optional', status: 'optional' } }) };
     const readPlaceSpy = vi.spyOn(composition.respondentPlaceSource, 'readPlace');
 
     render(<RespondentRuntime composition={composition} config={departmentAppProfile} />);
