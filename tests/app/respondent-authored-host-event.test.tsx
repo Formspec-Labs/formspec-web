@@ -14,8 +14,10 @@ beforeAll(() => initFormspecEngine());
 afterEach(cleanup);
 
 it.each(['completed', 'failed'] as const)('evaluates the retained authored photo detail and preserves the native capability result: %s', async expectedStatus => {
-  const bundle = JSON.parse(readFileSync('tests/fixtures/photo-complete-successor-v1.bundle.json', 'utf8'));
-  const original = Object.values(bundle.documents).find((value: any) => value.actions?.some((action: any) => action.id === 'inspect-photo')) as ResponseActionsDocument;
+  const bundle = JSON.parse(readFileSync('tests/fixtures/photo-complete-successor-v1.bundle.json', 'utf8')) as {
+    documents: Record<string, Partial<ResponseActionsDocument>>;
+  };
+  const original = Object.values(bundle.documents).find(value => value.actions?.some(action => action.id === 'inspect-photo')) as ResponseActionsDocument;
   const action = structuredClone(original.actions.find(value => value.id === 'inspect-photo')!);
   expect(action.effects).toEqual([{ type: 'hostEvent', eventName: 'formspec-attachment-inspection-request', detailRef: '$photo' }]);
   const definition = { $formspec: '1.0' as const, url: original.targetDefinition!.url, version: '1', title: 'Photo action',

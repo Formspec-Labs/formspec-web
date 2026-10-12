@@ -16,6 +16,8 @@ export default tseslint.config(
       'node_modules/**',
       'coverage/**',
       'test-results/**',
+      'output/**',
+      '**/.vite-cache/**',
       'vendor/**',
     ],
   },
