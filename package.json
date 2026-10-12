@@ -23,7 +23,8 @@
     "./adapters/source-worker": "./src/adapters/source-worker/index.ts",
     "./adapters/source-proof": "./src/adapters/source-proof/index.ts",
     "./status-runtime": "./src/status-runtime/index.ts",
-    "./status.css": "./src/app/status.css"
+    "./status.css": "./src/app/status.css",
+    "./native-package-runtime.css": "./src/app/native-runtime.css"
   },
   "license": "Apache-2.0",
   "description": "Public reference UI for Formspec \u2014 respondent renderer (MVP) + verifier (post-MVP) + selective-proof viewer (post-MVP). Hexagonal architecture per web ADR-0009.",

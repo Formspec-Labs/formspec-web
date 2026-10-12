@@ -1,4 +1,5 @@
 @import './status.css';
+@import './native-runtime.css';
 :root {
   color-scheme: light;
   font-family: "Inter", "Segoe UI", sans-serif;
@@ -109,8 +110,6 @@ select {
 .respondent-flow .fs-issuer-support,
 .respondent-header__kicker,
 .respondent-header p,
-.respondent-toolbar__meta,
-.submit-notice,
 .confirmation-panel p,
 .support-code {
   color: var(--formspec-color-muted, #5d6b66);
@@ -149,56 +148,6 @@ select {
   margin: 0;
   font-size: 1rem;
   line-height: 1.55;
-}
-
-.respondent-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  border-block: 1px solid var(--formspec-color-border, #c9d3cd);
-  padding: 0.75rem 0;
-}
-
-.respondent-toolbar__group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.locale-button {
-  min-height: 44px;
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
-  border-radius: 8px;
-  padding: 0.55rem 0.85rem;
-  background: #fff;
-  color: var(--formspec-color-foreground, #1f2933);
-  cursor: pointer;
-}
-
-.locale-button[aria-pressed="true"] {
-  border-color: var(--formspec-color-primary, #155e56);
-  background: color-mix(in srgb, var(--formspec-color-primary, #155e56) 10%, white);
-  color: var(--formspec-color-primary, #155e56);
-  font-weight: 750;
-}
-
-.respondent-toolbar__meta {
-  font-size: 0.88rem;
-  text-transform: capitalize;
-}
-
-.submit-notice {
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
-  border-radius: 8px;
-  padding: 0.85rem 1rem;
-  background: #f8fbfa;
-}
-
-.submit-notice--error {
-  border-color: #9f1c1c;
-  background: #fff8f8;
-  color: #7f1d1d;
 }
 
 .respondent-place {
@@ -637,14 +586,9 @@ select {
     border-radius: 0;
   }
 
-  .respondent-toolbar,
   .respondent-flow .fs-issuer-chrome {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .respondent-toolbar__meta {
-    text-align: left;
   }
 
   .respondent-place__header,
@@ -669,11 +613,9 @@ select {
 }
 
 @media print {
-  .respondent-toolbar,
   .respondent-place,
   .trusted-reviewer,
-  .submit-notice,
-  .confirmation-panel > a,
+    .confirmation-panel > a,
   .public-terminal-actions h3,
   .public-terminal-actions > p:not(.public-terminal-actions__print-url),
   .public-terminal-actions__row,
@@ -878,71 +820,3 @@ select {
   color: var(--formspec-color-primary, #155e56);
 }
 
-/* Native package chrome stays outside the authored route theme. */
-.native-package-workspace > .respondent-toolbar {
-  width: min(100% - 2rem, 72rem);
-  margin: 1rem auto 0;
-  border-top: 0;
-}
-
-.native-package-status {
-  width: min(100% - 2rem, 38rem);
-  margin: clamp(2rem, 8vh, 5rem) auto;
-  padding: 1.5rem 0;
-  line-height: 1.55;
-}
-
-.native-package-status h1 {
-  margin: 0 0 1rem;
-  font-size: clamp(1.5rem, 4vw, 2rem);
-  line-height: 1.2;
-}
-
-.native-package-status .locale-button {
-  display: inline-flex;
-  align-items: center;
-  text-decoration: none;
-}
-
-.native-package-workspace .locale-button,
-.native-package-status .locale-button {
-  transition: background-color 140ms ease, border-color 140ms ease;
-}
-
-.native-package-workspace .locale-button:hover:not(:disabled),
-.native-package-status .locale-button:hover {
-  border-color: var(--formspec-color-primary, #155e56);
-  background: var(--formspec-color-surface, #edf3ef);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .native-package-workspace .locale-button,
-  .native-package-status .locale-button { transition: none; }
-}
-
-/* Shared native-session notices follow the same content width as the toolbar. */
-.session-status {
-  box-sizing: border-box;
-  width: min(100% - 2rem, 72rem);
-  margin: 0.75rem auto;
-  color: var(--formspec-color-foreground, #1f2933);
-  font-size: 0.95rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.session-status p { margin: 0 0 0.65rem; }
-.session-status > :last-child,
-.session-status > div > :last-child { margin-bottom: 0; }
-
-/* These notices were printable before adopting the shared notice treatment. */
-@media print {
-  .submit-notice.session-status {
-    display: block;
-    width: 100%;
-    margin: 0.75rem 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-  }
-}
