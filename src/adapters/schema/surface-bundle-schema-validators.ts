@@ -260,7 +260,7 @@ async function compileArtifactValidators(): Promise<CompiledArtifactValidators> 
   });
   compiledResponseValidator = ajv.getSchema('https://formspec.org/schemas/response/1.0');
   compiledSigningContentValidator = ajv.getSchema('https://formspec.org/schemas/common/1.0#/$defs/SigningContent');
-  return Object.freeze(Object.fromEntries(entries)) as CompiledArtifactValidators;
+  return Object.freeze(Object.fromEntries(entries)) as unknown as CompiledArtifactValidators;
 }
 
 async function loadCanonicalSchemaAjv() {
