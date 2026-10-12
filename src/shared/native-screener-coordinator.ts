@@ -4,7 +4,7 @@ import type { SurfaceScreenerCompletionPolicy, SurfaceScreenerCompletionRequest 
 import type { SavedResponseDraft } from '../ports/response-signing.ts';
 import type { ScreenerOperationContext, ScreenerRetention, ScreenerRunView } from '../ports/screener-retention.ts';
 import type { HydratedEvaluationCandidate } from '../ports/evaluation-hydration.ts';
-import type { ScreenerHydration } from '../ports/screener-hydration.ts';
+import type { HydrateScreenerCandidate, ScreenerHydration } from '../ports/screener-hydration.ts';
 
 export interface NativeScreenerCoordinatorConfig {
   readonly selectionKey: string;
@@ -160,12 +160,13 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
       const currentCheck = !!candidate.response.authoredSignatures?.length;
       const nativeCurrentCheck = currentCheck ? Object.freeze({ selectionHash: issued.run.selectionHash,
         runId: issued.run.runId, runRevision: issued.run.revision }) : undefined;
-      const binding = nativeCurrentCheck ? { nativeCurrentCheck }
-        : { association: await operation.wait(retention.associate({ saved: candidate, run: issued,
-          identity: operation.identity, signal: operation.signal, assertCurrent: operation.assertCurrent })) };
+      const common = { saved: candidate, run: issued,
+        identity: operation.identity, signal: operation.signal, assertCurrent: operation.assertCurrent };
+      const hydrationCandidate: HydrateScreenerCandidate = nativeCurrentCheck
+        ? { ...common, nativeCurrentCheck }
+        : { ...common, association: await operation.wait(retention.associate(common)) };
       operation.assertCurrent();
-      const facts = await operation.wait(hydration.hydrate({ saved: candidate, run: issued, ...binding,
-        identity: operation.identity, signal: operation.signal, assertCurrent: operation.assertCurrent }));
+      const facts = await operation.wait(hydration.hydrate(hydrationCandidate));
       operation.assertCurrent(); facts.assertCurrent();
       if (nativeCurrentCheck && canonicalize(facts.nativeCurrentCheck) !== canonicalize(nativeCurrentCheck)) throw new Error('Native current check proof selector mismatch');
       return Object.freeze({ view: facts.view, ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}),

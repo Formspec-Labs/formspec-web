@@ -30,6 +30,17 @@ async function fixture(extraSource = false, routingOnly = false) {
 }
 
 describe('same-session native Screener coordination', () => {
+  it('passes only the issued association for an unsigned saved candidate', async () => {
+    const f = await fixture(false, true);
+    await f.coordinator.completionPolicy.complete(f.request);
+    await f.coordinator.qualifySaved(f.input.saved);
+    expect(f.associated).toHaveBeenCalledTimes(1);
+    const candidate = f.hydrated.mock.calls[0][0];
+    expect(candidate.association).toBe(f.input.association);
+    expect(Object.hasOwn(candidate, 'nativeCurrentCheck')).toBe(false);
+    f.coordinator.dispose();
+  });
+
   it('denies fresh and foreign destinations, retaining only the exact accepted selected document target', async () => {
     const f = await fixture();
     const document = { url: f.input.run.selection.screenerUrl, version: f.input.run.selection.screenerVersion };
@@ -94,6 +105,7 @@ describe('same-session native Screener coordination', () => {
     expect(f.hydrated.mock.calls[0][0]).toMatchObject({ saved: signed, run: f.input.run,
       nativeCurrentCheck: { selectionHash: f.input.run.run.selectionHash, runId: f.input.run.run.runId, runRevision: f.input.run.run.revision } });
     expect(f.hydrated.mock.calls[0][0]).not.toHaveProperty('association');
+    expect(Object.hasOwn(f.hydrated.mock.calls[0][0], 'association')).toBe(false);
     expect(facts.nativeCurrentCheck).toEqual({ selectionHash: f.input.run.run.selectionHash, runId: f.input.run.run.runId, runRevision: f.input.run.run.revision });
     f.coordinator.dispose();
   });
