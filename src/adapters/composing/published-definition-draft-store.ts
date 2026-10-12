@@ -13,12 +13,13 @@ export function publishedDefinitionDraftStore(
     list: subject => store.list(subject),
     delete: key => store.delete(key),
     invalidateSubject: subject => store.invalidateSubject(subject),
-    async save(key, response) {
+    async save(key, response, options) {
+      const guard = options?.assertBeforeDispatch?.bind(options);
       const [local, server] = await Promise.all([authored(), published()]);
       if (local.url !== server.url || local.version !== server.version || canonicalize(local) !== canonicalize(server)) {
         throw new Error('This preview differs from the published form. Reload the current package before sending.');
       }
-      await store.save(key, response);
+      await store.save(key, response, guard ? { assertBeforeDispatch: guard } : undefined);
     },
   };
 }

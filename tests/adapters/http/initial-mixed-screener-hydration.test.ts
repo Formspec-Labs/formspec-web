@@ -51,7 +51,7 @@ async function fixture() {
     return { hydrationBytes: encode(hydration), expectedRequest: expected, proofs: [{ decoded: native, utf8Bytes: encode(native) }, mock.bundle.proofs[1]] };
   });
   const current = vi.fn();
-  const verify = vi.spyOn(InitialMixedProofWorkerClient.prototype, 'verify').mockResolvedValue({ outcome: mock.outcome, assertCurrent: current });
+  const verify = vi.spyOn(InitialMixedProofWorkerClient.prototype, 'verify').mockResolvedValue({ outcome: mock.outcome, assertCurrent: current, remainingMilliseconds: () => 60_000 });
   return { input, config, reader, verify, current, token, fetch, setElapsed: (value: number) => { elapsed = value; } };
 }
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -64,7 +64,7 @@ describe('initial mixed saved-candidate integration', () => {
     expect(selected.formVersion).toEqual(f.config.formVersion);
     expect(selected.owner).toEqual(f.input.run.run.owner);
     expect(f.verify.mock.calls[0][2]).toMatchObject({ startedMonotonic: 0, currentAtMonotonic: 20, currentAt: '2026-10-10T12:00:05Z' });
-    expect(facts.view.version).toBe(2); facts.assertReady();
+    expect(facts.view.version).toBe(2); expect(facts.remainingMilliseconds!()).toBe(60_000); facts.assertReady();
     adapter.retireFacts(); expect(() => facts.assertCurrent()).toThrow(); adapter.dispose();
   });
   for (const change of ['actor', 'candidate', 'publication', 'extra-source'] as const) {
@@ -160,7 +160,7 @@ describe('explicit general hydration branch (MOCK owning verifier; schema/guard 
         ...(currentCheck ? { nativeCurrentChecks: { facts: { original: native, snapshot: native.snapshot, run: input.run.run } } } : {}), images: {}, initialContext: {}, taskContext: {} }, buffers: [] }), buffers: [] });
     const verify = vi.spyOn(MixedProofWorkerClient.prototype, 'verify').mockImplementation(async (_selected, prepare, lifetime) => {
       await prepare(async () => encode({}), lifetime);
-      return { outcome: {} as never, assertCurrent: f.current, refreshRequired: () => false };
+      return { outcome: {} as never, assertCurrent: f.current, remainingMilliseconds: () => 60_000, refreshRequired: () => false };
     });
     const { worker, ...config } = f.config;
     const adapter = new HttpInitialMixedScreenerHydration({ ...config, registration, generalWorker: {
@@ -171,7 +171,7 @@ describe('explicit general hydration branch (MOCK owning verifier; schema/guard 
     const { f, input, nativeCurrentCheck, adapter, verify } = await generalFixture(false, true);
     const original = JSON.stringify(input.saved.response);
     const facts = await adapter.hydrate(input);
-    expect(facts.nativeCurrentCheck).toEqual(nativeCurrentCheck);
+    expect(facts.nativeCurrentCheck).toEqual(nativeCurrentCheck); expect(facts.remainingMilliseconds!()).toBe(60_000);
     expect(verify.mock.calls[0][0]).toMatchObject({ nativeCurrentCheck,
       request: { operation: 'hydrate', canonicalResponse: input.saved.response } });
     expect(JSON.parse(String(f.fetch.mock.calls[0]![1]?.body))).toMatchObject({ nativeCurrentCheck });

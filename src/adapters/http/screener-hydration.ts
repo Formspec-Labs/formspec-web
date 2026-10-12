@@ -129,20 +129,26 @@ export class HttpScreenerHydration implements ScreenerHydration {
     }
     let lastElapsed = 0;
     let retired: Error | undefined;
-    const current = () => {
-      if (retired) throw retired;
+    let elapsedExpiry = false;
+    const remainingMilliseconds = () => {
+      if (retired && !elapsedExpiry) throw retired;
       try {
         check(); const elapsed = this.monotonicNow() - started;
         if (!Number.isFinite(elapsed) || elapsed < lastElapsed) fail('elapsed clock mismatch');
-        if (elapsed >= remaining) fail('expired candidate context');
-        lastElapsed = elapsed;
+        lastElapsed = elapsed; return Math.max(0, remaining - elapsed);
       } catch (error) {
-        retired = error instanceof Error ? error : new Error('Source Screener hydration context retired');
+        elapsedExpiry = false; retired = error instanceof Error ? error : new Error('Source Screener hydration context retired');
         throw retired;
       }
     };
+    const current = () => {
+      if (retired) throw retired;
+      if (remainingMilliseconds() === 0) {
+        elapsedExpiry = true; retired = new Error('Source Screener hydration expired candidate context'); throw retired;
+      }
+    };
     current();
-    return Object.freeze({ view, assertCurrent: current, assertReady: () => {
+    return Object.freeze({ view, assertCurrent: current, remainingMilliseconds, assertReady: () => {
       current(); if (view.results.some(result => result.status !== 'qualified')) fail('required source unavailable');
     } });
   }

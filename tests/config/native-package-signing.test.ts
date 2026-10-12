@@ -21,6 +21,12 @@ function fixture() {
 }
 
 describe('closed native package signing opt-in', () => {
+  it('admits a detached dedicated Prepare path and rejects collisions independently of property order', () => {
+    const config = { ...fixture(), readiness: { prepareReadyPath: 'prepareReady', ownedPath: 'owned', instance: 'scratch', readyPath: 'ready' } };
+    expect(nativePackageSigningConfig(config).readiness.prepareReadyPath).toBe('prepareReady');
+    for (const prepareReadyPath of ['owned', 'ready', '']) expect(() => nativePackageSigningConfig({ ...config, readiness: { ...config.readiness, prepareReadyPath } })).toThrow();
+  });
+
   it('detaches exact ceremony selection and rejects unknown or overlapping slots', () => {
     const signingScope = { surface: { url: 'urn:test:surface', version: '1' }, route: 'signing', ceremonySlot: 'ceremony', reviewSlot: 'review' };
     const admitted = nativePackageSigningConfig({ ...fixture(), signingScope });

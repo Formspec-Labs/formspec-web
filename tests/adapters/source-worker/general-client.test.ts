@@ -66,11 +66,11 @@ describe('general client and actual Hydrate transport (MOCK verifier; no proof q
       .toEqual({ ...nativeCurrentCheck, runId: 'exact-selected-run' });
     expect(supplied.hydrationBytes).toEqual(f.hydrationBytes); expect(supplied.buffers).toEqual(f.actual.protectedObjects.map((item: { file: string }) => f.read(item.file)));
     expect(paths).toHaveLength(1 + f.actual.protectedObjects.length); expect(w.terminated()).toBe(1);
-    now = 1001; expect(() => proof.assertCurrent()).not.toThrow(); expect(proof.refreshRequired()).toBe(false);
+    now = 1001; expect(proof.remainingMilliseconds()).toBe(Date.parse(f.view.providerReceipt.validUntil) - Date.parse(f.selection.currentAt) - 1001); expect(() => proof.assertCurrent()).not.toThrow(); expect(proof.refreshRequired()).toBe(false);
     const expiry = Date.parse(f.view.providerReceipt.validUntil) - Date.parse(f.selection.currentAt);
-    now = expiry; expect(() => proof.assertCurrent()).toThrow('worker-expired'); expect(proof.refreshRequired()).toBe(true);
+    now = expiry; expect(proof.remainingMilliseconds()).toBe(0); expect(() => proof.assertCurrent()).toThrow('worker-expired'); expect(proof.refreshRequired()).toBe(true);
     now = expiry - 1; expect(() => proof.refreshRequired()).toThrow('worker-clock-retired');
-    now = expiry + 1; expect(() => proof.refreshRequired()).toThrow('worker-clock-retired');
+    now = expiry + 1; expect(() => proof.remainingMilliseconds()).toThrow('worker-clock-retired'); expect(() => proof.refreshRequired()).toThrow('worker-clock-retired');
     now = 1002; expect(() => proof.assertCurrent()).toThrow('worker-clock-retired');
     guarded = false; client.dispose();
   });
@@ -83,7 +83,7 @@ describe('general client and actual Hydrate transport (MOCK verifier; no proof q
       proofIndexBytes: encode(f.indexed.proofIndex), buffers: f.actual.protectedObjects.map((item: { file: string }) => f.read(item.file)) }),
       { signal: parent.signal, assertCurrent() { if (!current) throw new Error('retired-owner'); },
         startedMonotonic: 0, currentAt: f.selection.currentAt, currentAtMonotonic: 0 });
-    now = 1001; expect(() => proof.assertCurrent()).not.toThrow(); expect(proof.refreshRequired()).toBe(false);
+    now = 1001; expect(proof.remainingMilliseconds()).toBe(Date.parse(f.view.providerReceipt.validUntil) - Date.parse(f.selection.currentAt) - 1001); expect(() => proof.assertCurrent()).not.toThrow(); expect(proof.refreshRequired()).toBe(false);
     if (retirement === 'owner') current = false;
     if (retirement === 'cancel') parent.abort();
     if (retirement === 'generation') client.retireFacts();

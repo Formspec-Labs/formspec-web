@@ -141,7 +141,7 @@ describe('initial Source worker client (MOCK lifecycle only; no native proof qua
     hydration.providerReceipt.validUntil = expiresAt;
     const pending = h.client.verify(h.selected, { ...h.bundle, hydrationBytes: encode(hydration) }, h.lifetime); await ready(h);
     h.worker.emit({ kind: 'result', id: 2, bytes: encode({ ...h.outcome, expiresAt }) }); const facts = await pending;
-    expect(facts.outcome.expiresAt).toBe(expiresAt); h.advance(30_099); facts.assertCurrent();
+    expect(facts.outcome.expiresAt).toBe(expiresAt); h.advance(30_099); expect(facts.remainingMilliseconds()).toBe(1); facts.assertCurrent();
     h.advance(30_100); expect(facts.assertCurrent).toThrow('worker-expired');
   });
   it('keeps a returned owner failure retired even if the owner guard later appears current', async () => {

@@ -24,15 +24,15 @@ async function verifyFixture(value: unknown) {
   return verifyComposedSources({ view, receipt: proof, requestHash: view.requestHash,
     registrationHash: proof.registration.registrationHash, verifyNative: async () => {} });
 }
-async function composedFixture(options: { allSources?: boolean; parentAge?: number; mutate?: (view: EvaluationHydrationWire) => void | Promise<void> } = {}) {
-  const f = await hydrationFixture({ extraSource: options.allSources, taskSource: options.allSources, mutate: options.mutate });
+async function composedFixture(options: { allSources?: boolean; parentAge?: number; childAge?: number; childValidity?: number; parentValidity?: number; mutate?: (view: EvaluationHydrationWire) => void | Promise<void> } = {}) {
+  const f = await hydrationFixture({ extraSource: options.allSources, taskSource: options.allSources, maxEvidenceAgeSeconds: options.childAge, maxValiditySeconds: options.childValidity, mutate: options.mutate });
   const owners = f.view.results.map(result => ({ instanceName: result.instanceName, sourceRef: result.sourceRef,
     resolverKind: result.status === 'qualified' ? 'nativeScreenerMapping' : 'unavailable',
     registrationHash: result.status === 'qualified' ? f.receipt.registration.registrationHash : null,
     attachmentMode: 'metadataOnly', executorAdmissionHash: null,
     unavailableReason: result.status === 'qualified' ? null : result.reason }));
   const budgets = { deadlineMillis: 10_000, concurrency: 1, responseBytes: 2 * 1024 * 1024,
-    maxEvidenceAgeSeconds: options.parentAge ?? 60, maxValiditySeconds: 60 };
+    maxEvidenceAgeSeconds: options.parentAge ?? 60, maxValiditySeconds: options.parentValidity ?? 60 };
   const descriptor = { version: 1, resolver: 'exactSourceComposition', providerId: 'composer', providerVersion: '1',
     selection: f.view.selection, formVersionHash: f.view.formVersionHash,
     outputSchema: { url: 'urn:formspec:server:evaluation-composition:1', version: '1', hash: rawHash(document), document }, budgets, owners };
@@ -43,7 +43,7 @@ async function composedFixture(options: { allSources?: boolean; parentAge?: numb
     registration: { providerId: descriptor.providerId, providerVersion: descriptor.providerVersion, registrationHash,
       outputSchemaHash: descriptor.outputSchema.hash, maxEvidenceAgeSeconds: budgets.maxEvidenceAgeSeconds,
       maxValiditySeconds: budgets.maxValiditySeconds, publicDescriptor: descriptor }, requestHash: f.view.requestHash,
-    resolvedAt: f.view.qualifiedAt, validUntil: new Date(Number(hydrationInstant(f.view.qualifiedAt) / 1_000_000n) + budgets.maxEvidenceAgeSeconds * 1000).toISOString(),
+    resolvedAt: f.view.qualifiedAt, validUntil: new Date(Number(hydrationInstant(f.view.qualifiedAt) / 1_000_000n) + Math.min(budgets.maxEvidenceAgeSeconds, budgets.maxValiditySeconds, options.childAge ?? 60, options.childValidity ?? 60) * 1000).toISOString(),
     contributions, receiptHash: registrationHash };
   await rehash(parent);
   Object.assign(f.view, { providerReceipt: parent });
@@ -120,6 +120,12 @@ describe('independently pinned composed candidate HTTP hydration', () => {
     f.config.compositionRegistrationHash = parentPin;
     await rehash(f.parent);
     await expect(new HttpScreenerHydration(f.config).hydrate(f.input)).rejects.toThrow('original policy');
+  });
+  it.each([[97, 117, 97_000], [200, 117, 117_000]])('reports the verified parent/child minimum for selected ages %s/%s', async (parentAge, childAge, expected) => {
+    const f = await composedFixture({ parentAge, childAge, parentValidity: 900, childValidity: 900 });
+    const facts = await new HttpScreenerHydration(f.config).hydrate(f.input);
+    expect(facts.remainingMilliseconds!()).toBe(expected); f.setElapsed(expected - 1); expect(facts.remainingMilliseconds!()).toBe(1);
+    f.setElapsed(expected); expect(facts.remainingMilliseconds!()).toBe(0); expect(() => facts.assertReady()).toThrow('expired');
   });
   it('uses the shorter parent age and permanently retires installed facts at that deadline', async () => {
     const f = await composedFixture({ parentAge: 20 });

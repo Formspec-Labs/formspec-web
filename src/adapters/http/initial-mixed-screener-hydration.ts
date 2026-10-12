@@ -168,6 +168,7 @@ export class HttpInitialMixedScreenerHydration implements ScreenerHydration {
       let view: HydratedEvaluationCandidate['view'];
       let proofCurrent: () => void;
       let refreshRequired: (() => boolean) | undefined;
+      let remainingMilliseconds: (() => number) | undefined;
       if (this.generalWorker) {
         const currentAt = this.utc(); const currentAtMonotonic = this.now(); check();
         const proof = await this.generalWorker.verify({ request, registration: this.config.registration, ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}) }, async (index, lifetime) => {
@@ -201,7 +202,7 @@ export class HttpInitialMixedScreenerHydration implements ScreenerHydration {
           return bundle;
         }, { signal, assertCurrent: check, startedMonotonic, currentAt, currentAtMonotonic }); check(); proof.assertCurrent();
         view = decodeMixedHydration(decodeBoundedProofJson(hydration.utf8Bytes));
-        proofCurrent = proof.assertCurrent;
+        proofCurrent = proof.assertCurrent; remainingMilliseconds = proof.remainingMilliseconds;
         refreshRequired = proof.refreshRequired;
       } else {
       const bundle = await this.reader!.readAll(hydration, request, { signal, assertCurrent: check, startedMonotonic }); check();
@@ -213,11 +214,11 @@ export class HttpInitialMixedScreenerHydration implements ScreenerHydration {
       const proof = await this.worker!.verify({ request, registration: this.config.registration }, bundle,
         { signal, assertCurrent: check, startedMonotonic, currentAt, currentAtMonotonic }); check(); proof.assertCurrent();
       view = decodeInitialMixedHydration(JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bundle.hydrationBytes)));
-      proofCurrent = proof.assertCurrent;
+      proofCurrent = proof.assertCurrent; remainingMilliseconds = proof.remainingMilliseconds;
       }
       check(); proofCurrent();
       completedGeneral = !!this.generalWorker;
-      return Object.freeze({ view, ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}), ...(refreshRequired ? { refreshRequired: () => { check(); return refreshRequired!(); } } : {}), assertCurrent: () => { check(); proofCurrent(); },
+      return Object.freeze({ view, ...(remainingMilliseconds ? { remainingMilliseconds: () => { check(); return remainingMilliseconds!(); } } : {}), ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}), ...(refreshRequired ? { refreshRequired: () => { check(); return refreshRequired!(); } } : {}), assertCurrent: () => { check(); proofCurrent(); },
         assertReady: () => { check(); proofCurrent(); if (view.results.some(result => result.status !== 'qualified')) fail('required source unavailable'); } });
     } catch (error) { active.abort(error); throw error; }
     finally { clearTimeout(timer); signal.removeEventListener('abort', clearDeadline); }

@@ -189,7 +189,10 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     };
     const signingPolicy = { keyId: pins.keyId, validateResponse: validateCanonicalFormResponse,
       validateContent, signingProfileDigest: responseSigningDigest,
-      ...(nativePins || taskNeedsHydration ? { preSignCandidate: async (input: Parameters<NonNullable<HttpResponseSigningPolicy['preSignCandidate']>>[0]) => {
+      ...(nativePins || taskNeedsHydration ? { prePrepareCandidate: async (input: Parameters<NonNullable<HttpResponseSigningPolicy['prePrepareCandidate']>>[0]) => {
+        if (!host?.prePrepareCandidate) throw new Error('Native candidate host unavailable');
+        return host.prePrepareCandidate(input);
+      }, preSignCandidate: async (input: Parameters<NonNullable<HttpResponseSigningPolicy['preSignCandidate']>>[0]) => {
         if (!host?.preSignCandidate) throw new Error('Native candidate host unavailable');
         return host.preSignCandidate(input);
       } } : {}) };

@@ -109,6 +109,8 @@ export interface HydratedEvaluationCandidate {
   readonly view: EvaluationHydrationWire | InitialMixedHydrationWire | MixedHydrationWire;
   readonly assertCurrent: () => void;
   readonly assertReady: () => void;
+  /** Verified monotonic lifetime remaining; absence means unknown, explicit Infinity means nonexpiring. */
+  readonly remainingMilliseconds?: () => number;
   /** Local verified lifetime decision; authority retirement still throws. */
   readonly refreshRequired?: () => boolean;
 }

@@ -17,6 +17,9 @@ export interface HttpResponseSigningPolicy {
   signingProfileDigest: (response: FormResponse) => Promise<string>;
   keyId: string;
   now?: () => string;
+  /** Trusted Prepare-only admission of the existing verified saved revision. */
+  prePrepareCandidate?: (input: Readonly<{ saved: SavedResponseDraft; response: FormResponse; assertCurrent: () => void }>)
+    => Promise<Readonly<{ assertCurrent: () => void }>>;
   /** Optional host qualification of the actual commitment-bearing saved revision. */
   preSignCandidate?: (input: Readonly<{
     saved: SavedResponseDraft;
@@ -228,7 +231,14 @@ export class HttpResponseSigning implements ResponseSigning {
         throw new Error('Saved draft changed before preparation');
       }
       this.qualifySaveAction(input.action, input, binding.draftId, existing.draft_version);
-      try { await this.config.drafts.save(input.draftKey, input.response); }
+      const admission = this.config.prePrepareCandidate
+        ? await this.config.prePrepareCandidate({ saved: await this.savedResult(input.draftKey, existing), response: input.response,
+          assertCurrent: () => this.current(context) }) : undefined;
+      this.current(context);
+      if (this.config.prePrepareCandidate && typeof admission?.assertCurrent !== 'function') throw new Error('Prepare candidate requires a dispatch assertion');
+      // This guard belongs only to this write; committed readback and later signing retain their existing behavior.
+      try { await this.config.drafts.save(input.draftKey, input.response,
+        admission ? { assertBeforeDispatch: admission.assertCurrent.bind(admission) } : undefined); }
       catch { this.current(context); }
       this.current(context);
       const saved = await this.read(context, binding.draftId);

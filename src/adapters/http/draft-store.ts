@@ -133,14 +133,15 @@ export class HttpDraftStore implements DraftStore {
     }
   }
 
-  async save(key: DraftKey, response: FormResponse): Promise<void> {
+  async save(key: DraftKey, response: FormResponse, options?: { readonly assertBeforeDispatch?: () => void }): Promise<void> {
     if (this.clearing) throw new Error('Draft state is being cleared');
-    const pending = this.saveOnce(key, response);
+    const guard = options?.assertBeforeDispatch?.bind(options);
+    const pending = this.saveOnce(key, response, guard ? { assertBeforeDispatch: guard } : undefined);
     this.pendingSaves.add(pending);
     try { await pending; } finally { this.pendingSaves.delete(pending); }
   }
 
-  private async saveOnce(key: DraftKey, response: FormResponse): Promise<void> {
+  private async saveOnce(key: DraftKey, response: FormResponse, options?: { readonly assertBeforeDispatch?: () => void }): Promise<void> {
     const generation = this.retirementGeneration;
     const current = () => { if (generation !== this.retirementGeneration) throw new Error('Draft state was retired while saving'); };
     response = structuredClone(response);
@@ -155,7 +156,7 @@ export class HttpDraftStore implements DraftStore {
       await this.createDraft(key, response, {
         anonymousSessionToken,
         respondentSubject,
-      }, current);
+      }, current, options);
       return;
     }
 
@@ -166,7 +167,7 @@ export class HttpDraftStore implements DraftStore {
         canonical_response: response,
         expected_draft_version: existing.draftVersion,
       },
-      { headers: bearerHeaders(anonymousSessionToken), assertCurrent: current },
+      { headers: bearerHeaders(anonymousSessionToken), assertCurrent: current, assertBeforeDispatch: options?.assertBeforeDispatch },
     );
     current();
     this.bindings.put(key, {
@@ -226,6 +227,7 @@ export class HttpDraftStore implements DraftStore {
       respondentSubject?: string;
     },
     current: () => void = () => {},
+    options?: { readonly assertBeforeDispatch?: () => void },
   ): Promise<void> {
     const formId = this.formIdResolver(key.formUrl, key.formVersion);
     const draft = await this.client.postJson<DraftView>(
@@ -238,7 +240,7 @@ export class HttpDraftStore implements DraftStore {
         draft_state: response.data,
         canonical_response: response,
       },
-      { headers: bearerHeaders(anonymousSessionToken), assertCurrent: current },
+      { headers: bearerHeaders(anonymousSessionToken), assertCurrent: current, assertBeforeDispatch: options?.assertBeforeDispatch },
     );
     current();
     this.bindings.put(key, {

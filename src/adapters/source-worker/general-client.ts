@@ -54,7 +54,7 @@ export class MixedProofWorkerClient {
   dispose(): void { this.disposed = true; this.retireFacts(); }
   async verify(selected: Readonly<{ registration: EvaluationProviderRegistration; request: InitialNativeRequest; nativeCurrentCheck?: NativeCurrentCheck }>,
     prepare: (index: MixedProofIndexer, lifetime: { signal: AbortSignal; assertCurrent: () => void }) => Promise<PreparedMixedProof>,
-    lifetime: InitialProofWorkerLifetime): Promise<Readonly<{ outcome: MixedProofOutcome; assertCurrent: () => void; refreshRequired: () => boolean }>> {
+    lifetime: InitialProofWorkerLifetime): Promise<Readonly<{ outcome: MixedProofOutcome; assertCurrent: () => void; remainingMilliseconds: () => number; refreshRequired: () => boolean }>> {
     lifetime = { ...lifetime, assertCurrent: lifetime.assertCurrent.bind(lifetime) };
     this.retireFacts(); const generation = this.generation;
     const active = new AbortController(); this.active = active;
@@ -122,7 +122,7 @@ export class MixedProofWorkerClient {
         || value.receiptHash !== receipt.receiptHash || value.qualifiedAt !== view.qualifiedAt || value.validUntil !== expiresAt
         || !equal(value.results, view.results) || typeof value.evidenceHash !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(value.evidenceHash)
         || !Array.isArray(value.originalSignatureRequirements) || value.originalSignatureRequirements.length) throw new Error('binding');
-      check(); completed = true; return Object.freeze({ outcome: value as unknown as MixedProofOutcome, assertCurrent: () => { check(); }, refreshRequired: () => {
+      check(); completed = true; const refreshRequired = () => {
         // Expiry can be renewed by an explicit action. Owner, cancellation,
         // generation and clock retirement permanently refuse this lifetime.
         try {
@@ -138,7 +138,9 @@ export class MixedProofWorkerClient {
           expired = false; retired = error instanceof Error ? error : new Error('worker-retired');
           active.abort(retired); throw retired;
         }
-      } });
+      };
+      return Object.freeze({ outcome: value as unknown as MixedProofOutcome, assertCurrent: () => { check(); },
+        remainingMilliseconds: () => refreshRequired() ? 0 : check(), refreshRequired });
     } catch (error) { active.abort(error); throw error; }
     finally { if (timer !== undefined) clearTimeout(timer); worker?.terminate(); }
   }

@@ -816,6 +816,28 @@ describe('maintained native package Surface host', () => {
     await act(async () => {}); expect(test.dispose).not.toHaveBeenCalled();
     mounted.unmount(); await act(async () => {}); expect(test.dispose).not.toHaveBeenCalled();
   });
+  it('renders a neutral authored Prepare guard independently from the ordinary Save guard', async () => {
+    const resolved = dereferenceBundleExport(bundle); const definition = structuredClone([...resolved.definitions.values()][0]);
+    Object.assign(definition.instances!.draftReadiness.data!, { prepareReady: false });
+    const selectedComponent = structuredClone(component);
+    const guardPrepare = (node: unknown) => {
+      if (!node || typeof node !== 'object') return;
+      const value = node as Record<string, unknown>;
+      if (value.actionRef === 'prepare') value.when = "@instance('draftReadiness').ready and @instance('draftReadiness').owned and @instance('draftReadiness').prepareReady";
+      Object.values(value).forEach(child => { if (Array.isArray(child)) child.forEach(guardPrepare); else guardPrepare(child); });
+    };
+    guardPrepare(selectedComponent);
+    const engine = createFormEngine(definition, { registryEntries: [...flattenRegistryEntries(resolved.registries).entries] });
+    for (const document of Object.values(bundle.documents)) if (document && typeof document === 'object' && '$formspecLocale' in document) engine.loadLocale(document as LocaleDocument);
+    engine.setLocale('en'); engine.setInstanceValue('draftReadiness', 'ready', true); engine.setInstanceValue('draftReadiness', 'owned', true);
+    render(<FormspecForm engine={engine} componentDocument={selectedComponent} responseActionsDocument={resolved.responseActions[0]} />);
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDefined(); expect(screen.queryByRole('button', { name: 'Prepare saved response' })).toBeNull();
+    await act(async () => engine.setInstanceValue('draftReadiness', 'prepareReady', true));
+    expect(screen.getByRole('button', { name: 'Prepare saved response' })).toBeDefined();
+    await act(async () => engine.setInstanceValue('draftReadiness', 'prepareReady', false));
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDefined(); expect(screen.queryByRole('button', { name: 'Prepare saved response' })).toBeNull();
+    cleanup(); engine.dispose();
+  });
   it('renders only the actual Component Save branch and adds Prepare after ownership, keeping ceremony actions off intake', async () => {
     const resolved = dereferenceBundleExport(bundle);
     const definition = [...resolved.definitions.values()][0];

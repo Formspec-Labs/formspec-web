@@ -7,10 +7,10 @@ import type { EvaluationHydrationWire, NativeScreenerMappingReceipt } from '../.
 import type { FormDefinition } from '@formspec-org/types';
 import { recordingFetch } from './test-fetch.ts';
 
-export async function hydrationFixture(options: { extraSource?: boolean; taskSource?: boolean; outputSchemaHash?: string; data?: Record<string, unknown>; mutate?: (view: EvaluationHydrationWire) => void | Promise<void> } = {}) {
+export async function hydrationFixture(options: { extraSource?: boolean; taskSource?: boolean; maxEvidenceAgeSeconds?: number; maxValiditySeconds?: number; outputSchemaHash?: string; data?: Record<string, unknown>; mutate?: (view: EvaluationHydrationWire) => void | Promise<void> } = {}) {
   const digest = `sha256:${'a'.repeat(64)}`;
   const at = '2026-10-09T12:00:00Z';
-  const expires = '2026-10-09T12:01:00Z';
+  const expires = new Date(Date.parse(at) + (options.maxValiditySeconds ?? 60) * 1000).toISOString();
   const scope = { tenant_id: 'tenant', workspace_id: 'workspace', environment_id: 'environment', cell_id: 'cell' };
   const owner = { sessionId: 'session', subjectRef: 'source-subject', authenticated: { issuer: 'https://issuer.example', subject: 'oidc',
     clientId: 'client', principalId: 'principal', profile: 'profile', actorRef: 'separate-actor', subjectRef: 'source-subject', sessionId: 'session' } };
@@ -24,7 +24,7 @@ export async function hydrationFixture(options: { extraSource?: boolean; taskSou
   const descriptor = { version: 1, resolver: 'nativeScreenerMapping', providerId: 'provider', providerVersion: '1', selection: evaluationSelection,
     formVersionHash: digest, screenerSelectionHash: digest, instanceName: 'facts', sourceRef: 'screening', rules, rulesHash: await hash(rules),
     outputSchema: { url: 'urn:test:output', version: '1', document, hash: options.outputSchemaHash ?? `sha256:${createHash('sha256').update(document).digest('hex')}` },
-    budgets: { maxEvidenceAgeSeconds: 60, maxValiditySeconds: 60 } };
+    budgets: { maxEvidenceAgeSeconds: options.maxEvidenceAgeSeconds ?? 60, maxValiditySeconds: options.maxValiditySeconds ?? 60 } };
   const { screenerSelectionHash: _omit, ...authority } = descriptor;
   const selection: ScreenerSelection = { evaluationSelection, formVersionHash: digest, sourceRef: 'screening', screenerUrl: 'urn:test:screener', screenerVersion: '1',
     screenerRawHash: digest, screenerHash: digest, allowedTargets: ['urn:test:target'], qualificationProfile: 'flat-first-match-v1',

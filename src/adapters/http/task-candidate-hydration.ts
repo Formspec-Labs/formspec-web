@@ -143,13 +143,14 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
       deadline = started + proof.validForMilliseconds;
     }
     let retired: Error | undefined;
+    let observedRemaining = Infinity;
     const current = () => {
       if (retired) throw retired;
-      try { check(); if (this.now() >= deadline) fail('original proof expired'); }
+      try { check(); observedRemaining = deadline - this.now(); if (observedRemaining <= 0) fail('original proof expired'); }
       catch (error) { retired = error instanceof Error ? error : new Error('Source task candidate retired'); throw retired; }
     };
     current();
-    return Object.freeze({ view, assertCurrent: current, assertReady: () => {
+    return Object.freeze({ view, assertCurrent: current, remainingMilliseconds: () => { current(); return observedRemaining; }, assertReady: () => {
       current(); if (view.results.some(result => result.status !== 'qualified')) fail('selected sources pending or unavailable');
     } });
   }

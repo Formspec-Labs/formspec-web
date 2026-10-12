@@ -59,7 +59,7 @@ export interface NativePackageSigningHostPolicy {
   signingContext: (locale: string) => ReturnType<ResponseActionControllerConfig['signingContext']>;
   semanticScope: (responseId: string, renderInstance: number) => SemanticControlScope;
   applicationReadiness?: { instance: string; canStartPath: string; startedPath: string; persistentSavingPath: string };
-  readiness: { instance: string; readyPath: string; ownedPath: string };
+  readiness: { instance: string; readyPath: string; ownedPath: string; prepareReadyPath?: string };
   bindings: Readonly<Record<string, { catalogRef: string; sourceRef: string }>>;
   /** Resolved mapped action labels from the exact admitted Locale. */
   actionLabels: (locale: string) => Readonly<Record<string, string>>;
@@ -195,6 +195,10 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const scratch = policy.definition.instances?.[policy.readiness.instance];
   if (scratch?.readonly !== false || policy.readiness.readyPath === policy.readiness.ownedPath
     || atPath(scratch.data, policy.readiness.readyPath) !== false || atPath(scratch.data, policy.readiness.ownedPath) !== false) throw new Error('native-readiness-unadmitted');
+  const preparePath = policy.readiness.prepareReadyPath;
+  if (preparePath !== undefined && (!preparePath.trim() || [policy.readiness.readyPath, policy.readiness.ownedPath].includes(preparePath)
+    || atPath(scratch.data, preparePath) !== false || policy.applicationReadiness?.instance === policy.readiness.instance
+      && [policy.applicationReadiness.canStartPath, policy.applicationReadiness.startedPath, policy.applicationReadiness.persistentSavingPath].includes(preparePath))) throw new Error('native-prepare-readiness-unadmitted');
   for (const admission of Object.values(policy.controller.roles)) {
     if (!admission || !same(policy.bundle.documents[admission.artifactRef], admission.document)
       || bundle.responseActions.filter(document => same(document, admission.document)).length !== 1) {
@@ -230,8 +234,55 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   let nativeLifetime = new AbortController();
   let nativeStage: AbortController | undefined;
   let qualificationSequence = 0;
-  let nativeReadiness: 'pending' | 'ready' | 'needs-save' | undefined = policy.nativeScreener || policy.candidateHydration ? 'pending' : undefined;
+  let nativeReadiness: 'pending' | 'ready' | 'needs-save' | 'expired' | undefined = policy.nativeScreener || policy.candidateHydration ? 'pending' : undefined;
   let nativeCandidate: { saved: SavedResponseDraft; facts: HydratedEvaluationCandidate } | undefined;
+  let candidateExpiry: ReturnType<typeof setTimeout> | undefined;
+  const clearCandidateExpiry = () => { if (candidateExpiry !== undefined) clearTimeout(candidateExpiry); candidateExpiry = undefined; };
+  function prepareCandidateCurrent(): boolean {
+    return !!nativeCandidate && nativeReadiness === 'ready' && !['saveInitial', 'saveOwned'].includes(publicSnapshot?.phase ?? '')
+      && same(publicSnapshot?.saved, nativeCandidate.saved);
+  }
+  function currentPrepareFacts(): boolean {
+    if (!prepareCandidateCurrent()) return false;
+    try { nativeCandidate!.facts.assertReady(); return true; } catch { return false; }
+  }
+  function prepareReady(): boolean {
+    if (!currentPrepareFacts()) return false;
+    try {
+      const remaining = nativeCandidate!.facts.remainingMilliseconds?.();
+      return remaining === Infinity || typeof remaining === 'number' && Number.isFinite(remaining) && remaining > 0;
+    } catch { return false; }
+  }
+  function factsUnavailable(elapsedExpiry = false) {
+    let expired = elapsedExpiry;
+    try { expired ||= nativeCandidate?.facts.refreshRequired?.() === true; } catch { /* Authority retirement stays unavailable. */ }
+    nativeReadiness = expired ? 'expired' : 'pending'; emit();
+  }
+  function prepareFlags() {
+    if (policy.readiness.prepareReadyPath !== undefined) rendererEngine?.setInstanceValue(policy.readiness.instance,
+      policy.readiness.prepareReadyPath, !native || prepareReady());
+  }
+  function observeCandidateLifetime() {
+    clearCandidateExpiry();
+    const candidate = nativeCandidate; const authority = authorityGeneration; const visit = visitEpoch;
+    if (!candidate) return;
+    const observe = () => {
+      if (disposed || nativeCandidate !== candidate || authority !== authorityGeneration || visit !== visitEpoch) return;
+      try {
+        if (!candidate.facts.remainingMilliseconds) return;
+        const remaining = candidate.facts.remainingMilliseconds();
+        if (remaining === 0) { factsUnavailable(true); return; }
+        candidate.facts.assertReady();
+        if (remaining === Infinity) return;
+        if (typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining <= 0) throw new Error('native-facts-lifetime-unavailable');
+        candidateExpiry = setTimeout(observe, Math.min(Math.ceil(remaining), 2_147_483_647));
+      } catch {
+        // Expiry changes availability only. Frozen review, signing retries and durable receipts remain owned.
+        factsUnavailable();
+      }
+    };
+    observe(); prepareFlags();
+  }
   let restoredScreenerCheckpoint: Pick<SavedResponseDraft, 'draftKey' | 'draft' | 'actor' | 'response'> | undefined;
 
   let locale = policy.initialLocale;
@@ -293,7 +344,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   function retireNative(reason: 'visit-change' | 'renderer-dispose' | 'authority-change' | 'sign-retry-retired' = 'authority-change') {
     if (nativeCandidate || runtime) reportQualification('candidate-lifetime', new Error(reason));
     controller?.retireSignRetry();
-    qualificationSequence++; nativeStage?.abort(); nativeStage = undefined;
+    clearCandidateExpiry(); qualificationSequence++; nativeStage?.abort(); nativeStage = undefined;
     nativeLifetime.abort(); nativeLifetime = new AbortController(); native?.retireFacts();
     nativeCandidate = undefined; if (native) { nativeReadiness = 'pending'; fence(); emit(); }
   }
@@ -332,7 +383,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       }
       nativeCandidate = { saved: structuredClone(saved), facts };
       diagnosticStage = 'source-ready';
-      facts.assertReady(); nativeReadiness = 'ready';
+      facts.assertReady(); nativeReadiness = 'ready'; observeCandidateLifetime();
       reportQualification(diagnosticStage);
       diagnosticStage = 'review-delivery';
       if (publicSnapshot?.prepared || publicSnapshot?.signed) { await delivery(publicSnapshot); reportQualification(diagnosticStage); }
@@ -397,7 +448,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         const unchanged = same(outputs.fields, capturedReview.presentation.fields) && same(validationMeaning(outputs.validationReport), validationMeaning(capturedValidation));
         if (!await installFacts(facts, saved, old, lease, signal, check)) throw new Error('native-isolated-candidate-changed');
         check(); facts.assertReady();
-        nativeCandidate = { saved: structuredClone(saved), facts }; nativeReadiness = 'ready';
+        nativeCandidate = { saved: structuredClone(saved), facts }; nativeReadiness = 'ready'; observeCandidateLifetime();
         if (!unchanged) {
           await delivery(publicSnapshot!);
           throw new Error('native-review-renewed-assent-required');
@@ -419,9 +470,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const applicationStatus = (): Pick<ResponseActionControllerSnapshot, 'application' | 'applicationLookup'> => ({
     ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}) });
   const checkpointStatus = (): { checkpointState?: 'unsaved' | 'saving' | 'saved' | 'failed' } => policy.controller.applicationLifecycle ? { checkpointState } : {};
-  const nativeStatus = (): { nativeReadiness?: 'pending' | 'ready' | 'needs-save' } => native ? { nativeReadiness } : {};
+  const nativeStatus = (): { nativeReadiness?: 'pending' | 'ready' | 'needs-save' | 'expired' } => native ? { nativeReadiness } : {};
   let hostSnapshot = { ...checkpointStatus(), ...applicationStatus(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted };
-  const emit = () => { hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
+  const emit = () => { prepareFlags(); hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
   function fence() {
     generation++; runtime = undefined; review = undefined; expectedReviewIdentity = undefined; reviewState = undefined; reviewValidation = undefined;
     for (const read of reads) read.abort();
@@ -599,6 +650,22 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   return {
     bundle, definition: policy.definition,
     ...(native ? { ...(screener ? { screenerCompletion: screener.completionPolicy } : {}), instanceSourceResolver: unavailableSources, retireCandidateAuthority: retireNative,
+      prePrepareCandidate: async (candidate: Readonly<{ saved: SavedResponseDraft; response: FormResponse; assertCurrent: () => void }>) => {
+        const facts = nativeCandidate; const authority = authorityGeneration; const visit = visitEpoch; const lease = rendererLease;
+        const check = () => {
+          candidate.assertCurrent();
+          if (!facts || disposed || cleared || authorityGeneration !== authority || visitEpoch !== visit || rendererLease !== lease
+            || lease && !lease.active || nativeCandidate !== facts || !same(publicSnapshot?.saved, candidate.saved)
+            || !same(facts.saved, candidate.saved) || !rendererEngine || !same(rendererEngine.getResponse({ profile: 'off' }).data, candidate.saved.response.data)
+            || candidate.response.id !== candidate.saved.response.id || candidate.response.definitionUrl !== candidate.saved.response.definitionUrl
+            || candidate.response.definitionVersion !== candidate.saved.response.definitionVersion || !same(candidate.response.data, candidate.saved.response.data)
+            || !same(candidate.response.displayedLocale, candidate.saved.response.displayedLocale)) throw new Error('native-prepare-candidate-mismatch');
+          policy.assertOwner(candidate.saved.draftKey, candidate.saved.actor.id);
+          if (!currentPrepareFacts()) { if (prepareCandidateCurrent()) factsUnavailable(); throw new Error('native-facts-pending-save-required'); }
+          facts.facts.assertReady();
+        };
+        check(); return Object.freeze({ assertCurrent: check });
+      },
       preSignCandidate: async (input: Readonly<{ saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }>) => {
         if (historicalScreenerCheckpoint(input.saved)) {
           await qualifyCommitted(input.saved, { signal: nativeLifetime.signal, assertCurrent: input.assertCurrent });
@@ -844,7 +911,10 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return { responseActionInvoker: async action => {
         const expected = authorityGeneration; const expectedVisit = visitEpoch;
         if (!active || disposed) throw new Error('native-renderer-retired');
-        if (native && action.actionRef === policy.controller.roles.prepare?.actionRef && nativeReadiness !== 'ready') throw new Error('native-facts-pending-save-required');
+        if (native && action.actionRef === policy.controller.roles.prepare?.actionRef && !currentPrepareFacts()) {
+          if (prepareCandidateCurrent()) factsUnavailable();
+          throw new Error('native-facts-pending-save-required');
+        }
         const assertCurrent = () => {
           if (!active || disposed || cleared || authorityGeneration !== expected || visitEpoch !== expectedVisit || rendererLease !== lease) throw new Error('native-renderer-retired');
         };

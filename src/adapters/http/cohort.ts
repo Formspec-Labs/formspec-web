@@ -243,10 +243,13 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
         return result;
       },
     } : {}),
-    save: (key, response) => fence.run(key, async () => {
-      responseSigning.assertEditable(key);
-      await draftStore.save(key, response);
-    }),
+    save: (key, response, options) => {
+      const guard = options?.assertBeforeDispatch?.bind(options);
+      return fence.run(key, async () => {
+        responseSigning.assertEditable(key);
+        await draftStore.save(key, response, guard ? { assertBeforeDispatch: guard } : undefined);
+      });
+    },
     list: subject => draftStore.list(subject),
     delete: key => fence.clear(key, async () => {
       await draftStore.delete(key);

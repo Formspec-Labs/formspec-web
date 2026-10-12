@@ -118,6 +118,18 @@ describe('authenticated native Screener candidate hydration', () => {
     expect(f.requests).toHaveLength(1);
   });
 
+  it('reports the verified native freshness remainder and latches owner or clock retirement', async () => {
+    const f = await hydrationFixture(); const facts = await new HttpScreenerHydration(f.config).hydrate(f.input);
+    expect(facts.remainingMilliseconds!()).toBe(60_000); f.setElapsed(1_234); expect(facts.remainingMilliseconds!()).toBe(58_766);
+    f.setElapsed(60_000); expect(facts.remainingMilliseconds!()).toBe(0); expect(() => facts.assertReady()).toThrow('expired');
+    expect(facts.remainingMilliseconds!()).toBe(0);
+    f.setElapsed(59_999); expect(() => facts.remainingMilliseconds!()).toThrow('clock');
+    f.setElapsed(61_000); expect(() => facts.remainingMilliseconds!()).toThrow('clock');
+    const owner = await hydrationFixture(); const owned = await new HttpScreenerHydration(owner.config).hydrate(owner.input);
+    owner.input.assertCurrent.mockImplementationOnce(() => { throw new Error('owner retired'); });
+    expect(() => owned.assertCurrent()).toThrow('owner retired');
+    expect(() => owned.remainingMilliseconds!()).toThrow('owner retired');
+  });
   it('retires installed context and resolver when owner generation changes or local elapsed freshness expires', async () => {
     const f = await hydrationFixture();
     const context = await new HttpScreenerHydration(f.config).hydrate(f.input);

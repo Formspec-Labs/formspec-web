@@ -9,8 +9,8 @@ import { HttpScreenerHydration } from '../../src/adapters/http/screener-hydratio
 import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts';
 import { createNativeScreenerCoordinator } from '../../src/shared/native-screener-coordinator.ts';
 
-async function fixture(extraSource = false, routingOnly = false) {
-  const f = await hydrationFixture({ extraSource });
+async function fixture(extraSource = false, routingOnly = false, freshness: { maxEvidenceAgeSeconds?: number; maxValiditySeconds?: number } = {}) {
+  const f = await hydrationFixture({ extraSource, ...freshness });
   const retained = vi.fn<ScreenerRetention['retain']>(async () => f.input.run);
   const associated = vi.fn<ScreenerRetention['associate']>(async () => f.input.association);
   const context = () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent });
@@ -30,6 +30,15 @@ async function fixture(extraSource = false, routingOnly = false) {
 }
 
 describe('same-session native Screener coordination', () => {
+  it('forwards the selected 117-second proof freshness while the original 900-second route remains valid', async () => {
+    const f = await fixture(false, false, { maxEvidenceAgeSeconds: 117, maxValiditySeconds: 900 });
+    await f.coordinator.completionPolicy.complete(f.request); const facts = await f.coordinator.qualifySaved(f.input.saved);
+    expect(facts.remainingMilliseconds!()).toBe(117_000); f.setElapsed(117_000); f.setRouteElapsed(117_000);
+    expect(facts.remainingMilliseconds!()).toBe(0); expect(() => facts.assertReady()).toThrow('expired');
+    expect(f.coordinator.routeAllowed(f.request.target, { url: f.input.run.selection.screenerUrl, version: f.input.run.selection.screenerVersion })).toBe(true);
+    expect(f.retained).toHaveBeenCalledOnce(); expect(f.associated).toHaveBeenCalledOnce(); f.coordinator.dispose();
+  });
+
   it('passes only the issued association for an unsigned saved candidate', async () => {
     const f = await fixture(false, true);
     await f.coordinator.completionPolicy.complete(f.request);

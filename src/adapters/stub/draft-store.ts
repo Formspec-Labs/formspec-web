@@ -1,3 +1,4 @@
+import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import type { DraftKey, DraftStore, FormResponse } from '../../ports/draft-store.ts';
 
 /**
@@ -13,7 +14,8 @@ export function stubDraftStore(): DraftStore {
     async load(key) {
       return store.get(keyStr(key));
     },
-    async save(key, response) {
+    async save(key, response, options) {
+      if (options?.assertBeforeDispatch) assertSynchronousGuard(options.assertBeforeDispatch);
       store.set(keyStr(key), response);
     },
     async list(subjectRef) {

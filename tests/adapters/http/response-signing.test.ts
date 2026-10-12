@@ -1,3 +1,4 @@
+import type { HttpResponseSigningPolicy } from '../../../src/adapters/http/response-signing.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { detachedSignatureProtectedHeader, encodeCoseSign1 } from '@formspec-org/integrity-cose';
 import { canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
@@ -52,7 +53,7 @@ function saveAction(method: 'POST' | 'PATCH') {
 const prepareAction = saveAction('PATCH');
 
 type CandidateGate = (input: { saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }) => Promise<{ assertCurrent: () => void }>;
-async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean, preSignCandidate?: CandidateGate, persistentSaving = true) {
+async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean, preSignCandidate?: CandidateGate, persistentSaving = true, prePrepareCandidate?: HttpResponseSigningPolicy['prePrepareCandidate']) {
   const draftId = earlyCaseCreation === undefined ? 'owned-draft' : 'draft_01a11ca26d05793192f9f01f97ba9c0b';
   const draftKey: DraftKey = authenticated ? { ...key, subjectRef: 'oidc:owner' }
     : anonymousSubject ? { ...key, subjectRef: 'anon:owner' } : key;
@@ -114,7 +115,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   });
   const now = vi.fn(() => '2026-10-07T03:00:00.000Z');
   const policy = { validateResponse: validateCanonicalFormResponse,
-    validateContent: await loadCanonicalSigningContentValidator(), signingProfileDigest: vi.fn(profileDigest), keyId: 'test-key', now, ...(preSignCandidate ? { preSignCandidate } : {}) };
+    validateContent: await loadCanonicalSigningContentValidator(), signingProfileDigest: vi.fn(profileDigest), keyId: 'test-key', now, ...(preSignCandidate ? { preSignCandidate } : {}), ...(prePrepareCandidate ? { prePrepareCandidate } : {}) };
   const statePolicy = { definition: structuredClone(definition), formVersionId: 'publication-1', localeDocuments: [{
     $formspecLocale: '2.0' as const, url: response.displayedLocale!.url, version: response.displayedLocale!.version,
     locale: response.displayedLocale!.locale, target: { kind: 'definition' as const, url: definition.url }, strings: {},
@@ -165,6 +166,40 @@ async function profileDigest(response: FormResponse): Promise<string> {
 }
 
 describe('cohort-owned Response Prepare and Sign', () => {
+  it('returns the committed Prepare receipt when freshness expires after dispatch and before readback', async () => {
+    let expired = false; let guarded = 0; let committed = false; let release!: () => void;
+    const readback = new Promise<void>(resolve => { release = resolve; });
+    const test = await fixture(false, true, false, undefined, undefined, true, async ({ assertCurrent }) => ({
+      assertCurrent: () => { assertCurrent(); guarded++; if (expired) throw new Error('facts expired'); },
+    }));
+    const saved = await test.save(); const count = test.state.patchCount;
+    test.state.mutateSave = () => { expired = true; committed = true; test.state.getGate = readback; };
+    const preparing = test.prepare(); await vi.waitFor(() => expect(committed).toBe(true)); release();
+    const prepared = await preparing;
+    expect(prepared.draft.version).toBe(saved.draft.version + 1); expect(test.state.patchCount).toBe(count + 1); expect(guarded).toBe(1);
+    expect(prepared.response).toEqual(test.state.response);
+  });
+  it('refuses a configured Prepare provider without its required dispatch assertion', async () => {
+    const test = await fixture(false, true, false, undefined, undefined, true, async () => undefined as unknown as { assertCurrent: () => void });
+    const saved = await test.save(); const count = test.state.patchCount;
+    await expect(test.prepare()).rejects.toThrow('dispatch assertion');
+    expect(test.state.patchCount).toBe(count); expect(test.state.version).toBe(saved.draft.version);
+  });
+  it('refuses Prepare at dispatch when facts expire during credential resolution, preserving the owned revision', async () => {
+    let expired = false; let release!: () => void; let gateReached = false;
+    const credentials = new Promise<void>(resolve => { release = resolve; });
+    const test = await fixture(false, true, false, undefined, undefined, true, async ({ saved, assertCurrent }) => {
+      expect(saved.draft.version).toBe(test.state.version);
+      test.state.tokenGate = credentials; gateReached = true;
+      return { assertCurrent: () => { assertCurrent(); if (expired) throw new Error('facts expired before dispatch'); } };
+    });
+    const saved = await test.save(); const count = test.state.patchCount;
+    const preparing = test.prepare(); const refused = expect(preparing).rejects.toThrow('Preparation differs');
+    await vi.waitFor(() => expect(gateReached).toBe(true)); expired = true; release(); await refused;
+    expect(test.state.patchCount).toBe(count); expect(test.state.version).toBe(saved.draft.version);
+    expect(test.state.response).toEqual(saved.response);
+  });
+
   it('restores the unsigned saved handle from one qualified owned read without a write', async () => {
     const test = await fixture(true, true); await test.save();
     const before = test.requests.length;

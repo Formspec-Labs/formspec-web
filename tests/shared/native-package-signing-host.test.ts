@@ -589,6 +589,22 @@ describe('generic native package signing session', () => {
     expect(test.host.getSnapshot().controller?.prepared).toBeDefined(); expect(test.invalidateAuthority).not.toHaveBeenCalled();
     await expect(test.invoke(lease, 'save')).rejects.toThrow('retired'); test.host.dispose();
   });
+  it('rejects a dedicated Prepare path aliased to application lifecycle readiness', () => {
+    const test = fixture(); test.host.dispose();
+    Object.assign(test.policy.definition.instances!.readiness.data!, { canStart: false, started: false, persistentSaving: false });
+    test.policy.applicationReadiness = { instance: 'readiness', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' };
+    test.policy.controller.roles.startApplication = { ...test.policy.controller.roles.saveInitial! };
+    test.policy.controller.applicationLifecycle = { capabilities: { earlyCaseCreation: true, persistentSaving: true, formVersionId: test.policy.publication.formVersionId },
+      load: vi.fn(async () => undefined), start: vi.fn(async () => { throw new Error('unused'); }) };
+    test.policy.readiness.prepareReadyPath = 'canStart';
+    expect(() => createNativePackageSigningHost(test.policy)).toThrow('native-prepare-readiness-unadmitted'); test.engine.dispose();
+  });
+  it.each(['missing', 'non-boolean', 'read-only', 'colliding'] as const)('rejects a %s dedicated Prepare readiness path', async mode => {
+    const test = fixture(); test.host.dispose(); test.policy.readiness.prepareReadyPath = mode === 'colliding' ? 'ready' : 'prepareReady';
+    if (mode !== 'missing') Object.assign(test.policy.definition.instances!.readiness.data!, { prepareReady: mode === 'non-boolean' ? 'false' : false });
+    if (mode === 'read-only') test.policy.definition.instances!.readiness.readonly = true;
+    expect(() => createNativePackageSigningHost(test.policy)).toThrow('readiness'); test.engine.dispose();
+  });
   it('captures labels and keeps readiness scratch outside Response answers without a recreation loop', async () => {
     const test = fixture(); const lease = await test.prepared();
     const review = await test.reviewData(); expect(review.presentation.fields.fullName.label).toBe('Full name');
@@ -795,12 +811,12 @@ describe('native authored host event routing', () => {
 
 // Synthetic native lifetime tests use maintained public engines, not Source proof qualification.
 describe('explicit reviewed-candidate facts renewal', () => {
-  function nativeFixture(currentCheck = false) {
+  function nativeFixture(currentCheck = false, lifetimeMilliseconds = 90_000, reportsLifetime = true) {
     let now = 0; let data = { qualified: true, evidenceRef: 'proof-one' }; let refuse = false;
     let hold: Promise<void> | undefined; let activeGeneration = 0;
     let runId = 'fresh-run-original';
     const qualify = vi.fn(async (saved: SavedResponseDraft, lifetime: { assertCurrent: () => void }) => {
-      const issuedData = structuredClone(data); const deadline = now + 90_000; const generation = ++activeGeneration;
+      const issuedData = structuredClone(data); const deadline = now + lifetimeMilliseconds; const generation = ++activeGeneration;
       await hold; lifetime.assertCurrent(); if (refuse) throw new Error('Source refusal');
       const view = { version: 1, purpose: 'formspec.instance.hydrate', operation: 'hydrate',
         scope: {}, owner: { subjectRef: saved.actor.id }, selection: { definitionUrl: saved.response.definitionUrl, definitionVersion: saved.response.definitionVersion },
@@ -810,11 +826,13 @@ describe('explicit reviewed-candidate facts renewal', () => {
           issuedAt: String(now), expiresAt: String(deadline), evidenceRef: String(now), dataHash: 'test' }] } as unknown as HydratedEvaluationCandidate['view'];
       const current = () => { lifetime.assertCurrent(); if (generation !== activeGeneration) throw new Error('facts-generation-retired'); };
       const check = () => { current(); if (now >= deadline) throw new Error('worker-expired'); };
-      return { view, ...(currentCheck && saved.response.authoredSignatures?.length ? { nativeCurrentCheck: { selectionHash: `sha256:${'a'.repeat(64)}`, runId, runRevision: 1 } } : {}), assertCurrent: check, assertReady: check, refreshRequired: () => { current(); return now >= deadline; } };
+      return { view, ...(currentCheck && saved.response.authoredSignatures?.length ? { nativeCurrentCheck: { selectionHash: `sha256:${'a'.repeat(64)}`, runId, runRevision: 1 } } : {}), assertCurrent: check, assertReady: check, ...(reportsLifetime ? { remainingMilliseconds: () => { current(); return Math.max(0, deadline - now); } } : {}), refreshRequired: () => { current(); return now >= deadline; } };
     });
     const test = fixture(true, undefined, policy => {
       policy.definition.binds = [{ path: 'fullName', constraint: "@instance('facts').qualified", constraintMessage: 'Photo needs correction' }];
       policy.definition.instances!.facts = { readonly: true, source: 'urn:test:facts', schema: { qualified: 'boolean', evidenceRef: 'string' } };
+      Object.assign(policy.readiness, { prepareReadyPath: 'prepareReady' });
+      Object.assign(policy.definition.instances!.readiness.data!, { prepareReady: false });
       policy.candidateHydration = { qualifySaved: qualify, retireFacts: vi.fn(), dispose: vi.fn() };
       if (currentCheck) policy.buildHandoff = async response => ({ ...sampleIntakeHandoff,
         definitionRef: { url: response.definitionUrl, version: response.definitionVersion },
@@ -822,6 +840,11 @@ describe('explicit reviewed-candidate facts renewal', () => {
         extensions: { 'x-formspec-response': response } });
       const signRole = policy.controller.roles.sign!;
       const document = signRole.document;
+      const saveRole = policy.controller.roles.saveInitial!;
+      document.actions.push({ ...structuredClone(document.actions.find(action => action.id === 'save')!), id: 'save-owned',
+        effects: [{ type: 'serviceRequest', requestRef: 'save-owned', idempotencyKey: '@invocation.id' }] });
+      document['x-formspec-runtime']!.requests.push({ ...structuredClone(document['x-formspec-runtime']!.requests.find(request => request.id === 'save')!), id: 'save-owned' });
+      policy.controller.roles.saveOwned = { ...saveRole, actionRef: 'save-owned', requestRef: 'save-owned' };
       const signAction = document.actions.find(action => action.id === 'sign')!;
       document.actions.push({ ...structuredClone(signAction), id: 'submit', effects: [{ type: 'serviceRequest', requestRef: 'submit', idempotencyKey: '@invocation.id' }] });
       const request = document['x-formspec-runtime']!.requests.find(request => request.id === 'sign')!;
@@ -943,6 +966,124 @@ describe('explicit reviewed-candidate facts renewal', () => {
     visit.dispose();
     await expect(ports.retrySigningResult!()).rejects.toThrow('native-visit-retired');
     expect(test.sign).toHaveBeenCalledTimes(1); test.cleanup();
+  });
+  it('restores healthy Prepare availability after a refused successor Save without retiring its facts', async () => {
+    const test = nativeFixture(); const lease = await test.attach(); await test.invoke(lease, 'save');
+    let release!: () => void; const saved = structuredClone(test.host.getSnapshot().controller!.saved!);
+    test.saveDraft.mockImplementationOnce(async () => { await new Promise<void>(resolve => { release = resolve; }); throw new Error('Save refused'); });
+    const saving = test.invoke(lease, 'save-owned'); await vi.waitFor(() => expect(release).toBeDefined());
+    await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-facts-pending-save-required');
+    expect(test.host.getSnapshot().nativeReadiness).toBe('ready'); release(); await saving;
+    expect(test.host.getSnapshot().controller!.saved).toEqual(saved);
+    expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(true);
+    await test.invoke(lease, 'prepare'); expect(test.prepare).toHaveBeenCalledOnce(); lease.dispose(); test.cleanup();
+  });
+  it('keeps a successor Save available while removing stale Prepare availability immediately', async () => {
+    const test = nativeFixture(); const lease = await test.attach(); await test.invoke(lease, 'save');
+    const saved = structuredClone(test.host.getSnapshot().controller!.saved!); let release!: () => void;
+    const original = test.saveDraft.getMockImplementation()!;
+    test.saveDraft.mockImplementationOnce(async input => { await new Promise<void>(resolve => { release = resolve; }); return original(input); });
+    const saving = test.invoke(lease, 'save-owned'); await vi.waitFor(() => expect(release).toBeDefined());
+    expect(test.host.getSnapshot().controller!.saved).toEqual(saved);
+    expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(false);
+    expect(test.replacements.at(-1)!.getInstanceData('readiness', 'ready')).toBe(true);
+    await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-facts-pending-save-required');
+    expect(test.prepare).not.toHaveBeenCalled(); release(); await saving;
+    expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(true);
+    lease.dispose(); test.cleanup();
+  });
+  it.each(['saved', 'prepared', 'pending', 'signed'] as const)('expires the selected 117-second facts while preserving %s receipts and review', async stage => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const test = nativeFixture(false, 117_000); const lease = await test.attach();
+    try {
+      await test.invoke(lease, 'save');
+      if (stage !== 'saved') await test.invoke(lease, 'prepare');
+      if (stage === 'pending' || stage === 'signed') {
+        await test.assent();
+        if (stage === 'pending') test.sign.mockRejectedValueOnce(new Error('Sign reply unavailable'));
+        await test.signAction();
+      }
+      const snapshot = structuredClone(test.host.getSnapshot().controller); const runtime = test.host.getSnapshot().runtime;
+      const calls = test.qualify.mock.calls.length;
+      test.advance(117_000); await vi.advanceTimersByTimeAsync(117_000);
+      expect(test.host.getSnapshot().nativeReadiness).toBe('expired');
+      expect(test.host.getSnapshot().controller).toEqual(snapshot);
+      expect(test.host.getSnapshot().runtime).toBe(runtime); expect(test.qualify).toHaveBeenCalledTimes(calls);
+      expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(false);
+      expect(test.replacements.at(-1)!.getInstanceData('readiness', 'ready')).toBe(true);
+      if (stage === 'pending') expect(test.host.getSnapshot().controller!.retrySignAvailable).toBe(true);
+    } finally { lease.dispose(); test.cleanup(); vi.useRealTimers(); }
+  });
+  it('fences an old queued expiry callback after a successor candidate replaces its facts', async () => {
+    const timers = vi.spyOn(globalThis, 'setTimeout'); const test = nativeFixture(false, 117_000);
+    const lease = await test.attach();
+    try {
+      await test.invoke(lease, 'save'); const old = timers.mock.calls.find(call => call[1] === 117_000)![0] as () => void;
+      test.advance(500); await test.invoke(lease, 'save-owned'); const saved = test.host.getSnapshot().controller!.saved;
+      old(); expect(test.host.getSnapshot().nativeReadiness).toBe('ready');
+      expect(test.host.getSnapshot().controller!.saved).toBe(saved);
+      expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(true);
+    } finally { lease.dispose(); test.cleanup(); timers.mockRestore(); }
+  });
+  it('captures exact saved facts for the Prepare dispatch guard while permitting the ordinary completed status change', async () => {
+    const test = nativeFixture(); const lease = await test.attach(); await test.invoke(lease, 'save');
+    const saved = structuredClone(test.host.getSnapshot().controller!.saved!); const response = { ...structuredClone(saved.response), status: 'completed' as const };
+    const input = { saved, response, assertCurrent() {} };
+    const guard = await test.host.prePrepareCandidate!(input); guard.assertCurrent();
+    for (const changed of [
+      { ...input, saved: { ...saved, draft: { ...saved.draft, version: saved.draft.version + 1 } } },
+      { ...input, response: { ...response, data: { ...response.data, injected: true } } },
+      { ...input, response: { ...response, displayedLocale: { locale: 'es', url: 'urn:changed', version: 'changed' } } },
+    ]) await expect(test.host.prePrepareCandidate!(changed)).rejects.toThrow('native-prepare-candidate-mismatch');
+    test.advance(90_000); expect(() => guard.assertCurrent()).toThrow('native-facts-pending-save-required');
+    expect(test.host.getSnapshot().controller!.saved).toEqual(saved); expect(test.prepare).not.toHaveBeenCalled();
+    lease.dispose(); test.cleanup();
+  });
+  it.each([undefined, NaN, -1])('treats a malformed reported lifetime %s as unavailable without inventing nonexpiry', async value => {
+    const test = nativeFixture(); const original = test.qualify.getMockImplementation()!;
+    test.qualify.mockImplementationOnce(async (saved, lifetime) => ({ ...await original(saved, lifetime), remainingMilliseconds: () => value as number }));
+    const lease = await test.attach(); await test.invoke(lease, 'save');
+    expect(test.host.getSnapshot().nativeReadiness).toBe('pending');
+    expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(false);
+    await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-facts-pending-save-required'); expect(test.prepare).not.toHaveBeenCalled();
+    lease.dispose(); test.cleanup();
+  });
+  it('keeps unknown lifetime conservative for authored availability while preserving supported imperative currentness', async () => {
+    const test = nativeFixture(false, 90_000, false); const lease = await test.attach();
+    try {
+      await test.invoke(lease, 'save'); expect(test.host.getSnapshot().nativeReadiness).toBe('ready');
+      expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(false);
+      await test.invoke(lease, 'prepare'); expect(test.prepare).toHaveBeenCalledOnce();
+    } finally { lease.dispose(); test.cleanup(); }
+  });
+  it('accepts explicit nonexpiring lifetime without scheduling an expiry', async () => {
+    const test = nativeFixture(false, Infinity); const lease = await test.attach();
+    try {
+      await test.invoke(lease, 'save'); test.advance(1_000_000);
+      expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(true);
+      await test.invoke(lease, 'prepare'); expect(test.prepare).toHaveBeenCalledOnce();
+    } finally { lease.dispose(); test.cleanup(); }
+  });
+  it('keeps Prepare unavailable while a committed Save waits for qualification', async () => {
+    const test = nativeFixture(); const lease = await test.attach(); let release!: () => void;
+    test.hold(new Promise<void>(resolve => { release = resolve; }));
+    const saving = test.invoke(lease, 'save'); await vi.waitFor(() => expect(test.qualify).toHaveBeenCalledOnce());
+    expect(test.host.getSnapshot().controller!.saved).toBeDefined();
+    expect(test.engine.getInstanceData('readiness', 'ready')).toBe(true);
+    expect(test.engine.getInstanceData('readiness', 'prepareReady')).toBe(false);
+    await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-facts-pending-save-required');
+    expect(test.prepare).not.toHaveBeenCalled(); release(); await saving;
+    expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(true);
+    lease.dispose(); test.cleanup();
+  });
+  it('refuses expired facts before Prepare writes and preserves the exact saved checkpoint', async () => {
+    const test = nativeFixture(); const lease = await test.attach(); await test.invoke(lease, 'save');
+    const saved = structuredClone(test.host.getSnapshot().controller!.saved!); test.advance(90_000);
+    await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-facts-pending-save-required');
+    expect(test.prepare).not.toHaveBeenCalled(); expect(test.host.getSnapshot().controller!.saved).toEqual(saved);
+    expect(test.replacements.at(-1)!.getInstanceData('readiness', 'ready')).toBe(true);
+    expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(false);
+    lease.dispose(); test.cleanup();
   });
   it('renews expired exact photo facts after two minutes of reading, preserving completed review', async () => {
     const test = nativeFixture(); await test.prepared(); await test.assent(); const before = test.qualify.mock.calls.length;

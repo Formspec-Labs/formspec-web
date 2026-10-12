@@ -24,6 +24,7 @@ export interface InitialProofWorkerLifetime {
 }
 export interface CurrentInitialProof {
   readonly outcome: InitialProofOutcome;
+  readonly remainingMilliseconds: () => number;
   /** Call at every awaited replacement/adoption boundary, including final installation. */
   readonly assertCurrent: () => void;
 }
@@ -132,7 +133,7 @@ export class InitialMixedProofWorkerClient {
       check();
       // This is current verified data, not a signing or storage capability. Host adoption
       // must retain this guard through the maintained replacement/lease exchange path.
-      return Object.freeze({ outcome, assertCurrent: () => { check(); } });
+      return Object.freeze({ outcome, assertCurrent: () => { check(); }, remainingMilliseconds: check });
     } finally {
       if (timer !== undefined) clearTimeout(timer);
       worker?.terminate();

@@ -29,7 +29,7 @@ export interface NativePackageSigningConfig {
   applicationLifecycle?: { instance: string; canStartPath: string; startedPath: string; persistentSavingPath: string };
   bindings: Readonly<Record<string, { catalogRef: string; sourceRef: string }>>;
   /** Syntax only; the host must qualify writable paths against the admitted Definition. */
-  readiness: { instance: string; readyPath: string; ownedPath: string };
+  readiness: { instance: string; readyPath: string; ownedPath: string; prepareReadyPath?: string };
 }
 
 const roles = { saveInitial: true, saveOwned: true, prepare: true, sign: true, submit: true, paper: true } satisfies Record<Exclude<ResponseActionRole, 'startApplication'>, true>;
@@ -116,9 +116,9 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
     closed(binding, ['catalogRef', 'sourceRef']); absoluteUrl(binding.catalogRef); nonblank(binding.sourceRef);
     unique(sources, JSON.stringify([binding.catalogRef, binding.sourceRef]));
   }
-  closed(config.readiness, ['instance', 'readyPath', 'ownedPath']);
+  closed(config.readiness, ['instance', 'readyPath', 'ownedPath', ...(config.readiness && typeof config.readiness === 'object' && Object.hasOwn(config.readiness, 'prepareReadyPath') ? ['prepareReadyPath'] : [])]);
   Object.values(config.readiness).forEach(nonblank);
-  if (config.readiness.readyPath === config.readiness.ownedPath) invalid();
+  if (new Set([config.readiness.readyPath, config.readiness.ownedPath, ...(config.readiness.prepareReadyPath === undefined ? [] : [config.readiness.prepareReadyPath])]).size !== (config.readiness.prepareReadyPath === undefined ? 2 : 3)) invalid();
   return config as unknown as NativePackageSigningConfig;
 }
 

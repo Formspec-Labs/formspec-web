@@ -169,7 +169,8 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
       const facts = await operation.wait(hydration.hydrate(hydrationCandidate));
       operation.assertCurrent(); facts.assertCurrent();
       if (nativeCurrentCheck && canonicalize(facts.nativeCurrentCheck) !== canonicalize(nativeCurrentCheck)) throw new Error('Native current check proof selector mismatch');
-      return Object.freeze({ view: facts.view, ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}),
+      return Object.freeze({ view: facts.view,
+        ...(facts.remainingMilliseconds ? { remainingMilliseconds: () => { operation.assertCurrent(); return facts.remainingMilliseconds!(); } } : {}), ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}),
         ...(facts.refreshRequired ? { refreshRequired: () => { operation.assertCurrent(); return facts.refreshRequired!(); } } : {}),
         assertCurrent: () => { operation.assertCurrent(); facts.assertCurrent(); },
         assertReady: () => { operation.assertCurrent(); facts.assertReady(); } });
