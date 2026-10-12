@@ -19,6 +19,10 @@ import { isUuidV7IdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { createHttpAdapterCohort } from '../../src/adapters/http/cohort.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
+import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts';
+import type { ScreenerAssociation, ScreenerRetention } from '../../src/ports/screener-retention.ts';
+import type { ScreenerHydration } from '../../src/ports/screener-hydration.ts';
+import type { SurfaceScreenerCompletionRequest } from '@formspec-org/surface-react';
 
 beforeAll(() => initFormspecEngine());
 const hashResponse = async (response: FormResponse) => createHash('sha256').update(canonicalResponseHandoffBytes(response)).digest('hex');
@@ -1014,5 +1018,151 @@ describe('explicit reviewed-candidate facts renewal', () => {
     test.host.dispose(); release();
     expect((await a).status).toBe('failed'); expect((await b).status).toBe('failed'); expect(test.sign).not.toHaveBeenCalled();
     test.cleanup();
+  });
+});
+
+// Restored screening uses the real coordinator. This fake owns only immutable association storage and qualified hydration ports.
+describe('restored unsigned Screener checkpoints', () => {
+  async function restoredFixture() {
+    const issued = await hydrationFixture();
+    const associationStore = new Map<string, ScreenerAssociation>();
+    let holdHydration: Promise<void> | undefined;
+    let authorityCurrent = true;
+    const authority = new AbortController();
+    let currentRun = issued.input.run;
+    const retain = vi.fn<ScreenerRetention['retain']>(async () => currentRun);
+    const associate = vi.fn<ScreenerRetention['associate']>(async request => {
+      request.assertCurrent();
+      const run = request.run.run;
+      if (request.saved.actor.id !== run.owner.subjectRef) throw new Error('Owner differs');
+      const value: ScreenerAssociation = { scope: run.scope, owner: run.owner, draftId: request.saved.draft.id,
+        draftVersion: request.saved.draft.version, candidateHash: await computeJcsSha256Digest(request.saved.response),
+        selectionHash: run.selectionHash, runId: run.runId, runRevision: run.revision,
+        evidenceHash: run.evidenceHash, associatedAt: issued.input.association.associatedAt };
+      const key = JSON.stringify([value.scope, value.draftId, value.draftVersion]);
+      const existing = associationStore.get(key);
+      if (existing && JSON.stringify({ ...existing, associatedAt: '' }) !== JSON.stringify({ ...value, associatedAt: '' })) {
+        throw new Error('Immutable association conflict');
+      }
+      if (!existing) associationStore.set(key, structuredClone(value));
+      return structuredClone(existing ?? value);
+    });
+    const hydrate = vi.fn<ScreenerHydration['hydrate']>(async request => {
+      await holdHydration; request.assertCurrent();
+      const view = { ...issued.view, draftId: request.saved.draft.id, draftVersion: request.saved.draft.version,
+        candidateHash: await computeJcsSha256Digest(request.saved.response), owner: request.run.run.owner,
+        results: issued.view.results.map(result => ({ ...result, data: { eligible: true, evidenceRef: request.run.run.evidenceRef } })) };
+      return { view, ...(request.nativeCurrentCheck ? { nativeCurrentCheck: request.nativeCurrentCheck } : {}),
+        assertCurrent: request.assertCurrent, assertReady: request.assertCurrent };
+    });
+    const refresh = vi.fn<NonNullable<NativePackageSigningHostPolicy['hostEvents']>[number]['handle']>(async context => { await context.refreshSavedFacts(); });
+    const test = fixture(true, undefined, policy => {
+      const initial = policy.controller.roles.saveInitial!;
+      initial.document.actions.push({ id: 'refresh-checks', intent: 'review', validation: { profile: 'off', blocking: 'non-blocking', persistence: 'none' },
+        effects: [{ type: 'hostEvent', eventName: 'refresh-checks' }] });
+      policy.hostEvents = [{ artifactRef: 'urn:test:actions', actionRef: 'refresh-checks', eventName: 'refresh-checks', handle: refresh }];
+      const ownedAction = structuredClone(initial.document.actions.find(action => action.id === initial.actionRef)!);
+      ownedAction.id = 'save-owned';
+      ownedAction.effects = [{ type: 'serviceRequest', requestRef: 'save-owned', idempotencyKey: '@invocation.id' }];
+      initial.document.actions.push(ownedAction);
+      const ownedRequest = structuredClone(initial.document['x-formspec-runtime']!.requests.find(request => request.id === initial.requestRef)!);
+      ownedRequest.id = 'save-owned'; ownedRequest.request.method = 'PATCH'; ownedRequest.request.pathTemplate = '/drafts/{draftId}';
+      ownedRequest.request.pathBindings = { draftId: { from: 'input', path: 'draftId' } };
+      initial.document['x-formspec-runtime']!.requests.push(ownedRequest);
+      policy.controller.roles.saveOwned = { ...initial, actionRef: 'save-owned', requestRef: 'save-owned' };
+      currentRun = { ...currentRun, selection: { ...currentRun.selection, evaluationSelection: {
+        ...currentRun.selection.evaluationSelection, definitionUrl: policy.definition.url,
+        definitionVersion: policy.definition.version, formId: policy.publication.formId, formVersionId: policy.publication.formVersionId } },
+        run: { ...currentRun.run, owner: { ...currentRun.run.owner, subjectRef: 'server-actor',
+          authenticated: { ...currentRun.run.owner.authenticated, subjectRef: 'server-actor' } } } };
+      policy.nativeScreener = { selectionKey: 'checkpoint-selection', elapsedNow: () => 0, retention: { retain, associate }, hydration: { hydrate },
+        context: () => ({ identity: issued.input.identity, signal: authority.signal, assertCurrent() { if (!authorityCurrent) throw new Error('Authority retired'); } }) };
+    });
+    const complete = async (host: ReturnType<typeof createNativePackageSigningHost>) => {
+      const request: SurfaceScreenerCompletionRequest = { completionId: currentRun.run.runId, selectionKey: 'checkpoint-selection',
+        document: { $formspecScreener: '1.0', url: 'urn:test:screener', version: '1', title: 'Screen', items: [], evaluation: [] },
+        screenerRef: { url: 'urn:test:screener', version: '1' }, answers: { flag: false }, target: 'urn:test:target',
+        determination: { $formspecDetermination: '1.0', screener: { url: 'urn:test:screener', version: '1' }, timestamp: 'untrusted',
+          evaluationVersion: '1', status: 'completed', overrides: { matched: [], halted: false }, phases: [], inputs: {} },
+        evaluationTime: 'untrusted', allowedTargets: ['urn:test:target'], route: { surfaceId: 'surface', routeId: 'route', routeClass: undefined, params: {} },
+        slotId: 'screener', visitId: 'visit', runtimeGeneration: 'render', signal: new AbortController().signal };
+      expect(await host.screenerCompletion!.complete(request)).toEqual({ status: 'accepted' });
+    };
+    await complete(test.host);
+    const first = await test.attach(); await test.invoke(first, 'save');
+    expect(test.host.getSnapshot().nativeReadiness).toBe('ready');
+    const saved = structuredClone(test.host.getSnapshot().controller!.saved!);
+    const originalAssociation = structuredClone([...associationStore.values()][0]);
+    first.dispose(); test.host.dispose(); test.engine.dispose();
+    currentRun = { ...currentRun, run: { ...currentRun.run, runId: 'fresh-run', evidenceRef: 'urn:test:fresh-evidence', evidenceHash: 'sha256:' + 'f'.repeat(64) } };
+    const host = createNativePackageSigningHost(test.policy);
+    const engine = createFormEngine(test.policy.definition); engine.loadResponseData(saved.response.data as Parameters<typeof engine.loadResponseData>[0]);
+    const replacements: ReturnType<typeof createFormEngine>[] = [];
+    const application = { caseLedgerId: 'urn:test:case', caseReference: 'case-reference', draftRef: `urn:formspec:draft:${saved.draft.id}`, status: 'in-progress' as const };
+    await complete(host); associate.mockClear(); hydrate.mockClear();
+    const configure = () => host.configureRuntime({ engine, definition: test.policy.definition, draftKey: saved.draftKey,
+      claim: null, activeLocale: 'en', restoredResponse: saved.response, restoredSavedDraft: saved, restoredApplication: application,
+      exchangeEngine: async (request: RespondentEngineExchange) => { request.assertCurrent(); request.adopt(); replacements.push(request.engine as ReturnType<typeof createFormEngine>); } });
+    return { ...test, host, engine, saved, application, originalAssociation, associationStore, associate, hydrate, configure,
+      holdHydration: (hold: Promise<void>) => { holdHydration = hold; }, retireAuthority: () => { authorityCurrent = false; },
+      cleanup() { host.dispose(); engine.dispose(); replacements.forEach(value => value.dispose()); test.replacements.forEach(value => value.dispose()); } };
+  }
+  it('keeps the exact restored version historical across all entry paths, then qualifies its normal Save successor', async () => {
+    const test = await restoredFixture();
+    try {
+      const lease = await test.configure(); await lease.afterMount!(); await test.host.qualifyCurrentVisit!();
+      expect(test.associate).not.toHaveBeenCalled(); expect(test.hydrate).not.toHaveBeenCalled();
+      expect(test.host.getSnapshot().nativeReadiness).toBe('needs-save');
+      expect(test.host.getSnapshot().controller).toMatchObject({ saved: test.saved, owned: true });
+      expect(test.host.getSnapshot().application).toEqual(test.application);
+      expect(test.engine.getInstanceData('readiness', 'ready')).toBe(true);
+      expect(test.engine.getInstanceData('readiness', 'owned')).toBe(true);
+      await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-facts-pending-save-required');
+      await expect(test.invoke(lease, 'refresh-checks')).rejects.toThrow('native-host-event-handler-failed');
+      await expect(test.host.preSignCandidate!({ saved: test.saved, operationId: 'explicit-pre-sign', assertCurrent() {} })).rejects.toThrow('native-restored-screener-save-required');
+      expect(test.associate).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled();
+      expect(test.host.getSnapshot().nativeReadiness).toBe('needs-save');
+      await test.invoke(lease, 'save-owned');
+      const successor = test.host.getSnapshot().controller!.saved!;
+      expect(successor.draft.id).toBe(test.saved.draft.id); expect(successor.draft.version).toBe(test.saved.draft.version + 1);
+      expect(successor.response.id).toBe(test.saved.response.id); expect(successor.response.data).toEqual(test.saved.response.data);
+      expect(successor.response).toEqual(test.saveDraft.mock.calls.at(-1)![0].response); expect(successor.actor).toEqual(test.saved.actor);
+      expect(test.host.getSnapshot().application).toEqual(test.application); expect(test.host.getSnapshot().nativeReadiness).toBe('ready');
+      expect(test.associate).toHaveBeenCalledOnce(); expect(test.associate.mock.calls[0][0].saved.draft.version).toBe(successor.draft.version);
+      expect([...test.associationStore.values()]).toContainEqual(test.originalAssociation);
+      expect([...test.associationStore.values()].find(value => value.draftVersion === successor.draft.version)?.runId).toBe('fresh-run');
+      await test.invoke(lease, 'prepare'); expect(test.prepare).toHaveBeenCalledOnce(); lease.dispose();
+    } finally { test.cleanup(); }
+  });
+  it('preserves the historical checkpoint and no-I/O guard after a failed Save and a returning visit', async () => {
+    const test = await restoredFixture();
+    try {
+      const lease = await test.configure(); test.saveDraft.mockRejectedValueOnce(new Error('Save unavailable'));
+      await test.invoke(lease, 'save-owned');
+      expect(test.host.getSnapshot().controller!.saved).toEqual(test.saved);
+      expect(test.host.getSnapshot().nativeReadiness).toBe('needs-save');
+      await lease.afterMount!(); await test.host.qualifyCurrentVisit!();
+      lease.dispose(); const returning = await test.configure(); await returning.afterMount!();
+      expect(test.associate).not.toHaveBeenCalled(); expect(test.hydrate).not.toHaveBeenCalled();
+      expect([...test.associationStore.values()]).toEqual([test.originalAssociation]);
+      expect(test.host.getSnapshot().controller!.saved).toEqual(test.saved);
+      expect(test.engine.getResponse({ profile: 'off' }).data).toEqual(test.saved.response.data);
+      returning.dispose();
+    } finally { test.cleanup(); }
+  });
+  it('keeps a saved successor checkpoint while retired authority refuses its pending facts', async () => {
+    const test = await restoredFixture();
+    try {
+      const lease = await test.configure(); let release!: () => void;
+      test.holdHydration(new Promise<void>(resolve => { release = resolve; }));
+      const saving = test.invoke(lease, 'save-owned'); await vi.waitFor(() => expect(test.hydrate).toHaveBeenCalledOnce());
+      test.retireAuthority(); release(); await saving;
+      expect(test.host.getSnapshot().controller!.saved!.draft.version).toBe(test.saved.draft.version + 1);
+      expect(test.host.getSnapshot().controller!.saved!.response.data).toEqual(test.saved.response.data);
+      expect(test.host.getSnapshot().nativeReadiness).not.toBe('ready');
+      expect(test.host.getSnapshot().runtime).toBeUndefined();
+      expect([...test.associationStore.values()]).toContainEqual(test.originalAssociation);
+      lease.dispose();
+    } finally { test.cleanup(); }
   });
 });

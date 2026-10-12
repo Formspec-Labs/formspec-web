@@ -95,7 +95,7 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
       </div>
     </SessionStatus> : null}
     {state.nativeReadiness && state.nativeReadiness !== 'ready' ? <SessionStatus>
-      <p role="status" lang="en">{state.nativeReadiness === 'needs-save' ? 'Updated answers need saving.' : 'Checks pending.'}</p>
+      <p role="status" lang="en">{state.nativeReadiness === 'needs-save' ? 'Save progress to refresh checks.' : 'Checks pending.'}</p>
     </SessionStatus> : null}
     <SurfaceApp screenerCompletion={props.screenerCompletion ?? props.host.screenerCompletion} activeLocale={props.screenerLocale} localeDocuments={locales} bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate} resolveNavigationHref={props.resolveNavigationHref}
     staticAssetResolver={props.host.staticAssetResolver}

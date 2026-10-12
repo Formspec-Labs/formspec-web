@@ -232,6 +232,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   let qualificationSequence = 0;
   let nativeReadiness: 'pending' | 'ready' | 'needs-save' | undefined = policy.nativeScreener || policy.candidateHydration ? 'pending' : undefined;
   let nativeCandidate: { saved: SavedResponseDraft; facts: HydratedEvaluationCandidate } | undefined;
+  let restoredScreenerCheckpoint: Pick<SavedResponseDraft, 'draftKey' | 'draft' | 'actor' | 'response'> | undefined;
 
   let locale = policy.initialLocale;
   let formTitle = typeof policy.definition.title === 'string' ? policy.definition.title : '';
@@ -273,10 +274,15 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     } };
   } }) : undefined;
   const native = screener ?? policy.candidateHydration;
-  const qualifySaved = (saved: SavedResponseDraft, assertCurrent: () => void) => screener
-    ? screener.qualifySaved(saved, assertCurrent)
-    : policy.candidateHydration!.qualifySaved(saved, { signal: AbortSignal.any([nativeLifetime.signal,
-      ...(nativeStage ? [nativeStage.signal] : [])]), assertCurrent });
+  const historicalScreenerCheckpoint = (saved: SavedResponseDraft) => !!restoredScreenerCheckpoint
+    && same(saved.draftKey, restoredScreenerCheckpoint.draftKey) && same(saved.draft, restoredScreenerCheckpoint.draft)
+    && same(saved.actor, restoredScreenerCheckpoint.actor) && same(saved.response, restoredScreenerCheckpoint.response);
+  const qualifySaved = (saved: SavedResponseDraft, assertCurrent: () => void) => {
+    if (historicalScreenerCheckpoint(saved)) throw new Error('native-restored-screener-save-required');
+    return screener ? screener.qualifySaved(saved, assertCurrent)
+      : policy.candidateHydration!.qualifySaved(saved, { signal: AbortSignal.any([nativeLifetime.signal,
+        ...(nativeStage ? [nativeStage.signal] : [])]), assertCurrent });
+  };
   const entrySlot = entryScreenerSlots[0];
   if (entryScreenerSlots.length > 1 || entrySlot && (entrySlot.status !== 'ready' || !entrySlot.screener)) throw new Error('native-entry-screener-unavailable');
   const protectedScreenerRoutes = entrySlot ? createProtectedScreenerRoutes({ allowedTargets: entrySlot.allowedTargets,
@@ -301,6 +307,11 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   async function qualifyCommitted(saved: SavedResponseDraft, caller?: { signal: AbortSignal; assertCurrent: () => void }) {
     if (!native) return;
+    if (historicalScreenerCheckpoint(saved)) {
+      caller?.signal.throwIfAborted(); if (caller) assertSynchronousGuard(caller.assertCurrent);
+      if (nativeReadiness !== 'needs-save') { retireNative(); nativeReadiness = 'needs-save'; emit(); }
+      return;
+    }
     const sequence = ++qualificationSequence; nativeStage?.abort();
     nativeReadiness = 'pending'; nativeCandidate = undefined; fence(); emit();
     const lease = rendererLease; const old = rendererEngine;
@@ -418,7 +429,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function current(expected: number) { if (disposed || generation !== expected) throw new Error('native-context-obsolete'); }
   function stop(reason: Parameters<NativePackageSigningHostPolicy['invalidateAuthority']>[0]) {
-    if (reason === 'clear' || reason === 'dispose') { application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; }
+    if (reason === 'clear' || reason === 'dispose') { application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; restoredScreenerCheckpoint = undefined; }
     retireNative();
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
     authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? structuredClone(input.draftKey) : submittedKey ? structuredClone(submittedKey) : undefined);
@@ -589,6 +600,10 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     bundle, definition: policy.definition,
     ...(native ? { ...(screener ? { screenerCompletion: screener.completionPolicy } : {}), instanceSourceResolver: unavailableSources, retireCandidateAuthority: retireNative,
       preSignCandidate: async (input: Readonly<{ saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }>) => {
+        if (historicalScreenerCheckpoint(input.saved)) {
+          await qualifyCommitted(input.saved, { signal: nativeLifetime.signal, assertCurrent: input.assertCurrent });
+          throw new Error('native-restored-screener-save-required');
+        }
         qualificationSequence++; nativeStage?.abort(); nativeStage = new AbortController();
         nativeReadiness = 'pending'; nativeCandidate = undefined;
         const facts = await qualifySaved(input.saved, input.assertCurrent);
@@ -773,6 +788,12 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         if (next.restoredSavedDraft && (next.restoredPendingSign || next.restoredSigning)) throw new Error('native-saved-restoration-ambiguous');
         start(next.restoredResponse);
         if (next.restoredSavedDraft) {
+          // A historical unsigned screening association belongs to this exact saved revision.
+          // Only the user's ordinary Save may create a successor for a new screening act.
+          if (screener) {
+            const { draftKey, draft, actor, response } = next.restoredSavedDraft;
+            restoredScreenerCheckpoint = structuredClone({ draftKey, draft, actor, response });
+          }
           const expected = authorityGeneration;
           await controller!.restoreSavedDraft(next.restoredSavedDraft);
           if (disposed || cleared || authorityGeneration !== expected) throw new Error('native-saved-restoration-retired');

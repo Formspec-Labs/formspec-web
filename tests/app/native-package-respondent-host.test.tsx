@@ -1241,7 +1241,7 @@ describe('actual native facts product caller', () => {
       expect(test.candidates[0]).toEqual(test.host.getSnapshot().controller!.saved);
       if (mode === 'changed') {
         expect(test.host.getSnapshot().nativeReadiness).toBe('needs-save');
-        expect(screen.getByText('Updated answers need saving.')).toBeDefined();
+        expect(screen.getByText('Save progress to refresh checks.')).toBeDefined();
         fireEvent.click(await screen.findByRole('button', { name: 'Save draft' }));
         await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledTimes(2));
         await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe('ready'));
