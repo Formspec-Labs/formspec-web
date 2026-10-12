@@ -1,17 +1,20 @@
 import canonicalize from 'canonicalize';
 import type { FormDefinition } from '@formspec-org/types';
-import type { EvaluationHydrationWire, NativeScreenerMappingReceipt } from '../../ports/evaluation-hydration.ts';
+import type { EvaluationHydrationResult, EvaluationHydrationWire, NativeScreenerMappingReceipt } from '../../ports/evaluation-hydration.ts';
 import type { HydrateScreenerCandidate, HydratedScreenerCandidate, ScreenerHydration } from '../../ports/screener-hydration.ts';
 import type { ScreenerSelection } from '../../ports/screener-retention.ts';
 import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import { computeJcsSha256Digest as hash } from './response-action-ledger.ts';
 import { decodeEvaluationHydrationWire } from './evaluation-hydration-wire.ts';
+import { hydrationInstant as clock, rawUtf8Hash as rawHash, verifyComposedSources } from './evaluation-composition.ts';
 
 export interface HttpScreenerHydrationConfig extends HttpClientConfig {
   readonly selection: ScreenerSelection;
   readonly selectionHash: string;
   readonly definition: FormDefinition;
+  /** Independent Source composition policy pin; absence retains legacy native-only qualification. */
+  readonly compositionRegistrationHash?: string;
   /** Trusted elapsed-time clock, not an asserted Source business clock. Defaults to performance.now. */
   readonly monotonicNow?: () => number;
 }
@@ -21,17 +24,19 @@ const object = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('object mismatch');
   return value as Record<string, unknown>;
 };
-const clock = (value: string): number => { const time = Date.parse(value); return Number.isFinite(time) ? time : fail('clock mismatch'); };
 
-/** Native mapping only. Legacy HTTP wire receipts remain faithfully decoded, without native qualification. */
+/** Independently pinned native/composed sources; legacy HTTP remains decoded without qualification. */
 export class HttpScreenerHydration implements ScreenerHydration {
   private readonly client: HttpClient;
   private readonly selection: ScreenerSelection;
   private readonly selectionHash: string;
   private readonly definition: FormDefinition;
   private readonly monotonicNow: () => number;
+  private readonly compositionRegistrationHash?: string;
   constructor(config: HttpScreenerHydrationConfig) {
     this.selection = structuredClone(config.selection); this.selectionHash = config.selectionHash;
+    this.compositionRegistrationHash = config.compositionRegistrationHash;
+    if (this.compositionRegistrationHash !== undefined && !/^sha256:[0-9a-f]{64}$/.test(this.compositionRegistrationHash)) fail('composition pin mismatch');
     this.definition = structuredClone(config.definition); this.monotonicNow = config.monotonicNow ?? (() => performance.now());
     const scope = this.selection.evaluationSelection.scope;
     const headers = config.tenantBinding && tenantScopeHeaders(config.tenantBinding);
@@ -94,24 +99,31 @@ export class HttpScreenerHydration implements ScreenerHydration {
     const requestHash = await hash({ operation: 'hydrate', scope: selected.scope, owner, selection: selected,
       formVersionHash: this.selection.formVersionHash, draftId: saved.draft.id, draftVersion: saved.draft.version, candidateHash, sources });
     if (view.requestHash !== requestHash || !equal(await referenceCounts(view.attachmentBindings), await referenceCounts(references))) fail('request or attachment binding mismatch');
+    if (this.compositionRegistrationHash && (!view.providerReceipt || !('kind' in view.providerReceipt)
+      || view.providerReceipt.kind !== 'composedSources')) fail('selected composition receipt required');
     const qualified = view.results.filter(result => result.status === 'qualified');
     let remaining = Infinity;
     if (view.providerReceipt === null) {
       if (qualified.length) fail('qualified facts lack receipt');
+    } else if ('kind' in view.providerReceipt && view.providerReceipt.kind === 'composedSources') {
+      remaining = await verifyComposedSources({ view, receipt: view.providerReceipt, registrationHash: this.compositionRegistrationHash, requestHash,
+        verifyNative: async (receipt, result) => {
+          await this.verifyNativeReceipt(receipt, view, viewRun, association, requestHash);
+          await this.verifyNativeResult(receipt, result);
+        } });
     } else {
       if (!('kind' in view.providerReceipt) || view.providerReceipt.kind !== 'nativeScreenerMapping') fail('native receipt required');
       const receipt = view.providerReceipt;
       await this.verifyNativeReceipt(receipt, view, viewRun, association, requestHash);
       if (qualified.length !== 1) fail('native qualified result mismatch');
       const result = qualified[0];
-      if (result.instanceName !== receipt.proof.instanceName || result.sourceRef !== this.selection.sourceRef
-        || result.sourceRef !== receipt.proof.sourceRef || result.dataHash !== receipt.proof.dataHash
-        || result.evidenceRef !== receipt.proof.evidenceRef || result.issuedAt !== receipt.proof.issuedAt
-        || result.expiresAt !== receipt.proof.expiresAt || await hash(result.data) !== result.dataHash) fail('native result mismatch');
+      await this.verifyNativeResult(receipt, result);
       const issued = clock(result.issuedAt), expires = clock(result.expiresAt), now = clock(view.qualifiedAt);
-      const age = receipt.registration.maxEvidenceAgeSeconds * 1000, validity = receipt.registration.maxValiditySeconds * 1000;
+      const age = BigInt(receipt.registration.maxEvidenceAgeSeconds) * 1_000_000_000n,
+        validity = BigInt(receipt.registration.maxValiditySeconds) * 1_000_000_000n;
       if (issued > now || expires <= now || issued >= expires || now - issued > age || expires - issued > validity) fail('expired or invalid proof');
-      remaining = Math.min(expires - now, age - (now - issued));
+      const expiryRemaining = expires - now, ageRemaining = age - (now - issued);
+      remaining = Math.floor(Number(expiryRemaining < ageRemaining ? expiryRemaining : ageRemaining) / 1_000_000);
     }
     let lastElapsed = 0;
     let retired: Error | undefined;
@@ -132,6 +144,13 @@ export class HttpScreenerHydration implements ScreenerHydration {
       current(); if (view.results.some(result => result.status !== 'qualified')) fail('required source unavailable');
     } });
   }
+  private async verifyNativeResult(receipt: NativeScreenerMappingReceipt, result: EvaluationHydrationResult) {
+    if (result.status !== 'qualified' || result.instanceName !== receipt.proof.instanceName
+      || result.sourceRef !== this.selection.sourceRef || result.sourceRef !== receipt.proof.sourceRef
+      || result.dataHash !== receipt.proof.dataHash || result.evidenceRef !== receipt.proof.evidenceRef
+      || clock(result.issuedAt) !== clock(receipt.proof.issuedAt) || clock(result.expiresAt) !== clock(receipt.proof.expiresAt)
+      || await hash(result.data) !== result.dataHash) fail('native result mismatch');
+  }
   private async verifyNativeReceipt(receipt: NativeScreenerMappingReceipt, view: EvaluationHydrationWire,
     original: HydrateScreenerCandidate['run'], association: HydrateScreenerCandidate['association'], requestHash: string) {
     const descriptor = receipt.registration.publicDescriptor;
@@ -150,8 +169,8 @@ export class HttpScreenerHydration implements ScreenerHydration {
       || await hash(descriptor.rules) !== descriptor.rulesHash || descriptor.instanceName !== proof.instanceName
       || descriptor.sourceRef !== proof.sourceRef || proof.sourceRef !== this.selection.sourceRef
       || !equal(proof.association, association) || proof.evidenceHash !== original.run.evidenceHash
-      || proof.evidenceRef !== original.run.evidenceRef || proof.issuedAt !== original.run.evaluatedAt
-      || proof.expiresAt !== object(original.run.determination.validity).validUntil
+      || proof.evidenceRef !== original.run.evidenceRef || clock(proof.issuedAt) !== clock(original.run.evaluatedAt)
+      || clock(proof.expiresAt) !== clock(String(object(original.run.determination.validity).validUntil))
       || clock(association.associatedAt) < clock(proof.issuedAt) || clock(receipt.resolvedAt) < clock(association.associatedAt)
       || clock(receipt.resolvedAt) > clock(view.qualifiedAt)) fail('native receipt or original policy mismatch');
   }
@@ -181,8 +200,4 @@ async function referenceCounts(references: readonly unknown[]): Promise<Record<s
   const counts: Record<string, number> = {};
   for (const reference of references) { const digest = await hash(reference); counts[digest] = (counts[digest] ?? 0) + 1; }
   return counts;
-}
-async function rawHash(text: string): Promise<string> {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return `sha256:${Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('')}`;
 }

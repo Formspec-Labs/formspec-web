@@ -28,6 +28,8 @@ export interface NativeScreenerCompositionPins {
   readonly selection: ScreenerSelection;
   readonly selectionHash: string;
   readonly selectionKey: string;
+  /** Independently selected Source composition policy; never part of a retained Screener selection. */
+  readonly compositionRegistrationHash?: string;
 }
 
 export interface NativePackageCompositionOptions {

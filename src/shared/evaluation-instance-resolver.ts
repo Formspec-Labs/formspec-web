@@ -13,7 +13,7 @@ export function createEvaluationInstanceResolver(context: HydratedScreenerCandid
       return { status: 'unavailable', reason: 'evaluation-source-unselected' };
     }
     const result = view.results.find(result => result.instanceName === request.instanceName && result.sourceRef === request.source);
-    if (!result || result.status !== 'qualified') return { status: 'unavailable', reason: result?.reason ?? 'evaluation-source-unavailable' };
+    if (!result || result.status !== 'qualified') return { status: 'unavailable', reason: (result as { readonly reason: string } | undefined)?.reason ?? 'evaluation-source-unavailable' };
     // Decoder guarantees JSON-compatible data; the public engine owns instance schema admission.
     const value = structuredClone(result.data) as Extract<Awaited<ReturnType<InstanceSourceResolver>>, { status: 'loaded' }>['value'];
     options.signal.throwIfAborted(); assertCurrent();

@@ -48,6 +48,23 @@ export interface NativeScreenerMappingReceipt {
   };
   readonly receiptHash: string;
 }
+/** First admitted composition cut: one native owner and explicit unavailable owners. */
+export interface ComposedSourcesReceipt {
+  readonly kind: 'composedSources';
+  readonly version: 1;
+  readonly purpose: 'formspec.instance.compose';
+  readonly registration: EvaluationProviderRegistration;
+  readonly requestHash: string;
+  readonly resolvedAt: string;
+  readonly validUntil: string | null;
+  readonly contributions: readonly {
+    readonly instanceName: string;
+    readonly sourceRef: string;
+    readonly resultHash: string;
+    readonly receipt: NativeScreenerMappingReceipt | null;
+  }[];
+  readonly receiptHash: string;
+}
 export type EvaluationHydrationResult = {
   readonly status: 'qualified';
   readonly instanceName: string;
@@ -79,5 +96,5 @@ export interface EvaluationHydrationWire {
   readonly attachmentBindings: readonly unknown[];
   readonly qualifiedAt: string;
   readonly results: readonly EvaluationHydrationResult[];
-  readonly providerReceipt: HttpEvaluationProviderReceipt | NativeScreenerMappingReceipt | null;
+  readonly providerReceipt: HttpEvaluationProviderReceipt | NativeScreenerMappingReceipt | ComposedSourcesReceipt | null;
 }
