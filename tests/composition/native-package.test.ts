@@ -476,6 +476,27 @@ describe('explicit native package composition', () => {
     const [boot, sameBoot] = await Promise.all([deferred.nativePackageRespondent!.load(), deferred.nativePackageRespondent!.load()]);
     expect(boot).toBe(sameBoot); expect(boot.componentDocument).toEqual(test.component);
     expect(await boot.composition.definitionSource.getDefinition(initialDefinitionUrl)).toEqual(test.definition);
+    const source = boot.composition.definitionSource;
+    const packageReadCount = test.requests.length;
+    expect(initialDefinitionUrl).not.toBe(test.definition.url);
+    for (const url of [initialDefinitionUrl, test.definition.url]) {
+      expect(await source.getDefinition(url, test.definition.version)).toEqual(test.definition);
+      expect(await source.getComponentDocument!(url, test.definition.version)).toEqual(test.component);
+      expect(await source.getLocaleDocuments!(url, test.definition.version)).toEqual(
+        Object.values(test.bundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document));
+      expect(await source.getThemeDocument!(url, test.definition.version)).toBeNull();
+      expect(await source.getResponseActionsDocument!(url, test.definition.version)).toBeNull();
+    }
+    const packageReads: Array<(url: string, version?: string) => Promise<unknown>> = [
+      source.getDefinition, source.getThemeDocument!, source.getResponseActionsDocument!,
+      source.getLocaleDocuments!, source.getComponentDocument!,
+    ];
+    for (const read of packageReads) {
+      await expect(read('https://server.example.test/runtime/forms/foreign-form', test.definition.version)).rejects.toThrow('selection mismatch');
+      await expect(read(initialDefinitionUrl, '99.0.0')).rejects.toThrow('selection mismatch');
+      await expect(read(test.definition.url, '99.0.0')).rejects.toThrow('selection mismatch');
+    }
+    expect(test.requests).toHaveLength(packageReadCount);
     expect(boot.moduleId).toBe(test.signing.module.id); expect(boot.initialLocale).toBe('en');
     expect(boot.host.getSnapshot().locale).toBe('en');
     expect(producer).toHaveBeenCalledTimes(1);

@@ -6,6 +6,7 @@ import type { IdentityClaim } from '../ports/identity-provider.ts';
 import canonicalize from 'canonicalize';
 import { assertTaskCompletionRequest } from '../shared/task-response-completion.ts';
 import { createTaskComposition } from './task.ts';
+import { bindPackageDefinitionSource } from './package-definition-source.ts';
 import { taskRequiresExternalHydration } from '../adapters/http/task-candidate-hydration.ts';
 import { targetDefinitionMatches } from '@formspec-org/types';
 import { canonicalResponseHandoffBytes as handoffBytes } from '@formspec-org/integrity-canonical';
@@ -229,7 +230,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
       lifetime: { signal: authLifetime.signal, assertCurrent: taskCurrent } } } : {}),
     accessToken: ownedAccessToken
       ?? (async () => (await anonymousSessions!.sessionForForm(definition.url, definition.version)).sessionToken) });
-  const composition = freezeComposition({ ...deferred, nativePackageRespondent: undefined, definitionSource: source,
+  const composition = freezeComposition({ ...deferred, nativePackageRespondent: undefined,
+    definitionSource: bindPackageDefinitionSource(source, [options.initialDefinitionUrl, definition.url]),
     draftStore, submitTransport: cohort.submitTransport, responseSigning: signing, attachmentStore,
     instanceCapabilities: { ...deferred.instanceCapabilities, fileUpload: 'available' as const } });
   const registryEntries = flattenRegistryEntries(resolved.registries);
