@@ -1,3 +1,4 @@
+import { wosTenantScopeHeaders } from '../../profiles/wos-tenant-headers.ts';
 import { isLosslessHttpIdempotencyKey } from '../../shared/idempotency-key.ts';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
@@ -20,9 +21,11 @@ const resourceShape = ajv.compile<string>({ $ref: `${commonSchema.$id}#/$defs/Wo
  */
 export class HttpTaskCompletion implements TaskCompletion {
   private readonly client: HttpClient;
+  private readonly scopeHeaders: Readonly<Record<string, string>>;
   private readonly selection: TaskCompletionSelection;
   private readonly assertCurrentAuth: () => void;
   constructor(config: HttpClientConfig & { selection: TaskCompletionSelection; assertCurrentAuth: () => void }) {
+    this.scopeHeaders = wosTenantScopeHeaders(config.tenantBinding);
     this.selection = snapshotFiniteJson(config.selection) as unknown as TaskCompletionSelection;
     if (Object.keys(this.selection).sort().join(',') !== 'definitionUrl,definitionVersion,processId,taskId'
       || !resourceShape(this.selection.taskId) || !resourceShape(this.selection.processId)
@@ -31,7 +34,7 @@ export class HttpTaskCompletion implements TaskCompletion {
     }
     const token = config.accessToken;
     this.assertCurrentAuth = config.assertCurrentAuth;
-    this.client = new HttpClient({ ...config, accessToken: async () => {
+    this.client = new HttpClient({ ...config, tenantBinding: undefined, accessToken: async () => {
       assertSynchronousGuard(this.assertCurrentAuth);
       const value = typeof token === 'function' ? await token() : token;
       assertSynchronousGuard(this.assertCurrentAuth);
@@ -50,7 +53,7 @@ export class HttpTaskCompletion implements TaskCompletion {
       || !isLosslessHttpIdempotencyKey(operationId)
       || new TextEncoder().encode(JSON.stringify(body)).byteLength > 2 * 1024 * 1024) throw new Error('Task completion candidate mismatch');
     const raw = await this.client.postJson<unknown>(`/api/v1/tasks/${encodeURIComponent(this.selection.taskId)}/response`, body,
-      { idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check, assertBeforeDispatch: check,
+      { headers: this.scopeHeaders, idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check, assertBeforeDispatch: check,
         timeoutMs: 10_000, maxResponseBytes: 64 * 1024, requireJson: true, successStatuses: [200] });
     check(); const event = snapshotFiniteJson(raw) as unknown;
     if (!outcomeShape(event) || event.taskId !== this.selection.taskId || event.processId !== this.selection.processId

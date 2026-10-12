@@ -10,3 +10,4 @@ export {
   tenantScopeHeaders,
   type FormspecTenantHeaders,
 } from './tenant-headers.ts';
+export { wosTenantHeaderNames, wosTenantScopeHeaders } from './wos-tenant-headers.ts';
