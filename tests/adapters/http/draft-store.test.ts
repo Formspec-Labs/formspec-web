@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { HttpDraftStore } from '../../../src/adapters/http/draft-store.ts';
 import { createDraftBindingRegistry } from '../../../src/adapters/http/draft-binding-registry.ts';
 import {
@@ -219,4 +219,28 @@ describe('HttpDraftStore', () => {
     const adapter = new HttpDraftStore({ baseUrl: 'https://formspec-server.example.test', fetchImpl: fetch, bindingRegistry });
     await expect(adapter.load(key)).resolves.toEqual(response);
   });
+});
+
+describe('qualified explicit locator binding', () => {
+  it('refuses a competing binding installed while owning qualification is pending', async () => {
+    const registry = createDraftBindingRegistry(); const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version, subjectRef: 'owner' };
+    const response = { ...sampleFormResponse, id: 'stable-response' };
+    const { fetch } = recordingFetch(() => jsonResponse({ draft_id: 'selected', draft_version: 7,
+      canonical_response: response, draft_state: response.data }));
+    const adapter = new HttpDraftStore({ baseUrl: 'https://server.example.test', fetchImpl: fetch, bindingRegistry: registry,
+      qualifyReadState: async () => { registry.put(key, { draftId: 'competing', draftVersion: 1 }); return { kind: 'active', response }; } });
+    await expect(adapter.resumeState!(key, { draftId: 'selected', expectedResponseId: response.id })).rejects.toThrow('binding changed');
+    expect(registry.get(key)?.draftId).toBe('competing');
+  });
+});
+
+
+it('refuses an asynchronous direct adapter resume guard before credential resolution', async () => {
+  const accessToken = vi.fn(async () => 'owned-token');
+  const { fetch, requests } = recordingFetch(() => jsonResponse({}));
+  const adapter = new HttpDraftStore({ baseUrl: 'https://server.example.test', accessToken, fetchImpl: fetch,
+    qualifyReadState: async () => ({ kind: 'active', response: sampleFormResponse }) });
+  await expect(adapter.resumeState!({ formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version, subjectRef: 'owner' },
+    { draftId: 'owned', expectedResponseId: 'response' }, async () => {})).rejects.toThrow('guard must be synchronous');
+  expect(accessToken).not.toHaveBeenCalled(); expect(requests).toHaveLength(0);
 });

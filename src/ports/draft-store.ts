@@ -34,6 +34,11 @@ export type DraftReadState = { kind: 'active'; response: FormResponse; savedDraf
   subjectRef: string; formVersionId: string; application?: ApplicationCaseReceipt; applicationLookup?: ApplicationCaseLookupUnavailable;
 };
 
+export interface OwnedDraftResumeSelection {
+  readonly draftId: string;
+  readonly expectedResponseId: string;
+}
+
 /** A retained draft cannot be resumed against a different immutable form version. */
 export class DraftVersionConflictError extends Error {
   readonly currentDraftKey: Readonly<DraftKey>;
@@ -56,6 +61,8 @@ export interface DraftStore {
   load(key: DraftKey): Promise<FormResponse | undefined>;
   /** Optional owner-qualified terminal recovery; omission preserves legacy loading. */
   readState?(key: DraftKey): Promise<DraftReadState | undefined>;
+  /** Explicit authenticated lookup of an existing draft; qualification must precede binding. */
+  resumeState?(key: DraftKey, selection: OwnedDraftResumeSelection, assertCurrent?: () => void): Promise<DraftReadState>;
   save(key: DraftKey, response: FormResponse): Promise<void>;
   list(subjectRef: string): Promise<DraftKey[]>;
   delete(key: DraftKey): Promise<void>;

@@ -1,3 +1,4 @@
+import type { OwnedDraftResumeSelection } from '../ports/draft-store.ts';
 import type { NativeHostEventCapability } from '../shared/native-host-events.ts';
 import type { NativeInitialDataSourceFactory } from '../shared/native-package-signing-host.ts';
 import type { NativeScreenerCompositionPins, NativeTaskCompositionPins } from './native-package.ts';
@@ -88,6 +89,7 @@ export interface DefaultCompositionOptions {
   screenerCompletion?: SurfaceScreenerCompletionPolicy;
   nativeScreener?: NativeScreenerCompositionPins;
   nativeTask?: NativeTaskCompositionPins;
+  ownedDraftResume?: OwnedDraftResumeSelection;
   initialDataSources?: NativeInitialDataSourceFactory;
   hostEvents?: readonly NativeHostEventCapability[];
 }
@@ -98,6 +100,7 @@ export function createDefaultComposition(
 ): Composition {
   const serverUrl = config.referenceAdapters?.formspecStack?.formspecServerUrl;
   const nativeSigning = readNativePackageSigningConfig(config.referenceAdapters?.formspecStack);
+  if (options.ownedDraftResume !== undefined && !nativeSigning) throw new Error('Owned draft resume requires native package admission');
   if (options.nativeTask && !nativeSigning) throw new Error('Native task correction requires explicit native signing configuration');
   if (nativeSigning) {
     if (respondentSurfaceDeploymentIsConfigured(config)) throw new Error('Native package and signed Surface deployments cannot both be active');
@@ -106,7 +109,7 @@ export function createDefaultComposition(
     const identityBinding = config.ports.identityProvider === 'oidc'
       ? options.identityBinding ?? (config.identity.oidc ? createOidcIdentityBinding(config.identity.oidc) : undefined)
       : undefined;
-    return createNativePackageComposition(config, { signing: nativeSigning, packageUrl: options.packageUrl, identityBinding, screenerCompletion: options.screenerCompletion, nativeScreener: options.nativeScreener, nativeTask: options.nativeTask, initialDataSources: options.initialDataSources, hostEvents: options.hostEvents,
+    return createNativePackageComposition(config, { signing: nativeSigning, packageUrl: options.packageUrl, identityBinding, screenerCompletion: options.screenerCompletion, nativeScreener: options.nativeScreener, nativeTask: options.nativeTask, ownedDraftResume: options.ownedDraftResume, initialDataSources: options.initialDataSources, hostEvents: options.hostEvents,
       initialDefinitionUrl: requiredInitialDefinitionUrl(options.initialDefinitionUrl) });
   }
   if (!serverUrl) {

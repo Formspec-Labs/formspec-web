@@ -30,3 +30,6 @@ export {
   respondentSurfaceBundleConfig,
   respondentSurfaceDeploymentIsConfigured,
 } from './respondent-surface.ts';
+
+export { ownedDraftResumeSelection, ownedDraftResumeSelectionSchema } from './owned-draft-resume.ts';
+export type { OwnedDraftResumeSelection } from '../ports/draft-store.ts';

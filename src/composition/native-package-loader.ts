@@ -35,7 +35,7 @@ import type { QualifiedResponseActionRole, ResponseActionRole } from '../shared/
 import { admitNativeSigningScope, nativeSigningActionMappings } from '../shared/native-signing-scope.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { buildIntakeHandoff, responseHash } from '../app/respondent-flow.ts';
-import type { DraftKey } from '../ports/draft-store.ts';
+import type { DraftKey, DraftReadState } from '../ports/draft-store.ts';
 import type { AdmittedResponseAction, ResponseSigning, SavedResponseDraft } from '../ports/response-signing.ts';
 import { freezeComposition } from '../policy/index.ts';
 import type { Composition } from './types.ts';
@@ -167,14 +167,14 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   const session = options.identityBinding?.browserAuthSession;
   let authState: BrowserAuthSessionState | null = null;
   let authSequence = 0; let authLifetime = new AbortController();
-  const releaseAuth = nativePins || taskPins ? session!.subscribe(next => {
+  const releaseAuth = nativePins || taskPins || options.ownedDraftResume ? session!.subscribe(next => {
     authSequence++; authLifetime.abort(); authLifetime = new AbortController(); authState = next ? structuredClone(next) : null;
     host?.retireCandidateAuthority?.();
   }) : undefined;
   let taskCandidate: SavedCandidateHydration | undefined;
   let selectedScreenerHydration: ScreenerHydration | undefined;
   try {
-    if (nativePins || taskPins) {
+    if (nativePins || taskPins || options.ownedDraftResume) {
       const sequence = authSequence;
       const initial = await session!.getSession();
       if (sequence === authSequence) authState = initial ? structuredClone(initial) : null;
@@ -219,11 +219,17 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     sign: input => cohort.responseSigning!.sign(input).then(remember),
     ...(signingPort.restorePending ? { restorePending: (input: Parameters<NonNullable<ResponseSigning['restorePending']>>[0], operationId: string) => signingPort.restorePending!(input, operationId).then(result => result.kind === 'signed' ? { ...result, signed: remember(result.signed) } : { ...result, preparation: remember(result.preparation) }) } : {}),
   };
+  const rememberOwnedState = (state: DraftReadState | undefined) => {
+    if (state?.kind === 'active') {
+      const saved = state.signed ?? state.savedDraft ?? state.pendingSign;
+      if (saved) remember(saved);
+    }
+  };
   const draftStore = { ...cohort.draftStore, readState: async (key: DraftKey) => {
-    const state = await cohort.draftStore.readState!(key);
-    if (state?.kind === 'active' && state.signed) remember(state.signed);
-    return state;
-  } };
+    const state = await cohort.draftStore.readState!(key); rememberOwnedState(state); return state;
+  }, ...(cohort.draftStore.resumeState ? { resumeState: async (key: DraftKey, selection: NonNullable<NativePackageCompositionOptions['ownedDraftResume']>, assertCurrent: () => void) => {
+    const state = await cohort.draftStore.resumeState!(key, selection, assertCurrent); rememberOwnedState(state); return state;
+  } } : {}) };
   const attachmentStore = new HttpAttachmentStore({ ...base, formId: publication.form_id,
     maxUploadBytes: adapter!.attachments?.maxUploadBytes,
     ...(taskCohort ? { taskBinding: { draftId: taskCohort.launched.draft_id, fieldPaths: taskPins!.attachmentFieldPaths,
@@ -274,6 +280,9 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     let resuming: ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>> | undefined;
     return { composition, host: admittedHost, componentDocument, componentRouteResolver, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale, screenerCompletion: admittedHost.screenerCompletion ?? options.screenerCompletion,
       resumeSubmitted: () => resuming ??= atNativeAdmissionStage('saved-access', async () => {
+        const lifetime = authLifetime, sequence = authSequence;
+        const current = () => { lifetime.signal.throwIfAborted(); if (sequence !== authSequence) throw new Error('Native recovery session retired'); };
+        current();
         // Validate retained credentials through the bridge; recovery never issues an owner.
         if (anonymousSessions && resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {
           await anonymousSessions.sessionForForm(definition.url, definition.version, true);
@@ -288,11 +297,14 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
             if (!selected) throw new Error('Selected OIDC identity is unavailable for native recovery');
             return options.identityBinding!.provider.authenticate(selected);
           });
-          if (!claim) return 'absent';
+          current(); if (!claim) return 'absent';
         }
         const draftKey = { formUrl: definition.url, formVersion: definition.version, subjectRef: claim?.subjectRef };
         if (taskPins && claim?.subjectRef !== taskPins.subjectRef) throw new Error('Native task recovery owner mismatch');
-        const state = await draftStore.readState(draftKey);
+        if (options.ownedDraftResume && !draftStore.resumeState) throw new Error('Owned draft resume capability unavailable');
+        const state = options.ownedDraftResume
+          ? await draftStore.resumeState!(draftKey, options.ownedDraftResume, current) : await draftStore.readState(draftKey);
+        current();
         if (state?.kind === 'submitted') await admittedHost.configureSubmittedRuntime({ definition, draftKey, claim, state });
         return state?.kind ?? 'absent';
       }) };

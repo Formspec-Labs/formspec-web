@@ -83,7 +83,7 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
   const publication = { form_id: 'actual-form', form_version_id: 'actual-publication', definition_url: definition.url,
     definition_version: definition.version, definition_hash: await computeJcsSha256Digest(definition), definition: structuredClone(definition) };
   const requests: { url: string; method: string; body?: unknown; headers: Headers }[] = [];
-  let saved: FormResponse | undefined;
+  let saved: FormResponse | undefined; let draftReadGate: Promise<void> | undefined;
   let draftStatus = 'in_progress'; let draftVersion = 1;
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input)); const method = init?.method ?? 'GET';
@@ -98,6 +98,7 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
     if (url.pathname === '/runtime/forms/actual-form/application-lifecycle') return Response.json(capabilities);
     if (url.pathname === '/runtime/forms/actual-form' && method === 'GET') return Response.json(publication);
     if (url.pathname === '/runtime/forms/actual-form/drafts' && method === 'POST') saved = structuredClone(body.canonical_response);
+    if (url.pathname === '/drafts/fixture-draft' && method === 'GET') await draftReadGate;
     if (url.pathname === '/drafts/fixture-draft' || (url.pathname.endsWith('/drafts') && method === 'POST')) return Response.json({
       draft_id: 'fixture-draft', draft_version: draftVersion, form_version_id: 'actual-publication', subject_ref: subject,
       canonical_response: saved, draft_state: saved?.data, status: draftStatus });
@@ -105,6 +106,7 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
   });
   vi.stubGlobal('fetch', fetch);
   return { capabilities, config, signing, bundle, definition, document, component, files, texts, publication, requests, fetch, values,
+    setDraftReadGate: (gate: Promise<void>) => { draftReadGate = gate; },
     setDraft: (response: FormResponse, status: string, version: number) => { saved = structuredClone(response); draftStatus = status; draftVersion = version; } };
 }
 
@@ -640,17 +642,19 @@ describe('explicit native package composition', () => {
     expect(browserAuthSession.subscribe).toHaveBeenCalledOnce(); expect(release).toHaveBeenCalledOnce();
   });
 
-  it('preserves selected OIDC identity and bearer for native draft save and recovery without anonymous credentials', async () => {
+  it.each(['current', 'disposed', 'account-change'] as const)('preserves selected OIDC identity and resumes a known owned native checkpoint with %s boot lifetime', async lifetime => {
     const test = await fixture('oidc:fixture');
+    const nativePolicy = vi.spyOn(nativeHostModule, 'createNativePackageSigningHost');
     const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',
       credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
     const provider = { discover: vi.fn(async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }]),
       authenticate: vi.fn(async () => claim), revoke: vi.fn(async () => {}), subscribe: vi.fn(() => () => {}) };
     const session = { issuer: claim.provider, subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+    let authListener: ((state: BrowserAuthSessionState | null) => void) | undefined;
     const browserAuthSession = { getSession: vi.fn(async () => session), begin: async () => {},
       completeCallback: async () => session, completeSilentCallback: async () => {}, renew: async () => session,
       logout: async () => {}, completeLogoutCallback: async () => {}, accessToken: async () => 'oidc-bearer',
-      subscribe: () => () => {}, dispose: () => {} };
+      subscribe: (listener: (state: BrowserAuthSessionState | null) => void) => { authListener = listener; return () => { authListener = undefined; }; }, dispose: () => {} };
     const identityBinding: IdentityBinding = { provider, accessToken: vi.fn(async () => 'oidc-bearer'), browserAuthSession };
     const config = { ...test.config, tenantBinding: { kind: 'bound' as const, scope: {
       tenant: 'tenant_test', workspace: 'workspace_test', environment: 'environment_test', cell: 'cell_test',
@@ -672,9 +676,37 @@ describe('explicit native package composition', () => {
     const create = test.requests.find(request => request.method === 'POST' && request.url.endsWith('/drafts'))!;
     expect(create.headers.get('authorization')).toBe('Bearer oidc-bearer');
     expect(create.body).toMatchObject({ respondent_subject_ref: claim.subjectRef });
-    const fresh = await createDefaultComposition(config, options).nativePackageRespondent!.load();
+    test.values.clear(); test.setDraft(response, 'in_progress', 7);
+    const count = test.requests.length;
+    const fresh = await createDefaultComposition(config, { ...options, ownedDraftResume: { draftId: 'fixture-draft', expectedResponseId: response.id! } }).nativePackageRespondent!.load();
+    if (lifetime !== 'current') {
+      let release!: () => void; test.setDraftReadGate(new Promise<void>(resolve => { release = resolve; }));
+      const pending = fresh.resumeSubmitted!();
+      await vi.waitFor(() => expect(test.requests.slice(count).some(request => request.url.endsWith('/drafts/fixture-draft'))).toBe(true));
+      if (lifetime === 'disposed') fresh.host.dispose();
+      else { expect(authListener).toBeTypeOf('function'); authListener!({ ...session, subject: 'another-owner', revision: 2 }); }
+      release();
+      await expect(pending).rejects.toThrow();
+      expect([...test.values.keys()].some(key => key.includes('draft-handles'))).toBe(false);
+      expect(test.requests.slice(count).every(request => request.method === 'GET')).toBe(true);
+      fresh.host.dispose(); return;
+    }
     await expect(fresh.resumeSubmitted!()).resolves.toBe('active');
+    const restored = await fresh.composition.draftStore.readState!(key);
+    expect(restored?.kind).toBe('active');
+    if (restored?.kind !== 'active' || !restored.savedDraft) throw new Error('Expected owned native checkpoint');
+    expect(restored.savedDraft.draft).toMatchObject({ id: 'fixture-draft', version: 7 });
+    expect(restored.response).toEqual(response);
+    const policy = nativePolicy.mock.calls.at(-1)![0];
+    expect(() => policy.assertOwner(key, claim.subjectRef)).not.toThrow();
+    expect(() => policy.assertOwner(key, 'another-owner')).toThrow();
+    const engine = createFormEngine(test.definition); engine.loadResponseData(restored.response.data as Parameters<typeof engine.loadResponseData>[0]);
+    const lease = await fresh.host.configureRuntime({ engine, definition: test.definition, draftKey: key, claim, activeLocale: 'en',
+      restoredResponse: restored.response, restoredSavedDraft: restored.savedDraft });
+    expect(fresh.host.getSnapshot().controller).toMatchObject({ owned: true, saved: restored.savedDraft });
+    expect(test.requests.slice(count).every(request => request.method === 'GET')).toBe(true);
     expect(test.requests.at(-1)!.headers.get('authorization')).toBe('Bearer oidc-bearer');
+    lease.dispose(); engine.dispose();
     expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
     fresh.host.dispose();
   });
@@ -869,4 +901,9 @@ describe('explicit correction host through the maintained native loader', () => 
     expect(() => createDefaultComposition(config, f.options)).toThrow('initial application capabilities');
     expect(f.test.requests).toHaveLength(0);
   });
+});
+
+
+it.each([null, false])('refuses a malformed explicit resume option outside native composition', ownedDraftResume => {
+  expect(() => Reflect.apply(createDefaultComposition, undefined, [publicPortalProfile, { ownedDraftResume }])).toThrow('Owned draft resume requires native package admission');
 });

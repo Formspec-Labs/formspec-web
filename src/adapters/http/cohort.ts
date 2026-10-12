@@ -1,3 +1,4 @@
+import { ownedDraftResumeSelection } from '../../config/owned-draft-resume.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 /**
  * HTTP adapter cohort (FW-0064).
@@ -24,7 +25,7 @@ import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
 import { resolveAuthoredSigningContent } from '@formspec-org/engine/render';
 import canonicalize from 'canonicalize';
 import { formspecTenantHeaderNames, tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
-import type { DraftKey, DraftStore } from '../../ports/draft-store.ts';
+import type { DraftKey, DraftReadState, DraftStore } from '../../ports/draft-store.ts';
 import type { ApplicationLifecycle, ApplicationLifecycleCapabilities } from '../../ports/application-lifecycle.ts';
 import { HttpApplicationLifecycle } from './application-lifecycle.ts';
 import type { AdmittedResponseAction, ResponseSigning, VerifiedDraftEvidence } from '../../ports/response-signing.ts';
@@ -212,25 +213,36 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     resumeMetadata: config.resumeMetadata,
     ownerFor,
   });
+  const readScopedState = (suppliedKey: DraftKey, read: (key: DraftKey, current: () => void) => Promise<DraftReadState | undefined>, assertCurrent: () => void = () => {}) => {
+    const key = structuredClone(suppliedKey);
+    return fence.run(key, async generation => {
+      const current = () => { assertSynchronousGuard(assertCurrent); fence.assertCurrent(key, generation); };
+      current();
+      const state = await read(key, current);
+      let application;
+      if (state && applicationLifecycle) {
+        try { application = await applicationLifecycle.loadInCurrentScope(key, generation); }
+        catch (error) {
+          current();
+          if (!(error instanceof HttpAdapterError) || error.status !== 503) throw error;
+          return { ...state, applicationLookup: Object.freeze({ status: 'unavailable' as const, statusCode: 503 as const }) };
+        }
+      }
+      current();
+      return state && application ? { ...state, application } : state;
+    });
+  };
   const scopedDrafts: DraftStore = {
     load: key => fence.run(key, async generation => draftStore.load(key, () => fence.assertCurrent(key, generation))),
-    ...(draftStore.readState ? { readState: (suppliedKey: DraftKey) => {
-      const key = structuredClone(suppliedKey);
-      return fence.run(key, async generation => {
-        const state = await draftStore.readState!(key, () => fence.assertCurrent(key, generation));
-        let application;
-        if (state && applicationLifecycle) {
-          try { application = await applicationLifecycle.loadInCurrentScope(key, generation); }
-          catch (error) {
-            fence.assertCurrent(key, generation);
-            if (!(error instanceof HttpAdapterError) || error.status !== 503) throw error;
-            return { ...state, applicationLookup: Object.freeze({ status: 'unavailable' as const, statusCode: 503 as const }) };
-          }
-        }
-        fence.assertCurrent(key, generation);
-        return state && application ? { ...state, application } : state;
-      });
-    } } : {}),
+    ...(draftStore.readState ? { readState: (key: DraftKey) => readScopedState(key, (key, current) => draftStore.readState!(key, current)) } : {}),
+    ...(draftStore.resumeState && config.accessToken && !anonymousSessions && !taskDraftSelection ? {
+      resumeState: async (key, suppliedSelection, assertCurrent = () => {}) => {
+        const selection = ownedDraftResumeSelection(suppliedSelection);
+        const result = await readScopedState(key, (key, current) => draftStore.resumeState!(key, selection, current), assertCurrent);
+        if (!result) throw new Error('Selected owned draft state unavailable');
+        return result;
+      },
+    } : {}),
     save: (key, response) => fence.run(key, async () => {
       responseSigning.assertEditable(key);
       await draftStore.save(key, response);

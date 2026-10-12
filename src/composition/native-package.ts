@@ -1,3 +1,5 @@
+import { ownedDraftResumeSelection } from '../config/owned-draft-resume.ts';
+import type { OwnedDraftResumeSelection } from '../ports/draft-store.ts';
 import type { NativeHostEventCapability } from '../shared/native-host-events.ts';
 import type { NativeScreenerHydrationFactory } from '../adapters/http/initial-mixed-screener-hydration.ts';
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
@@ -58,6 +60,8 @@ export interface NativeTaskCompositionPins {
 export interface NativePackageCompositionOptions {
   packageUrl: string; initialDefinitionUrl: string; signing: NativePackageSigningConfig;
   identityBinding?: IdentityBinding;
+  /** Read-only external locator for an existing authenticated ordinary draft. */
+  ownedDraftResume?: OwnedDraftResumeSelection;
   /** Trusted host capability; authored documents cannot supply completion callbacks. */
   screenerCompletion?: SurfaceScreenerCompletionPolicy;
   nativeScreener?: NativeScreenerCompositionPins;
@@ -91,6 +95,11 @@ export function createNativePackageComposition(config: FormspecWebConfig, option
   }
   if (options.nativeScreener && options.screenerCompletion) throw new Error('Native Screener completion policies are ambiguous');
   if (options.nativeScreener && (!options.identityBinding?.browserAuthSession || !config.identity.oidc)) throw new Error('Native Screener requires the selected authenticated session');
+  if (options.ownedDraftResume !== undefined) {
+    if (options.nativeTask || config.identity.mode !== 'oidc-required' || !options.identityBinding?.accessToken
+      || !options.identityBinding.browserAuthSession) throw new Error('Owned draft resume requires the ordinary authenticated native entry');
+    options.ownedDraftResume = ownedDraftResumeSelection(options.ownedDraftResume);
+  }
   const adapter = config.referenceAdapters?.formspecStack;
   if (!adapter?.formspecServerUrl) throw new Error('Native package signing requires the configured package service');
   if ((config.identity.mode === 'oidc-required' || config.ports.identityProvider === 'oidc')

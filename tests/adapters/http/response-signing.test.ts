@@ -52,7 +52,7 @@ function saveAction(method: 'POST' | 'PATCH') {
 const prepareAction = saveAction('PATCH');
 
 type CandidateGate = (input: { saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }) => Promise<{ assertCurrent: () => void }>;
-async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean, preSignCandidate?: CandidateGate) {
+async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean, preSignCandidate?: CandidateGate, persistentSaving = true) {
   const draftId = earlyCaseCreation === undefined ? 'owned-draft' : 'draft_01a11ca26d05793192f9f01f97ba9c0b';
   const draftKey: DraftKey = authenticated ? { ...key, subjectRef: 'oidc:owner' }
     : anonymousSubject ? { ...key, subjectRef: 'anon:owner' } : key;
@@ -67,9 +67,9 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
     tokenGate: undefined as Promise<void> | undefined, formVersionId: 'publication-1',
     mutateSigned: undefined as ((response: FormResponse) => void) | undefined,
     createGate: undefined as Promise<void> | undefined, patchGate: undefined as Promise<void> | undefined, signGate: undefined as Promise<void> | undefined, getGate: undefined as Promise<void> | undefined, getStatus: 200,
-    applicationStatus: 200, applicationAbsent: false, applicationGate: undefined as Promise<void> | undefined };
+    taskDraft: undefined as unknown, applicationStatus: 200, applicationAbsent: false, applicationGate: undefined as Promise<void> | undefined };
   const view = () => ({ draft_id: draftId, form_version_id: state.formVersionId, subject_ref: state.actor,
-    status: state.status, draft_version: state.version, draft_state: state.response.data, canonical_response: structuredClone(state.response) });
+    status: state.status, draft_version: state.version, draft_state: state.response.data, canonical_response: structuredClone(state.response), ...(state.taskDraft === undefined ? {} : { taskDraft: state.taskDraft }) });
   const { fetch, requests } = recordingFetch(async request => {
     if (authenticated && (!state.token || request.headers.get('authorization') !== `Bearer ${state.token}`)) return jsonResponse({ detail: 'unauthorized' }, 401);
     if (request.url.endsWith('/sessions/anonymous')) return jsonResponse({ session_id: 'session', session_token: 'owner-token',
@@ -129,7 +129,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   const build = () => {
     const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
     return createHttpAdapterCohort({ ...config, responseSigning: policy,
-      ...(earlyCaseCreation !== undefined ? { applicationLifecycle: { capabilities: { earlyCaseCreation, persistentSaving: true, formVersionId: 'publication-1' }, action: startAction } } : {}), ...(stateReading ? { qualifiedDraftState: statePolicy } : {}),
+      ...(earlyCaseCreation !== undefined ? { applicationLifecycle: { capabilities: { earlyCaseCreation, persistentSaving, formVersionId: 'publication-1' }, action: startAction } } : {}), ...(stateReading ? { qualifiedDraftState: statePolicy } : {}),
       ...(authenticated ? { accessToken: async () => { await state.tokenGate; return state.token; } } : { anonymousSessions: new AnonymousSessionBridge(config) }) });
   };
   const cohort = build();
@@ -140,7 +140,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   const save = (draftAction = saveAction('POST'), savedResponse = response, operationId = generateIdempotencyKey()) => cohort.responseSigning!.saveDraft({
     formId: 'conformance', draftKey, definition, formVersionId: 'publication-1', response: savedResponse, operationId, action: draftAction,
   });
-  return { save, cohort, state, requests, prepare, sign, now, values, build, metadata, policy, statePolicy, draftKey };
+  return { save, cohort, state, requests, prepare, sign, now, values, build, metadata, policy, statePolicy, draftKey, draftId };
 }
 
 async function signedResponse(unsigned: FormResponse): Promise<FormResponse> {
@@ -1282,4 +1282,86 @@ it.each(['formUrl', 'formVersion'] as const)('rejects a pending recovery with mi
   await expect(restored.responseSigning!.restorePending!({ draftKey: { ...test.draftKey, [field]: 'different' }, definition,
     formVersionId: 'publication-1', response: candidate, source, locale: 'en-US', action }, operationId)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
   expect(test.requests).toHaveLength(calls);
+});
+
+describe('explicit owned draft resume without tab metadata', () => {
+  it('recovers the same owned persisted response through qualified state reading from an empty registry', async () => {
+    const test = await fixture(true, true); test.state.version = 7;
+    expect(test.metadata.read('draft-handles')).toBeUndefined();
+    const fresh = test.build();
+    const selection = { draftId: 'owned-draft', expectedResponseId: response.id! };
+    const resumed = await fresh.draftStore.resumeState!(test.draftKey, selection);
+    expect(resumed?.kind).toBe('active');
+    if (resumed?.kind !== 'active') throw new Error('Owned checkpoint required');
+    expect(resumed.savedDraft).toMatchObject({ response, draft: { id: selection.draftId, version: 7 }, actor: { id: test.state.actor } });
+    expect(await fresh.draftStore.readState!(test.draftKey)).toEqual(resumed);
+    expect(test.requests.every(request => request.method === 'GET')).toBe(true);
+    expect(test.state.createCount).toBe(0); expect(test.state.patchCount).toBe(0); expect(test.state.signCount).toBe(0);
+  });
+});
+
+describe('owned resume admission boundaries', () => {
+  const selection = { draftId: 'owned-draft', expectedResponseId: response.id! };
+  it.each(['owner', 'publication', 'response', 'status'] as const)('refuses wrong %s before installing a fresh registry binding', async kind => {
+    const test = await fixture(true, true);
+    if (kind === 'owner') test.state.actor = 'another-owner';
+    if (kind === 'publication') test.state.formVersionId = 'another-publication';
+    if (kind === 'response') test.state.response.id = 'another-response';
+    if (kind === 'status') test.state.status = 'abandoned';
+    await expect(test.build().draftStore.resumeState!(test.draftKey, selection)).rejects.toThrow();
+    expect(test.metadata.read('draft-handles')).toBeUndefined();
+    expect(test.requests.every(request => request.method === 'GET')).toBe(true);
+    expect(test.state.createCount + test.state.patchCount + test.state.signCount).toBe(0);
+  });
+  it.each([401, 404, 503])('propagates HTTP %s and keeps selected absence from becoming creation', async status => {
+    const test = await fixture(true, true); test.state.getStatus = status;
+    await expect(test.build().draftStore.resumeState!(test.draftKey, selection)).rejects.toThrow();
+    expect(test.metadata.read('draft-handles')).toBeUndefined();
+    expect(test.state.createCount).toBe(0);
+  });
+  it('rejects task-owned returned state before ordinary binding', async () => {
+    const test = await fixture(true, true);
+    test.state.taskDraft = { taskId: 'owned-task' };
+    // Supply the association through the retained server-view fixture, never through a locator.
+    await expect(test.build().draftStore.resumeState!(test.draftKey, selection)).rejects.toThrow('Task-owned');
+    expect(test.metadata.read('draft-handles')).toBeUndefined();
+  });
+  it.each(['account', 'clear'] as const)('fences a pending new binding on %s retirement', async kind => {
+    const test = await fixture(true, true); const fresh = test.build(); let release!: () => void;
+    test.state.getGate = new Promise<void>(resolve => { release = resolve; });
+    const pending = fresh.draftStore.resumeState!(test.draftKey, selection);
+    await vi.waitFor(() => expect(test.requests).toHaveLength(1));
+    const retired = kind === 'account' ? fresh.draftStore.invalidateSubject(test.draftKey.subjectRef!) : fresh.draftStore.delete(test.draftKey);
+    release(); await expect(pending).rejects.toThrow(/cleared|invalidated/); await retired;
+    expect(test.metadata.read('draft-handles')).toBeUndefined();
+  });
+  it('refuses replacing a conflicting existing locator without a read or write', async () => {
+    const test = await fixture(true, true); await test.save(); const retained = structuredClone(test.metadata.read('draft-handles')); const count = test.requests.length;
+    await expect(test.build().draftStore.resumeState!(test.draftKey, { ...selection, draftId: 'another-draft' })).rejects.toThrow('conflicts');
+    expect(test.requests).toHaveLength(count); expect(test.metadata.read('draft-handles')).toEqual(retained);
+  });
+  it('does not downgrade a valid pending Source snapshot when local signing evidence is missing', async () => {
+    const test = await fixture(true, true); await test.save();
+    const prepared = await test.prepare(); test.state.refuseSign = true;
+    await expect(test.sign(prepared)).rejects.toThrow('ambiguous signing failure');
+    expect(test.state.response.extensions?.['x-formspec-signing-content']).toBeDefined();
+    expect(test.state.response.authoredSignatures?.length ?? 0).toBe(0);
+    expect(await validateCanonicalFormResponse(test.state.response)).toBe(true);
+    test.values.clear();
+    await expect(test.build().draftStore.resumeState!(test.draftKey, selection)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
+    expect(test.metadata.read('draft-handles')).toBeUndefined();
+  });
+  it.each([true, false])('keeps existing lookup available with creation disabled and persistent saving %s', async persistentSaving => {
+    const test = await fixture(true, true, false, false, undefined, persistentSaving);
+    const state = await test.build().draftStore.resumeState!(test.draftKey, { draftId: test.draftId, expectedResponseId: response.id! });
+    expect(state.kind).toBe('active'); expect(state.application?.draftRef).toBe(`urn:formspec:draft:${test.draftId}`);
+    expect(test.requests.every(request => request.method === 'GET')).toBe(true); expect(test.state.createCount).toBe(0);
+  });
+});
+
+
+it('refuses an asynchronous owned-resume guard before credentials or reads', async () => {
+  const test = await fixture(true, true);
+  await expect(test.build().draftStore.resumeState!(test.draftKey, { draftId: test.draftId, expectedResponseId: response.id! }, async () => {})).rejects.toThrow('guard must be synchronous');
+  expect(test.requests).toHaveLength(0); expect(test.metadata.read('draft-handles')).toBeUndefined();
 });
