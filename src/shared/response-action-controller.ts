@@ -457,6 +457,22 @@ export function createResponseActionController(config: ResponseActionControllerC
       } finally { busy = undefined; }
     },
     definitionInvoker, widgetExecutor,
+    async restoreSavedDraft(value: SavedResponseDraft) {
+      const generation = epoch; current(generation);
+      if (!restored || restored.authoredSignatures?.length || restored.extensions?.['x-formspec-signing-content']
+        || prepared || signed || saved || busy || pendingOperationId || completionResult) throw new ControllerRefusal('restoration-unresolved');
+      busy = 'draft-restoration';
+      try {
+        const result = freeze(structuredClone(value));
+        if (result.response.id !== context.responseId || result.response.definitionUrl !== context.definition.url
+          || result.response.definitionVersion !== context.definition.version
+          || context.draftKey.subjectRef && result.actor.id !== context.draftKey.subjectRef) throw new ControllerRefusal('context-mismatch');
+        await checkEvidence(result, restored); current(generation);
+        saved = result; actor = result.actor.id; owned = true;
+        publish('saved');
+        await afterCommit(result); current(generation);
+      } finally { busy = undefined; }
+    },
     async restorePending(value: PendingResponseSigning, renewUnsignedRevision?: true) {
       value = freeze(structuredClone(value));
       const generation = epoch; current(generation);

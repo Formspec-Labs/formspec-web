@@ -206,9 +206,7 @@ export class HttpResponseSigning implements ResponseSigning {
       canonical_response: view.canonical_response, status: view.status,
       ...(view.taskDraft === undefined ? {} : { taskDraft: view.taskDraft }),
     };
-    return freeze(structuredClone({ draftKey: key, response: view.canonical_response,
-      draft: { id: view.draft_id, version: view.draft_version, responseHash: await handoffHash(view.canonical_response) },
-      actor: { id: view.subject_ref }, evidence }));
+    return savedResponseDraftFromVerifiedRead(key, evidence);
   }
 
   prepare(input: PrepareResponseSigningInput): Promise<PreparedResponseSigning> {
@@ -632,6 +630,15 @@ function freeze<T>(value: T): T {
   }
   return value;
 }
+/** Reuses actual owned DraftView evidence; callers must qualify its owner and publication first. */
+export async function savedResponseDraftFromVerifiedRead(key: DraftKey, supplied: VerifiedDraftEvidence): Promise<SavedResponseDraft> {
+  const draftKey = freeze(structuredClone(key));
+  const evidence = freeze(structuredClone(supplied));
+  return freeze({ draftKey, response: evidence.canonical_response,
+    draft: { id: evidence.draft_id, version: evidence.draft_version, responseHash: await handoffHash(evidence.canonical_response) },
+    actor: { id: evidence.subject_ref }, evidence });
+}
+
 export async function handoffHash(response: FormResponse): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', canonicalResponseHandoffBytes(response));
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');

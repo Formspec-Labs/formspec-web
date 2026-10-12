@@ -758,6 +758,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       else locale = next.activeLocale;
       next = { ...next, draftKey: structuredClone(next.draftKey), claim: structuredClone(next.claim),
         restoredResponse: next.restoredResponse ? structuredClone(next.restoredResponse) : undefined,
+        restoredSavedDraft: next.restoredSavedDraft ? structuredClone(next.restoredSavedDraft) : undefined,
         restoredSigning: next.restoredSigning ? structuredClone(next.restoredSigning) : undefined,
         restoredPendingSign: next.restoredPendingSign ? structuredClone(next.restoredPendingSign) : undefined, activeLocale: locale };
       if (!input) checkpointState = next.restoredResponse ? 'saved' : 'unsaved';
@@ -769,7 +770,13 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       const title = next.engine.getFormVM().title.value;
       if (typeof title === 'string') formTitle = title;
       if (!controller) {
+        if (next.restoredSavedDraft && (next.restoredPendingSign || next.restoredSigning)) throw new Error('native-saved-restoration-ambiguous');
         start(next.restoredResponse);
+        if (next.restoredSavedDraft) {
+          const expected = authorityGeneration;
+          await controller!.restoreSavedDraft(next.restoredSavedDraft);
+          if (disposed || cleared || authorityGeneration !== expected) throw new Error('native-saved-restoration-retired');
+        }
         if (next.restoredPendingSign) await controller!.restorePending(next.restoredPendingSign, native && !next.restoredPendingSign.response.extensions?.['x-formspec-signing-content'] ? true : undefined);
         if (next.restoredSigning) {
           if (!same(next.restoredSigning.response, next.restoredResponse)) throw new Error('native-signed-restoration-mismatch');

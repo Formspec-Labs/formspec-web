@@ -3,6 +3,7 @@ import { detachedSignatureProtectedHeader, encodeCoseSign1 } from '@formspec-org
 import { canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import type { FormResponse, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import { createHttpAdapterCohort } from '../../../src/adapters/http/cohort.ts';
+import { handoffHash } from '../../../src/adapters/http/response-signing.ts';
 import { AnonymousSessionBridge } from '../../../src/adapters/http/anonymous-session.ts';
 import { createBrowserDraftResumeMetadataStore } from '../../../src/adapters/browser/draft-resume-metadata.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../../src/adapters/schema/index.ts';
@@ -164,6 +165,33 @@ async function profileDigest(response: FormResponse): Promise<string> {
 }
 
 describe('cohort-owned Response Prepare and Sign', () => {
+  it('restores the unsigned saved handle from one qualified owned read without a write', async () => {
+    const test = await fixture(true, true); await test.save();
+    const before = test.requests.length;
+    const state = await test.build().draftStore.readState!(test.draftKey);
+    expect(state?.kind).toBe('active');
+    if (state?.kind !== 'active') throw new Error('expected active owned draft');
+    expect(state.savedDraft).toMatchObject({ draftKey: test.draftKey, response,
+      draft: { id: 'owned-draft', version: test.state.version }, actor: { id: test.state.actor },
+      evidence: { draft_id: 'owned-draft', draft_version: test.state.version, status: 'in_progress' } });
+    expect(state.savedDraft?.draft.responseHash).toBe(await handoffHash(response));
+    expect(test.requests.slice(before).every(request => request.method === 'GET')).toBe(true);
+    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(0);
+  });
+
+  it('retains and refuses an unresolved create marker before unsigned handle restoration', async () => {
+    const test = await fixture(true, true); await test.save();
+    const marker = { scope: JSON.stringify({ formId: 'conformance', subject: test.draftKey.subjectRef, party: null }),
+      operationId: generateIdempotencyKey(), definitionUrl: response.definitionUrl,
+      definitionVersion: response.definitionVersion, candidateHash: await handoffHash(response) };
+    test.metadata.write('response-draft-create-operations', [marker]);
+    const before = test.requests.length;
+    await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
+    expect(test.metadata.read('response-draft-create-operations')).toEqual([marker]);
+    expect(test.requests.slice(before).every(request => request.method === 'GET')).toBe(true);
+    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(0);
+  });
+
   it('resumes an owned draft with explicit unavailable case status and keeps saving its exact handle', async () => {
     const test = await fixture(true, true, false, false); await test.save();
     test.state.applicationStatus = 503;
@@ -339,7 +367,8 @@ describe('cohort-owned Response Prepare and Sign', () => {
 
   it('retains legacy active load and returns an active variant under the qualified reader', async () => {
     const test = await fixture(true); await test.cohort.draftStore.save(key, response);
-    await expect(test.cohort.draftStore.readState!(key)).resolves.toEqual({ kind: 'active', response });
+    await expect(test.cohort.draftStore.readState!(key)).resolves.toMatchObject({ kind: 'active', response,
+      savedDraft: { response, draft: { id: 'owned-draft', version: 1 } } });
     await expect(test.cohort.draftStore.load(key)).resolves.toEqual(response);
     test.state.status = 'unknown'; await expect(test.cohort.draftStore.readState!(key)).rejects.toThrow();
   });

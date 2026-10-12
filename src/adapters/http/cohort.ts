@@ -36,7 +36,7 @@ import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 import { HttpClient, HttpAdapterError, type HttpClientConfig } from './http-client.ts';
 import { HttpSubmitTransport } from './submit-transport.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
-import { assertDelegatedSignedResponseConsistency, handoffHash, HttpResponseSigning, ResponseSigningScopeFence, type HttpResponseSigningPolicy } from './response-signing.ts';
+import { assertDelegatedSignedResponseConsistency, handoffHash, savedResponseDraftFromVerifiedRead, HttpResponseSigning, ResponseSigningScopeFence, type HttpResponseSigningPolicy } from './response-signing.ts';
 
 export type { DraftBindingRegistry, DraftBindingSnapshot } from './draft-binding-registry.ts';
 
@@ -145,7 +145,14 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
               subject_ref: owner.subjectRef, draft_state: view.draft_state, canonical_response: response, status: 'in_progress',
               ...(view.taskDraft === undefined ? {} : { taskDraft: view.taskDraft }) } } };
         }
-        return { kind: 'active', response };
+        responseSigning.assertEditable(key);
+        const savedDraft = await savedResponseDraftFromVerifiedRead(key, {
+          draft_id: view.draft_id, draft_version: view.draft_version, form_version_id: view.form_version_id!,
+          subject_ref: owner.subjectRef, draft_state: view.draft_state, canonical_response: response, status: 'in_progress',
+          ...(view.taskDraft === undefined ? {} : { taskDraft: view.taskDraft }),
+        });
+        current(); responseSigning.assertEditable(key);
+        return { kind: 'active', response, savedDraft };
       }
       const displayed = response.displayedLocale;
       const locale = displayed && statePolicy.localeDocuments.filter(document => document.url === displayed.url && document.version === displayed.version

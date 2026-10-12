@@ -14,7 +14,7 @@ import { createNativePackageSigningHost, captureFields, type NativePackageSignin
 import type { RespondentEngineExchange } from '../../src/app/RespondentRuntime.tsx';
 import type { HydratedEvaluationCandidate } from '../../src/ports/evaluation-hydration.ts';
 import { computeJcsSha256Digest } from '../../src/adapters/http/response-action-ledger.ts';
-import type { SavedResponseDraft } from '../../src/ports/response-signing.ts';
+import type { SavedResponseDraft, SignedResponseSigning } from '../../src/ports/response-signing.ts';
 import { isUuidV7IdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { createHttpAdapterCohort } from '../../src/adapters/http/cohort.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
@@ -540,6 +540,38 @@ describe('generic native package signing session', () => {
       claim: null, activeLocale: 'es', restoredResponse: response });
     expect(reloaded.getSnapshot().locale).toBe('es'); restored.dispose(); restoredEngine.dispose(); reloaded.dispose(); test.engine.dispose();
   });
+  it('restores a qualified unsigned saved handle into a fresh host without another Save', async () => {
+    const test = fixture(); const first = await test.attach();
+    await test.invoke(first, 'save');
+    const saved = test.host.getSnapshot().controller!.saved!;
+    first.dispose(); test.engine.dispose(); test.host.dispose();
+    const host = createNativePackageSigningHost(test.policy);
+    const engine = createFormEngine(test.policy.definition);
+    engine.loadResponseData(saved.response.data as Parameters<typeof engine.loadResponseData>[0]);
+    const lease = await host.configureRuntime({ engine, definition: test.policy.definition,
+      draftKey: saved.draftKey, claim: null, activeLocale: 'en', restoredResponse: saved.response, restoredSavedDraft: saved });
+    expect(host.getSnapshot().controller?.saved).toEqual(saved);
+    await test.invoke(lease, 'prepare');
+    expect(test.saveDraft).toHaveBeenCalledOnce();
+    expect(test.prepare).toHaveBeenCalledOnce();
+    expect(host.getSnapshot().controller?.phase).toBe('prepared');
+    lease.dispose(); engine.dispose(); host.dispose();
+  });
+
+  it('rejects saved and signed restoration ambiguity before adopting a saved handle', async () => {
+    const test = fixture(); const first = await test.attach();
+    await test.invoke(first, 'save');
+    const saved = test.host.getSnapshot().controller!.saved!;
+    first.dispose(); test.engine.dispose(); test.host.dispose();
+    const host = createNativePackageSigningHost(test.policy);
+    const engine = createFormEngine(test.policy.definition);
+    await expect(host.configureRuntime({ engine, definition: test.policy.definition, draftKey: saved.draftKey,
+      claim: null, activeLocale: 'en', restoredResponse: saved.response, restoredSavedDraft: saved,
+      restoredSigning: saved as unknown as SignedResponseSigning })).rejects.toThrow('ambiguous');
+    expect(host.getSnapshot().controller?.saved).toBeUndefined();
+    engine.dispose(); host.dispose();
+  });
+
   it('remains unavailable before explicit Save, publishes one prepared revision and retires only the form lease', async () => {
     const test = fixture(); const lease = await test.attach();
     expect(test.host.getSnapshot().runtime).toBeUndefined(); expect(lease.semanticControlScope?.responseId).toBe(test.response.id);
@@ -814,6 +846,58 @@ describe('explicit reviewed-candidate facts renewal', () => {
       changeProvenance: () => { data = { qualified: true, evidenceRef: 'proof-two' }; },
       correct: () => { data = { qualified: true, evidenceRef: 'proof-three' }; }, refuse: () => { refuse = true; }, hold: (value: Promise<void>) => { hold = value; } };
   }
+  async function restoreNative(test: ReturnType<typeof nativeFixture>, calculate = false) {
+    const first = await test.attach(); await test.invoke(first, 'save');
+    const saved = test.host.getSnapshot().controller!.saved!;
+    first.dispose(); test.host.dispose(); test.engine.dispose();
+    if (calculate) {
+      test.policy.definition.items.push({ key: 'qualification', type: 'field', dataType: 'boolean', label: 'Qualification' });
+      test.policy.definition.binds!.push({ path: 'qualification', calculate: "@instance('facts').qualified" });
+    }
+    const host = createNativePackageSigningHost(test.policy);
+    const engine = createFormEngine(test.policy.definition);
+    engine.loadResponseData(saved.response.data as Parameters<typeof engine.loadResponseData>[0]);
+    const replacements: ReturnType<typeof createFormEngine>[] = [];
+    const configure = () => host.configureRuntime({ engine, definition: test.policy.definition,
+      draftKey: saved.draftKey, claim: null, activeLocale: 'en', restoredResponse: saved.response,
+      restoredSavedDraft: saved, exchangeEngine: async (request: RespondentEngineExchange) => {
+        request.assertCurrent(); request.adopt(); replacements.push(request.engine as ReturnType<typeof createFormEngine>);
+      } });
+    return { host, engine, saved, configure, cleanup: () => {
+      host.dispose(); engine.dispose(); replacements.forEach(replacement => replacement.dispose()); test.cleanup();
+    } };
+  }
+  it('qualifies restored native facts and explicitly checks and prepares without another Save', async () => {
+    const test = nativeFixture(); const restored = await restoreNative(test);
+    const lease = await restored.configure(); await lease.afterMount!();
+    expect(restored.host.getSnapshot().nativeReadiness).toBe('ready');
+    const count = test.qualify.mock.calls.length;
+    await restored.host.qualifyCurrentVisit!();
+    expect(test.qualify.mock.calls.length).toBe(count + 1);
+    expect(test.qualify.mock.calls.at(-1)![0]).toEqual(restored.saved);
+    await test.invoke(lease, 'prepare');
+    expect(restored.host.getSnapshot().controller?.phase).toBe('prepared');
+    expect(test.saveDraft).toHaveBeenCalledOnce(); lease.dispose(); restored.cleanup();
+  });
+  it('keeps a restored saved checkpoint Pending when its native source refuses', async () => {
+    const test = nativeFixture(); const restored = await restoreNative(test); test.refuse();
+    const lease = await restored.configure(); await lease.afterMount!();
+    expect(restored.host.getSnapshot().nativeReadiness).toBe('pending');
+    expect(restored.host.getSnapshot().controller?.saved).toEqual(restored.saved);
+    await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-facts-pending-save-required');
+    expect(test.prepare).not.toHaveBeenCalled();
+    expect(test.saveDraft).toHaveBeenCalledOnce(); lease.dispose(); restored.cleanup();
+  });
+  it('requires Save when restored native facts recalculate response data', async () => {
+    const test = nativeFixture(); const restored = await restoreNative(test, true);
+    const lease = await restored.configure(); await lease.afterMount!();
+    expect(restored.host.getSnapshot().nativeReadiness).toBe('needs-save');
+    expect(restored.host.getSnapshot().controller?.saved).toEqual(restored.saved);
+    await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-facts-pending-save-required');
+    expect(test.prepare).not.toHaveBeenCalled();
+    expect(test.saveDraft).toHaveBeenCalledOnce(); lease.dispose(); restored.cleanup();
+  });
+
   it('reconciles a failed task Sign through candidate authority without a Screener context', async () => {
     const test = nativeFixture();
     expect(test.policy.nativeScreener).toBeUndefined();

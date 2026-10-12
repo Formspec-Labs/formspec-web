@@ -431,6 +431,68 @@ describe('generic admitted Response Action controller', () => {
     expect(test.controller.getSnapshot()).toEqual({ phase: 'refused', owned: false, reason: 'context-obsolete' });
   });
 
+  it('continues a restored unsigned checkpoint through Prepare without another Save', async () => {
+    const qualified = await evidence(response, 1);
+    const afterCommittedDraft = vi.fn();
+    const test = fixture({ restoredResponse: response, afterCommittedDraft });
+    await test.controller.restoreSavedDraft(qualified);
+    expect(test.controller.getSnapshot()).toMatchObject({ phase: 'saved', owned: true, saved: qualified });
+    expect(afterCommittedDraft).toHaveBeenCalledWith(qualified);
+    await test.definition('prepare');
+    expect(test.prepare).toHaveBeenCalledOnce();
+    expect(test.saveDraft).not.toHaveBeenCalled();
+    expect(test.controller.getSnapshot().phase).toBe('prepared');
+  });
+
+  it.each(['actor', 'publication', 'revision', 'hash', 'response'] as const)('refuses contradictory restored saved %s without publishing a handle', async field => {
+    let value = await evidence(response, 1);
+    const test = fixture({ restoredResponse: response, context: { ...fixture().config.context, expectedActor: 'server-actor' } });
+    if (field === 'actor') value = { ...value, actor: { id: 'other-actor' } };
+    if (field === 'publication') value = { ...value, evidence: { ...value.evidence, form_version_id: 'other-publication' } };
+    if (field === 'revision') value = { ...value, evidence: { ...value.evidence, draft_version: 2 } };
+    if (field === 'hash') value = { ...value, draft: { ...value.draft, responseHash: 'f'.repeat(64) } };
+    if (field === 'response') value = { ...value, response: { ...response, data: { ...response.data, fullName: 'changed' } } };
+    await expect(test.controller.restoreSavedDraft(value)).rejects.toMatchObject({ code: 'context-mismatch' });
+    expect(test.controller.getSnapshot().saved).toBeUndefined();
+    expect(test.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it('pins a restored saved actor to the selected draft owner without an expectedActor hint', async () => {
+    const value = await evidence(response, 1);
+    const selectedKey = { ...draftKey, subjectRef: 'selected-owner' };
+    const test = fixture({ restoredResponse: response, context: { ...fixture().config.context, draftKey: selectedKey } });
+    await expect(test.controller.restoreSavedDraft({ ...value, draftKey: selectedKey })).rejects.toMatchObject({ code: 'context-mismatch' });
+    expect(test.controller.getSnapshot().saved).toBeUndefined();
+  });
+
+  it('reserves restoration during hashing and refuses its late result after retirement', async () => {
+    let release!: () => void; let entered!: () => void;
+    const hashing = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const test = fixture({ restoredResponse: response, hashResponse: async value => { entered(); await gate; return hashResponse(value); } });
+    const qualified = await evidence(response, 1);
+    const pending = test.controller.restoreSavedDraft(qualified);
+    await hashing;
+    await expect(test.controller.restoreSavedDraft(qualified)).rejects.toMatchObject({ code: 'restoration-unresolved' });
+    const saving = test.definition('saveOwned');
+    test.controller.invalidate(); release();
+    await expect(pending).rejects.toMatchObject({ code: 'context-obsolete' });
+    await saving;
+    expect(test.saveDraft).not.toHaveBeenCalled();
+    expect(test.controller.getSnapshot()).toEqual({ phase: 'refused', owned: false, reason: 'context-obsolete' });
+  });
+
+  it('rechecks retirement after the restored checkpoint qualification hook', async () => {
+    let release!: () => void; let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const test = fixture({ restoredResponse: response, afterCommittedDraft: async () => { entered(); await gate; } });
+    const pending = test.controller.restoreSavedDraft(await evidence(response, 1));
+    await started; test.controller.invalidate(); release();
+    await expect(pending).rejects.toMatchObject({ code: 'context-obsolete' });
+    expect(test.controller.getSnapshot().saved).toBeUndefined();
+  });
+
   it('uses restored full Response only for owned branch and refuses signed restoration without qualification', async () => {
     const test = fixture({ restoredResponse: response });
     await test.definition('saveInitial');

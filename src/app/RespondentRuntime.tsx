@@ -54,7 +54,7 @@ import {
 import type { Composition } from '../composition/types.ts';
 import { DraftVersionConflictError, type DraftReadState, type DraftKey } from '../ports/draft-store.ts';
 import type { ApplicationCaseReceipt, ApplicationCaseLookupUnavailable } from '../ports/application-lifecycle.ts';
-import type { PendingResponseSigning, SignedResponseSigning } from '../ports/response-signing.ts';
+import type { PendingResponseSigning, SignedResponseSigning, SavedResponseDraft } from '../ports/response-signing.ts';
 import type { ReviewerShare } from '../ports/reviewer-session.ts';
 import { respondentSessionToken } from '../ports/reviewer-session.ts';
 import type {
@@ -204,6 +204,7 @@ export interface RespondentOwnedRuntimeInput {
   readonly draftKey: DraftKey;
   readonly claim: IdentityClaim | null;
   readonly restoredResponse?: FormResponse;
+  readonly restoredSavedDraft?: SavedResponseDraft;
   readonly restoredSigning?: SignedResponseSigning;
   readonly restoredPendingSign?: PendingResponseSigning;
   readonly restoredApplication?: ApplicationCaseReceipt;
@@ -1566,6 +1567,7 @@ async function createReadyState(
     subjectRef: claim?.subjectRef,
   };
   let recoveredDraft: FormResponse | undefined;
+  let recoveredSavedDraft: SavedResponseDraft | undefined;
   let recoveredSigning: SignedResponseSigning | undefined;
   let recoveredPendingSign: PendingResponseSigning | undefined;
   let recoveredApplication: ApplicationCaseReceipt | undefined;
@@ -1587,6 +1589,7 @@ async function createReadyState(
       return { status: 'submitted', terminalRuntime };
     }
     recoveredDraft = state?.response;
+    recoveredSavedDraft = state?.kind === 'active' ? state.savedDraft : undefined;
     recoveredSigning = state?.kind === 'active' ? state.signed : undefined;
     recoveredPendingSign = state?.kind === 'active' ? state.pendingSign : undefined;
     recoveredApplication = state?.application;
@@ -1641,7 +1644,7 @@ async function createReadyState(
       }
       const configured = await form.configureRuntime({ engine, definition, exchangeEngine,
         draftKey: multiPartyState ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef) : draftKey, claim,
-        restoredResponse: draft ? structuredClone(draft) : undefined, restoredSigning: recoveredSigning, restoredPendingSign: recoveredPendingSign, restoredApplication: recoveredApplication,
+        restoredResponse: draft ? structuredClone(draft) : undefined, restoredSavedDraft: recoveredSavedDraft, restoredSigning: recoveredSigning, restoredPendingSign: recoveredPendingSign, restoredApplication: recoveredApplication,
         restoredApplicationLookup: recoveredApplicationLookup, activeLocale });
       if (!configured || typeof configured.responseActionInvoker !== 'function'
         || typeof configured.invalidate !== 'function'

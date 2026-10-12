@@ -59,6 +59,30 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     expect(runtime.invalidate).not.toHaveBeenCalled();
   });
 
+  it('forwards the qualified saved handle from readState into owned runtime configuration', async () => {
+    const composition = anonymousComposition(createTestComposition({ definition: testDefinition }));
+    const response: FormResponse = { $formspecResponse: '1.0', id: 'retained-owned-response',
+      definitionUrl: definition.url, definitionVersion: definition.version, status: 'in-progress',
+      authored: '2026-10-06T00:00:00Z', data: { name: 'Retained answer' } };
+    const saved = { draftKey: { formUrl: definition.url, formVersion: definition.version }, response,
+      draft: { id: 'retained-owned-draft', version: 7, responseHash: 'qualified-by-reader' }, actor: { id: 'owner' },
+      evidence: { draft_id: 'retained-owned-draft', draft_version: 7, form_version_id: 'publication',
+        subject_ref: 'owner', status: 'in_progress' as const, draft_state: response.data, canonical_response: response } };
+    const readState = vi.fn(async () => ({ kind: 'active' as const, response, savedDraft: saved }));
+    composition.draftStore.readState = readState;
+    const load = vi.spyOn(composition.draftStore, 'load');
+    const save = vi.spyOn(composition.draftStore, 'save');
+    const configureRuntime = vi.fn(async (_input: RespondentOwnedRuntimeInput) => ownedRuntime());
+    const configureSubmittedRuntime = vi.fn(async () => ({ invalidate: vi.fn(), dispose: vi.fn() }));
+    const view = render(<RespondentDefinitionController composition={composition} config={departmentAppProfile}
+      form={{ ...resolvedForm(), configureRuntime, configureSubmittedRuntime }} />);
+    await waitFor(() => expect(configureRuntime).toHaveBeenCalledOnce());
+    expect(configureRuntime.mock.calls[0][0]).toMatchObject({ restoredResponse: response, restoredSavedDraft: saved });
+    expect(readState).toHaveBeenCalledOnce();
+    expect(load).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
+    expect(configureSubmittedRuntime).not.toHaveBeenCalled(); view.unmount();
+  });
+
   it('disposes a superseded asynchronous owned runtime before disposing its engine', async () => {
     let finish!: (runtime: RespondentOwnedRuntime) => void;
     let disposeEngine: ReturnType<typeof vi.spyOn> | undefined;
