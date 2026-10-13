@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTaskMixedProofVerifier } from '../../../src/adapters/http/task-mixed-proof-verifier.ts';
 import { attachMixedProofWorker } from '../../../src/adapters/source-worker/general-worker.ts';
 import type { ProofWorker } from '../../../src/adapters/source-worker/protocol.ts';
@@ -173,5 +173,37 @@ describe('selected mixed task proof configuration admission', () => {
     f.config.registration.publicDescriptor.providerVersion = 'correction-2';
     expect(() => createTaskMixedProofVerifier(f.config)).not.toThrow();
     expect(f.calls()).toBe(0); expect(f.created()).toBe(0);
+  });
+});
+
+
+describe('bounded protected transport overlap (simulated timing; mock Source crypto)', () => {
+  it('overlaps two genuine producer objects and preserves buffers under reverse completion', async () => {
+    const f = await taskHydrationFixture(); const original = f.config.source.fetchImpl;
+    const held: { release: () => void }[] = []; const completed: number[] = []; let elapsed = 0;
+    f.config.monotonicNow = () => elapsed;
+    f.config.source.fetchImpl = async (url, init) => {
+      if (!String(url).endsWith('/proof-object')) return original(url, init);
+      const position = held.length;
+      await new Promise<void>(resolve => { held.push({ release: resolve }); });
+      const response = await original(url, init); completed.push(position); return response;
+    };
+    // Recreate the real adapter/verifier so the selected transport is pinned.
+    const request = f.selected.request;
+    const adapter = new HttpTaskCandidateHydration({ ...f.config.source, definition: JSON.parse(request.formVersion.definition_json),
+      selection: request.selection, formVersionHash: f.input.view.formVersionHash, taskDraft: f.saved.evidence.taskDraft!, subjectRef: f.saved.actor.id,
+      identity: { issuer: request.owner.authenticated.issuer, subject: request.owner.authenticated.subject, clientId: request.owner.authenticated.clientId },
+      assertCurrent: f.config.assertCurrent, elapsedNow: () => elapsed, receiptVerifier: createTaskMixedProofVerifier(f.config) }, f.lifetime);
+    const lifetime = new AbortController();
+    const outcome = adapter.qualifySaved(f.saved, { ...f.lifetime, signal: lifetime.signal }).then(facts => ({ facts }), error => ({ error }));
+    try {
+      await vi.waitFor(() => expect(held).toHaveLength(2), { timeout: 500 });
+      elapsed = 45; held[1].release(); await vi.waitFor(() => expect(completed).toEqual([1]));
+      elapsed = 75; held[0].release();
+      const result = await outcome; if ('error' in result) throw result.error;
+      result.facts.assertReady(); expect(result.facts.view).toEqual(f.input.view);
+      // Two controlled delays75/45 cost75 overlapped, versus120 sequential.
+      expect(elapsed).toBe(75); expect(completed).toEqual([1, 0]); expect(f.terminated()).toBe(1);
+    } finally { lifetime.abort(new Error('test cleanup')); held.forEach(item => item.release()); await outcome; adapter.dispose(); f.adapter.dispose(); }
   });
 });

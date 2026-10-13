@@ -72,11 +72,30 @@ export class HttpMixedProofReader {
       throw new Error('Source mixed proof aggregate or ordering differs');
     }
     const buffers: Uint8Array[] = [];
-    for (const item of objects) {
-      check(); const bytes = await this.client.postJsonForBytes(`${path}/proof-object`,
-        { version: 1, hydration: view, objectKey: item.objectKey }, { ...options, maxResponseBytes: item.byteLength }); check();
-      if (bytes.byteLength !== item.byteLength) throw new Error('Source mixed proof object length differs');
-      buffers.push(bytes);
+    for (let offset = 0; offset < objects.length; offset += 2) {
+      check();
+      const siblings = new AbortController();
+      const batchSignal = AbortSignal.any([signal, siblings.signal]);
+      const batchCurrent = () => { batchSignal.throwIfAborted(); check(); };
+      let failure: { error: unknown } | undefined;
+      const batch = objects.slice(offset, offset + 2).map(async item => {
+        try {
+          batchCurrent();
+          const bytes = await this.client.postJsonForBytes(`${path}/proof-object`,
+            { version: 1, hydration: view, objectKey: item.objectKey },
+            { ...options, signal: batchSignal, assertCurrent: batchCurrent, maxResponseBytes: item.byteLength });
+          batchCurrent();
+          if (bytes.byteLength !== item.byteLength) throw new Error('Source mixed proof object length differs');
+          return bytes;
+        } catch (error) {
+          failure ??= { error };
+          siblings.abort(failure.error);
+          throw failure.error;
+        }
+      });
+      // Promise.all preserves indexed positions and observes every late rejection.
+      const completed = await Promise.all(batch);
+      check(); buffers.push(...completed);
     }
     check();
     return { hydrationBytes, proofIndexBytes: snapshotInput(new TextEncoder().encode(JSON.stringify(proofIndex)), SMALL_CAP), buffers };
