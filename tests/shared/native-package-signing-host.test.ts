@@ -19,6 +19,7 @@ import { isUuidV7IdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { createHttpAdapterCohort } from '../../src/adapters/http/cohort.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
+import { HttpTaskCandidateHydration } from '../../src/adapters/http/task-candidate-hydration.ts';
 import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts';
 import type { ScreenerAssociation, ScreenerRetention } from '../../src/ports/screener-retention.ts';
 import type { ScreenerHydration } from '../../src/ports/screener-hydration.ts';
@@ -26,7 +27,7 @@ import type { SurfaceScreenerCompletionRequest } from '@formspec-org/surface-rea
 
 beforeAll(() => initFormspecEngine());
 const hashResponse = async (response: FormResponse) => createHash('sha256').update(canonicalResponseHandoffBytes(response)).digest('hex');
-function fixture(attachment = false, signingScope?: NativePackageSigningHostPolicy['signingScope'], configure?: (policy: NativePackageSigningHostPolicy) => void) {
+function fixture(attachment = false, signingScope?: NativePackageSigningHostPolicy['signingScope'], configure?: (policy: NativePackageSigningHostPolicy) => void, subjectRef?: string) {
   const definition = { ...sampleFormDefinition, items: attachment ? [{ key: 'fullName', type: 'field' as const, dataType: 'attachment' as const, label: 'Photo' }] : sampleFormDefinition.items, instances: { readiness: { readonly: false, data: { owned: false, ready: false } } } };
   const response: FormResponse & { id: string } = { ...sampleFormResponse, id: 'stable-id', data: attachment ? { fullName: { kind: 'attachment-ref', uri: 'attachment:owned', mimeType: 'image/png', contentType: 'image/png', filename: 'photo.png', size: 1, hash: `sha256:${'a'.repeat(64)}` } } : sampleFormResponse.data };
   const source = { ref: `${definition.url}#/extensions/x-formspec-signing-content/entries/en`, version: '1' };
@@ -51,7 +52,7 @@ function fixture(attachment = false, signingScope?: NativePackageSigningHostPoli
   let version = 0;
   async function saved(value: FormResponse): Promise<SavedResponseDraft> {
     const draft = { id: 'owned-id', version: ++version, responseHash: await hashResponse(value) };
-    return { draftKey: { formUrl: definition.url, formVersion: definition.version }, response: value, draft, actor: { id: 'server-actor' },
+    return { draftKey: { formUrl: definition.url, formVersion: definition.version, ...(subjectRef ? { subjectRef } : {}) }, response: value, draft, actor: { id: 'server-actor' },
       evidence: { draft_id: draft.id, draft_version: draft.version, form_version_id: 'publication', subject_ref: 'server-actor', status: 'in_progress', draft_state: value.data, canonical_response: value } };
   }
   const saveDraft = vi.fn<NativePackageSigningHostPolicy['controller']['signing']['saveDraft']>(async input => saved(input.response));
@@ -77,7 +78,7 @@ function fixture(attachment = false, signingScope?: NativePackageSigningHostPoli
   async function attach() { return host.configureRuntime({ engine, definition,
     ...(configure ? { exchangeEngine: async (request: RespondentEngineExchange) => {
       request.assertCurrent(); request.adopt(); replacements.push(request.engine as ReturnType<typeof createFormEngine>);
-    } } : {}), draftKey: { formUrl: definition.url, formVersion: definition.version }, claim: null, activeLocale: 'en' }); }
+    } } : {}), draftKey: { formUrl: definition.url, formVersion: definition.version, ...(subjectRef ? { subjectRef } : {}) }, claim: null, activeLocale: 'en' }); }
   async function invoke(lease: Awaited<ReturnType<typeof attach>>, actionRef: string, invocationId = `node:${actionRef}`) {
     return lease.responseActionInvoker({ document, actionRef, invocationContext: { invocationId },
       ports: { dispatchHostEvent: vi.fn(), submit: () => ({ response, validationReport: engine.getValidationReport({ profile: 'on-submit' }) }) } });
@@ -809,13 +810,43 @@ describe('native authored host event routing', () => {
   }
 });
 
-// Synthetic native lifetime tests use maintained public engines, not Source proof qualification.
+// Neutral lifetime tests use public engines and, where selected, the actual task adapter
+// with an explicitly mocked receipt verifier; they do not qualify Source proof accuracy.
 describe('explicit reviewed-candidate facts renewal', () => {
-  function nativeFixture(currentCheck = false, lifetimeMilliseconds = 90_000, reportsLifetime = true) {
+  function nativeFixture(currentCheck = false, lifetimeMilliseconds = 90_000, reportsLifetime = true, actualTaskAdapter = false) {
     let now = 0; let data = { qualified: true, evidenceRef: 'proof-one' }; let refuse = false;
     let hold: Promise<void> | undefined; let activeGeneration = 0;
     let runId = 'fresh-run-original';
+    let taskAdapter: HttpTaskCandidateHydration | undefined;
+    let taskSaved: SavedResponseDraft;
+    let taskTemplate: Awaited<ReturnType<typeof hydrationFixture>>;
+    let authorityRetired = false;
+    const taskAssociation = { version: 1 as const, associationHash: `sha256:${'b'.repeat(64)}`, taskBindingHash: `sha256:${'c'.repeat(64)}` };
     const qualify = vi.fn(async (saved: SavedResponseDraft, lifetime: { assertCurrent: () => void }) => {
+      if (actualTaskAdapter) {
+        if (!taskAdapter) {
+          taskTemplate = await hydrationFixture();
+          const definition = test.policy.definition;
+          const selection = { ...taskTemplate.config.selection.evaluationSelection, formId: 'form', formVersionId: 'publication',
+            definitionUrl: definition.url!, definitionVersion: definition.version, definitionHash: await computeJcsSha256Digest(definition), requiredSources: ['urn:test:facts'] };
+          taskAdapter = new HttpTaskCandidateHydration({ ...taskTemplate.config, definition, selection,
+            formVersionHash: taskTemplate.config.selection.formVersionHash, taskDraft: taskAssociation, subjectRef: 'server-actor',
+            identity: taskTemplate.input.identity, assertCurrent() { if (authorityRetired) throw new Error('test task authority retired'); }, elapsedNow: () => now,
+            receiptVerifier: { verify: async () => ({ validForMilliseconds: lifetimeMilliseconds }) },
+            fetchImpl: async () => {
+              if (refuse) throw new Error('Source refusal');
+              const owner = { ...taskTemplate.view.owner, subjectRef: 'server-actor', authenticated: { ...taskTemplate.view.owner.authenticated!, subjectRef: 'server-actor' } };
+              const request = { operation: 'hydrate' as const, scope: selection.scope, owner, selection,
+                formVersionHash: taskTemplate.config.selection.formVersionHash, draftId: taskSaved.draft.id,
+                draftVersion: taskSaved.draft.version, candidateHash: await computeJcsSha256Digest(taskSaved.response), sources: { facts: 'urn:test:facts' } };
+              return Response.json({ ...taskTemplate.view, ...request, requestHash: await computeJcsSha256Digest(request),
+                results: [{ ...taskTemplate.view.results[0], sourceRef: 'urn:test:facts', data: structuredClone(data), dataHash: await computeJcsSha256Digest(data) }] },
+                { headers: { 'cache-control': 'no-store' } });
+            } }, { signal: new AbortController().signal, assertCurrent() {} });
+        }
+        taskSaved = saved;
+        return taskAdapter.qualifySaved(saved, { signal: new AbortController().signal, assertCurrent: lifetime.assertCurrent });
+      }
       const issuedData = structuredClone(data); const deadline = now + lifetimeMilliseconds; const generation = ++activeGeneration;
       await hold; lifetime.assertCurrent(); if (refuse) throw new Error('Source refusal');
       const view = { version: 1, purpose: 'formspec.instance.hydrate', operation: 'hydrate',
@@ -833,7 +864,16 @@ describe('explicit reviewed-candidate facts renewal', () => {
       policy.definition.instances!.facts = { readonly: true, source: 'urn:test:facts', schema: { qualified: 'boolean', evidenceRef: 'string' } };
       Object.assign(policy.readiness, { prepareReadyPath: 'prepareReady' });
       Object.assign(policy.definition.instances!.readiness.data!, { prepareReady: false });
-      policy.candidateHydration = { qualifySaved: qualify, retireFacts: vi.fn(), dispose: vi.fn() };
+      policy.candidateHydration = { qualifySaved: qualify, retireFacts: () => taskAdapter?.retireFacts(), dispose: () => taskAdapter?.dispose() };
+      if (actualTaskAdapter) {
+        for (const port of ['saveDraft', 'prepare'] as const) {
+          const original = policy.controller.signing[port];
+          Object.assign(policy.controller.signing, { [port]: async (...args: Parameters<typeof original>) => {
+            const saved = await (original as (...inputs: Parameters<typeof original>) => Promise<SavedResponseDraft>)(...args);
+            return { ...saved, evidence: { ...saved.evidence, taskDraft: taskAssociation } };
+          } });
+        }
+      }
       if (currentCheck) policy.buildHandoff = async response => ({ ...sampleIntakeHandoff,
         definitionRef: { url: response.definitionUrl, version: response.definitionVersion },
         responseRef: `response:${response.id}`, responseHash: `sha256:${await hashResponse(response)}`, subjectRef: 'server-actor',
@@ -851,7 +891,7 @@ describe('explicit reviewed-candidate facts renewal', () => {
       document['x-formspec-runtime']!.requests.push({ ...structuredClone(request), id: 'submit', request: { ...request.request, pathTemplate: '/drafts/{draftId}/submit' } });
       policy.controller.roles.submit = { ...signRole, actionRef: 'submit', requestRef: 'submit', widgetSource: { ...signRole.widgetSource!, outputName: 'submit' } };
 
-    });
+    }, actualTaskAdapter ? 'server-actor' : undefined);
     const assent = async () => {
       const review = await test.reviewData();
       test.host.reviewOptions.onReviewState!({ status: 'ready', contextIdentity: await responseReviewHash(review),
@@ -871,7 +911,7 @@ describe('explicit reviewed-candidate facts renewal', () => {
     return { ...test, qualify, assent, changeSelector: () => { runId = 'fresh-run-newer'; }, signAction: sign, cleanup, advance: (value: number) => { now = value; },
       change: () => { data = { qualified: false, evidenceRef: 'proof-two' }; },
       changeProvenance: () => { data = { qualified: true, evidenceRef: 'proof-two' }; },
-      correct: () => { data = { qualified: true, evidenceRef: 'proof-three' }; }, refuse: () => { refuse = true; }, hold: (value: Promise<void>) => { hold = value; } };
+      correct: () => { data = { qualified: true, evidenceRef: 'proof-three' }; }, retireAuthority: () => { authorityRetired = true; }, refuse: () => { refuse = true; }, hold: (value: Promise<void>) => { hold = value; } };
   }
   async function restoreNative(test: ReturnType<typeof nativeFixture>, calculate = false) {
     const first = await test.attach(); await test.invoke(first, 'save');
@@ -1107,6 +1147,41 @@ describe('explicit reviewed-candidate facts renewal', () => {
     expect(test.replacements.at(-1)!.getInstanceData('readiness', 'ready')).toBe(true);
     expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(false);
     lease.dispose(); test.cleanup();
+  });
+  it('renews actual task adapter facts after long reading with exact response and assent', async () => {
+    vi.useFakeTimers();
+    const test = nativeFixture(false, 90_000, true, true);
+    try {
+      await test.prepared(); await test.assent();
+      const prepared = structuredClone(test.host.getSnapshot().controller!.prepared!); const calls = test.qualify.mock.calls.length;
+      test.advance(120_000); vi.advanceTimersByTime(90_000);
+      expect(test.host.getSnapshot().nativeReadiness).toBe('expired');
+      const result = await test.signAction();
+      expect(result).toMatchObject({ status: 'completed' });
+      expect(test.sign).toHaveBeenCalledOnce(); expect(test.qualify.mock.calls.length).toBe(calls + 2);
+      expect(test.sign.mock.calls[0][0].preparation).toEqual(prepared);
+      expect(test.sign.mock.calls[0][0].assent).toEqual({ signerName: 'Actual signer', consentAccepted: true });
+    } finally { test.cleanup(); vi.useRealTimers(); }
+  });
+  it.each(['changed findings', 'Source refusal', 'retired authority'] as const)('refuses actual task adapter renewal with %s before Sign', async mode => {
+    const test = nativeFixture(false, 90_000, true, true);
+    try {
+      await test.prepared(); await test.assent();
+      const prepared = structuredClone(test.host.getSnapshot().controller!.prepared!);
+      test.advance(120_000);
+      if (mode === 'changed findings') test.change();
+      else if (mode === 'Source refusal') test.refuse();
+      else test.retireAuthority();
+      expect((await test.signAction()).status).toBe('failed');
+      expect(test.sign).not.toHaveBeenCalled();
+      expect(test.host.getSnapshot().controller!.prepared).toEqual(prepared);
+      if (mode === 'changed findings') {
+        expect(await test.load('review')).toMatchObject({ value: { state: { status: 'pending' } } });
+        await test.assent(); const calls = test.qualify.mock.calls.length;
+        expect((await test.signAction('changed-findings-assent')).status).toBe('blocked');
+        expect(test.qualify.mock.calls.length).toBe(calls); expect(test.sign).not.toHaveBeenCalled();
+      }
+    } finally { test.cleanup(); }
   });
   it('renews expired exact photo facts after two minutes of reading, preserving completed review', async () => {
     const test = nativeFixture(); await test.prepared(); await test.assent(); const before = test.qualify.mock.calls.length;

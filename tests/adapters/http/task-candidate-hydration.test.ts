@@ -81,9 +81,16 @@ describe('task candidate hydration through the maintained Source route', () => {
       receiptVerifier: { verify } }, f.lifetime);
     const facts = await adapter.qualifySaved(f.saved, f.lifetime);
     facts.assertReady();
+    expect(facts.refreshRequired!()).toBe(false); expect(facts.remainingMilliseconds!()).toBe(10);
     expect(verify).toHaveBeenCalledOnce();
     elapsed = 50;
+    expect(facts.remainingMilliseconds!()).toBe(0); expect(facts.refreshRequired!()).toBe(true);
     expect(() => facts.assertReady()).toThrow('original proof expired');
+    expect(facts.refreshRequired!()).toBe(true); expect(f.fetchImpl).toHaveBeenCalledOnce();
+    f.lifetime.assertCurrent.mockImplementation(() => { throw new Error('task owner retired'); });
+    expect(() => facts.refreshRequired!()).toThrow('task owner retired');
+    f.lifetime.assertCurrent.mockImplementation(() => {});
+    expect(() => facts.refreshRequired!()).toThrow('task owner retired');
   });
   it('keeps returned facts immutable and observes caller cancellation after qualification', async () => {
     const f = await fixture();
@@ -102,9 +109,10 @@ describe('task candidate hydration through the maintained Source route', () => {
     const facts = await new HttpTaskCandidateHydration({ ...f.config, elapsedNow: () => elapsed }, f.lifetime)
       .qualifySaved(f.saved, f.lifetime);
     elapsed = NaN;
-    expect(() => facts.assertCurrent()).toThrow('elapsed clock mismatch');
+    expect(() => facts.refreshRequired!()).toThrow('elapsed clock mismatch');
     elapsed = 11;
     expect(() => facts.assertCurrent()).toThrow('elapsed clock mismatch');
+    expect(() => facts.refreshRequired!()).toThrow('elapsed clock mismatch');
   });
 
   it('stops waiting for a non-cooperative verifier when the task owner retires', async () => {

@@ -155,16 +155,19 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
           deadline = started + proof.validForMilliseconds;
         }
         let retired: Error | undefined;
-        let observedRemaining = Infinity;
-        const current = () => {
+        // Expiry requests fresh proof through the host's explicit reviewed-action
+        // path. Authority and clock failures still permanently retire these facts.
+        const remaining = () => {
           if (retired) throw retired;
-          try { check(); observedRemaining = deadline - this.now(); if (observedRemaining <= 0) fail('original proof expired'); }
+          try { check(); return Math.max(0, deadline - this.now()); }
           catch (error) { retired = error instanceof Error ? error : new Error('Source task candidate retired'); throw retired; }
         };
+        const current = () => { if (remaining() === 0) fail('original proof expired'); };
         current();
-        return Object.freeze({ view, assertCurrent: current, remainingMilliseconds: () => { current(); return observedRemaining; }, assertReady: () => {
-          current(); if (view.results.some(result => result.status !== 'qualified')) fail('selected sources pending or unavailable');
-        } });
+        return Object.freeze({ view, assertCurrent: current, remainingMilliseconds: remaining,
+          refreshRequired: () => remaining() === 0, assertReady: () => {
+            current(); if (view.results.some(result => result.status !== 'qualified')) fail('selected sources pending or unavailable');
+          } });
       })());
     } finally { clearTimeout(timer); }
   }
