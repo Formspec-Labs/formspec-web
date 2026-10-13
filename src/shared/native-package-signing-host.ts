@@ -247,7 +247,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const clearCandidateExpiry = () => { if (candidateExpiry !== undefined) clearTimeout(candidateExpiry); candidateExpiry = undefined; };
   function prepareCandidateCurrent(): boolean {
     return !!nativeCandidate && nativeReadiness === 'ready' && !['saveInitial', 'saveOwned'].includes(publicSnapshot?.phase ?? '')
-      && same(publicSnapshot?.saved, nativeCandidate.saved);
+      && sameSavedDraft(publicSnapshot?.saved, nativeCandidate.saved);
   }
   function currentPrepareFacts(): boolean {
     if (!prepareCandidateCurrent()) return false;
@@ -429,8 +429,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const lease = rendererLease; const old = rendererEngine;
     const authority = authorityGeneration; const visit = visitEpoch; const selectedLocale = locale; const deliveryGeneration = generation;
     if (!input || !capturedReview || !reviewValidation || capturedState?.status !== 'ready' || !previous
-      || !same(previous.saved, saved) || !same(capturedReview.response, saved.response)) throw new Error('native-review-refresh-unready');
-    const identity = canonicalize({ saved, authority, visit, selectedLocale, deliveryGeneration, reviewIdentity: capturedState.contextIdentity })!;
+      || !sameSavedDraft(previous.saved, saved) || !same(capturedReview.response, saved.response)) throw new Error('native-review-refresh-unready');
+    const identity = canonicalize({ saved: savedDraftIdentity(saved), authority, visit, selectedLocale, deliveryGeneration, reviewIdentity: capturedState.contextIdentity })!;
     if (reviewedRefresh) {
       if (reviewedRefresh.identity !== identity) throw new Error('native-review-refresh-conflict');
       return reviewedRefresh.promise;
@@ -443,7 +443,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       signal.throwIfAborted();
       if (disposed || cleared || authorityGeneration !== authority || visitEpoch !== visit || locale !== selectedLocale
         || sequence !== qualificationSequence || rendererLease !== lease || lease && !lease.active
-        || !same(publicSnapshot?.signed ?? publicSnapshot?.prepared, saved)) throw new Error('native-review-refresh-retired');
+        || !sameSavedDraft(publicSnapshot?.signed ?? publicSnapshot?.prepared, saved)) throw new Error('native-review-refresh-retired');
       policy.assertOwner(input!.draftKey, saved.actor.id);
     };
     const check = () => {
@@ -602,7 +602,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
     unsubscribeController = controller.subscribe(() => {
       publicSnapshot = controller!.getSnapshot();
-      if (ownedDraftRestoration && publicSnapshot.saved && !same(ownedDraftRestoration.saved, publicSnapshot.saved)) {
+      if (ownedDraftRestoration && publicSnapshot.saved && !sameSavedDraft(ownedDraftRestoration.saved, publicSnapshot.saved)) {
         const previous = ownedDraftRestoration.saved, saved = publicSnapshot.saved;
         if (same(previous.draftKey, saved.draftKey) && previous.draft.id === saved.draft.id && previous.actor.id === saved.actor.id
           && previous.response.id === saved.response.id && previous.evidence.form_version_id === saved.evidence.form_version_id) {
@@ -721,8 +721,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         const check = () => {
           candidate.assertCurrent();
           if (!facts || disposed || cleared || authorityGeneration !== authority || visitEpoch !== visit || rendererLease !== lease
-            || lease && !lease.active || nativeCandidate !== facts || !same(publicSnapshot?.saved, candidate.saved)
-            || !same(facts.saved, candidate.saved) || !rendererEngine || !same(responseData(rendererEngine.getResponse({ profile: 'off' }).data, candidate.saved), candidate.saved.response.data)
+            || lease && !lease.active || nativeCandidate !== facts || !sameSavedDraft(publicSnapshot?.saved, candidate.saved)
+            || !sameSavedDraft(facts.saved, candidate.saved) || !rendererEngine || !same(responseData(rendererEngine.getResponse({ profile: 'off' }).data, candidate.saved), candidate.saved.response.data)
             || candidate.response.id !== candidate.saved.response.id || candidate.response.definitionUrl !== candidate.saved.response.definitionUrl
             || candidate.response.definitionVersion !== candidate.saved.response.definitionVersion || !same(candidate.response.data, candidate.saved.response.data)
             || !same(candidate.response.displayedLocale, candidate.saved.response.displayedLocale)) throw new Error('native-prepare-candidate-mismatch');
@@ -908,7 +908,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         if (admission !== rendererAdmission || disposed || cleared || expectedAuthority !== authorityGeneration || expectedVisit !== visitEpoch)
           throw new Error('native-renderer-admission-retired');
       };
-      if (!input && ownedDraftRestoration && !same(next.restoredSavedDraft, ownedDraftRestoration.saved)) {
+      if (!input && ownedDraftRestoration && !sameSavedDraft(next.restoredSavedDraft, ownedDraftRestoration.saved)) {
         ownedDraftRestoration = undefined; throw new Error('native-owned-restoration-changed');
       }
       if (disposed || cleared || submitted || !same(next.definition, policy.definition) || (responseId && next.restoredResponse && next.restoredResponse.id !== responseId)
@@ -1011,7 +1011,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
             lifetime.signal.throwIfAborted(); lifetime.assertCurrent(); assertCurrent();
             sourceAuthority?.signal.throwIfAborted();
             if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
-            if (!(saving && checkpointState === 'saving' && publicSnapshot?.phase === 'saveOwned' || ['saved', 'failed'].includes(checkpointState)) || !same(publicSnapshot?.saved, saved)
+            if (!(saving && checkpointState === 'saving' && publicSnapshot?.phase === 'saveOwned' || ['saved', 'failed'].includes(checkpointState)) || !sameSavedDraft(publicSnapshot?.saved, saved)
               || explicitPrepare && !!publicSnapshot?.signed
               || !same(responseData(leasedEngine.getResponse({ profile: 'off' }).data, saved), saved.response.data)) throw new Error('native-saved-facts-context-retired');
             policy.assertOwner(saved.draftKey, saved.actor.id);
@@ -1038,7 +1038,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
               if (('invocation' in result ? result.invocation : result).status !== 'completed') throw new Error('native-saved-facts-save-failed');
             }
             const committed = publicSnapshot?.saved;
-            if (!nativeCandidate || nativeReadiness !== 'ready' || !same(nativeCandidate.saved, committed))
+            if (!nativeCandidate || nativeReadiness !== 'ready' || !sameSavedDraft(nativeCandidate.saved, committed))
               throw new Error('native-saved-facts-refresh-unavailable');
             nativeCandidate.facts.assertReady();
           })();
@@ -1128,4 +1128,15 @@ function freezeMetadata(value: unknown): void {
 function validationMeaning(report: ValidationReport) {
   const { timestamp: _validatedAt, ...findings } = report;
   return findings;
+}
+
+/** Prepared/signed results add ceremony metadata; saved identity includes every
+ * owning SavedResponseDraft field without changing the original result object. */
+function savedDraftIdentity(saved: SavedResponseDraft | undefined) {
+  if (!saved) return saved;
+  const { draftKey, response, draft, actor, evidence } = saved;
+  return { draftKey, response, draft, actor, evidence };
+}
+function sameSavedDraft(a: SavedResponseDraft | undefined, b: SavedResponseDraft | undefined) {
+  return same(savedDraftIdentity(a), savedDraftIdentity(b));
 }

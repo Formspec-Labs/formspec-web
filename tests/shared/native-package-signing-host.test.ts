@@ -1025,6 +1025,29 @@ describe('explicit reviewed-candidate facts renewal', () => {
       expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(true);
     } finally { lease.dispose(); test.cleanup(); timers.mockRestore(); }
   });
+  it('compares all saved core fields after Prepare without erasing its additive content', async () => {
+    const test = nativeFixture(); const lease = await test.prepared();
+    try {
+      const prepared = test.host.getSnapshot().controller!.prepared!;
+      const { draftKey, response, draft, actor, evidence } = prepared;
+      const saved = structuredClone({ draftKey, response, draft, actor, evidence });
+      const candidate = { saved, response: structuredClone(response), assertCurrent() {} };
+      const guard = await test.host.prePrepareCandidate!(candidate); guard.assertCurrent();
+      for (const changed of [
+        { ...candidate, saved: { ...saved, draftKey: { ...saved.draftKey, subjectRef: 'foreign' } } },
+        { ...candidate, saved: { ...saved, draft: { ...saved.draft, version: saved.draft.version + 1 } } },
+        { ...candidate, saved: { ...saved, actor: { ...saved.actor, id: 'foreign' } } },
+        { ...candidate, saved: { ...saved, evidence: { ...saved.evidence, form_version_id: 'foreign' } } },
+        { ...candidate, saved: { ...saved, response: { ...saved.response, data: { ...saved.response.data, injected: true } } } },
+        { ...candidate, response: { ...response, displayedLocale: { locale: 'es', url: 'urn:foreign', version: '1' } } },
+      ]) await expect(test.host.prePrepareCandidate!(changed)).rejects.toThrow('native-prepare-candidate-mismatch');
+      const retired = new Error('test owner retired');
+      await expect(test.host.prePrepareCandidate!({ ...candidate, assertCurrent() { throw retired; } })).rejects.toBe(retired);
+      expect(test.host.getSnapshot().controller!.prepared).toBe(prepared); expect(prepared.content).toBeDefined();
+      expect(test.prepare).toHaveBeenCalledOnce(); test.advance(90_000);
+      expect(() => guard.assertCurrent()).toThrow('native-facts-pending-save-required');
+    } finally { lease.dispose(); test.cleanup(); }
+  });
   it('captures exact saved facts for the Prepare dispatch guard while permitting the ordinary completed status change', async () => {
     const test = nativeFixture(); const lease = await test.attach(); await test.invoke(lease, 'save');
     const saved = structuredClone(test.host.getSnapshot().controller!.saved!); const response = { ...structuredClone(saved.response), status: 'completed' as const };

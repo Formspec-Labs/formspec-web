@@ -1,3 +1,4 @@
+import { diagnoseNativePrepare } from '../../../src/composition/native-package-action-diagnostic.ts';
 import type { TaskDraftAssociation } from '../../../src/ports/task-draft.ts';
 import type { HttpResponseSigningPolicy } from '../../../src/adapters/http/response-signing.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -170,6 +171,21 @@ async function profileDigest(response: FormResponse): Promise<string> {
 }
 
 describe('cohort-owned Response Prepare and Sign', () => {
+  it.each([
+    ['native-prepare-candidate-mismatch', 'candidate-mismatch'],
+    ['native-facts-pending-save-required', 'facts-pending-save-required'],
+  ])('reports the finite owning %s refusal before any Prepare write', async (literal, reason) => {
+    const error = new Error(literal);
+    const test = await fixture(false, true, false, undefined, undefined, true, async () => { throw error; });
+    const saved = await test.save();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await expect(diagnoseNativePrepare(test.prepare)).rejects.toBe(error);
+    expect(test.state.patchCount).toBe(0); expect(test.state.signCount).toBe(0);
+    expect(test.state.version).toBe(saved.draft.version); expect(test.state.response).toEqual(saved.response);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Native form action failed', JSON.stringify({ stage: 'prepare-port', reason }));
+    warn.mockRestore();
+  });
+
   it('returns the committed Prepare receipt when freshness expires after dispatch and before readback', async () => {
     let expired = false; let guarded = 0; let committed = false; let release!: () => void;
     const readback = new Promise<void>(resolve => { release = resolve; });

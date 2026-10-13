@@ -2,6 +2,8 @@ import { HttpAdapterError } from '../adapters/http/http-client.ts';
 
 // Exact maintained invariant messages select finite codes; messages never leave this boundary.
 const prepareReasons = new Map([
+  ['native-prepare-candidate-mismatch', 'candidate-mismatch'],
+  ['native-facts-pending-save-required', 'facts-pending-save-required'],
   ['Preparation requires a completed unsigned pinned Response', 'candidate-invalid'],
   ['Preparation requires an existing owned draft handle', 'owned-handle-missing'],
   ['Saved draft changed before preparation', 'saved-draft-changed'],
