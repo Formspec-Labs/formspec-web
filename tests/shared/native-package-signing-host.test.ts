@@ -1215,6 +1215,16 @@ describe('explicit reviewed-candidate facts renewal', () => {
     expect(test.host.getSnapshot().controller!.prepared!.response.data).toEqual(test.response.data);
     test.cleanup();
   });
+  it('records only host admission metadata and preserves refusal when the observer throws', async () => {
+    const test = nativeFixture(); const admission = test.policy.controller.roles.submit!;
+    test.host.dispose();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => { throw new Error('private observer'); });
+    try {
+      expect(() => test.host.widgetExecutor({ document: admission.document, actionRef: admission.actionRef,
+        invocationId: 'private-task-invocation', source: admission.widgetSource!, input: {} })).toThrow('native-runtime-unavailable');
+      expect(warn.mock.calls).toEqual([['Native form Submit diagnostic', '{"stage":"host-admission","kind":"failed"}']]);
+    } finally { warn.mockRestore(); test.cleanup(); }
+  });
   it('preserves an already committed signature when expired signed Submit renewal is refused', async () => {
     const test = nativeFixture(); await test.prepared(); await test.assent(); expect((await test.signAction()).status).toBe('completed');
     await test.assent(); const signed = structuredClone(test.host.getSnapshot().controller!.signed!);

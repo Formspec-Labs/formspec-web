@@ -117,3 +117,39 @@ it('captures completion scope before a caller can mutate the binding', async () 
   expect(headers.get('x-wos-tenant-id')).toBe(selectedNativeScope.tenant);
   expect(headers.has('x-formspec-tenant-id')).toBe(false);
 });
+
+
+describe('fixed task Submit diagnostics', () => {
+  it.each(['preflight', 'status', 'timeout', 'outcome'] as const)('reports %s metadata and preserves the original failure', async kind => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const privateFailure = new DOMException('private URL credential signature response', 'TimeoutError');
+    const fetchImpl = vi.fn(async () => {
+      if (kind === 'timeout') throw privateFailure;
+      return jsonResponse(kind === 'status' ? { title: 'private URL credential signature response' }
+        : kind === 'outcome' ? { ...outcome, taskId: 'private-foreign-task' } : outcome, kind === 'status' ? 403 : 200);
+    });
+    try {
+      const adapter = new HttpTaskCompletion({ baseUrl: 'https://private.test', selection, accessToken: 'private-token', fetchImpl, assertCurrentAuth: () => {} });
+      const promise = adapter.complete(kind === 'preflight' ? { ...submission, definitionVersion: 'private-version' } : submission, 'private-operation', lifetime());
+      if (kind === 'timeout') await expect(promise).rejects.toBe(privateFailure);
+      else await expect(promise).rejects.toThrow(kind === 'preflight' ? 'candidate mismatch' : kind === 'outcome' ? 'outcome mismatch' : 'HTTP adapter request failed');
+      expect(warn.mock.calls).toEqual([['Native form Submit diagnostic', JSON.stringify({
+        stage: kind === 'preflight' ? 'task-preflight' : kind === 'outcome' ? 'task-outcome-validation' : 'task-transport',
+        kind: kind === 'status' ? 'http-status' : kind === 'timeout' ? 'timeout' : 'failed', ...(kind === 'status' ? { status: 403 } : {}) })]]);
+      expect(fetchImpl).toHaveBeenCalledTimes(kind === 'preflight' ? 0 : 1);
+    } finally { warn.mockRestore(); }
+  });
+  it('keeps success silent and preserves original exceptions when observation throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => { throw new Error('observer'); });
+    const original = new Error('private failure');
+    try {
+      const fetchImpl = vi.fn(async () => jsonResponse(outcome));
+      const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'private-token', fetchImpl, assertCurrentAuth: () => {} });
+      expect(await adapter.complete(submission, 'operation', lifetime())).toEqual(outcome);
+      expect(warn).not.toHaveBeenCalled();
+      fetchImpl.mockRejectedValueOnce(original);
+      await expect(adapter.complete(submission, 'operation', lifetime())).rejects.toBe(original);
+      expect(warn).toHaveBeenCalledOnce();
+    } finally { warn.mockRestore(); }
+  });
+});

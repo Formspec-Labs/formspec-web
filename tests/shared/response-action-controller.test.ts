@@ -924,3 +924,47 @@ it('reports Save validation refusal before any signing port call with closed met
   expect(warn).toHaveBeenCalledExactlyOnceWith('Native form Save diagnostic', JSON.stringify({ stage: 'controller-validation', reason: 'port-failed' }));
   warn.mockRestore();
 });
+
+
+describe('fixed Submit diagnostics', () => {
+  it.each(['admission', 'validation', 'review', 'preflight', 'effect', 'blocked'] as const)('reports %s without private values and preserves refusal', async kind => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const test = fixture(); await test.widget('sign', await test.ready());
+      const signed = test.controller.getSnapshot().signed!;
+      if (kind === 'validation') test.config.validateFrozenResponse = () => { throw new Error('private URL token signature response'); };
+      if (kind === 'review') test.reviewReady.mockReturnValue(false);
+      if (kind === 'preflight') test.config.captureSubmitOptions = async () => { throw new Error('private URL token signature response'); };
+      if (kind === 'effect') test.submit.mockRejectedValueOnce(new Error('private URL token signature response'));
+      if (kind === 'blocked') {
+        const original = test.config.validateFrozenResponse;
+        test.config.validateFrozenResponse = async (value, tuple) => {
+          const result = await original(value, tuple);
+          return { ...result, validationReport: { ...result.validationReport!, valid: false,
+            results: [{ $formspecValidationResult: '1.0', constraintKind: 'required', path: 'private-field', severity: 'error', message: 'private validation message' }],
+            counts: { error: 1, warning: 0, info: 0 } } };
+        };
+      }
+      const result = await test.widget('submit', signed, 'private-operation', kind === 'admission' ? { source: widgetSource('foreign') } : {});
+      expect(result).toMatchObject({ status: kind === 'blocked' ? 'blocked' : 'failed' });
+      expect(warn.mock.calls).toEqual([['Native form Submit diagnostic', JSON.stringify({
+        stage: kind === 'admission' ? 'controller-admission' : kind === 'review' ? 'controller-review'
+          : kind === 'effect' ? 'controller-effect' : kind === 'preflight' ? 'controller-completion-preflight' : 'controller-frozen-validation',
+        kind: kind === 'blocked' ? 'refused' : 'failed' })]]);
+      expect(test.controller.getSnapshot().signed).toEqual(signed);
+      expect(test.submit).toHaveBeenCalledTimes(kind === 'effect' ? 1 : 0);
+    } finally { warn.mockRestore(); }
+  });
+  it('keeps success silent and preserves failures when console throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => { throw new Error('observer'); });
+    try {
+      const test = fixture(); await test.widget('sign', await test.ready());
+      const signed = test.controller.getSnapshot().signed!;
+      test.reviewReady.mockReturnValue(false);
+      expect(await test.widget('submit', signed)).toMatchObject({ status: 'failed', failureReason: 'review-unready' });
+      test.reviewReady.mockReturnValue(true);
+      expect(await test.widget('submit', signed, 'new-act')).toMatchObject({ status: 'completed' });
+      expect(warn).toHaveBeenCalledOnce(); expect(test.submit).toHaveBeenCalledOnce();
+    } finally { warn.mockRestore(); }
+  });
+});

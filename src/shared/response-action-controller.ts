@@ -1,3 +1,4 @@
+import { createSubmitFailureReporter, type SubmitFailureStage } from './submit-diagnostic.ts';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
 import { ResponseCompletionRefusal } from '../ports/response-completion.ts';
 import canonicalize from 'canonicalize';
@@ -114,6 +115,7 @@ export function createResponseActionController(config: ResponseActionControllerC
   let pendingOperationId: string | undefined;
   let signed: SignedResponseSigning | undefined;
   let busy: string | undefined;
+  const reportSubmitFailure = createSubmitFailureReporter();
   let saveDiagnosticCount = 0;
   const reportSaveFailure = (stage: 'controller-admission' | 'controller-validation' | 'controller-effect', reason: string) => {
     if (saveDiagnosticCount++ >= 32) return;
@@ -196,7 +198,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         ...wording, generation: context.generation })), stage)) throw new ControllerRefusal('review-unready');
   }
   async function perform(role: ResponseActionRole, admission: QualifiedResponseActionRole, response: FormResponse,
-    input: Record<string, unknown>, deliveryId: string, source: unknown, generation: number, signRetry?: SignRetry, execution?: SaveResponseDraftOptions) {
+    input: Record<string, unknown>, deliveryId: string, source: unknown, generation: number, signRetry?: SignRetry, execution?: SaveResponseDraftOptions, diagnostic?: { stage: SubmitFailureStage }) {
     if (pendingOperationId && role !== 'sign') throw new ControllerRefusal('operation-conflict');
     const request = requestFor(role, admission);
     const recoveringSign = role === 'sign' && config.reconcileSignRetries && signRetry !== undefined
@@ -212,7 +214,9 @@ export function createResponseActionController(config: ResponseActionControllerC
     const subject = role === 'sign' ? prepared : role === 'submit' ? signed : saved;
     if (role === 'sign' || role === 'submit') {
       if (!subject || !same(subject.response, response)) throw new ControllerRefusal('context-mismatch');
+      if (diagnostic) diagnostic.stage = 'controller-review';
       if (!recoveringSign) review(subject as PreparedResponseSigning, role === 'sign' ? 'unsigned' : 'signed', wording!);
+      if (diagnostic) diagnostic.stage = 'controller-admission';
       if (role === 'sign' && (input.draftId !== subject.draft.id || input.draftVersion !== subject.draft.version
         || input.responseId !== response.id || input.responseHash !== subject.draft.responseHash
         || !same(input.source, wording!.source) || input.locale !== wording!.locale
@@ -309,6 +313,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         signed = signature; saved = signature; result = signature;
         publish('signed');
       } else {
+        if (diagnostic) diagnostic.stage = 'controller-completion-preflight';
         const completionLifetime = { signal: lifetime.signal, assertCurrent: () => current(generation) };
         if (!operation.completionPreparation) {
           const submitOptions = await config.captureSubmitOptions?.(signed!); current(generation);
@@ -316,7 +321,9 @@ export function createResponseActionController(config: ResponseActionControllerC
           operation.completionPreparation = await completion!.capture({ signed: signed!, request: request!, invocationInput: input, submitOptions }, completionLifetime);
         }
         current(generation);
+        if (diagnostic) diagnostic.stage = 'controller-review';
         review(signed!, 'signed', wording!);
+        if (diagnostic) diagnostic.stage = 'controller-effect';
         const result = freeze(structuredClone(await completion!.complete(operation.completionPreparation, operation.operationId, completionLifetime)));
         current(generation);
         if (result.kind !== completion!.kind) throw new ControllerRefusal('context-mismatch');
@@ -381,6 +388,9 @@ export function createResponseActionController(config: ResponseActionControllerC
   const definitionInvoker: ResponseActionInvoker<SubmitResult> = input => invokeDefinitionAction(input);
   const widgetExecutor: SurfaceWidgetActionExecutor = async input => {
     const generation = epoch;
+    const submit = input.actionRef === roles.submit?.actionRef;
+    const diagnostic: { stage: SubmitFailureStage } = { stage: 'controller-admission' };
+    let effect = false;
     try {
       current(generation);
       const identity = canonicalize({ document: input.document, actionRef: input.actionRef, source: input.source,
@@ -407,6 +417,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       const tuple = resolveResponseActionValidationTuple(resolveResponseAction(admission.document, input.actionRef).action!);
       const retainedRetry = role === 'sign' && config.reconcileSignRetries ? deliveries.get(input.invocationId)?.signRetry : undefined;
       if (retainedRetry && retainedRetry.identity !== identity) throw new ControllerRefusal('operation-conflict');
+      diagnostic.stage = 'controller-frozen-validation';
       const validated = retainedRetry?.validated ?? freeze(structuredClone(await config.validateFrozenResponse(response, freeze(structuredClone(tuple)))));
       current(generation);
       if (!same(validated.response, response) || !same(validated.validationTuple, tuple)
@@ -416,13 +427,16 @@ export function createResponseActionController(config: ResponseActionControllerC
         submit: () => validated,
         dispatchHostEvent: () => { current(generation); publish('paper'); }, resolveIdempotencyKey: () => input.invocationId,
         dispatchEffect: async () => {
+          effect = true; diagnostic.stage = 'controller-admission';
           try {
             const transitionBindings = await perform(role, admission, response, selected, input.invocationId, input.source, generation,
-              role === 'sign' && config.reconcileSignRetries ? retainedRetry ?? freeze(structuredClone({ request: input, identity, validated })) : undefined);
+              role === 'sign' && config.reconcileSignRetries ? retainedRetry ?? freeze(structuredClone({ request: input, identity, validated })) : undefined, undefined, submit ? diagnostic : undefined);
             return { outcome: { type: 'serviceRequest', status: 'succeeded' }, transitionBindings };
-          } catch (error) { return { type: 'serviceRequest', status: 'failed', reason: fail(error, generation) }; }
+          } catch (error) { if (submit) reportSubmitFailure(diagnostic.stage);
+            return { type: 'serviceRequest', status: 'failed', reason: fail(error, generation) }; }
         },
       }, undefined, { invocationId: input.invocationId, actionArtifact: { artifactRef: admission.artifactRef, artifactDigest: admission.artifactDigest } });
+      if (submit && !effect && invocation.status !== 'completed') reportSubmitFailure('controller-frozen-validation', 'refused');
       if (role === 'sign' && invocation.status === 'failed' && generation === epoch && !invalidated) {
         retryableSign = deliveries.get(input.invocationId)?.signRetry ?? retryableSign;
         if (retryableSign) publish(snapshot.phase, snapshot.reason);
@@ -433,7 +447,8 @@ export function createResponseActionController(config: ResponseActionControllerC
       }
       if (invocation.status === 'blocked' && generation === epoch && !invalidated && !completionResult) publish('refused', 'response-invalid');
       return invocation;
-    } catch (error) { return failure(input.document, input.actionRef, input.invocationId, fail(error, generation)); }
+    } catch (error) { if (submit) reportSubmitFailure(diagnostic.stage);
+      return failure(input.document, input.actionRef, input.invocationId, fail(error, generation)); }
   };
   function retireSignRetry() {
     retryableSign = undefined;

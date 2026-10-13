@@ -1,3 +1,4 @@
+import { createSubmitFailureReporter, type SubmitFailureStage } from '../../shared/submit-diagnostic.ts';
 import { wosTenantScopeHeaders } from '../../profiles/wos-tenant-headers.ts';
 import { isLosslessHttpIdempotencyKey } from '../../shared/idempotency-key.ts';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -5,7 +6,7 @@ import addFormats from 'ajv-formats';
 import { snapshotFiniteJson } from '@formspec-org/surface';
 import type { TaskCompletion, TaskCompletionSelection, TaskOutcomeEvent, TaskSubmission, CompletedTaskOutcome } from '../../ports/task-completion.ts';
 import type { CompletionLifetime } from '../../ports/response-completion.ts';
-import { HttpClient, type HttpClientConfig } from './http-client.ts';
+import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
 import commonSchema from './workspec-schemas/common.schema.json';
 import taskSchema from './workspec-schemas/task.schema.json';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
@@ -20,6 +21,7 @@ const resourceShape = ajv.compile<string>({ $ref: `${commonSchema.$id}#/$defs/Wo
  * Wire/schema checks grant no Source signed-evidence or task authority; WOS owns those checks.
  */
 export class HttpTaskCompletion implements TaskCompletion {
+  private readonly reportSubmitFailure = createSubmitFailureReporter();
   private readonly client: HttpClient;
   private readonly scopeHeaders: Readonly<Record<string, string>>;
   private readonly selection: TaskCompletionSelection;
@@ -43,21 +45,34 @@ export class HttpTaskCompletion implements TaskCompletion {
     } });
   }
   async complete(submission: TaskSubmission, operationId: string, lifetime: CompletionLifetime): Promise<CompletedTaskOutcome> {
-    const check = () => { lifetime.signal.throwIfAborted(); assertSynchronousGuard(lifetime.assertCurrent);
-      assertSynchronousGuard(this.assertCurrentAuth); };
-    check(); const body = snapshotFiniteJson(submission) as unknown as TaskSubmission;
-    if (!submissionShape(body) || !['definitionUrl,definitionVersion,response', 'definitionUrl,definitionVersion,response,signedDraft'].includes(Object.keys(body).sort().join(','))
-      || body.definitionUrl !== this.selection.definitionUrl || body.definitionVersion !== this.selection.definitionVersion
-      || body.response.definitionUrl !== body.definitionUrl || body.response.definitionVersion !== body.definitionVersion
-      || body.response.status !== 'completed' || !body.response.authoredSignatures?.length
-      || !isLosslessHttpIdempotencyKey(operationId)
-      || new TextEncoder().encode(JSON.stringify(body)).byteLength > 2 * 1024 * 1024) throw new Error('Task completion candidate mismatch');
-    const raw = await this.client.postJson<unknown>(`/api/v1/tasks/${encodeURIComponent(this.selection.taskId)}/response`, body,
-      { headers: this.scopeHeaders, idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check, assertBeforeDispatch: check,
-        timeoutMs: 10_000, maxResponseBytes: 64 * 1024, requireJson: true, successStatuses: [200] });
-    check(); const event = snapshotFiniteJson(raw) as unknown;
-    if (!outcomeShape(event) || event.taskId !== this.selection.taskId || event.processId !== this.selection.processId
-      || event.outcome !== 'completed' || event.newStatus !== 'submitted') throw new Error('Task completion outcome mismatch');
-    return event as CompletedTaskOutcome;
+    let stage: SubmitFailureStage = 'task-preflight';
+    try {
+      const check = () => { lifetime.signal.throwIfAborted(); assertSynchronousGuard(lifetime.assertCurrent);
+        assertSynchronousGuard(this.assertCurrentAuth); };
+      check(); const body = snapshotFiniteJson(submission) as unknown as TaskSubmission;
+      if (!submissionShape(body) || !['definitionUrl,definitionVersion,response', 'definitionUrl,definitionVersion,response,signedDraft'].includes(Object.keys(body).sort().join(','))
+        || body.definitionUrl !== this.selection.definitionUrl || body.definitionVersion !== this.selection.definitionVersion
+        || body.response.definitionUrl !== body.definitionUrl || body.response.definitionVersion !== body.definitionVersion
+        || body.response.status !== 'completed' || !body.response.authoredSignatures?.length
+        || !isLosslessHttpIdempotencyKey(operationId)
+        || new TextEncoder().encode(JSON.stringify(body)).byteLength > 2 * 1024 * 1024) throw new Error('Task completion candidate mismatch');
+      stage = 'task-transport';
+      const raw = await this.client.postJson<unknown>(`/api/v1/tasks/${encodeURIComponent(this.selection.taskId)}/response`, body,
+        { headers: this.scopeHeaders, idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check, assertBeforeDispatch: check,
+          timeoutMs: 10_000, maxResponseBytes: 64 * 1024, requireJson: true, successStatuses: [200] });
+      stage = 'task-outcome-validation';
+      check(); const event = snapshotFiniteJson(raw) as unknown;
+      if (!outcomeShape(event) || event.taskId !== this.selection.taskId || event.processId !== this.selection.processId
+        || event.outcome !== 'completed' || event.newStatus !== 'submitted') throw new Error('Task completion outcome mismatch');
+      return event as CompletedTaskOutcome;
+    } catch (error) {
+      // Read only the adapter's numeric status; retain the original error unchanged.
+      try {
+        this.reportSubmitFailure(stage, error instanceof HttpAdapterError ? 'http-status'
+          : error instanceof DOMException && error.name === 'TimeoutError' ? 'timeout' : 'failed',
+          error instanceof HttpAdapterError ? error.status : undefined);
+      } catch { /* Error classification is observational too. */ }
+      throw error;
+    }
   }
 }

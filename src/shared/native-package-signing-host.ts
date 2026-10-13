@@ -1,3 +1,4 @@
+import { createSubmitFailureReporter } from './submit-diagnostic.ts';
 import { assembleNativeTaskPrefill } from './native-task-prefill.ts';
 import { NATIVE_SOURCE_OPERATION_MILLISECONDS } from './native-operation-budget.ts';
 import { admitNativeHostEvents, type NativeHostEventCapability } from './native-host-events.ts';
@@ -321,6 +322,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   };
   let deliveryIdentity: string | undefined;
   let pendingDelivery: Promise<void> | undefined;
+  const reportSubmitFailure = createSubmitFailureReporter();
   let submitted: { referenceNumber: string; recordKind: 'response' } | undefined;
   let submittedKey: DraftKey | undefined;
   const listeners = new Set<() => void>();
@@ -856,11 +858,17 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
             validateDataSourcePayload: (request: Parameters<NativeInitialDataSourcePorts['validateDataSourcePayload']>[0]) => initial.owns(request)
               ? initial.validateDataSourcePayload(request) : policy.validatePayload(request),
             widgetActionExecutor: async (action: Parameters<NonNullable<typeof controller>['widgetExecutor']>[0]) => {
-              assertVisit(); if (!controller) throw new Error('native-runtime-unavailable');
-              if (policy.signingScope && (!signingScopeAllows(policy.signingScope, { ...action.source.route, slotId: action.source.slotId, moduleId: action.source.moduleId, widgetName: action.source.widgetName })
-                || action.source.slotId !== policy.signingScope.ceremonySlot || action.source.moduleId !== policy.signingScope.moduleId
-                || action.source.widgetName !== SIGNING_CEREMONY_WIDGET_SHAPE.widgetName)) throw new Error('native-signing-scope-unadmitted');
-              const result = await controller.widgetExecutor(action); assertVisit(); return result;
+              let stage: 'host-admission' | 'host-result-fence' = 'host-admission';
+              try {
+                assertVisit(); if (!controller) throw new Error('native-runtime-unavailable');
+                if (policy.signingScope && (!signingScopeAllows(policy.signingScope, { ...action.source.route, slotId: action.source.slotId, moduleId: action.source.moduleId, widgetName: action.source.widgetName })
+                  || action.source.slotId !== policy.signingScope.ceremonySlot || action.source.moduleId !== policy.signingScope.moduleId
+                  || action.source.widgetName !== SIGNING_CEREMONY_WIDGET_SHAPE.widgetName)) throw new Error('native-signing-scope-unadmitted');
+                const result = await controller.widgetExecutor(action); stage = 'host-result-fence'; assertVisit(); return result;
+              } catch (error) {
+                if (action.actionRef === policy.controller.roles.submit?.actionRef) reportSubmitFailure(stage);
+                throw error;
+              }
             },
           };
         },
@@ -878,7 +886,12 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     getSnapshot: () => hostSnapshot,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     widgetExecutor: ((action: Parameters<NonNullable<typeof controller>['widgetExecutor']>[0]) => {
-      if (!controller || disposed || cleared) throw new Error('native-runtime-unavailable'); return controller.widgetExecutor(action);
+      try {
+        if (!controller || disposed || cleared) throw new Error('native-runtime-unavailable'); return controller.widgetExecutor(action);
+      } catch (error) {
+        if (action.actionRef === policy.controller.roles.submit?.actionRef) reportSubmitFailure('host-admission');
+        throw error;
+      }
     }),
     async configureSubmittedRuntime(next: RespondentSubmittedRuntimeInput): Promise<Pick<RespondentOwnedRuntime, 'invalidate' | 'dispose'>> {
       const response = next.state.response;
