@@ -899,6 +899,72 @@ async function correctionFixture(taskRequest = true) {
 }
 
 describe('explicit correction host through the maintained native loader', () => {
+  it.each(['unmount', 'session-retirement'] as const)('keeps the latest task hydration alive across asynchronous renderer restoration until %s', async retirement => {
+    const f = await correctionFixture();
+    f.test.definition.instances!.facts = { source: 'urn:test:external', readonly: true };
+    const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    f.test.texts['definition.json'] = JSON.stringify(f.test.definition);
+    f.test.files.definition.sha256 = await rawDigest(f.test.texts['definition.json']);
+    f.test.texts['native.json'] = JSON.stringify(f.test.bundle);
+    f.test.files.nativeBundle.sha256 = await rawDigest(f.test.texts['native.json']);
+    f.test.publication.definition = structuredClone(f.test.definition);
+    f.test.publication.definition_hash = await computeJcsSha256Digest(f.test.definition);
+    f.options.nativeTask.hydration.selection.definitionHash = f.test.publication.definition_hash;
+    f.options.nativeTask.hydration.selection.requiredSources = ['urn:test:external'];
+    const seed = createFormEngine(f.test.definition);
+    seed.setValue('fullName', 'Retained task respondent');
+    const response = seed.getResponse({ profile: 'off', id: f.launched.canonical_response.id }); seed.dispose();
+    // Missing saved Locale makes the configured Locale settle during restoration.
+    expect(response.displayedLocale).toBeUndefined();
+    Object.assign(f.launched, { canonical_response: response, draft_state: response.data });
+    const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:task',
+      credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+    Object.assign(f.options.identityBinding.provider, {
+      discover: async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }],
+      authenticate: async () => claim,
+      subscribe: (listener: (value: typeof claim) => void) => { listener(claim); return () => {}; },
+    });
+    const sessionListeners = new Set<(value: BrowserAuthSessionState | null) => void>();
+    f.options.identityBinding.browserAuthSession.subscribe.mockImplementation(next => {
+      sessionListeners.add(next); return vi.fn(() => { sessionListeners.delete(next); });
+    });
+    const previousFetch = f.test.fetch.getMockImplementation()!;
+    const evaluations: AbortSignal[] = [];
+    f.test.fetch.mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/drafts/task-draft' && (init?.method ?? 'GET') === 'GET') return Response.json(f.launched);
+      if (path === '/drafts/task-draft/evaluation-instances') {
+        evaluations.push(init!.signal!);
+        return new Promise<Response>((_resolve, reject) => {
+          init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true });
+        });
+      }
+      if ((init?.method ?? 'GET') !== 'GET' && path !== '/runtime/task-drafts') throw new Error('Unexpected business write');
+      return previousFetch(input, init);
+    });
+    const { HttpTaskCandidateHydration } = await import('../../src/adapters/http/task-candidate-hydration.ts');
+    const qualify = vi.spyOn(HttpTaskCandidateHydration.prototype, 'qualifySaved');
+    const composition = createDefaultComposition(f.config, f.options);
+    const route = dereferenceBundleExport(f.test.bundle).surfaces.flatMap(surface => surface.routes)
+      .find(route => route.slots?.some(slot => slot.slotType === 'definition-form'))!;
+    window.history.replaceState(null, '', route.path!);
+    const mounted = render(createElement(NativePackageRuntime, { composition, config: f.config }));
+    let boot: Awaited<ReturnType<NonNullable<typeof composition.nativePackageRespondent>['load']>> | undefined;
+    try {
+      boot = await composition.nativePackageRespondent!.load();
+      await screen.findByRole('textbox', { name: /full legal name/i });
+      await vi.waitFor(() => expect(evaluations.length).toBeGreaterThan(0));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(evaluations.at(-1)!.aborted).toBe(false);
+      expect(qualify.mock.calls.length).toBeGreaterThan(1);
+      expect(boot.host.getSnapshot().controller?.saved?.response.data).toEqual(response.data);
+      expect(boot.host.getSnapshot().nativeReadiness).toBe('pending');
+      expect(boot.host.getSnapshot().controller?.prepared).toBeUndefined();
+      if (retirement === 'unmount') mounted.unmount(); else for (const listener of [...sessionListeners]) listener(null);
+      await vi.waitFor(() => expect(evaluations.every(signal => signal.aborted)).toBe(true));
+    } finally { mounted.unmount(); boot?.host.dispose(); window.history.replaceState(null, '', '/'); }
+  });
+
   it('selects a native-only task without external hydration or initial draft creation', async () => {
     const f = await correctionFixture();
     const boot = await createDefaultComposition(f.config, f.options).nativePackageRespondent!.load();

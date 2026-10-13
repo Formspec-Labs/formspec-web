@@ -299,6 +299,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   let visitEpoch = 0;
   let visitMarkerSequence = 0;
   let renderInstance = 0;
+  let rendererAdmission = 0;
   let responseId = policy.responseId;
   let disposed = false;
   let cleared = false;
@@ -893,6 +894,12 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return { invalidate: () => { if (!disposed) { stop('clear'); emit(); } }, dispose: () => {} };
     },
     async configureRuntime(next: RespondentOwnedRuntimeInput): Promise<RespondentOwnedRuntime> {
+      const admission = ++rendererAdmission;
+      const expectedAuthority = authorityGeneration; const expectedVisit = visitEpoch;
+      const assertAdmission = () => {
+        if (admission !== rendererAdmission || disposed || cleared || expectedAuthority !== authorityGeneration || expectedVisit !== visitEpoch)
+          throw new Error('native-renderer-admission-retired');
+      };
       if (!input && ownedDraftRestoration && !same(next.restoredSavedDraft, ownedDraftRestoration.saved)) {
         ownedDraftRestoration = undefined; throw new Error('native-owned-restoration-changed');
       }
@@ -927,18 +934,21 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
             restoredScreenerCheckpoint = structuredClone({ draftKey, draft, actor, response });
           }
           const expected = authorityGeneration;
-          await controller!.restoreSavedDraft(next.restoredSavedDraft);
+          await controller!.restoreSavedDraft(next.restoredSavedDraft); assertAdmission();
           if (disposed || cleared || authorityGeneration !== expected) throw new Error('native-saved-restoration-retired');
         }
-        if (next.restoredPendingSign) await controller!.restorePending(next.restoredPendingSign, native && !next.restoredPendingSign.response.extensions?.['x-formspec-signing-content'] ? true : undefined);
+        if (next.restoredPendingSign) {
+          await controller!.restorePending(next.restoredPendingSign, native && !next.restoredPendingSign.response.extensions?.['x-formspec-signing-content'] ? true : undefined); assertAdmission();
+        }
         if (next.restoredSigning) {
           if (!same(next.restoredSigning.response, next.restoredResponse)) throw new Error('native-signed-restoration-mismatch');
           const expected = authorityGeneration;
-          await controller!.restoreSigned(next.restoredSigning);
-          await pendingDelivery;
+          await controller!.restoreSigned(next.restoredSigning); assertAdmission();
+          await pendingDelivery; assertAdmission();
           if (disposed || authorityGeneration !== expected || !native && !runtime) throw new Error('native-signed-restoration-retired');
         }
       }
+      assertAdmission();
       const scope = policy.semanticScope(responseId, ++renderInstance);
       if (scope.responseId !== responseId) throw new Error('native-response-scope-refused');
       applicationFlags();
