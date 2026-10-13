@@ -1,3 +1,4 @@
+import { NATIVE_SOURCE_OPERATION_MILLISECONDS } from '../../shared/native-operation-budget.ts';
 import { abortable } from '../../shared/abortable.ts';
 import canonicalize from 'canonicalize';
 import { snapshotFiniteJson } from '@formspec-org/surface';
@@ -111,7 +112,7 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
     check();
     const raw = await this.client.postJsonWithBytes<unknown>(`/drafts/${encodeURIComponent(saved.draft.id)}/evaluation-instances`,
       { draftVersion: saved.draft.version, candidateHash }, { signal, assertCurrent: check, assertBeforeDispatch: check,
-        successStatuses: [200], requireJson: true, requireNoStore: true, timeoutMs: 10_000, maxResponseBytes: 2 * 1024 * 1024 });
+        successStatuses: [200], requireJson: true, requireNoStore: true, timeoutMs: NATIVE_SOURCE_OPERATION_MILLISECONDS, maxResponseBytes: 2 * 1024 * 1024 });
     check();
     const view = snapshotFiniteJson(decodeEvaluationHydrationWire(raw.value)) as unknown as EvaluationHydrationWire;
     const owner = view.owner;

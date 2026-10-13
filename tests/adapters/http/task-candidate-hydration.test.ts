@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpTaskCandidateHydration } from '../../../src/adapters/http/task-candidate-hydration.ts';
 import { hydrationFixture } from './screener-hydration-fixture.ts';
+
+afterEach(() => vi.useRealTimers());
 
 async function fixture() {
   const original = await hydrationFixture();
@@ -112,4 +114,57 @@ describe('task candidate hydration through the maintained Source route', () => {
     await Promise.resolve();
   });
 
+});
+
+describe('task hydration within the existing native operation budget', () => {
+  it('accepts a verified response after ten seconds without renewing original proof validity', async () => {
+    const f = await fixture(); vi.useFakeTimers();
+    let elapsed = 0; let dispatched!: () => void;
+    const entered = new Promise<void>(resolve => { dispatched = resolve; });
+    f.fetchImpl.mockImplementation(async () => {
+      dispatched();
+      return new Promise<Response>(resolve => { setTimeout(() => {
+        elapsed = 15_000; resolve(Response.json(f.original.view, { headers: { 'cache-control': 'no-store' } }));
+      }, 15_000); });
+    });
+    const verify = vi.fn(async () => ({ validForMilliseconds: 20_000 }));
+    const adapter = new HttpTaskCandidateHydration({ ...f.config, elapsedNow: () => elapsed, receiptVerifier: { verify } }, f.lifetime);
+    const outcome = adapter.qualifySaved(f.saved, f.lifetime).then(facts => ({ facts }), error => ({ error }));
+    await entered; await vi.advanceTimersByTimeAsync(15_000);
+    const result = await outcome;
+    if (!('facts' in result)) throw result.error;
+    result.facts.assertReady(); expect(verify).toHaveBeenCalledOnce(); expect(f.fetchImpl).toHaveBeenCalledOnce();
+    expect(result.facts.remainingMilliseconds!()).toBe(5_000);
+    elapsed = 20_000; expect(() => result.facts.assertReady()).toThrow('original proof expired');
+    adapter.dispose();
+  });
+  it.each(['host-deadline', 'session-retirement', 'unmount'] as const)('honors %s before a delayed response', async retirement => {
+    const f = await fixture(); vi.useFakeTimers();
+    const owner = new AbortController(), stage = new AbortController();
+    let dispatched!: () => void;
+    const entered = new Promise<void>(resolve => { dispatched = resolve; });
+    f.fetchImpl.mockImplementation(async () => {
+      dispatched(); return new Promise<Response>(resolve => { setTimeout(() => resolve(Response.json(f.original.view,
+        { headers: { 'cache-control': 'no-store' } })), 15_000); });
+    });
+    const verify = vi.fn(async () => ({ validForMilliseconds: 20_000 }));
+    const adapter = new HttpTaskCandidateHydration({ ...f.config, receiptVerifier: { verify } },
+      { signal: owner.signal, assertCurrent: vi.fn() });
+    const outcome = adapter.qualifySaved(f.saved, { signal: stage.signal, assertCurrent: vi.fn() })
+      .then(() => ({ accepted: true, error: undefined }), error => ({ accepted: false, error }));
+    await entered;
+    // The enclosing host has only five seconds remaining; the request cannot renew it.
+    const reason = new Error(retirement === 'host-deadline' ? 'native-facts-deadline' : 'task owner retired');
+    setTimeout(() => {
+      if (retirement === 'host-deadline') stage.abort(reason);
+      else if (retirement === 'session-retirement') owner.abort(reason);
+      else adapter.dispose();
+    }, 5_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const result = await outcome; expect(result.accepted).toBe(false);
+    if (retirement !== 'unmount') expect(result.error).toBe(reason);
+    expect(f.fetchImpl.mock.calls[0][1]!.signal!.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(verify).not.toHaveBeenCalled(); expect(f.fetchImpl).toHaveBeenCalledOnce(); adapter.dispose();
+  });
 });
