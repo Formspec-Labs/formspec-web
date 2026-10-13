@@ -1,4 +1,5 @@
 import { createSubmitFailureReporter, type SubmitFailureStage } from './submit-diagnostic.ts';
+import { assertSignedTaskDraft } from './task-draft-wire.ts';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
 import { ResponseCompletionRefusal } from '../ports/response-completion.ts';
 import canonicalize from 'canonicalize';
@@ -527,11 +528,15 @@ export function createResponseActionController(config: ResponseActionControllerC
     async restoreSigned(value: SignedResponseSigning) {
       const generation = epoch;
       current(generation);
-      if (completion?.kind === 'task' || !restored?.authoredSignatures?.length || prepared || signed || saved || busy || completionResult) throw new ControllerRefusal('restoration-unresolved');
+      if (!restored?.authoredSignatures?.length || prepared || signed || saved || busy || completionResult) throw new ControllerRefusal('restoration-unresolved');
       const result = freeze(structuredClone(value));
       await checkEvidence(result, restored); current(generation);
       const wording = config.signingContext();
       checkRestoredSigned(result, wording);
+      if (completion?.kind === 'task') {
+        try { assertSignedTaskDraft(result.evidence.taskDraft, result.draft); }
+        catch { throw new ControllerRefusal('context-mismatch'); }
+      }
       signed = result; saved = result; actor = result.actor.id; owned = true;
       publish('signed');
       await afterCommit(result);

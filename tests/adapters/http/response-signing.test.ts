@@ -36,6 +36,27 @@ const document: ResponseActionsDocument = {
 };
 const action = { document, actionRef: 'sign', requestRef: 'sign-draft', artifactRef: 'https://forms.example.test/actions', artifactDigest: `sha256:${'a'.repeat(64)}` };
 
+describe('authenticated signed task read selectors', () => {
+  it.each(['exact', 'missing', 'hash', 'revision', 'draft', 'association', 'binding'] as const)('adopts only the exact Source signed task: %s', async mode => {
+    const association = { version: 1 as const, associationHash: `sha256:${'b'.repeat(64)}`, taskBindingHash: `sha256:${'c'.repeat(64)}` };
+    const test = await fixture(true, true, false, undefined, async () => ({ assertCurrent() {} }), true, undefined, association);
+    const prepared = await test.prepare(); const signed = await test.sign(prepared);
+    const selector = { draftId: signed.draft.id, expectedSignedDraftVersion: signed.draft.version,
+      expectedSignedResponseHash: `sha256:${signed.draft.responseHash}`, associationHash: association.associationHash, taskBindingHash: association.taskBindingHash };
+    if (mode === 'hash') selector.expectedSignedResponseHash = `sha256:${'0'.repeat(64)}`;
+    if (mode === 'revision') selector.expectedSignedDraftVersion++;
+    if (mode === 'draft') selector.draftId = 'different-draft';
+    if (mode === 'association') selector.associationHash = `sha256:${'0'.repeat(64)}`;
+    if (mode === 'binding') selector.taskBindingHash = `sha256:${'0'.repeat(64)}`;
+    test.state.taskDraft = { ...association, ...(mode === 'missing' ? {} : { signedDraft: selector }) };
+    const before = test.requests.length; const read = test.build().draftStore.readState!(test.draftKey);
+    if (mode === 'exact') expect(await read).toMatchObject({ kind: 'active', signed: { response: signed.response, draft: signed.draft } });
+    else await expect(read).rejects.toThrow('Signed task draft selector');
+    expect(test.requests.slice(before).map(request => request.method)).toEqual(['GET']);
+    expect(test.state.signCount).toBe(1);
+  });
+});
+
 function saveAction(method: 'POST' | 'PATCH') {
   const draftAction = structuredClone(action);
   draftAction.actionRef = 'save'; draftAction.requestRef = 'save-draft';

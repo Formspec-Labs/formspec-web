@@ -6,6 +6,7 @@ import { snapshotFiniteJson } from '@formspec-org/surface';
 import type { ResponseCompletion, PreparedResponseCompletion } from '../ports/response-completion.ts';
 import type { TaskCompletion, TaskCompletionSelection, TaskSubmission } from '../ports/task-completion.ts';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
+import { assertSignedTaskDraft } from './task-draft-wire.ts';
 
 /** Generic task completion preparation. No production caller until owning task/sign authority is qualified. */
 export function createTaskResponseCompletion(config: { selection: TaskCompletionSelection; transport: TaskCompletion }): ResponseCompletion {
@@ -21,11 +22,9 @@ export function createTaskResponseCompletion(config: { selection: TaskCompletion
       const invocationInput = snapshotFiniteJson(input.invocationInput) as unknown as typeof input.invocationInput;
       if (signed.response.definitionUrl !== selection.definitionUrl || signed.response.definitionVersion !== selection.definitionVersion
         || signed.response.status !== 'completed' || !signed.response.authoredSignatures?.length) throw new Error('Task completion candidate mismatch');
-      const signedDraft = signed.evidence.taskDraft?.signedDraft;
-      if (!signedDraft || signedDraft.draftId !== signed.draft.id
-        || signedDraft.expectedSignedDraftVersion !== signed.draft.version
-        || signedDraft.associationHash !== signed.evidence.taskDraft!.associationHash
-        || signedDraft.taskBindingHash !== signed.evidence.taskDraft!.taskBindingHash) throw new ResponseCompletionRefusal('context-mismatch');
+      let signedDraft;
+      try { signedDraft = assertSignedTaskDraft(signed.evidence.taskDraft, signed.draft); }
+      catch { throw new ResponseCompletionRefusal('context-mismatch'); }
       const submission: TaskSubmission = { definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion,
         response: signed.response, signedDraft };
       const planned = planServiceRequest(input.request, { input: { ...invocationInput, taskId: selection.taskId,

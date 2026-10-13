@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
-import { createFormEngine } from '@formspec-org/engine/render';
+import { createFormEngine, hashSigningContent } from '@formspec-org/engine/render';
 import { createSemanticControlRegistry } from '@formspec-org/react';
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import { composeSurfaceApp, flattenRegistryEntries, dereferenceBundleExport, resolveDataSourceDescriptor, planStaticContent, type BundleExport } from '@formspec-org/surface';
@@ -17,6 +17,8 @@ import { computeJcsSha256Digest } from '../../src/adapters/http/response-action-
 import type { SavedResponseDraft, SignedResponseSigning } from '../../src/ports/response-signing.ts';
 import { isUuidV7IdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { createHttpAdapterCohort } from '../../src/adapters/http/cohort.ts';
+import { createTaskComposition } from '../../src/composition/task.ts';
+import { detachedSignatureProtectedHeader, encodeCoseSign1 } from '@formspec-org/integrity-cose';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
 import { HttpTaskCandidateHydration } from '../../src/adapters/http/task-candidate-hydration.ts';
@@ -129,6 +131,97 @@ function siblingModulePolicy(test: ReturnType<typeof fixture>) {
 }
 
 describe('generic native package signing session', () => {
+  it.each(['current', 'retired during read'] as const)('reads and restores only a current Source signed task in a fresh native host: %s', async mode => {
+    const baseline = fixture(); baseline.host.dispose(); baseline.engine.dispose();
+    const { policy } = baseline;
+    const source = policy.signingContext('en').source;
+    const content = { source, locale: 'en', documentId: 'doc', signingIntent: 'urn:test:sign', declaration: 'Declaration',
+      affirmationText: 'Affirmation', delegatedSigningNotice: 'Notice', paperAlternative: 'Paper',
+      electronicConsent: { text: 'Consent', controlLabel: 'Consent', textRef: 'urn:test:consent', version: '1' } } satisfies SigningContent;
+    policy.definition.extensions = { 'x-formspec-signing-content': { version: '1.0', entries: { en: content } } };
+    const locale: LocaleDocument = { $formspecLocale: '2.0', url: 'urn:test:locale:en', version: '1', locale: 'en',
+      target: { kind: 'definition', url: policy.definition.url }, strings: {} };
+    policy.locales = [locale]; policy.bundle = { ...policy.bundle, documents: { ...policy.bundle.documents, [locale.url!]: locale } };
+    const validateContent = await loadCanonicalSigningContentValidator();
+    const documentHash = await hashSigningContent(content, validateContent);
+    const unsigned: FormResponse = { ...baseline.response, displayedLocale: { url: locale.url!, version: locale.version, locale: 'en' },
+      extensions: { 'x-formspec-signing-content': { version: '1.0', content, draftId: 'owned-id', draftVersion: 7,
+        actorRef: 'server-actor', signerName: 'Generic signer', consentAccepted: true, signedAt: '2026-10-08T12:00:00Z',
+        documentHash, documentHashAlgorithm: 'sha-256' } } };
+    const digest = createHash('sha256').update(canonicalResponseSignedPayloadBytes(unsigned)).digest('hex');
+    const signatureValue = btoa(String.fromCharCode(...encodeCoseSign1(detachedSignatureProtectedHeader(-8,
+      new TextEncoder().encode('key'), 'urn:formspec:sig-method:ed25519-cose-sign1@1'), null, new Uint8Array(64))));
+    const response: FormResponse = { ...unsigned, authoredSignatures: [{ signatureId: 'neutral-signature', ceremonyId: 'neutral-ceremony',
+      signatureProvider: 'urn:formspec:provider:delegated-response@1', documentId: content.documentId, signingIntent: content.signingIntent,
+      signatureValue, signerId: 'server-actor', signerName: 'Generic signer', consentAccepted: true,
+      consentTextRef: content.electronicConsent.textRef, consentVersion: content.electronicConsent.version, affirmationText: content.affirmationText,
+      documentHash, documentHashAlgorithm: 'sha-256', signedPayload: { canonicalization: 'formspec-response-signing-v1',
+        digestAlgorithm: 'sha-256', digest, responseId: unsigned.id!, definitionUrl: unsigned.definitionUrl,
+        definitionVersion: unsigned.definitionVersion, signedAt: '2026-10-08T12:00:00Z', signingIntent: content.signingIntent } }] };
+    const signedDraft = { draftId: 'owned-id', expectedSignedDraftVersion: 8, expectedSignedResponseHash: `sha256:${await hashResponse(response)}`,
+      associationHash: `sha256:${'b'.repeat(64)}`, taskBindingHash: `sha256:${'c'.repeat(64)}` };
+    const view = { draft_id: 'owned-id', draft_version: 8, form_version_id: 'publication', subject_ref: 'server-actor', status: 'in_progress',
+      draft_state: response.data, canonical_response: response, taskDraft: { version: 1, associationHash: signedDraft.associationHash,
+        taskBindingHash: signedDraft.taskBindingHash, signedDraft } };
+    const selection = { taskId: 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db/tasks/neutral',
+      processId: 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db', definitionUrl: response.definitionUrl, definitionVersion: response.definitionVersion };
+    let sourceCurrent = true; let retireDuringRead = false;
+    const fetchImpl = vi.fn(async () => { if (retireDuringRead) sourceCurrent = false; return Response.json(view); });
+    const complete = vi.fn(async () => Response.json({ taskId: selection.taskId, processId: selection.processId, outcome: 'completed',
+      newStatus: 'submitted', occurredAt: '2026-10-08T12:05:00Z' }));
+    const cohort = await createTaskComposition({ source: { baseUrl: 'https://source.test', accessToken: 'respondent', fetchImpl,
+      tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } } },
+      wos: { baseUrl: 'https://wos.test', accessToken: 'respondent', fetchImpl: complete },
+      launch: { version: 1, taskId: selection.taskId, expectedTaskRevision: 'neutral-task-revision', formVersionId: 'publication', formVersionHash: `sha256:${'a'.repeat(64)}` },
+      completion: selection, draftKey: { formUrl: response.definitionUrl, formVersion: response.definitionVersion, subjectRef: 'server-actor' },
+      formId: 'form', definition: policy.definition, locales: [locale], signing: { validateResponse: validateCanonicalFormResponse, validateContent,
+        signingProfileDigest: async value => createHash('sha256').update(canonicalResponseSignedPayloadBytes(value)).digest('hex'), keyId: 'key',
+        preSignCandidate: async () => ({ assertCurrent() {} }) }, resumeMetadata: { read: () => undefined, write() {}, remove() {} },
+      assertCurrentSource() { if (!sourceCurrent) throw new Error('Selected task owner retired'); }, assertCurrentWos() {}, launchOperationId: 'neutral-resume' },
+      { signal: new AbortController().signal, assertCurrent() {} });
+    retireDuringRead = mode === 'retired during read';
+    const reading = cohort.draftStore.readState!({ formUrl: response.definitionUrl, formVersion: response.definitionVersion, subjectRef: 'server-actor' });
+    if (mode === 'retired during read') {
+      await expect(reading).rejects.toThrow('Selected task owner retired'); expect(complete).not.toHaveBeenCalled();
+      expect(fetchImpl).toHaveBeenCalledTimes(2); return;
+    }
+    const state = await reading;
+    if (state?.kind !== 'active' || !state.signed) throw new Error('Signed task read required');
+    const submitRole = structuredClone(policy.controller.roles.sign!); submitRole.actionRef = 'submit'; submitRole.requestRef = 'submit';
+    submitRole.widgetSource!.outputName = 'submit';
+    submitRole.document.actions = [{ id: 'submit', intent: 'x-submit', validation: { profile: 'on-submit', blocking: 'block-on-error', persistence: 'complete-response' },
+      effects: [{ type: 'serviceRequest', requestRef: 'submit', idempotencyKey: '@invocation.id' }] }];
+    submitRole.document['x-formspec-runtime'] = { version: '1.0', requests: [{ id: 'submit', adapter: 'http-json', successStatuses: [200], request: {
+      method: 'POST', pathTemplate: '/api/v1/tasks/{taskId}/response', pathBindings: { taskId: { from: 'input', path: 'taskId' } },
+      bodyDefaults: { definitionUrl: selection.definitionUrl, definitionVersion: selection.definitionVersion },
+      bodyBindings: { '/response': { from: 'input', path: 'frozenResponse' }, '/signedDraft': { from: 'input', path: 'signedDraft' } } } }] };
+    const document = policy.controller.roles.sign!.document;
+    document.actions.push(...submitRole.document.actions);
+    document['x-formspec-runtime']!.requests.push(...submitRole.document['x-formspec-runtime']!.requests);
+    submitRole.document = document;
+    policy.controller.roles.submit = submitRole; policy.controller.completion = cohort.completion; policy.controller.signing = cohort.responseSigning;
+    const host = createNativePackageSigningHost(policy); const engine = createFormEngine(policy.definition);
+    engine.loadLocale(locale); engine.setLocale('en'); engine.loadResponseData(response.data as Parameters<typeof engine.loadResponseData>[0]);
+    const lease = await host.configureRuntime({ engine, definition: policy.definition, draftKey: state.signed.draftKey, claim: null,
+      activeLocale: 'en', restoredResponse: state.response, restoredSigning: state.signed });
+    expect(host.getSnapshot().controller?.signed).toEqual(state.signed); expect(complete).not.toHaveBeenCalled();
+    const runtime = host.getSnapshot().runtime!;
+    const review = Object.fromEntries(await Promise.all(['definition', 'response', 'presentation'].map(async name => {
+      const loaded = await runtime.dataSourceLoader({ descriptor: resolveDataSourceDescriptor(host.bundle.dataSources!, policy.bindings[name])!,
+        context: { surfaceId: 'surface', surfaceRef: 'urn:test:surface', routeId: 'review', slotId: 'review', params: {}, sessionGeneration: host.getSnapshot().generation } });
+      if (loaded.status !== 'loaded') throw new Error('Review unavailable'); return [name, loaded.value];
+    }))) as unknown as ResponseReviewData;
+    host.reviewOptions.onReviewState!({ status: 'ready', contextIdentity: await responseReviewHash(review), responseHash: review.presentation.responseHash,
+      actorRef: review.presentation.actorRef, draft: review.presentation.draft, locale: review.presentation.locale, phase: review.presentation.phase });
+    const result = await host.widgetExecutor({ document: submitRole.document, actionRef: 'submit', invocationId: 'neutral-separate-submit', source: submitRole.widgetSource!,
+      responseContext: { inputName: 'response', source: { catalogRef: policy.bindings.response.catalogRef, sourceRef: policy.bindings.response.sourceRef },
+        definition: policy.definition, response }, input: { draftId: 'owned-id', draftVersion: 8, canonical_response: response as never } });
+    expect('invocation' in result ? result.invocation.status : result.status).toBe('completed'); expect(complete).toHaveBeenCalledOnce();
+    expect(host.getSnapshot().controller?.signed?.response).toEqual(response);
+    expect(fetchImpl).toHaveBeenCalledTimes(2); // task launch/resume and authenticated owned draft read only
+    expect(baseline.saveDraft).not.toHaveBeenCalled(); expect(baseline.prepare).not.toHaveBeenCalled(); expect(baseline.sign).not.toHaveBeenCalled();
+    lease.dispose(); engine.dispose(); host.dispose();
+  });
   it('publishes editable activity only for the current form lease and refuses retired actions', async () => {
     const test = fixture();
     expect(test.host.getSnapshot().editableSessionActive).toBe(false);

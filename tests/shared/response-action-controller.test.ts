@@ -771,7 +771,7 @@ describe('typed response completion', () => {
     test.sign.mockImplementation(async input => {
       const actual = await sign(input);
       const signedDraft = { draftId: actual.draft.id, expectedSignedDraftVersion: actual.draft.version,
-        expectedSignedResponseHash: `sha256:${'a'.repeat(64)}`, associationHash: `sha256:${'b'.repeat(64)}`,
+        expectedSignedResponseHash: `sha256:${actual.draft.responseHash}`, associationHash: `sha256:${'b'.repeat(64)}`,
         taskBindingHash: `sha256:${'c'.repeat(64)}` };
       return { ...actual, evidence: { ...actual.evidence, taskDraft: { version: 1,
         associationHash: signedDraft.associationHash, taskBindingHash: signedDraft.taskBindingHash, signedDraft } } };
@@ -792,6 +792,42 @@ describe('typed response completion', () => {
     expect(test.buildHandoff).not.toHaveBeenCalled(); expect(test.submit).not.toHaveBeenCalled();
     expect(await test.widget('submit', signed, 'task-completion')).toEqual(first);
     expect(test.complete).toHaveBeenCalledOnce();
+  });
+  it.each(['exact', 'missing', 'hash', 'revision', 'association', 'binding'] as const)('restores only an exact signed task without new Save, Prepare or Sign: %s', async mode => {
+    const producer = taskFixture(); const prepared = await producer.ready(); await producer.widget('sign', prepared);
+    const generated = producer.controller.getSnapshot().signed!;
+    const value: FormResponse = { ...generated.response, extensions: { ...generated.response.extensions, 'x-formspec-signing-content': {
+      version: '1.0' as const, content, draftId: generated.draft.id, draftVersion: generated.draft.version - 1,
+      actorRef: generated.actor.id, signerName: 'Actual signer', consentAccepted: true, signedAt: '2026-10-08T12:00:00Z',
+      documentHash: 'a'.repeat(64), documentHashAlgorithm: 'sha-256' as const } } };
+    const previous = { ...generated, ...await evidence(value, generated.draft.version), content,
+      verification: { ...generated.verification, provider: value.authoredSignatures![0].signatureProvider } };
+    const signedDraft = { draftId: previous.draft.id, expectedSignedDraftVersion: previous.draft.version,
+      expectedSignedResponseHash: `sha256:${previous.draft.responseHash}`, associationHash: `sha256:${'b'.repeat(64)}`,
+      taskBindingHash: `sha256:${'c'.repeat(64)}` };
+    const signed = { ...previous, evidence: { ...previous.evidence, taskDraft: { version: 1 as const,
+      associationHash: signedDraft.associationHash, taskBindingHash: signedDraft.taskBindingHash, signedDraft } } };
+    const selected = taskFixture();
+    const test = fixture({ roles: selected.config.roles, completion: selected.config.completion, restoredResponse: signed.response });
+    if (mode !== 'exact') {
+      const candidate = structuredClone(signed);
+      if (mode === 'missing') Reflect.deleteProperty(candidate.evidence.taskDraft!, 'signedDraft');
+      if (mode === 'hash') candidate.evidence.taskDraft!.signedDraft!.expectedSignedResponseHash = `sha256:${'0'.repeat(64)}`;
+      if (mode === 'revision') candidate.evidence.taskDraft!.signedDraft!.expectedSignedDraftVersion++;
+      if (mode === 'association') candidate.evidence.taskDraft!.signedDraft!.associationHash = `sha256:${'0'.repeat(64)}`;
+      if (mode === 'binding') candidate.evidence.taskDraft!.signedDraft!.taskBindingHash = `sha256:${'0'.repeat(64)}`;
+      await expect(test.controller.restoreSigned(candidate)).rejects.toThrow('context-mismatch');
+      expect(test.controller.getSnapshot().signed).toBeUndefined(); expect(selected.complete).not.toHaveBeenCalled();
+      expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+      return;
+    }
+    await test.controller.restoreSigned(signed);
+    expect(test.controller.getSnapshot().signed).toEqual(signed);
+    await test.widget('submit', signed, 'resumed-task-submit');
+    expect(selected.complete).toHaveBeenCalledOnce();
+    expect(selected.complete.mock.calls[0][0].response).toEqual(signed.response);
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+    expect(test.submit).not.toHaveBeenCalled();
   });
   it('retains the committed task event when optional authored output extraction fails', async () => {
     const test = taskFixture(true); const prepared = await test.ready(); await test.widget('sign', prepared);

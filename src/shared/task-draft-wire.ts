@@ -1,4 +1,19 @@
-import type { TaskDraftAssociation } from '../ports/task-draft.ts';
+import type { SignedTaskDraft, TaskDraftAssociation } from '../ports/task-draft.ts';
+
+/** Exact selectors from an authenticated Source read or Sign result, never a task grant.
+ * Source qualifies the retained Sign record; WOS independently admits completion. */
+export function assertSignedTaskDraft(association: TaskDraftAssociation | undefined,
+  draft: { id: string; version: number; responseHash: string }): SignedTaskDraft {
+  assertTaskDraftWire(association);
+  const signed = association?.signedDraft;
+  if (!signed || Object.keys(signed).sort().join(',') !== 'associationHash,draftId,expectedSignedDraftVersion,expectedSignedResponseHash,taskBindingHash'
+    || signed.draftId !== draft.id || !Number.isSafeInteger(signed.expectedSignedDraftVersion)
+    || signed.expectedSignedDraftVersion !== draft.version || draft.version < 2
+    || !/^[a-f0-9]{64}$/.test(draft.responseHash) || signed.expectedSignedResponseHash !== `sha256:${draft.responseHash}`
+    || signed.associationHash !== association!.associationHash || signed.taskBindingHash !== association!.taskBindingHash)
+    throw new Error('Signed task draft selector differs from its owned snapshot');
+  return signed;
+}
 
 /** Optional authenticated composition metadata; never a freshness or write grant. */
 export function assertTaskDraftWire(value: TaskDraftAssociation | undefined): void {

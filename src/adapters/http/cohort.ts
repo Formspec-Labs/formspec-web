@@ -38,6 +38,7 @@ import { HttpClient, HttpAdapterError, type HttpClientConfig } from './http-clie
 import { HttpSubmitTransport } from './submit-transport.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 import { assertDelegatedSignedResponseConsistency, handoffHash, savedResponseDraftFromVerifiedRead, HttpResponseSigning, ResponseSigningScopeFence, type HttpResponseSigningPolicy } from './response-signing.ts';
+import { assertSignedTaskDraft } from '../../shared/task-draft-wire.ts';
 
 export type { DraftBindingRegistry, DraftBindingSnapshot } from './draft-binding-registry.ts';
 
@@ -175,6 +176,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       if (view.status === 'in_progress') {
         responseSigning.assertEditable(key);
         const responseHash = await handoffHash(response); current();
+        if (taskDraftSelection) assertSignedTaskDraft(view.taskDraft, { id: view.draft_id, version: view.draft_version, responseHash });
         return { kind: 'active', response, signed: { draftKey: key, response, content,
           draft: { id: view.draft_id, version: view.draft_version, responseHash }, actor: { id: owner.subjectRef },
           evidence: { draft_id: view.draft_id, draft_version: view.draft_version, form_version_id: view.form_version_id!,
