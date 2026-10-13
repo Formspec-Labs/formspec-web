@@ -20,6 +20,12 @@
     },
     {
       "$ref": "#/$defs/EvidenceView"
+    },
+    {
+      "$ref": "#/$defs/Recover"
+    },
+    {
+      "$ref": "#/$defs/RecoveryView"
     }
   ],
   "$defs": {
@@ -1679,6 +1685,146 @@
         "purpose",
         "requestHash",
         "sourceRef",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "Recover": {
+      "type": "object",
+      "properties": {
+        "selectionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "formVersionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "draftVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "selectionHash",
+        "formVersionHash",
+        "draftVersion",
+        "candidateHash"
+      ],
+      "additionalProperties": false
+    },
+    "HistoricalRunView": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/RunView"
+        },
+        {
+          "properties": {
+            "acceptance": {
+              "type": "null"
+            }
+          }
+        }
+      ]
+    },
+    "RecoveryView": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "purpose": {
+          "const": "formspec.screener.draft-recovery"
+        },
+        "scope": {
+          "$ref": "#/$defs/Run/properties/scope"
+        },
+        "owner": {
+          "$ref": "#/$defs/Run/properties/owner"
+        },
+        "formVersionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "draftId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "draftVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "selectionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "retained"
+                },
+                "relation": {
+                  "enum": [
+                    "currentCandidate",
+                    "priorCandidate"
+                  ]
+                },
+                "association": {
+                  "$ref": "#/$defs/Association"
+                },
+                "history": {
+                  "$ref": "#/$defs/HistoricalRunView"
+                }
+              },
+              "required": [
+                "status",
+                "relation",
+                "association",
+                "history"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "pending"
+                },
+                "reason": {
+                  "const": "associationNotRetained"
+                }
+              },
+              "required": [
+                "status",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "purpose",
+        "scope",
+        "owner",
+        "formVersionHash",
+        "draftId",
+        "draftVersion",
+        "candidateHash",
+        "selectionHash",
         "result"
       ],
       "additionalProperties": false

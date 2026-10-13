@@ -217,7 +217,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   };
   const signingPort: ResponseSigning = cohort.responseSigning!;
   const signing: ResponseSigning = {
-    saveDraft: input => cohort.responseSigning!.saveDraft(input).then(remember),
+    saveDraft: (input, execution) => cohort.responseSigning!.saveDraft(input, execution).then(remember),
     prepare: input => diagnoseNativePrepare(() => cohort.responseSigning!.prepare(input)).then(remember),
     sign: input => cohort.responseSigning!.sign(input).then(remember),
     ...(signingPort.restorePending ? { restorePending: (input: Parameters<NonNullable<ResponseSigning['restorePending']>>[0], operationId: string) => signingPort.restorePending!(input, operationId).then(result => result.kind === 'signed' ? { ...result, signed: remember(result.signed) } : { ...result, preparation: remember(result.preparation) }) } : {}),

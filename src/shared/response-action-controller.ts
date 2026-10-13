@@ -1,3 +1,4 @@
+import { assertSynchronousGuard } from './synchronous-guard.ts';
 import { ResponseCompletionRefusal } from '../ports/response-completion.ts';
 import canonicalize from 'canonicalize';
 import { extractServiceRequestOutputs, invokeResponseActionAsync, planServiceRequest, resolveResponseAction, resolveResponseActionValidationTuple, resolveServiceRequest, type ResponseActionInvocationResult } from '@formspec-org/engine/render';
@@ -6,7 +7,7 @@ import type { SurfaceWidgetActionExecutor, SurfaceWidgetActionSource } from '@fo
 import type { FormDefinition, FormResponse, SigningContentSource, ValidationOverride } from '@formspec-org/types';
 import type { ApplicationCaseReceipt, ApplicationLifecycle, ApplicationCaseLookupUnavailable } from '../ports/application-lifecycle.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
-import type { AdmittedResponseAction, PendingResponseSigning, PreparedResponseSigning, ResponseSigning, SavedResponseDraft, SignedResponseSigning } from '../ports/response-signing.ts';
+import type { SaveResponseDraftOptions, AdmittedResponseAction, PendingResponseSigning, PreparedResponseSigning, ResponseSigning, SavedResponseDraft, SignedResponseSigning } from '../ports/response-signing.ts';
 import type { IntakeHandoff, SubmitConfirmation, SubmitTransport, SubmitOptions } from '../ports/submit-transport.ts';
 import type { ResponseCompletion, PreparedResponseCompletion, ResponseCompletionResult } from '../ports/response-completion.ts';
 import { createIntakeResponseCompletion } from './intake-response-completion.ts';
@@ -202,7 +203,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         ...wording, generation: context.generation })), stage)) throw new ControllerRefusal('review-unready');
   }
   async function perform(role: ResponseActionRole, admission: QualifiedResponseActionRole, response: FormResponse,
-    input: Record<string, unknown>, deliveryId: string, source: unknown, generation: number, signRetry?: SignRetry) {
+    input: Record<string, unknown>, deliveryId: string, source: unknown, generation: number, signRetry?: SignRetry, execution?: SaveResponseDraftOptions) {
     if (pendingOperationId && role !== 'sign') throw new ControllerRefusal('operation-conflict');
     const request = requestFor(role, admission);
     const recoveringSign = role === 'sign' && config.reconcileSignRetries && signRetry !== undefined
@@ -288,7 +289,9 @@ export function createResponseActionController(config: ResponseActionControllerC
       if (role === 'saveInitial' || role === 'saveOwned') {
         result = await config.signing.saveDraft({ ...context, formVersionId: context.publication.formVersionId,
           formId: context.publication.formId,
-          response, operationId: operation.operationId, action });
+          response, operationId: operation.operationId, action }, execution?.assertBeforeDispatch ? {
+            assertBeforeDispatch: () => { current(generation); assertSynchronousGuard(execution.assertBeforeDispatch!); },
+          } : undefined);
         current(generation); await checkEvidence(result, response); current(generation);
         saved = result; actor = result.actor.id; owned = true; prepared = undefined;
         publish('saved');
@@ -347,7 +350,7 @@ export function createResponseActionController(config: ResponseActionControllerC
     if (reason !== 'context-obsolete' && !completionResult) publish(error instanceof ControllerRefusal || error instanceof ResponseCompletionRefusal ? 'refused' : 'failed', reason);
     return reason;
   }
-  const definitionInvoker: ResponseActionInvoker<SubmitResult> = async input => {
+  const invokeDefinitionAction = async (input: Parameters<ResponseActionInvoker<SubmitResult>>[0], execution?: SaveResponseDraftOptions): Promise<Awaited<ReturnType<ResponseActionInvoker<SubmitResult>>>> => {
     const generation = epoch;
     const deliveryId = input.invocationContext?.invocationId ?? generateIdempotencyKey();
     try {
@@ -362,7 +365,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         dispatchEffect: async (_effect, detail) => {
           try {
             const transitionBindings = await perform(role, admission, freeze(structuredClone(detail.response)), {}, deliveryId,
-              { nodeId: input.nodeId ?? null }, generation);
+              { nodeId: input.nodeId ?? null }, generation, undefined, execution);
             return { outcome: { type: 'serviceRequest', status: 'succeeded' }, transitionBindings };
           } catch (error) { return { type: 'serviceRequest', status: 'failed', reason: fail(error, generation) }; }
         },
@@ -371,6 +374,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       return failure(input.document, input.actionRef, deliveryId, fail(error, generation));
     }
   };
+  const definitionInvoker: ResponseActionInvoker<SubmitResult> = input => invokeDefinitionAction(input);
   const widgetExecutor: SurfaceWidgetActionExecutor = async input => {
     const generation = epoch;
     try {
@@ -456,7 +460,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         publish(snapshot.phase, snapshot.reason);
       } finally { busy = undefined; }
     },
-    definitionInvoker, widgetExecutor,
+    definitionInvoker, invokeDefinitionAction, widgetExecutor,
     async restoreSavedDraft(value: SavedResponseDraft) {
       const generation = epoch; current(generation);
       if (!restored || restored.authoredSignatures?.length || restored.extensions?.['x-formspec-signing-content']

@@ -511,11 +511,13 @@ describe('explicit native package composition', () => {
     expect(test.requests.some(request => request.url.includes('sessions/anonymous'))).toBe(false);
     const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version, status: 'in-progress' as const };
     const saveAction = test.document.actions.find(action => action.id === test.signing.roles.saveInitial.actionRef)!;
+    const saveGuard = vi.fn();
     await boot.composition.responseSigning!.saveDraft({ formId: test.publication.form_id,
       draftKey: { formUrl: test.definition.url, formVersion: test.definition.version }, definition: test.definition,
       formVersionId: test.publication.form_version_id, response, operationId: generateIdempotencyKey(),
       action: { ...test.signing.roles.saveInitial, document: test.document, artifactDigest: await computeJcsSha256Digest(test.document),
-        requestRef: (saveAction.effects[0] as { requestRef: string }).requestRef } });
+        requestRef: (saveAction.effects[0] as { requestRef: string }).requestRef } }, { assertBeforeDispatch: saveGuard });
+    expect(saveGuard).toHaveBeenCalledTimes(2);
     const creates = test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'));
     expect(creates).toHaveLength(1); expect((creates[0].body as { canonical_response: FormResponse }).canonical_response.id).toBe(response.id);
     expect(await boot.composition.draftStore.load({ formUrl: test.definition.url, formVersion: test.definition.version })).toEqual(response);

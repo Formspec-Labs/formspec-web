@@ -406,6 +406,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     } catch (error) { replacement.dispose(); throw error; }
     return same(replacement.engine.getResponse({ profile: 'off' }).data, saved.response.data);
   }
+  let savedFactsRefresh: Promise<void> | undefined;
   let reviewedRefresh: { identity: string; promise: Promise<void> } | undefined;
   async function refreshReviewedFacts(saved: SavedResponseDraft) {
     if (!native) return;
@@ -911,32 +912,76 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return { responseActionInvoker: async action => {
         const expected = authorityGeneration; const expectedVisit = visitEpoch;
         if (!active || disposed) throw new Error('native-renderer-retired');
-        if (native && action.actionRef === policy.controller.roles.prepare?.actionRef && !currentPrepareFacts()) {
-          if (prepareCandidateCurrent()) factsUnavailable();
-          throw new Error('native-facts-pending-save-required');
-        }
         const assertCurrent = () => {
           if (!active || disposed || cleared || authorityGeneration !== expected || visitEpoch !== expectedVisit || rendererLease !== lease) throw new Error('native-renderer-retired');
         };
         const refreshSavedFacts = async (lifetime: { signal: AbortSignal; assertCurrent: () => void }) => {
           lifetime.signal.throwIfAborted(); lifetime.assertCurrent(); assertCurrent();
           const saved = publicSnapshot?.saved;
-          if (!native || !saved || checkpointState !== 'saved' || !same(leasedEngine.getResponse({ profile: 'off' }).data, saved.response.data))
+          const sourceAuthority = policy.nativeScreener?.context();
+          const explicitPrepare = action.actionRef === policy.controller.roles.prepare?.actionRef
+            && same(action.document, policy.controller.roles.prepare.document);
+          if (!native || !saved || explicitPrepare && (publicSnapshot?.signed || saved.response.authoredSignatures?.length)
+            || !['saved', 'failed'].includes(checkpointState) || !same(leasedEngine.getResponse({ profile: 'off' }).data, saved.response.data))
             throw new Error('native-saved-facts-refresh-unavailable');
-          const assertSavedCurrent = () => {
+          const assertSavedCurrent = (saving = false) => {
             lifetime.signal.throwIfAborted(); lifetime.assertCurrent(); assertCurrent();
-            if (checkpointState !== 'saved' || !same(publicSnapshot?.saved, saved)
+            sourceAuthority?.signal.throwIfAborted();
+            if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
+            if (!(saving && checkpointState === 'saving' && publicSnapshot?.phase === 'saveOwned' || ['saved', 'failed'].includes(checkpointState)) || !same(publicSnapshot?.saved, saved)
+              || explicitPrepare && !!publicSnapshot?.signed
               || !same(leasedEngine.getResponse({ profile: 'off' }).data, saved.response.data)) throw new Error('native-saved-facts-context-retired');
             policy.assertOwner(saved.draftKey, saved.actor.id);
           };
           assertSavedCurrent();
-          await qualifyCommitted(saved, { signal: lifetime.signal, assertCurrent: assertSavedCurrent }); assertSavedCurrent();
-          if (!nativeCandidate || nativeReadiness !== 'ready' || !same(nativeCandidate.saved, saved)) throw new Error('native-saved-facts-refresh-unavailable');
-          nativeCandidate.facts.assertReady();
+          if (savedFactsRefresh) return savedFactsRefresh;
+          const pending = (async () => {
+            assertSavedCurrent();
+            if (!historicalScreenerCheckpoint(saved)) {
+              await qualifyCommitted(saved, { signal: lifetime.signal, assertCurrent: assertSavedCurrent }); assertSavedCurrent();
+            }
+            if (!currentPrepareFacts() && screener && !publicSnapshot?.signed && (explicitPrepare || !publicSnapshot?.prepared)) {
+              const admission = policy.controller.roles.saveOwned;
+              if (!policy.nativeScreener?.retention.refresh) throw new Error('native-facts-pending-save-required');
+              if (!admission) throw new Error('native-saved-facts-save-unavailable');
+              await screener.refreshSaved(saved, () => assertSavedCurrent()); assertSavedCurrent();
+              const result = await controller!.invokeDefinitionAction({ document: admission.document, actionRef: admission.actionRef,
+                invocationContext: { invocationId: generateIdempotencyKey() }, ports: { ...action.ports,
+                  submit: options => {
+                    assertSavedCurrent();
+                    return { response: structuredClone(saved.response), validationReport: leasedEngine.getValidationReport({ profile: options.profile }) };
+                  } } }, { assertBeforeDispatch: () => assertSavedCurrent(true) });
+              lifetime.signal.throwIfAborted(); lifetime.assertCurrent(); assertCurrent();
+              if (('invocation' in result ? result.invocation : result).status !== 'completed') throw new Error('native-saved-facts-save-failed');
+            }
+            const committed = publicSnapshot?.saved;
+            if (!nativeCandidate || nativeReadiness !== 'ready' || !same(nativeCandidate.saved, committed))
+              throw new Error('native-saved-facts-refresh-unavailable');
+            nativeCandidate.facts.assertReady();
+          })();
+          savedFactsRefresh = pending;
+          try { await pending; } finally { if (savedFactsRefresh === pending) savedFactsRefresh = undefined; }
         };
+        let refreshedPrepare = false;
+        if (native && action.actionRef === policy.controller.roles.prepare?.actionRef && same(action.document, policy.controller.roles.prepare.document) && !currentPrepareFacts()) {
+          if (!policy.nativeScreener?.retention.refresh || ['saveInitial', 'saveOwned'].includes(publicSnapshot?.phase ?? '')) {
+            if (prepareCandidateCurrent()) factsUnavailable();
+            throw new Error('native-facts-pending-save-required');
+          }
+          await refreshSavedFacts({ signal: nativeLifetime.signal, assertCurrent });
+          refreshedPrepare = true;
+        }
+        // React's original submit callback owns the pre-exchange engine. A fresh
+        // Prepare must capture validation and Response from the installed engine.
+        const invocation = refreshedPrepare ? { ...action, ports: { ...action.ports, submit: (options: Parameters<NonNullable<typeof action.ports.submit>>[0]) => {
+          assertCurrent();
+          const validationReport = leasedEngine.getValidationReport({ profile: options.profile });
+          const response = leasedEngine.getResponse({ profile: options.validationTuple.persistence === 'complete-response' ? 'on-submit' : 'off', id: responseId });
+          assertCurrent(); return { response, validationReport };
+        } } } : action;
         const result = hostEvents.owns(action.document, action.actionRef)
           ? await hostEvents.invoke(action, { signal: nativeLifetime.signal, assertCurrent, refreshSavedFacts })
-          : await controller!.definitionInvoker(action);
+          : await controller!.definitionInvoker(invocation);
         if (!active || disposed || authorityGeneration !== expected) throw new Error('native-renderer-retired');
         return result;
       }, semanticControlScope: scope,

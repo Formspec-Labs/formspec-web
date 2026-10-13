@@ -102,19 +102,23 @@ export class HttpClient {
     return payload.value;
   }
 
+  async putJson<T>(path: string, body: unknown, options?: JsonRequestOptions): Promise<T> {
+    return this.requestJson<T>('PUT', path, { ...options, body });
+  }
+
   async patchJson<T>(path: string, body: unknown, options?: JsonRequestOptions): Promise<T> {
     return this.requestJson<T>('PATCH', path, { ...options, body });
   }
 
   async requestJson<T>(
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
     path: string,
     options: JsonRequestOptions = {},
   ): Promise<T> {
     return (await this.requestJsonPayload<T>(method, path, options)).value;
   }
 
-  async requestJsonWithBytes<T>(method: 'GET' | 'POST' | 'PATCH', path: string,
+  async requestJsonWithBytes<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT', path: string,
     options: JsonRequestOptions): Promise<HttpJsonResponseWithBytes<T>> {
     if (!Number.isSafeInteger(options.maxResponseBytes) || !options.maxResponseBytes || options.maxResponseBytes < 1) {
       throw new Error('Raw JSON response requires an admitted byte limit');
@@ -124,7 +128,7 @@ export class HttpClient {
     return Object.freeze({ value: payload.value, utf8Bytes: payload.utf8Bytes });
   }
 
-  private async requestJsonPayload<T>(method: 'GET' | 'POST' | 'PATCH', path: string,
+  private async requestJsonPayload<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT', path: string,
     options: JsonRequestOptions, binary = false, mimeTypes: readonly string[] = []): Promise<ResponsePayload<T>> {
     const lifetime = requestLifetime(options);
     const { signal } = lifetime;

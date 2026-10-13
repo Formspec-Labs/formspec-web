@@ -179,6 +179,34 @@ describe('cohort-owned Response Prepare and Sign', () => {
     expect(prepared.draft.version).toBe(saved.draft.version + 1); expect(test.state.patchCount).toBe(count + 1); expect(guarded).toBe(1);
     expect(prepared.response).toEqual(test.state.response);
   });
+  it('refuses owned Save after host retirement during actual PATCH credential resolution', async () => {
+    const test = await fixture(false, true); const saved = await test.save();
+    let releaseRead!: () => void; test.state.getGate = new Promise<void>(resolve => { releaseRead = resolve; });
+    let current = true; const before = test.requests.length;
+    const pending = test.cohort.responseSigning!.saveDraft({ formId: 'conformance', draftKey: test.draftKey,
+      definition, formVersionId: 'publication-1', response, operationId: generateIdempotencyKey(), action: saveAction('PATCH') },
+      { assertBeforeDispatch() { if (!current) throw Error('host retired'); } });
+    const refused = expect(pending).rejects.toThrow();
+    await vi.waitFor(() => expect(test.requests.length).toBeGreaterThan(before));
+    let releaseToken!: () => void; test.state.tokenGate = new Promise<void>(resolve => { releaseToken = resolve; });
+    releaseRead(); await Promise.resolve(); current = false; releaseToken(); await refused;
+    expect(test.state.patchCount).toBe(0); expect(test.state.version).toBe(saved.draft.version);
+    expect(test.requests.slice(before).some(request => request.method === 'PATCH')).toBe(false);
+  });
+  it('does not reconcile a dispatch refusal as this Save even when a same-content successor appears', async () => {
+    const test = await fixture(false, true); await test.save(); let calls = 0;
+    await expect(test.cohort.responseSigning!.saveDraft({ formId: 'conformance', draftKey: test.draftKey,
+      definition, formVersionId: 'publication-1', response, operationId: generateIdempotencyKey(), action: saveAction('PATCH') },
+      { assertBeforeDispatch() { if (++calls === 2) { test.state.version++; throw Error('retired before PATCH'); } } })).rejects.toThrow('retired before PATCH');
+    expect(test.state.patchCount).toBe(0); expect(calls).toBe(2);
+  });
+  it('preserves an undefined dispatch refusal without reconciling a concurrent successor', async () => {
+    const test = await fixture(false, true); await test.save(); let calls = 0;
+    const pending = test.cohort.responseSigning!.saveDraft({ formId: 'conformance', draftKey: test.draftKey,
+      definition, formVersionId: 'publication-1', response, operationId: generateIdempotencyKey(), action: saveAction('PATCH') },
+      { assertBeforeDispatch() { if (++calls === 2) { test.state.version++; throw undefined; } } });
+    await expect(pending).rejects.toBeUndefined(); expect(test.state.patchCount).toBe(0);
+  });
   it('refuses a configured Prepare provider without its required dispatch assertion', async () => {
     const test = await fixture(false, true, false, undefined, undefined, true, async () => undefined as unknown as { assertCurrent: () => void });
     const saved = await test.save(); const count = test.state.patchCount;

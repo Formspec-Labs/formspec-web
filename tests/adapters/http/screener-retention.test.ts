@@ -17,7 +17,7 @@ const placeholder = `sha256:${'a'.repeat(64)}`;
 function response(value: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 }
-async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpRequest) => unknown, instanceMappingHash?: string) {
+async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpRequest) => unknown, instanceMappingHash?: string, recoveryMutation?: (value: Record<string, unknown>) => unknown) {
   const owner = structuredClone(ownerTemplate);
   const selection: ScreenerSelection = {
     evaluationSelection: { scope, formId: 'form/id', formVersionId: 'version', definitionUrl: 'urn:example:form',
@@ -40,6 +40,18 @@ async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpReque
     draft_version: 7, status: 'in_progress', draft_state: {}, canonical_response: saved.response } });
   let lastRun: ScreenerRunView['run'];
   const { fetch, requests } = recordingFetch(async request => {
+    if (request.url.endsWith('/screener-recovery')) {
+      const body = request.body as { candidateHash: string; draftVersion: number; formVersionHash: string };
+      const recovery = { version: 1, purpose: 'formspec.screener.draft-recovery', scope, owner,
+        formVersionHash: body.formVersionHash, draftId: saved.draft.id, draftVersion: body.draftVersion,
+        candidateHash: body.candidateHash, selectionHash, result: { status: 'retained', relation: 'currentCandidate',
+          association: { scope, owner, draftId: saved.draft.id, draftVersion: body.draftVersion, candidateHash: body.candidateHash,
+            selectionHash, runId: lastRun.runId, runRevision: lastRun.revision, evidenceHash: lastRun.evidenceHash, associatedAt: at },
+          history: { version: 1, purpose: 'formspec.screener.run', selection, run: lastRun, acceptance: null } } };
+      return response(recoveryMutation ? recoveryMutation(structuredClone(recovery)) : recovery);
+    }
+    if (request.method === 'GET') return response({ version: 1, purpose: 'formspec.screener.run', selection,
+      run: lastRun, acceptance: null });
     if (request.url.endsWith('/screener-associations')) {
       const body = request.body as { candidateHash: string; draftVersion: number };
       return response({ scope, draftId: saved.draft.id, draftVersion: body.draftVersion, candidateHash: body.candidateHash,
@@ -48,10 +60,11 @@ async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpReque
     const answers = (request.body as { answers: Record<string, unknown> }).answers;
     const determination = { $formspecDetermination: '1.0', screener: document, timestamp: at, evaluationVersion: '1.0.0', status: 'completed',
       overrides: { matched: [], halted: false }, phases: [], inputs: answers, validity: { validUntil: '2026-10-10T12:00:00Z' } };
-    const original = { version: 1 as const, scope, runId: 'run_123', revision: 1, selectionHash, owner,
+    const revision = request.method === 'PUT' ? lastRun.revision + 1 : 1;
+    const original = { version: 1 as const, scope, runId: 'run_123', revision, selectionHash, owner,
       answers: answers as ScreenerRunView['run']['answers'], answersHash: await hash(answers), evaluatedAt: at,
       determination, determinationHash: await hash(determination), qualification: { status: 'ready' as const, target },
-      evidenceRef: 'urn:formspec:source:screener:run_123:revision:1' };
+      evidenceRef: `urn:formspec:source:screener:run_123:revision:${revision}` };
     lastRun = { ...original, evidenceHash: await hash(original) };
     const view: ScreenerRunView = { version: 1, purpose: 'formspec.screener.run', selection, run: lastRun,
       acceptance: { checkedAt: at, qualification: { status: 'ready', target } } };
@@ -77,6 +90,53 @@ describe('public Source Screener retention adapter', () => {
     expect(Object.isFrozen(first.run.owner.authenticated)).toBe(true);
   });
 
+  it('PUT reevaluates exact issued typed answers under CAS and owning headers, then GET reconciles the revision', async () => {
+    const f = await setup(); const run = await f.adapter.retain(f.completion);
+    const fresh = await f.adapter.refresh({ ...f.context, run });
+    expect(f.requests[1]).toMatchObject({ method: 'PUT', url: 'https://source.example/screener-runs/run_123',
+      body: { selectionHash: run.run.selectionHash, expectedRevision: 1, answers: run.run.answers } });
+    expect(f.requests[1].headers.get('authorization')).toBe('Bearer owner-token');
+    expect(fresh.run.revision).toBe(2); expect(fresh.run.answers).toEqual(run.run.answers);
+    expect(await f.adapter.load({ ...f.context, run })).toEqual({ ...fresh, acceptance: null });
+    expect(f.requests[2].method).toBe('GET');
+    const retired = { ...f.context, assertCurrent() { throw Error('owner retired'); } };
+    await expect(f.adapter.refresh({ ...retired, run: fresh })).rejects.toThrow('owner retired');
+    expect(f.requests).toHaveLength(3);
+    await expect(f.adapter.refresh({ ...f.context, run: structuredClone(fresh) })).rejects.toThrow('Port-issued');
+  });
+  it('recovers only the exact owned saved association as history without ready acceptance', async () => {
+    const f = await setup(); const retained = await f.adapter.retain(f.completion);
+    const history = await f.adapter.recover({ ...f.context, saved: f.saved });
+    expect(history.run).toEqual(retained.run); expect(history.acceptance).toBeNull();
+    expect(f.requests[1].body).toEqual({ selectionHash: retained.run.selectionHash,
+      formVersionHash: retained.selection.formVersionHash, draftVersion: 7, candidateHash: await hash(f.saved.response) });
+    await expect(f.adapter.associate({ ...f.context, saved: f.saved, run: history })).rejects.toThrow('current retained');
+    expect((await f.adapter.refresh({ ...f.context, run: history })).run.revision).toBe(2);
+  });
+  it.each(['prior', 'pending', 'crossed candidate'])('checks %s recovery against the exact current saved draft', async branch => {
+    const f = await setup(undefined, undefined, value => {
+      const result = value.result as { status: string; relation: string; association: { draftVersion: number } };
+      if (branch === 'prior') { result.relation = 'priorCandidate'; result.association.draftVersion = 6; }
+      if (branch === 'pending') value.result = { status: 'pending', reason: 'associationNotRetained' };
+      if (branch === 'crossed candidate') value.candidateHash = placeholder;
+      return value;
+    });
+    await f.adapter.retain(f.completion);
+    if (branch === 'prior') expect((await f.adapter.recover({ ...f.context, saved: f.saved })).acceptance).toBeNull();
+    else await expect(f.adapter.recover({ ...f.context, saved: f.saved })).rejects.toThrow('recovery unavailable');
+  });
+  it.each(['owner', 'answers', 'revision', 'hash'])('refuses changed %s in a refresh reply', async field => {
+    const f = await setup((view, request) => {
+      if (request.method !== 'PUT') return view;
+      if (field === 'owner') (view.run.owner.authenticated as { subject: string }).subject = 'other';
+      if (field === 'answers') (view.run as { answers: unknown }).answers = {};
+      if (field === 'revision') (view.run as { revision: number }).revision = 4;
+      if (field === 'hash') (view.run as { evidenceHash: string }).evidenceHash = placeholder;
+      return view;
+    });
+    const run = await f.adapter.retain(f.completion);
+    await expect(f.adapter.refresh({ ...f.context, run })).rejects.toThrow();
+  });
   it('retains the original mapping-bound selection without changing legacy omission', async () => {
     const legacy = await setup();
     const unbound = await legacy.adapter.retain(legacy.completion);

@@ -54,7 +54,7 @@ function fixture(attachment = false, signingScope?: NativePackageSigningHostPoli
     return { draftKey: { formUrl: definition.url, formVersion: definition.version }, response: value, draft, actor: { id: 'server-actor' },
       evidence: { draft_id: draft.id, draft_version: draft.version, form_version_id: 'publication', subject_ref: 'server-actor', status: 'in_progress', draft_state: value.data, canonical_response: value } };
   }
-  const saveDraft = vi.fn(async (input: Parameters<NativePackageSigningHostPolicy['controller']['signing']['saveDraft']>[0]) => saved(input.response));
+  const saveDraft = vi.fn<NativePackageSigningHostPolicy['controller']['signing']['saveDraft']>(async input => saved(input.response));
   const prepare = vi.fn(async (input: Parameters<NativePackageSigningHostPolicy['controller']['signing']['prepare']>[0]) => ({ ...await saved(input.response), content }));
   const sign = vi.fn(async (input: Parameters<NativePackageSigningHostPolicy['controller']['signing']['sign']>[0]) => ({ ...input.preparation, ...await saved({ ...input.preparation.response, authoredSignatures: [{}] as unknown as FormResponse['authoredSignatures'] }), verification: { mode: 'delegated-service-key' as const, provider: 'urn:test:delegated', keyId: 'key' } }));
   const read = vi.fn(async () => new Blob(['actual bytes']));
@@ -78,8 +78,8 @@ function fixture(attachment = false, signingScope?: NativePackageSigningHostPoli
     ...(configure ? { exchangeEngine: async (request: RespondentEngineExchange) => {
       request.assertCurrent(); request.adopt(); replacements.push(request.engine as ReturnType<typeof createFormEngine>);
     } } : {}), draftKey: { formUrl: definition.url, formVersion: definition.version }, claim: null, activeLocale: 'en' }); }
-  async function invoke(lease: Awaited<ReturnType<typeof attach>>, actionRef: string) {
-    return lease.responseActionInvoker({ document, actionRef, invocationContext: { invocationId: `node:${actionRef}` },
+  async function invoke(lease: Awaited<ReturnType<typeof attach>>, actionRef: string, invocationId = `node:${actionRef}`) {
+    return lease.responseActionInvoker({ document, actionRef, invocationContext: { invocationId },
       ports: { dispatchHostEvent: vi.fn(), submit: () => ({ response, validationReport: engine.getValidationReport({ profile: 'on-submit' }) }) } });
   }
   async function prepared() { const lease = await attach(); await invoke(lease, 'save'); await invoke(lease, 'prepare');
@@ -1164,7 +1164,7 @@ describe('explicit reviewed-candidate facts renewal', () => {
 
 // Restored screening uses the real coordinator. This fake owns only immutable association storage and qualified hydration ports.
 describe('restored unsigned Screener checkpoints', () => {
-  async function restoredFixture() {
+  async function restoredFixture(renew = false) {
     const issued = await hydrationFixture();
     const associationStore = new Map<string, ScreenerAssociation>();
     let holdHydration: Promise<void> | undefined;
@@ -1194,7 +1194,17 @@ describe('restored unsigned Screener checkpoints', () => {
         candidateHash: await computeJcsSha256Digest(request.saved.response), owner: request.run.run.owner,
         results: issued.view.results.map(result => ({ ...result, data: { eligible: true, evidenceRef: request.run.run.evidenceRef } })) };
       return { view, ...(request.nativeCurrentCheck ? { nativeCurrentCheck: request.nativeCurrentCheck } : {}),
-        assertCurrent: request.assertCurrent, assertReady: request.assertCurrent };
+        assertCurrent: request.assertCurrent, assertReady: () => { request.assertCurrent(); if (renew && now - Number(request.run.run.evaluatedAt) > 300_000) throw new Error('evidence-expired'); } };
+    });
+    let now = 0;
+    const renewRun = vi.fn<NonNullable<ScreenerRetention['refresh']>>(async request => {
+      request.assertCurrent();
+      currentRun = { ...request.run, acceptance: { checkedAt: String(now), qualification: request.run.run.qualification },
+        run: { ...request.run.run, revision: request.run.run.revision + 1, evaluatedAt: String(now), evidenceRef: `fresh:${now}` } };
+      return currentRun;
+    });
+    const recover = vi.fn<NonNullable<ScreenerRetention['recover']>>(async request => {
+      request.assertCurrent(); return { ...currentRun, acceptance: null };
     });
     const refresh = vi.fn<NonNullable<NativePackageSigningHostPolicy['hostEvents']>[number]['handle']>(async context => { await context.refreshSavedFacts(); });
     const test = fixture(true, undefined, policy => {
@@ -1216,7 +1226,7 @@ describe('restored unsigned Screener checkpoints', () => {
         definitionVersion: policy.definition.version, formId: policy.publication.formId, formVersionId: policy.publication.formVersionId } },
         run: { ...currentRun.run, owner: { ...currentRun.run.owner, subjectRef: 'server-actor',
           authenticated: { ...currentRun.run.owner.authenticated, subjectRef: 'server-actor' } } } };
-      policy.nativeScreener = { selectionKey: 'checkpoint-selection', elapsedNow: () => 0, retention: { retain, associate }, hydration: { hydrate },
+      policy.nativeScreener = { selectionKey: 'checkpoint-selection', elapsedNow: () => 0, retention: { retain, associate, ...(renew ? { refresh: renewRun, recover } : {}) }, hydration: { hydrate },
         context: () => ({ identity: issued.input.identity, signal: authority.signal, assertCurrent() { if (!authorityCurrent) throw new Error('Authority retired'); } }) };
     });
     const complete = async (host: ReturnType<typeof createNativePackageSigningHost>) => {
@@ -1229,6 +1239,7 @@ describe('restored unsigned Screener checkpoints', () => {
         slotId: 'screener', visitId: 'visit', runtimeGeneration: 'render', signal: new AbortController().signal };
       expect(await host.screenerCompletion!.complete(request)).toEqual({ status: 'accepted' });
     };
+    if (renew) currentRun = { ...currentRun, run: { ...currentRun.run, evaluatedAt: '0' } };
     await complete(test.host);
     const first = await test.attach(); await test.invoke(first, 'save');
     expect(test.host.getSnapshot().nativeReadiness).toBe('ready');
@@ -1240,14 +1251,125 @@ describe('restored unsigned Screener checkpoints', () => {
     const engine = createFormEngine(test.policy.definition); engine.loadResponseData(saved.response.data as Parameters<typeof engine.loadResponseData>[0]);
     const replacements: ReturnType<typeof createFormEngine>[] = [];
     const application = { caseLedgerId: 'urn:test:case', caseReference: 'case-reference', draftRef: `urn:formspec:draft:${saved.draft.id}`, status: 'in-progress' as const };
-    await complete(host); associate.mockClear(); hydrate.mockClear();
+    if (!renew) await complete(host); associate.mockClear(); hydrate.mockClear();
     const configure = () => host.configureRuntime({ engine, definition: test.policy.definition, draftKey: saved.draftKey,
       claim: null, activeLocale: 'en', restoredResponse: saved.response, restoredSavedDraft: saved, restoredApplication: application,
       exchangeEngine: async (request: RespondentEngineExchange) => { request.assertCurrent(); request.adopt(); replacements.push(request.engine as ReturnType<typeof createFormEngine>); } });
-    return { ...test, host, engine, saved, application, originalAssociation, associationStore, associate, hydrate, configure,
+    return { ...test, host, engine, saved, application, originalAssociation, associationStore, associate, hydrate, configure, renewRun, recover, advance: (value: number) => { now = value; },
       holdHydration: (hold: Promise<void>) => { holdHydration = hold; }, retireAuthority: () => { authorityCurrent = false; },
       cleanup() { host.dispose(); engine.dispose(); replacements.forEach(value => value.dispose()); test.replacements.forEach(value => value.dispose()); } };
   }
+  it('refreshes a saved photo after the 300-second evidence limit and prepares the exact successor', async () => {
+    const test = await restoredFixture(true);
+    try {
+      const lease = await test.configure(); test.advance(301_000);
+      const response = structuredClone(test.saved.response);
+      await test.invoke(lease, 'prepare');
+      expect(test.recover).toHaveBeenCalledOnce(); expect(test.renewRun).toHaveBeenCalledOnce();
+      expect(test.saveDraft).toHaveBeenCalledTimes(2);
+      expect(test.saveDraft.mock.calls.at(-1)![0].response).toEqual(response);
+      const successor = test.associate.mock.calls[0][0].saved;
+      expect(successor.draft.version).toBe(test.saved.draft.version + 1);
+      expect(successor.response).toEqual(response); expect(test.host.getSnapshot().application).toEqual(test.application);
+      expect(test.prepare).toHaveBeenCalledOnce(); expect(test.sign).not.toHaveBeenCalled();
+      expect([...test.associationStore.values()]).toContainEqual(test.originalAssociation);
+      lease.dispose();
+    } finally { test.cleanup(); }
+  });
+  it('uses the installed hydrated engine for Prepare after replacing the renderer', async () => {
+    const test = await restoredFixture(true);
+    try {
+      const lease = await test.configure(); test.advance(301_000);
+      const admission = test.policy.controller.roles.prepare!;
+      const staleSubmit = vi.fn(() => { throw new Error('old renderer submit'); });
+      const result = await lease.responseActionInvoker({ document: admission.document, actionRef: admission.actionRef,
+        invocationContext: { invocationId: 'fresh-engine-prepare' }, ports: { dispatchHostEvent: vi.fn(), submit: staleSubmit } });
+      expect(('invocation' in result ? result.invocation : result).status).toBe('completed');
+      expect(staleSubmit).not.toHaveBeenCalled(); expect(test.prepare).toHaveBeenCalledOnce(); expect(test.sign).not.toHaveBeenCalled();
+      lease.dispose();
+    } finally { test.cleanup(); }
+  });
+  it('refuses unsaved renderer edits before screening refresh or successor Save', async () => {
+    const test = await restoredFixture(true);
+    try {
+      const lease = await test.configure(); test.advance(301_000); test.engine.setValue('fullName', null);
+      await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-saved-facts-refresh-unavailable');
+      expect(test.recover).not.toHaveBeenCalled(); expect(test.renewRun).not.toHaveBeenCalled();
+      expect(test.saveDraft).toHaveBeenCalledTimes(1); expect(test.prepare).not.toHaveBeenCalled(); lease.dispose();
+    } finally { test.cleanup(); }
+  });
+  it('uses a fresh act on later refused-Save retry and preserves a committed successor after hydration failure', async () => {
+    const test = await restoredFixture(true);
+    try {
+      const lease = await test.configure(); test.advance(301_000);
+      test.saveDraft.mockRejectedValueOnce(new Error('Save refused'));
+      await expect(test.invoke(lease, 'refresh-checks')).rejects.toThrow('native-host-event-handler-failed');
+      expect(test.host.getSnapshot().controller!.saved).toEqual(test.saved);
+      expect(test.renewRun).toHaveBeenCalledOnce();
+      test.advance(602_000);
+      test.hydrate.mockRejectedValueOnce(new Error('Source unavailable'));
+      await expect(test.invoke(lease, 'refresh-checks')).rejects.toThrow('native-host-event-handler-failed');
+      const committed = structuredClone(test.host.getSnapshot().controller!.saved!);
+      expect(committed.draft.version).toBe(test.saved.draft.version + 1);
+      expect(test.renewRun).toHaveBeenCalledTimes(2); const saves = test.saveDraft.mock.calls.length;
+      await test.invoke(lease, 'refresh-checks');
+      expect(test.saveDraft).toHaveBeenCalledTimes(saves); expect(test.renewRun).toHaveBeenCalledTimes(2);
+      expect(test.host.getSnapshot().controller!.saved).toEqual(committed); expect(test.sign).not.toHaveBeenCalled(); lease.dispose();
+    } finally { test.cleanup(); }
+  });
+  it('coalesces explicit checks and refuses a retired owner before successor Save', async () => {
+    const test = await restoredFixture(true);
+    try {
+      const lease = await test.configure(); test.advance(301_000); let release!: () => void;
+      const hold = new Promise<void>(resolve => { release = resolve; });
+      const original = test.renewRun.getMockImplementation()!;
+      test.renewRun.mockImplementationOnce(async request => { await hold; return original(request); });
+      const first = test.invoke(lease, 'refresh-checks', 'check-one');
+      const second = test.invoke(lease, 'refresh-checks', 'check-two');
+      await vi.waitFor(() => expect(test.renewRun).toHaveBeenCalledOnce());
+      test.retireAuthority(); release();
+      await expect(first).rejects.toThrow('native-host-event-handler-failed');
+      await expect(second).rejects.toThrow('native-host-event-handler-failed');
+      expect(test.saveDraft).toHaveBeenCalledTimes(1); expect(test.host.getSnapshot().controller!.saved).toEqual(test.saved);
+      lease.dispose();
+    } finally { test.cleanup(); }
+  });
+  it.each(['owner', 'lease', 'edit'])('fences late %s retirement at successor Save dispatch', async retired => {
+    const test = await restoredFixture(true);
+    try {
+      const lease = await test.configure(); test.advance(301_000); let release!: () => void;
+      const hold = new Promise<void>(resolve => { release = resolve; });
+      const original = test.saveDraft.getMockImplementation()!;
+      let dispatched = false;
+      test.saveDraft.mockImplementationOnce(async (request, execution) => {
+        await hold; execution!.assertBeforeDispatch!(); dispatched = true; return original(request, execution);
+      });
+      const pending = test.invoke(lease, 'refresh-checks', 'retired-save');
+      await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledTimes(2));
+      if (retired === 'owner') test.retireAuthority();
+      if (retired === 'lease') lease.dispose();
+      if (retired === 'edit') test.engine.setValue('fullName', null);
+      release(); await expect(pending).rejects.toThrow('native-host-event-handler-failed');
+      expect(dispatched).toBe(false); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+      lease.dispose();
+    } finally { test.cleanup(); }
+  });
+  it('late unsigned review expiry requires explicit fresh Prepare and never saves through Sign', async () => {
+    const test = await restoredFixture(true);
+    try {
+      const lease = await test.configure(); test.advance(301_000); await test.invoke(lease, 'prepare');
+      const prepared = structuredClone(test.host.getSnapshot().controller!.prepared!);
+      test.advance(602_000);
+      await expect(test.invoke(lease, 'refresh-checks')).rejects.toThrow('native-host-event-handler-failed');
+      expect(test.renewRun).toHaveBeenCalledOnce();
+      await expect(test.host.preSignCandidate!({ saved: prepared, operationId: 'late-sign', assertCurrent() {} })).rejects.toThrow();
+      expect(test.renewRun).toHaveBeenCalledOnce(); expect(test.sign).not.toHaveBeenCalled();
+      await test.invoke(lease, 'prepare', 'fresh-prepare');
+      expect(test.renewRun).toHaveBeenCalledTimes(2); expect(test.prepare).toHaveBeenCalledTimes(2);
+      expect(test.host.getSnapshot().controller!.prepared!.draft.version).toBeGreaterThan(prepared.draft.version);
+      expect(test.sign).not.toHaveBeenCalled(); lease.dispose();
+    } finally { test.cleanup(); }
+  });
   it('keeps the exact restored version historical across all entry paths, then qualifies its normal Save successor', async () => {
     const test = await restoredFixture();
     try {

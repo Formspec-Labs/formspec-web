@@ -29,6 +29,7 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
   let run: ScreenerRunView | undefined;
   let active: Operation | undefined;
   let disposed = false;
+  let uncertainRefresh = false;
   const elapsedNow = config.elapsedNow ?? (() => performance.now());
   let lastElapsed = -Infinity;
   const clock = () => {
@@ -46,13 +47,13 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
   };
   function routeAllowed(target: string, document: { url?: string; version: string }): boolean {
     try {
-      if (disposed || !route || route.run !== run || clock() >= route.deadline) throw new Error('Screener route expired');
+      if (disposed || !route || clock() >= route.deadline) throw new Error('Screener route expired');
       assertSynchronousGuard(route.assertOwner);
       const owner = (config.routeContext ?? context)();
       owner.signal.throwIfAborted(); assertSynchronousGuard(owner.assertCurrent.bind(owner));
       if (JSON.stringify(owner.identity) !== route.identity) throw new Error('Screener route owner changed');
-      if (run?.selection.screenerUrl !== document.url || run.selection.screenerVersion !== document.version
-        || run.acceptance?.qualification.status !== 'ready' || run.acceptance.qualification.target !== target) return false;
+      if (route.run.selection.screenerUrl !== document.url || route.run.selection.screenerVersion !== document.version
+        || route.run.acceptance?.qualification.status !== 'ready' || route.run.acceptance.qualification.target !== target) return false;
       return true;
     } catch { retireRoute(false); return false; }
   }
@@ -176,7 +177,35 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
         assertReady: () => { operation.assertCurrent(); facts.assertReady(); } });
     } catch (error) { finish(operation); throw error; }
   }
-  return Object.freeze({ completionPolicy, qualifySaved, retireFacts, routeAllowed,
+  async function refreshSaved(saved: SavedResponseDraft, caller: () => void): Promise<void> {
+    const operation = begin(undefined, caller);
+    try {
+      if (saved.response.authoredSignatures?.length) throw new Error('Signed Screener refresh requires current check');
+      if (!run) {
+        if (!retention.recover) throw new Error('Native Screener retained recovery unavailable');
+        const recovered = await operation.wait(retention.recover({ saved, identity: operation.identity,
+          signal: operation.signal, assertCurrent: operation.assertCurrent }));
+        operation.assertCurrent(); run = recovered;
+      }
+      const issued = run;
+      if (!retention.refresh) throw new Error('Native Screener refresh unavailable');
+      let issuedLatest = issued;
+      const common = { identity: operation.identity, signal: operation.signal, assertCurrent: operation.assertCurrent };
+      if (uncertainRefresh) {
+        if (!retention.load) throw new Error('Native Screener refresh recovery unavailable');
+        issuedLatest = await operation.wait(retention.load({ ...common, run: issued })); operation.assertCurrent();
+        // Owning GET supplies history only. The next explicit attempt reevaluates
+        // from its actual latest revision; only successful PUT supplies acceptance.
+        run = issuedLatest;
+      }
+      uncertainRefresh = true;
+      const fresh = await operation.wait(retention.refresh({ ...common, run: issuedLatest }));
+      operation.assertCurrent(); run = fresh; uncertainRefresh = false;
+      if (fresh.acceptance?.qualification.status !== 'ready' || fresh.run.qualification.status !== 'ready')
+        throw new Error('Native Screener refreshed acceptance unavailable');
+    } finally { finish(operation); }
+  }
+  return Object.freeze({ completionPolicy, qualifySaved, refreshSaved, retireFacts, routeAllowed,
     preSignCandidate: async (input: { saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }) => {
       const facts = await qualifySaved(input.saved, input.assertCurrent);
       facts.assertReady();

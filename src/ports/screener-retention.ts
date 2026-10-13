@@ -101,9 +101,19 @@ export interface AssociateScreenerCandidate extends ScreenerOperationContext {
   /** Result of the maintained authenticated save and custody checks. */
   readonly saved: SavedResponseDraft;
 }
+export interface AssociateRecovery extends ScreenerOperationContext {
+  readonly saved: SavedResponseDraft;
+}
+export interface RefreshScreenerRun extends ScreenerOperationContext {
+  /** Exact port-issued history. Refresh preserves its original answers and owner. */
+  readonly run: ScreenerRunView;
+}
 /** Retention only. This port never turns a target into eligibility or an instance value. */
 export interface ScreenerRetention {
   retain(request: RetainScreenerCompletion): Promise<ScreenerRunView>;
+  recover?(request: AssociateRecovery): Promise<ScreenerRunView>;
+  refresh?(request: RefreshScreenerRun): Promise<ScreenerRunView>;
+  load?(request: RefreshScreenerRun): Promise<ScreenerRunView>;
   associate(request: AssociateScreenerCandidate): Promise<ScreenerAssociation>;
 }
 

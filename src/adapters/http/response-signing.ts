@@ -1,10 +1,11 @@
+import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import canonicalize from 'canonicalize';
 import { extractServiceRequestOutputs, hashSigningContent, planServiceRequest, resolveAuthoredSigningContent, resolveServiceRequest } from '@formspec-org/engine/render';
 import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
 import { decodeCoseSign1WithMethodUri } from '@formspec-org/integrity-cose';
 import { targetDefinitionMatches, type FormResponse } from '@formspec-org/types';
 import type { DraftKey, DraftStore } from '../../ports/draft-store.ts';
-import { ResponseSigningUnresolvedError, type AdmittedResponseAction, type SaveResponseDraftInput, type SavedResponseDraft, type VerifiedDraftEvidence, type PrepareResponseSigningInput, type PreparedResponseSigning, type ResponseSigning, type SignPreparedResponseInput, type SignedResponseSigning, type RestoredPendingResponseSigning } from '../../ports/response-signing.ts';
+import { ResponseSigningUnresolvedError, type AdmittedResponseAction, type SaveResponseDraftInput, type SaveResponseDraftOptions, type SavedResponseDraft, type VerifiedDraftEvidence, type PrepareResponseSigningInput, type PreparedResponseSigning, type ResponseSigning, type SignPreparedResponseInput, type SignedResponseSigning, type RestoredPendingResponseSigning } from '../../ports/response-signing.ts';
 import { assertUuidV7IdempotencyKey, isUuidV7IdempotencyKey, generateIdempotencyKey } from '../../shared/idempotency-key.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 import type { DraftBindingRegistry } from './draft-binding-registry.ts';
@@ -117,8 +118,10 @@ export class HttpResponseSigning implements ResponseSigning {
 
   private readonly saves = new Map<string, { identity: string; scope: string; generation: number; settled: boolean; pending: Promise<SavedResponseDraft> }>();
 
-  saveDraft(input: SaveResponseDraftInput): Promise<SavedResponseDraft> {
+  saveDraft(input: SaveResponseDraftInput, options?: SaveResponseDraftOptions): Promise<SavedResponseDraft> {
     assertUuidV7IdempotencyKey(input.operationId);
+    const dispatchGuard = options?.assertBeforeDispatch;
+    if (dispatchGuard) assertSynchronousGuard(dispatchGuard);
     input = structuredClone(input);
     const identity = canonicalize(input)!;
     const generation = this.config.fence.capture(input.draftKey);
@@ -145,8 +148,13 @@ export class HttpResponseSigning implements ResponseSigning {
         definitionUrl: input.definition.url, definitionVersion: input.definition.version,
         candidateHash: await handoffHash(input.response) }]);
       this.current(context);
-      try { await this.config.drafts.save(input.draftKey, input.response); }
-      catch (error) { this.current(context); if (!binding) throw error; }
+      let dispatchRefused = false;
+      let dispatchRefusal: unknown;
+      try { await this.config.drafts.save(input.draftKey, input.response, { assertBeforeDispatch: () => {
+        try { this.current(context); if (dispatchGuard) assertSynchronousGuard(dispatchGuard); }
+        catch (error) { dispatchRefused = true; dispatchRefusal = error; throw error; }
+      } }); }
+      catch (error) { this.current(context); if (dispatchRefused) throw dispatchRefusal; if (!binding) throw error; }
       this.current(context);
       const savedBinding = this.config.bindings.get(input.draftKey);
       if (!savedBinding) throw new ResponseSigningUnresolvedError();

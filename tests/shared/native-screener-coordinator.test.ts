@@ -39,6 +39,65 @@ describe('same-session native Screener coordination', () => {
     expect(f.retained).toHaveBeenCalledOnce(); expect(f.associated).toHaveBeenCalledOnce(); f.coordinator.dispose();
   });
 
+  it('preserves the original navigation deadline across a signing-only run refresh', async () => {
+    const f = await fixture(false, true); let elapsed = 0;
+    const original = { ...f.input.run, run: { ...f.input.run.run,
+      determination: { ...f.input.run.run.determination, validity: { validUntil: new Date(Date.parse(f.input.run.acceptance!.checkedAt) + 900_000).toISOString() } } } };
+    const fresh = { ...original, run: { ...original.run, revision: original.run.revision + 1 } };
+    const coordinator = createNativeScreenerCoordinator({ selectionKey: 'selected', elapsedNow: () => elapsed,
+      retention: { retain: async () => original, associate: f.associated, refresh: async () => fresh },
+      hydration: { hydrate: f.hydrated }, context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent }) });
+    await coordinator.completionPolicy.complete(f.request); elapsed = 301_000;
+    await coordinator.refreshSaved(f.input.saved, () => {});
+    const document = { url: original.selection.screenerUrl, version: original.selection.screenerVersion };
+    expect(coordinator.routeAllowed(f.request.target, document)).toBe(true);
+    elapsed = 900_000; expect(coordinator.routeAllowed(f.request.target, document)).toBe(false);
+    coordinator.dispose(); f.coordinator.dispose();
+  });
+  it('reconciles an uncertain append from owning latest history before any further PUT', async () => {
+    const f = await fixture(false, true); const history = { ...f.input.run, acceptance: null, run: { ...f.input.run.run, revision: 2 } };
+    const fresh = { ...f.input.run, run: { ...f.input.run.run, revision: 3 } };
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>().mockRejectedValueOnce(Error('reply lost')).mockResolvedValueOnce(fresh);
+    const load = vi.fn<NonNullable<ScreenerRetention['load']>>(async () => history);
+    const recover = vi.fn<NonNullable<ScreenerRetention['recover']>>(async () => f.input.run);
+    const coordinator = createNativeScreenerCoordinator({ selectionKey: 'selected', retention: { retain: f.retained,
+      associate: f.associated, refresh, load, recover }, hydration: { hydrate: f.hydrated },
+      context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent }) });
+    await expect(coordinator.refreshSaved(f.input.saved, () => {})).rejects.toThrow('reply lost');
+    await coordinator.refreshSaved(f.input.saved, () => {});
+    expect(recover).toHaveBeenCalledOnce(); expect(refresh).toHaveBeenCalledTimes(2); expect(load).toHaveBeenCalledOnce();
+    expect(refresh.mock.calls[1][0].run).toBe(history); expect(history.acceptance).toBeNull();
+    await coordinator.qualifySaved({ ...f.input.saved, draft: { ...f.input.saved.draft, version: f.input.saved.draft.version + 1 } });
+    expect(f.associated.mock.calls[0][0].run).toBe(fresh);
+    coordinator.dispose(); f.coordinator.dispose();
+  });
+  it('reads latest again if a reconciled uncommitted retry also loses its PUT reply', async () => {
+    const f = await fixture(false, true); const history = { ...f.input.run, acceptance: null, run: { ...f.input.run.run, revision: 2 } };
+    const fresh = { ...f.input.run, run: { ...f.input.run.run, revision: 3 } };
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>().mockRejectedValueOnce(Error('reply lost')).mockRejectedValueOnce(Error('reply lost')).mockResolvedValueOnce(fresh);
+    const load = vi.fn<NonNullable<ScreenerRetention['load']>>().mockResolvedValueOnce({ ...f.input.run, acceptance: null }).mockResolvedValueOnce(history);
+    const coordinator = createNativeScreenerCoordinator({ selectionKey: 'selected', retention: { retain: f.retained,
+      associate: f.associated, refresh, load, recover: async () => f.input.run }, hydration: { hydrate: f.hydrated },
+      context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent }) });
+    await expect(coordinator.refreshSaved(f.input.saved, () => {})).rejects.toThrow('reply lost');
+    await expect(coordinator.refreshSaved(f.input.saved, () => {})).rejects.toThrow('reply lost');
+    await coordinator.refreshSaved(f.input.saved, () => {});
+    expect(refresh).toHaveBeenCalledTimes(3); expect(load).toHaveBeenCalledTimes(2);
+    expect(refresh.mock.calls[2][0].run).toBe(history);
+    coordinator.dispose(); f.coordinator.dispose();
+  });
+  it('retires a pending refresh before adopting its late result', async () => {
+    const f = await fixture(false, true); let release!: (value: ScreenerRunView) => void;
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>(() => new Promise(resolve => { release = resolve; }));
+    let current = true;
+    const coordinator = createNativeScreenerCoordinator({ selectionKey: 'selected', retention: { retain: f.retained,
+      associate: f.associated, refresh, recover: async () => f.input.run }, hydration: { hydrate: f.hydrated },
+      context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent() { if (!current) throw Error('owner retired'); } }) });
+    const pending = coordinator.refreshSaved(f.input.saved, () => {});
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce()); current = false; release(f.input.run);
+    await expect(pending).rejects.toThrow('owner retired'); expect(f.associated).not.toHaveBeenCalled();
+    coordinator.dispose(); f.coordinator.dispose();
+  });
   it('passes only the issued association for an unsigned saved candidate', async () => {
     const f = await fixture(false, true);
     await f.coordinator.completionPolicy.complete(f.request);

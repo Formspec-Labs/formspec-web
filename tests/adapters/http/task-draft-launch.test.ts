@@ -1,3 +1,4 @@
+import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import { hydrationFixture } from './screener-hydration-fixture.ts';
 import { HttpDraftStore } from '../../../src/adapters/http/draft-store.ts';
 import { createDraftBindingRegistry } from '../../../src/adapters/http/draft-binding-registry.ts';
@@ -124,4 +125,16 @@ it('composes the selected task candidate adapter against the actual launch resul
   expect(() => facts.assertReady()).toThrow('pending or unavailable');
   expect(fetchImpl).toHaveBeenCalledTimes(2);
   composed.candidateHydration!.dispose();
+});
+
+it('forwards trusted nonserialized Save lifetime options through the task wrapper', async () => {
+  const fetchImpl = vi.fn(async () => Response.json(view));
+  const config = taskConfig(fetchImpl); const composed = await createTaskComposition(config, lifetime());
+  const guard = vi.fn(() => { throw Error('task save lifetime retired'); });
+  await expect(composed.responseSigning.saveDraft({ formId: config.formId, draftKey: config.draftKey,
+    definition: config.definition, formVersionId: selection.formVersionId, response: sampleFormResponse,
+    operationId: generateIdempotencyKey(), action: { document: { $formspecResponseActions: '1.0', version: '1', scope: 'response',
+      targetDefinition: { url: sampleFormDefinition.url }, actions: [{ id: 'save', intent: 'save-draft', effects: [{ type: 'serviceRequest', requestRef: 'save', idempotencyKey: '@invocation.id' }] }] }, artifactRef: 'urn:test:save', artifactDigest: `sha256:${'a'.repeat(64)}`,
+      actionRef: 'save', requestRef: 'save' } }, { assertBeforeDispatch: guard })).rejects.toThrow('task save lifetime retired');
+  expect(guard).toHaveBeenCalledOnce(); expect(fetchImpl).toHaveBeenCalledOnce();
 });

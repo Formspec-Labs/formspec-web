@@ -79,8 +79,12 @@ export type RestoredPendingResponseSigning =
   | { readonly kind: 'prepared'; readonly preparation: PreparedResponseSigning; readonly operationId: string }
   | { readonly kind: 'signed'; readonly signed: SignedResponseSigning };
 
+/** Trusted execution lifetime, never serialized into a Response or operation identity. */
+export interface SaveResponseDraftOptions {
+  readonly assertBeforeDispatch?: () => void;
+}
 export interface ResponseSigning {
-  saveDraft(input: SaveResponseDraftInput): Promise<SavedResponseDraft>;
+  saveDraft(input: SaveResponseDraftInput, options?: SaveResponseDraftOptions): Promise<SavedResponseDraft>;
   prepare(input: PrepareResponseSigningInput): Promise<PreparedResponseSigning>;
   sign(input: SignPreparedResponseInput): Promise<SignedResponseSigning>;
   restorePending?(input: PrepareResponseSigningInput & { readonly renewUnsignedRevision?: true }, operationId: string): Promise<RestoredPendingResponseSigning>;
