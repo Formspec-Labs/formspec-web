@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { HttpTaskCandidateHydration } from '../../../src/adapters/http/task-candidate-hydration.ts';
 import { computeJcsSha256Digest } from '../../../src/adapters/http/response-action-ledger.ts';
 import { createHash } from 'node:crypto';
@@ -8,12 +9,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { createTaskMixedProofVerifier } from '../../../src/adapters/http/task-mixed-proof-verifier.ts';
 import { attachMixedProofWorker } from '../../../src/adapters/source-worker/general-worker.ts';
 import type { ProofWorker } from '../../../src/adapters/source-worker/protocol.ts';
-import type { MixedProofCommand } from '../../../src/adapters/source-worker/general-protocol.ts';
+import type { MixedProofCommand, SourceMixedProofApi } from '../../../src/adapters/source-worker/general-protocol.ts';
 import type { SavedResponseDraft } from '../../../src/ports/response-signing.ts';
 import type { MixedHydrationWire } from '../../../src/ports/mixed-proof.ts';
 import type { EvaluationHydrationWire } from '../../../src/ports/evaluation-hydration.ts';
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
-function fixture(currentProducer = false) {
+function fixture(currentProducer = false, actualSource?: SourceMixedProofApi) {
   const base = resolve(dirname(fileURLToPath(import.meta.url)), currentProducer ? '../../fixtures/task-mixed-hydration-v3' : '../../fixtures/mixed-proof-transport-v1/hydrate-task');
   const read = (name: string) => Uint8Array.from(readFileSync(resolve(base, name)));
   const json = (name: string) => JSON.parse(new TextDecoder().decode(read(name)));
@@ -27,12 +28,14 @@ function fixture(currentProducer = false) {
     receiptHash: view.providerReceipt.receiptHash, qualifiedAt: view.qualifiedAt, validUntil: view.providerReceipt.validUntil,
     results: view.results, evidenceHash: 'sha256:' + '0'.repeat(64), originalSignatureRequirements: [] };
   let now = 0, current = true, calls = 0, terminated = 0, created = 0, refusal: string | undefined, hydrationBytes: Uint8Array<ArrayBuffer> | undefined;
+  let nativeResult: { stage: 'index' | 'verify'; value: unknown } | undefined;
   const listeners = new Set<(event: unknown) => void>();
   let receive: ((event: { data: unknown }) => void) | undefined;
   const detach = attachMixedProofWorker({ addEventListener: (_type, listener) => { receive = listener; },
-    removeEventListener: () => { receive = undefined; }, postMessage: data => { for (const listener of listeners) listener({ data }); } }, {
-    initializeMixedProofVerifier: async () => {}, indexMixedProofObjects: () => encode(indexed),
+    removeEventListener: () => { receive = undefined; }, postMessage: data => { for (const listener of listeners) listener({ data }); } }, actualSource ?? {
+    initializeMixedProofVerifier: async () => {}, indexMixedProofObjects: () => nativeResult?.stage === 'index' ? encode(nativeResult.value) : encode(indexed),
     verifyMixedProof(inputs) {
+      if (nativeResult?.stage === 'verify') return encode(nativeResult.value);
       if (refusal) throw new Error(refusal);
       expect(JSON.parse(new TextDecoder().decode(inputs.selectionBytes)).request).toEqual(selected.request);
       expect(inputs.buffers).toEqual(actual.protectedObjects.map((item: { file: string }) => read(item.file)));
@@ -66,7 +69,7 @@ function fixture(currentProducer = false) {
   const saved = { response: selected.request.canonicalResponse, draft: { id: selected.request.draftId, version: selected.request.draftVersion } } as SavedResponseDraft;
   return { config, input: { view: view as EvaluationHydrationWire | MixedHydrationWire, saved, hydrationBytes: read('hydration.json') },
     lifetime: { signal: new AbortController().signal, assertCurrent() { if (!current) throw new Error('Owner retired'); } },
-    read, selected, actual, changeHydration: (value: unknown) => { hydrationBytes = encode(value); }, refuse: (code: string) => { refusal = code; }, outcome, calls: () => calls, terminated: () => terminated, created: () => created, now: () => now, retire: () => { current = false; } };
+    read, selected, actual, nativeRefusal: (stage: 'index' | 'verify', value: unknown) => { nativeResult = { stage, value }; }, changeHydration: (value: unknown) => { hydrationBytes = encode(value); }, refuse: (code: string) => { refusal = code; }, outcome, calls: () => calls, terminated: () => terminated, created: () => created, now: () => now, retire: () => { current = false; } };
 }
 describe('task proof adapter binding (mock Source verifier; no native proof qualification)', () => {
   it('uses actual saved request and protected objects, subtracting elapsed time from original validity', async () => {
@@ -90,8 +93,9 @@ describe('task proof adapter binding (mock Source verifier; no native proof qual
 
 // Exact current Source producer export. Transport and proof worker protocol are
 // real maintained adapters; Source's cryptographic API is an explicit double.
-async function taskHydrationFixture() {
-  const f = fixture(true);
+async function taskHydrationFixture(actualSource?: SourceMixedProofApi, module?: Uint8Array<ArrayBuffer>) {
+  const f = fixture(true, actualSource);
+  if (module) { f.config.worker.module = module; f.config.worker.maxModuleBytes = module.byteLength; }
   const request = f.selected.request;
   const contextObject = f.actual.protectedObjects.find((item: { metadata: { object_kind: string } }) => item.metadata.object_kind === 'immutable:task-context-observation:v1');
   const association = JSON.parse(new TextDecoder().decode(f.read(contextObject.file))).origin.association;
@@ -207,3 +211,50 @@ describe('bounded protected transport overlap (simulated timing; mock Source cry
     } finally { lifetime.abort(new Error('test cleanup')); held.forEach(item => item.release()); await outcome; adapter.dispose(); f.adapter.dispose(); }
   });
 });
+
+
+const nativeMixedCodes = ['not_initialized', 'invalid_initialization', 'input_limit', 'invalid_json', 'invalid_selection', 'invalid_hydration',
+  'invalid_proof_index', 'unsupported_family', 'missing_proof', 'extra_proof', 'invalid_original', 'recursive_original', 'proof_refused',
+  'expired', 'unsupported_numeric_domain', 'output_limit', 'internal_failure'];
+describe('closed Source mixed native refusal byte contract', () => {
+  for (const stage of ['index', 'verify'] as const) it.each(nativeMixedCodes)(`preserves %s from native ${stage} result bytes`, async code => {
+    const f = fixture(true); f.nativeRefusal(stage, { version: 1, status: 'refused', code });
+    const error = await createTaskMixedProofVerifier(f.config).verify(f.input, f.lifetime).catch(failure => failure as Error);
+    expect(error).toMatchObject({ name: 'SourceMixedProofRefusalError', code, message: code });
+    expect(f.terminated()).toBe(1); expect(f.calls()).toBe(stage === 'index' ? 1 : 3);
+  });
+  it.each([{ version: 2, status: 'refused', code: 'expired' }, { version: '1', status: 'refused', code: 'expired' },
+    { version: 1, status: 'future', code: 'expired' }, { version: 1, status: 'refused', code: 'future_code' },
+    { version: 1, status: 'refused', code: 'native-proof' }, { version: 1, status: 'refused', code: 'expired', data: 'unadmitted' },
+    { version: 1, status: 'refused' }])('fails closed on malformed native refusal bytes', async value => {
+    const f = fixture(true); f.nativeRefusal('verify', value);
+    const error = await createTaskMixedProofVerifier(f.config).verify(f.input, f.lifetime).catch(failure => failure as Error);
+    expect(error).toBeInstanceOf(Error); expect((error as Error).name).not.toBe('SourceMixedProofRefusalError');
+  });
+});
+
+// Optional offline gate uses qualified local assets, never network or vendored WASM.
+const realModule = process.env.FORMSPEC_SOURCE_MIXED_PROOF_MODULE;
+const realWasm = process.env.FORMSPEC_SOURCE_MIXED_PROOF_WASM;
+it.skipIf(!realModule || !realWasm)('runs the complete task adapter/reader/worker with actual Source JS/WASM and authentic byte refusal', async () => {
+  // Native Node loading avoids Vite's off-tree module resolver; the exact
+  // qualified Source package owns its dynamic glue import and cryptography.
+  const api = createRequire(import.meta.url)(realModule!) as SourceMixedProofApi;
+  const module = Uint8Array.from(readFileSync(realWasm!)); let initialization: Promise<void> | undefined; let tamper = false; let nativeBytes: Uint8Array | undefined;
+  const source: SourceMixedProofApi = { initializeMixedProofVerifier: options => initialization ??= api.initializeMixedProofVerifier(options),
+    indexMixedProofObjects: options => api.indexMixedProofObjects(options), verifyMixedProof: inputs => {
+      if (!tamper) return api.verifyMixedProof(inputs);
+      const buffers = inputs.buffers.map(bytes => bytes.slice()); buffers[0][0] ^= 1;
+      nativeBytes = api.verifyMixedProof({ ...inputs, buffers }); return nativeBytes;
+    } };
+  const success = await taskHydrationFixture(source, module);
+  try { const facts = await success.adapter.qualifySaved(success.saved, success.lifetime); facts.assertReady(); expect(facts.view).toEqual(success.input.view); }
+  finally { success.adapter.dispose(); }
+  tamper = true; const refusal = await taskHydrationFixture(source, module);
+  try {
+    const error = await refusal.adapter.qualifySaved(refusal.saved, refusal.lifetime).catch(failure => failure as Error);
+    const actual = JSON.parse(new TextDecoder().decode(nativeBytes!));
+    expect(actual).toEqual({ version: 1, status: 'refused', code: 'proof_refused' });
+    expect(error).toMatchObject({ name: 'SourceMixedProofRefusalError', code: actual.code, message: actual.code });
+  } finally { refusal.adapter.dispose(); }
+}, 15_000);

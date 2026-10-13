@@ -1,3 +1,4 @@
+import { throwIfSourceMixedProofRefusal } from './mixed-refusal.ts';
 import canonicalize from 'canonicalize';
 import { abortable } from '../../shared/abortable.ts';
 import type { EvaluationProviderRegistration, EvaluationHydrationResult } from '../../ports/evaluation-hydration.ts';
@@ -97,7 +98,8 @@ export class MixedProofWorkerClient {
         check(); const referencesBytes = snapshotInput(references, SMALL_CAP);
         const result = await exchangeProofWorker(owned, { kind: 'index', id: nextId++, referencesBytes } as MixedProofCommand,
           signal, check, [referencesBytes.buffer]); check();
-        if (!result) throw new Error('output'); return result;
+        if (!result) throw new Error('output');
+        throwIfSourceMixedProofRefusal(decodeBoundedProofJson(result)); return result;
       }, { signal, assertCurrent: () => { check(); } })); check();
       const inputs = snapshotMixedInputs({ ...prepared, selectionBytes });
       const view = object(decodeBoundedProofJson(inputs.hydrationBytes));
@@ -113,6 +115,7 @@ export class MixedProofWorkerClient {
         signal, check, []); check();
       if (!result) throw new Error('output');
       const value = object(decodeBoundedProofJson(result));
+      throwIfSourceMixedProofRefusal(value);
       const keys = ['version','status','verificationScope','registration','request','requestHash','registrationHash',
         'receiptHash','qualifiedAt','validUntil','results','evidenceHash','originalSignatureRequirements'];
       if (Object.keys(value).length !== keys.length || keys.some(key => !Object.hasOwn(value, key))
