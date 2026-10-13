@@ -63,7 +63,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   const context = { baseUrl: 'https://server.example.test', tenantBinding: { kind: 'bound' as const,
     scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } } };
   const state = { response: structuredClone(response), version: 1, patchCount: 0, signCount: 0,
-    patchStatus: 200, createdVersion: 1, mutateSave: undefined as ((response: FormResponse) => void) | undefined, lostCreate: false, createCount: 0, status: 'in_progress' as string | undefined, lostPatch: false, lostSign: false, refuseSign: false, signStatus: 200, persistSign: true,
+    patchProblem: undefined as unknown, patchStatus: 200, createdVersion: 1, mutateSave: undefined as ((response: FormResponse) => void) | undefined, lostCreate: false, createCount: 0, status: 'in_progress' as string | undefined, lostPatch: false, lostSign: false, refuseSign: false, signStatus: 200, persistSign: true,
     actor: authenticated ? 'oidc:owner' : 'anon:owner', token: 'owner-token' as string | undefined,
     tokenGate: undefined as Promise<void> | undefined, formVersionId: 'publication-1',
     mutateSigned: undefined as ((response: FormResponse) => void) | undefined,
@@ -103,7 +103,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
     if (request.method === 'PATCH') {
       state.patchCount++;
       await state.patchGate;
-      if (state.patchStatus !== 200) return jsonResponse({ detail: 'private URL token subject response' }, state.patchStatus);
+      if (state.patchStatus !== 200) return jsonResponse(state.patchProblem ?? { detail: 'private URL token subject response' }, state.patchStatus);
       if (body.expected_draft_version !== state.version) return jsonResponse({ detail: 'stale' }, 409);
       state.version++;
     }
@@ -1440,8 +1440,12 @@ describe('bounded Save boundary diagnostics', () => {
     await expect(test.save(saveAction('PATCH'))).rejects.toThrow('Save differs from the exact saved Response');
     await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
     expect(warn.mock.calls.map(call => JSON.parse(call[1]))).toEqual([
-      { stage: 'write-dispatch', reason: 'http-refused', status: 403 },
-      { stage: 'readback', reason: 'save-failed' },
+      { stage: 'write-dispatch', reason: 'http-refused', status: 403, candidate: { expectedDraftVersion: 1,
+        baselineDataKeyCount: Object.keys(test.state.response.data).length, candidateDataKeyCount: Object.keys(test.state.response.data).length,
+        changedDataPaths: [], changedDataPathCount: 0, removedDataPaths: [], addedDataPaths: [] } },
+      { stage: 'readback', reason: 'save-failed', candidate: { expectedDraftVersion: 1,
+        baselineDataKeyCount: Object.keys(test.state.response.data).length, candidateDataKeyCount: Object.keys(test.state.response.data).length,
+        changedDataPaths: [], changedDataPathCount: 0, removedDataPaths: [], addedDataPaths: [] } },
     ]);
     expect(test.state.version).toBe(1); expect(test.state.patchCount).toBe(1);
   });
@@ -1458,6 +1462,65 @@ describe('bounded Save boundary diagnostics', () => {
     const test = await fixture(false, true); await test.save(); test.state.lostPatch = true;
     const saved = await test.save(saveAction('PATCH'));
     expect(saved.draft.version).toBe(2);
-    expect(warn).toHaveBeenCalledExactlyOnceWith('Native form Save diagnostic', JSON.stringify({ stage: 'write-dispatch', reason: 'save-failed' }));
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Native form Save diagnostic', JSON.stringify({ stage: 'write-dispatch', reason: 'save-failed', candidate: { expectedDraftVersion: 1,
+      baselineDataKeyCount: Object.keys(test.state.response.data).length, candidateDataKeyCount: Object.keys(test.state.response.data).length,
+      changedDataPaths: [], changedDataPathCount: 0, removedDataPaths: [], addedDataPaths: [] } }));
   });
+});
+
+
+describe('typed original Save problem diagnostics', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('retains bounded typed server detail and a value-free candidate comparison before reconciliation', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const test = await fixture(false, true); await test.save(); test.state.patchStatus = 409;
+    const detail = 'protected task prefill data differs from original baseline';
+    test.state.patchProblem = { type: 'about:blank', title: 'conflict', status: 409, error_code: 'FORMSPEC-4090', detail,
+      context: { private: 'private context' }, instance: 'https://private.test/token', extra: 'private response' };
+    const candidate = structuredClone(test.state.response); candidate.data['neutral/field'] = 'private answer';
+    const removed = Object.keys(candidate.data)[0]; delete candidate.data[removed];
+    await expect(test.save(saveAction('PATCH'), candidate)).rejects.toThrow('Save differs from the exact saved Response');
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
+    const first = JSON.parse(warn.mock.calls[0][1]);
+    expect(first).toEqual({ stage: 'write-dispatch', reason: 'http-refused', status: 409, error_code: 'FORMSPEC-4090', detail,
+      candidate: { expectedDraftVersion: 1, baselineDataKeyCount: Object.keys(test.state.response.data).length,
+        candidateDataKeyCount: Object.keys(candidate.data).length, changedDataPaths: [removed, 'neutral/field'].sort()
+          .map(key => '/' + key.replace(/~/g, '~0').replace(/\//g, '~1')), changedDataPathCount: 2,
+        removedDataPaths: ['/' + removed], addedDataPaths: ['/neutral~1field'] } });
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('private answer');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('private context');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('https://private.test/token');
+    expect(test.state.version).toBe(1);
+  });
+  it('bounds recognized detail to 1024 characters and omits arbitrary response fields', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const test = await fixture(false, true); await test.save(); test.state.patchStatus = 409;
+    test.state.patchProblem = { type: 'about:blank', title: 'conflict', status: 409, error_code: 'FORMSPEC-4090', detail: 'x'.repeat(2048) };
+    await expect(test.save(saveAction('PATCH'))).rejects.toThrow();
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(warn.mock.calls[0][1]).detail).toBe('x'.repeat(1024));
+  });
+  it('does not expose unrecognized raw response detail', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const test = await fixture(false, true); await test.save(); test.state.patchStatus = 409;
+    test.state.patchProblem = { status: 409, detail: 'private raw response', error_code: 'arbitrary' };
+    await expect(test.save(saveAction('PATCH'))).rejects.toThrow();
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(warn.mock.calls[0][1])).not.toHaveProperty('detail');
+    expect(JSON.parse(warn.mock.calls[0][1])).not.toHaveProperty('error_code');
+  });
+});
+
+
+it('keeps broader infrastructure problem codes without exposing dynamic database detail', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const test = await fixture(false, true); await test.save(); test.state.patchStatus = 409;
+    test.state.patchProblem = { type: 'about:blank', title: 'conflict', status: 409, error_code: 'INFRA-4090',
+      detail: 'database diagnostic containing a private answer' };
+    await expect(test.save(saveAction('PATCH'))).rejects.toThrow();
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(warn.mock.calls[0][1]).error_code).toBe('INFRA-4090');
+    expect(JSON.parse(warn.mock.calls[0][1])).not.toHaveProperty('detail');
+  } finally { warn.mockRestore(); }
 });

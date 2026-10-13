@@ -9,7 +9,20 @@ import { ResponseSigningUnresolvedError, type AdmittedResponseAction, type SaveR
 import { assertUuidV7IdempotencyKey, isUuidV7IdempotencyKey, generateIdempotencyKey } from '../../shared/idempotency-key.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 import type { DraftBindingRegistry } from './draft-binding-registry.ts';
+import { isProblemJson } from '../../shared/problem-json.ts';
 import { HttpAdapterError, type HttpClient } from './http-client.ts';
+
+/** Root names and counts only; no applicant answer values enter diagnostics. */
+function saveCandidateComparison(baseline: Record<string, unknown>, candidate: Record<string, unknown>, expectedDraftVersion: number) {
+  const pointer = (key: string) => `/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`.slice(0, 256);
+  const baselineKeys = Object.keys(baseline), candidateKeys = Object.keys(candidate);
+  const changed = [...new Set([...baselineKeys, ...candidateKeys])].sort().filter(key =>
+    Object.hasOwn(baseline, key) !== Object.hasOwn(candidate, key) || canonicalize(baseline[key]) !== canonicalize(candidate[key]));
+  return { expectedDraftVersion, baselineDataKeyCount: baselineKeys.length, candidateDataKeyCount: candidateKeys.length,
+    changedDataPaths: changed.slice(0, 64).map(pointer).sort(), changedDataPathCount: changed.length,
+    removedDataPaths: changed.filter(key => !Object.hasOwn(candidate, key)).slice(0, 64).map(pointer).sort(),
+    addedDataPaths: changed.filter(key => !Object.hasOwn(baseline, key)).slice(0, 64).map(pointer).sort() };
+}
 
 /** All checks use maintained schemas and signed-profile digest implementation injected by the host. */
 export interface HttpResponseSigningPolicy {
@@ -118,14 +131,18 @@ export class HttpResponseSigning implements ResponseSigning {
 
   private readonly saves = new Map<string, { identity: string; scope: string; generation: number; settled: boolean; pending: Promise<SavedResponseDraft> }>();
   private saveDiagnosticCount = 0;
-  private reportSaveFailure(stage: 'preflight' | 'owned-read' | 'action-admission' | 'write-admission' | 'write-dispatch' | 'readback' | 'saved-evidence', error: unknown): void {
+  private reportSaveFailure(stage: 'preflight' | 'owned-read' | 'action-admission' | 'write-admission' | 'write-dispatch' | 'readback' | 'saved-evidence', error: unknown, candidate?: ReturnType<typeof saveCandidateComparison>): void {
     if (this.saveDiagnosticCount++ >= 32) return;
     try {
       const status = error instanceof HttpAdapterError && Number.isInteger(error.status)
         && error.status >= 100 && error.status <= 599 ? error.status : undefined;
       const reason = status !== undefined ? 'http-refused'
         : error instanceof DOMException && error.name === 'TimeoutError' && error.message === 'HTTP request timed out' ? 'http-timeout' : 'save-failed';
-      console.warn('Native form Save diagnostic', JSON.stringify({ stage, reason, ...(status !== undefined ? { status } : {}) }));
+      const problem = error instanceof HttpAdapterError && status !== undefined && isProblemJson(error.problem)
+        && error.problem.status === status ? error.problem : undefined;
+      console.warn('Native form Save diagnostic', JSON.stringify({ stage, reason, ...(status !== undefined ? { status } : {}),
+        ...(problem ? { error_code: problem.error_code, ...(problem.error_code === 'FORMSPEC-4090' && typeof problem.detail === 'string' ? { detail: problem.detail.slice(0, 1024) } : {}) } : {}),
+        ...(candidate ? { candidate } : {}) }));
     } catch { /* Observation must preserve Save and reconciliation behavior. */ }
   }
 
@@ -145,6 +162,7 @@ export class HttpResponseSigning implements ResponseSigning {
       return previous.pending;
     }
     let stage: Parameters<HttpResponseSigning['reportSaveFailure']>[0] = 'preflight';
+    let candidate: ReturnType<typeof saveCandidateComparison> | undefined;
     const pending = this.config.fence.run(input.draftKey, async generation => {
       this.refuseUnresolved(input.draftKey);
       if (!input.formId?.trim() || input.formId !== this.config.formIdFor(input.draftKey)) throw new Error('Save publication form id differs from the configured form');
@@ -155,6 +173,8 @@ export class HttpResponseSigning implements ResponseSigning {
       const existing = binding ? await this.read(context, binding.draftId) : undefined;
       if (binding && (existing!.draft_version !== binding.draftVersion
         || existing!.canonical_response.authoredSignatures?.length)) throw new Error('Saved draft changed before Save');
+      if (existing) try { candidate = saveCandidateComparison(existing.canonical_response.data, input.response.data, existing.draft_version); }
+      catch { /* Comparison cannot change the existing Save path. */ }
       stage = 'action-admission';
       this.qualifySaveAction(input.action, input, binding?.draftId, existing?.draft_version);
       this.current(context);
@@ -170,7 +190,7 @@ export class HttpResponseSigning implements ResponseSigning {
         try { this.current(context); if (dispatchGuard) assertSynchronousGuard(dispatchGuard); stage = 'write-dispatch'; }
         catch (error) { dispatchRefused = true; dispatchRefusal = error; throw error; }
       } }); }
-      catch (error) { this.reportSaveFailure(stage, error); this.current(context); if (dispatchRefused) throw dispatchRefusal; if (!binding) throw error; }
+      catch (error) { this.reportSaveFailure(stage, error, candidate); this.current(context); if (dispatchRefused) throw dispatchRefusal; if (!binding) throw error; }
       this.current(context);
       const savedBinding = this.config.bindings.get(input.draftKey);
       if (!savedBinding) throw new ResponseSigningUnresolvedError();
@@ -187,7 +207,7 @@ export class HttpResponseSigning implements ResponseSigning {
       return result;
     });
     this.saves.set(input.operationId, { identity, scope: this.config.fence.scopeFor(input.draftKey), generation, settled: false, pending });
-    void pending.finally(() => { const entry = this.saves.get(input.operationId); if (entry) entry.settled = true; }).catch(error => this.reportSaveFailure(stage, error));
+    void pending.finally(() => { const entry = this.saves.get(input.operationId); if (entry) entry.settled = true; }).catch(error => this.reportSaveFailure(stage, error, candidate));
     return pending;
   }
 
