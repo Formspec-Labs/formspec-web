@@ -259,6 +259,7 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
   // Keep the owned native preparation or signature mounted while it qualifies current sources.
   const ownedNativeSigningState = state.nativeReadiness !== undefined && state.controller?.owned === true && !!(state.controller.prepared || state.controller.signed);
   const startupBlocked = !confirmation && !state.cleared && outcome !== 'submitted'
+    && !startupRoute?.canRestoreOwnedForm
     && (!!startupRoute?.requiresScreener || !!startupRoute?.requiresHostState && !state.runtime && !ownedNativeSigningState);
   const preparing = startupBlocked && !startupRoute?.requiresScreener && (!!state.controller?.prepared || state.controller?.phase === 'prepare');
   const formTitle = locale?.strings['$form.title'] ?? state.formTitle;

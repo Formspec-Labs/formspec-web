@@ -1259,6 +1259,29 @@ describe('restored unsigned Screener checkpoints', () => {
       holdHydration: (hold: Promise<void>) => { holdHydration = hold; }, retireAuthority: () => { authorityCurrent = false; },
       cleanup() { host.dispose(); engine.dispose(); replacements.forEach(value => value.dispose()); test.replacements.forEach(value => value.dispose()); } };
   }
+  it.each(['actor', 'publication', 'hash', 'data'] as const)('refuses a crossed %s checkpoint before restoration mount', async changed => {
+    const test = await restoredFixture(true);
+    try {
+      const saved = structuredClone(test.saved);
+      if (changed === 'actor') Object.assign(saved.actor, { id: 'foreign-owner' });
+      if (changed === 'publication') Object.assign(saved.evidence, { form_version_id: 'foreign-publication' });
+      if (changed === 'hash') Object.assign(saved.draft, { responseHash: '0'.repeat(64) });
+      if (changed === 'data') saved.response.data.fullName = 'crossed';
+      await expect(test.host.restoreOwnedDraftAccess(saved, () => {})).rejects.toThrow();
+      expect(test.host.getSnapshot().controller).toBeUndefined();
+      expect(test.host.getSnapshot().runtime).toBeUndefined();
+    } finally { test.cleanup(); }
+  });
+  it('refuses owner retirement while qualifying an exact restored checkpoint', async () => {
+    const test = await restoredFixture(true);
+    try {
+      let current = true;
+      const pending = test.host.restoreOwnedDraftAccess(test.saved, () => { if (!current) throw new Error('retired'); });
+      current = false;
+      await expect(pending).rejects.toThrow('retired');
+      expect(test.host.getSnapshot().controller).toBeUndefined();
+    } finally { test.cleanup(); }
+  });
   it('refreshes a saved photo after the 300-second evidence limit and prepares the exact successor', async () => {
     const test = await restoredFixture(true);
     try {

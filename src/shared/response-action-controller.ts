@@ -168,27 +168,14 @@ export function createResponseActionController(config: ResponseActionControllerC
     return request;
   }
   async function validateResponse(response: FormResponse) {
-    if (response.id !== context.responseId || response.definitionUrl !== context.definition.url
-      || response.definitionVersion !== context.definition.version || !await config.validateResponse(response)) throw new ControllerRefusal('response-invalid');
-    if (context.draftKey.formUrl !== response.definitionUrl || context.draftKey.formVersion !== response.definitionVersion
-      || !context.publication.formVersionId || !context.publication.formId) throw new ControllerRefusal('context-mismatch');
+    await assertControllerResponse(context, config.validateResponse, response);
   }
   async function afterCommit(result: SavedResponseDraft) {
     try { await config.afterCommittedDraft?.(freeze(structuredClone(result))); }
     catch { /* The host publishes downstream Pending separately; this receipt remains committed. */ }
   }
   async function checkEvidence(result: SavedResponseDraft, expected?: FormResponse) {
-    await validateResponse(result.response);
-    if (!same(result.draftKey, context.draftKey) || typeof result.actor.id !== 'string' || !result.actor.id.trim()
-      || typeof result.draft.id !== 'string' || !result.draft.id.trim() || !/^[a-f0-9]{64}$/.test(result.draft.responseHash)
-      || (actor && actor !== result.actor.id)
-      || result.evidence.subject_ref !== result.actor.id || result.evidence.form_version_id !== context.publication.formVersionId
-      || result.evidence.draft_id !== result.draft.id || result.evidence.draft_version !== result.draft.version
-      || !Number.isSafeInteger(result.draft.version) || result.draft.version < 1 || result.evidence.status !== 'in_progress'
-      || !same(result.evidence.canonical_response, result.response) || !same(result.evidence.draft_state, result.response.data)
-      || (expected && !same(result.response, expected)) || result.draft.responseHash !== await config.hashResponse(result.response)) {
-      throw new ControllerRefusal('context-mismatch');
-    }
+    await assertSavedResponseDraftEvidence({ context, validateResponse: config.validateResponse, hashResponse: config.hashResponse }, result, expected, actor);
   }
   function checkRestoredSigned(result: SignedResponseSigning, wording: { source: SigningContentSource; locale: string }) {
     if ((context.draftKey.subjectRef && result.actor.id !== context.draftKey.subjectRef)
@@ -529,6 +516,31 @@ function failure(document: Parameters<ResponseActionInvoker>[0]['document'], act
   reason: ResponseActionControllerReason): ResponseActionInvocationResult<SubmitResult> {
   return { status: 'failed', invocationId, resolution: resolveResponseAction(document, actionRef), validationTuple: null,
     detail: null, effectTrace: [], failureReason: reason };
+}
+/** Internal shared receipt checks; callers separately fence current owner and operation lifetime. */
+export async function assertSavedResponseDraftEvidence(
+  config: Pick<ResponseActionControllerConfig, 'context' | 'validateResponse' | 'hashResponse'>,
+  result: SavedResponseDraft, expected?: FormResponse, actor?: string,
+): Promise<void> {
+  const context = config.context;
+  await assertControllerResponse(context, config.validateResponse, result.response);
+  if (!same(result.draftKey, context.draftKey) || typeof result.actor.id !== 'string' || !result.actor.id.trim()
+    || typeof result.draft.id !== 'string' || !result.draft.id.trim() || !/^[a-f0-9]{64}$/.test(result.draft.responseHash)
+    || (actor && actor !== result.actor.id)
+    || result.evidence.subject_ref !== result.actor.id || result.evidence.form_version_id !== context.publication.formVersionId
+    || result.evidence.draft_id !== result.draft.id || result.evidence.draft_version !== result.draft.version
+    || !Number.isSafeInteger(result.draft.version) || result.draft.version < 1 || result.evidence.status !== 'in_progress'
+    || !same(result.evidence.canonical_response, result.response) || !same(result.evidence.draft_state, result.response.data)
+    || (expected && !same(result.response, expected)) || result.draft.responseHash !== await config.hashResponse(result.response)) {
+    throw new ControllerRefusal('context-mismatch');
+  }
+}
+async function assertControllerResponse(context: ResponseActionControllerContext,
+  validate: ResponseActionControllerConfig['validateResponse'], response: FormResponse): Promise<void> {
+  if (response.id !== context.responseId || response.definitionUrl !== context.definition.url
+    || response.definitionVersion !== context.definition.version || !await validate(response)) throw new ControllerRefusal('response-invalid');
+  if (context.draftKey.formUrl !== response.definitionUrl || context.draftKey.formVersion !== response.definitionVersion
+    || !context.publication.formVersionId || !context.publication.formId) throw new ControllerRefusal('context-mismatch');
 }
 function same(a: unknown, b: unknown): boolean { return canonicalize(a) === canonicalize(b); }
 function freeze<T>(value: T): T {

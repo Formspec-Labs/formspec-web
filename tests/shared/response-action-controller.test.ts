@@ -116,6 +116,14 @@ function lifecycleFixture(enabled = true, change: Partial<ResponseActionControll
   const startApplication = vi.fn(async () => ({ caseLedgerId: 'urn:wos:real-case', caseReference: 'APP-001', draftRef: 'urn:formspec:draft:owned-draft', status: 'in-progress' as const }));
   return { ...fixture({ roles, applicationLifecycle: { capabilities: { earlyCaseCreation: enabled, persistentSaving: true, formVersionId: 'publication' }, load: vi.fn(async () => undefined), start: startApplication }, ...change }), startApplication };
 }
+describe('detached controller evidence context', () => {
+  it('keeps saved receipt checks bound to construction context after caller mutation', async () => {
+    const test = fixture();
+    Object.assign(test.config.context.publication, { formVersionId: 'mutated-publication' });
+    expect(await test.definition('saveInitial')).toMatchObject({ status: 'completed' });
+    expect(test.controller.getSnapshot().saved!.evidence.form_version_id).toBe('publication');
+  });
+});
 describe('maintained application Start', () => {
   it('keeps Save available while unavailable case status blocks Start and Submit, then retries authoritative absence', async () => {
     const base = lifecycleFixture(); const load = vi.fn(async () => undefined);

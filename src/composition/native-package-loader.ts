@@ -67,6 +67,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     || bundle.manifest.modules?.length !== modulePins.length
     || modulePins.some(pin => bundle.manifest.modules!.filter(module => same(module, pin)).length !== 1)) throw new Error('Native package differs from its explicit deployment pins');
   const resolved = dereferenceBundleExport(bundle);
+  const ownedDraftRestorationSites: { surfaceRef: string; routeId: string; slotId: string }[] = [];
   for (const surface of resolved.surfaces) {
     const url = resolved.surfaceRefs?.get(surface);
     const refs = bundle.manifest.surfaces?.filter(ref => ref.url === url) ?? [];
@@ -76,6 +77,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
       const selected = componentRouteResolver({ surface: { url: url ?? '', version: refs.length === 1 ? refs[0].version ?? '' : '' },
         route: route.id, slot: slot.id, role: 'slot', definition: { url: form?.url ?? '', version: form?.version ?? '' } });
       if (selected.status !== 'ready') throw new Error(`Native form Component is unavailable: ${selected.reason}`);
+      if (url && same(form, definition) && same(selected.component.document, componentDocument))
+        ownedDraftRestorationSites.push({ surfaceRef: url, routeId: route.id, slotId: slot.id });
     }
   }
   const needsInitialDataMapping = resolved.surfaces.some(surface => surface.routes.some(route => (route.slots ?? []).some(slot =>
@@ -247,7 +250,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   if (registryEntries.diagnostics.length) throw new Error('Native Registry entries are ambiguous');
   const semantics = createSemanticControlRegistry();
   const definitionDigest = await computeJcsSha256Digest(definition);
-    host = createNativePackageSigningHost({ candidateHydration: taskCohort?.candidateHydration, initialDataSources: options.initialDataSources, hostEvents: options.hostEvents, screenerEntryGate: nativePins?.entryGate,
+    host = createNativePackageSigningHost({ ownedDraftRestorationSites, candidateHydration: taskCohort?.candidateHydration, initialDataSources: options.initialDataSources, hostEvents: options.hostEvents, screenerEntryGate: nativePins?.entryGate,
       ...(nativePins ? { nativeScreener: { selectionKey: nativePins.selectionKey,
         retention: new HttpScreenerRetention({ ...base, accessToken: ownedAccessToken, ...nativePins }),
         hydration: selectedScreenerHydration = nativePins.hydrationFactory
@@ -284,7 +287,10 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     return { composition, host: admittedHost, componentDocument, componentRouteResolver, localeDocuments, moduleId: pins.module.id, initialLocale: pins.initialLocale, screenerCompletion: admittedHost.screenerCompletion ?? options.screenerCompletion,
       resumeSubmitted: () => resuming ??= atNativeAdmissionStage('saved-access', async () => {
         const lifetime = authLifetime, sequence = authSequence;
-        const current = () => { lifetime.signal.throwIfAborted(); if (sequence !== authSequence) throw new Error('Native recovery session retired'); };
+        const current = () => { lifetime.signal.throwIfAborted();
+          if (sequence !== authSequence || options.ownedDraftResume && options.identityBinding && (!authState
+            || authState.issuer !== config.identity.oidc?.issuer || !Number.isFinite(Date.parse(authState.expiresAt))
+            || Date.parse(authState.expiresAt) <= Date.now())) throw new Error('Native recovery session retired'); };
         current();
         // Validate retained credentials through the bridge; recovery never issues an owner.
         if (anonymousSessions && resumeMetadata.read(`grant:${publication.form_id}`) !== undefined) {
@@ -308,6 +314,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
         const state = options.ownedDraftResume
           ? await draftStore.resumeState!(draftKey, options.ownedDraftResume, current) : await draftStore.readState(draftKey);
         current();
+        if (state?.kind === 'active' && state.savedDraft && !state.signed && !state.pendingSign)
+          await admittedHost.restoreOwnedDraftAccess(state.savedDraft, current);
         if (state?.kind === 'submitted') await admittedHost.configureSubmittedRuntime({ definition, draftKey, claim, state });
         return state?.kind ?? 'absent';
       }) };

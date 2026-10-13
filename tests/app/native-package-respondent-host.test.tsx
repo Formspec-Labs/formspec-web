@@ -61,7 +61,7 @@ function fixture() {
   const host = { getStartupRoute: () => ({ entryHref: '/', entryTitle: undefined, requiresHostState: false }), definition: [...dereferenceBundleExport(bundle).definitions.values()][0], moduleId: 'x-demo-signing', widgetModules: [starterWidgetModule('x-demo-signing', { responseReview: {} })], bundle: dereferenceBundleExport(structuredClone(bundle)), reviewOptions: {}, configureRuntime, configureSubmittedRuntime: vi.fn(), dispose,
     allocateSurfaceSessionMarker: () => 'fixture-visit',
     createSurfaceVisit: () => ({ activate: vi.fn(), dispose: vi.fn(), bindRuntime: () => ({ authorizeDataSource: () => ({ status: 'refused' as const, reason: 'unavailable' }), dataSourceLoader: () => ({ status: 'unavailable' as const, reason: 'unavailable' }), validateDataSourcePayload: () => ({ valid: true }), dataSourceRevision: () => undefined, widgetActionExecutor: vi.fn() }) }),
-    widgetExecutor: vi.fn(), getSnapshot: () => state, subscribe: () => () => {}, selectLocale: vi.fn(), clearDraftAccess: vi.fn() } satisfies NativePackageSigningHost;
+    restoreOwnedDraftAccess: vi.fn(async () => {}), widgetExecutor: vi.fn(), getSnapshot: () => state, subscribe: () => () => {}, selectLocale: vi.fn(), clearDraftAccess: vi.fn() } satisfies NativePackageSigningHost;
   const props = { host, composition: createTestComposition({ definition: testDefinition }), config: departmentAppProfile, componentDocument: component, componentRouteResolver: componentResolver(component),
     localeDocuments: [], location: '/', onNavigate: vi.fn() };
   return { props, host, configureRuntime, dispose };

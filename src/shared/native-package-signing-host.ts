@@ -16,7 +16,7 @@ import { targetDefinitionMatches, type FormDefinition, type FormResponse, type L
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { RespondentOwnedRuntimeInput, RespondentOwnedRuntime, RespondentSubmittedRuntimeInput } from '../app/RespondentRuntime.tsx';
-import { createResponseActionController, type ResponseActionControllerConfig, type ResponseActionControllerSnapshot } from './response-action-controller.ts';
+import { createResponseActionController, assertSavedResponseDraftEvidence, type ResponseActionControllerConfig, type ResponseActionControllerSnapshot } from './response-action-controller.ts';
 import { createFrozenHostStateDataSourceRuntime } from './frozen-host-state-data.ts';
 import { createNativeScreenerCoordinator, type NativeScreenerCoordinatorConfig } from './native-screener-coordinator.ts';
 import { createEvaluationInstanceResolver } from './evaluation-instance-resolver.ts';
@@ -80,6 +80,8 @@ export interface NativePackageSigningHostPolicy {
   /** Trusted host policy; allowedTargets alone does not grant or restrict route access. */
   /** Explicit checked saved-candidate source; cannot substitute for entry Screener evidence. */
   candidateHydration?: SavedCandidateHydration;
+  /** Internal admitted sites whose Definition and Component match this owned form. */
+  ownedDraftRestorationSites?: readonly { surfaceRef: string; routeId: string; slotId: string }[];
   screenerEntryGate?: { readonly protectedTargets: readonly string[] };
 }
 
@@ -139,6 +141,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     return declared ? { status: 'admitted', source: request.source } : { status: 'refused' };
   } : undefined;
   const initialDataSites: { descriptor: DataSourceDescriptor; handle: typeof app.routes[number]; slotId: string; definitionRef: string }[] = [];
+  const ownedDraftFormRoutes = new Set<typeof app.routes[number]>();
   const requiredHostRoutes = new Set<typeof app.routes[number]>();
   const supportedEntryRoutes = new Set<typeof app.routes[number]>();
   const entryScreenerSlots: Extract<SlotPlan<unknown>, { slotType: 'screener' }>[] = [];
@@ -169,6 +172,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         && slot.actionOutputs.some(output => output.name === submitSource.outputName
           && output.actionRef === policy.controller.roles.submit?.actionRef && !!output.action))) signedReviewRoutes.add(handle);
     if (slots.some(slot => slot.slotType === 'module-widget' && slot.dataInputs.some(input => input.required && input.descriptor?.source.kind === 'host-state'))) requiredHostRoutes.add(handle);
+    if (policy.ownedDraftRestorationSites?.some(site => site.surfaceRef === bundle.surfaceRefs?.get(handle.surface)
+      && site.routeId === handle.routeId && slots.some(slot => slot.slotType === 'definition-form' && slot.status === 'ready'
+        && slot.slotId === site.slotId && same(slot.definition, policy.definition)))) ownedDraftFormRoutes.add(handle);
     if (handle === app.entry) entryScreenerSlots.push(...slots.filter((slot): slot is Extract<SlotPlan<unknown>, { slotType: 'screener' }> => slot.slotType === 'screener'));
     const screeners = slots.flatMap(slot => slot.slotType === 'screener' && slot.status === 'ready' && slot.screener ? [slot.screener.document] : []);
     if (screeners.length && !slots.some(slot => slot.slotType === 'definition-form' || slot.slotType === 'module-widget')) screenerRoutes.set(handle, Object.freeze(screeners));
@@ -283,6 +289,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     };
     observe(); prepareFlags();
   }
+  let ownedDraftRestoration: { saved: SavedResponseDraft; assertCurrent: () => void; visit?: number } | undefined;
   let restoredScreenerCheckpoint: Pick<SavedResponseDraft, 'draftKey' | 'draft' | 'actor' | 'response'> | undefined;
 
   let locale = policy.initialLocale;
@@ -481,7 +488,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function current(expected: number) { if (disposed || generation !== expected) throw new Error('native-context-obsolete'); }
   function stop(reason: Parameters<NativePackageSigningHostPolicy['invalidateAuthority']>[0]) {
-    if (reason === 'clear' || reason === 'dispose') { application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; restoredScreenerCheckpoint = undefined; }
+    if (reason === 'clear' || reason === 'dispose') { ownedDraftRestoration = undefined; application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; restoredScreenerCheckpoint = undefined; }
+    if ((reason === 'edit' || reason === 'locale') && ownedDraftRestoration) ownedDraftRestoration.visit = undefined;
     retireNative();
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
     authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? structuredClone(input.draftKey) : submittedKey ? structuredClone(submittedKey) : undefined);
@@ -588,6 +596,13 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
     unsubscribeController = controller.subscribe(() => {
       publicSnapshot = controller!.getSnapshot();
+      if (ownedDraftRestoration && publicSnapshot.saved && !same(ownedDraftRestoration.saved, publicSnapshot.saved)) {
+        const previous = ownedDraftRestoration.saved, saved = publicSnapshot.saved;
+        if (same(previous.draftKey, saved.draftKey) && previous.draft.id === saved.draft.id && previous.actor.id === saved.actor.id
+          && previous.response.id === saved.response.id && previous.evidence.form_version_id === saved.evidence.form_version_id) {
+          ownedDraftRestoration.saved = structuredClone(saved); freezeMetadata(ownedDraftRestoration.saved);
+        } else ownedDraftRestoration = undefined;
+      }
       application = publicSnapshot.application; applicationLookup = publicSnapshot.applicationLookup; applicationFlags();
       if (['saveInitial', 'saveOwned'].includes(publicSnapshot.phase) || publicSnapshot.phase === 'startApplication' && !publicSnapshot.owned) {
         pendingCheckpoint = true; checkpointState = 'saving';
@@ -648,9 +663,50 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
   }
   const widgetModules = registerModules(reviewOptions); freezeMetadata(widgetModules);
+  function canRestoreOwnedForm(route: typeof app.routes[number]): boolean {
+    const access = ownedDraftRestoration;
+    if (!access || !ownedDraftFormRoutes.has(route)) return false;
+    try {
+      access.assertCurrent();
+      const saved = publicSnapshot?.saved ?? access.saved;
+      if (!same(saved.draftKey, access.saved.draftKey) || saved.draft.id !== access.saved.draft.id
+        || saved.actor.id !== access.saved.actor.id || saved.response.id !== access.saved.response.id
+        || saved.evidence.form_version_id !== access.saved.evidence.form_version_id) throw new Error('native-owned-restoration-changed');
+      policy.assertOwner(saved.draftKey, saved.actor.id);
+      return access.visit === undefined || access.visit === visitEpoch;
+    } catch { return false; }
+  }
   return {
     bundle, definition: policy.definition,
-    ...(native ? { ...(screener ? { screenerCompletion: screener.completionPolicy } : {}), instanceSourceResolver: unavailableSources, retireCandidateAuthority: retireNative,
+    async restoreOwnedDraftAccess(value: SavedResponseDraft, assertCurrent: () => void): Promise<void> {
+      assertSynchronousGuard(assertCurrent);
+      if (disposed || cleared || controller || input || submitted || !value.response.id
+        || value.response.authoredSignatures?.length || value.response.extensions?.['x-formspec-signing-content'])
+        throw new Error('native-owned-restoration-refused');
+      const saved = structuredClone(value); freezeMetadata(saved);
+      const sourceAuthority = policy.nativeScreener?.context();
+      const check = () => {
+        assertSynchronousGuard(assertCurrent);
+        sourceAuthority?.signal.throwIfAborted();
+        if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
+        if (disposed || cleared || controller || input || submitted) throw new Error('native-owned-restoration-retired');
+        policy.assertOwner(saved.draftKey, saved.actor.id);
+      };
+      check();
+      await assertSavedResponseDraftEvidence({ context: { definition: policy.definition, draftKey: saved.draftKey,
+        publication: policy.publication, responseId: saved.response.id!, generation: String(authorityGeneration) },
+        validateResponse: policy.controller.validateResponse, hashResponse: policy.controller.hashResponse }, saved, saved.response, saved.draftKey.subjectRef ?? saved.actor.id);
+      check();
+      ownedDraftRestoration = { saved, assertCurrent: () => {
+        assertSynchronousGuard(assertCurrent);
+        sourceAuthority?.signal.throwIfAborted();
+        if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
+        if (disposed || cleared) throw new Error('native-owned-restoration-retired');
+        policy.assertOwner(saved.draftKey, saved.actor.id);
+      } };
+      emit();
+    },
+    ...(native ? { ...(screener ? { screenerCompletion: screener.completionPolicy } : {}), instanceSourceResolver: unavailableSources, retireCandidateAuthority: () => { ownedDraftRestoration = undefined; retireNative(); },
       prePrepareCandidate: async (candidate: Readonly<{ saved: SavedResponseDraft; response: FormResponse; assertCurrent: () => void }>) => {
         const facts = nativeCandidate; const authority = authorityGeneration; const visit = visitEpoch; const lease = rendererLease;
         const check = () => {
@@ -692,7 +748,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           || receipt.draftRef !== application.draftRef || application.status === 'submitted' && receipt.status !== 'submitted')) throw new Error('native-application-context-retired');
         application = receipt ? structuredClone(receipt) : undefined; applicationLookup = undefined; freezeMetadata(application); emit();
       } } : {}), reviewOptions, selectLocale,
-    getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; requiresScreener?: boolean; screenerDocuments?: readonly ScreenerDocument[]; signedReviewHref?: string; signedReviewTitle?: string } {
+    getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; requiresScreener?: boolean; canRestoreOwnedForm?: boolean; screenerDocuments?: readonly ScreenerDocument[]; signedReviewHref?: string; signedReviewTitle?: string } {
       const match = matchRoute(app, pathname).match;
       const entry = app.entry;
       if (!match || !entry || !supportedEntryRoutes.has(entry) || requiredHostRoutes.has(entry)) throw new Error('native-entry-route-unavailable');
@@ -708,7 +764,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           signedReviewHref = target.href; signedReviewTitle = review.route.title;
         }
       }
-      return { entryHref: destination.href, entryTitle: entry.route.title, requiresHostState: requiredHostRoutes.has(match.handle), requiresScreener, screenerDocuments: screenerRoutes.get(match.handle),
+      return { entryHref: destination.href, entryTitle: entry.route.title, canRestoreOwnedForm: canRestoreOwnedForm(match.handle), requiresHostState: requiredHostRoutes.has(match.handle), requiresScreener, screenerDocuments: screenerRoutes.get(match.handle),
         signedReviewHref, signedReviewTitle };
     },
     allocateSurfaceSessionMarker(sessionGeneration: number) {
@@ -725,9 +781,14 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return {
         activate() {
           if (disposed || cleared || sessionGeneration !== authorityGeneration) throw new Error('native-visit-retired');
-          ticket = ++visitEpoch; retireNative('visit-change'); for (const read of reads) read.abort(); reads.clear();
+          ticket = ++visitEpoch;
+          if (ownedDraftRestoration) {
+            if (ownedDraftRestoration.visit === undefined) ownedDraftRestoration.visit = ticket;
+            else if (ownedDraftRestoration.visit !== ticket) ownedDraftRestoration = undefined;
+          }
+          retireNative('visit-change'); for (const read of reads) read.abort(); reads.clear();
         },
-        dispose() { if (ticket === visitEpoch) { visitEpoch++; retireNative('visit-change'); for (const read of reads) read.abort(); reads.clear(); } ticket = undefined; },
+        dispose() { if (ticket === visitEpoch) { if (ownedDraftRestoration?.visit === ticket) ownedDraftRestoration = undefined; visitEpoch++; retireNative('visit-change'); for (const read of reads) read.abort(); reads.clear(); } ticket = undefined; },
         bindRuntime() {
           const initial = createNativeInitialDataSourceRuntime({ sessionGeneration: marker, assertCurrent: assertVisit,
             sites: initialDataSites.map(site => ({ descriptor: site.descriptor, context: { surfaceId: site.handle.surfaceId,
@@ -832,6 +893,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return { invalidate: () => { if (!disposed) { stop('clear'); emit(); } }, dispose: () => {} };
     },
     async configureRuntime(next: RespondentOwnedRuntimeInput): Promise<RespondentOwnedRuntime> {
+      if (!input && ownedDraftRestoration && !same(next.restoredSavedDraft, ownedDraftRestoration.saved)) {
+        ownedDraftRestoration = undefined; throw new Error('native-owned-restoration-changed');
+      }
       if (disposed || cleared || submitted || !same(next.definition, policy.definition) || (responseId && next.restoredResponse && next.restoredResponse.id !== responseId)
         || (input && !same(input.draftKey, next.draftKey))) throw new Error('native-runtime-context-refused');
       responseId ??= next.restoredResponse?.id ?? generateIdempotencyKey();

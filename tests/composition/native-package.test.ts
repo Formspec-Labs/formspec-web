@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
 import type { ResponseActionsDocument } from '@formspec-org/types';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -29,7 +32,7 @@ import { loadCanonicalModulePayloadSchemaResources } from 'formspec-web/adapters
 const nativeBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/native-bundle.json'), 'utf8');
 const componentBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/passport-renewal.component.json'), 'utf8');
 const initialDefinitionUrl = 'https://server.example.test/runtime/forms/actual-form';
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function fixture(subject = 'anon:fixture', lifecycle = false) {
   const selectedNativeBytes = lifecycle ? readFileSync(resolve('public/demo-packages/d1-passport/v0.1.7/native-bundle.json'), 'utf8') : nativeBytes;
@@ -172,8 +175,8 @@ async function moduleBindingFixture(selectedModule = false) {
   return { ...test, config };
 }
 
-async function completeStudioFixture(scoped: boolean) {
-  const test = await fixture();
+async function completeStudioFixture(scoped: boolean, subject = 'anon:fixture', restorationTest?: { hostState?: boolean; initialData?: boolean }) {
+  const test = await fixture(subject);
   const bytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/photo-complete-successor-v1.bundle.json'), 'utf8');
   const bundle = JSON.parse(bytes) as BundleExport;
   const resolved = dereferenceBundleExport(bundle);
@@ -192,6 +195,36 @@ async function completeStudioFixture(scoped: boolean) {
     definition_hash: await computeJcsSha256Digest(definition), definition });
   const intakeSurface = resolved.surfaces.find(surface => resolved.surfaceRefs?.get(surface) === 'urn:formspec:demo:d1:signing-app:surface')!;
   const route = intakeSurface.routes.find(route => route.id === 'signing')!;
+  const intake = intakeSurface.routes.find(route => route.id === 'intake')!;
+  if (restorationTest?.hostState) {
+    const requiredContext = structuredClone(route.slots!.find(slot => slot.slotType === 'module-widget'
+      && (slot.binding as { widgetName: string }).widgetName === 'x-structured-panel')!);
+    const binding = requiredContext.binding as { dataBindings: { caseFile: { catalogRef: string; sourceRef: string } } };
+    const catalog = resolved.dataSources!.find(handle => handle.catalogRef === binding.dataBindings.caseFile.catalogRef)!.document;
+    const source = structuredClone(catalog.sources.find(source => source.id === binding.dataBindings.caseFile.sourceRef)!);
+    source.id = 'host:restoration-context'; source.availability = { level: 'route', surfaceRef: resolved.surfaceRefs!.get(intakeSurface)!, routeRef: intake.id };
+    catalog.sources.push(source); binding.dataBindings.caseFile.sourceRef = source.id;
+    requiredContext.id = 'saved-context'; intake.slots!.push(requiredContext);
+  }
+  const prefillSnapshot = { fullName: 'Mapped source name', email: 'mapped@example.test', photo: null };
+  if (restorationTest?.initialData) {
+    const catalog = resolved.dataSources![0].document;
+    catalog.sources.push({ id: 'host:scenario-prefill', kind: 'host-state', owner: 'host', scope: 'route',
+      availability: { level: 'slot', surfaceRef: resolved.surfaceRefs!.get(intakeSurface)!, routeRef: intake.id, slotId: 'form' },
+      runtime: { delivery: 'live', cache: { mode: 'subscribe' }, authorizationBoundary: 'host', failureMode: 'block-render',
+        provenance: { kind: 'host-state', source: 'declared-neutral-snapshot' } },
+      schema: { type: 'object', required: ['fullName', 'email', 'photo'], properties: { fullName: { type: 'string' }, email: { type: 'string' }, photo: { type: 'null' } }, additionalProperties: false } });
+    const mappingUrl = 'urn:test:owned-form-prefill';
+    bundle.documents = { ...bundle.documents, [mappingUrl]: { $formspecMapping: '1.0', version: '1.0.0', definitionRef: definition.url,
+      definitionVersion: definition.version, autoMap: false, direction: 'reverse', targetSchema: { format: 'json' },
+      rules: ['fullName', 'email', 'photo'].map(path => ({ sourcePath: path, targetPath: path, transform: 'preserve' })) } };
+    bundle.manifest.mappings = [...bundle.manifest.mappings!, { handle: 'scenarioPrefill', url: mappingUrl, version: '1.0.0' }];
+    const formSlot = intake.slots!.find(slot => slot.slotType === 'definition-form')!;
+    Object.assign(formSlot.binding, { initialData: { catalogRef: catalog.id, sourceRef: 'host:scenario-prefill', mappingRef: 'scenarioPrefill' } });
+  }
+  if (restorationTest?.hostState || restorationTest?.initialData) {
+    test.texts['native.json'] = JSON.stringify(bundle); test.files.nativeBundle.sha256 = await rawDigest(test.texts['native.json']);
+  }
   const bindingFor = (name: string) => route.slots!.flatMap(slot => {
     const binding = slot.binding as { dataBindings?: Record<string, { catalogRef: string; sourceRef: string }> };
     const selected = binding.dataBindings?.[name];
@@ -225,7 +258,12 @@ async function completeStudioFixture(scoped: boolean) {
     // Syntactic fixture pin only: no Mapping or hydration operation is qualified by this package-load test.
     instanceMappingHash: await computeJcsSha256Digest({ purpose: 'unexecuted-test-mapping-policy' }) };
   // Package admission requires selected capabilities; this test does not execute sources or accept a screening result.
-  const initialDataSources = vi.fn(() => { throw new Error('Initial data was not selected for execution'); });
+  const initialDataSources = vi.fn(() => {
+    if (!restorationTest?.initialData) throw new Error('Initial data was not selected for execution');
+    return { authorizeDataSource: () => ({ status: 'authorized' as const }),
+      dataSourceLoader: () => ({ status: 'loaded' as const, value: structuredClone(prefillSnapshot), freshness: 'fresh' as const }),
+      validateDataSourcePayload: () => ({ valid: true }) };
+  });
   const hostEvents = Object.entries(bundle.documents).flatMap(([artifactRef, raw]) => {
     const document = raw as ResponseActionsDocument;
     return document.targetDefinition?.url === definition.url ? (document.actions ?? []).flatMap(action => {
@@ -244,6 +282,62 @@ async function completeStudioFixture(scoped: boolean) {
 }
 
 describe('explicit native package composition', () => {
+  it.each(['screening', 'both-with-prefill'] as const)('mounts an exact retained unsigned draft through real package admission and Surface with %s startup gates', async gate => {
+    const test = await completeStudioFixture(true, 'oidc:fixture', { hostState: gate !== 'screening', initialData: gate === 'both-with-prefill' });
+    const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',
+      credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+    const identityBinding = { ...test.options.identityBinding, provider: {
+      discover: async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }],
+      authenticate: async () => claim, revoke: async () => {}, subscribe: (listener: (value: typeof claim) => void) => { listener(claim); return () => {}; },
+    } };
+    const options = { ...test.options, identityBinding };
+    const seedBoot = await createDefaultComposition(test.config, options).nativePackageRespondent!.load();
+    const engine = createFormEngine(seedBoot.host.definition);
+    seedBoot.localeDocuments.forEach(document => engine.loadLocale(document)); engine.setLocale('en');
+    engine.setValue('fullName', 'Retained person');
+    const photo = { kind: 'attachment-ref', uri: 'urn:formspec:attachment:retained-photo', filename: 'retained.png', mimeType: 'image/png', contentType: 'image/png', size: 1, hash: `sha256:${'a'.repeat(64)}` };
+    engine.setValue('photo', photo);
+    const response = { ...engine.getResponse({ profile: 'off' }), id: generateIdempotencyKey() }; delete response.data.email; engine.dispose(); seedBoot.host.dispose();
+    test.setDraft(response, 'in_progress', 7);
+    const composition = createDefaultComposition(test.config, { ...options, ownedDraftResume: {
+      draftId: 'fixture-draft', expectedResponseId: response.id,
+    } });
+    const boot = await composition.nativePackageRespondent!.load();
+    const formRoute = boot.host.bundle.surfaces.flatMap(surface => surface.routes).find(route => route.slots?.some(slot =>
+      slot.slotType === 'definition-form' && (slot.binding as { definitionRef: string }).definitionRef === boot.host.definition.url))!;
+    window.history.replaceState(null, '', formRoute.path!);
+    const configure = vi.spyOn(boot.host, 'configureRuntime');
+    const mounted = render(createElement(NativePackageRuntime, { composition, config: test.config }));
+    await vi.waitFor(() => expect(test.requests.some(request => request.method === 'GET' && request.url.endsWith('/drafts/fixture-draft'))).toBe(true));
+    await vi.waitFor(() => expect(mounted.container.querySelector('.native-package-workspace')).not.toBeNull());
+    await screen.findByRole('textbox', { name: /full legal name/i });
+    expect(configure).toHaveBeenCalled(); expect(boot.host.getSnapshot().controller?.saved?.draft.version).toBe(7);
+    expect(boot.host.getSnapshot().controller!.saved!.response).toEqual(response);
+    expect((screen.getByRole('textbox', { name: /full legal name/i }) as HTMLInputElement).value).toBe('Retained person');
+    expect(boot.host.getSnapshot().controller!.saved!.response.data.photo).toEqual(photo);
+    expect(Object.hasOwn(boot.host.getSnapshot().controller!.saved!.response.data, 'email')).toBe(false);
+    const startup = boot.host.getStartupRoute(formRoute.path!);
+    expect(startup.requiresScreener).toBe(true); expect(startup.requiresHostState).toBe(gate !== 'screening');
+    expect(startup.canRestoreOwnedForm).toBe(true);
+    expect(boot.host.getSnapshot().runtime).toBeUndefined(); expect(boot.host.getSnapshot().controller?.prepared).toBeUndefined();
+    expect(test.initialDataSources).toHaveBeenCalledTimes(gate === 'both-with-prefill' ? 1 : 0);
+    if (gate === 'both-with-prefill') {
+      const input = configure.mock.calls[0][0]; expect(input.restoredSavedDraft!.response).toEqual(response);
+      expect(input.engine.getResponse({ profile: 'off' }).data.email).not.toBe('mapped@example.test');
+    }
+    expect(boot.host.getSnapshot().nativeReadiness).toBe('needs-save');
+    expect(test.requests.every(request => request.method === 'GET')).toBe(true);
+    const reviewRoute = boot.host.bundle.surfaces.flatMap(surface => surface.routes).find(route => route.id === 'signing')!;
+    expect(boot.host.getStartupRoute(reviewRoute.path!).canRestoreOwnedForm).toBe(false);
+    fireEvent.change(screen.getByRole('textbox', { name: /full legal name/i }), { target: { value: 'Edited retained person' } });
+    await vi.waitFor(() => expect((screen.getByRole('textbox', { name: /full legal name/i }) as HTMLInputElement).value).toBe('Edited retained person'));
+    expect(boot.host.getStartupRoute(formRoute.path!).canRestoreOwnedForm).toBe(true);
+    if (gate === 'screening') mounted.unmount();
+    else boot.host.retireCandidateAuthority!();
+    expect(boot.host.getStartupRoute(formRoute.path!).canRestoreOwnedForm).toBe(false);
+    expect(test.requests.every(request => request.method === 'GET')).toBe(true);
+    mounted.unmount(); boot.host.dispose(); window.history.replaceState(null, '', '/');
+  });
   it('awaits runtime then tools for an admitted initial-data Mapping before publishing the host', async () => {
     const test = await completeStudioFixture(true); const order: string[] = [];
     let release: (() => void) | undefined;
