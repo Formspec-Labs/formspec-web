@@ -168,3 +168,43 @@ describe('task hydration within the existing native operation budget', () => {
     expect(verify).not.toHaveBeenCalled(); expect(f.fetchImpl).toHaveBeenCalledOnce(); adapter.dispose();
   });
 });
+
+describe('whole task qualification budget without an enclosing host timer', () => {
+  it('stops cumulative hydration and a non-cooperative verifier at thirty seconds', async () => {
+    const f = await fixture(); vi.useFakeTimers();
+    let dispatched!: () => void;
+    const entered = new Promise<void>(resolve => { dispatched = resolve; });
+    f.fetchImpl.mockImplementation(async () => {
+      dispatched(); return new Promise<Response>(resolve => { setTimeout(() => resolve(Response.json(f.original.view,
+        { headers: { 'cache-control': 'no-store' } })), 15_000); });
+    });
+    let verificationStarted!: () => void;
+    const verificationEntered = new Promise<void>(resolve => { verificationStarted = resolve; });
+    const verify = vi.fn(async () => new Promise<{ validForMilliseconds: number }>(resolve => {
+      verificationStarted(); setTimeout(() => resolve({ validForMilliseconds: 60_000 }), 16_000);
+    }));
+    const adapter = new HttpTaskCandidateHydration({ ...f.config, receiptVerifier: { verify } }, f.lifetime);
+    let status = 'pending'; let refusal: unknown;
+    const outcome = adapter.qualifySaved(f.saved, f.lifetime).then(() => { status = 'accepted'; }, error => { status = 'failed'; refusal = error; });
+    try {
+      await entered; await vi.advanceTimersByTimeAsync(15_000); await verificationEntered;
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(verify).toHaveBeenCalledOnce(); expect(status).toBe('failed');
+      expect(refusal).toEqual(new Error('native-facts-deadline'));
+      expect(f.fetchImpl).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1_000); expect(status).toBe('failed');
+    } finally { await vi.advanceTimersByTimeAsync(1_000); await outcome; adapter.dispose(); }
+  });
+  it('clears the operation timer without aborting successfully returned candidate facts', async () => {
+    const f = await fixture(); vi.useFakeTimers(); let elapsed = 0;
+    f.fetchImpl.mockImplementation(async () => Response.json(f.original.view, { headers: { 'cache-control': 'no-store' } }));
+    const adapter = new HttpTaskCandidateHydration({ ...f.config, elapsedNow: () => elapsed,
+      receiptVerifier: { verify: async () => ({ validForMilliseconds: 60_000 }) } }, f.lifetime);
+    try {
+      const facts = await adapter.qualifySaved(f.saved, f.lifetime); facts.assertReady();
+      await vi.advanceTimersByTimeAsync(30_000); elapsed = 30_000;
+      facts.assertReady(); expect(facts.remainingMilliseconds!()).toBe(30_000);
+      elapsed = 60_000; expect(() => facts.assertReady()).toThrow('original proof expired');
+    } finally { adapter.dispose(); }
+  });
+});

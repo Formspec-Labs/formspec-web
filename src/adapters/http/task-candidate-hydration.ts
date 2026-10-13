@@ -84,76 +84,82 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
     this.retireFacts();
     const generation = this.generation;
     const active = new AbortController(); this.active = active;
-    const signal = AbortSignal.any([this.lifetime.signal, lifetime.signal, active.signal]);
-    const check = () => { signal.throwIfAborted(); this.check(); assertSynchronousGuard(lifetime.assertCurrent);
-      if (generation !== this.generation) fail('candidate retired'); };
-    check();
-    const started = this.now();
-    const saved = structuredClone(input);
-    const { selection, definition, taskDraft, subjectRef, identity, formVersionHash } = this.pins;
-    const evidence = saved.evidence;
-    if (!evidence.taskDraft || evidence.taskDraft.version !== taskDraft.version
-      || evidence.taskDraft.associationHash !== taskDraft.associationHash || evidence.taskDraft.taskBindingHash !== taskDraft.taskBindingHash
-      || evidence.subject_ref !== subjectRef || saved.actor.id !== subjectRef || saved.draftKey.subjectRef !== subjectRef
-      || evidence.form_version_id !== selection.formVersionId || evidence.status !== 'in_progress'
-      || evidence.draft_id !== saved.draft.id || evidence.draft_version !== saved.draft.version
-      || !saved.draft.id.trim() || ['.', '..'].includes(saved.draft.id) || !Number.isSafeInteger(saved.draft.version) || saved.draft.version < 1
-      || saved.draftKey.formUrl !== selection.definitionUrl || saved.draftKey.formVersion !== selection.definitionVersion
-      || saved.response.definitionUrl !== selection.definitionUrl || saved.response.definitionVersion !== selection.definitionVersion
-      || !equal(saved.response, evidence.canonical_response) || !equal(saved.response.data, evidence.draft_state)
-      || await hash(definition) !== selection.definitionHash) fail('saved candidate binding mismatch');
-    const entries = Object.entries(definition.instances ?? {}).filter(([, value]) => typeof value.source === 'string');
-    const required = selection.requiredSources;
-    if (new Set(required).size !== required.length || entries.length !== required.length
-      || entries.some(([name, value]) => !name.trim() || !required.includes(value.source!) || value.readonly === false)
-      || new Set(entries.map(([, value]) => value.source)).size !== required.length) fail('selected source coverage mismatch');
-    const sources = Object.fromEntries(entries.map(([name, value]) => [name, value.source!]));
-    const candidateHash = await hash(saved.response);
-    check();
-    const raw = await this.client.postJsonWithBytes<unknown>(`/drafts/${encodeURIComponent(saved.draft.id)}/evaluation-instances`,
-      { draftVersion: saved.draft.version, candidateHash }, { signal, assertCurrent: check, assertBeforeDispatch: check,
-        successStatuses: [200], requireJson: true, requireNoStore: true, timeoutMs: NATIVE_SOURCE_OPERATION_MILLISECONDS, maxResponseBytes: 2 * 1024 * 1024 });
-    check();
-    const view = snapshotFiniteJson(decodeEvaluationHydrationWire(raw.value)) as unknown as EvaluationHydrationWire;
-    const owner = view.owner;
-    if (!equal(view.scope, selection.scope) || !equal(view.selection, selection) || view.formVersionHash !== formVersionHash
-      || view.draftId !== saved.draft.id || view.draftVersion !== saved.draft.version || view.candidateHash !== candidateHash
-      || !equal(view.sources, sources) || owner.subjectRef !== subjectRef || !owner.authenticated
-      || owner.authenticated.subjectRef !== subjectRef || owner.authenticated.sessionId !== owner.sessionId
-      || owner.authenticated.issuer !== identity.issuer || owner.authenticated.subject !== identity.subject
-      || owner.authenticated.clientId !== identity.clientId) fail('returned candidate binding mismatch');
-    const requestHash = await hash({ operation: 'hydrate', scope: selection.scope, owner, selection,
-      formVersionHash, draftId: saved.draft.id, draftVersion: saved.draft.version, candidateHash, sources });
-    if (view.requestHash !== requestHash || view.results.length !== entries.length) fail('request binding mismatch');
-    const names = new Set<string>();
-    for (const result of view.results) {
-      if (!Object.hasOwn(sources, result.instanceName) || sources[result.instanceName] !== result.sourceRef
-        || names.has(result.instanceName)) fail('result coverage mismatch');
-      names.add(result.instanceName);
-      if (result.status === 'qualified' && await hash(result.data) !== result.dataHash) fail('result data digest mismatch');
-    }
-    // Actual attachment ownership and bytes remain Source's task-authorized operation.
-    // The independently selected verifier checks original task-origin proof and custody;
-    // a qualified-looking response cannot bypass a missing verifier.
-    const qualified = view.results.some(result => result.status === 'qualified');
-    let deadline = Infinity;
-    if (qualified) {
-      if (!view.providerReceipt || !this.verifier) fail('task-origin proof verifier unavailable');
-      const proof = await abortable(signal, this.verifier({ view, saved, hydrationBytes: raw.utf8Bytes.slice() }, { signal, assertCurrent: check }));
-      if (!Number.isSafeInteger(proof.validForMilliseconds) || proof.validForMilliseconds <= 0 || !Number.isFinite(started + proof.validForMilliseconds)) fail('original proof validity unavailable');
-      deadline = started + proof.validForMilliseconds;
-    }
-    let retired: Error | undefined;
-    let observedRemaining = Infinity;
-    const current = () => {
-      if (retired) throw retired;
-      try { check(); observedRemaining = deadline - this.now(); if (observedRemaining <= 0) fail('original proof expired'); }
-      catch (error) { retired = error instanceof Error ? error : new Error('Source task candidate retired'); throw retired; }
-    };
-    current();
-    return Object.freeze({ view, assertCurrent: current, remainingMilliseconds: () => { current(); return observedRemaining; }, assertReady: () => {
-      current(); if (view.results.some(result => result.status !== 'qualified')) fail('selected sources pending or unavailable');
-    } });
+    const operation = new AbortController();
+    const timer = setTimeout(() => operation.abort(new Error('native-facts-deadline')), NATIVE_SOURCE_OPERATION_MILLISECONDS);
+    const signal = AbortSignal.any([this.lifetime.signal, lifetime.signal, active.signal, operation.signal]);
+    try {
+      return await abortable(signal, (async () => {
+        const check = () => { signal.throwIfAborted(); this.check(); assertSynchronousGuard(lifetime.assertCurrent);
+          if (generation !== this.generation) fail('candidate retired'); };
+        check();
+        const started = this.now();
+        const saved = structuredClone(input);
+        const { selection, definition, taskDraft, subjectRef, identity, formVersionHash } = this.pins;
+        const evidence = saved.evidence;
+        if (!evidence.taskDraft || evidence.taskDraft.version !== taskDraft.version
+          || evidence.taskDraft.associationHash !== taskDraft.associationHash || evidence.taskDraft.taskBindingHash !== taskDraft.taskBindingHash
+          || evidence.subject_ref !== subjectRef || saved.actor.id !== subjectRef || saved.draftKey.subjectRef !== subjectRef
+          || evidence.form_version_id !== selection.formVersionId || evidence.status !== 'in_progress'
+          || evidence.draft_id !== saved.draft.id || evidence.draft_version !== saved.draft.version
+          || !saved.draft.id.trim() || ['.', '..'].includes(saved.draft.id) || !Number.isSafeInteger(saved.draft.version) || saved.draft.version < 1
+          || saved.draftKey.formUrl !== selection.definitionUrl || saved.draftKey.formVersion !== selection.definitionVersion
+          || saved.response.definitionUrl !== selection.definitionUrl || saved.response.definitionVersion !== selection.definitionVersion
+          || !equal(saved.response, evidence.canonical_response) || !equal(saved.response.data, evidence.draft_state)
+          || await hash(definition) !== selection.definitionHash) fail('saved candidate binding mismatch');
+        const entries = Object.entries(definition.instances ?? {}).filter(([, value]) => typeof value.source === 'string');
+        const required = selection.requiredSources;
+        if (new Set(required).size !== required.length || entries.length !== required.length
+          || entries.some(([name, value]) => !name.trim() || !required.includes(value.source!) || value.readonly === false)
+          || new Set(entries.map(([, value]) => value.source)).size !== required.length) fail('selected source coverage mismatch');
+        const sources = Object.fromEntries(entries.map(([name, value]) => [name, value.source!]));
+        const candidateHash = await hash(saved.response);
+        check();
+        const raw = await this.client.postJsonWithBytes<unknown>(`/drafts/${encodeURIComponent(saved.draft.id)}/evaluation-instances`,
+          { draftVersion: saved.draft.version, candidateHash }, { signal, assertCurrent: check, assertBeforeDispatch: check,
+            successStatuses: [200], requireJson: true, requireNoStore: true, timeoutMs: NATIVE_SOURCE_OPERATION_MILLISECONDS, maxResponseBytes: 2 * 1024 * 1024 });
+        check();
+        const view = snapshotFiniteJson(decodeEvaluationHydrationWire(raw.value)) as unknown as EvaluationHydrationWire;
+        const owner = view.owner;
+        if (!equal(view.scope, selection.scope) || !equal(view.selection, selection) || view.formVersionHash !== formVersionHash
+          || view.draftId !== saved.draft.id || view.draftVersion !== saved.draft.version || view.candidateHash !== candidateHash
+          || !equal(view.sources, sources) || owner.subjectRef !== subjectRef || !owner.authenticated
+          || owner.authenticated.subjectRef !== subjectRef || owner.authenticated.sessionId !== owner.sessionId
+          || owner.authenticated.issuer !== identity.issuer || owner.authenticated.subject !== identity.subject
+          || owner.authenticated.clientId !== identity.clientId) fail('returned candidate binding mismatch');
+        const requestHash = await hash({ operation: 'hydrate', scope: selection.scope, owner, selection,
+          formVersionHash, draftId: saved.draft.id, draftVersion: saved.draft.version, candidateHash, sources });
+        if (view.requestHash !== requestHash || view.results.length !== entries.length) fail('request binding mismatch');
+        const names = new Set<string>();
+        for (const result of view.results) {
+          if (!Object.hasOwn(sources, result.instanceName) || sources[result.instanceName] !== result.sourceRef
+            || names.has(result.instanceName)) fail('result coverage mismatch');
+          names.add(result.instanceName);
+          if (result.status === 'qualified' && await hash(result.data) !== result.dataHash) fail('result data digest mismatch');
+        }
+        // Actual attachment ownership and bytes remain Source's task-authorized operation.
+        // The independently selected verifier checks original task-origin proof and custody;
+        // a qualified-looking response cannot bypass a missing verifier.
+        const qualified = view.results.some(result => result.status === 'qualified');
+        let deadline = Infinity;
+        if (qualified) {
+          if (!view.providerReceipt || !this.verifier) fail('task-origin proof verifier unavailable');
+          const proof = await abortable(signal, this.verifier({ view, saved, hydrationBytes: raw.utf8Bytes.slice() }, { signal, assertCurrent: check }));
+          if (!Number.isSafeInteger(proof.validForMilliseconds) || proof.validForMilliseconds <= 0 || !Number.isFinite(started + proof.validForMilliseconds)) fail('original proof validity unavailable');
+          deadline = started + proof.validForMilliseconds;
+        }
+        let retired: Error | undefined;
+        let observedRemaining = Infinity;
+        const current = () => {
+          if (retired) throw retired;
+          try { check(); observedRemaining = deadline - this.now(); if (observedRemaining <= 0) fail('original proof expired'); }
+          catch (error) { retired = error instanceof Error ? error : new Error('Source task candidate retired'); throw retired; }
+        };
+        current();
+        return Object.freeze({ view, assertCurrent: current, remainingMilliseconds: () => { current(); return observedRemaining; }, assertReady: () => {
+          current(); if (view.results.some(result => result.status !== 'qualified')) fail('selected sources pending or unavailable');
+        } });
+      })());
+    } finally { clearTimeout(timer); }
   }
 }
 
