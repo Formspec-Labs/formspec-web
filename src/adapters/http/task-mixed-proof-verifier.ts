@@ -1,3 +1,4 @@
+import { assertMixedProofRegistration } from './mixed-proof-wire.ts';
 import canonicalize from 'canonicalize';
 import type { EvaluationHydrationWire, EvaluationProviderRegistration } from '../../ports/evaluation-hydration.ts';
 import type { InitialNativeRequest } from '../../ports/initial-mixed-proof.ts';
@@ -28,6 +29,7 @@ export function createTaskMixedProofVerifier(config: {
 }): TaskHydrationReceiptVerifier {
   const publication = structuredClone(config.publication);
   const registration = structuredClone(config.registration);
+  assertMixedProofRegistration(registration);
   const selection = structuredClone(config.selection);
   const nativeCurrentCheck = config.nativeCurrentCheck === undefined ? undefined : snapshotNativeCurrentCheck(config.nativeCurrentCheck);
   const source = { ...config.source, tenantBinding: config.source.tenantBinding ? structuredClone(config.source.tenantBinding) : undefined };

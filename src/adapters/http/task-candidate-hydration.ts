@@ -10,12 +10,14 @@ import type { EvaluationHydrationWire, HydratedEvaluationCandidate, SavedCandida
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import { computeJcsSha256Digest as hash } from './response-action-ledger.ts';
+import type { MixedHydrationWire } from '../../ports/mixed-proof.ts';
+import { decodeMixedHydration } from './mixed-proof-wire.ts';
 import { decodeEvaluationHydrationWire } from './evaluation-hydration-wire.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 
 /** Selected owning proof implementation; schema decoding alone cannot qualify facts. */
 export interface TaskHydrationReceiptVerifier {
-  verify(input: Readonly<{ view: EvaluationHydrationWire; saved: SavedResponseDraft; hydrationBytes: Uint8Array<ArrayBuffer> }>, lifetime: CompletionLifetime): Promise<Readonly<{
+  verify(input: Readonly<{ view: EvaluationHydrationWire | MixedHydrationWire; saved: SavedResponseDraft; hydrationBytes: Uint8Array<ArrayBuffer> }>, lifetime: CompletionLifetime): Promise<Readonly<{
     /** Remaining original proof validity measured from request dispatch, never a renewed lease. */
     validForMilliseconds: number;
   }>>;
@@ -118,7 +120,12 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
           { draftVersion: saved.draft.version, candidateHash }, { signal, assertCurrent: check, assertBeforeDispatch: check,
             successStatuses: [200], requireJson: true, requireNoStore: true, timeoutMs: NATIVE_SOURCE_OPERATION_MILLISECONDS, maxResponseBytes: 2 * 1024 * 1024 });
         check();
-        const view = snapshotFiniteJson(decodeEvaluationHydrationWire(raw.value)) as unknown as EvaluationHydrationWire;
+        // Task compositions use Source's strict TOP2/receipt3 family; legacy
+        // hydration keeps its unchanged TOP1 decoder and proof requirements.
+        const mixed = raw.value !== null && typeof raw.value === 'object' && !Array.isArray(raw.value)
+          && Object.hasOwn(raw.value, 'version') && (raw.value as { version: unknown }).version === 2;
+        const decoded = mixed ? decodeMixedHydration(raw.value) : decodeEvaluationHydrationWire(raw.value);
+        const view = snapshotFiniteJson(decoded) as unknown as EvaluationHydrationWire | MixedHydrationWire;
         const owner = view.owner;
         if (!equal(view.scope, selection.scope) || !equal(view.selection, selection) || view.formVersionHash !== formVersionHash
           || view.draftId !== saved.draft.id || view.draftVersion !== saved.draft.version || view.candidateHash !== candidateHash

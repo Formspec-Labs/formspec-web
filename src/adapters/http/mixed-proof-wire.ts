@@ -5,10 +5,17 @@ import type { MixedHydrationWire } from '../../ports/mixed-proof.ts';
 import { freezeWireJson, requireWireJson } from './wire-json.ts';
 const ajv = new Ajv2020({ strict: false, strictNumbers: true, allErrors: false });
 addFormats(ajv); ajv.addSchema(schema);
+const validateRegistration = ajv.compile({ $ref: `${schema.$id}#/$defs/CompositionRegistration` });
 const validate = ajv.compile<MixedHydrationWire>({ $ref: `${schema.$id}#/$defs/Hydration` });
 /** Owning shape admission only; every proof decision stays in the selected Source verifier. */
 export function decodeMixedHydration(value: unknown): MixedHydrationWire {
   requireWireJson(value); const detached: unknown = structuredClone(value);
   if (!validate(detached)) throw new Error('Invalid Source mixed hydration wire shape');
   freezeWireJson(detached); return detached;
+}
+
+/** Selected configuration shape only; original proof admission remains in Source. */
+export function assertMixedProofRegistration(value: unknown): void {
+  requireWireJson(value);
+  if (!validateRegistration(structuredClone(value))) throw new Error('Invalid Source mixed proof registration shape');
 }

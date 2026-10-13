@@ -1,3 +1,4 @@
+import { computeJcsSha256Digest } from '../../../src/adapters/http/response-action-ledger.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpTaskCandidateHydration } from '../../../src/adapters/http/task-candidate-hydration.ts';
 import { hydrationFixture } from './screener-hydration-fixture.ts';
@@ -21,6 +22,15 @@ async function fixture() {
 }
 
 describe('task candidate hydration through the maintained Source route', () => {
+  it.each(['depth', 'nodes'] as const)('preserves the legacy %s snapshot budget before proof verification', async mode => {
+    const f = await fixture();
+    const data = mode === 'depth' ? Array.from({ length: 130 }).reduce<unknown>(value => [value], null) : Array(100_001).fill(null);
+    const view = { ...f.original.view, results: [{ ...f.original.view.results[0], data, dataHash: await computeJcsSha256Digest(data) }] };
+    f.fetchImpl.mockImplementation(async () => Response.json(view, { headers: { 'cache-control': 'no-store' } }));
+    await expect(new HttpTaskCandidateHydration(f.config, f.lifetime).qualifySaved(f.saved, f.lifetime)).rejects.toThrow('Response data exceeds the safe snapshot limit');
+    expect(f.fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it('uses the actual saved candidate and preserves Pending without a browser Screener act', async () => {
     const f = await fixture();
     const adapter = new HttpTaskCandidateHydration(f.config, f.lifetime);
