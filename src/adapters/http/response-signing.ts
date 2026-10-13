@@ -9,7 +9,7 @@ import { ResponseSigningUnresolvedError, type AdmittedResponseAction, type SaveR
 import { assertUuidV7IdempotencyKey, isUuidV7IdempotencyKey, generateIdempotencyKey } from '../../shared/idempotency-key.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 import type { DraftBindingRegistry } from './draft-binding-registry.ts';
-import type { HttpClient } from './http-client.ts';
+import { HttpAdapterError, type HttpClient } from './http-client.ts';
 
 /** All checks use maintained schemas and signed-profile digest implementation injected by the host. */
 export interface HttpResponseSigningPolicy {
@@ -117,6 +117,18 @@ export class HttpResponseSigning implements ResponseSigning {
   }
 
   private readonly saves = new Map<string, { identity: string; scope: string; generation: number; settled: boolean; pending: Promise<SavedResponseDraft> }>();
+  private saveDiagnosticCount = 0;
+  private reportSaveFailure(stage: 'preflight' | 'owned-read' | 'action-admission' | 'write-admission' | 'write-dispatch' | 'readback' | 'saved-evidence', error: unknown): void {
+    if (this.saveDiagnosticCount++ >= 32) return;
+    try {
+      const status = error instanceof HttpAdapterError && Number.isInteger(error.status)
+        && error.status >= 100 && error.status <= 599 ? error.status : undefined;
+      const reason = status !== undefined ? 'http-refused'
+        : error instanceof DOMException && error.name === 'TimeoutError' && error.message === 'HTTP request timed out' ? 'http-timeout' : 'save-failed';
+      console.warn('Native form Save diagnostic', JSON.stringify({ stage, reason, ...(status !== undefined ? { status } : {}) }));
+    } catch { /* Observation must preserve Save and reconciliation behavior. */ }
+  }
+
 
   saveDraft(input: SaveResponseDraftInput, options?: SaveResponseDraftOptions): Promise<SavedResponseDraft> {
     assertUuidV7IdempotencyKey(input.operationId);
@@ -132,15 +144,18 @@ export class HttpResponseSigning implements ResponseSigning {
       if (previous.settled) return Promise.reject(new Error('This Save operation is retired; start a new explicit act instead of replaying stale readiness'));
       return previous.pending;
     }
+    let stage: Parameters<HttpResponseSigning['reportSaveFailure']>[0] = 'preflight';
     const pending = this.config.fence.run(input.draftKey, async generation => {
       this.refuseUnresolved(input.draftKey);
       if (!input.formId?.trim() || input.formId !== this.config.formIdFor(input.draftKey)) throw new Error('Save publication form id differs from the configured form');
       await this.validateUnsigned(input);
       const context = { input, generation };
       const binding = this.config.bindings.get(input.draftKey);
+      stage = 'owned-read';
       const existing = binding ? await this.read(context, binding.draftId) : undefined;
       if (binding && (existing!.draft_version !== binding.draftVersion
         || existing!.canonical_response.authoredSignatures?.length)) throw new Error('Saved draft changed before Save');
+      stage = 'action-admission';
       this.qualifySaveAction(input.action, input, binding?.draftId, existing?.draft_version);
       this.current(context);
       const scope = this.config.fence.scopeFor(input.draftKey);
@@ -150,17 +165,20 @@ export class HttpResponseSigning implements ResponseSigning {
       this.current(context);
       let dispatchRefused = false;
       let dispatchRefusal: unknown;
+      stage = 'write-admission';
       try { await this.config.drafts.save(input.draftKey, input.response, { assertBeforeDispatch: () => {
-        try { this.current(context); if (dispatchGuard) assertSynchronousGuard(dispatchGuard); }
+        try { this.current(context); if (dispatchGuard) assertSynchronousGuard(dispatchGuard); stage = 'write-dispatch'; }
         catch (error) { dispatchRefused = true; dispatchRefusal = error; throw error; }
       } }); }
-      catch (error) { this.current(context); if (dispatchRefused) throw dispatchRefusal; if (!binding) throw error; }
+      catch (error) { this.reportSaveFailure(stage, error); this.current(context); if (dispatchRefused) throw dispatchRefusal; if (!binding) throw error; }
       this.current(context);
       const savedBinding = this.config.bindings.get(input.draftKey);
       if (!savedBinding) throw new ResponseSigningUnresolvedError();
+      stage = 'readback';
       const saved = await this.read(context, savedBinding.draftId);
       if (saved.draft_version !== (existing ? existing.draft_version + 1 : 1)
         || !same(saved.canonical_response, input.response)) throw new Error('Save differs from the exact saved Response');
+      stage = 'saved-evidence';
       extractServiceRequestOutputs(this.admittedRequest(input.action, input.response), saved);
       const result = await this.savedResult(input.draftKey, saved);
       this.current(context);
@@ -169,7 +187,7 @@ export class HttpResponseSigning implements ResponseSigning {
       return result;
     });
     this.saves.set(input.operationId, { identity, scope: this.config.fence.scopeFor(input.draftKey), generation, settled: false, pending });
-    void pending.finally(() => { const entry = this.saves.get(input.operationId); if (entry) entry.settled = true; }).catch(() => {});
+    void pending.finally(() => { const entry = this.saves.get(input.operationId); if (entry) entry.settled = true; }).catch(error => this.reportSaveFailure(stage, error));
     return pending;
   }
 

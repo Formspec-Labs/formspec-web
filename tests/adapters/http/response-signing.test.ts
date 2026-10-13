@@ -1,5 +1,5 @@
 import type { HttpResponseSigningPolicy } from '../../../src/adapters/http/response-signing.ts';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { detachedSignatureProtectedHeader, encodeCoseSign1 } from '@formspec-org/integrity-cose';
 import { canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import type { FormResponse, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
@@ -63,7 +63,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   const context = { baseUrl: 'https://server.example.test', tenantBinding: { kind: 'bound' as const,
     scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } } };
   const state = { response: structuredClone(response), version: 1, patchCount: 0, signCount: 0,
-    createdVersion: 1, mutateSave: undefined as ((response: FormResponse) => void) | undefined, lostCreate: false, createCount: 0, status: 'in_progress' as string | undefined, lostPatch: false, lostSign: false, refuseSign: false, signStatus: 200, persistSign: true,
+    patchStatus: 200, createdVersion: 1, mutateSave: undefined as ((response: FormResponse) => void) | undefined, lostCreate: false, createCount: 0, status: 'in_progress' as string | undefined, lostPatch: false, lostSign: false, refuseSign: false, signStatus: 200, persistSign: true,
     actor: authenticated ? 'oidc:owner' : 'anon:owner', token: 'owner-token' as string | undefined,
     tokenGate: undefined as Promise<void> | undefined, formVersionId: 'publication-1',
     mutateSigned: undefined as ((response: FormResponse) => void) | undefined,
@@ -103,6 +103,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
     if (request.method === 'PATCH') {
       state.patchCount++;
       await state.patchGate;
+      if (state.patchStatus !== 200) return jsonResponse({ detail: 'private URL token subject response' }, state.patchStatus);
       if (body.expected_draft_version !== state.version) return jsonResponse({ detail: 'stale' }, 409);
       state.version++;
     }
@@ -1427,4 +1428,36 @@ it('refuses an asynchronous owned-resume guard before credentials or reads', asy
   const test = await fixture(true, true);
   await expect(test.build().draftStore.resumeState!(test.draftKey, { draftId: test.draftId, expectedResponseId: response.id! }, async () => {})).rejects.toThrow('guard must be synchronous');
   expect(test.requests).toHaveLength(0); expect(test.metadata.read('draft-handles')).toBeUndefined();
+});
+
+
+describe('bounded Save boundary diagnostics', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('retains the original refused write status before unchanged reconciliation fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const test = await fixture(false, true); await test.save();
+    test.state.patchStatus = 403;
+    await expect(test.save(saveAction('PATCH'))).rejects.toThrow('Save differs from the exact saved Response');
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
+    expect(warn.mock.calls.map(call => JSON.parse(call[1]))).toEqual([
+      { stage: 'write-dispatch', reason: 'http-refused', status: 403 },
+      { stage: 'readback', reason: 'save-failed' },
+    ]);
+    expect(test.state.version).toBe(1); expect(test.state.patchCount).toBe(1);
+  });
+  it('distinguishes an owned GET refusal and bounds each adapter while isolating observer errors', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => { throw new Error('private observer failure'); });
+    const test = await fixture(false, true); await test.save(); test.state.getStatus = 503;
+    for (let index = 0; index < 40; index++) await expect(test.save(saveAction('PATCH'))).rejects.toMatchObject({ status: 503 });
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(32));
+    expect(warn.mock.calls.every(call => call[1] === JSON.stringify({ stage: 'owned-read', reason: 'http-refused', status: 503 }))).toBe(true);
+    expect(test.state.patchCount).toBe(0);
+  });
+  it('records an uncertain write reply without preventing successful authoritative reconciliation', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const test = await fixture(false, true); await test.save(); test.state.lostPatch = true;
+    const saved = await test.save(saveAction('PATCH'));
+    expect(saved.draft.version).toBe(2);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Native form Save diagnostic', JSON.stringify({ stage: 'write-dispatch', reason: 'save-failed' }));
+  });
 });

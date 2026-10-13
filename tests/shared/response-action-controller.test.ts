@@ -913,3 +913,14 @@ describe('unsigned checkpoints without signing wording', () => {
     expect(test.sign).toHaveBeenCalledTimes(role === 'submit' ? 1 : 0);
   });
 });
+
+
+it('reports Save validation refusal before any signing port call with closed metadata', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const test = fixture();
+  expect(await test.controller.definitionInvoker({ document: test.config.roles.saveInitial!.document, actionRef: 'saveInitial',
+    ports: { submit: () => { throw new Error('private URL token response'); }, validationReportValid: () => true, dispatchHostEvent: vi.fn() } })).toMatchObject({ status: 'failed' });
+  expect(test.saveDraft).not.toHaveBeenCalled();
+  expect(warn).toHaveBeenCalledExactlyOnceWith('Native form Save diagnostic', JSON.stringify({ stage: 'controller-validation', reason: 'port-failed' }));
+  warn.mockRestore();
+});

@@ -114,6 +114,12 @@ export function createResponseActionController(config: ResponseActionControllerC
   let pendingOperationId: string | undefined;
   let signed: SignedResponseSigning | undefined;
   let busy: string | undefined;
+  let saveDiagnosticCount = 0;
+  const reportSaveFailure = (stage: 'controller-admission' | 'controller-validation' | 'controller-effect', reason: string) => {
+    if (saveDiagnosticCount++ >= 32) return;
+    try { console.warn('Native form Save diagnostic', JSON.stringify({ stage, reason })); }
+    catch { /* Diagnostics cannot change action handling. */ }
+  };
   let retryableSign: SignRetry | undefined;
   let retryingSign: Promise<Awaited<ReturnType<SurfaceWidgetActionExecutor>>> | undefined;
   let confirmedDelivery: string | undefined;
@@ -341,25 +347,35 @@ export function createResponseActionController(config: ResponseActionControllerC
   const invokeDefinitionAction = async (input: Parameters<ResponseActionInvoker<SubmitResult>>[0], execution?: SaveResponseDraftOptions): Promise<Awaited<ReturnType<ResponseActionInvoker<SubmitResult>>>> => {
     const generation = epoch;
     const deliveryId = input.invocationContext?.invocationId ?? generateIdempotencyKey();
+    let save = false;
+    let effect = false;
+    let stage: 'controller-admission' | 'controller-validation' = 'controller-admission';
     try {
       current(generation);
       if (completionResult) throw new ControllerRefusal('operation-conflict');
       const [role, admission] = roleFor(input.document, input.actionRef);
+      save = role === 'saveInitial' || role === 'saveOwned';
       if (!['startApplication', 'saveInitial', 'saveOwned', 'prepare', 'paper'].includes(role)) throw new ControllerRefusal('action-unadmitted');
       requestFor(role, admission);
-      return await invokeResponseActionAsync(admission.document, input.actionRef, { ...input.ports,
+      stage = 'controller-validation';
+      const invocation = await invokeResponseActionAsync(admission.document, input.actionRef, { ...input.ports,
         dispatchHostEvent: () => { current(generation); publish('paper'); },
         resolveIdempotencyKey: () => deliveryId,
         dispatchEffect: async (_effect, detail) => {
+          effect = true;
           try {
             const transitionBindings = await perform(role, admission, freeze(structuredClone(detail.response)), {}, deliveryId,
               { nodeId: input.nodeId ?? null }, generation, undefined, execution);
             return { outcome: { type: 'serviceRequest', status: 'succeeded' }, transitionBindings };
-          } catch (error) { return { type: 'serviceRequest', status: 'failed', reason: fail(error, generation) }; }
+          } catch (error) { const reason = fail(error, generation); if (save) reportSaveFailure('controller-effect', reason);
+            return { type: 'serviceRequest', status: 'failed', reason }; }
         },
       }, input.nodeId, { ...input.invocationContext, invocationId: deliveryId });
+      if (save && !effect && invocation.status !== 'completed') reportSaveFailure('controller-validation', 'action-refused');
+      return invocation;
     } catch (error) {
-      return failure(input.document, input.actionRef, deliveryId, fail(error, generation));
+      const reason = fail(error, generation); if (save) reportSaveFailure(stage, reason);
+      return failure(input.document, input.actionRef, deliveryId, reason);
     }
   };
   const definitionInvoker: ResponseActionInvoker<SubmitResult> = input => invokeDefinitionAction(input);
