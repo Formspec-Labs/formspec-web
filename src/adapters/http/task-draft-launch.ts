@@ -1,3 +1,4 @@
+import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
 import canonicalize from 'canonicalize';
 import { snapshotFiniteJson } from '@formspec-org/surface';
 import type { FormResponse } from '@formspec-org/types';
@@ -56,6 +57,7 @@ export class HttpTaskDraftLaunch {
     check();
     const view = snapshotFiniteJson(raw) as unknown as VerifiedDraftEvidence;
     const response: FormResponse | undefined = view?.canonical_response;
+    assertTaskDraftWire(view?.taskDraft);
     if (!view || typeof view.draft_id !== 'string' || !view.draft_id.trim()
       || view.form_version_id !== this.selection.formVersionId || view.subject_ref !== this.owner
       || view.status !== 'in_progress' || !Number.isSafeInteger(view.draft_version) || view.draft_version < 1

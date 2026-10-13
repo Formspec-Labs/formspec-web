@@ -1,3 +1,4 @@
+import type { TaskDraftAssociation } from '../../../src/ports/task-draft.ts';
 import type { HttpResponseSigningPolicy } from '../../../src/adapters/http/response-signing.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { detachedSignatureProtectedHeader, encodeCoseSign1 } from '@formspec-org/integrity-cose';
@@ -53,7 +54,7 @@ function saveAction(method: 'POST' | 'PATCH') {
 const prepareAction = saveAction('PATCH');
 
 type CandidateGate = (input: { saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }) => Promise<{ assertCurrent: () => void }>;
-async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean, preSignCandidate?: CandidateGate, persistentSaving = true, prePrepareCandidate?: HttpResponseSigningPolicy['prePrepareCandidate']) {
+async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean, preSignCandidate?: CandidateGate, persistentSaving = true, prePrepareCandidate?: HttpResponseSigningPolicy['prePrepareCandidate'], taskAssociation?: TaskDraftAssociation) {
   const draftId = earlyCaseCreation === undefined ? 'owned-draft' : 'draft_01a11ca26d05793192f9f01f97ba9c0b';
   const draftKey: DraftKey = authenticated ? { ...key, subjectRef: 'oidc:owner' }
     : anonymousSubject ? { ...key, subjectRef: 'anon:owner' } : key;
@@ -131,9 +132,11 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   const build = () => {
     const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
     return createHttpAdapterCohort({ ...config, responseSigning: policy,
+      ...(taskAssociation ? { taskDraft: { key: draftKey, view: { ...view(), status: 'in_progress' as const, taskDraft: structuredClone(taskAssociation) } } } : {}),
       ...(earlyCaseCreation !== undefined ? { applicationLifecycle: { capabilities: { earlyCaseCreation, persistentSaving, formVersionId: 'publication-1' }, action: startAction } } : {}), ...(stateReading ? { qualifiedDraftState: statePolicy } : {}),
       ...(authenticated ? { accessToken: async () => { await state.tokenGate; return state.token; } } : { anonymousSessions: new AnonymousSessionBridge(config) }) });
   };
+  if (taskAssociation) state.taskDraft = structuredClone(taskAssociation);
   const cohort = build();
   const prepare = () => cohort.responseSigning!.prepare({ draftKey, definition, formVersionId: 'publication-1', response, source, locale: 'en-US', action: prepareAction });
   const sign = (preparation: PreparedResponseSigning, operationId = generateIdempotencyKey()) => cohort.responseSigning!.sign({
@@ -1523,4 +1526,29 @@ it('keeps broader infrastructure problem codes without exposing dynamic database
     expect(JSON.parse(warn.mock.calls[0][1]).error_code).toBe('INFRA-4090');
     expect(JSON.parse(warn.mock.calls[0][1])).not.toHaveProperty('detail');
   } finally { warn.mockRestore(); }
+});
+
+
+describe('pinned native task composition metadata', () => {
+  const association: TaskDraftAssociation = { version: 1, associationHash: `sha256:${'b'.repeat(64)}`, taskBindingHash: `sha256:${'c'.repeat(64)}`,
+    taskPrefill: { version: 1, editableDataPaths: ['/fullName'], readOnlyDataPaths: [] } };
+  it.each(['association', 'binding', 'partition', 'omission'] as const)('refuses %s drift on owned Save/Prepare and restoration reads', async drift => {
+    const test = await fixture(true, true, false, undefined, undefined, true, undefined, association);
+    const changed = structuredClone(association);
+    if (drift === 'association') Object.assign(changed, { associationHash: `sha256:${'d'.repeat(64)}` });
+    if (drift === 'binding') Object.assign(changed, { taskBindingHash: `sha256:${'d'.repeat(64)}` });
+    if (drift === 'partition') Object.assign(changed, { taskPrefill: { version: 1, editableDataPaths: [], readOnlyDataPaths: ['/fullName'] } });
+    if (drift === 'omission') delete (changed as { taskPrefill?: unknown }).taskPrefill;
+    test.state.taskDraft = changed;
+    await expect(test.save(saveAction('PATCH'))).rejects.toThrow('composition metadata changed');
+    await expect(test.prepare()).rejects.toThrow('composition metadata changed');
+    await expect(test.cohort.draftStore.readState!(test.draftKey)).rejects.toThrow('composition metadata changed');
+    expect(test.state.patchCount).toBe(0);
+  });
+  it('allows the separate signed-draft selector to evolve without changing the partition', async () => {
+    const test = await fixture(true, true, false, undefined, undefined, true, undefined, association);
+    test.state.taskDraft = { ...association, signedDraft: { draftId: test.draftId, expectedSignedDraftVersion: 1,
+      expectedSignedResponseHash: `sha256:${'d'.repeat(64)}`, associationHash: association.associationHash, taskBindingHash: association.taskBindingHash } };
+    await expect(test.cohort.draftStore.readState!(test.draftKey)).resolves.toHaveProperty('kind', 'active');
+  });
 });

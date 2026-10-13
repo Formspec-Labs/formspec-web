@@ -117,6 +117,10 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     qualifyReadState: statePolicy ? async (key, view, current) => {
       const owner = await ownerFor(key); current();
       const response = view.canonical_response;
+      if (taskDraftSelection && (view.taskDraft?.associationHash !== taskDraftSelection.view.taskDraft?.associationHash
+        || view.taskDraft?.taskBindingHash !== taskDraftSelection.view.taskDraft?.taskBindingHash
+        || canonicalize(view.taskDraft?.taskPrefill ?? null) !== canonicalize(taskDraftSelection.view.taskDraft?.taskPrefill ?? null)))
+        throw new Error('Task draft composition metadata changed');
       if (key.formUrl !== statePolicy.definition.url || key.formVersion !== statePolicy.definition.version
         || view.form_version_id !== statePolicy.formVersionId || !statePolicy.formVersionId.trim()
         || view.subject_ref !== owner.subjectRef || !response.id?.trim()
@@ -211,6 +215,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     ...signingPolicy, client: new HttpClient(httpConfig), drafts: draftStore, bindings: registry, fence,
     formIdFor: key => resolveFormId(key.formUrl, key.formVersion),
     resumeMetadata: config.resumeMetadata,
+    expectedTaskDraft: taskDraftSelection?.view.taskDraft ? structuredClone(taskDraftSelection.view.taskDraft) : undefined,
     ownerFor,
   });
   const readScopedState = (suppliedKey: DraftKey, read: (key: DraftKey, current: () => void) => Promise<DraftReadState | undefined>, assertCurrent: () => void = () => {}) => {

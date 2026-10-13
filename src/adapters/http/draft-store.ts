@@ -1,3 +1,4 @@
+import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { ownedDraftResumeSelection } from '../../config/owned-draft-resume.ts';
 import type { TaskDraftAssociation } from '../../ports/task-draft.ts';
@@ -103,6 +104,8 @@ export class HttpDraftStore implements DraftStore {
       });
       current();
       const response = view.canonical_response;
+      if (selection && view.taskDraft !== undefined) throw new Error('Task-owned draft requires its maintained task entry');
+      assertTaskDraftWire(view?.taskDraft);
       const { validateCanonicalFormResponse } = await import('../schema/surface-bundle-schema-validators.ts');
       if (view.draft_id !== binding.draftId || !response || !await validateCanonicalFormResponse(response)
         || !Number.isInteger(view.draft_version) || (view.draft_version ?? -1) < 0

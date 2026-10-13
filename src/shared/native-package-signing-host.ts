@@ -1,3 +1,4 @@
+import { assembleNativeTaskPrefill } from './native-task-prefill.ts';
 import { NATIVE_SOURCE_OPERATION_MILLISECONDS } from './native-operation-budget.ts';
 import { admitNativeHostEvents, type NativeHostEventCapability } from './native-host-events.ts';
 import type { NativeStructuredPanelWidget } from '../config/native-package-signing.ts';
@@ -314,6 +315,10 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   // Ownership survives retiring candidate evidence after edits. This detached
   // snapshot selects the owned branch only; the cohort requalifies its handle.
   let ownedResponseSeed: FormResponse | undefined;
+  const responseData = (data: FormResponse['data'], saved = publicSnapshot?.saved ?? input?.restoredSavedDraft) => {
+    if (policy.controller.completion?.kind !== 'task' || !saved?.evidence.taskDraft?.taskPrefill) return data;
+    return assembleNativeTaskPrefill(policy.definition, saved, data);
+  };
   let deliveryIdentity: string | undefined;
   let pendingDelivery: Promise<void> | undefined;
   let submitted: { referenceNumber: string; recordKind: 'response' } | undefined;
@@ -412,7 +417,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         assertCurrent: () => { assertCurrent(); facts.assertCurrent(); } });
       assertCurrent(); lease.rebind(replacement.engine);
     } catch (error) { replacement.dispose(); throw error; }
-    return same(replacement.engine.getResponse({ profile: 'off' }).data, saved.response.data);
+    return same(responseData(replacement.engine.getResponse({ profile: 'off' }).data, saved), saved.response.data);
   }
   let savedFactsRefresh: Promise<void> | undefined;
   let reviewedRefresh: { identity: string; promise: Promise<void> } | undefined;
@@ -489,7 +494,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function current(expected: number) { if (disposed || generation !== expected) throw new Error('native-context-obsolete'); }
   function stop(reason: Parameters<NativePackageSigningHostPolicy['invalidateAuthority']>[0]) {
-    if (reason === 'clear' || reason === 'dispose') { ownedDraftRestoration = undefined; application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; restoredScreenerCheckpoint = undefined; }
+    if (reason === 'clear' || reason === 'dispose') { ownedDraftRestoration = undefined; application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; restoredScreenerCheckpoint = undefined; if (input) input = { ...input, restoredSavedDraft: undefined }; }
     if ((reason === 'edit' || reason === 'locale') && ownedDraftRestoration) ownedDraftRestoration.visit = undefined;
     retireNative();
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
@@ -513,7 +518,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       engine.setLocale(activeLocale);
       await abortable(signal, engine.waitForInstanceSources()); check();
       await abortable(signal, engine.waitForRemoteOptions()); check();
-      if (native && !same(engine.getResponse({ profile: 'off' }).data, response.data)) throw new Error('native-isolated-candidate-changed');
+      if (native && !same(responseData(engine.getResponse({ profile: 'off' }).data, saved ?? publicSnapshot?.signed ?? publicSnapshot?.prepared ?? publicSnapshot?.saved ?? input?.restoredSavedDraft), response.data)) throw new Error('native-isolated-candidate-changed');
       return await run(engine);
     } finally { clearTimeout(timer); engine.dispose(); }
   }
@@ -611,7 +616,10 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         if (publicSnapshot.saved && ['saved', 'startApplication'].includes(publicSnapshot.phase)) { checkpointState = 'saved'; pendingCheckpoint = false; }
         else if (['failed', 'refused'].includes(publicSnapshot.phase)) { checkpointState = 'failed'; pendingCheckpoint = false; }
       }
-      if (authorityGeneration === expected && publicSnapshot.saved) { ownedResponseSeed = structuredClone(publicSnapshot.saved.response); freezeMetadata(ownedResponseSeed); }
+      if (authorityGeneration === expected && publicSnapshot.saved) {
+        ownedResponseSeed = structuredClone(publicSnapshot.saved.response); freezeMetadata(ownedResponseSeed);
+        if (input) input = { ...input, restoredSavedDraft: structuredClone(publicSnapshot.saved) };
+      }
       rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
       const selected = publicSnapshot.signed ?? publicSnapshot.prepared;
       const identity = selected ? canonicalize({ selected, locale, signed: !!publicSnapshot.signed }) : undefined;
@@ -714,7 +722,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           candidate.assertCurrent();
           if (!facts || disposed || cleared || authorityGeneration !== authority || visitEpoch !== visit || rendererLease !== lease
             || lease && !lease.active || nativeCandidate !== facts || !same(publicSnapshot?.saved, candidate.saved)
-            || !same(facts.saved, candidate.saved) || !rendererEngine || !same(rendererEngine.getResponse({ profile: 'off' }).data, candidate.saved.response.data)
+            || !same(facts.saved, candidate.saved) || !rendererEngine || !same(responseData(rendererEngine.getResponse({ profile: 'off' }).data, candidate.saved), candidate.saved.response.data)
             || candidate.response.id !== candidate.saved.response.id || candidate.response.definitionUrl !== candidate.saved.response.definitionUrl
             || candidate.response.definitionVersion !== candidate.saved.response.definitionVersion || !same(candidate.response.data, candidate.saved.response.data)
             || !same(candidate.response.displayedLocale, candidate.saved.response.displayedLocale)) throw new Error('native-prepare-candidate-mismatch');
@@ -935,6 +943,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           }
           const expected = authorityGeneration;
           await controller!.restoreSavedDraft(next.restoredSavedDraft); assertAdmission();
+          if (policy.controller.completion?.kind === 'task' && next.restoredSavedDraft.evidence.taskDraft?.taskPrefill) assembleNativeTaskPrefill(policy.definition, next.restoredSavedDraft, next.restoredSavedDraft.response.data);
           if (disposed || cleared || authorityGeneration !== expected) throw new Error('native-saved-restoration-retired');
         }
         if (next.restoredPendingSign) {
@@ -996,7 +1005,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           const explicitPrepare = action.actionRef === policy.controller.roles.prepare?.actionRef
             && same(action.document, policy.controller.roles.prepare.document);
           if (!native || !saved || explicitPrepare && (publicSnapshot?.signed || saved.response.authoredSignatures?.length)
-            || !['saved', 'failed'].includes(checkpointState) || !same(leasedEngine.getResponse({ profile: 'off' }).data, saved.response.data))
+            || !['saved', 'failed'].includes(checkpointState) || !same(responseData(leasedEngine.getResponse({ profile: 'off' }).data, saved), saved.response.data))
             throw new Error('native-saved-facts-refresh-unavailable');
           const assertSavedCurrent = (saving = false) => {
             lifetime.signal.throwIfAborted(); lifetime.assertCurrent(); assertCurrent();
@@ -1004,7 +1013,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
             if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
             if (!(saving && checkpointState === 'saving' && publicSnapshot?.phase === 'saveOwned' || ['saved', 'failed'].includes(checkpointState)) || !same(publicSnapshot?.saved, saved)
               || explicitPrepare && !!publicSnapshot?.signed
-              || !same(leasedEngine.getResponse({ profile: 'off' }).data, saved.response.data)) throw new Error('native-saved-facts-context-retired');
+              || !same(responseData(leasedEngine.getResponse({ profile: 'off' }).data, saved), saved.response.data)) throw new Error('native-saved-facts-context-retired');
             policy.assertOwner(saved.draftKey, saved.actor.id);
           };
           assertSavedCurrent();
@@ -1053,9 +1062,20 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           const response = leasedEngine.getResponse({ profile: options.validationTuple.persistence === 'complete-response' ? 'on-submit' : 'off', id: responseId });
           assertCurrent(); return { response, validationReport };
         } } } : action;
+        const taskPrefill = (publicSnapshot?.saved ?? input?.restoredSavedDraft)?.evidence.taskDraft?.taskPrefill;
+        const assembledInvocation = policy.controller.completion?.kind === 'task' && taskPrefill && invocation.ports.submit
+          ? { ...invocation, ports: { ...invocation.ports,
+            submit: (options: Parameters<NonNullable<typeof invocation.ports.submit>>[0]) => {
+              assertCurrent();
+              const detail = invocation.ports.submit!(options);
+              if (!detail) return detail;
+              const response = { ...detail.response, data: responseData(detail.response.data) };
+              assertCurrent(); return { ...detail, response };
+            } } }
+          : invocation;
         const result = hostEvents.owns(action.document, action.actionRef)
           ? await hostEvents.invoke(action, { signal: nativeLifetime.signal, assertCurrent, refreshSavedFacts })
-          : await controller!.definitionInvoker(invocation);
+          : await controller!.definitionInvoker(assembledInvocation);
         if (!active || disposed || authorityGeneration !== expected) throw new Error('native-renderer-retired');
         return result;
       }, semanticControlScope: scope,

@@ -12,6 +12,7 @@ export interface TaskDraftAssociation {
   readonly version: 1;
   readonly associationHash: string;
   readonly taskBindingHash: string;
+  readonly taskPrefill?: TaskPrefill;
   readonly signedDraft?: SignedTaskDraft;
 }
 
@@ -22,4 +23,11 @@ export interface TaskDraftLaunchSelection {
   readonly expectedTaskRevision: string;
   readonly formVersionId: string;
   readonly formVersionHash: string;
+}
+
+/** Source-verified flat native task composition partition. */
+export interface TaskPrefill {
+  readonly version: 1;
+  readonly editableDataPaths: readonly string[];
+  readonly readOnlyDataPaths: readonly string[];
 }

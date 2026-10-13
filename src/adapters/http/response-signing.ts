@@ -1,3 +1,4 @@
+import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import canonicalize from 'canonicalize';
 import { extractServiceRequestOutputs, hashSigningContent, planServiceRequest, resolveAuthoredSigningContent, resolveServiceRequest } from '@formspec-org/engine/render';
@@ -120,6 +121,7 @@ export interface HttpResponseSigningConfig extends HttpResponseSigningPolicy {
   formIdFor: (key: DraftKey) => string;
   ownerFor: (key: DraftKey) => Promise<{ token?: string; subjectRef: string }>;
   resumeMetadata?: DraftResumeMetadataStore;
+  expectedTaskDraft?: VerifiedDraftEvidence['taskDraft'];
 }
 
 export class HttpResponseSigning implements ResponseSigning {
@@ -563,6 +565,12 @@ export class HttpResponseSigning implements ResponseSigning {
   }
   private async validateView(context: PreparationContext, id: string, view: DraftView, actor: string): Promise<void> {
     const response = view?.canonical_response;
+    assertTaskDraftWire(view?.taskDraft);
+    const expectedTask = this.config.expectedTaskDraft;
+    if (expectedTask && (view.taskDraft?.associationHash !== expectedTask.associationHash
+      || view.taskDraft?.taskBindingHash !== expectedTask.taskBindingHash
+      || !same(view.taskDraft?.taskPrefill ?? null, expectedTask.taskPrefill ?? null)))
+      throw new Error('Task draft composition metadata changed');
     if (!view || view.draft_id !== id || view.form_version_id !== context.input.formVersionId
       || view.status !== 'in_progress' || view.subject_ref !== actor || !Number.isSafeInteger(view.draft_version) || view.draft_version < 0
       || !response || !await this.config.validateResponse(response)

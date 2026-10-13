@@ -1051,6 +1051,134 @@ describe('explicit correction host through the maintained native loader', () => 
     } finally { mounted.unmount(); boot?.host.dispose(); window.history.replaceState(null, '', '/'); }
   });
 
+  it.each(['pending', 'qualified'] as const)('preserves declared task prefill through Save with %s correction facts', async mode => {
+    const f = await correctionFixture();
+    const { hydrationFixture } = await import('../adapters/http/screener-hydration-fixture.ts');
+    const hydration = await hydrationFixture();
+    Object.assign(f.options.nativeTask.hydration, { receiptVerifier: { verify: async () => ({ validForMilliseconds: 60_000 }) } });
+    f.test.definition.binds!.push({ path: 'protectedRef', readonly: 'true', relevant: "@instance('facts').posture = 'correction'" });
+    f.test.definition.items.push({ key: 'protectedRef', type: 'field', dataType: 'uri', label: 'Protected reference' });
+    f.test.definition.instances!.facts = { source: 'urn:test:external', readonly: true };
+    const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    f.test.texts['definition.json'] = JSON.stringify(f.test.definition);
+    f.test.files.definition.sha256 = await rawDigest(f.test.texts['definition.json']);
+    f.test.texts['native.json'] = JSON.stringify(f.test.bundle);
+    f.test.files.nativeBundle.sha256 = await rawDigest(f.test.texts['native.json']);
+    f.test.publication.definition = structuredClone(f.test.definition);
+    f.test.publication.definition_hash = await computeJcsSha256Digest(f.test.definition);
+    f.options.nativeTask.hydration.selection.definitionHash = f.test.publication.definition_hash;
+    f.options.nativeTask.hydration.selection.requiredSources = ['urn:test:external'];
+    const seed = createFormEngine(f.test.definition);
+    if (mode === 'qualified') {
+      for (const document of Object.values(f.test.bundle.documents)) if (document && typeof document === 'object' && '$formspecLocale' in document) seed.loadLocale(document as LocaleDocument);
+      seed.setLocale('en');
+      for (const [key, value] of Object.entries({ renewalEligible: true, fullName: 'Neutral respondent', dateOfBirth: '1990-01-01', placeOfBirth: 'Neutral place', email: 'neutral@example.test', mailingAddress: 'Neutral address', priorPassportNumber: '000000000', priorPassportIssueDate: '2020-01-01', ssnIssued: false, neverIssuedStatement: 'Never issued', declarationAcknowledged: true })) seed.setValue(key, value);
+    } else seed.setValue('fullName', 'Retained task respondent');
+    const response = seed.getResponse({ profile: 'off', id: f.launched.canonical_response.id }); seed.dispose();
+    response.data.protectedRef = 'urn:test:protected';
+    Object.assign(f.launched.taskDraft, { taskPrefill: { version: 1, editableDataPaths: ['/photo'], readOnlyDataPaths: f.test.definition.items.filter(item => item.type === 'field' && item.key !== 'photo').map(item => '/' + item.key) } });
+    // Missing saved Locale makes the configured Locale settle during restoration.
+    if (mode === 'pending') expect(response.displayedLocale).toBeUndefined();
+    Object.assign(f.launched, { canonical_response: response, draft_state: response.data });
+    const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:task',
+      credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+    Object.assign(f.options.identityBinding.provider, {
+      discover: async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }],
+      authenticate: async () => claim,
+      subscribe: (listener: (value: typeof claim) => void) => { listener(claim); return () => {}; },
+    });
+    const sessionListeners = new Set<(value: BrowserAuthSessionState | null) => void>();
+    f.options.identityBinding.browserAuthSession.subscribe.mockImplementation(next => {
+      sessionListeners.add(next); return vi.fn(() => { sessionListeners.delete(next); });
+    });
+    const previousFetch = f.test.fetch.getMockImplementation()!;
+    const evaluations: AbortSignal[] = [];
+    const patches: { draft_state: unknown; canonical_response: FormResponse; expected_draft_version: number }[] = [];
+    f.test.fetch.mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/drafts/task-draft' && init?.method === 'PATCH') {
+        const patch = JSON.parse(init.body as string); patches.push(patch);
+        if (patch.canonical_response.data.protectedRef !== response.data.protectedRef) return Response.json({ detail: 'Protected task prefill differs' }, { status: 409 });
+        Object.assign(f.launched, { draft_version: f.launched.draft_version + 1, canonical_response: patch.canonical_response, draft_state: patch.draft_state });
+        return Response.json(f.launched);
+      }
+      if (path === '/drafts/task-draft' && (init?.method ?? 'GET') === 'GET') return Response.json(f.launched);
+      if (path === '/drafts/task-draft/evaluation-instances') {
+        evaluations.push(init!.signal!);
+        if (mode === 'qualified') {
+          const selection = f.options.nativeTask.hydration.selection;
+          const owner = { ...hydration.view.owner, subjectRef: 'oidc:task', authenticated: { ...hydration.view.owner.authenticated!, subjectRef: 'oidc:task', issuer: 'https://idp.test', subject: 'task-owner', clientId: 'task-client' } };
+          const request = { operation: 'hydrate', scope: selection.scope, owner, selection, formVersionHash: f.options.nativeTask.launch.formVersionHash, draftId: f.launched.draft_id, draftVersion: f.launched.draft_version, candidateHash: await computeJcsSha256Digest(f.launched.canonical_response), sources: { facts: 'urn:test:external' } };
+          const data = { posture: 'correction' };
+          return Response.json({ ...hydration.view, ...request, requestHash: await computeJcsSha256Digest(request), providerReceipt: f.launched.draft_version > 1 ? hydration.view.providerReceipt : null, results: f.launched.draft_version > 1 ? [{ ...hydration.view.results[0], status: 'qualified', instanceName: 'facts', sourceRef: 'urn:test:external', data, dataHash: await computeJcsSha256Digest(data) }] : [{ status: 'pending', instanceName: 'facts', sourceRef: 'urn:test:external', reason: 'task-origin-unavailable' }] }, { headers: { 'cache-control': 'no-store' } });
+        }
+        return new Promise<Response>((_resolve, reject) => {
+          init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true });
+        });
+      }
+      if ((init?.method ?? 'GET') !== 'GET' && path !== '/runtime/task-drafts') throw new Error('Unexpected business write');
+      return previousFetch(input, init);
+    });
+    const { HttpTaskCandidateHydration } = await import('../../src/adapters/http/task-candidate-hydration.ts');
+    const qualify = vi.spyOn(HttpTaskCandidateHydration.prototype, 'qualifySaved');
+    const composition = createDefaultComposition(f.config, f.options);
+    const route = dereferenceBundleExport(f.test.bundle).surfaces.flatMap(surface => surface.routes)
+      .find(route => route.slots?.some(slot => slot.slotType === 'definition-form'))!;
+    window.history.replaceState(null, '', route.path!);
+    const boot = await composition.nativePackageRespondent!.load();
+    let currentEngine!: Parameters<typeof boot.host.configureRuntime>[0]['engine'];
+    const configureRuntime = boot.host.configureRuntime.bind(boot.host);
+    const configured = vi.spyOn(boot.host, 'configureRuntime').mockImplementation(next => {
+      currentEngine = next.engine;
+      return configureRuntime({ ...next, exchangeEngine: next.exchangeEngine ? async replacement => {
+        const result = await next.exchangeEngine!(replacement); currentEngine = replacement.engine; return result;
+      } : undefined });
+    });
+    const mounted = render(createElement(NativePackageRuntime, { composition, config: f.config }));
+    try {
+      await vi.waitFor(() => expect(configured).toHaveBeenCalled());
+      await screen.findByRole('textbox', { name: /full legal name/i });
+      await vi.waitFor(() => expect(evaluations.length).toBeGreaterThan(0));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(evaluations.at(-1)!.aborted).toBe(false);
+      const photo = { kind: 'attachment-ref', uri: 'urn:formspec:attachment:staged-neutral-photo', filename: 'neutral.png',
+        contentType: 'image/png', mimeType: 'image/png', size: 1, hash: `sha256:${'d'.repeat(64)}` };
+      currentEngine.setValue('photo', photo);
+      expect(boot.host.getSnapshot().locale).toBe(mode === 'qualified' ? 'en' : '');
+      const savedBefore = structuredClone(response.data);
+      // The missing Locale leaves authored labels empty; the first admitted ActionButton is SaveOwned.
+      const save = mounted.container.querySelector<HTMLButtonElement>('button.formspec-action')!;
+      expect(save).not.toBeNull();
+      fireEvent.click(save);
+      await vi.waitFor(() => expect(boot.host.getSnapshot().controller?.phase).toBe('saved'));
+      await vi.waitFor(() => expect(patches).toHaveLength(1));
+      expect(patches[0].expected_draft_version).toBe(1);
+      expect(patches[0].draft_state).toEqual({ ...savedBefore, photo });
+      expect(patches[0].canonical_response.data).toEqual({ ...savedBefore, photo });
+      expect(f.launched.draft_version).toBe(2);
+      expect(boot.host.getSnapshot().controller?.saved?.draft.version).toBe(2);
+      expect(boot.host.getSnapshot().controller?.saved?.response.data).toEqual({ ...savedBefore, photo });
+      expect(boot.host.getSnapshot().controller?.prepared).toBeUndefined();
+      expect(boot.host.getSnapshot().controller?.signed).toBeUndefined();
+      expect(qualify).toHaveBeenCalled();
+      // Real adapter binding checks and engine replacement run; transport and
+      // original receipt verification are fixture-owned, not live Source proof.
+      if (mode === 'pending') {
+        const saved = boot.host.getSnapshot().controller!.saved!;
+        await expect(boot.host.prePrepareCandidate!({ saved, response: saved.response, assertCurrent: () => {} })).rejects.toThrow();
+        return;
+      }
+      await vi.waitFor(() => expect(boot.host.getSnapshot().nativeReadiness).toBe('ready'));
+      const saved = boot.host.getSnapshot().controller!.saved!;
+      await expect(boot.host.prePrepareCandidate!({ saved, response: saved.response, assertCurrent: () => {} })).resolves.toHaveProperty('assertCurrent');
+      expect(currentEngine.getResponse({ profile: 'off' }).data.protectedRef).toBe('urn:test:protected');
+      fireEvent.click(screen.getByRole('button', { name: /prepare/i }));
+      await vi.waitFor(() => expect(boot.host.getSnapshot().controller?.prepared).toBeDefined());
+      expect(boot.host.getSnapshot().controller!.prepared!.response.data).toEqual({ ...savedBefore, photo });
+      expect(patches).toHaveLength(2);
+    } finally { mounted.unmount(); boot?.host.dispose(); window.history.replaceState(null, '', '/'); }
+  });
+
   it('selects a native-only task without external hydration or initial draft creation', async () => {
     const f = await correctionFixture();
     const boot = await createDefaultComposition(f.config, f.options).nativePackageRespondent!.load();
