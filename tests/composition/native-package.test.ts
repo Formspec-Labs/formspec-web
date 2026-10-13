@@ -1003,3 +1003,87 @@ describe('explicit correction host through the maintained native loader', () => 
 it.each([null, false])('refuses a malformed explicit resume option outside native composition', ownedDraftResume => {
   expect(() => Reflect.apply(createDefaultComposition, undefined, [publicPortalProfile, { ownedDraftResume }])).toThrow('Owned draft resume requires native package admission');
 });
+
+// Studio's distribution runner supplies the exact exported public files. This
+// exercises maintained package/task admission and Surface, without a live launch.
+it.skipIf(!process.env.FORMSPEC_TASK_PACKAGE_PUBLIC_ROOT)('admits exported correction task package through maintained host and actual task route', async () => {
+  const publicRoot = process.env.FORMSPEC_TASK_PACKAGE_PUBLIC_ROOT!;
+  const manifest = JSON.parse(readFileSync(resolve(publicRoot, 'correction-package-manifest.json'), 'utf8'));
+  const selections = JSON.parse(readFileSync(resolve(publicRoot, 'task-role-selections.json'), 'utf8')) as { signing: import('../../src/config/native-package-signing.ts').NativePackageSigningConfig; deployment: { publication: { definitionHash: string } } }[];
+  const matches = selections.filter(selection => selection.signing.component?.handle === 'submit_correction');
+  expect(matches).toHaveLength(1);
+  const signing = matches[0].signing;
+  const definition = JSON.parse(readFileSync(resolve(publicRoot, manifest.files.definition.path), 'utf8'));
+  expect(await computeJcsSha256Digest(definition) === matches[0].deployment.publication.definitionHash).toBe(true);
+  const publication = JSON.parse(readFileSync(resolve(publicRoot, 'source-publication.json'), 'utf8'));
+  expect(await computeJcsSha256Digest(definition) === publication.definition_hash).toBe(true);
+  const f = await correctionFixture(false);
+  Object.assign(f.test.publication, { definition_url: definition.url, definition_version: definition.version,
+    definition_hash: await computeJcsSha256Digest(definition), definition });
+  Object.assign(f.options.nativeTask.completion, { definitionUrl: definition.url, definitionVersion: definition.version });
+  Object.assign(f.options.nativeTask.hydration.selection, { definitionUrl: definition.url, definitionVersion: definition.version,
+    definitionHash: f.test.publication.definition_hash,
+    requiredSources: Object.values(definition.instances ?? {}).flatMap((instance: unknown) => {
+      const source = (instance as { source?: string }).source; return typeof source === 'string' ? [source] : [];
+    }) });
+  const retainedEngine = createFormEngine(definition);
+  retainedEngine.setValue('fullName', 'Retained task respondent');
+  retainedEngine.setValue('photo', { kind: 'attachment-ref', uri: 'urn:formspec:attachment:retained-task-photo', filename: 'retained.png', contentType: 'image/png', mimeType: 'image/png', size: 1, hash: `sha256:${'a'.repeat(64)}` });
+  const response = retainedEngine.getResponse({ profile: 'off', id: f.launched.canonical_response.id }); retainedEngine.dispose();
+  Object.assign(f.launched, { canonical_response: response, draft_state: response.data });
+  const previousFetch = f.test.fetch.getMockImplementation()!;
+  const transports: { path: string; method: string }[] = [];
+  f.test.fetch.mockImplementation(async (input, init) => {
+    const url = new URL(String(input), window.location.origin);
+    transports.push({ path: url.pathname, method: init?.method ?? 'GET' });
+    if (url.origin === window.location.origin) return new Response(readFileSync(resolve(publicRoot, '.' + url.pathname)));
+    if (url.origin === 'https://server.example.test' && url.pathname === '/drafts/task-draft' && (init?.method ?? 'GET') === 'GET') return Response.json(f.launched);
+    throwIfBusinessWrite(url, init);
+    return previousFetch(input, init);
+  });
+  const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:task',
+    credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+  Object.assign(f.options.identityBinding.provider, {
+    discover: async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }],
+    authenticate: async () => claim,
+    subscribe: (listener: (value: typeof claim) => void) => { listener(claim); return () => {}; },
+  });
+  const { HttpTaskCandidateHydration } = await import('../../src/adapters/http/task-candidate-hydration.ts');
+  const qualification = vi.spyOn(HttpTaskCandidateHydration.prototype, 'qualifySaved').mockRejectedValue(new Error('Offline admission does not qualify Source evidence'));
+  const hostPolicy = vi.spyOn(nativeHostModule, 'createNativePackageSigningHost');
+  const deployment = JSON.parse(readFileSync(resolve(publicRoot, 'browser-host-deployment.json'), 'utf8')) as {
+    taskHostEvents: { definition: { url: string; version: string }; bindings: { artifactRef: string; actionRef: string; eventName: string }[] }[];
+  };
+  const bindings = deployment.taskHostEvents.find(row => row.definition.url === signing.definition.url
+    && row.definition.version === signing.definition.version)?.bindings ?? [];
+  // Same maintained savedFactsHostEvents handler selected by browser-task-signing.
+  const hostEvents: NonNullable<import('../../src/composition/native-package.ts').NativePackageCompositionOptions['hostEvents']> = bindings.map(binding => ({ ...binding,
+    async handle({ signal, assertCurrent, refreshSavedFacts }) {
+      signal.throwIfAborted(); assertCurrent();
+      await refreshSavedFacts();
+      signal.throwIfAborted(); assertCurrent();
+    },
+  }));
+  const config = resolveActiveConfig(f.config, { nativePackageSigning: signing });
+  const composition = createDefaultComposition(config, { ...f.options, hostEvents, packageUrl: '/correction-package-manifest.json' });
+  window.history.replaceState(null, '', '/task-response');
+  const mounted = render(createElement(NativePackageRuntime, { composition, config }));
+  let boot: Awaited<ReturnType<NonNullable<typeof composition.nativePackageRespondent>['load']>> | undefined;
+  try {
+    boot = await composition.nativePackageRespondent!.load();
+    expect(hostPolicy.mock.calls.at(-1)![0].candidateHydration).toBeDefined();
+    expect(hostPolicy.mock.calls.at(-1)![0].initialDataSources).toBeUndefined();
+    await screen.findByRole('textbox', { name: /full legal name/i });
+    expect((screen.getByRole('textbox', { name: /full legal name/i }) as HTMLInputElement).value).toBe('Retained task respondent');
+    expect(JSON.stringify(boot.host.getSnapshot().controller?.saved?.response.data) === JSON.stringify(response.data)).toBe(true);
+    expect(boot.host.getSnapshot().controller?.prepared).toBeUndefined();
+    expect(boot.host.getSnapshot().controller?.signed).toBeUndefined();
+    await vi.waitFor(() => expect(qualification).toHaveBeenCalled());
+    // The maintained fixture resolves one retained task launch; no application
+    // writes, upload, Save, Sign or task submission reach the transport.
+    expect(transports.filter(request => request.method !== 'GET')).toEqual([{ path: '/runtime/task-drafts', method: 'POST' }]);
+  } finally { mounted.unmount(); boot?.host.dispose(); window.history.replaceState(null, '', '/'); }
+});
+function throwIfBusinessWrite(url: URL, init?: RequestInit) {
+  if ((init?.method ?? 'GET') !== 'GET' && url.pathname !== '/runtime/task-drafts') throw new Error('Offline package admission prohibits business writes');
+}
