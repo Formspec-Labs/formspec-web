@@ -201,14 +201,15 @@ export function createResponseActionController(config: ResponseActionControllerC
     if (role === 'startApplication' && (!config.applicationLifecycle?.capabilities.earlyCaseCreation
       || config.applicationLifecycle.capabilities.formVersionId !== context.publication.formVersionId || signed)) throw new ControllerRefusal('branch-mismatch');
     if (restored?.authoredSignatures?.length && !signed) throw new ControllerRefusal('restoration-unresolved');
-    const wording = freeze(structuredClone(config.signingContext()));
+    const unsignedCheckpoint = role === 'saveInitial' || role === 'saveOwned' || role === 'startApplication';
+    const wording = unsignedCheckpoint ? null : freeze(structuredClone(config.signingContext()));
     const subject = role === 'sign' ? prepared : role === 'submit' ? signed : saved;
     if (role === 'sign' || role === 'submit') {
       if (!subject || !same(subject.response, response)) throw new ControllerRefusal('context-mismatch');
-      if (!recoveringSign) review(subject as PreparedResponseSigning, role === 'sign' ? 'unsigned' : 'signed', wording);
+      if (!recoveringSign) review(subject as PreparedResponseSigning, role === 'sign' ? 'unsigned' : 'signed', wording!);
       if (role === 'sign' && (input.draftId !== subject.draft.id || input.draftVersion !== subject.draft.version
         || input.responseId !== response.id || input.responseHash !== subject.draft.responseHash
-        || !same(input.source, wording.source) || input.locale !== wording.locale
+        || !same(input.source, wording!.source) || input.locale !== wording!.locale
         || typeof input.signerName !== 'string' || !input.signerName.trim() || input.consentAccepted !== true)) throw new ControllerRefusal('context-mismatch');
       if (role === 'submit' && (input.draftId !== subject.draft.id || input.draftVersion !== subject.draft.version
         || !same(input.canonical_response, response))) throw new ControllerRefusal('context-mismatch');
@@ -284,14 +285,14 @@ export function createResponseActionController(config: ResponseActionControllerC
         publish('saved');
       } else if (role === 'prepare') {
         const preparation = await config.signing.prepare({ ...context, formVersionId: context.publication.formVersionId,
-          response, source: wording.source, locale: wording.locale, action });
+          response, source: wording!.source, locale: wording!.locale, action });
         current(generation); await checkEvidence(preparation, response); current(generation);
-        if (!same(preparation.content.source, wording.source) || preparation.content.locale !== wording.locale) throw new ControllerRefusal('context-mismatch');
+        if (!same(preparation.content.source, wording!.source) || preparation.content.locale !== wording!.locale) throw new ControllerRefusal('context-mismatch');
         prepared = preparation; saved = preparation; actor = preparation.actor.id;
         result = preparation;
         publish('prepared');
       } else if (role === 'sign') {
-        if (!recoveringSign) review(prepared!, 'unsigned', wording);
+        if (!recoveringSign) review(prepared!, 'unsigned', wording!);
         if (config.reconcileSignRetries && signRetry) operation.signRetry = signRetry;
         const signature = await config.signing.sign({ preparation: prepared!, operationId: operation.operationId,
           assent: { signerName: input.signerName as string, consentAccepted: true }, action });
@@ -309,7 +310,7 @@ export function createResponseActionController(config: ResponseActionControllerC
           operation.completionPreparation = await completion!.capture({ signed: signed!, request: request!, invocationInput: input, submitOptions }, completionLifetime);
         }
         current(generation);
-        review(signed!, 'signed', wording);
+        review(signed!, 'signed', wording!);
         const result = freeze(structuredClone(await completion!.complete(operation.completionPreparation, operation.operationId, completionLifetime)));
         current(generation);
         if (result.kind !== completion!.kind) throw new ControllerRefusal('context-mismatch');

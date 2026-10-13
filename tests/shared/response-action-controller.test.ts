@@ -884,3 +884,32 @@ it('captures the pending operation key and candidate before asynchronous restora
   expect(restorePending.mock.calls[0][1]).toBe(original.operationId);
   expect(baseline.sign.mock.calls[0][0].operationId).toBe(original.operationId);
 });
+
+describe('unsigned checkpoints without signing wording', () => {
+  it('saves initial and owned checkpoints without invoking signing context', async () => {
+    const signingContext = vi.fn(() => { throw new Error('Signing wording unavailable'); });
+    const test = fixture({ signingContext });
+    expect(await test.definition('saveInitial')).toMatchObject({ status: 'completed' });
+    expect(await test.definition('saveOwned')).toMatchObject({ status: 'completed' });
+    expect(signingContext).not.toHaveBeenCalled(); expect(test.saveDraft).toHaveBeenCalledTimes(2);
+    expect(await test.definition('prepare')).toMatchObject({ status: 'failed' });
+    expect(signingContext).toHaveBeenCalledOnce(); expect(test.prepare).not.toHaveBeenCalled();
+  });
+  it('starts an admitted application without invoking signing context', async () => {
+    const signingContext = vi.fn(() => { throw new Error('Signing wording unavailable'); });
+    const test = lifecycleFixture(true, { signingContext });
+    expect(await test.definition('startApplication')).toMatchObject({ status: 'completed' });
+    expect(signingContext).not.toHaveBeenCalled(); expect(test.startApplication).toHaveBeenCalledOnce();
+  });
+  it.each(['sign', 'submit'] as const)('retains signing context admission for %s', async role => {
+    let available = true;
+    const signingContext = vi.fn(() => { if (!available) throw new Error('Signing wording unavailable'); return { source, locale: 'en' }; });
+    const test = fixture({ signingContext }); const preparation = await test.ready();
+    if (role === 'submit') await test.widget('sign', preparation);
+    const selected = role === 'submit' ? test.controller.getSnapshot().signed! : preparation;
+    available = false; signingContext.mockClear();
+    expect(await test.widget(role, selected)).toMatchObject({ status: 'failed' });
+    expect(signingContext).toHaveBeenCalledOnce(); expect(test.submit).not.toHaveBeenCalled();
+    expect(test.sign).toHaveBeenCalledTimes(role === 'submit' ? 1 : 0);
+  });
+});
