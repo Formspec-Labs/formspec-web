@@ -30,6 +30,22 @@ describe('bounded native Prepare diagnostic', () => {
 });
 
 describe('closed native qualification diagnostic', () => {
+  it('distinguishes the maintained HTTP timeout from the whole-operation deadline and unknown failures', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const report = createNativeQualificationReporter();
+    for (const error of [
+      new DOMException('HTTP request timed out', 'TimeoutError'),
+      new Error('native-facts-deadline'),
+      new Error('HTTP request timed out'),
+      new DOMException('private timeout detail', 'TimeoutError'),
+    ]) report('source-qualification', error);
+    expect(warn.mock.calls.map(call => JSON.parse(call[1]))).toEqual([
+      { stage: 'source-qualification', reason: 'http-timeout' },
+      { stage: 'source-qualification', reason: 'deadline' },
+      { stage: 'source-qualification', reason: 'qualification-failed' },
+      { stage: 'source-qualification', reason: 'qualification-failed' },
+    ]);
+  });
   it('distinguishes success, later retirement, and HTTP failure without private context', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const report = createNativeQualificationReporter();

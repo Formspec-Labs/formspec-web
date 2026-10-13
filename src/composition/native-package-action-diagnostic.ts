@@ -69,6 +69,7 @@ export function createNativeQualificationReporter() {
       const status = error instanceof HttpAdapterError && Number.isInteger(error.status)
         && error.status >= 100 && error.status <= 599 ? error.status : undefined;
       const reason = error === undefined ? 'ready' : status !== undefined ? 'http-refused'
+        : error instanceof DOMException && error.name === 'TimeoutError' && error.message === 'HTTP request timed out' ? 'http-timeout'
         : error instanceof Error ? qualificationReasons.get(error.message) ?? 'qualification-failed' : 'qualification-failed';
       console.warn('Native form qualification diagnostic', JSON.stringify({ stage, reason,
         ...(status !== undefined ? { status } : {}) }));
