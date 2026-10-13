@@ -26,6 +26,8 @@ import { createTaskComposition } from '../../src/composition/task.ts';
 import { detachedSignatureProtectedHeader, encodeCoseSign1 } from '@formspec-org/integrity-cose';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
+import { HttpTaskCompletion } from '../../src/adapters/http/task-completion.ts';
+import { createTaskResponseCompletion } from '../../src/shared/task-response-completion.ts';
 import { HttpTaskCandidateHydration } from '../../src/adapters/http/task-candidate-hydration.ts';
 import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts';
 import type { ScreenerAssociation, ScreenerRetention } from '../../src/ports/screener-retention.ts';
@@ -975,7 +977,7 @@ describe('native authored host event routing', () => {
 // Neutral lifetime tests use public engines and, where selected, the actual task adapter
 // with an explicitly mocked receipt verifier; they do not qualify Source proof accuracy.
 describe('explicit reviewed-candidate facts renewal', () => {
-  function nativeFixture(currentCheck = false, lifetimeMilliseconds = 90_000, reportsLifetime = true, actualTaskAdapter = false) {
+  function nativeFixture(currentCheck = false, lifetimeMilliseconds = 90_000, reportsLifetime = true, actualTaskAdapter = false, actualTaskCompletion = false) {
     let now = 0; let data = { qualified: true, evidenceRef: 'proof-one' }; let refuse = false;
     let hold: Promise<void> | undefined; let activeGeneration = 0;
     let runId = 'fresh-run-original';
@@ -983,6 +985,8 @@ describe('explicit reviewed-candidate facts renewal', () => {
     let taskSaved: SavedResponseDraft;
     let taskTemplate: Awaited<ReturnType<typeof hydrationFixture>>;
     let authorityRetired = false;
+    const taskPosts = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ taskId: taskSelection.taskId, processId: taskSelection.processId, outcome: 'completed', newStatus: 'submitted', occurredAt: '2026-10-13T12:00:00Z' }));
+    const taskSelection = { processId: 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db', taskId: 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db/tasks/neutral-correction', definitionUrl: sampleFormDefinition.url, definitionVersion: sampleFormDefinition.version };
     const taskAssociation = { version: 1 as const, associationHash: `sha256:${'b'.repeat(64)}`, taskBindingHash: `sha256:${'c'.repeat(64)}` };
     const qualify = vi.fn(async (saved: SavedResponseDraft, lifetime: { assertCurrent: () => void }) => {
       if (actualTaskAdapter) {
@@ -1052,6 +1056,25 @@ describe('explicit reviewed-candidate facts renewal', () => {
       const request = document['x-formspec-runtime']!.requests.find(request => request.id === 'sign')!;
       document['x-formspec-runtime']!.requests.push({ ...structuredClone(request), id: 'submit', request: { ...request.request, pathTemplate: '/drafts/{draftId}/submit' } });
       policy.controller.roles.submit = { ...signRole, actionRef: 'submit', requestRef: 'submit', widgetSource: { ...signRole.widgetSource!, outputName: 'submit' } };
+      if (actualTaskCompletion) {
+        const submitRequest = document['x-formspec-runtime']!.requests.find(request => request.id === 'submit')!;
+        submitRequest.request = { method: 'POST', pathTemplate: '/api/v1/tasks/{taskId}/response',
+          pathBindings: { taskId: { from: 'input', path: 'taskId' } },
+          bodyDefaults: { definitionUrl: taskSelection.definitionUrl, definitionVersion: taskSelection.definitionVersion },
+          bodyBindings: { '/response': { from: 'input', path: 'frozenResponse' }, '/signedDraft': { from: 'input', path: 'signedDraft' } } };
+        policy.controller.completion = createTaskResponseCompletion({ selection: taskSelection,
+          transport: new HttpTaskCompletion({ baseUrl: 'https://neutral-wos.test', selection: taskSelection, accessToken: 'neutral-token',
+            assertCurrentAuth: () => { if (authorityRetired) throw new Error('test task authority retired'); }, fetchImpl: taskPosts }) });
+        const originalSign = policy.controller.signing.sign;
+        policy.controller.signing.sign = async input => {
+          const signed = await originalSign(input);
+          return { ...signed, evidence: { ...signed.evidence, taskDraft: { ...taskAssociation, signedDraft: {
+            draftId: signed.draft.id, expectedSignedDraftVersion: signed.draft.version,
+            expectedSignedResponseHash: await computeJcsSha256Digest(signed.response),
+            associationHash: taskAssociation.associationHash, taskBindingHash: taskAssociation.taskBindingHash } } } };
+        };
+      }
+
 
     }, actualTaskAdapter ? 'server-actor' : undefined);
     const assent = async () => {
@@ -1070,7 +1093,7 @@ describe('explicit reviewed-candidate facts renewal', () => {
       return 'invocation' in result ? result.invocation : result;
     };
     const cleanup = () => { test.host.dispose(); test.engine.dispose(); test.replacements.forEach(engine => engine.dispose()); };
-    return { ...test, qualify, assent, changeSelector: () => { runId = 'fresh-run-newer'; }, signAction: sign, cleanup, advance: (value: number) => { now = value; },
+    return { ...test, qualify, assent, taskPosts, taskSelection, changeSelector: () => { runId = 'fresh-run-newer'; }, signAction: sign, cleanup, advance: (value: number) => { now = value; },
       change: () => { data = { qualified: false, evidenceRef: 'proof-two' }; },
       changeProvenance: () => { data = { qualified: true, evidenceRef: 'proof-two' }; },
       correct: () => { data = { qualified: true, evidenceRef: 'proof-three' }; }, retireAuthority: () => { authorityRetired = true; }, refuse: () => { refuse = true; }, hold: (value: Promise<void>) => { hold = value; } };
@@ -1309,6 +1332,42 @@ describe('explicit reviewed-candidate facts renewal', () => {
     expect(test.replacements.at(-1)!.getInstanceData('readiness', 'ready')).toBe(true);
     expect(test.replacements.at(-1)!.getInstanceData('readiness', 'prepareReady')).toBe(false);
     lease.dispose(); test.cleanup();
+  });
+  it.each(['unchanged', 'changed findings', 'retired authority'] as const)('composes actual task hydration and separate signed Submit after expiry with %s', async mode => {
+    vi.useFakeTimers();
+    const test = nativeFixture(false, 90_000, true, true, true);
+    try {
+      await test.prepared(); await test.assent();
+      expect((await test.signAction()).status).toBe('completed'); await test.assent();
+      const signed = structuredClone(test.host.getSnapshot().controller!.signed!);
+      const qualificationCount = test.qualify.mock.calls.length;
+      test.advance(120_000); vi.advanceTimersByTime(90_000);
+      expect(test.host.getSnapshot().nativeReadiness).toBe('expired');
+      if (mode === 'changed findings') test.change();
+      if (mode === 'retired authority') test.retireAuthority();
+      const admission = test.policy.controller.roles.submit!;
+      const result = await test.host.widgetExecutor({ document: admission.document, actionRef: admission.actionRef,
+        invocationId: 'neutral-expired-task-submit', source: admission.widgetSource!,
+        responseContext: { inputName: 'response', source: { catalogRef: 'urn:test:catalog', sourceRef: 'host:response' },
+          definition: test.policy.definition, response: signed.response },
+        input: { draftId: signed.draft.id, draftVersion: signed.draft.version, canonical_response: signed.response as never } });
+      const invocation = 'invocation' in result ? result.invocation : result;
+      expect(test.host.getSnapshot().controller!.signed).toEqual(signed); expect(test.sign).toHaveBeenCalledOnce();
+      if (mode === 'unchanged') {
+        expect(invocation.status).toBe('completed'); expect(test.taskPosts).toHaveBeenCalledOnce();
+        expect(test.qualify.mock.calls.length).toBe(qualificationCount + 1);
+        const [url, init] = test.taskPosts.mock.calls[0];
+        expect(url).toBe(`https://neutral-wos.test/api/v1/tasks/${encodeURIComponent(test.taskSelection.taskId)}/response`);
+        const submitted = JSON.parse(init!.body as string);
+        expect(submitted).toEqual({ definitionUrl: signed.response.definitionUrl,
+          definitionVersion: signed.response.definitionVersion, response: signed.response, signedDraft: signed.evidence.taskDraft!.signedDraft });
+        expect(canonicalResponseSignedPayloadBytes(submitted.response)).toEqual(canonicalResponseSignedPayloadBytes(signed.response));
+        expect(signed.evidence.taskDraft!.signedDraft!.expectedSignedDraftVersion).toBe(signed.draft.version);
+      } else {
+        expect(invocation.status).toBe('failed'); expect(test.taskPosts).not.toHaveBeenCalled();
+        if (mode === 'changed findings') expect(await test.load('review')).toMatchObject({ value: { state: { status: 'pending' } } });
+      }
+    } finally { test.cleanup(); vi.useRealTimers(); }
   });
   it('renews actual task adapter facts after long reading with exact response and assent', async () => {
     vi.useFakeTimers();
