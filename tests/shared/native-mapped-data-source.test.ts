@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { resolveDataSourceDescriptor } from '@formspec-org/surface';
 import type { DataSourcesDocument, MappingDocument } from '@formspec-org/types';
-import { createNativeMappedDataSource, type NativeMappedDataSourceInput } from '../../src/shared/native-mapped-data-source.ts';
+import { createNativeMappedDataSource, type NativeMappedDataSourceInput } from 'formspec-web/shared';
 
 function fixture() {
   const catalog: DataSourcesDocument = { $formspecDataSources: '1.0', id: 'urn:test:catalog', version: '1', sources: [{

@@ -9,6 +9,7 @@ export {
 export { assertProblemJson, isProblemJson, type ProblemJson } from './problem-json.ts';
 export { createFrozenHostStateDataSourceRuntime, type FrozenHostStateDataInput } from './frozen-host-state-data.ts';
 export { createResponseSigningDataSourceRuntime, type ResponseSigningDataInput } from './response-signing-data.ts';
+export { createNativeMappedDataSource, type NativeMappedDataSourceInput } from './native-mapped-data-source.ts';
 
 export { matchBrowserAuthCallback, completeBrowserAuthCallback, type BrowserAuthCallbackUris, type AuthCallbackKind } from './browser-auth-callback.ts';
 
