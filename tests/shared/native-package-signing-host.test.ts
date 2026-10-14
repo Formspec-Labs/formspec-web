@@ -1,4 +1,9 @@
 import { createHash } from 'node:crypto';
+import { createElement } from 'react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { NativePackageRespondentHost } from '../../src/app/NativePackageRespondentHost.tsx';
+import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
+import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -7,7 +12,7 @@ import { createFormEngine, hashSigningContent } from '@formspec-org/engine/rende
 import { createSemanticControlRegistry } from '@formspec-org/react';
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import { composeSurfaceApp, flattenRegistryEntries, dereferenceBundleExport, resolveDataSourceDescriptor, planStaticContent, type BundleExport } from '@formspec-org/surface';
-import { deriveSurfaceRuntimeGeneration, responseReviewHash, starterWidgetModule, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE, type ResponseReviewData } from '@formspec-org/surface-react';
+import { SIGNING_CEREMONY_WIDGET_SHAPE, deriveSurfaceRuntimeGeneration, responseReviewHash, starterWidgetModule, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE, type ResponseReviewData } from '@formspec-org/surface-react';
 import type { DataSourcesDocument, FormResponse, LocaleDocument, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
 import { createNativePackageSigningHost, captureFields, type NativePackageSigningHostPolicy } from '../../src/shared/native-package-signing-host.ts';
@@ -131,7 +136,7 @@ function siblingModulePolicy(test: ReturnType<typeof fixture>) {
 }
 
 describe('generic native package signing session', () => {
-  it.each(['current', 'retired during read'] as const)('reads and restores only a current Source signed task in a fresh native host: %s', async mode => {
+  it.each(['current', 'retired during read', 'delayed outcome unknown'] as const)('reads and restores only a current Source signed task in a fresh native host: %s', async mode => {
     const baseline = fixture(); baseline.host.dispose(); baseline.engine.dispose();
     const { policy } = baseline;
     const source = policy.signingContext('en').source;
@@ -167,13 +172,15 @@ describe('generic native package signing session', () => {
       processId: 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db', definitionUrl: response.definitionUrl, definitionVersion: response.definitionVersion };
     let sourceCurrent = true; let retireDuringRead = false;
     const fetchImpl = vi.fn(async () => { if (retireDuringRead) sourceCurrent = false; return Response.json(view); });
-    const complete = vi.fn(async () => Response.json({ taskId: selection.taskId, processId: selection.processId, outcome: 'completed',
-      newStatus: 'submitted', occurredAt: '2026-10-08T12:05:00Z' }));
+    const complete = vi.fn(async () => {
+      if (mode === 'delayed outcome unknown') return new Promise<Response>(() => {});
+      return Response.json({ taskId: selection.taskId, processId: selection.processId, outcome: 'completed',
+      newStatus: 'submitted', occurredAt: '2026-10-08T12:05:00Z' }); });
     const cohort = await createTaskComposition({ source: { baseUrl: 'https://source.test', accessToken: 'respondent', fetchImpl,
       tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } } },
       wos: { baseUrl: 'https://wos.test', accessToken: 'respondent', fetchImpl: complete },
       launch: { version: 1, taskId: selection.taskId, expectedTaskRevision: 'neutral-task-revision', formVersionId: 'publication', formVersionHash: `sha256:${'a'.repeat(64)}` },
-      completion: selection, draftKey: { formUrl: response.definitionUrl, formVersion: response.definitionVersion, subjectRef: 'server-actor' },
+      completionTimeoutMs: 10_000, completion: selection, draftKey: { formUrl: response.definitionUrl, formVersion: response.definitionVersion, subjectRef: 'server-actor' },
       formId: 'form', definition: policy.definition, locales: [locale], signing: { validateResponse: validateCanonicalFormResponse, validateContent,
         signingProfileDigest: async value => createHash('sha256').update(canonicalResponseSignedPayloadBytes(value)).digest('hex'), keyId: 'key',
         preSignCandidate: async () => ({ assertCurrent() {} }) }, resumeMetadata: { read: () => undefined, write() {}, remove() {} },
@@ -200,10 +207,34 @@ describe('generic native package signing session', () => {
     document['x-formspec-runtime']!.requests.push(...submitRole.document['x-formspec-runtime']!.requests);
     submitRole.document = document;
     policy.controller.roles.submit = submitRole; policy.controller.completion = cohort.completion; policy.controller.signing = cohort.responseSigning;
+    const application = { caseLedgerId: 'urn:wos:neutral-case', caseReference: 'APP-TEST', draftRef: 'urn:formspec:draft:owned-id', status: 'in-progress' as const };
+    const loadApplication = vi.fn(async () => ({ ...application, status: 'submitted' as const }));
+    if (mode === 'delayed outcome unknown') {
+      const registry = { $formspecRegistry: '1.1', publisher: { name: 'Test' }, published: '2026-01-01T00:00:00Z', entries: [
+        { name: 'test', category: 'module', version: '0.1.0', status: 'stable', description: 'Neutral signing module', compatibility: { formspecVersion: '>=1.0.0' }, contributes: ['x-neutral-signing'] },
+        { name: 'x-neutral-signing', category: 'widget', version: '0.1.0', status: 'stable', description: 'Neutral signing widget', compatibility: { formspecVersion: '>=1.0.0' }, widgetShape: SIGNING_CEREMONY_WIDGET_SHAPE },
+      ] };
+      (policy.bundle.documents[policy.bindings.response.catalogRef] as DataSourcesDocument).sources.find(entry => entry.id === 'host:response')!.schema = { $ref: 'https://formspec.org/schemas/response/1.0' };
+      document.actions.find(action => action.id === 'submit')!.label = { literal: 'Submit' };
+      submitRole.widgetSource!.route.surfaceRef = 'urn:test:surface';
+      policy.controller.roles.sign!.widgetSource!.route.surfaceRef = 'urn:test:surface';
+      policy.bundle = { ...policy.bundle, manifest: { ...policy.bundle.manifest, responseActions: undefined, responseActionDocuments: [{ url: 'urn:test:actions' }], registries: [{ url: 'urn:test:registry' }], surfaces: [{ url: 'urn:test:surface' }], entrySurface: 'urn:test:surface' }, documents: { ...policy.bundle.documents,
+        'urn:test:registry': registry, 'urn:test:surface': { $formspecSurface: '0.3', id: 'surface', entry: 'review', routes: [{ id: 'review', path: '/review', routeClass: 'ceremony', slots: [{ id: 'review', slotType: 'module-widget', binding: {
+          moduleId: 'test', widgetName: 'SigningCeremony', config: { requireResponseReview: false, contentRefs: { en: source }, copy: { en: {
+            heading: 'Review signed response', readInstruction: 'Read the declaration', readConfirmation: 'I read it', signerName: 'Name', pending: 'Submitting', signed: 'Signed response saved', failed: 'Submission failed', unavailable: 'Unavailable',
+          } } }, dataBindings: Object.fromEntries(['content', 'response', 'draft', 'actor', 'signingResult', 'actionLabels'].map(name => [name, policy.bindings[name]])), actionBindings: { submit: { actionRef: 'submit', responseInput: 'response' } },
+        } }] }] },
+      } };
+      policy.registryEntries = flattenRegistryEntries(dereferenceBundleExport(policy.bundle).registries).entries;
+      policy.definition.instances!.readiness.data = { owned: false, ready: false, canStart: false, started: false, persistentSaving: false };
+      policy.applicationReadiness = { instance: 'readiness', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' };
+      policy.controller.roles.startApplication = policy.controller.roles.saveInitial;
+      policy.controller.applicationLifecycle = { capabilities: { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'publication' }, start: vi.fn(), load: loadApplication };
+    }
     const host = createNativePackageSigningHost(policy); const engine = createFormEngine(policy.definition);
     engine.loadLocale(locale); engine.setLocale('en'); engine.loadResponseData(response.data as Parameters<typeof engine.loadResponseData>[0]);
     const lease = await host.configureRuntime({ engine, definition: policy.definition, draftKey: state.signed.draftKey, claim: null,
-      activeLocale: 'en', restoredResponse: state.response, restoredSigning: state.signed });
+      activeLocale: 'en', restoredResponse: state.response, restoredSigning: state.signed, ...(mode === 'delayed outcome unknown' ? { restoredApplication: application } : {}) });
     expect(host.getSnapshot().controller?.signed).toEqual(state.signed); expect(complete).not.toHaveBeenCalled();
     const runtime = host.getSnapshot().runtime!;
     const review = Object.fromEntries(await Promise.all(['definition', 'response', 'presentation'].map(async name => {
@@ -213,6 +244,44 @@ describe('generic native package signing session', () => {
     }))) as unknown as ResponseReviewData;
     host.reviewOptions.onReviewState!({ status: 'ready', contextIdentity: await responseReviewHash(review), responseHash: review.presentation.responseHash,
       actorRef: review.presentation.actorRef, draft: review.presentation.draft, locale: review.presentation.locale, phase: review.presentation.phase });
+    if (mode === 'delayed outcome unknown') {
+      const props = { host, composition: createTestComposition({ definition: testDefinition }), config: departmentAppProfile,
+        componentDocument: {} as never, componentRouteResolver: vi.fn(), localeDocuments: [locale], location: '/review', onNavigate: vi.fn() };
+      const mounted = render(createElement(NativePackageRespondentHost, props));
+      try {
+        const submit = await screen.findByRole('button', { name: 'Submit' });
+        await vi.waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(false));
+        vi.useFakeTimers();
+        await act(async () => { fireEvent.click(submit); await vi.advanceTimersByTimeAsync(10_000); });
+        vi.useRealTimers();
+        expect(host.getSnapshot().controller).toMatchObject({ phase: 'outcome-unknown', reason: 'completion-outcome-unknown' });
+        await screen.findByText('Your signed response is saved. The submission outcome is unknown. Check application status.');
+        expect((submit as HTMLButtonElement).disabled).toBe(true);
+        await act(async () => { await host.refreshApplication!(); });
+        mounted.rerender(createElement(NativePackageRespondentHost, { ...props }));
+        expect(host.getSnapshot().application?.status).toBe('submitted');
+        expect(loadApplication).toHaveBeenCalledOnce();
+        expect(screen.getByText('Your signed response is saved. The submission outcome is unknown. Check application status.')).toBeTruthy();
+        expect(host.getSnapshot().controller).toMatchObject({ phase: 'outcome-unknown', reason: 'completion-outcome-unknown' });
+        expect(props.onNavigate).not.toHaveBeenCalled();
+        const fencedSubmit = screen.getByRole('button', { name: 'Submit' }) as HTMLButtonElement;
+        expect(fencedSubmit.disabled).toBe(true);
+        // A forced DOM enable still must not redispatch through the mounted UI.
+        fencedSubmit.disabled = false;
+        await act(async () => { fireEvent.click(fencedSubmit); });
+        fencedSubmit.disabled = true;
+        expect((screen.getByRole('button', { name: 'Submit' }) as HTMLButtonElement).disabled).toBe(true);
+        expect(complete).toHaveBeenCalledOnce();
+        const completionBody = JSON.parse(String((complete.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+        expect(completionBody.response).toEqual(response);
+        expect(completionBody.signedDraft).toEqual(signedDraft);
+        expect(canonicalResponseSignedPayloadBytes(host.getSnapshot().controller!.signed!.response)).toEqual(canonicalResponseSignedPayloadBytes(response));
+        expect(host.getSnapshot().controller?.signed?.response.authoredSignatures).toEqual(response.authoredSignatures);
+        expect(fetchImpl).toHaveBeenCalledTimes(2); // No Source Save, Prepare or Sign writes after reopening.
+        expect(baseline.saveDraft).not.toHaveBeenCalled(); expect(baseline.prepare).not.toHaveBeenCalled(); expect(baseline.sign).not.toHaveBeenCalled();
+      } finally { vi.useRealTimers(); cleanup(); lease.dispose(); engine.dispose(); host.dispose(); }
+      return;
+    }
     const result = await host.widgetExecutor({ document: submitRole.document, actionRef: 'submit', invocationId: 'neutral-separate-submit', source: submitRole.widgetSource!,
       responseContext: { inputName: 'response', source: { catalogRef: policy.bindings.response.catalogRef, sourceRef: policy.bindings.response.sourceRef },
         definition: policy.definition, response }, input: { draftId: 'owned-id', draftVersion: 8, canonical_response: response as never } });
