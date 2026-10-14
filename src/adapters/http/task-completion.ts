@@ -10,6 +10,7 @@ import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-clie
 import commonSchema from './workspec-schemas/common.schema.json';
 import taskSchema from './workspec-schemas/task.schema.json';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
+import { TaskCompletionOutcomeUnknown } from '../../ports/response-completion.ts';
 
 const ajv = new Ajv2020({ strict: false, strictNumbers: true, allErrors: false });
 addFormats(ajv); ajv.addSchema(commonSchema); ajv.addSchema(taskSchema);
@@ -26,7 +27,11 @@ export class HttpTaskCompletion implements TaskCompletion {
   private readonly scopeHeaders: Readonly<Record<string, string>>;
   private readonly selection: TaskCompletionSelection;
   private readonly assertCurrentAuth: () => void;
-  constructor(config: HttpClientConfig & { selection: TaskCompletionSelection; assertCurrentAuth: () => void }) {
+  private readonly completionTimeoutMs: number;
+  constructor(config: HttpClientConfig & { selection: TaskCompletionSelection; assertCurrentAuth: () => void; completionTimeoutMs?: number }) {
+    this.completionTimeoutMs = config.completionTimeoutMs ?? 10_000;
+    if (!Number.isSafeInteger(this.completionTimeoutMs) || this.completionTimeoutMs <= 0
+      || this.completionTimeoutMs > 2_147_483_647) throw new Error('Task completion timeout must be a finite positive timer bound');
     this.scopeHeaders = wosTenantScopeHeaders(config.tenantBinding);
     this.selection = snapshotFiniteJson(config.selection) as unknown as TaskCompletionSelection;
     if (Object.keys(this.selection).sort().join(',') !== 'definitionUrl,definitionVersion,processId,taskId'
@@ -46,6 +51,7 @@ export class HttpTaskCompletion implements TaskCompletion {
   }
   async complete(submission: TaskSubmission, operationId: string, lifetime: CompletionLifetime): Promise<CompletedTaskOutcome> {
     let stage: SubmitFailureStage = 'task-preflight';
+    let dispatched = false;
     try {
       const check = () => { lifetime.signal.throwIfAborted(); assertSynchronousGuard(lifetime.assertCurrent);
         assertSynchronousGuard(this.assertCurrentAuth); };
@@ -58,8 +64,9 @@ export class HttpTaskCompletion implements TaskCompletion {
         || new TextEncoder().encode(JSON.stringify(body)).byteLength > 2 * 1024 * 1024) throw new Error('Task completion candidate mismatch');
       stage = 'task-transport';
       const raw = await this.client.postJson<unknown>(`/api/v1/tasks/${encodeURIComponent(this.selection.taskId)}/response`, body,
-        { headers: this.scopeHeaders, idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check, assertBeforeDispatch: check,
-          timeoutMs: 10_000, maxResponseBytes: 64 * 1024, requireJson: true, successStatuses: [200] });
+        { headers: this.scopeHeaders, idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check,
+          assertBeforeDispatch: () => { check(); dispatched = true; },
+          timeoutMs: this.completionTimeoutMs, maxResponseBytes: 64 * 1024, requireJson: true, successStatuses: [200] });
       stage = 'task-outcome-validation';
       check(); const event = snapshotFiniteJson(raw) as unknown;
       if (!outcomeShape(event) || event.taskId !== this.selection.taskId || event.processId !== this.selection.processId
@@ -72,6 +79,7 @@ export class HttpTaskCompletion implements TaskCompletion {
           : error instanceof DOMException && error.name === 'TimeoutError' ? 'timeout' : 'failed',
           error instanceof HttpAdapterError ? error.status : undefined);
       } catch { /* Error classification is observational too. */ }
+      if (dispatched && error instanceof DOMException && error.name === 'TimeoutError') throw new TaskCompletionOutcomeUnknown();
       throw error;
     }
   }

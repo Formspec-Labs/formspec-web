@@ -1,5 +1,6 @@
 import type { TaskSubmission } from '../../src/ports/task-completion.ts';
 import type { CompletionLifetime } from '../../src/ports/response-completion.ts';
+import { TaskCompletionOutcomeUnknown } from '../../src/ports/response-completion.ts';
 import { createTaskResponseCompletion } from '../../src/shared/task-response-completion.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -754,7 +755,7 @@ describe('typed response completion', () => {
   const selection = { taskId: 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db/tasks/correction',
     processId: 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db',
     definitionUrl: sampleFormDefinition.url, definitionVersion: sampleFormDefinition.version };
-  function taskFixture(optionalOutput = false) {
+  function taskFixture(optionalOutput = false, change: Partial<ResponseActionControllerConfig> = {}) {
     const roles = Object.fromEntries(['saveInitial', 'saveOwned', 'prepare', 'sign', 'submit', 'paper'].map(role =>
       [role, roleAdmission(role as ResponseActionRole)])) as ResponseActionControllerConfig['roles'];
     const request = roles.submit!.document['x-formspec-runtime']!.requests[0];
@@ -766,7 +767,7 @@ describe('typed response completion', () => {
       ...(optionalOutput ? { actor: { path: '/actorRef', exposure: 'internal' as const } } : {}) };
     const complete = vi.fn(async (_submission: TaskSubmission, _operationId: string, _lifetime: CompletionLifetime) => ({ taskId: selection.taskId, processId: selection.processId,
       outcome: 'completed' as const, newStatus: 'submitted' as const, occurredAt: '2026-10-09T12:00:00Z' }));
-    const test = fixture({ roles, completion: createTaskResponseCompletion({ selection, transport: { complete } }) });
+    const test = fixture({ roles, completion: createTaskResponseCompletion({ selection, transport: { complete } }), ...change });
     const sign = test.sign.getMockImplementation()!;
     test.sign.mockImplementation(async input => {
       const actual = await sign(input);
@@ -778,6 +779,29 @@ describe('typed response completion', () => {
     });
     return { ...test, complete };
   }
+  it('retains the signed operation and fences further Submit after an unknown outcome', async () => {
+    const receipt = { caseLedgerId: 'urn:wos:original-case', caseReference: 'ORIGINAL', draftRef: 'original-draft', status: 'in-progress' as const };
+    const load = vi.fn(async () => ({ ...receipt, status: 'submitted' as const }));
+    const test = taskFixture(false, { restoredApplication: receipt, applicationLifecycle: {
+      capabilities: { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'publication' },
+      load, start: vi.fn() } });
+    const prepared = await test.ready(); await test.widget('sign', prepared);
+    const signed = test.controller.getSnapshot().signed!;
+    test.complete.mockRejectedValueOnce(new TaskCompletionOutcomeUnknown());
+    expect(await test.widget('submit', signed, '019bcade-2222-7333-8444-555566667777')).toMatchObject({ status: 'failed', failureReason: 'completion-outcome-unknown' });
+    expect(test.controller.getSnapshot()).toMatchObject({ phase: 'outcome-unknown', signed, reason: 'completion-outcome-unknown' });
+    expect(test.controller.getSnapshot().completion).toBeUndefined();
+    await test.controller.refreshApplication();
+    expect(load).toHaveBeenCalledOnce();
+    expect(test.controller.getSnapshot()).toMatchObject({ phase: 'outcome-unknown', reason: 'completion-outcome-unknown',
+      application: { status: 'submitted' }, signed });
+    expect(await test.widget('submit', signed, 'new-operation')).toMatchObject({ status: 'failed', failureReason: 'completion-outcome-unknown' });
+    expect(await test.widget('submit', signed, '019bcade-2222-7333-8444-555566667777')).toMatchObject({ status: 'failed', failureReason: 'completion-outcome-unknown' });
+    expect(test.complete).toHaveBeenCalledOnce();
+    expect(test.complete.mock.calls[0][0].response).toEqual(signed.response);
+    expect(test.complete.mock.calls[0][1]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(test.sign).toHaveBeenCalledOnce(); expect(test.prepare).toHaveBeenCalledOnce();
+  });
   it('publishes the actual task outcome, preserves full signed bytes, and caches the completed act', async () => {
     const test = taskFixture(); const prepared = await test.ready(); await test.widget('sign', prepared);
     const signed = test.controller.getSnapshot().signed!;

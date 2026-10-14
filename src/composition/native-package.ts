@@ -52,6 +52,7 @@ export interface NativeTaskCompositionPins {
   readonly launchOperationId: string;
   readonly subjectRef: string;
   readonly wos: HttpClientConfig;
+  readonly completionTimeoutMs?: number;
   readonly assertCurrentWos: () => void;
   readonly hydration: Pick<HttpTaskCandidateHydrationConfig, 'selection' | 'identity' | 'receiptVerifier' | 'elapsedNow'>;
   readonly attachmentFieldPaths: Readonly<Record<string, string>>;

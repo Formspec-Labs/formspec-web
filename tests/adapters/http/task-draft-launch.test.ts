@@ -58,6 +58,11 @@ it('refuses ordinary draft creation after a task-owned binding is lost', async (
 });
 
 
+it('validates the selected completion wait through task composition before any Source launch', async () => {
+  const fetchImpl = vi.fn();
+  await expect(createTaskComposition({ ...taskConfig(fetchImpl), completionTimeoutMs: 0 }, lifetime())).rejects.toThrow('Task completion timeout');
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
 function taskConfig(fetchImpl: typeof fetch) {
   const processId = 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db';
   const launch = { ...selection, taskId: `${processId}/tasks/actual` };

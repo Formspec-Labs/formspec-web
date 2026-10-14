@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { TASK_COMPLETION_OUTCOME_UNKNOWN_MESSAGE } from '../ports/response-completion.ts';
 import { useBrowserLocation } from '@formspec-org/surface-react';
 import { createScreenerLocaleResolver } from '@formspec-org/engine/render';
 import { UI_STRINGS, type ChromeStringKey } from '@formspec-org/layout';
@@ -306,11 +307,14 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
       </button> : null}
     </div>
     {!confirmation && !state.cleared && operation === 'idle' && state.runtime && (state.controller?.signed || state.controller?.pendingSign)
-      && ['prepared', 'signed', 'refused', 'failed'].includes(state.controller.phase)
+      && ['prepared', 'signed', 'refused', 'failed', 'outcome-unknown'].includes(state.controller.phase)
       && startupRoute?.signedReviewHref ? <button type="button" className="locale-button"
         onClick={() => onNavigate(startupRoute.signedReviewHref!)}>
         {state.controller?.pendingSign ? 'Review previous signing attempt' : locale?.strings[`$module.${boot.host.moduleId}.response.reviewSigned`] ?? startupRoute.signedReviewTitle ?? 'Review signed response'}
       </button> : null}
+    {state.controller?.reason === 'completion-outcome-unknown' ? <SessionStatus><p role="alert">
+      {applicationText('submissionOutcomeUnknown') ?? TASK_COMPLETION_OUTCOME_UNKNOWN_MESSAGE}
+    </p></SessionStatus> : null}
     {boot.host.applicationCapabilities && !state.cleared && operation !== 'cleared'
       && (state.applicationLookup || state.application || !confirmation && state.editableSessionActive) ? <SessionStatus>
       {state.applicationLookup ? <p role="status">{applicationText('statusUnavailable')
@@ -320,7 +324,7 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
           ?? (state.application.status === 'submitted' ? 'Application submitted' : 'Application in progress')}: {state.application.caseReference}</p>
       </> : null}
       {state.application || state.applicationLookup ? <button type="button" className="locale-button" disabled={operation === 'refreshing' || operation === 'clearing'
-          || !!state.controller && !['idle', 'saved', 'prepared', 'signed', 'submitted', 'refused', 'failed'].includes(state.controller.phase)}
+          || !!state.controller && !['idle', 'saved', 'prepared', 'signed', 'submitted', 'refused', 'failed', 'outcome-unknown'].includes(state.controller.phase)}
           onClick={() => void refreshApplication()}>{applicationText('refresh') ?? 'Refresh application status'}</button> : null}
       {!confirmation && state.editableSessionActive ? <p role="status">{boot.host.applicationCapabilities.persistentSaving
         ? applicationText(`checkpoint${checkpointSuffix}`)

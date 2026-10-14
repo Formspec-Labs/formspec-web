@@ -18,6 +18,8 @@ import { createTaskResponseCompletion } from '../shared/task-response-completion
 export async function createTaskComposition(config: {
   source: HttpClientConfig;
   wos: HttpClientConfig;
+  /** Deployment-selected whole request wait; omission preserves the existing bound. */
+  completionTimeoutMs?: number;
   launch: TaskDraftLaunchSelection;
   completion: TaskCompletionSelection;
   draftKey: DraftKey;
@@ -67,7 +69,8 @@ export async function createTaskComposition(config: {
     catch (error) { await response.body?.cancel().catch(() => {}); throw error; }
   } };
   const completion = createTaskResponseCompletion({ selection: selection.completion,
-    transport: new HttpTaskCompletion({ ...wosSettings, selection: selection.completion, assertCurrentAuth: wosGuard }) });
+    transport: new HttpTaskCompletion({ ...wosSettings, completionTimeoutMs: config.completionTimeoutMs,
+      selection: selection.completion, assertCurrentAuth: wosGuard }) });
   const cohortConfig = { ...source,
     formIdResolver: (url: string, version?: string) => {
       if (url !== selection.definition.url || version !== selection.definition.version) throw new Error('Task publication mismatch');

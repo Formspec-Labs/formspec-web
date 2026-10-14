@@ -16,6 +16,64 @@ const outcome = { taskId: selection.taskId, processId, outcome: 'completed', new
 const lifetime = () => ({ signal: new AbortController().signal, assertCurrent: () => {} });
 
 describe('inactive typed WOS task completion adapter', () => {
+  it('uses the selected finite completion budget instead of an unqualified increase', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(() => new Promise<Response>(() => {}));
+      const config = { baseUrl: 'https://wos.test', selection, accessToken: 'wos-token', fetchImpl,
+        assertCurrentAuth: () => {}, completionTimeoutMs: 20 };
+      const adapter = new HttpTaskCompletion(config);
+      const pending = adapter.complete(submission, 'operation', lifetime());
+      const assertion = expect(pending).rejects.toMatchObject({ name: 'TaskCompletionOutcomeUnknown' });
+      await vi.advanceTimersByTimeAsync(20);
+      await assertion;
+      expect(fetchImpl).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+  it.each([0, -1, Infinity, 1.5])('refuses invalid selected completion budget %s', completionTimeoutMs => {
+    const config = { baseUrl: 'https://wos.test', selection, accessToken: 'wos-token',
+      assertCurrentAuth: () => {}, completionTimeoutMs };
+    expect(() => new HttpTaskCompletion(config)).toThrow('Task completion timeout');
+  });
+  it('retains a normal delayed server outcome within the selected browser wait', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(() => new Promise<Response>(resolve => setTimeout(() => resolve(jsonResponse(outcome)), 25_200)));
+      const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'wos-token',
+        fetchImpl, assertCurrentAuth: () => {}, completionTimeoutMs: 120_000 });
+      const pending = adapter.complete(submission, 'operation', lifetime());
+      await vi.advanceTimersByTimeAsync(25_200);
+      expect(await pending).toEqual(outcome); expect(fetchImpl).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+  it('keeps the default wait at ten seconds and classifies only dispatched timeout as unknown', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(() => new Promise<Response>(() => {}));
+      const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'wos-token',
+        fetchImpl, assertCurrentAuth: () => {} });
+      const pending = adapter.complete(submission, 'operation', lifetime());
+      const assertion = expect(pending).rejects.toMatchObject({ name: 'TaskCompletionOutcomeUnknown' });
+      await vi.advanceTimersByTimeAsync(10_000); await assertion;
+      expect(fetchImpl).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+  it('preserves an actual conflict response and status', async () => {
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'wos-token',
+      fetchImpl: async () => jsonResponse({ title: 'Conflict' }, 409), assertCurrentAuth: () => {}, completionTimeoutMs: 120_000 });
+    await expect(adapter.complete(submission, 'operation', lifetime())).rejects.toMatchObject({ name: 'HttpAdapterError', status: 409 });
+  });
+  it('keeps credential timeout before dispatch distinct from an unknown submission', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn();
+      const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection,
+        accessToken: () => new Promise<string>(() => {}), fetchImpl, assertCurrentAuth: () => {}, completionTimeoutMs: 20 });
+      const pending = adapter.complete(submission, 'operation', lifetime());
+      const assertion = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
+      await vi.advanceTimersByTimeAsync(20); await assertion; expect(fetchImpl).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
   it('keeps signed draft selectors optional for other task submissions', async () => {
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(outcome));
     const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'wos-token', fetchImpl,
@@ -131,7 +189,7 @@ describe('fixed task Submit diagnostics', () => {
     try {
       const adapter = new HttpTaskCompletion({ baseUrl: 'https://private.test', selection, accessToken: 'private-token', fetchImpl, assertCurrentAuth: () => {} });
       const promise = adapter.complete(kind === 'preflight' ? { ...submission, definitionVersion: 'private-version' } : submission, 'private-operation', lifetime());
-      if (kind === 'timeout') await expect(promise).rejects.toBe(privateFailure);
+      if (kind === 'timeout') await expect(promise).rejects.toMatchObject({ name: 'TaskCompletionOutcomeUnknown' });
       else await expect(promise).rejects.toThrow(kind === 'preflight' ? 'candidate mismatch' : kind === 'outcome' ? 'outcome mismatch' : 'HTTP adapter request failed');
       expect(warn.mock.calls).toEqual([['Native form Submit diagnostic', JSON.stringify({
         stage: kind === 'preflight' ? 'task-preflight' : kind === 'outcome' ? 'task-outcome-validation' : 'task-transport',

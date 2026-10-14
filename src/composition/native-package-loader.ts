@@ -203,7 +203,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
       || taskPins.hydration.selection.formId !== publication.form_id || taskPins.hydration.selection.definitionHash !== publication.definition_hash
       || taskPins.hydration.selection.formVersionId !== publication.form_version_id)) throw new Error('Native task publication pins mismatch');
     const taskCohort = taskPins ? await createTaskComposition({ source: { ...base, accessToken: ownedAccessToken },
-      wos: taskPins.wos, launch: taskPins.launch, completion: taskPins.completion,
+      wos: taskPins.wos, completionTimeoutMs: taskPins.completionTimeoutMs, launch: taskPins.launch, completion: taskPins.completion,
       draftKey: { formUrl: definition.url, formVersion: definition.version, subjectRef: taskPins.subjectRef },
       formId: publication.form_id, definition, locales: localeDocuments, signing: signingPolicy, resumeMetadata,
       assertCurrentSource: taskCurrent, assertCurrentWos: taskPins.assertCurrentWos,

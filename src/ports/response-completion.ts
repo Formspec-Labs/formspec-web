@@ -32,3 +32,10 @@ export interface ResponseCompletion {
 export class ResponseCompletionRefusal extends Error {
   constructor(readonly code: 'action-unadmitted' | 'outputs-unsupported' | 'context-mismatch') { super(code); }
 }
+
+/** Safe common copy for native hosts; never infer acceptance from application status. */
+export const TASK_COMPLETION_OUTCOME_UNKNOWN_MESSAGE = 'Your signed response is saved. The submission outcome is unknown. Check application status.';
+/** The dispatched task request timed out; this says nothing about server acceptance. */
+export class TaskCompletionOutcomeUnknown extends Error {
+  constructor() { super('Task submission outcome is unknown'); this.name = 'TaskCompletionOutcomeUnknown'; }
+}

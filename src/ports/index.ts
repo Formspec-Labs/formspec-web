@@ -213,7 +213,7 @@ export type { HydrateScreenerCandidate, ScreenerHydration } from './screener-hyd
 
 export type { CompletionLifetime, CaptureResponseCompletion, PreparedResponseCompletion,
   ResponseCompletionResult, ResponseCompletion } from './response-completion.ts';
-export { ResponseCompletionRefusal } from './response-completion.ts';
+export { ResponseCompletionRefusal, TaskCompletionOutcomeUnknown, TASK_COMPLETION_OUTCOME_UNKNOWN_MESSAGE } from './response-completion.ts';
 export type { TaskOutcomeEvent, TaskSubmission, CompletedTaskOutcome, TaskCompletionSelection, TaskCompletion } from './task-completion.ts';
 
 export type { SignedTaskDraft, TaskDraftAssociation, TaskDraftLaunchSelection } from './task-draft.ts';

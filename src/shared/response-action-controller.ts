@@ -1,7 +1,7 @@
 import { createSubmitFailureReporter, type SubmitFailureStage } from './submit-diagnostic.ts';
 import { assertSignedTaskDraft } from './task-draft-wire.ts';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
-import { ResponseCompletionRefusal } from '../ports/response-completion.ts';
+import { ResponseCompletionRefusal, TaskCompletionOutcomeUnknown } from '../ports/response-completion.ts';
 import canonicalize from 'canonicalize';
 import { extractServiceRequestOutputs, invokeResponseActionAsync, planServiceRequest, resolveResponseAction, resolveResponseActionValidationTuple, resolveServiceRequest, type ResponseActionInvocationResult } from '@formspec-org/engine/render';
 import type { ResponseActionInvoker, SubmitResult } from '@formspec-org/react';
@@ -16,7 +16,7 @@ import { createIntakeResponseCompletion } from './intake-response-completion.ts'
 import { generateIdempotencyKey, isUuidV7IdempotencyKey } from './idempotency-key.ts';
 
 export type ResponseActionRole = 'startApplication' | 'saveInitial' | 'saveOwned' | 'prepare' | 'sign' | 'submit' | 'paper';
-export type ResponseActionControllerReason = 'action-unadmitted' | 'context-mismatch' | 'response-invalid' | 'branch-mismatch' | 'outputs-unsupported' | 'review-unready' | 'operation-conflict' | 'operation-pending' | 'context-obsolete' | 'restoration-unresolved' | 'port-failed';
+export type ResponseActionControllerReason = 'action-unadmitted' | 'context-mismatch' | 'response-invalid' | 'branch-mismatch' | 'outputs-unsupported' | 'review-unready' | 'operation-conflict' | 'operation-pending' | 'context-obsolete' | 'restoration-unresolved' | 'port-failed' | 'completion-outcome-unknown';
 export interface QualifiedResponseActionRole extends Omit<AdmittedResponseAction, 'requestRef'> {
   requestRef?: string;
   widgetSource?: SurfaceWidgetActionSource;
@@ -40,7 +40,7 @@ export interface ResponseActionReviewContext {
   generation: string;
 }
 export interface ResponseActionControllerSnapshot {
-  phase: 'idle' | ResponseActionRole | 'saved' | 'prepared' | 'signed' | 'submitted' | 'refused' | 'failed';
+  phase: 'idle' | ResponseActionRole | 'saved' | 'prepared' | 'signed' | 'submitted' | 'refused' | 'failed' | 'outcome-unknown';
   owned: boolean;
   application?: ApplicationCaseReceipt;
   applicationLookup?: ApplicationCaseLookupUnavailable;
@@ -104,6 +104,7 @@ export function createResponseActionController(config: ResponseActionControllerC
     ? createIntakeResponseCompletion({ buildHandoff: config.buildHandoff, submitTransport: config.submitTransport }) : undefined);
   const lifetime = new AbortController();
   let completionResult: ResponseCompletionResult | undefined;
+  let completionOutcomeUnknown = false;
   let epoch = 0;
   let invalidated = false;
   let owned = restored !== undefined;
@@ -348,6 +349,8 @@ export function createResponseActionController(config: ResponseActionControllerC
   }
   function fail(error: unknown, generation: number) {
     if (generation !== epoch) return 'context-obsolete';
+    if (completion?.kind === 'task' && error instanceof TaskCompletionOutcomeUnknown) completionOutcomeUnknown = true;
+    if (completionOutcomeUnknown) { publish('outcome-unknown', 'completion-outcome-unknown'); return 'completion-outcome-unknown'; }
     const reason = error instanceof ControllerRefusal || error instanceof ResponseCompletionRefusal ? error.code : 'port-failed';
     if (reason !== 'context-obsolete' && !completionResult) publish(error instanceof ControllerRefusal || error instanceof ResponseCompletionRefusal ? 'refused' : 'failed', reason);
     return reason;
@@ -362,6 +365,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       current(generation);
       if (completionResult) throw new ControllerRefusal('operation-conflict');
       const [role, admission] = roleFor(input.document, input.actionRef);
+      if (role === 'submit' && completionOutcomeUnknown) throw new ControllerRefusal('completion-outcome-unknown');
       save = role === 'saveInitial' || role === 'saveOwned';
       if (!['startApplication', 'saveInitial', 'saveOwned', 'prepare', 'paper'].includes(role)) throw new ControllerRefusal('action-unadmitted');
       requestFor(role, admission);
@@ -404,6 +408,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         }
       }
       const [role, admission] = roleFor(input.document, input.actionRef);
+      if (role === 'submit' && completionOutcomeUnknown) throw new ControllerRefusal('completion-outcome-unknown');
       if (!['sign', 'submit', 'paper'].includes(role) || !same(admission.widgetSource, input.source)
         || !input.responseContext || !admission.responseSource
         || input.responseContext.inputName !== admission.responseSource.inputName

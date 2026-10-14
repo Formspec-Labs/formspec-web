@@ -78,6 +78,29 @@ describe('native package boot and scoped recovery', () => {
     expect(screen.getByText('Application in progress: APP-001')).toBeTruthy();
   });
 
+  it('explains an unknown submission without offering another Submit', async () => {
+    const test = fixture();
+    test.publish({ controller: { phase: 'failed', owned: true, reason: 'completion-outcome-unknown' } as unknown as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']> });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    expect(await screen.findByText('Your signed response is saved. The submission outcome is unknown. Check application status.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
+  });
+  it('keeps unknown task outcome and signed review after refreshing original submitted intake', async () => {
+    const test = fixture();
+    test.host.applicationCapabilities = { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'publication' };
+    test.host.getStartupRoute = (() => ({ entryHref: '/', requiresHostState: false, signedReviewHref: '/review', signedReviewTitle: 'Review signed response' })) as typeof test.host.getStartupRoute;
+    const application = { caseLedgerId: 'urn:wos:case-private', caseReference: 'APP-001', draftRef: 'draft-private', status: 'in-progress' as const };
+    const controller = { phase: 'outcome-unknown', owned: true, signed: {}, reason: 'completion-outcome-unknown' } as unknown as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['controller']>;
+    test.publish({ application, controller, runtime: {} as NonNullable<ReturnType<NativePackageSigningHost['getSnapshot']>['runtime']> });
+    test.host.refreshApplication = vi.fn(async () => { test.publish({ application: { ...application, status: 'submitted' } }); });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    const refresh = await screen.findByRole('button', { name: 'Refresh application status' });
+    expect((refresh as HTMLButtonElement).disabled).toBe(false); fireEvent.click(refresh);
+    await screen.findByText('Application submitted: APP-001');
+    expect(screen.getByText('Your signed response is saved. The submission outcome is unknown. Check application status.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Review signed response' })).toBeTruthy();
+    expect(test.host.widgetExecutor).not.toHaveBeenCalled();
+  });
   it('shows unavailable case status separately from saved progress and permits explicit status retry', async () => {
     const test = fixture();
     test.host.applicationCapabilities = { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'publication' };
