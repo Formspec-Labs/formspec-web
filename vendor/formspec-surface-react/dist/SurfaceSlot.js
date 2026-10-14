@@ -31,7 +31,7 @@ import { FormspecForm } from '@formspec-org/react';
 import { resolveFieldReferences, targetDefinitionMatches, } from '@formspec-org/types';
 import { loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
 import { Heading, nextLevel } from './heading.js';
-import { allocateWidgetActionInvocationId, admitSurfaceWidgetActionInput, createWidgetActionCoordinator, responseActionsDocumentForAction, snapshotWidgetResponseContext, } from './widget-action-runtime.js';
+import { allocateWidgetActionInvocationId, admitSurfaceWidgetActionInput, createWidgetActionCoordinator, responseActionsDocumentForAction, snapshotWidgetResponseContext, normalizeWidgetActionResult, } from './widget-action-runtime.js';
 import { WidgetEmptyState } from './widgets/empty-state.js';
 import { ModuleWidgetStateView, widgetDataMatchesEmptyWhen, } from './widget-state.js';
 import { needIdTraceAttributes, needTraceAttributes } from './need-trace.js';
@@ -739,7 +739,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
                         ? 'obsolete'
                         : completedWidgetAction(result, document)?.id === actionRef
                             ? 'completed'
-                            : 'failed',
+                            : unknownCompletion(result) ? 'outcome-unknown' : 'failed',
                 }))
                     .catch(() => ({ status: 'failed' })),
             };
@@ -765,7 +765,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
                     result,
                     navigation: 'none',
                 });
-                return { status: 'failed' };
+                return { status: unknownCompletion(result) ? 'outcome-unknown' : 'failed' };
             }
             const eligible = transitions.filter((transition) => transition.status === 'supplied-by-slot' &&
                 transition.actionId === action.id);
@@ -869,5 +869,10 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
 }
 function UnavailableSlot({ children }) {
     return (_jsx("p", { className: "fs-surface-unavailable", role: "status", "data-probe": "slot-unavailable", children: children }));
+}
+/** Forward one closed uncertainty classification; never expose arbitrary failure text. */
+function unknownCompletion(result) {
+    const invocation = normalizeWidgetActionResult(result);
+    return invocation.status === 'failed' && invocation.failureReason === 'completion-outcome-unknown';
 }
 export { nextLevel };

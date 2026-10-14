@@ -74,7 +74,7 @@ export type SurfaceWidgetActionInput = Readonly<{
 }>;
 /** Response submission detail or structured input returned by an app action. */
 export type SurfaceWidgetActionDetail = SubmitResult | SurfaceWidgetActionInput;
-export type SurfaceWidgetActionFeedbackStatus = 'completed' | 'failed' | 'refused' | 'obsolete';
+export type SurfaceWidgetActionFeedbackStatus = 'completed' | 'failed' | 'outcome-unknown' | 'refused' | 'obsolete';
 export interface SurfaceWidgetActionEmission {
     /** False when this call joins an already-running logical action or is refused. */
     started: boolean;
