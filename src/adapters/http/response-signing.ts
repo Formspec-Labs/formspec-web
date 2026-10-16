@@ -90,7 +90,7 @@ interface DraftView {
   form_version_id: string;
   subject_ref: string;
   draft_version: number;
-  draft_state: unknown;
+  draft_state: Record<string, unknown>;
   canonical_response: FormResponse;
   status: 'in_progress';
   taskDraft?: VerifiedDraftEvidence['taskDraft'];
@@ -254,7 +254,7 @@ export class HttpResponseSigning implements ResponseSigning {
   private async savedResult(key: DraftKey, view: DraftView): Promise<SavedResponseDraft> {
     const evidence: VerifiedDraftEvidence = {
       draft_id: view.draft_id, form_version_id: view.form_version_id, subject_ref: view.subject_ref,
-      draft_version: view.draft_version, draft_state: view.draft_state as Record<string, unknown>,
+      draft_version: view.draft_version, draft_state: view.draft_state,
       canonical_response: view.canonical_response, status: view.status,
       ...(view.taskDraft === undefined ? {} : { taskDraft: view.taskDraft }),
     };

@@ -1,3 +1,5 @@
+import { isRecord } from './is-record.ts';
+
 export interface ProblemJson {
   type: string;
   title: string;
@@ -32,6 +34,3 @@ export function assertProblemJson(value: unknown): asserts value is ProblemJson 
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}

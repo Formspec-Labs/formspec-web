@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/is-record.ts';
 import canonicalize from 'canonicalize';
 import { computeJcsSha256Digest } from './response-action-ledger.ts';
 import type {
@@ -506,10 +507,6 @@ function uniqueLocaleDocuments(documents: LocaleDocument[]): LocaleDocument[] {
     seen.add(key);
     return true;
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function nonblankString(value: unknown): value is string {

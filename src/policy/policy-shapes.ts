@@ -7,10 +7,6 @@
  * Composition root.
  */
 import type { RuntimeFeatureKey } from './feature-keys.ts';
-import type {
-  ReviewThreadPolicySnapshot,
-  TrustedReviewerPosture,
-} from '../ports/review-thread-store.ts';
 
 /**
  * Closed-set decision: an instance capability is exactly one of three states.
@@ -74,8 +70,21 @@ export interface OrgRuntimePolicy {
   readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
 }
 
-export interface TrustedReviewerRuntimeConfig extends ReviewThreadPolicySnapshot {
+export type TrustedReviewerPosture = 'forbidden' | 'comment-allowed' | 'suggest-allowed';
+export type ReviewerAssuranceFloor = 'L1' | 'L2' | 'L3' | 'L4';
+
+/**
+ * FW-0042 authoring contract (`x-formspec-trusted-reviewer`, `limits.trustedReviewer`). The feature
+ * has no runtime or ports yet, so a resolved profile never enables it; the shape stays so forms that
+ * declare it keep validating.
+ */
+export interface TrustedReviewerRuntimeConfig {
   readonly posture: TrustedReviewerPosture;
+  readonly allowedRoles?: readonly string[];
+  readonly reviewerAssuranceFloor?: ReviewerAssuranceFloor;
+  readonly maxActiveSharesPerDraft?: number;
+  readonly defaultShareExpiresAtRule?: string;
+  readonly respondentOnlyFieldPointers: readonly string[];
 }
 
 export type SafeAddressAccessClass = 'safe-address' | 'safe-contact' | 'safe-employer';
@@ -356,12 +365,7 @@ export function getTrustedReviewerRuntimeConfig(
   if (!profile.enabled.has('trustedReviewer')) return undefined;
   const value = profile.limits.trustedReviewer;
   if (value === undefined) {
-    return {
-      posture: 'comment-allowed',
-      respondentOnlyFieldPointers: [],
-      reviewerSessionBindingRef: 'composition:reviewerSession',
-      reviewThreadStoreBindingRef: 'composition:reviewThreadStore',
-    };
+    return { posture: 'comment-allowed', respondentOnlyFieldPointers: [] };
   }
   return value as TrustedReviewerRuntimeConfig;
 }

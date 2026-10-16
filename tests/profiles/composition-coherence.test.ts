@@ -28,12 +28,8 @@ import { unavailableOfflineSubmitQueue } from '../../src/adapters/unavailable/of
 import { unavailablePaymentRailAdapter } from '../../src/adapters/unavailable/payment-rail-adapter.ts';
 import { unavailablePreallocatedFeaturePorts } from '../../src/adapters/unavailable/preallocated-feature-port.ts';
 import { unavailableScreenerDocumentSource } from '../../src/adapters/unavailable/screener-document-source.ts';
-import { unavailableReviewerSession } from '../../src/adapters/unavailable/reviewer-session.ts';
-import { unavailableReviewThreadStore } from '../../src/adapters/unavailable/review-thread-store.ts';
 import { HISTORY_ROUTE_NARROWING } from '../../src/app/history-route.ts';
 import { SCREENER_ROUTE_NARROWING } from '../../src/app/screener-route.ts';
-import type { ReviewerSession } from '../../src/ports/reviewer-session.ts';
-import type { ReviewThreadStore } from '../../src/ports/review-thread-store.ts';
 
 // Build a minimal production-mode CompositionLike directly. `createUnavailableComposition('urn:test:form')`
 // short-circuits to the demo composition when no formspecServerUrl is configured, which
@@ -220,7 +216,7 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
     expect(isUnavailableAdapter(composition.statusReader)).toBe(false);
   });
 
-  it('requires both trustedReviewer ports when the feature is declared available', () => {
+  it('keeps trustedReviewer unavailable-only until FW-0042 binds ports', () => {
     const composition = productionCompositionLike({
       instanceCapabilities: {
         respondentPlace: 'unavailable',
@@ -240,36 +236,9 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
         multiParty: 'unavailable',
         recordLifecycle: 'unavailable',
       },
-      reviewerSession: unmarkedReviewerSession(),
-      reviewThreadStore: unavailableReviewThreadStore(),
     });
-    expect(() => assertCompositionCoherence(composition)).toThrow(/reviewThreadStore/);
-  });
-
-  it('does not accept a one-port trustedReviewer shortcut', () => {
-    const composition = productionCompositionLike({
-      instanceCapabilities: {
-        respondentPlace: 'unavailable',
-        status: 'unavailable',
-        documentPresentation: 'unavailable',
-        fileUpload: 'unavailable',
-        crossIssuerHistory: 'unavailable',
-        offlineSubmit: 'unavailable',
-        payment: 'unavailable',
-        embed: 'unavailable',
-        screener: 'unavailable',
-        trustedReviewer: 'available',
-        preparerFiling: 'unavailable',
-        bringYourOwnAssistant: 'unavailable',
-        safeAddress: 'unavailable',
-        duressAware: 'unavailable',
-        multiParty: 'unavailable',
-        recordLifecycle: 'unavailable',
-      },
-      reviewerSession: unavailableReviewerSession(),
-      reviewThreadStore: unmarkedReviewThreadStore(),
-    });
-    expect(() => assertCompositionCoherence(composition)).toThrow(/reviewerSession/);
+    expect(() => assertCompositionCoherence(composition)).toThrow(/trustedReviewer/);
+    expect(() => assertCompositionCoherence(composition)).toThrow(/no backing port binding/);
   });
 
   it('keeps preparerFiling unavailable-only until a concrete FW-0037 port lands', () => {
@@ -297,55 +266,6 @@ describe('Composition coherence — provenance ↔ instanceCapabilities (ADR-001
     expect(() => assertCompositionCoherence(composition)).toThrow(/no backing port binding/);
   });
 });
-
-function unmarkedReviewerSession(): ReviewerSession {
-  return {
-    async mintShare() {
-      return { shareId: 'share:test', capabilityUrl: 'https://review.example.test/r/thread/token' };
-    },
-    async redeem() {
-      return {
-        shareId: 'share:test',
-        threadId: 'thread:test',
-        grantedScope: 'view+comment',
-        threadPolicySnapshot: {
-          posture: 'comment-allowed',
-          respondentOnlyFieldPointers: [],
-        },
-        sessionToken: 'capability:test',
-      };
-    },
-    async revoke() {},
-    async listShares() {
-      return [];
-    },
-  };
-}
-
-function unmarkedReviewThreadStore(): ReviewThreadStore {
-  return {
-    async ensureThread(args) {
-      return {
-        $formspecReviewThread: '1.0',
-        threadId: args.threadId,
-        draftRef: args.draftRef,
-        policySnapshot: args.policySnapshot,
-        shares: [],
-        events: [],
-        createdAt: '2026-05-25T00:00:00.000Z',
-      };
-    },
-    async read() {
-      throw new Error('not used');
-    },
-    async appendEvent() {
-      throw new Error('not used');
-    },
-    async pinForReceipt() {
-      return { threadHash: 'sha256:test', bindingArtifactRef: 'review-thread:test' };
-    },
-  };
-}
 
 // FW-0056 arch-review MED-1: when two RuntimeFeatureKeys map to the same
 // port slot (today: respondentPlace + documentPresentation both → the

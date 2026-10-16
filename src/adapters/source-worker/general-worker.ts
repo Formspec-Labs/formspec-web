@@ -1,8 +1,7 @@
 import { SMALL_CAP, snapshotInput, sourceFailureCode } from './protocol.ts';
-import type { ProofWorkerReply } from './protocol.ts';
+import type { ProofWorkerReply, ProofWorkerScope } from './protocol.ts';
 import { snapshotMixedInputs } from './general-protocol.ts';
 import type { MixedProofInputs, SourceMixedProofApi } from './general-protocol.ts';
-import type { ProofWorkerScope } from './worker.ts';
 /** Dedicated-worker binding to the selected public Source verifier. */
 export function attachMixedProofWorker(scope: ProofWorkerScope, source: SourceMixedProofApi): () => void {
   let state: 'new' | 'initializing' | 'ready' | 'closed' = 'new';

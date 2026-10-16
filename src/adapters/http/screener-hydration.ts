@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/is-record.ts';
 import canonicalize from 'canonicalize';
 import type { FormDefinition } from '@formspec-org/types';
 import type { EvaluationHydrationResult, EvaluationHydrationWire, NativeScreenerMappingReceipt } from '../../ports/evaluation-hydration.ts';
@@ -21,10 +22,7 @@ export interface HttpScreenerHydrationConfig extends HttpClientConfig {
 }
 const equal = (a: unknown, b: unknown) => canonicalize(a) === canonicalize(b);
 function fail(detail: string): never { throw new Error(`Source Screener hydration ${detail}`); }
-const object = (value: unknown): Record<string, unknown> => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('object mismatch');
-  return value as Record<string, unknown>;
-};
+const object = (value: unknown): Record<string, unknown> => isRecord(value) ? value : fail('object mismatch');
 
 /** Independently pinned native/composed sources; legacy HTTP remains decoded without qualification. */
 export class HttpScreenerHydration implements ScreenerHydration {
@@ -195,8 +193,8 @@ function attachmentReferences(data: unknown): unknown[] {
   while (pending.length) {
     const value = pending.pop();
     if (Array.isArray(value)) pending.push(...value);
-    else if (value && typeof value === 'object') {
-      const entry = value as Record<string, unknown>;
+    else if (isRecord(value)) {
+      const entry = value;
       if (Object.hasOwn(entry, 'contentType') && (Object.hasOwn(entry, 'url') || Object.hasOwn(entry, 'data'))
         || entry.kind === 'attachment-ref' || [entry.uri, entry.url].some(uri => typeof uri === 'string' && /^urn:formspec:attachment:/i.test(uri))) found.push(value);
       else pending.push(...Object.values(entry));

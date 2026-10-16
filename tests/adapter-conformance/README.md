@@ -31,7 +31,5 @@ Directory skeleton (one per current port):
 - `payment-rail-adapter/`
 - `embed-transport/`
 - `screener-document-source/`
-- `reviewer-session/`
-- `review-thread-store/`
 - `surface-bundle-source/`
 - `surface-bundle-verifier/`

@@ -1,3 +1,5 @@
+import { snapshotFiniteJson } from '@formspec-org/surface';
+
 /** Reject non-wire values without silently changing opaque data through JSON normalization. */
 export function requireWireJson(value: unknown, ancestors = new Set<object>(), depth = 0): void {
   if (depth > 256) throw new Error('Source evaluation hydration JSON nesting exceeds limit');
@@ -27,3 +29,7 @@ export function freezeWireJson(value: unknown): void {
     Object.freeze(value);
   }
 }
+
+/** Immutable finite-JSON copy of a typed value, typed as that value. */
+export function snapshotWire<T>(value: T): T;
+export function snapshotWire(value: unknown): unknown { return snapshotFiniteJson(value); }

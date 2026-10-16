@@ -150,13 +150,13 @@ describe('public-terminal confirmation actions (FW-0041)', () => {
     expect(screen.getByText('Print this confirmation, then clear this computer before leaving.')).not.toBeNull();
   });
 
-  it('hides trusted-reviewer controls from the print confirmation', () => {
+  it('hides respondent-place controls from the print confirmation', () => {
     const css = readFileSync('src/app/app.css', 'utf8');
     const printStart = css.indexOf('@media print');
     const printEnd = css.indexOf('/* FW-0046', printStart);
     const printBlock = css.slice(printStart, printEnd);
 
-    expect(printBlock).toContain('.trusted-reviewer');
+    expect(printBlock).toContain('.respondent-place');
     expect(printBlock).toContain('.confirmation-panel > a');
   });
 

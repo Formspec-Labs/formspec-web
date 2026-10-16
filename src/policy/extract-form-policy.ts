@@ -622,12 +622,7 @@ export function extractTrustedReviewerPolicy(
 function defaultTrustedReviewerConfig(
   posture: TrustedReviewerRuntimeConfig['posture'],
 ): TrustedReviewerRuntimeConfig {
-  return {
-    posture,
-    respondentOnlyFieldPointers: [],
-    reviewerSessionBindingRef: 'composition:reviewerSession',
-    reviewThreadStoreBindingRef: 'composition:reviewThreadStore',
-  };
+  return { posture, respondentOnlyFieldPointers: [] };
 }
 
 function trustedReviewerPosture(value: unknown): TrustedReviewerRuntimeConfig['posture'] | undefined {

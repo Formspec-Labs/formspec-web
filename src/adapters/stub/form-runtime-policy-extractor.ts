@@ -23,15 +23,6 @@ export class DemoFormPolicyExtractor implements FormRuntimePolicyExtractor {
         features: {
           respondentPlace: 'optional',
           status: 'optional',
-          trustedReviewer: 'optional',
-        },
-        limits: {
-          trustedReviewer: {
-            posture: 'suggest-allowed',
-            respondentOnlyFieldPointers: ['/data/ssn', '/data/protectedAddress'],
-            reviewerSessionBindingRef: 'composition:reviewerSession',
-            reviewThreadStoreBindingRef: 'composition:reviewThreadStore',
-          },
         },
       };
     }

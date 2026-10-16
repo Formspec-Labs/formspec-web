@@ -1,3 +1,5 @@
+import { defaultFetch } from './http-client.ts';
+import { isRecord } from '../../shared/is-record.ts';
 import { targetDefinitionMatches, type ComponentDocument, type FormDefinition, type LocaleDocument, type ThemeDocument } from '@formspec-org/types';
 import type { ResponseActionsDocumentInput as ResponseActionsDocument } from '@formspec-org/engine';
 import canonicalize from 'canonicalize';
@@ -87,7 +89,7 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
   private async load(manifestUrl: string): Promise<LoadedPackage> {
     const manifest = new URL(manifestUrl, window.location.href);
     if (manifest.origin !== window.location.origin) throw new Error('Package must use this app origin');
-    const response = await fetch(manifest, { redirect: 'error' });
+    const response = await defaultFetch()(manifest, { redirect: 'error' });
     if (!response.ok) throw new Error(`Package manifest failed: HTTP ${response.status}`);
     const { files } = await response.json() as { files: PackageFiles };
     if (this.componentSelection && (!files.nativeBundle || files.component)) {
@@ -104,7 +106,7 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
         || typeof file.sha256 !== 'string') throw new Error('Package file pin is malformed');
       const url = new URL(file.path, manifest);
       if (url.origin !== manifest.origin) throw new Error('Package file must use this app origin');
-      const result = await fetch(url, { redirect: 'error' });
+      const result = await defaultFetch()(url, { redirect: 'error' });
       if (!result.ok) throw new Error(`Package file failed: HTTP ${result.status}`);
       const bytes = await result.arrayBuffer();
       const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
@@ -207,10 +209,6 @@ export class PinnedPackageDefinitionSource implements DefinitionSource {
     if (typeof result.componentRouteResolver !== 'function') throw new Error('Package native Component route resolution is unavailable');
     return { bundle: structuredClone(bundle), component: structuredClone(component), componentRouteResolver: result.componentRouteResolver };
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function matchesComponentDocument(document: unknown, ref: { url: string; version: string }, definition: FormDefinition): boolean {

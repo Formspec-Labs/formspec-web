@@ -1,3 +1,4 @@
+import { isRecord } from '../shared/is-record.ts';
 import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
 import { demoSampleForm } from './index.ts';
 
@@ -108,6 +109,3 @@ export function defaultLocaleForDefinition(definition: FormDefinition): string {
   return typeof localeExtension.default === 'string' ? localeExtension.default : 'en';
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}

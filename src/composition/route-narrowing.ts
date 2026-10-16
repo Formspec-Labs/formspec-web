@@ -7,15 +7,11 @@ import {
   noopSubmitTransport,
 } from '../adapters/noop-for-narrowed-route/index.ts';
 import { unavailableNotificationDelivery } from '../adapters/unavailable/notification-delivery.ts';
-import { createHttpReviewerSession } from '../adapters/http/reviewer-session.ts';
-import { createHttpReviewThreadStore } from '../adapters/http/review-thread-store.ts';
 import { unavailableAttachmentStore } from '../adapters/unavailable/attachment-store.ts';
 import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transport.ts';
 import { unavailableLifecycleActionClient } from '../adapters/unavailable/lifecycle-action-client.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
-import { unavailableReviewerSession } from '../adapters/unavailable/reviewer-session.ts';
-import { unavailableReviewThreadStore } from '../adapters/unavailable/review-thread-store.ts';
 import { unavailableSafeAddressDirectory } from '../adapters/unavailable/safe-address-directory.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
@@ -150,7 +146,7 @@ function buildProductionNarrowedComposition({
     // `route.consumes.has('screener')` here (mirrors the
     // crossIssuerHistory pattern).
     screener: 'unavailable',
-    trustedReviewer: route.consumes.has('trustedReviewer') ? 'available' : 'unavailable',
+    trustedReviewer: 'unavailable',
     preparerFiling: 'unavailable',
     bringYourOwnAssistant: 'unavailable',
     safeAddress: 'unavailable',
@@ -211,12 +207,6 @@ function buildProductionNarrowedComposition({
     // + render the disabled-cause copy honestly. Adopter forks branch on
     // `route.consumes.has('screener')` to wire their real adapter.
     screenerDocumentSource: unavailableScreenerDocumentSource(),
-    reviewerSession: route.consumes.has('trustedReviewer')
-      ? createHttpReviewerSession({ baseUrl: serverUrl, tenantBinding: config.tenantBinding })
-      : unavailableReviewerSession(),
-    reviewThreadStore: route.consumes.has('trustedReviewer')
-      ? createHttpReviewThreadStore({ baseUrl: serverUrl, tenantBinding: config.tenantBinding })
-      : unavailableReviewThreadStore(),
     safeAddressDirectory: unavailableSafeAddressDirectory(),
     lifecycleActionClient: unavailableLifecycleActionClient(),
     instanceCapabilities,

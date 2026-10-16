@@ -15,7 +15,6 @@ import { stubOfflineSubmitQueue } from '../../src/adapters/stub/offline-submit-q
 import { stubPaymentRailAdapter } from '../../src/adapters/stub/payment-rail-adapter.ts';
 import { stubEmbedTransport } from '../../src/adapters/stub/embed-transport.ts';
 import { stubScreenerDocumentSource } from '../../src/adapters/stub/screener-document-source.ts';
-import { createStubTrustedReviewerAdapters } from '../../src/adapters/stub/review-thread-store.ts';
 import { stubSafeAddressDirectory } from '../../src/adapters/stub/safe-address-directory.ts';
 import { stubLifecycleActionClient } from '../../src/adapters/stub/lifecycle-action-client.ts';
 
@@ -32,7 +31,6 @@ export function createTestComposition(options: Partial<Composition> & { definiti
     definitionSource.registerDefinition(definition.url, definition);
   }
   const submitTransport = stubSubmitTransport();
-  const reviewer = createStubTrustedReviewerAdapters({ baseUrl: 'https://review.example.test' });
   return freezeComposition({
     ...base, mode: 'demo',
     definitionSource, draftStore: stubDraftStore(),
@@ -42,12 +40,12 @@ export function createTestComposition(options: Partial<Composition> & { definiti
     attachmentStore: stubAttachmentStore(), respondentHistorySource: stubRespondentHistorySource(),
     offlineSubmitQueue: stubOfflineSubmitQueue({ transport: submitTransport }),
     paymentRailAdapter: stubPaymentRailAdapter(), embedTransport: stubEmbedTransport({ embedded: false }),
-    screenerDocumentSource: stubScreenerDocumentSource(), ...reviewer,
+    screenerDocumentSource: stubScreenerDocumentSource(),
     safeAddressDirectory: stubSafeAddressDirectory(), lifecycleActionClient: stubLifecycleActionClient(),
     instanceCapabilities: { ...base.instanceCapabilities,
       respondentPlace: 'demo-stub', status: 'demo-stub', fileUpload: 'demo-stub',
       crossIssuerHistory: 'demo-stub', offlineSubmit: 'demo-stub', payment: 'demo-stub',
-      embed: 'demo-stub', screener: 'demo-stub', trustedReviewer: 'demo-stub',
+      embed: 'demo-stub', screener: 'demo-stub', trustedReviewer: 'unavailable',
       safeAddress: 'demo-stub', recordLifecycle: 'demo-stub',
     },
     ...overrides,

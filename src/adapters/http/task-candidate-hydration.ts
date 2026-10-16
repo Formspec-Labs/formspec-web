@@ -1,7 +1,8 @@
 import { NATIVE_SOURCE_OPERATION_MILLISECONDS } from '../../shared/native-operation-budget.ts';
 import { abortable } from '../../shared/abortable.ts';
 import canonicalize from 'canonicalize';
-import { snapshotFiniteJson } from '@formspec-org/surface';
+import { isRecord } from '../../shared/is-record.ts';
+import { snapshotWire } from './wire-json.ts';
 import type { FormDefinition } from '@formspec-org/types';
 import type { CompletionLifetime } from '../../ports/response-completion.ts';
 import type { SavedResponseDraft } from '../../ports/response-signing.ts';
@@ -122,10 +123,8 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
         check();
         // Task compositions use Source's strict TOP2/receipt3 family; legacy
         // hydration keeps its unchanged TOP1 decoder and proof requirements.
-        const mixed = raw.value !== null && typeof raw.value === 'object' && !Array.isArray(raw.value)
-          && Object.hasOwn(raw.value, 'version') && (raw.value as { version: unknown }).version === 2;
-        const decoded = mixed ? decodeMixedHydration(raw.value) : decodeEvaluationHydrationWire(raw.value);
-        const view = snapshotFiniteJson(decoded) as unknown as EvaluationHydrationWire | MixedHydrationWire;
+        const mixed = isRecord(raw.value) && raw.value.version === 2;
+        const view = snapshotWire(mixed ? decodeMixedHydration(raw.value) : decodeEvaluationHydrationWire(raw.value));
         const owner = view.owner;
         if (!equal(view.scope, selection.scope) || !equal(view.selection, selection) || view.formVersionHash !== formVersionHash
           || view.draftId !== saved.draft.id || view.draftVersion !== saved.draft.version || view.candidateHash !== candidateHash

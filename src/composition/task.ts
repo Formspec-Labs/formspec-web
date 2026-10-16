@@ -9,7 +9,7 @@ import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
 import { HttpTaskDraftLaunch } from '../adapters/http/task-draft-launch.ts';
 import { HttpTaskCandidateHydration, assertTaskHydrationSelection, taskRequiresExternalHydration, type HttpTaskCandidateHydrationConfig } from '../adapters/http/task-candidate-hydration.ts';
 import { HttpTaskCompletion } from '../adapters/http/task-completion.ts';
-import type { HttpClientConfig } from '../adapters/http/http-client.ts';
+import { defaultFetch, type HttpClientConfig } from '../adapters/http/http-client.ts';
 import type { HttpResponseSigningPolicy } from '../adapters/http/response-signing.ts';
 import type { DraftResumeMetadataStore } from '../adapters/browser/draft-resume-metadata.ts';
 import { createTaskResponseCompletion } from '../shared/task-response-completion.ts';
@@ -56,7 +56,7 @@ export async function createTaskComposition(config: {
   const check = () => { lifetime.signal.throwIfAborted(); assertSynchronousGuard(lifetime.assertCurrent);
     assertSynchronousGuard(sourceGuard); };
   const rawToken = sourceSettings.accessToken!;
-  const rawFetch = sourceSettings.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  const rawFetch = sourceSettings.fetchImpl ?? defaultFetch();
   const source: HttpClientConfig = { ...sourceSettings, accessToken: async () => {
     check(); const token = typeof rawToken === 'function' ? await rawToken() : rawToken; check();
     if (!token?.trim()) throw new Error('Selected Source task session is unavailable');

@@ -1,6 +1,6 @@
 import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
 import canonicalize from 'canonicalize';
-import { snapshotFiniteJson } from '@formspec-org/surface';
+import { snapshotWire } from './wire-json.ts';
 import type { FormResponse } from '@formspec-org/types';
 import type { TaskDraftLaunchSelection } from '../../ports/task-draft.ts';
 import type { VerifiedDraftEvidence } from '../../ports/response-signing.ts';
@@ -24,8 +24,8 @@ export class HttpTaskDraftLaunch {
     assertCurrent: () => void;
     validateResponse: (value: unknown) => boolean | Promise<boolean>;
   }) {
-    this.selection = snapshotFiniteJson(config.selection) as unknown as TaskDraftLaunchSelection;
-    this.definition = snapshotFiniteJson(config.definition) as unknown as typeof config.definition;
+    this.selection = snapshotWire(config.selection);
+    this.definition = snapshotWire(config.definition);
     this.owner = config.expectedSubjectRef;
     this.assertCurrent = config.assertCurrent;
     this.validateResponse = config.validateResponse;
@@ -50,12 +50,12 @@ export class HttpTaskDraftLaunch {
       assertSynchronousGuard(this.assertCurrent); };
     check();
     if (!isLosslessHttpIdempotencyKey(operationId)) throw new Error('Task draft launch requires a stable Idempotency-Key');
-    const raw = await this.client.postJson<unknown>('/runtime/task-drafts', this.selection, {
+    const raw = await this.client.postJson<VerifiedDraftEvidence>('/runtime/task-drafts', this.selection, {
       idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check, assertBeforeDispatch: check,
       requireJson: true, successStatuses: [200], timeoutMs: 10_000, maxResponseBytes: 2 * 1024 * 1024,
     });
     check();
-    const view = snapshotFiniteJson(raw) as unknown as VerifiedDraftEvidence;
+    const view = snapshotWire(raw);
     const response: FormResponse | undefined = view?.canonical_response;
     assertTaskDraftWire(view?.taskDraft);
     if (!view || typeof view.draft_id !== 'string' || !view.draft_id.trim()

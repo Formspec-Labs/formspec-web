@@ -8,7 +8,6 @@ import { parseObligationsRoute, type ObligationsRouteParams } from './obligation
 import { parseDocumentsRoute, type DocumentsRouteParams } from './documents-route.ts';
 import { parseHistoryRoute, type HistoryRouteParams } from './history-route.ts';
 import { parseScreenerRoute, type ScreenerRouteParams } from './screener-route.ts';
-import { parseReviewerRoute, type ReviewerRouteParams } from './reviewer-route.ts';
 
 interface AppProps {
   config: FormspecWebConfig;
@@ -50,12 +49,6 @@ interface ScreenerRuntimeProps {
   route: ScreenerRouteParams;
 }
 
-interface ReviewerRuntimeProps {
-  composition: Composition;
-  config: FormspecWebConfig;
-  route: ReviewerRouteParams;
-}
-
 type RuntimeState =
   | { status: 'loading' }
   | {
@@ -93,12 +86,6 @@ type RuntimeState =
       Runtime: ComponentType<ScreenerRuntimeProps>;
       params: ScreenerRouteParams;
     }
-  | {
-      status: 'ready';
-      route: 'reviewer';
-      Runtime: ComponentType<ReviewerRuntimeProps>;
-      params: ReviewerRouteParams;
-    }
   | { status: 'error'; error: unknown };
 
 export function App({ config, href = window.location.href }: AppProps) {
@@ -124,10 +111,6 @@ export function App({ config, href = window.location.href }: AppProps) {
       statusParams || obligationsParams || documentsParams || historyParams
         ? null
         : parseScreenerRoute(href);
-    const reviewerParams =
-      statusParams || obligationsParams || documentsParams || historyParams || screenerParams
-        ? null
-        : parseReviewerRoute(href);
     const loader = statusParams
       ? import('./StatusRuntime.tsx').then((module) => ({
           status: 'ready' as const,
@@ -163,13 +146,6 @@ export function App({ config, href = window.location.href }: AppProps) {
                   Runtime: module.ScreenerRuntime,
                   params: screenerParams,
                 }))
-              : reviewerParams
-                ? import('./ReviewerRuntime.tsx').then((module) => ({
-                    status: 'ready' as const,
-                    route: 'reviewer' as const,
-                    Runtime: module.ReviewerRuntime,
-                    params: reviewerParams,
-                  }))
               : (composition.nativePackageRespondent
                   ? import('./NativePackageRuntime.tsx').then(module => ({ Native: module.NativePackageRuntime }))
                   : import('./RespondentRuntime.tsx').then(module => ({ Native: module.RespondentRuntime })))
@@ -215,8 +191,6 @@ export function App({ config, href = window.location.href }: AppProps) {
           ) : runtimeState.status === 'ready' && runtimeState.route === 'history' ? (
             <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
           ) : runtimeState.status === 'ready' && runtimeState.route === 'screener' ? (
-            <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
-          ) : runtimeState.status === 'ready' && runtimeState.route === 'reviewer' ? (
             <runtimeState.Runtime composition={composition} config={config} route={runtimeState.params} />
           ) : (
             <>

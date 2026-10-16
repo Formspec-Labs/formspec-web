@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/is-record.ts';
 import { isLosslessHttpIdempotencyKey } from '../../shared/idempotency-key.ts';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
@@ -26,8 +27,22 @@ export interface HttpScreenerRetentionConfig extends HttpClientConfig {
   readonly selectionHash: string;
 }
 
+interface ScreenerRecoveryView {
+  scope: unknown; owner: unknown; formVersionHash: string; draftId: string; draftVersion: number;
+  candidateHash: string; selectionHash: string;
+  result: { status: string; relation: string; association: ScreenerAssociation; history: ScreenerRunView };
+}
+/** Admits a Source wire value against its pinned schema; responses narrow to their port type. */
+function requireSchema(name: 'RunView', value: unknown): asserts value is ScreenerRunView;
+function requireSchema(name: 'Association', value: unknown): asserts value is ScreenerAssociation;
+function requireSchema(name: 'RecoveryView', value: unknown): asserts value is ScreenerRecoveryView;
+function requireSchema(name: string, value: unknown): void;
 function requireSchema(name: string, value: unknown): void {
   if (!validators[name]?.(value)) throw new Error(`Invalid Source Screener ${name}`);
+}
+function validUntil(run: ScreenerRunView['run']): string | undefined {
+  const validity = run.determination.validity;
+  return isRecord(validity) && typeof validity.validUntil === 'string' ? validity.validUntil : undefined;
 }
 function equal(left: unknown, right: unknown): boolean { return canonicalize(left) === canonicalize(right); }
 function check(context: ScreenerOperationContext): void { context.signal.throwIfAborted(); context.assertCurrent(); }
@@ -87,7 +102,7 @@ export class HttpScreenerRetention implements ScreenerRetention {
       { ...options(input), idempotencyKey: request.completionId });
     check(input);
     requireSchema('RunView', value);
-    const view = value as ScreenerRunView;
+    const view = value;
     requireIdentity(view, { ...input, identity: request.identity });
     const run = view.run;
     const { evidenceHash, ...evidence } = run;
@@ -103,10 +118,10 @@ export class HttpScreenerRetention implements ScreenerRetention {
     const current = view.acceptance;
     if (Date.parse(current.checkedAt) < Date.parse(run.evaluatedAt)) throw new Error('Source Screener acceptance predates evaluation');
     if (current.qualification.status === 'ready') {
-      const validity = run.determination.validity as { validUntil?: string } | undefined;
+      const until = validUntil(run);
       if (run.qualification.status !== 'ready' || run.qualification.target !== request.target
         || current.qualification.target !== request.target || run.determination.status !== 'completed'
-        || (validity?.validUntil !== undefined && Date.parse(current.checkedAt) >= Date.parse(validity.validUntil))) {
+        || (until !== undefined && Date.parse(current.checkedAt) >= Date.parse(until))) {
         throw new Error('Source Screener current acceptance mismatch');
       }
     }
@@ -133,9 +148,7 @@ export class HttpScreenerRetention implements ScreenerRetention {
     requireSchema('Recover', body); check(input);
     const value = await this.client.postJson<unknown>(`/drafts/${encodeURIComponent(saved.draft.id)}/screener-recovery`, body, options(input));
     check(input); requireSchema('RecoveryView', value);
-    const recovered = value as { scope: unknown; owner: unknown; formVersionHash: string; draftId: string;
-      draftVersion: number; candidateHash: string; selectionHash: string; result: { status: string; relation: string;
-        association: ScreenerAssociation; history: ScreenerRunView } };
+    const recovered = value;
     if (!equal(recovered.scope, selected.scope) || recovered.formVersionHash !== body.formVersionHash
       || recovered.draftId !== saved.draft.id || recovered.draftVersion !== saved.draft.version
       || recovered.candidateHash !== candidateHash || recovered.selectionHash !== this.selectionHash
@@ -184,7 +197,7 @@ export class HttpScreenerRetention implements ScreenerRetention {
 
   private async validateSuccessor(value: unknown, input: RefreshScreenerRun, appended: boolean): Promise<ScreenerRunView> {
     check(input); requireSchema('RunView', value);
-    const view = value as ScreenerRunView;
+    const view = value;
     requireIdentity(view, input);
     const run = view.run, previous = input.run.run;
     const { evidenceHash, ...evidence } = run;
@@ -201,10 +214,10 @@ export class HttpScreenerRetention implements ScreenerRetention {
       || (appended ? view.acceptance === null : view.acceptance !== null)
       || view.acceptance !== null && Date.parse(view.acceptance.checkedAt) < Date.parse(run.evaluatedAt)) throw new Error('Source Screener refreshed evidence mismatch');
     if (view.acceptance?.qualification.status === 'ready') {
-      const validity = run.determination.validity as { validUntil?: string } | undefined;
+      const until = validUntil(run);
       if (run.qualification.status !== 'ready' || run.qualification.target !== view.acceptance.qualification.target
         || !this.selection.allowedTargets.includes(run.qualification.target) || run.determination.status !== 'completed'
-        || validity?.validUntil !== undefined && Date.parse(view.acceptance.checkedAt) >= Date.parse(validity.validUntil))
+        || until !== undefined && Date.parse(view.acceptance.checkedAt) >= Date.parse(until))
         throw new Error('Source Screener refreshed acceptance mismatch');
     }
     check(input); freeze(view); this.issued.add(view); return view;
@@ -233,7 +246,7 @@ export class HttpScreenerRetention implements ScreenerRetention {
     const value = await this.client.postJson<unknown>(`/drafts/${encodeURIComponent(saved.draft.id)}/screener-associations`, body, options(input));
     check(input);
     requireSchema('Association', value);
-    const association = value as ScreenerAssociation;
+    const association = value;
     if (!equal(association.scope, run.scope) || !equal(association.owner, run.owner)
       || association.draftId !== saved.draft.id || association.draftVersion !== saved.draft.version
       || association.candidateHash !== candidateHash || association.selectionHash !== this.selectionHash

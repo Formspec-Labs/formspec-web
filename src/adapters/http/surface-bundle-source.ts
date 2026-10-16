@@ -7,7 +7,7 @@ import {
   SurfaceBundleSourceError,
   createSurfaceBundleSnapshot,
 } from '../../ports/surface-bundle-source.ts';
-import type { FetchLike } from './http-client.ts';
+import { defaultFetch, type FetchLike } from './http-client.ts';
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -50,7 +50,7 @@ export class HttpSurfaceBundleSource implements SurfaceBundleSource {
     if (!Number.isSafeInteger(this.maxRedirects) || this.maxRedirects < 0) {
       throw new Error('HttpSurfaceBundleSource maxRedirects must be a non-negative safe integer');
     }
-    this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.fetchImpl = config.fetchImpl ?? defaultFetch();
     this.now = config.now ?? (() => new Date());
     this.adapterId = config.adapterId ?? 'urn:formspec-web:surface-bundle-source:http@1';
   }

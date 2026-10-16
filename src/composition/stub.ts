@@ -19,7 +19,6 @@ import { stubNotificationDelivery } from '../adapters/stub/notification-delivery
 import { stubOfflineSubmitQueue } from '../adapters/stub/offline-submit-queue.ts';
 import { stubPaymentRailAdapter } from '../adapters/stub/payment-rail-adapter.ts';
 import { persistentDemoAttachmentStore } from '../adapters/stub/persistent-attachment-store.ts';
-import { createStubTrustedReviewerAdapters } from '../adapters/stub/review-thread-store.ts';
 import { stubRespondentHistorySource } from '../adapters/stub/respondent-history-source.ts';
 import { stubRespondentPlaceSource } from '../adapters/stub/respondent-place-source.ts';
 import { stubScreenerDocumentSource } from '../adapters/stub/screener-document-source.ts';
@@ -66,9 +65,6 @@ export function createStubComposition(): Composition {
   definitionSource.registerLocaleDocuments(demoSampleForm.url, demoLocaleDocuments);
 
   const submitTransport = stubSubmitTransport();
-  const trustedReviewerAdapters = createStubTrustedReviewerAdapters({
-    baseUrl: 'https://demo.formspec.test',
-  });
   const composition: Composition = {
     mode: 'demo',
     initialDefinitionUrl: demoSampleFormUrl,
@@ -108,8 +104,6 @@ export function createStubComposition(): Composition {
     // posture so the /screener route renders the upstream
     // <FormspecScreener> end-to-end in `npm run dev`.
     screenerDocumentSource: stubScreenerDocumentSource(demoScreenerCatalog()),
-    reviewerSession: trustedReviewerAdapters.reviewerSession,
-    reviewThreadStore: trustedReviewerAdapters.reviewThreadStore,
     safeAddressDirectory: stubSafeAddressDirectory(),
     lifecycleActionClient: stubLifecycleActionClient({
       initialSnapshots: [demoLifecycleActionSnapshot()],
@@ -163,10 +157,8 @@ export function createStubComposition(): Composition {
       // end-to-end. Production declares 'unavailable' until adopters
       // wire a real catalog adapter.
       screener: 'demo-stub',
-      // FW-0113 slice 1: in-memory reviewer-session + review-thread stubs
-      // satisfy the demo posture. Production remains unavailable until an
-      // adopter wires durable capability URL + SC-6 storage adapters.
-      trustedReviewer: 'demo-stub',
+      // FW-0042 has no ports yet (the unserved reviewer stubs were deleted).
+      trustedReviewer: 'unavailable',
       preparerFiling: 'unavailable',
       bringYourOwnAssistant: 'unavailable',
       safeAddress: 'demo-stub',

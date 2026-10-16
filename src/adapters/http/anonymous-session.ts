@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/is-record.ts';
 import type { DraftKey } from '../../ports/draft-store.ts';
 import type {
   AssuranceLevel,
@@ -65,7 +66,7 @@ export class AnonymousSessionBridge {
     if (!slot) {
       const saved = this.resumeMetadata?.read(`grant:${formId}`);
       if (saved !== undefined && !isSession(saved, formId)) throw new Error('Stored anonymous grant is invalid or bound to another form');
-      slot = { session: saved as AnonymousSession | undefined };
+      slot = { session: saved };
       this.sessions.set(formId, slot);
     }
     if (slot.session) {
@@ -227,11 +228,10 @@ function assertSubjectMatches(serverSubjectRef: string, requestedSubjectRef: str
 }
 
 function isSession(value: unknown, formId: string): value is AnonymousSession {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as AnonymousSession;
-  return typeof candidate.sessionId === 'string' && candidate.sessionId.trim().length > 0
-    && typeof candidate.sessionToken === 'string' && candidate.sessionToken.trim().length > 0
-    && typeof candidate.subjectRef === 'string' && candidate.subjectRef.startsWith('anon:') && candidate.subjectRef.length > 5
-    && candidate.formId === formId && typeof candidate.expiresAt === 'string'
-    && Number.isFinite(Date.parse(candidate.expiresAt));
+  return isRecord(value)
+    && typeof value.sessionId === 'string' && value.sessionId.trim().length > 0
+    && typeof value.sessionToken === 'string' && value.sessionToken.trim().length > 0
+    && typeof value.subjectRef === 'string' && value.subjectRef.startsWith('anon:') && value.subjectRef.length > 5
+    && value.formId === formId && typeof value.expiresAt === 'string'
+    && Number.isFinite(Date.parse(value.expiresAt));
 }
