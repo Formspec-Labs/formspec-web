@@ -955,9 +955,13 @@ describe('explicit correction host through the maintained native loader', () => 
       boot = await composition.nativePackageRespondent!.load();
       await screen.findByRole('textbox', { name: /full legal name/i });
       await vi.waitFor(() => expect(evaluations.length).toBeGreaterThan(0));
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // The superseded-renderer race would abort the latest hydration once the second configureRuntime
+      // retires runtime 1; both qualification passes having dispatched means that point has passed.
+      await vi.waitFor(() => {
+        expect(qualify.mock.calls.length).toBeGreaterThan(1);
+        expect(evaluations.filter(signal => !signal.aborted)).toHaveLength(1);
+      });
       expect(evaluations.at(-1)!.aborted).toBe(false);
-      expect(qualify.mock.calls.length).toBeGreaterThan(1);
       expect(boot.host.getSnapshot().controller?.saved?.response.data).toEqual(response.data);
       expect(boot.host.getSnapshot().nativeReadiness).toBe('pending');
       expect(boot.host.getSnapshot().controller?.prepared).toBeUndefined();
