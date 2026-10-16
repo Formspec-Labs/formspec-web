@@ -1557,3 +1557,35 @@ it('native route transition rebuilds prepared sources after the old renderer unm
   expect(test.prepare).toHaveBeenCalledOnce(); expect(test.sign).not.toHaveBeenCalled(); expect(test.submit).not.toHaveBeenCalled();
   mounted.unmount(); test.host.dispose();
 });
+
+it.each(['current', 'expired'] as const)('settles one %s-facts Prepare across its committed successor engine exchange', async mode => {
+  const test = await nativeFactsFixture();
+  let expired = false;
+  const originalHydrate = test.hydrate.getMockImplementation()!;
+  test.hydrate.mockImplementationOnce(async request => {
+    const facts = await originalHydrate(request);
+    return { ...facts, assertReady: () => { facts.assertReady(); if (expired) throw new Error('proof expired'); } };
+  });
+  Object.assign(test.policy.nativeScreener!.retention, { refresh: vi.fn(async () => { throw new Error('unexpected fresh act'); }) });
+  const mounted = render(<NativePackageRespondentHost {...test.props} location="/eligibility" />);
+  await completeNativeScreener(test, mounted);
+  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+  await vi.waitFor(() => expect(test.host.getSnapshot().nativeReadiness).toBe('ready'));
+  expired = mode === 'expired';
+  let release!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const hydrate = test.hydrate.getMockImplementation()!;
+  test.hydrate.mockImplementationOnce(async request => { await hold; return hydrate(request); });
+  const before = test.terminals.length;
+  fireEvent.click(screen.getByRole('button', { name: 'Prepare saved response' }));
+  if (mode === 'current') {
+    await vi.waitFor(() => expect(test.prepare).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(test.host.getSnapshot().controller?.prepared).toBeDefined());
+  } else await vi.waitFor(() => expect(test.hydrate).toHaveBeenCalledTimes(2));
+  await act(async () => { release(); });
+  await vi.waitFor(() => expect(test.terminals.length).toBeGreaterThan(before));
+  expect(test.terminals.at(-1)).toEqual({ status: 'completed', valid: true });
+  expect(test.host.getSnapshot().controller?.prepared).toBeDefined();
+  expect(test.navigate).toHaveBeenCalledWith('/review-sign');
+  mounted.unmount(); test.host.dispose();
+});
