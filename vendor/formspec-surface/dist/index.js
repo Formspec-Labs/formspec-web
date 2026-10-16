@@ -27,6 +27,6 @@ export { planTransitions, responseActionsDocumentForDefinition, slotSuppliedTrig
 export { planMatchedRoute, } from './route-plan.js';
 export { bundleIsRenderable, dereferenceBundleExport, } from './bundle.js';
 export { SURFACE_SCENARIO_DIAGNOSTIC_CODES, createSurfacePreviewRuntime, validateSurfacePreviewScenario, } from './preview-scenario.js';
-export { snapshotFiniteJson, canonicalFiniteJson, FiniteJsonSnapshotError, finiteJsonSnapshotRefusalReason } from "./finite-json.js";
+export { snapshotFiniteJson, canonicalFiniteJson } from "./finite-json.js";
 export { captureResponseFieldMetadata, } from './response-field-metadata.js';
 export * from "./screener-slot.js";
