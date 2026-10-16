@@ -21,7 +21,8 @@ import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts
 import * as nativeHostModule from '../../src/shared/native-package-signing-host.ts';
 import { createDefaultComposition, type IdentityBinding } from '../../src/composition/default.ts';
 import { resolveActiveConfig } from '../../src/config/runtime.ts';
-import { nativePackageSigningConfig } from '../../src/config/native-package-signing.ts';
+import { nativePackageSigningConfig, type NativePackageSigningConfig } from '../../src/config/native-package-signing.ts';
+import type { NativePackageCompositionOptions } from '../../src/composition/native-package.ts';
 import { publicPortalProfile } from '../../src/profiles/profiles.ts';
 import { computeJcsSha256Digest } from '../../src/adapters/http/response-action-ledger.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
@@ -1289,7 +1290,7 @@ it.each([null, false])('refuses a malformed explicit resume option outside nativ
 it.skipIf(!process.env.FORMSPEC_TASK_PACKAGE_PUBLIC_ROOT)('admits exported correction task package through maintained host and actual task route', async () => {
   const publicRoot = process.env.FORMSPEC_TASK_PACKAGE_PUBLIC_ROOT!;
   const manifest = JSON.parse(readFileSync(resolve(publicRoot, 'correction-package-manifest.json'), 'utf8'));
-  const selections = JSON.parse(readFileSync(resolve(publicRoot, 'task-role-selections.json'), 'utf8')) as { signing: import('../../src/config/native-package-signing.ts').NativePackageSigningConfig; deployment: { publication: { definitionHash: string } } }[];
+  const selections = JSON.parse(readFileSync(resolve(publicRoot, 'task-role-selections.json'), 'utf8')) as { signing: NativePackageSigningConfig; deployment: { publication: { definitionHash: string } } }[];
   const matches = selections.filter(selection => selection.signing.component?.handle === 'submit_correction');
   expect(matches).toHaveLength(1);
   const signing = matches[0].signing;
@@ -1337,7 +1338,7 @@ it.skipIf(!process.env.FORMSPEC_TASK_PACKAGE_PUBLIC_ROOT)('admits exported corre
   const bindings = deployment.taskHostEvents.find(row => row.definition.url === signing.definition.url
     && row.definition.version === signing.definition.version)?.bindings ?? [];
   // Same maintained savedFactsHostEvents handler selected by browser-task-signing.
-  const hostEvents: NonNullable<import('../../src/composition/native-package.ts').NativePackageCompositionOptions['hostEvents']> = bindings.map(binding => ({ ...binding,
+  const hostEvents: NonNullable<NativePackageCompositionOptions['hostEvents']> = bindings.map(binding => ({ ...binding,
     async handle({ signal, assertCurrent, refreshSavedFacts }) {
       signal.throwIfAborted(); assertCurrent();
       await refreshSavedFacts();
