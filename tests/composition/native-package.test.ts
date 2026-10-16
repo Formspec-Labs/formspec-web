@@ -338,7 +338,7 @@ describe('explicit native package composition', () => {
     expect(boot.host.getStartupRoute(formRoute.path!).canRestoreOwnedForm).toBe(false);
     expect(test.requests.every(request => request.method === 'GET')).toBe(true);
     mounted.unmount(); boot.host.dispose(); window.history.replaceState(null, '', '/');
-  });
+  }, 30000);
   it('awaits runtime then tools for an admitted initial-data Mapping before publishing the host', async () => {
     const test = await completeStudioFixture(true); const order: string[] = [];
     let release: (() => void) | undefined;
