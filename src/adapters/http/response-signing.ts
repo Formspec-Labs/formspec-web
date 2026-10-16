@@ -1,4 +1,5 @@
 import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
+import { decodeBase64 } from '../../shared/base64.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import canonicalize from 'canonicalize';
 import { extractServiceRequestOutputs, hashSigningContent, planServiceRequest, resolveAuthoredSigningContent, resolveServiceRequest } from '@formspec-org/engine/render';
@@ -677,7 +678,7 @@ export async function assertDelegatedSignedResponseConsistency(response: FormRes
     || payload.digest !== digest || payload.responseId !== candidate.id || payload.definitionUrl !== candidate.definitionUrl
     || payload.definitionVersion !== candidate.definitionVersion || payload.signedAt !== commitment.signedAt
     || payload.signingIntent !== commitment.content.signingIntent) throw new Error('Delegated signing evidence differs from the frozen candidate');
-  const decoded = decodeCoseSign1WithMethodUri(base64Bytes(signature.signatureValue), 'urn:formspec:sig-method:');
+  const decoded = decodeCoseSign1WithMethodUri(decodeBase64(signature.signatureValue, 1024 * 1024), 'urn:formspec:sig-method:');
   if (decoded.methodUri !== 'urn:formspec:sig-method:ed25519-cose-sign1@1' || decoded.cose.alg !== -8
     || decoded.cose.payload !== null || decoded.cose.signature.length !== 64
     || !decoded.cose.kid || new TextDecoder('utf-8', { fatal: true }).decode(decoded.cose.kid) !== policy.keyId) {
@@ -706,8 +707,4 @@ export async function savedResponseDraftFromVerifiedRead(key: DraftKey, supplied
 export async function handoffHash(response: FormResponse): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', canonicalResponseHandoffBytes(response));
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
-}
-function base64Bytes(value: string): Uint8Array {
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw new Error('Signing envelope must be standard base64');
-  return Uint8Array.from(atob(value), character => character.charCodeAt(0));
 }

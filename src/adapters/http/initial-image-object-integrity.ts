@@ -1,4 +1,5 @@
 import Ajv2020 from 'ajv/dist/2020.js';
+import { decodeBase64 } from '../../shared/base64.ts';
 import addFormats from 'ajv-formats';
 import canonicalize from 'canonicalize';
 import proofSchema from './source-schemas/evaluation-instance-proof-read-v1.schema.json';
@@ -42,14 +43,7 @@ const caps: Readonly<Record<Role, number>> = { rawOutput: 65_536, preparedInputs
 const utf8Length = (value: string) => new TextEncoder().encode(value).byteLength;
 
 function decodedBytes(encoded: string, cap: number): Uint8Array<ArrayBuffer> {
-  if (encoded.length > 4 * Math.ceil(cap / 3) || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
-    fail('base64 encoding or byte cap mismatch');
-  }
-  const text = atob(encoded);
-  if (!text.length || text.length > cap || btoa(text) !== encoded) fail('decoded byte cap or encoding mismatch');
-  const bytes = new Uint8Array(text.length);
-  for (let index = 0; index < text.length; index++) bytes[index] = text.charCodeAt(index);
-  return bytes;
+  try { return decodeBase64(encoded, cap); } catch (error) { return fail((error as Error).message); }
 }
 async function rawHash(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes);

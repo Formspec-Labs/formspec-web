@@ -1,4 +1,5 @@
 import { canonicalFiniteJson, captureResponseFieldMetadata, snapshotFiniteJson } from '@formspec-org/surface';
+import { decodeBase64 } from './base64.ts';
 import { createStaticResponseMetadataReader } from '@formspec-org/engine/static-presentation';
 import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
@@ -11,15 +12,6 @@ export type AcceptedTaskSignIdentity = AcceptedTaskResponseReviewSign;
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
 const equal = (a: unknown, b: unknown) => canonicalFiniteJson(snapshotFiniteJson(a)) === canonicalFiniteJson(snapshotFiniteJson(b));
-/** Source retains artifact bytes as standard base64 text; a number array costs a JSON node per byte. */
-function decodeRetainedBytes(value: unknown): Uint8Array<ArrayBuffer> {
-  if (typeof value !== 'string' || value.length > Math.ceil(1024 * 1024 / 3) * 4
-    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value))
-    throw new Error('Bounded retained artifact bytes required');
-  const bytes = Uint8Array.from(atob(value), character => character.charCodeAt(0));
-  if (bytes.length > 1024 * 1024) throw new Error('Bounded retained artifact bytes required');
-  return bytes;
-}
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Retained task presentation object required');
   return value as Record<string, unknown>;
@@ -74,7 +66,9 @@ export async function prepareStaticTaskPresentation(input: {
   const identities = new Set<string>();
   for (const value of presentation.artifacts) {
     const artifact = object(value);
-    const retainedBytes = decodeRetainedBytes(artifact.bytes);
+    if (typeof artifact.bytes !== 'string') throw new Error('Bounded retained artifact bytes required');
+    let retainedBytes: Uint8Array<ArrayBuffer>;
+    try { retainedBytes = decodeBase64(artifact.bytes, 1024 * 1024); } catch { throw new Error('Bounded retained artifact bytes required'); }
     total += retainedBytes.length;
     if (total > 4 * 1024 * 1024) throw new Error('Retained presentation byte limit exceeded');
     const identity = canonicalFiniteJson(snapshotFiniteJson([artifact.kind, artifact.reference, artifact.authoredVersion ?? null]));
