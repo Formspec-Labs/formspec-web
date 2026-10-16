@@ -18,7 +18,7 @@ function fixture() {
       responseId: 'retained-task-response', definitionUrl: definition.url, definitionVersion: definition.version } }] as FormResponse['authoredSignatures'] };
   const artifact = (kind: string, value: FormDefinition | LocaleDocument) => {
     const bytes = new TextEncoder().encode(JSON.stringify(value));
-    return { kind, reference: value.url, authoredVersion: value.version, rawHash: sha(bytes), bytes: [...bytes] };
+    return { kind, reference: value.url, authoredVersion: value.version, rawHash: sha(bytes), bytes: Buffer.from(bytes).toString('base64') };
   };
   const retainedSign = { recordRef: 'urn:formspec:task-draft-sign:sha256:' + 'b'.repeat(64), recordHash: 'sha256:' + 'b'.repeat(64),
     signedResponseHash: sha(canonicalResponseHandoffBytes(response)), signedCanonicalResponse: structuredClone(response),
@@ -43,7 +43,7 @@ describe('retained static task presentation', () => {
     if (change === 'response') input.retainedSign.signedCanonicalResponse.data = {};
     if (change === 'responseHash') input.retainedSign.signedResponseHash = 'sha256:' + 'd'.repeat(64);
     if (change === 'publication') input.retainedPresentation.formVersionHash = 'sha256:' + 'd'.repeat(64);
-    if (change === 'rawBytes') input.retainedPresentation.artifacts[0].bytes[0] = 0;
+    if (change === 'rawBytes') input.retainedPresentation.artifacts[0].bytes = Buffer.from(' ').toString('base64');
     if (change === 'locale') input.retainedPresentation.selectedLocale = { ...input.response.displayedLocale!, locale: 'es' };
     if (change === 'duplicate') input.retainedPresentation.artifacts.push(input.retainedPresentation.artifacts[0]);
     if (change === 'recordRef') input.retainedSign.recordRef = 'urn:formspec:task-draft-sign:sha256:' + 'a'.repeat(64);
@@ -52,6 +52,17 @@ describe('retained static task presentation', () => {
   it('refuses a retired case after metadata preparation', async () => {
     const input = fixture(); input.qualifyCurrent.mockImplementationOnce(async () => {}).mockImplementationOnce(async () => { throw new Error('Case retired'); });
     await expect(prepareStaticTaskPresentation(input)).rejects.toThrow('Case retired');
+  });
+  it('admits a real-size Definition at the default snapshot capacity because bytes are base64 text', async () => {
+    const input = fixture(); input.definition.description = 'x'.repeat(300_000);
+    const bytes = new TextEncoder().encode(JSON.stringify(input.definition));
+    expect(bytes.length).toBeGreaterThan(100_000);
+    input.retainedPresentation.artifacts[0] = { ...input.retainedPresentation.artifacts[0], bytes: Buffer.from(bytes).toString('base64'), rawHash: sha(bytes) };
+    await expect(prepareStaticTaskPresentation(input)).resolves.toHaveProperty('fields');
+  });
+  it.each([[[32, 32]], ['not base64!'], ['QQ'], [`${'QUFB'.repeat(350_000)}`]])('refuses retained bytes that are not bounded base64 text: %#', async bytes => {
+    const input = fixture(); input.retainedPresentation.artifacts[0] = { ...input.retainedPresentation.artifacts[0], bytes } as never;
+    await expect(prepareStaticTaskPresentation(input)).rejects.toThrow('Bounded retained artifact bytes required');
   });
   it('refuses absent recorded Locale instead of inventing a display language', async () => {
     const input = fixture(); delete input.response.displayedLocale;
@@ -65,7 +76,7 @@ describe('retained static task presentation', () => {
   it('preserves the maintained dynamic wording refusal', async () => {
     const input = fixture(); input.definition.items[0].label = '{{ today }}';
     const bytes = new TextEncoder().encode(JSON.stringify(input.definition));
-    input.retainedPresentation.artifacts[0] = { ...input.retainedPresentation.artifacts[0], bytes: [...bytes], rawHash: sha(bytes) };
+    input.retainedPresentation.artifacts[0] = { ...input.retainedPresentation.artifacts[0], bytes: Buffer.from(bytes).toString('base64'), rawHash: sha(bytes) };
     await expect(prepareStaticTaskPresentation(input)).rejects.toThrow('interpolation-unproven');
   });
 });

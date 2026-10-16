@@ -11,6 +11,15 @@ export type AcceptedTaskSignIdentity = AcceptedTaskResponseReviewSign;
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
 const equal = (a: unknown, b: unknown) => canonicalFiniteJson(snapshotFiniteJson(a)) === canonicalFiniteJson(snapshotFiniteJson(b));
+/** Source retains artifact bytes as standard base64 text; a number array costs a JSON node per byte. */
+function decodeRetainedBytes(value: unknown): Uint8Array<ArrayBuffer> {
+  if (typeof value !== 'string' || value.length > Math.ceil(1024 * 1024 / 3) * 4
+    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value))
+    throw new Error('Bounded retained artifact bytes required');
+  const bytes = Uint8Array.from(atob(value), character => character.charCodeAt(0));
+  if (bytes.length > 1024 * 1024) throw new Error('Bounded retained artifact bytes required');
+  return bytes;
+}
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Retained task presentation object required');
   return value as Record<string, unknown>;
@@ -65,19 +74,16 @@ export async function prepareStaticTaskPresentation(input: {
   const identities = new Set<string>();
   for (const value of presentation.artifacts) {
     const artifact = object(value);
-    if (!Array.isArray(artifact.bytes) || artifact.bytes.length > 1024 * 1024
-      || artifact.bytes.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255))
-      throw new Error('Bounded retained artifact bytes required');
-    total += artifact.bytes.length;
+    const retainedBytes = decodeRetainedBytes(artifact.bytes);
+    total += retainedBytes.length;
     if (total > 4 * 1024 * 1024) throw new Error('Retained presentation byte limit exceeded');
     const identity = canonicalFiniteJson(snapshotFiniteJson([artifact.kind, artifact.reference, artifact.authoredVersion ?? null]));
     if (identities.has(identity)) throw new Error('Duplicate retained task artifact');
     identities.add(identity);
     if (artifact.kind !== 'definition' && artifact.kind !== 'locale') continue;
-    const bytes = new Uint8Array(artifact.bytes);
-    if (await hash(bytes) !== artifact.rawHash) throw new Error('Retained display artifact bytes changed');
+    if (await hash(retainedBytes) !== artifact.rawHash) throw new Error('Retained display artifact bytes changed');
     check();
-    const document = object(snapshotFiniteJson(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), true));
+    const document = object(snapshotFiniteJson(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(retainedBytes)), true));
     if (document.version !== artifact.authoredVersion || document.url !== artifact.reference)
       throw new Error('Retained display artifact identity differs');
     if (artifact.kind === 'definition') {
