@@ -1586,6 +1586,6 @@ it.each(['current', 'expired'] as const)('settles one %s-facts Prepare across it
   await vi.waitFor(() => expect(test.terminals.length).toBeGreaterThan(before));
   expect(test.terminals.at(-1)).toEqual({ status: 'completed', valid: true });
   expect(test.host.getSnapshot().controller?.prepared).toBeDefined();
-  expect(test.navigate).toHaveBeenCalledWith('/review-sign');
+  await vi.waitFor(() => expect(test.navigate).toHaveBeenCalledWith('/review-sign'));
   mounted.unmount(); test.host.dispose();
 });

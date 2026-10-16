@@ -257,13 +257,15 @@ describe('generic native package signing session', () => {
         await act(async () => { fireEvent.click(submit); await vi.advanceTimersByTimeAsync(10_000); });
         vi.useRealTimers();
         expect(host.getSnapshot().controller).toMatchObject({ phase: 'outcome-unknown', reason: 'completion-outcome-unknown' });
-        await screen.findByText('Your signed response is saved. The submission outcome is unknown. Check application status.');
+        // The ceremony stays silent in this state; the Runtime shell owns the localized message.
+        await vi.waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(true));
+        expect(screen.queryByText('Submission failed')).toBeNull();
         expect((submit as HTMLButtonElement).disabled).toBe(true);
         await act(async () => { await host.refreshApplication!(); });
         mounted.rerender(createElement(NativePackageRespondentHost, { ...props }));
         expect(host.getSnapshot().application?.status).toBe('submitted');
         expect(loadApplication).toHaveBeenCalledOnce();
-        expect(screen.getByText('Your signed response is saved. The submission outcome is unknown. Check application status.')).toBeTruthy();
+        expect(screen.queryByText('Submission failed')).toBeNull();
         expect(host.getSnapshot().controller).toMatchObject({ phase: 'outcome-unknown', reason: 'completion-outcome-unknown' });
         expect(props.onNavigate).not.toHaveBeenCalled();
         const fencedSubmit = screen.getByRole('button', { name: 'Submit' }) as HTMLButtonElement;
@@ -1070,7 +1072,7 @@ describe('explicit reviewed-candidate facts renewal', () => {
           const signed = await originalSign(input);
           return { ...signed, evidence: { ...signed.evidence, taskDraft: { ...taskAssociation, signedDraft: {
             draftId: signed.draft.id, expectedSignedDraftVersion: signed.draft.version,
-            expectedSignedResponseHash: await computeJcsSha256Digest(signed.response),
+            expectedSignedResponseHash: `sha256:${signed.draft.responseHash}`,
             associationHash: taskAssociation.associationHash, taskBindingHash: taskAssociation.taskBindingHash } } } };
         };
       }
