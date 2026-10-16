@@ -1177,8 +1177,28 @@ describe('explicit correction host through the maintained native loader', () => 
       await vi.waitFor(() => expect(boot.host.getSnapshot().controller?.prepared).toBeDefined());
       expect(boot.host.getSnapshot().controller!.prepared!.response.data).toEqual({ ...savedBefore, photo });
       expect(patches).toHaveLength(2);
+      const firstPrepared = boot.host.getSnapshot().controller!.prepared!;
+      const { draftKey, response: preparedResponse, draft, actor, evidence } = firstPrepared;
+      const readback = { draftKey, response: preparedResponse, draft, actor, evidence };
+      // Return through the maintained route lifecycle before preparing again.
+      // The first Prepare navigates to /review-sign a tick later; wait for it before returning, or it retires the visit.
+      await vi.waitFor(() => expect(window.location.pathname).not.toBe(route.path));
+      window.history.replaceState(null, '', route.path!);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await screen.findByRole('textbox', { name: /full legal name/i });
+      // HTTP readback is a SavedResponseDraft; preparation additionally owns content.
+      await vi.waitFor(async () => {
+        expect(boot.host.getSnapshot().nativeReadiness).toBe('ready');
+        await expect(boot.host.prePrepareCandidate!({ saved: readback, response: preparedResponse, assertCurrent() {} }))
+          .resolves.toHaveProperty('assertCurrent');
+      });
+      fireEvent.click(screen.getByRole('button', { name: /prepare/i }));
+      await vi.waitFor(() => expect(boot.host.getSnapshot().controller?.prepared?.draft.version).toBe(firstPrepared.draft.version + 1));
+      expect(patches).toHaveLength(3);
+      expect(boot.host.getSnapshot().controller!.prepared!.response.data).toEqual(firstPrepared.response.data);
+      expect(firstPrepared.content).toBeDefined();
     } finally { mounted.unmount(); boot?.host.dispose(); window.history.replaceState(null, '', '/'); }
-  });
+  }, 30000);
 
   it('selects a native-only task without external hydration or initial draft creation', async () => {
     const f = await correctionFixture();
