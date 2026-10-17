@@ -62,7 +62,6 @@ export declare const UI_STRINGS: {
     readonly 'select.remoteFailed': "Failed to load options.";
     readonly 'modal.open': "Open";
     readonly 'fileUpload.dropzone': "Drop files here or click to browse";
-    readonly 'fileUpload.dropzoneKeyboard': "Drop files here or press Enter to browse";
     readonly 'fileUpload.browse': "Upload a file";
     readonly 'fileUpload.attachedList': "Files you have attached";
     readonly 'fileUpload.pendingList': "Pending file activity";

@@ -174,15 +174,6 @@ describe('actual web public native Tools widget props compilation', () => {
             "diagnostics": [
               {
                 "code": "E101",
-                "message": ""$ui.draft.saveUnconfirmd" is not one of "$ui.select.placeholder", "$ui.select.clearSelection" or 151 other candidates",
-                "pass": 1,
-                "path": "$.strings",
-                "severity": "error",
-                "specRef": "specs/core/spec.md#4-definition-schema",
-                "suggestedFix": "align the document with schemas/*.schema.json — fix the flagged property or value",
-              },
-              {
-                "code": "E101",
                 "message": ""$ui.draft.saveUnconfirmd" is not one of "$ui.select.placeholder", "$ui.select.clearSelection" or 139 other candidates",
                 "pass": 1,
                 "path": "$.strings",
