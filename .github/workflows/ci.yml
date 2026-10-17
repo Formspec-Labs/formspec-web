@@ -40,3 +40,33 @@ jobs:
       - run: npm run test:compose-quickstart
       - run: npm run test:deployment
       - run: npm run test:multi-deployment
+
+  # Formspec's WASM is built in its pinned arm64 image, so this job runs on an arm64 runner
+  # (an x86_64 one would emulate it). It rebuilds the siblings and fails on any vendor drift.
+  vendor:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Formspec-Labs/formspec
+          path: formspec-source
+      - uses: actions/checkout@v4
+        with:
+          repository: Formspec-Labs/fel-core
+          path: fel-core
+      - uses: actions/checkout@v4
+        with:
+          repository: Formspec-Labs/integrity-stack
+          path: integrity-source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix formspec-source ci
+      - run: npm --prefix integrity-source ci
+      - run: npm run check:surface-bundle-vendor
+        env:
+          FORMSPEC_SOURCE_DIR: formspec-source
+          INTEGRITY_STACK_SOURCE_DIR: integrity-source

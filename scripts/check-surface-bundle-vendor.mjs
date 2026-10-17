@@ -24,6 +24,7 @@ const integrityRoot = resolve(
   root,
   process.env.INTEGRITY_STACK_SOURCE_DIR ?? '../integrity-stack',
 );
+// Keeps the hand-vendored verification code (runtime .js only) small enough to audit.
 const maxVendoredDistBytes = 100 * 1024;
 
 // `--write` refreshes the vendored copies from fresh sibling builds, then runs
@@ -55,8 +56,7 @@ const packages = [
     source: resolve(formspecRoot, 'packages/formspec-engine'),
     workspace: formspecRoot,
     licenseSource: 'package',
-    // wasm-pack output: compared against the sibling's last WASM build, which
-    // this check cannot rebuild.
+    // wasm-pack output of the sibling's `npm run build` (built in its pinned image).
     prebuiltDirs: ['wasm-pkg-runtime', 'wasm-pkg-tools'],
   },
   {
@@ -231,6 +231,19 @@ for (const file of selectedSchemaFiles) {
   schemaBytes += statSync(local).size;
 }
 
+// Clean checkouts have no workspace dist/ or WASM, and the package builds below resolve each
+// other through them: run each upstream workspace's own build first (the engine's builds its
+// WASM once, in formspec's pinned image).
+for (const workspace of new Set(selectedPackages.map((pkg) => pkg.workspace))) {
+  const manifest = join(workspace, 'package.json');
+  if (existsSync(manifest) && readJson(manifest).scripts?.build) {
+    const result = spawnSync('npm', ['run', 'build'], { cwd: workspace, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+    if (result.status !== 0) {
+      throw new Error(`Upstream workspace build failed in ${workspace}:\n${result.stdout}${result.stderr}`);
+    }
+  }
+}
+
 const buildRoot = mkdtempSync(join(tmpdir(), 'formspec-web-surface-bundle-vendor-'));
 let totalBytes = 0;
 let sourceBudgetBytes = 0;
@@ -293,7 +306,10 @@ try {
 
     const bytes = assertSameTree(sourceBuild, localDist, files, `${pkg.local}/dist`);
     totalBytes += bytes;
-    if (pkg.sourceBudget) sourceBudgetBytes += bytes;
+    if (pkg.sourceBudget) {
+      sourceBudgetBytes += files.filter((file) => file.endsWith('.js'))
+        .reduce((sum, file) => sum + statSync(join(localDist, file)).size, 0);
+    }
     for (const dir of pkg.prebuiltDirs ?? []) {
       assertSameTree(
         join(pkg.source, dir),
