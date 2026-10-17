@@ -119,7 +119,6 @@ export interface ResponseActionLedgerAppendReceipt {
   substrateEventId?: string;
   sequence?: number;
   checkpointReference?: string;
-  bundleRef?: string;
 }
 
 export interface ResponseActionLedgerCapabilityRequest {
@@ -437,7 +436,6 @@ function parseAnchoredReceipt(payload: unknown): ResponseActionLedgerAppendRecei
     substrateEventId: optionalStringField(payload, 'substrateEventId'),
     sequence: optionalNumberField(payload, 'sequence'),
     checkpointReference: optionalStringField(payload, 'checkpointReference'),
-    bundleRef: optionalStringField(payload, 'bundleRef'),
   };
 }
 
