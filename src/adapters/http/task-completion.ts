@@ -7,6 +7,7 @@ import { snapshotFiniteJson } from '@formspec-org/surface';
 import type { TaskCompletion, TaskCompletionSelection, TaskOutcomeEvent, TaskSubmission, CompletedTaskOutcome } from '../../ports/task-completion.ts';
 import type { CompletionLifetime } from '../../ports/response-completion.ts';
 import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
+import { snapshotWire } from './wire-json.ts';
 import commonSchema from './workspec-schemas/common.schema.json';
 import taskSchema from './workspec-schemas/task.schema.json';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
@@ -16,6 +17,8 @@ const ajv = new Ajv2020({ strict: false, strictNumbers: true, allErrors: false }
 addFormats(ajv); ajv.addSchema(commonSchema); ajv.addSchema(taskSchema);
 const submissionShape = ajv.compile<TaskSubmission>({ $ref: `${taskSchema.$id}#/$defs/TaskSubmission` });
 const outcomeShape = ajv.compile<TaskOutcomeEvent>({ $ref: `${taskSchema.$id}#/$defs/TaskOutcomeEvent` });
+const isCompleted = (event: TaskOutcomeEvent): event is CompletedTaskOutcome =>
+  event.outcome === 'completed' && event.newStatus === 'submitted';
 const resourceShape = ajv.compile<string>({ $ref: `${commonSchema.$id}#/$defs/WosResourceUrn` });
 
 /** Inactive adapter preparation: production composition must supply qualified task launch and WOS auth.
@@ -33,7 +36,7 @@ export class HttpTaskCompletion implements TaskCompletion {
     if (!Number.isSafeInteger(this.completionTimeoutMs) || this.completionTimeoutMs <= 0
       || this.completionTimeoutMs > 2_147_483_647) throw new Error('Task completion timeout must be a finite positive timer bound');
     this.scopeHeaders = wosTenantScopeHeaders(config.tenantBinding);
-    this.selection = snapshotFiniteJson(config.selection) as unknown as TaskCompletionSelection;
+    this.selection = snapshotWire(config.selection);
     if (Object.keys(this.selection).sort().join(',') !== 'definitionUrl,definitionVersion,processId,taskId'
       || !resourceShape(this.selection.taskId) || !resourceShape(this.selection.processId)
       || !this.selection.definitionUrl.trim() || !this.selection.definitionVersion.trim() || !config.accessToken) {
@@ -55,7 +58,7 @@ export class HttpTaskCompletion implements TaskCompletion {
     try {
       const check = () => { lifetime.signal.throwIfAborted(); assertSynchronousGuard(lifetime.assertCurrent);
         assertSynchronousGuard(this.assertCurrentAuth); };
-      check(); const body = snapshotFiniteJson(submission) as unknown as TaskSubmission;
+      check(); const body = snapshotWire(submission);
       if (!submissionShape(body) || !['definitionUrl,definitionVersion,response', 'definitionUrl,definitionVersion,response,signedDraft'].includes(Object.keys(body).sort().join(','))
         || body.definitionUrl !== this.selection.definitionUrl || body.definitionVersion !== this.selection.definitionVersion
         || body.response.definitionUrl !== body.definitionUrl || body.response.definitionVersion !== body.definitionVersion
@@ -68,10 +71,10 @@ export class HttpTaskCompletion implements TaskCompletion {
           assertBeforeDispatch: () => { check(); dispatched = true; },
           timeoutMs: this.completionTimeoutMs, maxResponseBytes: 64 * 1024, requireJson: true, successStatuses: [200] });
       stage = 'task-outcome-validation';
-      check(); const event = snapshotFiniteJson(raw) as unknown;
+      check(); const event = snapshotFiniteJson(raw);
       if (!outcomeShape(event) || event.taskId !== this.selection.taskId || event.processId !== this.selection.processId
-        || event.outcome !== 'completed' || event.newStatus !== 'submitted') throw new Error('Task completion outcome mismatch');
-      return event as CompletedTaskOutcome;
+        || !isCompleted(event)) throw new Error('Task completion outcome mismatch');
+      return event;
     } catch (error) {
       // Read only the adapter's numeric status; retain the original error unchanged.
       try {

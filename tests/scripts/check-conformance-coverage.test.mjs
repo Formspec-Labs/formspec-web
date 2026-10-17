@@ -343,24 +343,6 @@ function createFixture(options = {}) {
   );
   write(
     root,
-    'tests/adapter-conformance/reviewer-session/conformance.test.ts',
-    suiteText(
-      'ReviewerSession',
-      [['stub ReviewerSession conformance', 'stubReviewerSession']],
-      options,
-    ),
-  );
-  write(
-    root,
-    'tests/adapter-conformance/review-thread-store/conformance.test.ts',
-    suiteText(
-      'ReviewThreadStore',
-      [['stub ReviewThreadStore conformance', 'stubReviewThreadStore']],
-      options,
-    ),
-  );
-  write(
-    root,
     'tests/adapter-conformance/safe-address-directory/conformance.test.ts',
     suiteText(
       'SafeAddressDirectory',
@@ -437,14 +419,6 @@ function writeAdapterFiles(root, options) {
       'export function stubScreenerDocumentSource() {}',
     ],
     [
-      'src/adapters/stub/reviewer-session.ts',
-      'export function stubReviewerSession() {}',
-    ],
-    [
-      'src/adapters/stub/review-thread-store.ts',
-      'export function stubReviewThreadStore() {}',
-    ],
-    [
       'src/adapters/stub/safe-address-directory.ts',
       'export function stubSafeAddressDirectory() {}',
     ],
@@ -480,14 +454,6 @@ function writeAdapterFiles(root, options) {
     [
       'src/adapters/unavailable/screener-document-source.ts',
       'export function unavailableScreenerDocumentSource() {}',
-    ],
-    [
-      'src/adapters/unavailable/reviewer-session.ts',
-      'export function unavailableReviewerSession() {}',
-    ],
-    [
-      'src/adapters/unavailable/review-thread-store.ts',
-      'export function unavailableReviewThreadStore() {}',
     ],
     [
       'src/adapters/unavailable/safe-address-directory.ts',
@@ -558,8 +524,6 @@ function defaultComposition() {
     'import { unavailablePaymentRailAdapter } from "../adapters/unavailable/payment-rail-adapter.ts";',
     'import { unavailableEmbedTransport } from "../adapters/unavailable/embed-transport.ts";',
     'import { unavailableScreenerDocumentSource } from "../adapters/unavailable/screener-document-source.ts";',
-    'import { unavailableReviewerSession } from "../adapters/unavailable/reviewer-session.ts";',
-    'import { unavailableReviewThreadStore } from "../adapters/unavailable/review-thread-store.ts";',
     'import { unavailableLifecycleActionClient } from "../adapters/unavailable/lifecycle-action-client.ts";',
     'import { unavailableSurfaceBundleSource } from "../adapters/unavailable/surface-bundle-source.ts";',
     'import { unavailableSurfaceBundleVerifier } from "../adapters/unavailable/surface-bundle-verifier.ts";',
@@ -573,8 +537,6 @@ function defaultComposition() {
     '    paymentRailAdapter: unavailablePaymentRailAdapter(),',
     '    embedTransport: unavailableEmbedTransport(),',
     '    screenerDocumentSource: unavailableScreenerDocumentSource(),',
-    '    reviewerSession: unavailableReviewerSession(),',
-    '    reviewThreadStore: unavailableReviewThreadStore(),',
     '    safeAddressDirectory: unavailableSafeAddressDirectory(),',
     '    lifecycleActionClient: unavailableLifecycleActionClient(),',
     '    surfaceBundleSource: unavailableSurfaceBundleSource(),',
@@ -601,8 +563,6 @@ function publicIndex() {
     '  definePaymentRailAdapterConformance,',
     '  defineEmbedTransportConformance,',
     '  defineScreenerDocumentSourceConformance,',
-    '  defineReviewerSessionConformance,',
-    '  defineReviewThreadStoreConformance,',
     '  defineSafeAddressDirectoryConformance,',
     '  defineLifecycleActionClientConformance,',
     '  defineSurfaceBundleSourceConformance,',

@@ -121,30 +121,6 @@ export type {
 } from './screener-document-source.ts';
 export { ScreenerDocumentNotFoundError } from './screener-document-source.ts';
 export type {
-  ReviewerSession,
-  ReviewerSessionRedeemResult,
-  ReviewerShare,
-  ReviewerScope,
-  CapabilityToken,
-  RespondentSessionToken,
-} from './reviewer-session.ts';
-export {
-  ReviewerSessionError,
-  respondentSessionToken,
-  isRespondentSessionToken,
-} from './reviewer-session.ts';
-export type {
-  ReviewThreadStore,
-  ReviewThread,
-  ReviewThreadAuthor,
-  ReviewThreadDraftRef,
-  ReviewThreadEvent,
-  ReviewThreadEventPayload,
-  ReviewThreadPolicySnapshot,
-  TrustedReviewerPosture,
-} from './review-thread-store.ts';
-export { ReviewThreadStoreError } from './review-thread-store.ts';
-export type {
   LifecycleActionClient,
   LifecycleActionSnapshot,
   LifecycleActionAvailability,
@@ -218,6 +194,6 @@ export type { TaskOutcomeEvent, TaskSubmission, CompletedTaskOutcome, TaskComple
 
 export type { SignedTaskDraft, TaskDraftAssociation, TaskDraftLaunchSelection } from './task-draft.ts';
 
-export type { InitialMixedHydrationWire, InitialNativeRequest } from './initial-mixed-proof.ts';
+export type { InitialNativeRequest } from './initial-mixed-proof.ts';
 
 export { StatusReadError } from './status-reader.ts';

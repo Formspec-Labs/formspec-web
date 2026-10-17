@@ -1,24 +1,17 @@
-/** Source-owned static API. Composition supplies the qualified package; no implicit import. */
-export interface SourceInitialMixedProofApi {
-  initializeInitialMixedProof(input: { module_or_path: Uint8Array | WebAssembly.Module }): Promise<void>;
-  verifyInitialMixedProof(selection: Uint8Array, hydration: Uint8Array, native: Uint8Array, image: Uint8Array): Uint8Array;
-}
-export interface ProofWorkerInputs {
-  readonly selection: Uint8Array<ArrayBuffer>;
-  readonly hydration: Uint8Array<ArrayBuffer>;
-  readonly native: Uint8Array<ArrayBuffer>;
-  readonly image: Uint8Array<ArrayBuffer>;
-}
-export type ProofWorkerCommand =
-  | { readonly kind: 'initialize'; readonly id: number; readonly module: Uint8Array<ArrayBuffer> | WebAssembly.Module }
-  | { readonly kind: 'verify'; readonly id: number; readonly inputs: ProofWorkerInputs };
 export type ProofWorkerReply =
   | { readonly kind: 'ready'; readonly id: number }
   | { readonly kind: 'result'; readonly id: number; readonly bytes: Uint8Array<ArrayBuffer> }
   | { readonly kind: 'refused'; readonly id: number; readonly code: string };
 
+/** Dedicated-worker global scope subset used by `attachMixedProofWorker`. */
+export interface ProofWorkerScope {
+  addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
+  removeEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
+  postMessage(reply: ProofWorkerReply, transfer?: Transferable[]): void;
+}
+
 /** Structural browser Worker subset permits deterministic lifecycle tests. */
-export interface ProofWorker<Command = ProofWorkerCommand> {
+export interface ProofWorker<Command> {
   postMessage(message: Command, transfer: Transferable[]): void;
   addEventListener(type: 'message' | 'error' | 'messageerror', listener: (event: unknown) => void): void;
   removeEventListener(type: 'message' | 'error' | 'messageerror', listener: (event: unknown) => void): void;

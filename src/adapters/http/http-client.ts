@@ -59,6 +59,12 @@ export class HttpAdapterError extends Error {
   }
 }
 
+/** The one place the global fetch is read; every adapter's default transport comes from here. */
+export function defaultFetch(): FetchLike {
+  if (!globalThis.fetch) throw new Error('HTTP adapters require a fetch implementation.');
+  return globalThis.fetch.bind(globalThis);
+}
+
 export class HttpClient {
   readonly baseUrl: string;
   private readonly fetchImpl: FetchLike;
@@ -70,7 +76,7 @@ export class HttpClient {
       throw new Error('HttpClient baseUrl is required');
     }
     this.baseUrl = config.baseUrl.replace(/\/+$/, '');
-    this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.fetchImpl = config.fetchImpl ?? defaultFetch();
     this.tenantBinding = config.tenantBinding ? structuredClone(config.tenantBinding) : undefined;
     this.accessToken = config.accessToken;
   }

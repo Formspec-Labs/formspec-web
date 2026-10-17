@@ -38,16 +38,6 @@ export {
   type HttpSubmitTransportConfig,
 } from './submit-transport.ts';
 export {
-  HttpReviewerSession,
-  createHttpReviewerSession,
-  type HttpReviewerSessionConfig,
-} from './reviewer-session.ts';
-export {
-  HttpReviewThreadStore,
-  createHttpReviewThreadStore,
-  type HttpReviewThreadStoreConfig,
-} from './review-thread-store.ts';
-export {
   RESPONSE_ACTION_LEDGER_APPEND_ROUTE,
   RESPONSE_ACTION_LEDGER_CAPABILITY_HEADER,
   computeJcsSha256Digest,

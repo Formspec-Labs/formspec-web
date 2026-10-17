@@ -65,11 +65,10 @@ export const FEATURE_PORT_MAP = {
   // port shape lands with the preparer-filing build, so this key is
   // unavailable-only until then.
   preparerFiling: [],
-  // FW-0113 preallocation: trusted reviewer requires both ports. A one-slot
-  // mapping would let an adopter declare the feature available while one half
-  // of the substrate is missing, so the coherence assertion supports
-  // one-feature-to-many-port bindings.
-  trustedReviewer: ['reviewerSession', 'reviewThreadStore'],
+  // FW-0042 future reservation. The reviewer-session / review-thread ports and
+  // their runtime were deleted unserved (ADR 0165 §1.4); FW-0042 builds both
+  // halves, so this key is unavailable-only until its build row binds ports.
+  trustedReviewer: [],
   // FW-0062 future reservation. FW-0051 defers the Assist Provider port shape
   // until consumer code lands, so this key is unavailable-only until its build
   // row replaces the empty binding.

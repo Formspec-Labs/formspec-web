@@ -14,7 +14,7 @@ import { HttpAttachmentStore } from '../adapters/http/attachment-store.ts';
 import { publishedDefinitionDraftStore } from '../adapters/composing/published-definition-draft-store.ts';
 import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
 import { createBrowserDraftResumeMetadataStore } from '../adapters/browser/draft-resume-metadata.ts';
-import { PinnedPackageDefinitionSource } from '../adapters/http/pinned-package-definition-source.ts';
+import { PinnedPackageDefinitionSource } from '../adapters/package/pinned-package-definition-source.ts';
 import { defaultFormIdResolver } from '../adapters/http/form-id.ts';
 import { HttpDefinitionSource } from '../adapters/http/definition-source.ts';
 import {
@@ -35,7 +35,6 @@ import {
   PaymentRequirementExtractor,
   RecordLifecycleExtractor,
   SafeAddressPolicyExtractor,
-  TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
@@ -46,8 +45,6 @@ import { unavailableEmbedTransport } from '../adapters/unavailable/embed-transpo
 import { unavailableLifecycleActionClient } from '../adapters/unavailable/lifecycle-action-client.ts';
 import { unavailableOfflineSubmitQueue } from '../adapters/unavailable/offline-submit-queue.ts';
 import { unavailablePaymentRailAdapter } from '../adapters/unavailable/payment-rail-adapter.ts';
-import { unavailableReviewerSession } from '../adapters/unavailable/reviewer-session.ts';
-import { unavailableReviewThreadStore } from '../adapters/unavailable/review-thread-store.ts';
 import { unavailableSafeAddressDirectory } from '../adapters/unavailable/safe-address-directory.ts';
 import { unavailableRespondentHistorySource } from '../adapters/unavailable/respondent-history-source.ts';
 import { unavailableRespondentPlaceSource } from '../adapters/unavailable/respondent-place-source.ts';
@@ -244,8 +241,6 @@ export function createDefaultComposition(
     paymentRailAdapter: unavailablePaymentRailAdapter(),
     embedTransport: unavailableEmbedTransport(),
     screenerDocumentSource: unavailableScreenerDocumentSource(),
-    reviewerSession: unavailableReviewerSession(),
-    reviewThreadStore: unavailableReviewThreadStore(),
     safeAddressDirectory: unavailableSafeAddressDirectory(),
     lifecycleActionClient: unavailableLifecycleActionClient(),
     ...(responseActionInvoker ? { responseActionInvoker } : {}),
@@ -358,7 +353,6 @@ export function createDefaultComposition(
       new OfflineSubmitRequirementExtractor(),
       new PaymentRequirementExtractor(),
       new EmbeddableExtractor(),
-      new TrustedReviewerPolicyExtractor(),
       new MultiPartyPolicyExtractor(),
       new RecordLifecycleExtractor(),
       new SafeAddressPolicyExtractor(),

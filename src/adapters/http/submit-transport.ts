@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/is-record.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import canonicalize from 'canonicalize';
 import type {
@@ -141,21 +142,21 @@ export function createHttpSubmitTransport(
   return new HttpSubmitTransport(config);
 }
 
+function isCanonicalResponse(value: unknown): value is CanonicalResponse {
+  return isRecord(value) && isRecord(value.data);
+}
+
 function requireCanonicalResponse(handoff: IntakeHandoff): CanonicalResponse {
   const response = handoff.extensions?.['x-formspec-response'];
-  if (!isRecord(response) || !isRecord(response.data)) {
+  if (!isCanonicalResponse(response)) {
     throw new Error('HTTP SubmitTransport requires a canonical Response snapshot with object data');
   }
-  return response as CanonicalResponse;
+  return response;
 }
 
 function partyRefFromHandoff(handoff: IntakeHandoff): string | undefined {
   const candidate = handoff.extensions?.['x-formspec-active-party-ref'];
   return typeof candidate === 'string' && candidate.length > 0 ? candidate : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function snapshotSubmitOptions(options: SubmitOptions): SubmitOptions {

@@ -6,7 +6,6 @@ import {
 import { DOCUMENTS_ROUTE_NARROWING } from '../../src/app/documents-route.ts';
 import { HISTORY_ROUTE_NARROWING } from '../../src/app/history-route.ts';
 import { OBLIGATIONS_ROUTE_NARROWING } from '../../src/app/obligations-route.ts';
-import { REVIEWER_ROUTE_NARROWING } from '../../src/app/reviewer-route.ts';
 import { STATUS_ROUTE_NARROWING } from '../../src/app/status-route.ts';
 import { assertCompositionCoherence } from '../../src/policy/composition-coherence.ts';
 import { isRuntimeFeatureKey } from '../../src/policy/feature-keys.ts';
@@ -19,7 +18,6 @@ const ALL_DESCRIPTORS: readonly RouteNarrowing[] = [
   OBLIGATIONS_ROUTE_NARROWING,
   DOCUMENTS_ROUTE_NARROWING,
   HISTORY_ROUTE_NARROWING,
-  REVIEWER_ROUTE_NARROWING,
 ];
 
 function productionConfig(): FormspecWebConfig {
@@ -54,7 +52,7 @@ describe('explicit narrowed HTTP composition', () => {
       const composition = createRouteNarrowedComposition({ config: productionConfig(), route });
       expect(composition.mode).toBe('production');
       expect(() => assertCompositionCoherence(composition)).not.toThrow();
-      expect(composition.instanceCapabilities.trustedReviewer).toBe(route.consumes.has('trustedReviewer') ? 'available' : 'unavailable');
+      expect(composition.instanceCapabilities.trustedReviewer).toBe('unavailable');
       expect(composition.instanceCapabilities.status).toBe('unavailable');
       expect(composition.instanceCapabilities.respondentPlace).toBe('unavailable');
       expect(composition.formRuntimePolicyExtractor.extract(sampleFormDefinition).features).toEqual({});

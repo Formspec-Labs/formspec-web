@@ -1,7 +1,5 @@
 import type { EvaluationProviderRegistration } from '../../../src/ports/evaluation-hydration.ts';
-import type { InitialInstanceProof, InitialNativeRequest } from '../../../src/ports/initial-mixed-proof.ts';
-import type { InitialProofReadBundle } from '../../../src/adapters/http/initial-mixed-proof-reader.ts';
-import type { InitialProofOutcome } from '../../../src/adapters/source-worker/wire.ts';
+import type { InitialNativeRequest } from '../../../src/ports/initial-mixed-proof.ts';
 
 // SCHEMA-ONLY MOCK: arbitrary digests/null leaf receipts are not owning proof successes.
 // These values exercise caller lifecycle only. Actual Source/native/WASM parity is separate.
@@ -42,10 +40,5 @@ export function mockFixture() {
     providerReceipt: { kind: 'composedSources', version: 2, purpose: 'formspec.instance.compose', registration, requestHash: digest,
       resolvedAt: at, validUntil: until, receiptHash: digest,
       contributions: results.map(result => ({ instanceName: result.instanceName, sourceRef: result.sourceRef, resultHash: digest, receipt: null })) } };
-  const outcome: InitialProofOutcome = { version: 1, kind: 'verifiedInitialMixed', requestHash: digest, registrationHash: digest,
-    receiptHash: digest, qualifiedAt: at, expiresAt: until, results };
-  const bundle: InitialProofReadBundle = { hydrationBytes: encode(hydration), expectedRequest: request,
-    proofs: [{ decoded: { kind: 'native' } as InitialInstanceProof, utf8Bytes: new TextEncoder().encode('{ "duplicate":1,"duplicate":2 }') },
-      { decoded: { kind: 'image' } as InitialInstanceProof, utf8Bytes: new TextEncoder().encode(' {"raw":true} ') }] };
-  return { selected: { registration, request }, bundle, outcome };
+  return { selected: { registration, request }, hydration };
 }

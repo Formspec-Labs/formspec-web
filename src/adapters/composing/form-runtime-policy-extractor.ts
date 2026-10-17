@@ -25,7 +25,6 @@ import {
   extractRecordLifecycleOptIn,
   extractRecordLifecyclePolicy,
   extractSafeAddressPolicy,
-  extractTrustedReviewerPolicy,
 } from '../../policy/extract-form-policy.ts';
 import type { FormRuntimePolicy } from '../../policy/policy-shapes.ts';
 import type { FormRuntimePolicyExtractor } from '../../ports/form-runtime-policy-extractor.ts';
@@ -62,12 +61,6 @@ export class EmbeddableExtractor implements FormRuntimePolicyExtractor {
   extract(definition: FormDefinition): FormRuntimePolicy {
     const embed = extractEmbeddableOptIn(definition);
     return embed ? { features: { embed } } : { features: {} };
-  }
-}
-
-export class TrustedReviewerPolicyExtractor implements FormRuntimePolicyExtractor {
-  extract(definition: FormDefinition): FormRuntimePolicy {
-    return extractTrustedReviewerPolicy(definition) ?? { features: {} };
   }
 }
 

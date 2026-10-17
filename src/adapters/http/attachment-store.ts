@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/is-record.ts';
 import { abortable } from '../../shared/abortable.ts';
 import type { AttachmentRef, AttachmentStore, AttachmentUploadMetadata } from '../../ports/attachment-store.ts';
 import { AttachmentUploadError } from '../../ports/attachment-store.ts';
@@ -6,7 +7,7 @@ import { generateIdempotencyKey, IDEMPOTENCY_KEY_HEADER } from '../../shared/ide
 import { validatedAttachmentMaxUploadBytes } from '../../config/attachment-policy.ts';
 import type { CompletionLifetime } from '../../ports/response-completion.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
-import type { HttpClientConfig } from './http-client.ts';
+import { defaultFetch, type HttpClientConfig } from './http-client.ts';
 
 export interface HttpAttachmentStoreConfig extends HttpClientConfig {
   formId: string;
@@ -55,7 +56,7 @@ export class HttpAttachmentStore implements AttachmentStore {
   private fetchResponse(url: URL, init: RequestInit): Promise<Response> {
     const signal = init.signal ?? undefined;
     this.check(signal);
-    const pending = Promise.resolve().then(() => { this.check(signal); return (this.config.fetchImpl ?? fetch)(url, init); });
+    const pending = Promise.resolve().then(() => { this.check(signal); return (this.config.fetchImpl ?? defaultFetch())(url, init); });
     if (!this.config.taskBinding || !signal) return pending;
     const checked = pending.then(response => {
       try { this.check(signal); return response; }
@@ -151,23 +152,24 @@ export class HttpAttachmentStore implements AttachmentStore {
       throw new AttachmentUploadError('File upload returned invalid JSON', { code: 'unknown', cause });
     }
     this.check(signal);
-    if (!value || typeof value !== 'object') {
+    if (!isUploadedRef(value, { size: blob.size, filename: metadata.filename, mimeType })) {
       throw new AttachmentUploadError('File upload returned an invalid reference', { code: 'unknown' });
     }
-    const ref = value as AttachmentRef;
-    if (ref.kind !== 'attachment-ref' || typeof ref.uri !== 'string' || !ref.uri
-      || typeof ref.hash !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(ref.hash)
-      || ref.size !== blob.size || ref.filename !== metadata.filename || ref.mimeType !== mimeType) {
-      throw new AttachmentUploadError('File upload returned an invalid reference', { code: 'unknown' });
-    }
+    const ref = value;
     if (this.config.taskBinding) qualifyReadDescriptor(ref, this.config.formId, this.basePath(), dataPath);
     return ref;
   }
 }
 
+function isUploadedRef(value: unknown, expected: { size: number; filename: string | undefined; mimeType: string }): value is AttachmentRef {
+  return isRecord(value) && value.kind === 'attachment-ref' && typeof value.uri === 'string' && !!value.uri
+    && typeof value.hash === 'string' && /^sha256:[a-f0-9]{64}$/.test(value.hash)
+    && value.size === expected.size && value.filename === expected.filename && value.mimeType === expected.mimeType;
+}
+
 function qualifyReadDescriptor(value: unknown, formId: string, taskBasePath?: string, dataPath?: string): { uploadId: string; mimeType: string; size: number; hash: string } {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Attachment descriptor is unavailable');
-  const ref = value as Record<string, unknown>;
+  if (!isRecord(value)) throw new Error('Attachment descriptor is unavailable');
+  const ref = value;
   const uri = ref.uri ?? ref.url;
   const mimeType = ref.mimeType ?? ref.contentType;
   const uploadId = typeof uri === 'string' ? /^urn:formspec:attachment:(upload_[a-f0-9]{64})$/.exec(uri)?.[1] : undefined;

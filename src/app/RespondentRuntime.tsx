@@ -1,3 +1,4 @@
+import { isRecord } from '../shared/is-record.ts';
 import { assertSynchronousGuard } from '../shared/synchronous-guard.ts';
 import {
   Component,
@@ -55,8 +56,6 @@ import type { Composition } from '../composition/types.ts';
 import { DraftVersionConflictError, type DraftReadState, type DraftKey } from '../ports/draft-store.ts';
 import type { ApplicationCaseReceipt, ApplicationCaseLookupUnavailable } from '../ports/application-lifecycle.ts';
 import type { PendingResponseSigning, SignedResponseSigning, SavedResponseDraft } from '../ports/response-signing.ts';
-import type { ReviewerShare } from '../ports/reviewer-session.ts';
-import { respondentSessionToken } from '../ports/reviewer-session.ts';
 import type {
   AssuranceLevel,
   IdentityClaim,
@@ -137,13 +136,6 @@ import {
   publicTerminalVerifierCode,
   sendPublicTerminalReceiptSms,
 } from './public-terminal-hygiene.ts';
-import {
-  reviewerDraftRefForDraft,
-  reviewerDraftSnapshotForResponse,
-  reviewerScopeForPosture,
-  reviewerThreadIdForDraft,
-  trustedReviewerPolicySnapshot,
-} from './trusted-reviewer.ts';
 import { validateSafeAddressResponseData } from './safe-address.ts';
 import { useResolvedRuntimeProfile } from './hooks/useResolvedRuntimeProfile.ts';
 
@@ -1211,10 +1203,6 @@ function RespondentController({
               {renderMode === 'surface-slot' ? (
                 <RespondentFormContent
                   renderMode={renderMode}
-                  claim={respondentState.claim}
-                  composition={composition}
-                  definition={respondentState.definition}
-                  draftKey={respondentState.draftKey}
                   multiPartyState={multiPartyState}
                   notificationDelivery={composition.notificationDelivery}
                   onClearTerminal={handleClearTerminal}
@@ -1228,10 +1216,8 @@ function RespondentController({
                   localeDocuments={respondentState.localeDocuments}
                   activeLocale={respondentState.activeLocale}
                   brandName={config.brand.name}
-                  claim={respondentState.claim}
                   composition={composition}
                   definition={respondentState.definition}
-                  draftKey={respondentState.draftKey}
                   draftLoaded={respondentState.draftLoaded}
                   mode={composition.mode}
                   respondentPlaceState={respondentPlaceState}
@@ -1639,9 +1625,6 @@ async function createReadyState(
     hydrateEngineFromResponse(engine, draft, form?.initialData?.data);
     const resolvedIssuer = await engine.getResolvedIssuer();
     if (form?.configureRuntime) {
-      if (runtimeProfile.enabled.has('trustedReviewer')) {
-        throw new Error('An owned action runtime cannot use the legacy reviewer draft writer');
-      }
       const configured = await form.configureRuntime({ engine, definition, exchangeEngine,
         draftKey: multiPartyState ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef) : draftKey, claim,
         restoredResponse: draft ? structuredClone(draft) : undefined, restoredSavedDraft: recoveredSavedDraft, restoredSigning: recoveredSigning, restoredPendingSign: recoveredPendingSign, restoredApplication: recoveredApplication,
@@ -2153,10 +2136,8 @@ function RespondentSurface({
   localeDocuments,
   activeLocale,
   brandName,
-  claim,
   composition,
   definition,
-  draftKey,
   draftLoaded,
   mode,
   respondentPlaceState,
@@ -2173,10 +2154,8 @@ function RespondentSurface({
   localeDocuments: readonly LocaleDocument[];
   activeLocale: string;
   brandName: string;
-  claim: IdentityClaim | null;
   composition: Composition;
   definition: FormDefinition;
-  draftKey: DraftKey;
   draftLoaded: boolean;
   mode: 'demo' | 'production';
   respondentPlaceState: RespondentPlaceState;
@@ -2246,10 +2225,6 @@ function RespondentSurface({
         </p>
       ) : null}
       <RespondentFormContent
-        claim={claim}
-        composition={composition}
-        definition={definition}
-        draftKey={draftKey}
         multiPartyState={multiPartyState}
         notificationDelivery={notificationDelivery}
         onClearTerminal={onClearTerminal}
@@ -2264,10 +2239,6 @@ function RespondentSurface({
 
 function RespondentFormContent({
   renderMode,
-  claim,
-  composition,
-  definition,
-  draftKey,
   multiPartyState,
   notificationDelivery,
   onClearTerminal,
@@ -2277,10 +2248,6 @@ function RespondentFormContent({
   terminalClearState,
 }: {
   renderMode?: 'standalone' | 'surface-slot';
-  claim: IdentityClaim | null;
-  composition: Composition;
-  definition: FormDefinition;
-  draftKey: DraftKey;
   multiPartyState: MultiPartyPersistedState | null;
   notificationDelivery?: NotificationDelivery;
   onClearTerminal: () => Promise<void>;
@@ -2295,15 +2262,6 @@ function RespondentFormContent({
     <>
       <SubmitNotice state={submitState} />
       <RespondentPlacePanel state={respondentPlaceState} />
-      <TrustedReviewerPanel
-        claim={claim}
-        composition={composition}
-        definition={definition}
-        draftKey={multiPartyState?.progress.activePartyRef
-          ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef)
-          : draftKey}
-        runtimeProfile={runtimeProfile}
-      />
       <MultiPartyPanel
         progress={multiPartyState?.progress ?? null}
         runtimeProfile={runtimeProfile}
@@ -2328,263 +2286,6 @@ function RespondentFormContent({
         </div>
       )}
     </>
-  );
-}
-
-type TrustedReviewerState =
-  | { status: 'disabled' }
-  | { status: 'loading' }
-  | { status: 'ready'; shares: readonly ReviewerShare[]; latestUrl?: string }
-  | { status: 'error'; error: unknown };
-
-function TrustedReviewerPanel({
-  claim,
-  composition,
-  definition,
-  draftKey,
-  runtimeProfile,
-}: {
-  claim: IdentityClaim | null;
-  composition: Composition;
-  definition: FormDefinition;
-  draftKey: DraftKey;
-  runtimeProfile: ResolvedRuntimeProfile;
-}) {
-  const { engine } = useFormspecContext();
-  const audienceId = useId();
-  const [audienceHint, setAudienceHint] = useState('');
-  const [state, setState] = useState<TrustedReviewerState>({ status: 'disabled' });
-  const policySnapshot = useMemo(
-    () => trustedReviewerPolicySnapshot(runtimeProfile),
-    [runtimeProfile],
-  );
-  const threadId = reviewerThreadIdForDraft(draftKey);
-  const respondentToken = respondentSessionToken(
-    `${claim?.subjectRef ?? draftKey.subjectRef ?? 'anonymous'}:thread=${encodeURIComponent(threadId)}`,
-  );
-
-  useEffect(() => {
-    if (!policySnapshot) {
-      setState({ status: 'disabled' });
-      return undefined;
-    }
-    let cancelled = false;
-    setState({ status: 'loading' });
-    void composition.reviewerSession.listShares({
-      threadId,
-      respondentSessionToken: respondentToken,
-    }).then((shares) => {
-      if (!cancelled) setState({ status: 'ready', shares });
-    }).catch((error: unknown) => {
-      if (!cancelled) setState({ status: 'error', error });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [composition.reviewerSession, policySnapshot, respondentToken, threadId]);
-
-  if (!policySnapshot || state.status === 'disabled') {
-    return null;
-  }
-
-  const activeShares = state.status === 'ready'
-    ? state.shares.filter((share) => !share.revokedAt)
-    : [];
-
-  const reloadShares = async (latestUrl?: string): Promise<void> => {
-    const shares = await composition.reviewerSession.listShares({
-      threadId,
-      respondentSessionToken: respondentToken,
-    });
-    setState({ status: 'ready', shares, latestUrl });
-  };
-
-  const mintShare = async (): Promise<void> => {
-    setState((current) => (
-      current.status === 'ready' ? { status: 'loading' } : current
-    ));
-    try {
-      const responseSnapshot = engine.getResponse({ profile: 'off' });
-      await composition.draftStore.save(draftKey, responseSnapshot);
-      const draftSnapshot = await reviewerDraftSnapshotForResponse({
-        definition,
-        policySnapshot,
-        response: responseSnapshot,
-      });
-      await composition.reviewThreadStore.ensureThread({
-        threadId,
-        draftRef: reviewerDraftRefForDraft(draftKey),
-        draftSnapshot,
-        policySnapshot,
-      });
-      if (
-        policySnapshot.maxActiveSharesPerDraft &&
-        activeShares.length >= policySnapshot.maxActiveSharesPerDraft
-      ) {
-        throw new Error('No more active reviewer links can be created for this draft.');
-      }
-      const minted = await composition.reviewerSession.mintShare({
-        threadId,
-        requestedScope: reviewerScopeForPosture(policySnapshot.posture),
-        audienceHint: audienceHint.trim() || undefined,
-        respondentSessionToken: respondentToken,
-        partyRef: draftKey.partyRef,
-      });
-      await composition.reviewThreadStore.appendEvent({
-        threadId,
-        sessionToken: respondentToken,
-        author: {
-          kind: 'respondent',
-          subjectRef: claim?.subjectRef ?? draftKey.subjectRef,
-        },
-        payload: {
-          type: 'share-minted',
-          shareId: minted.shareId,
-          audienceHint: audienceHint.trim() || undefined,
-        },
-      });
-      setAudienceHint('');
-      await reloadShares(minted.capabilityUrl);
-    } catch (error) {
-      setState({ status: 'error', error });
-    }
-  };
-
-  const revokeShareWithReason = async (share: ReviewerShare, reason: string): Promise<void> => {
-    await composition.reviewerSession.revoke({
-      shareId: share.shareId,
-      reason,
-      respondentSessionToken: respondentToken,
-    });
-    await composition.reviewThreadStore.appendEvent({
-      threadId,
-      sessionToken: respondentToken,
-      author: {
-        kind: 'respondent',
-        subjectRef: claim?.subjectRef ?? draftKey.subjectRef,
-      },
-      payload: {
-        type: 'share-revoked',
-        shareId: share.shareId,
-        reason,
-      },
-    });
-  };
-
-  const revokeShare = async (share: ReviewerShare): Promise<void> => {
-    try {
-      await revokeShareWithReason(share, 'respondent revoked');
-      await reloadShares();
-    } catch (error) {
-      setState({ status: 'error', error });
-    }
-  };
-
-  const revokeAllActiveShares = async (): Promise<void> => {
-    if (state.status !== 'ready') return;
-    const sharesToRevoke = state.shares.filter((share) => !share.revokedAt);
-    if (sharesToRevoke.length === 0) return;
-    setState({ status: 'loading' });
-    try {
-      for (const share of sharesToRevoke) {
-        await revokeShareWithReason(share, 'respondent panic revoked');
-      }
-      await reloadShares();
-    } catch (error) {
-      setState({ status: 'error', error });
-    }
-  };
-
-  return (
-    <section className="trusted-reviewer" aria-labelledby="trusted-reviewer-title">
-      <div className="trusted-reviewer__header">
-        <div>
-          <p className="respondent-header__kicker">Trusted reviewer</p>
-          <h2 id="trusted-reviewer-title">Share this draft</h2>
-        </div>
-        <span className="place-pill">{policySnapshot.posture}</span>
-      </div>
-      <div className="trusted-reviewer__controls">
-        <label htmlFor={audienceId}>Reviewer label</label>
-        <input
-          id={audienceId}
-          value={audienceHint}
-          onChange={(event) => setAudienceHint(event.currentTarget.value)}
-        />
-        <button
-          type="button"
-          disabled={state.status === 'loading'}
-          onClick={() => {
-            void mintShare();
-          }}
-        >
-          Create reviewer link
-        </button>
-        {activeShares.length > 0 ? (
-          <button
-            type="button"
-            disabled={state.status === 'loading'}
-            onClick={() => {
-              void revokeAllActiveShares();
-            }}
-          >
-            Stop sharing with everyone
-          </button>
-        ) : null}
-      </div>
-      {state.status === 'loading' ? (
-        <div className="submit-notice" role="status">
-          Loading reviewer links
-        </div>
-      ) : state.status === 'error' ? (
-        <div className="submit-notice submit-notice--error" role="alert">
-          {problemDetail(state.error).message}
-        </div>
-      ) : (
-        <ReviewerShareList shares={state.shares} onRevoke={revokeShare} />
-      )}
-      {state.status === 'ready' && state.latestUrl ? (
-        <input
-          className="trusted-reviewer__link"
-          value={state.latestUrl}
-          readOnly
-          aria-label="Reviewer link"
-          onFocus={(event) => event.currentTarget.select()}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-function ReviewerShareList({
-  onRevoke,
-  shares,
-}: {
-  onRevoke: (share: ReviewerShare) => Promise<void>;
-  shares: readonly ReviewerShare[];
-}) {
-  if (shares.length === 0) {
-    return <p className="place-list__empty">No active reviewer links</p>;
-  }
-  return (
-    <ul className="trusted-reviewer__shares">
-      {shares.map((share) => (
-        <li key={share.shareId}>
-          <span>{share.audienceHint || 'Reviewer'}</span>
-          <small>{share.revokedAt ? 'revoked' : share.grantedScope}</small>
-          {!share.revokedAt ? (
-            <button
-              type="button"
-              onClick={() => {
-                void onRevoke(share);
-              }}
-            >
-              Revoke
-            </button>
-          ) : null}
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -2613,7 +2314,7 @@ function MultiPartyPanel({
       <p>
         Current signer: <strong>{activeSlot?.label ?? 'Signer'}</strong>
       </p>
-      <ul className="trusted-reviewer__shares">
+      <ul className="signer-progress">
         {slots.map((slot) => (
           <li key={slot.partyRef}>
             <span>{slot.label}</span>
@@ -3411,6 +3112,3 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: unkno
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}

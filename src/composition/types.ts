@@ -14,8 +14,6 @@ import type {
   ResponseActionInvokerFactory,
   ResponseSigning,
   SurfaceRouter,
-  ReviewerSession,
-  ReviewThreadStore,
   RespondentHistorySource,
   RespondentPlaceSource,
   SafeAddressDirectory,
@@ -144,13 +142,6 @@ export interface Composition {
    * deployment.
    */
   screenerDocumentSource: ScreenerDocumentSource;
-  /**
-   * FW-0113: trusted reviewer requires both ports. ReviewerSession owns
-   * capability-URL mint/redeem/revoke. ReviewThreadStore owns the SC-6
-   * sidecar event log. Do not collapse the pair into one adapter slot.
-   */
-  reviewerSession: ReviewerSession;
-  reviewThreadStore: ReviewThreadStore;
   /**
    * 2026-05-25 namespace preallocation: real interfaces land with their
    * feature builds. These sentinel-backed slots exist so ADR-0011

@@ -4,7 +4,7 @@ import { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA } f
 import { loadCanonicalModulePayloadSchemaResources } from '../../../src/adapters/schema/index.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
-import { PinnedPackageDefinitionSource } from '../../../src/adapters/http/pinned-package-definition-source.ts';
+import { PinnedPackageDefinitionSource } from '../../../src/adapters/package/pinned-package-definition-source.ts';
 import type { DefinitionSource } from '../../../src/ports/definition-source.ts';
 import { sampleFormDefinition } from '../../../src/adapter-conformance/fixtures.ts';
 

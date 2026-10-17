@@ -1,5 +1,4 @@
 import type { MixedHydrationWire } from './mixed-proof.ts';
-import type { InitialMixedHydrationWire } from './initial-mixed-proof.ts';
 import type { SavedResponseDraft } from './response-signing.ts';
 import type { CompletionLifetime } from './response-completion.ts';
 import type { ScreenerAssociation, ScreenerOwner, ScreenerSelection, SourceScope, NativeCurrentCheck } from './screener-retention.ts';
@@ -106,7 +105,7 @@ export interface EvaluationHydrationWire {
 /** Checked facts for one exact saved candidate; Source retains admission authority. */
 export interface HydratedEvaluationCandidate {
   readonly nativeCurrentCheck?: NativeCurrentCheck;
-  readonly view: EvaluationHydrationWire | InitialMixedHydrationWire | MixedHydrationWire;
+  readonly view: EvaluationHydrationWire | MixedHydrationWire;
   readonly assertCurrent: () => void;
   readonly assertReady: () => void;
   /** Verified monotonic lifetime remaining; absence means unknown, explicit Infinity means nonexpiring. */

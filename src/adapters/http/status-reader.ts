@@ -5,7 +5,7 @@ import { captureStatusCaseLedgerId } from '../../shared/status-case-id.ts';
 import type { BrowserAuthSession } from '../../ports/browser-auth-session.ts';
 import { StatusReadError, type StatusReader, type StatusRequest, type ApplicantCaseDetail } from '../../ports/status-reader.ts';
 import { validateApplicantCaseDetail } from '../schema/applicant-case-detail.ts';
-import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
+import { defaultFetch, HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
 
 export interface HttpStatusReaderConfig extends Omit<HttpClientConfig, 'accessToken'> {
   readonly caseLedgerId: string;
@@ -50,7 +50,7 @@ export class HttpStatusReader implements StatusReader {
     };
     try {
       assertCurrent();
-      const transport = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+      const transport = config.fetchImpl ?? defaultFetch();
       const client = new HttpClient({ ...config, tenantBinding: undefined,
         fetchImpl: (input, init) => transport(input, { ...init, credentials: 'omit', cache: 'no-store' }),
         accessToken: async () => {

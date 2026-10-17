@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/is-record.ts';
 import canonicalize from 'canonicalize';
 import {
   invokeResponseAction,
@@ -24,7 +25,7 @@ import {
   defaultFormIdResolver,
   type FormIdResolver,
 } from './form-id.ts';
-import type { AccessTokenProvider, FetchLike } from './http-client.ts';
+import { defaultFetch, type AccessTokenProvider, type FetchLike } from './http-client.ts';
 
 export const RESPONSE_ACTION_LEDGER_APPEND_ROUTE =
   '/runtime/response-actions/ledger/session-op-batches';
@@ -358,7 +359,7 @@ function effectOutcomeSemanticOps(
 ): ResponseActionEffectOutcomeSemanticOp[] {
   return effectTrace.flatMap((outcome, effectIndex) => {
     if (outcome.type === 'hostEvent') return [];
-    return [definedProps({
+    return [definedProps<ResponseActionEffectOutcomeSemanticOp>({
       op: 'responseAction.effectOutcome',
       actionId,
       invocationId,
@@ -369,7 +370,7 @@ function effectOutcomeSemanticOps(
       outcomeRef: outcome.outcomeRef,
       reason: outcome.reason,
       replayToken: outcome.replayToken,
-    }) as ResponseActionEffectOutcomeSemanticOp];
+    })];
   });
 }
 
@@ -379,7 +380,7 @@ function invocationSemanticOp(
   invocationId: string,
   durableEffectCount: number,
 ): ResponseActionInvocationSemanticOp {
-  return definedProps({
+  return definedProps<ResponseActionInvocationSemanticOp>({
     op: 'responseAction.invocation',
     actionId,
     invocationId,
@@ -393,7 +394,7 @@ function invocationSemanticOp(
     failureReason: invocation.failureReason,
     replayToken: invocation.replayToken,
     durableEffectCount,
-  }) as ResponseActionInvocationSemanticOp;
+  });
 }
 
 async function appendSessionOpBatch(input: {
@@ -487,8 +488,7 @@ async function sha256Prefixed(bytes: Uint8Array): Promise<string> {
   if (!globalThis.crypto?.subtle) {
     throw new Error('Web Crypto SHA-256 is required for Response Actions Ledger append hashing.');
   }
-  const source = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  const buffer = await globalThis.crypto.subtle.digest('SHA-256', source);
+  const buffer = await globalThis.crypto.subtle.digest('SHA-256', Uint8Array.from(bytes));
   return `sha256:${Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
@@ -520,23 +520,22 @@ function valueFor<T>(
   value: T | ((context: ResponseActionRuntimeContext) => T) | undefined,
   context: ResponseActionRuntimeContext,
 ): T | undefined {
-  return typeof value === 'function'
-    ? (value as (context: ResponseActionRuntimeContext) => T)(context)
-    : value;
+  return isProvider(value) ? value(context) : value;
 }
 
-function definedProps<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  ) as T;
+function isProvider<T>(
+  value: T | ((context: ResponseActionRuntimeContext) => T) | undefined,
+): value is (context: ResponseActionRuntimeContext) => T {
+  return typeof value === 'function';
+}
+
+function definedProps<T extends Record<string, unknown>>(value: T): T;
+function definedProps(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
 function fetchFor(fetchImpl?: FetchLike): FetchLike {
-  if (fetchImpl) return fetchImpl;
-  if (!globalThis.fetch) {
-    throw new Error('Response Actions Ledger HTTP adapter requires a fetch implementation.');
-  }
-  return globalThis.fetch.bind(globalThis);
+  return fetchImpl ?? defaultFetch();
 }
 
 async function resolveAccessToken(
@@ -562,10 +561,6 @@ async function problemDetail(response: Response): Promise<string> {
     // Status text is enough when the response body is empty or non-JSON.
   }
   return response.statusText || `HTTP ${response.status}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function stringField(value: Record<string, unknown>, field: string): string {

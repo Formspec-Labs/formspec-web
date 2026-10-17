@@ -73,8 +73,8 @@ export class HttpApplicationLifecycle implements ApplicationLifecycle {
         || typeof value.caseLedgerId !== 'string' || !value.caseLedgerId.startsWith('urn:wos:') || value.caseLedgerId.length <= 8
         || typeof value.caseReference !== 'string' || !value.caseReference.trim()
         || [...(value.caseLedgerId + value.caseReference)].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) >= 127 && character.charCodeAt(0) <= 159)
-        || !['in-progress', 'submitted'].includes(value.status as string)) throw new Error('Application receipt differs from its owned draft');
-      return Object.freeze({ caseLedgerId: value.caseLedgerId, caseReference: value.caseReference, draftRef: value.draftRef, status: value.status as ApplicationCaseReceipt['status'] });
+        || (value.status !== 'in-progress' && value.status !== 'submitted')) throw new Error('Application receipt differs from its owned draft');
+      return Object.freeze({ caseLedgerId: value.caseLedgerId, caseReference: value.caseReference, draftRef: value.draftRef, status: value.status });
     };
     return heldGeneration === undefined ? this.config.fence.run(key, operation) : operation(heldGeneration);
   }

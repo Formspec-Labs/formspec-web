@@ -12,7 +12,6 @@ import { snapshotMixedInputs } from './general-protocol.ts';
 import type { MixedProofInputs, MixedProofCommand } from './general-protocol.ts';
 import { SMALL_CAP, snapshotInput } from './protocol.ts';
 import type { ProofWorker } from './protocol.ts';
-import type { InitialProofWorkerLifetime } from './client.ts';
 import { decodeBoundedProofJson } from './wire.ts';
 export interface MixedProofOutcome {
   readonly version: 1; readonly status: 'verified'; readonly verificationScope: 'mappedFacts';
@@ -27,6 +26,19 @@ export interface MixedProofWorkerConfig {
   readonly maxModuleBytes: number;
   readonly wholeOperationMilliseconds: number;
   readonly monotonicNow?: () => number;
+}
+export interface ProofWorkerLifetime {
+  readonly signal: AbortSignal;
+  /** Must fence owner, session, publication, candidate, route and engine generation. */
+  readonly assertCurrent: () => void;
+  /** Captured before hydration, using the same monotonic clock as the client. */
+  readonly startedMonotonic: number;
+  /** Independently captured UTC time and simultaneous monotonic reading. */
+  readonly currentAt: string;
+  readonly currentAtMonotonic: number;
+}
+export function createDedicatedProofWorker<Command>(url: URL): ProofWorker<Command> {
+  return new Worker(url, { type: 'module' });
 }
 export type PreparedMixedProof = Omit<MixedProofInputs, 'selectionBytes'>;
 export type MixedProofIndexer = (referencesBytes: Uint8Array) => Promise<Uint8Array>;
@@ -55,7 +67,7 @@ export class MixedProofWorkerClient {
   dispose(): void { this.disposed = true; this.retireFacts(); }
   async verify(selected: Readonly<{ registration: EvaluationProviderRegistration; request: InitialNativeRequest; nativeCurrentCheck?: NativeCurrentCheck }>,
     prepare: (index: MixedProofIndexer, lifetime: { signal: AbortSignal; assertCurrent: () => void }) => Promise<PreparedMixedProof>,
-    lifetime: InitialProofWorkerLifetime): Promise<Readonly<{ outcome: MixedProofOutcome; assertCurrent: () => void; remainingMilliseconds: () => number; refreshRequired: () => boolean }>> {
+    lifetime: ProofWorkerLifetime): Promise<Readonly<{ outcome: MixedProofOutcome; assertCurrent: () => void; remainingMilliseconds: () => number; refreshRequired: () => boolean }>> {
     lifetime = { ...lifetime, assertCurrent: lifetime.assertCurrent.bind(lifetime) };
     this.retireFacts(); const generation = this.generation;
     const active = new AbortController(); this.active = active;

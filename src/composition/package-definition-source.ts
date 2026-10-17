@@ -1,4 +1,4 @@
-import type { PinnedPackageDefinitionSource } from '../adapters/http/pinned-package-definition-source.ts';
+import type { PinnedPackageDefinitionSource } from '../adapters/package/pinned-package-definition-source.ts';
 import type { DefinitionSource } from '../ports/definition-source.ts';
 
 /** Bind explicit host selectors while preserving the package's canonical identity. */

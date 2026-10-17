@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/is-record.ts';
 import type { ComposedSourcesReceipt, EvaluationHydrationResult, EvaluationHydrationWire, NativeScreenerMappingReceipt } from '../../ports/evaluation-hydration.ts';
 import { computeJcsSha256Digest as hash } from './response-action-ledger.ts';
 
@@ -30,6 +31,21 @@ interface CompositionPolicy {
     registrationHash: string | null; unavailableReason: string | null }[];
 }
 
+const isNullableString = (value: unknown) => value === null || typeof value === 'string';
+/** Shape the verifier reads; the exact pinned Source schema remains the structural authority. */
+function isCompositionPolicy(value: unknown): value is CompositionPolicy {
+  if (!isRecord(value)) return false;
+  const { outputSchema, budgets, owners } = value;
+  return typeof value.providerId === 'string' && typeof value.providerVersion === 'string' && isRecord(value.selection)
+    && typeof value.formVersionHash === 'string'
+    && isRecord(outputSchema) && typeof outputSchema.hash === 'string' && typeof outputSchema.document === 'string'
+    && isRecord(budgets) && typeof budgets.maxEvidenceAgeSeconds === 'number' && typeof budgets.maxValiditySeconds === 'number'
+    && typeof budgets.responseBytes === 'number'
+    && Array.isArray(owners) && owners.every(owner => isRecord(owner) && typeof owner.instanceName === 'string'
+      && typeof owner.sourceRef === 'string' && (owner.resolverKind === 'nativeScreenerMapping' || owner.resolverKind === 'unavailable')
+      && isNullableString(owner.registrationHash) && isNullableString(owner.unavailableReason));
+}
+
 /** Requires the closed Source Hydration decoder and original candidate binding checks first. */
 export async function verifyComposedSources(input: {
   view: EvaluationHydrationWire;
@@ -41,8 +57,8 @@ export async function verifyComposedSources(input: {
 }): Promise<number> {
   const { view, receipt, requestHash, verifyNative } = input;
   const registration = receipt.registration;
-  // Structure is established by the exact pinned Source schema, not this assertion.
-  const descriptor = registration.publicDescriptor as unknown as CompositionPolicy;
+  const descriptor = registration.publicDescriptor;
+  if (!isCompositionPolicy(descriptor)) throw new Error('Source composition descriptor shape differs');
   const { receiptHash, ...preimage } = receipt;
   if (!input.registrationHash || registration.registrationHash !== input.registrationHash
     || registration.registrationHash !== await hash(descriptor) || receiptHash !== await hash(preimage)

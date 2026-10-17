@@ -2,12 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MixedProofWorkerClient } from '../../../src/adapters/source-worker/general-client.ts';
 import { HttpMixedProofReader } from '../../../src/adapters/http/mixed-proof-reader.ts';
 import { HttpInitialMixedScreenerHydration } from '../../../src/adapters/http/initial-mixed-screener-hydration.ts';
-import { HttpInitialMixedProofReader } from '../../../src/adapters/http/initial-mixed-proof-reader.ts';
-import { InitialMixedProofWorkerClient } from '../../../src/adapters/source-worker/client.ts';
 import { computeJcsSha256Digest as hash } from '../../../src/adapters/http/response-action-ledger.ts';
 import type { FormDefinition } from '../../../src/ports/definition-source.ts';
 import type { HydrateScreenerCandidate } from '../../../src/ports/screener-hydration.ts';
-import type { InitialInstanceProof } from '../../../src/ports/initial-mixed-proof.ts';
 import { mockFixture, at, encode } from '../source-worker/mock-fixture.ts';
 
 // Schema-only boundaries: mocked owning verification does not establish Source semantic success.
@@ -40,90 +37,12 @@ async function fixture() {
     definition, publication: { form_id: 'form', form_version_id: 'version', definition_url: 'urn:form', definition_version: '1', definition_hash: definitionHash, definition },
     selection, selectionHash, formVersion, registration: mock.selected.registration, compositionRegistrationHash: mock.selected.registration.registrationHash,
     monotonicNow: () => elapsed, utcNow: () => '2026-10-10T12:00:05Z', assertCurrent: () => {},
-    worker: { module: new Uint8Array([1]), maxModuleBytes: 1, wholeOperationMilliseconds: 10_000, createWorker: () => { throw new Error('mock verification only'); } } };
-  const reader = vi.spyOn(HttpInitialMixedProofReader.prototype, 'readAll').mockImplementation(async (_hydration, expected) => {
-    const hydration = JSON.parse(new TextDecoder().decode(mock.bundle.hydrationBytes));
-    Object.assign(hydration, { scope: expected.scope, owner: expected.owner, selection: expected.selection, sources: expected.sources,
-      candidateHash: expected.candidateHash, requestHash: expected.requestHash, formVersionHash: selection.formVersionHash, qualifiedAt: '2026-10-10T12:00:04Z' });
-    const native: InitialInstanceProof = { kind: 'native', version: 1, instanceName: 'facts', request: expected,
-      records: { snapshot: { selectionHash, selection, formVersion, screenerBytes: [] }, run, association } };
-    elapsed = 20;
-    return { hydrationBytes: encode(hydration), expectedRequest: expected, proofs: [{ decoded: native, utf8Bytes: encode(native) }, mock.bundle.proofs[1]] };
-  });
+    generalWorker: { module: new Uint8Array([1]), maxModuleBytes: 1, wholeOperationMilliseconds: 10_000, createWorker: () => { throw new Error('mock verifier only'); } } };
   const current = vi.fn();
-  const verify = vi.spyOn(InitialMixedProofWorkerClient.prototype, 'verify').mockResolvedValue({ outcome: mock.outcome, assertCurrent: current, remainingMilliseconds: () => 60_000 });
-  return { input, config, reader, verify, current, token, fetch, setElapsed: (value: number) => { elapsed = value; } };
+  return { input, config, current, token, fetch, setElapsed: (value: number) => { elapsed = value; } };
 }
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
-describe('initial mixed saved-candidate integration', () => {
-  it('selects full request before packets and captures current UTC after proof transport', async () => {
-    const f = await fixture(), adapter = new HttpInitialMixedScreenerHydration(f.config);
-    const facts = await adapter.hydrate(f.input);
-    const selected = f.verify.mock.calls[0][0].request;
-    expect(selected.canonicalResponse).toEqual(f.input.saved.response);
-    expect(selected.formVersion).toEqual(f.config.formVersion);
-    expect(selected.owner).toEqual(f.input.run.run.owner);
-    expect(f.verify.mock.calls[0][2]).toMatchObject({ startedMonotonic: 0, currentAtMonotonic: 20, currentAt: '2026-10-10T12:00:05Z' });
-    expect(facts.view.version).toBe(2); expect(facts.remainingMilliseconds!()).toBe(60_000); facts.assertReady();
-    adapter.retireFacts(); expect(() => facts.assertCurrent()).toThrow(); adapter.dispose();
-  });
-  for (const change of ['actor', 'candidate', 'publication', 'extra-source'] as const) {
-    it(`refuses changed independent ${change} before credentials`, async () => {
-      const f = await fixture();
-      if (change === 'actor') Object.assign(f.input.saved, { actor: { id: 'foreign' } });
-      if (change === 'candidate') Object.assign(f.input.saved.evidence, { canonical_response: { ...f.input.saved.response, data: { name: 'Different' } } });
-      if (change === 'publication') Object.assign(f.config.formVersion, { created_by: 'foreign' });
-      if (change === 'extra-source') {
-        f.config.definition.instances!.other = { source: 'unselected', readonly: true, data: {} };
-        const definitionHash = await hash(f.config.definition);
-        Object.assign(f.config.formVersion, { definition_json: JSON.stringify(f.config.definition), definition_hash: definitionHash });
-        f.config.publication.definition_hash = definitionHash;
-        Object.assign(f.config.selection.evaluationSelection, { definitionHash });
-        f.config.selection.formVersionHash = await hash(f.config.formVersion);
-        f.config.selectionHash = await hash(f.config.selection);
-        Object.assign(f.input.run.run, { selectionHash: f.config.selectionHash });
-        Object.assign(f.input.association, { selectionHash: f.config.selectionHash });
-      }
-      const adapter = new HttpInitialMixedScreenerHydration(f.config);
-      await expect(adapter.hydrate(f.input)).rejects.toThrow(change === 'extra-source' ? 'source inventory mismatch' : undefined);
-      expect(f.token).not.toHaveBeenCalled(); expect(f.fetch).not.toHaveBeenCalled(); expect(f.verify).not.toHaveBeenCalled(); adapter.dispose();
-    });
-  }
-  it('refuses a substituted native run before owning verification', async () => {
-    const f = await fixture(), original = f.reader.getMockImplementation()!;
-    f.reader.mockImplementation(async (...args) => {
-      const bundle = await original(...args), native = bundle.proofs[0].decoded;
-      if (native.kind !== 'native') throw new Error('fixture requires native');
-      return { ...bundle, proofs: [{ ...bundle.proofs[0], decoded: { ...native, records: { ...native.records, run: { ...native.records.run, revision: 2 } } } }, bundle.proofs[1]] };
-    });
-    const adapter = new HttpInitialMixedScreenerHydration(f.config);
-    await expect(adapter.hydrate(f.input)).rejects.toThrow('custody'); expect(f.verify).not.toHaveBeenCalled(); adapter.dispose();
-  });
-  it('captures guard and selected limit despite caller mutation during credentials', async () => {
-    const f = await fixture(); let current = true;
-    Object.assign(f.input, { assertCurrent: () => { if (!current) throw new Error('owner retired'); } });
-    f.token.mockImplementation(async () => { current = false; Object.assign(f.input, { assertCurrent: () => {} }); f.config.worker.wholeOperationMilliseconds = 60_000; return 'token'; });
-    const adapter = new HttpInitialMixedScreenerHydration(f.config);
-    await expect(adapter.hydrate(f.input)).rejects.toThrow('owner retired'); expect(f.fetch).not.toHaveBeenCalled(); expect(f.verify).not.toHaveBeenCalled(); adapter.dispose();
-  });
-  it('retains selected deadline when caller changes only worker limits during credentials', async () => {
-    const f = await fixture();
-    f.token.mockImplementation(async () => { f.config.worker.wholeOperationMilliseconds = 60_000; f.setElapsed(10_000); return 'token'; });
-    const adapter = new HttpInitialMixedScreenerHydration(f.config);
-    await expect(adapter.hydrate(f.input)).rejects.toThrow('whole deadline expired');
-    expect(f.fetch).not.toHaveBeenCalled(); expect(f.verify).not.toHaveBeenCalled(); adapter.dispose();
-  });
-  it('ends hung credentials at original whole deadline and never starts proof transport', async () => {
-    const f = await fixture(); vi.useFakeTimers(); f.config.worker.wholeOperationMilliseconds = 100;
-    f.token.mockImplementation(() => new Promise<string>(() => {}));
-    const adapter = new HttpInitialMixedScreenerHydration(f.config), pending = adapter.hydrate(f.input);
-    const refused = expect(pending).rejects.toThrow();
-    await vi.advanceTimersByTimeAsync(101); await refused;
-    expect(f.fetch).not.toHaveBeenCalled(); expect(f.reader).not.toHaveBeenCalled(); adapter.dispose();
-  });
-});
-
-describe('explicit general hydration branch (MOCK owning verifier; schema/guard checks only)', () => {
+describe('general hydration (MOCK owning verifier; schema/guard checks only)', () => {
   async function generalFixture(unavailable = false, currentCheck = false, baseAssociation = false) {
     const f = await fixture();
     const registration = structuredClone(f.config.registration);
@@ -143,7 +62,7 @@ describe('explicit general hydration branch (MOCK owning verifier; schema/guard 
     const binding = { operation: 'hydrate', scope: f.config.selection.evaluationSelection.scope, owner: input.run.run.owner,
       selection: f.config.selection.evaluationSelection, formVersionHash: f.config.selection.formVersionHash,
       draftId: input.saved.draft.id, draftVersion: input.saved.draft.version, candidateHash, sources: { facts: 'screening', photo: 'inspection' } };
-    const hydration = JSON.parse(new TextDecoder().decode(mockFixture().bundle.hydrationBytes));
+    const hydration = structuredClone(mockFixture().hydration) as { results: object[]; providerReceipt: object; requestHash?: string };
     Object.assign(hydration, binding, { requestHash: await hash(binding), qualifiedAt: at });
     Object.assign(hydration.providerReceipt, { version: 3, registration, requestHash: hydration.requestHash });
     if (unavailable) hydration.results[1] = { status: 'unavailable', instanceName: 'photo', sourceRef: 'inspection', reason: 'inspection pending' };
@@ -162,9 +81,7 @@ describe('explicit general hydration branch (MOCK owning verifier; schema/guard 
       await prepare(async () => encode({}), lifetime);
       return { outcome: {} as never, assertCurrent: f.current, remainingMilliseconds: () => 60_000, refreshRequired: () => false };
     });
-    const { worker, ...config } = f.config;
-    const adapter = new HttpInitialMixedScreenerHydration({ ...config, registration, generalWorker: {
-      ...worker, createWorker: () => { throw new Error('mock verifier only'); } } });
+    const adapter = new HttpInitialMixedScreenerHydration({ ...f.config, registration });
     return { f, input, nativeCurrentCheck, adapter, reader, verify, native };
   }
   it('selects fresh native current checks for the exact unchanged signed candidate without an association command', async () => {
@@ -202,7 +119,7 @@ describe('explicit general hydration branch (MOCK owning verifier; schema/guard 
   it('selects general verification explicitly and retains unavailable-result readiness checks', async () => {
     const { f, adapter, reader, verify } = await generalFixture(true);
     const facts = await adapter.hydrate(f.input);
-    expect(verify).toHaveBeenCalledOnce(); expect(reader).toHaveBeenCalledOnce(); expect(f.reader).not.toHaveBeenCalled();
+    expect(verify).toHaveBeenCalledOnce(); expect(reader).toHaveBeenCalledOnce();
     expect(facts.view.providerReceipt).toMatchObject({ version: 3 });
     facts.assertCurrent(); expect(() => facts.assertReady()).toThrow('required source unavailable');
     adapter.retireFacts(); expect(() => facts.assertCurrent()).toThrow(); adapter.dispose();

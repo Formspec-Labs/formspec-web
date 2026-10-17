@@ -7,10 +7,6 @@
  * Composition root.
  */
 import type { RuntimeFeatureKey } from './feature-keys.ts';
-import type {
-  ReviewThreadPolicySnapshot,
-  TrustedReviewerPosture,
-} from '../ports/review-thread-store.ts';
 
 /**
  * Closed-set decision: an instance capability is exactly one of three states.
@@ -72,10 +68,6 @@ export interface OrgRuntimePolicy {
    * resolver validates this shape at boot.
    */
   readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
-}
-
-export interface TrustedReviewerRuntimeConfig extends ReviewThreadPolicySnapshot {
-  readonly posture: TrustedReviewerPosture;
 }
 
 export type SafeAddressAccessClass = 'safe-address' | 'safe-contact' | 'safe-employer';
@@ -156,9 +148,7 @@ export function isFormFeaturePolicyMode(value: string): value is FormFeaturePoli
 export interface FormRuntimePolicy {
   readonly features: Readonly<Partial<Record<RuntimeFeatureKey, FormFeaturePolicyMode>>>;
   /**
-   * Optional per-feature configuration extracted from the definition. FW-0113
-   * uses `limits.trustedReviewer` for the FW-0042 three-tier posture and
-   * respondent-only field pointers while SC-6 remains PROPOSAL-status.
+   * Optional per-feature configuration extracted from the definition.
    */
   readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
   /**
@@ -348,22 +338,6 @@ export function getMultiPartyRuntimeConfig(
   profile: ResolvedRuntimeProfile,
 ): ResolvedMultiPartyPolicy | undefined {
   return profile.enabled.has('multiParty') ? profile.multiParty : undefined;
-}
-
-export function getTrustedReviewerRuntimeConfig(
-  profile: ResolvedRuntimeProfile,
-): TrustedReviewerRuntimeConfig | undefined {
-  if (!profile.enabled.has('trustedReviewer')) return undefined;
-  const value = profile.limits.trustedReviewer;
-  if (value === undefined) {
-    return {
-      posture: 'comment-allowed',
-      respondentOnlyFieldPointers: [],
-      reviewerSessionBindingRef: 'composition:reviewerSession',
-      reviewThreadStoreBindingRef: 'composition:reviewThreadStore',
-    };
-  }
-  return value as TrustedReviewerRuntimeConfig;
 }
 
 export function getSafeAddressRuntimeConfig(

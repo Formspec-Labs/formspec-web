@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/is-record.ts';
 import canonicalize from 'canonicalize';
 import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import { HttpClient } from './http-client.ts';
@@ -10,8 +11,8 @@ import type { InitialNativeRequest } from '../../ports/initial-mixed-proof.ts';
 const RESPONSE_CAP = 4 * 1024 * 1024 + 4096;
 const equal = (a: unknown, b: unknown) => canonicalize(a) === canonicalize(b);
 function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Source mixed proof object required');
-  return value as Record<string, unknown>;
+  if (!isRecord(value)) throw new Error('Source mixed proof object required');
+  return value;
 }
 const keys = (value: Record<string, unknown>, fields: string[]) => Object.keys(value).length === fields.length
   && fields.every(field => Object.hasOwn(value, field));
@@ -55,17 +56,18 @@ export class HttpMixedProofReader {
     if (!keys(indexed, ['version','status','proofIndex','objects']) || indexed.version !== 1 || indexed.status !== 'indexed'
       || !Array.isArray(indexed.objects) || indexed.objects.length > 256) throw new Error('Source mixed proof index refused');
     const proofIndex = object(indexed.proofIndex);
+    const proofBuffers = proofIndex.buffers;
     if (!keys(proofIndex, ['version','references','buffers']) || proofIndex.version !== 1
-      || !equal(proofIndex.references, returned.proofs) || !Array.isArray(proofIndex.buffers)
-      || proofIndex.buffers.length !== indexed.objects.length) throw new Error('Source mixed proof index binding differs');
+      || !equal(proofIndex.references, returned.proofs) || !Array.isArray(proofBuffers)
+      || proofBuffers.length !== indexed.objects.length) throw new Error('Source mixed proof index binding differs');
     const objects = indexed.objects.map((value, position) => {
-      const item = object(value); const entry = object((proofIndex.buffers as unknown[])[position]);
+      const item = object(value); const entry = object(proofBuffers[position]);
       if (!keys(item, ['objectKey','bufferIndex','sha256','byteLength']) || !keys(entry, ['key','bytes'])
         || typeof item.objectKey !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(item.objectKey)
         || item.bufferIndex !== position || entry.key !== item.objectKey || entry.bytes !== position
         || typeof item.sha256 !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(item.sha256)
-        || !Number.isSafeInteger(item.byteLength) || (item.byteLength as number) < 1) throw new Error('Source mixed proof object selector differs');
-      return { objectKey: item.objectKey, byteLength: item.byteLength as number };
+        || typeof item.byteLength !== 'number' || !Number.isSafeInteger(item.byteLength) || item.byteLength < 1) throw new Error('Source mixed proof object selector differs');
+      return { objectKey: item.objectKey, byteLength: item.byteLength };
     });
     if (objects.reduce((total, item) => total + item.byteLength, 0) > 64 * 1024 * 1024
       || objects.some((item, position) => position > 0 && item.objectKey <= objects[position - 1].objectKey)) {
