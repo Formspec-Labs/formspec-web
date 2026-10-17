@@ -1,11 +1,13 @@
-# Current Source-produced task mixed hydration
+# Task mixed hydration, composed receipt version 4
 
-These seven files are unchanged neutral exports of Source's maintained
-`actual_three_source_initial_and_task_hydration_protected_exports` producer test.
-The Source export was supplied at
-`/private/tmp/source-hydration-protocol-regression-20261013-v1/packets/task`.
+These seven files are the neutral export of formspec-server's
+`actual_three_source_initial_and_task_hydration_protected_exports` producer test, run with
+`FORMSPEC_MIXED_HYDRATE_FIXTURE_DIR` set (its `task` directory). They replace the earlier
+Source-supplied export: evaluation-composition moved from v3 to v4 when a form version began
+pinning its Theme and Locale documents (ADR 0166 section 1), which changes the policy, the
+registration and the form-version hashes every file is bound to.
 
-The hydration is TOP version 2, composed receipt version 3, with three
+The hydration is TOP version 2, composed receipt version 4, with three
 `nativeContextMapping` contributions. It contains two exact protected context
 objects and no image leaf. This fixture verifies task-family wire admission,
 authenticated candidate bindings, protected-object transport and worker protocol;
@@ -18,18 +20,14 @@ fixture outcome. It checks the full selected request and exact object bytes.
 A native-proof refusal control demonstrates that wire admission cannot bypass
 that selected verifier.
 
-Hydration SHA256: `3fe28a9a6074fc3c48b7076845b2429bbe04e8f858b27171edf3c870ccbbb6bb`.
-Normative Source V3 schema SHA256:
-`75c4a31fb125f925bae6d3911fd92ff06109591ecb5542d8711b1c6e8b07abc4`.
-The existing V3 schema is unchanged.
+Hydration SHA256: `a5bb4cf87f854acd19ad8e097c34e755cbe6a12ba8ce52a2aea628d5c8020bef`.
+Normative V4 schema: `src/adapters/http/source-schemas/evaluation-composition-v4.schema.json`
+(copied from formspec-server `schemas/`); the fixture's `producerProtocol` pins its
+`$id` and SHA256.
 
 The earlier task hydration tests used TOP1 with a mock receipt verifier; mixed
 proof tests entered the verifier directly and bypassed the HTTP decoder. The
-producer regression now crosses both boundaries in the maintained CI test
-suite. The selected mixed verifier factory also admits only the exact Source
-V3 CompositionRegistration shape before any transport or worker creation;
-semantic version and owner kinds matter, not the provider version label.
-
-Source test-only producer commit: `28766152fd1814079b37c806851c5f3603abeb53`.
-The fixture's `producerProtocol` pins are compared with the selected registration
-and the exact unchanged vendored Source V3 schema in the producer regression.
+producer regression crosses both boundaries in the maintained CI test suite. The
+selected mixed verifier factory admits only the exact V4 CompositionRegistration
+shape before any transport or worker creation; semantic version and owner kinds
+matter, not the provider version label.

@@ -33,20 +33,32 @@
     "formVersionId": "version_signing_test",
     "definitionUrl": "urn:formspec:test:signing",
     "definitionVersion": "1.0",
-    "definitionHash": "sha256:11cbdc6a35a2b31a4ef8978c1a0c941a8db69da778a4ed61babd4b7061e61c2d",
+    "definitionHash": "sha256:39ad001eddfa256caddbadb49ac19dfd1cb930ec04edcc508835debcda9940fa",
     "requiredSources": [
       "urn:test:screening"
     ]
   },
   "draftId": "draft_signing_test",
   "draftVersion": 5,
-  "candidateHash": "sha256:2623a137f29a09e13de5b2c7673d0ed515f0b363dae167b217046596e2c29617",
-  "formVersionHash": "sha256:cf0a263fbdf2549f56710111885b6d19090b91c73e6d4678c522ed4f6eb1d810",
-  "requestHash": "sha256:cb8bcab404e97a55079c112c3ad836218bb72b7ede562931b421009229891478",
+  "candidateHash": "sha256:d4551e9fe646f9dec859c91be8e152025c497b44a830811bdcb6c8ae8ee5f0e6",
+  "formVersionHash": "sha256:9972308152c449ba1026d5bbef4b8fc4e8cdfa471c68672bfcc59a4a58a1910f",
+  "requestHash": "sha256:50797514cb94dc1cf6d940c2e41f05937f7f3baa5561f7320981feacf62acc70",
   "sources": {
     "screening": "urn:test:screening"
   },
-  "attachmentBindings": [],
+  "attachmentBindings": [
+    {
+      "kind": "attachment-ref",
+      "uri": "urn:formspec:attachment:upload_83c798700912545aeaca0502032eb92451a94fede28e8ba7278ad3b6ca69524c",
+      "hash": "sha256:060d086b31ac1d8b9dffb7216e0fe8578bca6e5f95659161a53cde82bcadf4ee",
+      "size": 10,
+      "filename": "original.jpg",
+      "mimeType": "image/jpeg",
+      "upload_id": "upload_83c798700912545aeaca0502032eb92451a94fede28e8ba7278ad3b6ca69524c",
+      "read_url": "/runtime/forms/form_signing_test/attachments/upload_83c798700912545aeaca0502032eb92451a94fede28e8ba7278ad3b6ca69524c",
+      "contentType": "image/jpeg"
+    }
+  ],
   "qualifiedAt": "2026-10-09T12:00:00Z",
   "results": [
     {
@@ -55,10 +67,10 @@
       "sourceRef": "urn:test:screening",
       "data": {
         "qualified": true,
-        "determinationRef": "urn:formspec:source:screener:01a12109-6382-77f0-b9ac-220c1ed968e2:revision:1"
+        "determinationRef": "urn:formspec:source:screener:01a149e8-6686-7492-8831-897a51ae2734:revision:1"
       },
-      "dataHash": "sha256:19008257ccea7adf0c9f01b182aa8076a317f1bcdc54f427728aa7115d14cada",
-      "evidenceRef": "urn:formspec:source:screener:01a12109-6382-77f0-b9ac-220c1ed968e2:revision:1",
+      "dataHash": "sha256:01236ff8beb1352b0ef356f798ddbea0dbd896f9892fff870f7bf403d0fd830b",
+      "evidenceRef": "urn:formspec:source:screener:01a149e8-6686-7492-8831-897a51ae2734:revision:1",
       "issuedAt": "2026-10-09T12:00:00.000Z",
       "expiresAt": "2026-10-09T12:05:00+00:00"
     }
@@ -70,7 +82,7 @@
     "registration": {
       "providerId": "urn:test:source-composer",
       "providerVersion": "1",
-      "registrationHash": "sha256:ada3c01518b3fe9ba04ad19d488ed8e6f71023fc43a26208436add473ab4bc83",
+      "registrationHash": "sha256:54192c7135c5aac256660d7e40f4364b4e691a1a7f87b4757cee76ff9c75e3b1",
       "publicDescriptor": {
         "version": 1,
         "resolver": "exactSourceComposition",
@@ -87,12 +99,12 @@
           "formVersionId": "version_signing_test",
           "definitionUrl": "urn:formspec:test:signing",
           "definitionVersion": "1.0",
-          "definitionHash": "sha256:11cbdc6a35a2b31a4ef8978c1a0c941a8db69da778a4ed61babd4b7061e61c2d",
+          "definitionHash": "sha256:39ad001eddfa256caddbadb49ac19dfd1cb930ec04edcc508835debcda9940fa",
           "requiredSources": [
             "urn:test:screening"
           ]
         },
-        "formVersionHash": "sha256:cf0a263fbdf2549f56710111885b6d19090b91c73e6d4678c522ed4f6eb1d810",
+        "formVersionHash": "sha256:9972308152c449ba1026d5bbef4b8fc4e8cdfa471c68672bfcc59a4a58a1910f",
         "outputSchema": {
           "url": "urn:formspec:server:evaluation-composition:1",
           "version": "1",
@@ -111,7 +123,7 @@
             "instanceName": "screening",
             "sourceRef": "urn:test:screening",
             "resolverKind": "nativeScreenerMapping",
-            "registrationHash": "sha256:3b931ad53cdeb1f5f07ef3579db3e7e7efaa50a2a28f07864fa864ab1ec4c7df",
+            "registrationHash": "sha256:e1653ef22f3c0a4011ffb9e4e410bb573d53d734815a02a03631f5269ef78e73",
             "attachmentMode": "metadataOnly",
             "executorAdmissionHash": null,
             "unavailableReason": null
@@ -122,14 +134,14 @@
       "maxEvidenceAgeSeconds": 300,
       "maxValiditySeconds": 900
     },
-    "requestHash": "sha256:cb8bcab404e97a55079c112c3ad836218bb72b7ede562931b421009229891478",
+    "requestHash": "sha256:50797514cb94dc1cf6d940c2e41f05937f7f3baa5561f7320981feacf62acc70",
     "resolvedAt": "2026-10-09T12:00:00Z",
     "validUntil": "2026-10-09T12:05:00Z",
     "contributions": [
       {
         "instanceName": "screening",
         "sourceRef": "urn:test:foreign",
-        "resultHash": "sha256:b440178cff2b59412b2eaf7d0b80156c7bd3c6a4c922a8123474bb311957566e",
+        "resultHash": "sha256:ab5f6f7c8cad8e90dadff2e65ca415381cb36ddce9ea9c4936cb0e5909023a7c",
         "receipt": {
           "kind": "nativeScreenerMapping",
           "version": 1,
@@ -137,7 +149,7 @@
           "registration": {
             "providerId": "urn:test:native-mapping",
             "providerVersion": "1.0.0",
-            "registrationHash": "sha256:3b931ad53cdeb1f5f07ef3579db3e7e7efaa50a2a28f07864fa864ab1ec4c7df",
+            "registrationHash": "sha256:e1653ef22f3c0a4011ffb9e4e410bb573d53d734815a02a03631f5269ef78e73",
             "publicDescriptor": {
               "version": 1,
               "resolver": "nativeScreenerMapping",
@@ -154,13 +166,13 @@
                 "formVersionId": "version_signing_test",
                 "definitionUrl": "urn:formspec:test:signing",
                 "definitionVersion": "1.0",
-                "definitionHash": "sha256:11cbdc6a35a2b31a4ef8978c1a0c941a8db69da778a4ed61babd4b7061e61c2d",
+                "definitionHash": "sha256:39ad001eddfa256caddbadb49ac19dfd1cb930ec04edcc508835debcda9940fa",
                 "requiredSources": [
                   "urn:test:screening"
                 ]
               },
-              "formVersionHash": "sha256:cf0a263fbdf2549f56710111885b6d19090b91c73e6d4678c522ed4f6eb1d810",
-              "screenerSelectionHash": "sha256:8f513865874512762b680850251dba3c5d050fb63f479db42bced64999eb5b57",
+              "formVersionHash": "sha256:9972308152c449ba1026d5bbef4b8fc4e8cdfa471c68672bfcc59a4a58a1910f",
+              "screenerSelectionHash": "sha256:9db9e1544f390d4f509e7b49927e67d30d9e58c4e706777f82106be6407b9968",
               "instanceName": "screening",
               "sourceRef": "urn:test:screening",
               "rules": [
@@ -198,7 +210,7 @@
             "maxEvidenceAgeSeconds": 300,
             "maxValiditySeconds": 300
           },
-          "requestHash": "sha256:cb8bcab404e97a55079c112c3ad836218bb72b7ede562931b421009229891478",
+          "requestHash": "sha256:50797514cb94dc1cf6d940c2e41f05937f7f3baa5561f7320981feacf62acc70",
           "resolvedAt": "2026-10-09T12:00:00.000Z",
           "proof": {
             "association": {
@@ -210,8 +222,8 @@
               },
               "draftId": "draft_signing_test",
               "draftVersion": 5,
-              "candidateHash": "sha256:2623a137f29a09e13de5b2c7673d0ed515f0b363dae167b217046596e2c29617",
-              "selectionHash": "sha256:8f513865874512762b680850251dba3c5d050fb63f479db42bced64999eb5b57",
+              "candidateHash": "sha256:d4551e9fe646f9dec859c91be8e152025c497b44a830811bdcb6c8ae8ee5f0e6",
+              "selectionHash": "sha256:9db9e1544f390d4f509e7b49927e67d30d9e58c4e706777f82106be6407b9968",
               "owner": {
                 "sessionId": "applicant",
                 "subjectRef": "applicant",
@@ -226,23 +238,23 @@
                   "sessionId": "applicant"
                 }
               },
-              "runId": "01a12109-6382-77f0-b9ac-220c1ed968e2",
+              "runId": "01a149e8-6686-7492-8831-897a51ae2734",
               "runRevision": 1,
-              "evidenceHash": "sha256:8392bf4409495c0d4eb00357dd144c11e2e20da003a097c45fa6a6b4a273e779",
+              "evidenceHash": "sha256:caf4c9e4437e77ea2dfffdcded1ab9abd1da2868b5b7d92c86d253916c3a2c39",
               "associatedAt": "2026-10-09T12:00:00.000Z"
             },
-            "evidenceRef": "urn:formspec:source:screener:01a12109-6382-77f0-b9ac-220c1ed968e2:revision:1",
-            "evidenceHash": "sha256:8392bf4409495c0d4eb00357dd144c11e2e20da003a097c45fa6a6b4a273e779",
+            "evidenceRef": "urn:formspec:source:screener:01a149e8-6686-7492-8831-897a51ae2734:revision:1",
+            "evidenceHash": "sha256:caf4c9e4437e77ea2dfffdcded1ab9abd1da2868b5b7d92c86d253916c3a2c39",
             "issuedAt": "2026-10-09T12:00:00.000Z",
             "expiresAt": "2026-10-09T12:05:00+00:00",
             "instanceName": "screening",
             "sourceRef": "urn:test:screening",
-            "dataHash": "sha256:19008257ccea7adf0c9f01b182aa8076a317f1bcdc54f427728aa7115d14cada"
+            "dataHash": "sha256:01236ff8beb1352b0ef356f798ddbea0dbd896f9892fff870f7bf403d0fd830b"
           },
-          "receiptHash": "sha256:474ca5ca962365c46a3cac8b9abca3614da6649524ed42d3ab658fd6e53c056b"
+          "receiptHash": "sha256:97a17dd9f251f395792227a17fa6aba476c60d6e510a04e0a1b2029610594bd6"
         }
       }
     ],
-    "receiptHash": "sha256:9f2c51388cf21d80cb634a4ec7e4dbf062cd99db6ac10223cbd7cfa7ac58b26c"
+    "receiptHash": "sha256:e8be257cc8205e90fee6c1dc9c8de82bc40d1d694d602ff3b8188bc003aadd3b"
   }
 }
