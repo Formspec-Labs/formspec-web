@@ -37,8 +37,9 @@ route transitions remain reserved for app routes such as `/status`.
 
 The adapter extracts concrete Locale Documents from `locales`,
 `locale_documents`, and `localeDocuments` members of the same runtime payload.
-String-only `locale_refs` entries are treated as references and ignored by the
-web runtime.
+`getThemeDocument` returns the payload's `theme_document`: the Theme the server
+pinned at publish and ran its accessibility check against, or `null` when the
+form version has none.
 
 Run:
 

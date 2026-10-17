@@ -12,8 +12,11 @@ Adapter contract:
   they used for `getDefinition`. Do not assume this is equal to the returned
   canonical `definition.url`; reference runtime URLs may carry server form ids
   such as `/runtime/forms/{form_id}`.
-- Return only Locale Documents attached to that runtime payload. Legacy
-  `locale_refs` string arrays are references, not synthesized translations.
+- Return only Locale Documents attached to that runtime payload; never
+  synthesize translations.
+- If `getThemeDocument` is implemented, return the Theme pinned on the same
+  runtime payload (the one the form's accessibility check ran against), or
+  `null` when there is none.
 
 Run the conformance suite with:
 

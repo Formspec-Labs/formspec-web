@@ -8,6 +8,7 @@ import type {
   FormDefinition,
   LayoutHostEvidence,
   LocaleDocument,
+  ThemeDocument,
 } from '../../ports/definition-source.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
@@ -51,7 +52,7 @@ interface PublishedRuntimeView {
   locales?: unknown;
   locale_documents?: unknown;
   localeDocuments?: unknown;
-  locale_refs?: unknown;
+  theme_document?: unknown;
   runtime_config?: unknown;
   runtimeConfig?: unknown;
 }
@@ -105,6 +106,11 @@ export class HttpDefinitionSource implements DefinitionSource {
     const payload = await this.getRuntimePayload(url, version);
     const definition = extractDefinition(payload);
     return extractLocaleDocuments(payload, definition);
+  }
+
+  async getThemeDocument(url: string, version?: string): Promise<ThemeDocument | null> {
+    const payload = await this.getRuntimePayload(url, version);
+    return extractThemeDocument(payload);
   }
 
   async getComponentDocument(url: string, version?: string): Promise<ComponentDocument | null> {
@@ -184,6 +190,20 @@ export function extractLocaleDocuments(
     document.target.kind === 'definition'
     && document.target.url === definition.url
   ));
+}
+
+/** The Theme the form version was published and accessibility-checked with (ADR 0166 section 1). */
+export function extractThemeDocument(
+  payload: PublishedRuntimeView | FormDefinition,
+): ThemeDocument | null {
+  if (isFormDefinition(payload)) {
+    return null;
+  }
+  return isThemeDocument(payload.theme_document) ? payload.theme_document : null;
+}
+
+function isThemeDocument(value: unknown): value is ThemeDocument {
+  return isRecord(value) && typeof value.$formspecTheme === 'string' && typeof value.version === 'string';
 }
 
 export function extractComponentDocument(
