@@ -7,7 +7,6 @@ export {
   type RuntimeFeatureKey,
 } from './feature-keys.ts';
 export {
-  getTrustedReviewerRuntimeConfig,
   getMultiPartyRuntimeConfig,
   getSafeAddressRuntimeConfig,
   getEmbedLimits,
@@ -50,7 +49,6 @@ export {
   type SafeAddressFieldPolicy,
   type SafeAddressReceiptPostureTier,
   type SafeAddressRuntimeConfig,
-  type TrustedReviewerRuntimeConfig,
 } from './policy-shapes.ts';
 export {
   EmbedOriginNotAllowedError,

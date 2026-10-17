@@ -95,15 +95,15 @@ export default tseslint.config(
       'no-restricted-globals': ['error', { name: 'fetch', message: 'Use HttpClient or defaultFetch() from adapters/http/http-client.ts.' }],
       'no-restricted-properties': ['error',
         { object: 'globalThis', property: 'fetch', message: 'Use defaultFetch() from adapters/http/http-client.ts.' },
-        { object: 'window', property: 'fetch', message: 'Use defaultFetch() from adapters/http/http-client.ts.' }],
+        { object: 'window', property: 'fetch', message: 'Use defaultFetch() from adapters/http/http-client.ts.' },
+        { object: 'self', property: 'fetch', message: 'Use defaultFetch() from adapters/http/http-client.ts.' }],
     },
   },
   // Stack-service adapters take their response types from the client (openapi-fetch next), never from
-  // `any` or a cast. http-client.ts is the typed boundary; the pinned package loader reads same-origin
-  // static files, not a service.
+  // `any` or a cast. http-client.ts is the typed boundary.
   {
     files: ['src/adapters/http/**/*.ts'],
-    ignores: ['src/adapters/http/http-client.ts', 'src/adapters/http/pinned-package-definition-source.ts'],
+    ignores: ['src/adapters/http/http-client.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],

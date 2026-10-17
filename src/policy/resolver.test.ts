@@ -4,7 +4,6 @@ import { UnsupportedRequiredFeatureError } from './errors.ts';
 import {
   getMultiPartyRuntimeConfig,
   getSafeAddressRuntimeConfig,
-  getTrustedReviewerRuntimeConfig,
 } from './policy-shapes.ts';
 import type {
   FormRuntimePolicy,
@@ -108,113 +107,6 @@ describe('resolveRuntimeFeatures (happy path)', () => {
     });
     expect(profile.limits.status).toEqual({ retentionDays: 30 });
     expect(profile.limits.respondentPlace).toBeUndefined();
-  });
-
-  it('merges trustedReviewer form limits into the enabled resolved profile', () => {
-    const profile = resolveRuntimeFeatures({
-      mode: 'production',
-      instance: allAvailable,
-      org: {
-        features: { trustedReviewer: 'allowed' },
-        limits: {
-          trustedReviewer: {
-            maxActiveSharesPerDraft: 4,
-            respondentOnlyFieldPointers: [],
-          },
-        },
-      },
-      form: {
-        features: { trustedReviewer: 'optional' },
-        limits: {
-          trustedReviewer: {
-            posture: 'suggest-allowed',
-            respondentOnlyFieldPointers: ['/data/protectedAddress'],
-          },
-        },
-      },
-    });
-    const config = getTrustedReviewerRuntimeConfig(profile);
-    expect(config?.posture).toBe('suggest-allowed');
-    expect(config?.maxActiveSharesPerDraft).toBe(4);
-    expect(config?.respondentOnlyFieldPointers).toEqual(['/data/protectedAddress']);
-  });
-
-  it('intersects trustedReviewer allowedRoles across org and form policy', () => {
-    const profile = resolveRuntimeFeatures({
-      mode: 'production',
-      instance: allAvailable,
-      org: {
-        features: { trustedReviewer: 'allowed' },
-        limits: { trustedReviewer: { allowedRoles: ['lawyer', 'advocate'] } },
-      },
-      form: {
-        features: { trustedReviewer: 'optional' },
-        limits: {
-          trustedReviewer: {
-            posture: 'comment-allowed',
-            allowedRoles: ['advocate', 'family-helper'],
-          },
-        },
-      },
-    });
-    expect(getTrustedReviewerRuntimeConfig(profile)?.allowedRoles).toEqual(['advocate']);
-  });
-
-  it('fails closed when trustedReviewer allowedRoles have an empty intersection', () => {
-    expect(() =>
-      resolveRuntimeFeatures({
-        mode: 'production',
-        instance: allAvailable,
-        org: {
-          features: { trustedReviewer: 'allowed' },
-          limits: { trustedReviewer: { allowedRoles: ['lawyer'] } },
-        },
-        form: {
-          features: { trustedReviewer: 'optional' },
-          limits: {
-            trustedReviewer: {
-              posture: 'comment-allowed',
-              allowedRoles: ['family-helper'],
-            },
-          },
-        },
-      }),
-    ).toThrowError(/trusted-reviewer-role-intersection-empty/);
-  });
-});
-
-describe('resolveRuntimeFeatures — limits.trustedReviewer validation (FW-0113)', () => {
-  it('rejects an invalid trustedReviewer posture', () => {
-    expect(() =>
-      resolveRuntimeFeatures({
-        mode: 'production',
-        instance: allAvailable,
-        org: {
-          features: { trustedReviewer: 'allowed' },
-          limits: { trustedReviewer: { posture: 'read-only' } },
-        },
-        form: { features: { trustedReviewer: 'optional' } },
-      }),
-    ).toThrowError(/limits.trustedReviewer.posture/);
-  });
-
-  it('rejects malformed respondent-only field pointers', () => {
-    expect(() =>
-      resolveRuntimeFeatures({
-        mode: 'production',
-        instance: allAvailable,
-        org: { features: { trustedReviewer: 'allowed' } },
-        form: {
-          features: { trustedReviewer: 'optional' },
-          limits: {
-            trustedReviewer: {
-              posture: 'comment-allowed',
-              respondentOnlyFieldPointers: ['data/not-a-json-pointer'],
-            },
-          },
-        },
-      }),
-    ).toThrowError(/respondentOnlyFieldPointers/);
   });
 });
 

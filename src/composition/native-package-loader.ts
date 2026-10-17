@@ -16,7 +16,7 @@ import { dereferenceBundleExport, flattenRegistryEntries, type BundleExport } fr
 import { SIGNING_CEREMONY_WIDGET_SHAPE } from '@formspec-org/surface-react';
 import type { NativePackageSigningConfig } from '../config/native-package-signing.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
-import { PinnedPackageDefinitionSource } from '../adapters/http/pinned-package-definition-source.ts';
+import { PinnedPackageDefinitionSource } from '../adapters/package/pinned-package-definition-source.ts';
 import { HttpDefinitionSource } from '../adapters/http/definition-source.ts';
 import { HttpClient } from '../adapters/http/http-client.ts';
 import { readApplicationLifecycleCapabilities } from '../adapters/http/application-lifecycle.ts';

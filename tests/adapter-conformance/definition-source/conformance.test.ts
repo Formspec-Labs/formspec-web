@@ -2,7 +2,7 @@ import { createHash, webcrypto } from 'node:crypto';
 import { afterEach, vi } from 'vitest';
 import type { FormDefinition } from '@formspec-org/types';
 import { HttpDefinitionSource, defaultFormIdResolver } from '../../../src/adapters/http/index.ts';
-import { PinnedPackageDefinitionSource } from '../../../src/adapters/http/pinned-package-definition-source.ts';
+import { PinnedPackageDefinitionSource } from '../../../src/adapters/package/pinned-package-definition-source.ts';
 import { sampleFormDefinition } from '../../../src/adapter-conformance/fixtures.ts';
 import { stubDefinitionSource } from '../../../src/adapters/stub/definition-source.ts';
 import { jsonResponse, problemResponse, recordingFetch } from '../../adapters/http/test-fetch.ts';

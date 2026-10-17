@@ -65,8 +65,12 @@ export class AnonymousSessionBridge {
     let slot = this.sessions.get(formId);
     if (!slot) {
       const saved = this.resumeMetadata?.read(`grant:${formId}`);
-      if (saved !== undefined && !isSession(saved, formId)) throw new Error('Stored anonymous grant is invalid or bound to another form');
-      slot = { session: saved };
+      let session: AnonymousSession | undefined;
+      if (saved !== undefined) {
+        if (!isSession(saved, formId)) throw new Error('Stored anonymous grant is invalid or bound to another form');
+        session = saved;
+      }
+      slot = { session };
       this.sessions.set(formId, slot);
     }
     if (slot.session) {

@@ -14,7 +14,7 @@ import { HttpAttachmentStore } from '../adapters/http/attachment-store.ts';
 import { publishedDefinitionDraftStore } from '../adapters/composing/published-definition-draft-store.ts';
 import { createHttpAdapterCohort } from '../adapters/http/cohort.ts';
 import { createBrowserDraftResumeMetadataStore } from '../adapters/browser/draft-resume-metadata.ts';
-import { PinnedPackageDefinitionSource } from '../adapters/http/pinned-package-definition-source.ts';
+import { PinnedPackageDefinitionSource } from '../adapters/package/pinned-package-definition-source.ts';
 import { defaultFormIdResolver } from '../adapters/http/form-id.ts';
 import { HttpDefinitionSource } from '../adapters/http/definition-source.ts';
 import {
@@ -35,7 +35,6 @@ import {
   PaymentRequirementExtractor,
   RecordLifecycleExtractor,
   SafeAddressPolicyExtractor,
-  TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { AnonymousAdapter } from '../adapters/identity/anonymous.ts';
 import { OidcAdapter } from '../adapters/identity/oidc.ts';
@@ -354,7 +353,6 @@ export function createDefaultComposition(
       new OfflineSubmitRequirementExtractor(),
       new PaymentRequirementExtractor(),
       new EmbeddableExtractor(),
-      new TrustedReviewerPolicyExtractor(),
       new MultiPartyPolicyExtractor(),
       new RecordLifecycleExtractor(),
       new SafeAddressPolicyExtractor(),

@@ -7,7 +7,6 @@ import {
   PaymentRequirementExtractor,
   RecordLifecycleExtractor,
   SafeAddressPolicyExtractor,
-  TrustedReviewerPolicyExtractor,
 } from '../adapters/composing/form-runtime-policy-extractor.ts';
 import { stubDefinitionSource } from '../adapters/stub/definition-source.ts';
 import { stubDraftStore } from '../adapters/stub/draft-store.ts';
@@ -234,7 +233,6 @@ export function createStubComposition(): Composition {
       new OfflineSubmitRequirementExtractor(),
       new PaymentRequirementExtractor(),
       new EmbeddableExtractor(),
-      new TrustedReviewerPolicyExtractor(),
       new MultiPartyPolicyExtractor(),
       new RecordLifecycleExtractor(),
       new SafeAddressPolicyExtractor(),

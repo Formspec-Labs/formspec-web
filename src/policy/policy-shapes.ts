@@ -70,23 +70,6 @@ export interface OrgRuntimePolicy {
   readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
 }
 
-export type TrustedReviewerPosture = 'forbidden' | 'comment-allowed' | 'suggest-allowed';
-export type ReviewerAssuranceFloor = 'L1' | 'L2' | 'L3' | 'L4';
-
-/**
- * FW-0042 authoring contract (`x-formspec-trusted-reviewer`, `limits.trustedReviewer`). The feature
- * has no runtime or ports yet, so a resolved profile never enables it; the shape stays so forms that
- * declare it keep validating.
- */
-export interface TrustedReviewerRuntimeConfig {
-  readonly posture: TrustedReviewerPosture;
-  readonly allowedRoles?: readonly string[];
-  readonly reviewerAssuranceFloor?: ReviewerAssuranceFloor;
-  readonly maxActiveSharesPerDraft?: number;
-  readonly defaultShareExpiresAtRule?: string;
-  readonly respondentOnlyFieldPointers: readonly string[];
-}
-
 export type SafeAddressAccessClass = 'safe-address' | 'safe-contact' | 'safe-employer';
 export type SafeAddressReceiptPostureTier = 'verifier-grade' | 'phase-1-fallback';
 
@@ -165,9 +148,7 @@ export function isFormFeaturePolicyMode(value: string): value is FormFeaturePoli
 export interface FormRuntimePolicy {
   readonly features: Readonly<Partial<Record<RuntimeFeatureKey, FormFeaturePolicyMode>>>;
   /**
-   * Optional per-feature configuration extracted from the definition. FW-0113
-   * uses `limits.trustedReviewer` for the FW-0042 three-tier posture and
-   * respondent-only field pointers while SC-6 remains PROPOSAL-status.
+   * Optional per-feature configuration extracted from the definition.
    */
   readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
   /**
@@ -357,17 +338,6 @@ export function getMultiPartyRuntimeConfig(
   profile: ResolvedRuntimeProfile,
 ): ResolvedMultiPartyPolicy | undefined {
   return profile.enabled.has('multiParty') ? profile.multiParty : undefined;
-}
-
-export function getTrustedReviewerRuntimeConfig(
-  profile: ResolvedRuntimeProfile,
-): TrustedReviewerRuntimeConfig | undefined {
-  if (!profile.enabled.has('trustedReviewer')) return undefined;
-  const value = profile.limits.trustedReviewer;
-  if (value === undefined) {
-    return { posture: 'comment-allowed', respondentOnlyFieldPointers: [] };
-  }
-  return value as TrustedReviewerRuntimeConfig;
 }
 
 export function getSafeAddressRuntimeConfig(
