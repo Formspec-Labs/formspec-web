@@ -57,7 +57,6 @@ describe('HttpDefinitionSource', () => {
           es: localeDocument,
           unrelated: unrelatedLocaleDocument,
         },
-        locale_refs: ['en', 'es'],
       }),
     );
     const adapter = new HttpDefinitionSource({
@@ -74,22 +73,18 @@ describe('HttpDefinitionSource', () => {
     expect(requests).toHaveLength(1);
   });
 
-  it('accepts locale_documents / localeDocuments arrays and ignores legacy locale_refs', async () => {
+  it('accepts locale_documents / localeDocuments arrays', async () => {
     const snakeCaseLocale = localeDocumentFor(sampleFormDefinition.url, 'es', {
       '$form.title': 'Titulo desde locale_documents',
     });
     const camelCaseLocale = localeDocumentFor(sampleFormDefinition.url, 'fr', {
       '$form.title': 'Titre depuis localeDocuments',
     });
-    const legacyRefDocument = localeDocumentFor(sampleFormDefinition.url, 'de', {
-      '$form.title': 'Title from a legacy ref field',
-    });
     const { fetch } = recordingFetch(() =>
       jsonResponse({
         definition: sampleFormDefinition,
         locale_documents: [snakeCaseLocale],
         localeDocuments: [camelCaseLocale],
-        locale_refs: ['en', 'es', 'fr', legacyRefDocument],
       }),
     );
     const adapter = new HttpDefinitionSource({
@@ -101,6 +96,21 @@ describe('HttpDefinitionSource', () => {
       snakeCaseLocale,
       camelCaseLocale,
     ]);
+  });
+
+  it('returns the Theme document the form version was published with, or null when it has none', async () => {
+    const theme = { $formspecTheme: '1.0', version: '1.0.0', url: 'theme:published', tokens: {} };
+    const withTheme = new HttpDefinitionSource({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: recordingFetch(() => jsonResponse({ definition: sampleFormDefinition, theme_document: theme })).fetch,
+    });
+    const without = new HttpDefinitionSource({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: recordingFetch(() => jsonResponse({ definition: sampleFormDefinition })).fetch,
+    });
+
+    await expect(withTheme.getThemeDocument(sampleFormDefinition.url)).resolves.toEqual(theme);
+    await expect(without.getThemeDocument(sampleFormDefinition.url)).resolves.toBeNull();
   });
 
   it('reuses the original runtime payload when Locale Documents are requested with the same source URL', async () => {

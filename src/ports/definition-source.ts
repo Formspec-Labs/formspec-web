@@ -10,7 +10,7 @@ import type { ResponseActionsDocumentInput } from '@formspec-org/engine';
 import type { ComponentDocument, FormDefinition, LocaleDocument, ThemeDocument } from '@formspec-org/types';
 
 export type { ComponentGraphProjectionContext, LayoutHostEvidence } from '@formspec-org/layout';
-export type { ComponentDocument, FormDefinition, LocaleDocument } from '@formspec-org/types';
+export type { ComponentDocument, FormDefinition, LocaleDocument, ThemeDocument } from '@formspec-org/types';
 
 export interface DefinitionSource {
   /**

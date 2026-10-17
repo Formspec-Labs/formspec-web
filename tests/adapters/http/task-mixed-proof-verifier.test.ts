@@ -15,7 +15,7 @@ import type { MixedHydrationWire } from '../../../src/ports/mixed-proof.ts';
 import type { EvaluationHydrationWire } from '../../../src/ports/evaluation-hydration.ts';
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 function fixture(currentProducer = false, actualSource?: SourceMixedProofApi) {
-  const base = resolve(dirname(fileURLToPath(import.meta.url)), currentProducer ? '../../fixtures/task-mixed-hydration-v3' : '../../fixtures/mixed-proof-transport-v1/hydrate-task');
+  const base = resolve(dirname(fileURLToPath(import.meta.url)), currentProducer ? '../../fixtures/task-mixed-hydration-v4' : '../../fixtures/mixed-proof-transport-v1/hydrate-task');
   const read = (name: string) => Uint8Array.from(readFileSync(resolve(base, name)));
   const json = (name: string) => JSON.parse(new TextDecoder().decode(read(name)));
   const selected = json('selection.json'), view = json('hydration.json'), actual = json('actual-hydration-fixture.json');
@@ -111,7 +111,7 @@ async function taskHydrationFixture(actualSource?: SourceMixedProofApi, module?:
     assertCurrent: f.config.assertCurrent, elapsedNow: f.now, receiptVerifier: createTaskMixedProofVerifier(f.config) }, f.lifetime);
   return { ...f, adapter, saved };
 }
-describe('current Source-produced task mixed V3 through hydration and proof transport', () => {
+describe('current Source-produced task mixed V4 through hydration and proof transport', () => {
   it.each(['depth', 'nodes'] as const)('preserves the mixed %s snapshot budget before protected reads', async mode => {
     const f = await taskHydrationFixture();
     const view = JSON.parse(new TextDecoder().decode(f.read('hydration.json')));
@@ -137,11 +137,11 @@ describe('current Source-produced task mixed V3 through hydration and proof tran
     finally { f.adapter.dispose(); }
   });
 
-  it('admits TOP2/receipt3 without changing original bytes and verifies the exact candidate', async () => {
+  it('admits TOP2/receipt4 without changing original bytes and verifies the exact candidate', async () => {
     const f = await taskHydrationFixture();
-    const schemaPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/adapters/http/source-schemas/evaluation-composition-v3.schema.json');
+    const schemaPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/adapters/http/source-schemas/evaluation-composition-v4.schema.json');
     const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
-    expect(f.actual.producerProtocol).toEqual({ hydrationVersion: 2, mixedReceiptVersion: 3,
+    expect(f.actual.producerProtocol).toEqual({ hydrationVersion: 2, mixedReceiptVersion: 4,
       selectedPolicyVersion: f.config.registration.publicDescriptor.version,
       selectedRegistrationHash: f.config.registration.registrationHash, schemaId: schema.$id,
       schemaSha256: `sha256:${createHash('sha256').update(readFileSync(schemaPath)).digest('hex')}` });
@@ -149,7 +149,7 @@ describe('current Source-produced task mixed V3 through hydration and proof tran
       const facts = await f.adapter.qualifySaved(f.saved, f.lifetime);
       facts.assertReady();
       expect(facts.view).toEqual(JSON.parse(new TextDecoder().decode(f.read('hydration.json'))));
-      expect(facts.view.version).toBe(2); expect(facts.view.providerReceipt).toHaveProperty('version', 3);
+      expect(facts.view.version).toBe(2); expect(facts.view.providerReceipt).toHaveProperty('version', 4);
       expect(f.calls()).toBe(4); expect(f.terminated()).toBe(1);
       expect(facts.remainingMilliseconds!()).toBeGreaterThan(0);
     } finally { f.adapter.dispose(); }
@@ -163,10 +163,10 @@ describe('current Source-produced task mixed V3 through hydration and proof tran
 
 
 describe('selected mixed task proof configuration admission', () => {
-  it.each(['version2', 'future4', 'unknown-owner'] as const)('refuses %s before transport or worker creation', mode => {
+  it.each(['version2', 'future5', 'unknown-owner'] as const)('refuses %s before transport or worker creation', mode => {
     const f = fixture(true);
     if (mode === 'version2') f.config.registration.publicDescriptor.version = 2;
-    if (mode === 'future4') f.config.registration.publicDescriptor.version = 4;
+    if (mode === 'future5') f.config.registration.publicDescriptor.version = 5;
     if (mode === 'unknown-owner') f.config.registration.publicDescriptor.owners[0].resolverKind = 'unsupported-owner';
     expect(() => createTaskMixedProofVerifier(f.config)).toThrow('Invalid Source mixed proof registration shape');
     expect(f.calls()).toBe(0); expect(f.created()).toBe(0);

@@ -46,8 +46,8 @@ describe('general hydration (MOCK owning verifier; schema/guard checks only)', (
   async function generalFixture(unavailable = false, currentCheck = false, baseAssociation = false) {
     const f = await fixture();
     const registration = structuredClone(f.config.registration);
-    Object.assign(registration.publicDescriptor, { version: 3, outputSchema: {
-      url: 'urn:formspec:server:evaluation-composition:3', version: '3', hash: registration.outputSchemaHash, document: '{}' } });
+    Object.assign(registration.publicDescriptor, { version: 4, outputSchema: {
+      url: 'urn:formspec:server:evaluation-composition:4', version: '4', hash: registration.outputSchemaHash, document: '{}' } });
     const originalRun = structuredClone(f.input.run.run);
     const signedResponse = { ...f.input.saved.response, ...(baseAssociation ? { extensions: {
       ...f.input.saved.response.extensions, 'x-formspec-signing-content': { draftVersion: f.input.saved.draft.version - 1 } } } : {}),
@@ -64,7 +64,7 @@ describe('general hydration (MOCK owning verifier; schema/guard checks only)', (
       draftId: input.saved.draft.id, draftVersion: input.saved.draft.version, candidateHash, sources: { facts: 'screening', photo: 'inspection' } };
     const hydration = structuredClone(mockFixture().hydration) as { results: object[]; providerReceipt: object; requestHash?: string };
     Object.assign(hydration, binding, { requestHash: await hash(binding), qualifiedAt: at });
-    Object.assign(hydration.providerReceipt, { version: 3, registration, requestHash: hydration.requestHash });
+    Object.assign(hydration.providerReceipt, { version: 4, registration, requestHash: hydration.requestHash });
     if (unavailable) hydration.results[1] = { status: 'unavailable', instanceName: 'photo', sourceRef: 'inspection', reason: 'inspection pending' };
     f.fetch.mockImplementation(async () => new Response(encode(hydration), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }));
     const native = { snapshot: { selectionHash: f.config.selectionHash, selection: f.config.selection, formVersion: f.config.formVersion },
@@ -120,7 +120,7 @@ describe('general hydration (MOCK owning verifier; schema/guard checks only)', (
     const { f, adapter, reader, verify } = await generalFixture(true);
     const facts = await adapter.hydrate(f.input);
     expect(verify).toHaveBeenCalledOnce(); expect(reader).toHaveBeenCalledOnce();
-    expect(facts.view.providerReceipt).toMatchObject({ version: 3 });
+    expect(facts.view.providerReceipt).toMatchObject({ version: 4 });
     facts.assertCurrent(); expect(() => facts.assertReady()).toThrow('required source unavailable');
     adapter.retireFacts(); expect(() => facts.assertCurrent()).toThrow(); adapter.dispose();
   });
