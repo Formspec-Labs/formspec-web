@@ -30,5 +30,8 @@ fails on any byte of drift. Both first run each sibling workspace's own
 formspec's pinned image (`docker/wasm-build`: Rust, wasm-pack and binaryen
 pinned; sources at fixed `/src` paths), the same image its publish workflow
 uses, so these bytes are the published bytes on any host with Docker.
+`upstream-refs.json` records the formspec, fel-core and integrity-stack commits a
+full `vendor:refresh` built from; CI checks out exactly those and still gates on
+the byte comparison.
 Package manifests are curated
 by hand: keep `exports` in step with upstream.

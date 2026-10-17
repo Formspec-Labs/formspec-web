@@ -47,17 +47,23 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
+      # vendor:refresh records the upstream commits the vendored copies were built from.
+      - id: refs
+        run: node -p "Object.entries(require('./vendor/upstream-refs.json')).map(([k, v]) => k.replace('-', '_') + '=' + v).join('\n')" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: Formspec-Labs/formspec
+          ref: ${{ steps.refs.outputs.formspec }}
           path: formspec-source
       - uses: actions/checkout@v4
         with:
           repository: Formspec-Labs/fel-core
+          ref: ${{ steps.refs.outputs.fel_core }}
           path: fel-core
       - uses: actions/checkout@v4
         with:
           repository: Formspec-Labs/integrity-stack
+          ref: ${{ steps.refs.outputs.integrity_stack }}
           path: integrity-source
       - uses: actions/setup-node@v4
         with:

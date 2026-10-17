@@ -244,6 +244,20 @@ for (const workspace of new Set(selectedPackages.map((pkg) => pkg.workspace))) {
   }
 }
 
+// A full refresh records the exact upstream commits the copies were built from, so CI can
+// check out the same ones. The byte comparison remains the gate.
+if (write && only.length === 0) {
+  const refs = {};
+  for (const [name, dir] of [
+    ['formspec', formspecRoot], ['fel-core', resolve(formspecRoot, '../fel-core')], ['integrity-stack', integrityRoot],
+  ]) {
+    const git = (...gitArgs) => spawnSync('git', gitArgs, { cwd: dir, encoding: 'utf8' });
+    if (git('status', '--porcelain').stdout.trim()) throw new Error(`${name} has uncommitted changes; refusing to record its ref.`);
+    refs[name] = git('rev-parse', 'HEAD').stdout.trim();
+  }
+  writeFileSync(join(root, 'vendor/upstream-refs.json'), `${JSON.stringify(refs, null, 2)}\n`);
+}
+
 const buildRoot = mkdtempSync(join(tmpdir(), 'formspec-web-surface-bundle-vendor-'));
 let totalBytes = 0;
 let sourceBudgetBytes = 0;
