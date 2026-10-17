@@ -1505,10 +1505,6 @@
                   "type": "string",
                   "maxLength": 2097152
                 },
-                "locale_refs_json": {
-                  "type": "string",
-                  "maxLength": 2097152
-                },
                 "runtime_config_json": {
                   "type": "string",
                   "maxLength": 2097152
@@ -1528,12 +1524,6 @@
                     "retired"
                   ]
                 },
-                "theme_ref": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
                 "references_json": {},
                 "ontology_json": {},
                 "component_document_json": {},
@@ -1549,12 +1539,10 @@
                 "definition_url",
                 "definition_version",
                 "definition_json",
-                "locale_refs_json",
                 "runtime_config_json",
                 "created_by",
                 "definition_hash",
                 "status",
-                "theme_ref",
                 "references_json",
                 "ontology_json",
                 "component_document_json",

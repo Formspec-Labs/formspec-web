@@ -7,7 +7,7 @@ const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value
 // The owning request/protected view is a genuine neutral Source fixture. The
 // ten-object index below is a transport scheduling double, not proof authority.
 function fixture() {
-  const base = resolve('tests/fixtures/task-mixed-hydration-v3');
+  const base = resolve('tests/fixtures/task-mixed-hydration-v4');
   const read = (name: string) => Uint8Array.from(readFileSync(resolve(base, name)));
   const selected = JSON.parse(new TextDecoder().decode(read('selection.json')));
   const view = JSON.parse(new TextDecoder().decode(read('hydration.json')));

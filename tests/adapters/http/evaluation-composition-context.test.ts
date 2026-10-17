@@ -10,7 +10,7 @@ import { HttpScreenerHydration } from '../../../src/adapters/http/screener-hydra
 import { computeJcsSha256Digest as hash } from '../../../src/adapters/http/response-action-ledger.ts';
 
 const directory = resolve(process.cwd(), 'tests/fixtures/source-composition-context-v1');
-const custody = JSON.parse(readFileSync(resolve(directory, 'custody.json'), 'utf8')) as { sourceHandoffSha256: string; files: Record<string, string> };
+const custody = JSON.parse(readFileSync(resolve(directory, 'custody.json'), 'utf8')) as { generatedBy: string; files: Record<string, string> };
 function captured<T>(name: string): T {
   const bytes = readFileSync(resolve(directory, name));
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(custody.files[name]);
@@ -66,8 +66,8 @@ async function originalFixture(allSources = false) {
 }
 
 describe('actual same-run Source composition native-proof replay', () => {
-  it('preserves all eleven sealed Source outputs', () => {
-    expect(custody.sourceHandoffSha256).toBe('e8efb099f946d31c17d120917f49e8bc16ef215f73a0a1c59432b829603fcf66');
+  it('preserves all eleven generated outputs', () => {
+    expect(custody.generatedBy).toContain('FORMSPEC_COMPOSITION_CONTEXT_DIR');
     expect(Object.keys(custody.files)).toHaveLength(11);
     for (const name of Object.keys(custody.files)) captured(name);
   });

@@ -1,6 +1,6 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import schema from './source-schemas/evaluation-composition-v3.schema.json';
+import schema from './source-schemas/evaluation-composition-v4.schema.json';
 import type { MixedHydrationWire } from '../../ports/mixed-proof.ts';
 import { freezeWireJson, requireWireJson } from './wire-json.ts';
 const ajv = new Ajv2020({ strict: false, strictNumbers: true, allErrors: false });
