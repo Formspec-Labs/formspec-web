@@ -221,7 +221,10 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
         localeStrings?: Record<string, string>;
     };
 }, extensions?: FelExtensionHost): {
+    /** Flat state keyed by path (`group.field`, `rows[0].name`), like `required` and `readonly`. */
     values: any;
+    /** The Response projection of `values` after `nonRelevantBehavior`: groups are objects, repeats are arrays of row objects. */
+    data: any;
     validations: any[];
     diagnostics: Array<{
         path: string;
