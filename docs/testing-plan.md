@@ -22,7 +22,6 @@ deployment.
 | Unit and smoke tests | `npm run test:unit` | Yes | HTTP adapters, identity adapters, respondent-place runtime rendering, signed Surface admission and authenticated status, respondent flow helpers, runtime config, sample form, composition smoke, idempotency, Problem JSON. |
 | Vendor firewall | `npm run check:vendor-leaks` | Yes | Prevents provider-native vocabulary and disallowed vendor names from leaking through portable surfaces. |
 | Upstream theme sync | `npm run check:upstream-theme` | Yes | Verifies copied upstream theme assets are byte-for-byte synced and sourced from Apache-2.0 manifests. |
-| Signed Surface bundle vendor sync | `npm run check:surface-bundle-vendor` | Local stack | Verifies the vendored Formspec engine (including its sibling WASM build), React, types, Surface, signed-bundle profile, and integrity dependencies are byte-for-byte synced with sibling builds, Apache-2.0 licensed, and below the source-size ceiling. `npm run vendor:refresh` rewrites the copies from the siblings. |
 | Browser accessibility | `npm run test:e2e` | Yes | Playwright Chromium smoke with axe checks for demo, load-error, OIDC sign-in, mobile tap targets, and signed respondent admission and refusal states. |
 | Production build | `npm run build` | Yes | Vite production bundle and TypeScript build. |
 | Bundle budget | `npm run check:bundle-budget` | Yes | Initial JS <=200 KiB gzip and each lazy JS chunk <=200 KiB gzip after production build. |
@@ -30,13 +29,15 @@ deployment.
 | Compose quickstart | `npm run test:compose-quickstart` | Yes | Runs the documented `docker compose up --build` path on ports 8080/8081, checks isolated runtime profiles and brands, submits both demo forms in Chromium, and fails on browser warnings/errors. |
 | Deployment headers | `npm run test:deployment` | Yes | Docker/nginx image serves JS/CSS/WASM with gzip and immutable asset caching, keeps HTML revalidated, and keeps runtime config no-store. |
 | Multi-deployment smoke | `npm run test:multi-deployment` | Yes | Two Docker/nginx instances boot with separate runtime profiles, apply isolated brands, submit the demo form, and emit no browser warnings/errors. |
+| Signed Surface bundle vendor sync | `npm run check:surface-bundle-vendor` | Yes | Rebuilds each sibling workspace (formspec's engine WASM in its pinned Docker image) and verifies the vendored Formspec engine, React, types, Surface, signed-bundle profile, and integrity dependencies are byte-for-byte synced with sibling builds, Apache-2.0 licensed, and below the source-size ceiling. `npm run vendor:refresh` rewrites the copies from the siblings. |
 | Full local gate | `npm run ci` | Local stack | Runs every automated `Yes` and `Local stack` gate above in release order. GitHub Actions runs the `Yes` rows individually instead of invoking this sibling-dependent command. |
 
 GitHub CI uses the commands marked `Yes`. The local `npm run ci` gate also runs
-the two `Local stack` checks. `check:upstream-blockers` reads the sibling
-`formspec-server` source, and `check:surface-bundle-vendor` compares built
-artifacts with the sibling `formspec` worktree. The public workflow does not
-run either sibling-dependent check. `npm test` remains a convenient single
+the `Local stack` check: `check:upstream-blockers` reads the sibling
+`formspec-server` source, which the public workflow cannot fetch.
+`check:surface-bundle-vendor` rebuilds the sibling `formspec` and
+`integrity-stack` checkouts, including formspec's WASM in its pinned image
+(Docker required). `npm test` remains a convenient single
 Vitest command, but CI calls `test:conformance` and `test:unit` separately so
 conformance failures remain visible as their own class.
 

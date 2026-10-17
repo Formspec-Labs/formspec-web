@@ -20,3 +20,12 @@ export declare function canonicalResponseHandoffBytes(response: unknown): Uint8A
  * @throws TypeError for a non-object root, non-JSON runtime data or malformed Unicode.
  */
 export declare function canonicalResponseSignedPayloadBytes(response: unknown): Uint8Array<ArrayBuffer>;
+/**
+ * Serializes any JSON value with RFC 8785 JCS, matching Rust `canonical_json_bytes`.
+ *
+ * Applies the same admission rules as the Response profiles (no accessors, hooks, cycles, sparse
+ * arrays or malformed Unicode) and adds no domain framing. The root may be any JSON value.
+ *
+ * @throws TypeError for non-JSON runtime values or malformed Unicode.
+ */
+export declare function canonicalJsonBytes(value: unknown): Uint8Array<ArrayBuffer>;

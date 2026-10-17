@@ -23,8 +23,15 @@ also declares `Apache-2.0`; the copied `LICENSE` files contain that license
 text. `npm run check:surface-bundle-vendor` verifies licenses, source hashes,
 package metadata, and the source-size ceiling against the sibling checkouts.
 
-`npm run vendor:refresh` rewrites every copy from fresh sibling `tsc` builds
-and re-runs both checks. The engine's `wasm-pkg-runtime/` and `wasm-pkg-tools/`
-are copied from the sibling's last `wasm-pack` build, so build the WASM in
-`../formspec` first when its Rust crates changed. Package manifests are curated
+`npm run vendor:refresh` rewrites every copy from fresh sibling builds and
+re-runs both checks; `check:surface-bundle-vendor` does the same builds and
+fails on any byte of drift. Both first run each sibling workspace's own
+`npm run build` (run `npm ci` there once). Formspec's engine WASM is built in
+formspec's pinned image (`docker/wasm-build`: Rust, wasm-pack and binaryen
+pinned; sources at fixed `/src` paths), the same image its publish workflow
+uses, so these bytes are the published bytes on any host with Docker.
+`upstream-refs.json` records the formspec, fel-core and integrity-stack commits a
+full `vendor:refresh` built from; CI checks out exactly those and still gates on
+the byte comparison.
+Package manifests are curated
 by hand: keep `exports` in step with upstream.
