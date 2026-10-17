@@ -35,6 +35,7 @@ export type ValidationReport = FormspecValidationReport;
 export type { EngineReactiveRuntime, EngineSignal } from './reactivity/types.js';
 export { preactReactiveRuntime } from './reactivity/preact-runtime.js';
 export { initFormspecEngine, initFormspecEngine as initEngine, initFormspecEngineTools, isFormspecEngineInitialized, isFormspecEngineToolsInitialized, } from './init-formspec-engine.js';
+export type { InitWasmOptions } from './wasm-bridge-runtime.js';
 export { attachAuthoredSignature, buildValidationReportEnvelope } from './engine/response-assembly.js';
 export { deepEqual, toValidationResults } from './engine/helpers.js';
 export type { LocaleDocument } from './locale.js';

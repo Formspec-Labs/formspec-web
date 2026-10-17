@@ -17,14 +17,23 @@ export type WasmFelAnalysisResultJson = {
 export type WasmModule = typeof import('../wasm-pkg-runtime/formspec_wasm_runtime.js');
 /** Whether the WASM module has been initialized and is ready for use. */
 export declare function isWasmReady(): boolean;
+/** How the host supplies the WASM module. */
+export interface InitWasmOptions {
+    /**
+     * The runtime `.wasm` bytes, for a host that cannot fetch the sibling asset (a self-contained page,
+     * a sandbox with no network). Used in place of the Node file read and the browser fetch.
+     */
+    wasmBytes?: BufferSource;
+}
 /**
  * Initialize the WASM module. Safe to call multiple times — subsequent calls
  * return the same promise. Resolves when WASM is ready; rejects on failure.
  *
- * In Node.js, uses `initSync()` with bytes read from disk.
- * In browsers, the generated wasm-bindgen loader fetches the sibling `.wasm` asset via URL.
+ * With `wasmBytes`, instantiates from those bytes.
+ * In Node.js, otherwise uses `initSync()` with bytes read from disk.
+ * In browsers, otherwise the generated wasm-bindgen loader fetches the sibling `.wasm` asset via URL.
  */
-export declare function initWasm(): Promise<void>;
+export declare function initWasm(options?: InitWasmOptions): Promise<void>;
 /**
  * Initialized runtime module — for `wasm-bridge-tools` only (ABI check).
  * Not re-exported from the public `wasm-bridge` barrel.

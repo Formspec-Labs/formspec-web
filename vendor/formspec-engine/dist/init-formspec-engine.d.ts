@@ -1,4 +1,5 @@
 /** @filedesc Public `initFormspecEngine` / `isFormspecEngineInitialized` — runtime WASM only until tools APIs run (ADR 0050). */
+import { type InitWasmOptions } from './wasm-bridge-runtime.js';
 /**
  * Initialize the Formspec engine (loads and links the Rust/WASM module).
  *
@@ -6,8 +7,10 @@
  * Safe to call multiple times; concurrent calls share one load.
  *
  * Not required for `formspec-webcomponent` only: importing that package starts WASM load automatically.
+ * A host with no way to fetch the `.wasm` asset passes its bytes as `wasmBytes`; they win over the
+ * default load, but only if this is the first call to start one.
  */
-export declare function initFormspecEngine(): Promise<void>;
+export declare function initFormspecEngine(options?: InitWasmOptions): Promise<void>;
 /**
  * Whether {@link initFormspecEngine} has completed successfully in this JS realm.
  */

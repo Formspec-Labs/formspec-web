@@ -11,10 +11,11 @@ export function isWasmReady() {
  * Initialize the WASM module. Safe to call multiple times — subsequent calls
  * return the same promise. Resolves when WASM is ready; rejects on failure.
  *
- * In Node.js, uses `initSync()` with bytes read from disk.
- * In browsers, the generated wasm-bindgen loader fetches the sibling `.wasm` asset via URL.
+ * With `wasmBytes`, instantiates from those bytes.
+ * In Node.js, otherwise uses `initSync()` with bytes read from disk.
+ * In browsers, otherwise the generated wasm-bindgen loader fetches the sibling `.wasm` asset via URL.
  */
-export async function initWasm() {
+export async function initWasm(options = {}) {
     if (_wasmReady)
         return;
     if (_initPromise)
@@ -24,8 +25,8 @@ export async function initWasm() {
             const runtime = await import('../wasm-pkg-runtime/formspec_wasm_runtime.js');
             const runningInNode = typeof globalThis.process !== 'undefined'
                 && globalThis.process.versions?.node;
-            let wasmBytes = null;
-            if (runningInNode && typeof runtime.initSync === 'function') {
+            let wasmBytes = options.wasmBytes ?? null;
+            if (!wasmBytes && runningInNode && typeof runtime.initSync === 'function') {
                 const { readFileSync } = await import(/* @vite-ignore */ nodeFsModuleName);
                 const wasmPath = await resolveWasmAssetPathForNode('../wasm-pkg-runtime/formspec_wasm_runtime_bg.wasm');
                 wasmBytes = readFileSync(wasmPath);

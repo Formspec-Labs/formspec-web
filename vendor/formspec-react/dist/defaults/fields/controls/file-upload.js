@@ -111,14 +111,9 @@ export function FileUploadControl({ field, node, common, isReadonly }) {
         // Siblings only — formspec-file-upload lives on the field root (parity with default web component adapter).
         return (_jsxs(_Fragment, { children: [hiddenInput, _jsxs("button", { type: "button", className: browseBtnClass, onClick: () => fileInputRef.current?.click(), disabled: isReadonly, children: ["Choose file", multiple ? 's' : ''] }), fileList, errorEl] }));
     }
-    return (_jsxs(_Fragment, { children: [_jsx("div", { className: `formspec-file-drop-zone formspec-focus-ring${isDragOver ? ' formspec-file-drop-zone--active' : ''}`, tabIndex: isReadonly ? -1 : 0, role: "button", "aria-label": chrome('fileUpload.dropzone'), onKeyDown: (e) => {
-                    if (isReadonly)
-                        return;
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        fileInputRef.current?.click();
-                    }
-                }, onDragOver: (e) => { e.preventDefault(); setIsDragOver(true); }, onDragLeave: () => setIsDragOver(false), onDrop: (e) => {
+    return (_jsxs(_Fragment, { children: [_jsx("div", { className: `formspec-file-drop-zone formspec-focus-ring${isDragOver ? ' formspec-file-drop-zone--active' : ''}`, 
+                // Not an interactive role: the Browse button inside is the one keyboard control (WCAG 4.1.2).
+                role: "group", "aria-labelledby": `${field.id}-label`, onDragOver: (e) => { e.preventDefault(); setIsDragOver(true); }, onDragLeave: () => setIsDragOver(false), onDrop: (e) => {
                     e.preventDefault();
                     setIsDragOver(false);
                     addFiles(e.dataTransfer.files);
