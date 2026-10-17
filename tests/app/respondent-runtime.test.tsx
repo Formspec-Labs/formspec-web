@@ -1033,7 +1033,6 @@ describe('RespondentRuntime identity sign-in', () => {
           substrateEventId: 'evt_web_ledger',
           sequence: 0,
           checkpointReference: 'checkpoint:web-ledger',
-          bundleRef: 'bundle:web-ledger',
         });
       }
 

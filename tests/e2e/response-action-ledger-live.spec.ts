@@ -67,12 +67,6 @@ type ResponseActionLedgerAppendReceipt = {
   substrateEventId: string;
   sequence: number;
   checkpointReference: string;
-  bundleRef: string;
-  verificationReceipt: {
-    verified: boolean;
-    artifactType: string;
-    eventType: string;
-  };
 };
 
 type AnonymousSessionView = {
@@ -868,12 +862,8 @@ function expectTrellisBackedReceipt(receipt: ResponseActionLedgerAppendReceipt):
   expect(receipt.substrateEventId).not.toContain('noop://');
   expect(receipt.checkpointReference).toContain('checkpoints/');
   expect(receipt.checkpointReference).not.toContain('noop://');
-  expect(receipt.bundleRef).toBeTruthy();
-  expect(receipt.bundleRef).not.toMatch(/^proof-bundles\//);
-  expect(receipt.verificationReceipt).toMatchObject({
-    verified: true,
-    eventType: 'substrate.append.response_action_session_op_batch',
-  });
+  expect(receipt).not.toHaveProperty('bundleRef');
+  expect(receipt).not.toHaveProperty('verificationReceipt');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
