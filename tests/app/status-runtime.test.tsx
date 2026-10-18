@@ -1,6 +1,7 @@
 import { StatusReadError } from '../../src/ports/status-reader.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useLayoutEffect, type ComponentProps } from 'react';
+import { useLayoutEffect, type ComponentProps, type ReactElement } from 'react';
+import { flushSync } from 'react-dom';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import {
   StatusRuntime,
@@ -152,6 +153,41 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       await renderStatus(composition, { renderTaskAction: () => <ClickWithdrawOnCommit /> });
       expect(clicked).toBe(true);
       expect(screen.getByLabelText(/^Reason$/i)).toBeDefined();
+    });
+
+    it('resets an open action when the next case snapshot reaches the mounted panel', async () => {
+      // In-memory or cached adapters can resolve a route change's reads before React
+      // renders the loading shell, so the next case arrives at the mounted panel.
+      const nextUrn = 'urn:wos:case_demo_0002';
+      composition.statusReader = stubStatusReader([
+        [DEMO_URN, demoApplicantCaseDetail()],
+        [nextUrn, demoApplicantCaseDetail()],
+      ]);
+      composition.lifecycleActionClient = stubLifecycleActionClient({ initialSnapshots: [
+        demoLifecycleActionSnapshot(),
+        { ...demoLifecycleActionSnapshot(), caseUrn: nextUrn, events: [
+          ...demoLifecycleActionSnapshot().events,
+          { kind: 'dispute', eventId: 'evt-next-dispute', occurredAt: '2026-05-25T13:00:00.000Z',
+            verified: true, statement: { text: 'I dispute this signed record.' } },
+        ] },
+      ] });
+      const page = (caseLedgerId: string) => (
+        <StatusRuntime composition={composition} config={departmentAppProfile} route={{ caseLedgerId }} />
+      );
+      let rerender!: (ui: ReactElement) => void;
+      await settle(() => ({ rerender } = render(page(DEMO_URN))));
+      fireEvent.click(screen.getByRole('button', { name: 'Withdraw this submission' }));
+      expect(screen.getByLabelText(/^Reason$/i)).toBeDefined();
+
+      await act(async () => {
+        // flushSync commits the route change and runs its load effect now; the queued
+        // loading update then renders together with the reads, which all resolve on
+        // microtasks before this macrotask.
+        flushSync(() => rerender(page(nextUrn)));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(screen.getByText('Dispute note added')).toBeDefined();
+      expect(screen.queryByLabelText(/^Reason$/i)).toBeNull();
     });
 
     it('submits a correction and renders the correction-chain result without raw event vocabulary', async () => {

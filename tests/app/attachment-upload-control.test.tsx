@@ -633,10 +633,10 @@ describe('FormspecWebAttachmentControl', () => {
 
   it('opens image review for a file that matches `accept` under StrictMode before upload', async () => {
     stubLoadedImage();
-    const store = stubAttachmentStore();
+    const upload = vi.fn(stubAttachmentStore().upload);
     const harness = makeFieldHarness();
     render(
-      <StrictMode><AttachmentStoreProvider value={store}>
+      <StrictMode><AttachmentStoreProvider value={{ upload }}>
         <FormspecWebAttachmentControl
           field={harness.field}
           node={makeNode({ accept: 'image/*' })}
@@ -655,13 +655,14 @@ describe('FormspecWebAttachmentControl', () => {
     const uploadBtn = Array.from(container!.querySelectorAll('button'))
       .find((btn) => btn.textContent === 'Upload image');
     expect(uploadBtn).toBeDefined();
-    expect(harness.readValue()).toBeNull();
+    expect(upload).not.toHaveBeenCalled();
     const write = harness.nextWrite();
     await act(async () => {
       uploadBtn!.click();
       await write;
     });
 
+    expect(upload).toHaveBeenCalledTimes(1);
     expect(harness.readValue()).toMatchObject({ kind: 'attachment-ref', filename: 'photo.png' });
   });
 
