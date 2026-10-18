@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
+import { canonicalResponseHandoffBytes, parseJsonExact } from '@formspec-org/integrity-canonical';
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
 import { sampleFormDefinition, sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
 import { RESPONSE_SCHEMA_DOCUMENT } from '../../src/adapters/schema/canonical-schemas.ts';
@@ -48,6 +48,19 @@ describe('retained static task presentation', () => {
     if (change === 'duplicate') input.retainedPresentation.artifacts.push(input.retainedPresentation.artifacts[0]);
     if (change === 'recordRef') input.retainedSign.recordRef = 'urn:formspec:task-draft-sign:sha256:' + 'a'.repeat(64);
     await expect(prepareStaticTaskPresentation(input)).rejects.toThrow();
+  });
+  it('hashes a 19-digit decimal exactly when the record was parsed with parseJsonExact', async () => {
+    const input = fixture();
+    const wire = JSON.stringify(input.response).replace('"Ada Lovelace"', '"Ada Lovelace","amount":1234567890.123456789');
+    const exact = parseJsonExact(wire) as FormResponse;
+    const signedResponseHash = sha(canonicalResponseHandoffBytes(exact));
+    expect(signedResponseHash).not.toBe(sha(canonicalResponseHandoffBytes(JSON.parse(wire))));
+    const result = await prepareStaticTaskPresentation({ ...input, response: exact,
+      retainedSign: { ...input.retainedSign, signedResponseHash, signedCanonicalResponse: parseJsonExact(wire) as FormResponse } });
+    expect(result.responseHash).toBe(signedResponseHash.slice(7));
+    // A record parsed with JSON.parse rounds the decimal and no longer matches the retained hash.
+    await expect(prepareStaticTaskPresentation({ ...input, response: JSON.parse(wire),
+      retainedSign: { ...input.retainedSign, signedResponseHash, signedCanonicalResponse: JSON.parse(wire) } })).rejects.toThrow();
   });
   it('refuses a retired case after metadata preparation', async () => {
     const input = fixture(); input.qualifyCurrent.mockImplementationOnce(async () => {}).mockImplementationOnce(async () => { throw new Error('Case retired'); });
