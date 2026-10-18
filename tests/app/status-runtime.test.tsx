@@ -1,6 +1,7 @@
 import { StatusReadError } from '../../src/ports/status-reader.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useLayoutEffect, type ComponentProps } from 'react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import {
   StatusRuntime,
   NO_AGGREGATE_COPY,
@@ -37,6 +38,27 @@ function createStatusComposition(): Composition {
 
 const DEMO_URN = 'urn:wos:case_demo_0001';
 
+/**
+ * Runs an interaction and settles the work it starts. Every adapter in this file
+ * resolves on microtasks, so an awaited act drains read/submit → commit → effects
+ * with no wall-clock timeout: a waitFor poll races its 1000 ms timer on a starved
+ * CPU, and a condition the loading shell already meets passes before the read.
+ */
+async function settle(interact: () => unknown): Promise<void> {
+  await act(async () => {
+    interact();
+  });
+}
+
+async function renderStatus(
+  composition: Composition,
+  props: Partial<ComponentProps<typeof StatusRuntime>> = {},
+): Promise<void> {
+  await settle(() => render(
+    <StatusRuntime composition={composition} config={departmentAppProfile} route={{ caseLedgerId: DEMO_URN }} {...props} />,
+  ));
+}
+
 describe('StatusRuntime (FW-0039 slice 1)', () => {
   afterEach(() => {
     cleanup();
@@ -51,18 +73,8 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('renders the page heading + 5-stage strip with current step marked', async () => {
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(
-          screen.queryByRole('heading', { name: /Your application status/i, level: 1 }),
-        ).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByRole('heading', { name: /Your application status/i, level: 1 })).toBeDefined();
       const strip = screen.getByRole('list', { name: /Application stages/i });
       const stages = within(strip).getAllByRole('listitem');
       expect(stages.length).toBe(5);
@@ -75,49 +87,22 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
     });
 
     it('renders the per-case timing list with derived durations', async () => {
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByText(PER_CASE_HEADER)).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByText(PER_CASE_HEADER)).toBeDefined();
       // demoApplicantCaseDetail timeline has 1h between case-created and applicant-task-assigned.
       expect(screen.getByText(/1 hour/i)).toBeDefined();
     });
 
     it('renders the "no aggregate" copy prominently (arch-review F-6)', async () => {
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByText(NO_AGGREGATE_COPY)).not.toBeNull();
-      });
+      await renderStatus(composition);
       // Pinned: copy must render literally. Future copy edits must trip this.
       const node = screen.getByText(NO_AGGREGATE_COPY);
       expect(node.textContent).toBe(NO_AGGREGATE_COPY);
     });
 
     it('renders the AI involvement disclosure when present', async () => {
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(
-          screen.queryByRole('heading', { name: /AI participated in this case/i }),
-        ).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByRole('heading', { name: /AI participated in this case/i })).toBeDefined();
       expect(screen.getByText(/Eligibility Assistant/)).toBeDefined();
       expect(screen.getByText(/Advisory/)).toBeDefined();
       expect(screen.getByText(/Reviewed by a human: Yes/i)).toBeDefined();
@@ -129,48 +114,22 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         aiInvolvement: undefined,
       };
       patchStatusReader(composition, DEMO_URN, detail);
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(
-          screen.queryByRole('heading', { name: /Your application status/i }),
-        ).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByRole('list', { name: /Application stages/i })).toBeDefined();
       expect(
         screen.queryByRole('heading', { name: /AI participated in this case/i }),
       ).toBeNull();
     });
 
     it('renders the "What you owe next" ribbon when openTasks present', async () => {
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByText(/What you owe next/i)).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByText(/What you owe next/i)).toBeDefined();
       expect(screen.getByText(/Provide additional address proof/)).toBeDefined();
     });
 
     it('renders FW-0038 lifecycle actions on signed status records', async () => {
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByRole('heading', { name: /What you can do/i })).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByRole('heading', { name: /What you can do/i })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Correct a fact' })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Withdraw this submission' })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Add a dispute note' })).toBeDefined();
@@ -178,17 +137,25 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       expect(screen.getByText(/Original submission/i)).toBeDefined();
     });
 
+    it('keeps a lifecycle action the respondent opens before post-render effects run', async () => {
+      // A host task action mounts in the commit that first shows the lifecycle
+      // buttons, so a click from its layout effect lands before passive effects.
+      let clicked = false;
+      function ClickWithdrawOnCommit() {
+        useLayoutEffect(() => {
+          if (clicked) return;
+          clicked = true;
+          screen.getByRole('button', { name: 'Withdraw this submission' }).click();
+        });
+        return null;
+      }
+      await renderStatus(composition, { renderTaskAction: () => <ClickWithdrawOnCommit /> });
+      expect(clicked).toBe(true);
+      expect(screen.getByLabelText(/^Reason$/i)).toBeDefined();
+    });
+
     it('submits a correction and renders the correction-chain result without raw event vocabulary', async () => {
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Correct a fact' })).not.toBeNull();
-      });
+      await renderStatus(composition);
       fireEvent.click(screen.getByRole('button', { name: 'Correct a fact' }));
       fireEvent.change(screen.getByLabelText(/Fields to correct/i), {
         target: { value: 'Household size' },
@@ -196,10 +163,8 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       fireEvent.change(screen.getByLabelText(/^Reason$/i), {
         target: { value: 'I typed the wrong household size.' },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Submit correction' }));
-      await waitFor(() => {
-        expect(screen.queryByText(/Correction recorded on the receipt chain/i)).not.toBeNull();
-      });
+      await settle(() => fireEvent.click(screen.getByRole('button', { name: 'Submit correction' })));
+      expect(screen.getByText(/Correction recorded on the receipt chain/i)).toBeDefined();
       expect(screen.queryByText(/response\.correction-recorded/i)).toBeNull();
       expect(screen.queryByText(/correctionTargetEventHash/i)).toBeNull();
     });
@@ -208,18 +173,8 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
   describe('not-found path', () => {
     it('renders the unknown-URN copy when the adapter returns undefined', async () => {
       const composition = createStatusComposition();
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: 'urn:wos:case_unknown_999' }}
-        />,
-      );
-      await waitFor(() => {
-        expect(
-          screen.queryByText(/We don't have status for this reference/i),
-        ).not.toBeNull();
-      });
+      await renderStatus(composition, { route: { caseLedgerId: 'urn:wos:case_unknown_999' } });
+      expect(screen.getByText(/We don't have status for this reference/i)).toBeDefined();
       expect(screen.queryByText(NO_AGGREGATE_COPY)).toBeNull();
       expect(
         screen.queryByRole('list', { name: /Application stages/i }),
@@ -234,16 +189,8 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         features: { respondentPlace: 'allowed', status: 'forbidden' },
       };
       const spy = vi.spyOn(composition.statusReader, 'readStatus');
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByText(/Status not shared/i)).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByText(/Status not shared/i)).toBeDefined();
       expect(
         screen.getByText(/This issuer does not share application status here\./i),
       ).toBeDefined();
@@ -258,16 +205,8 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       };
       composition.formRuntimePolicyExtractor = new EmptyFormRuntimePolicyExtractor();
       const spy = vi.spyOn(composition.statusReader, 'readStatus');
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByText(/Status not shared/i)).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByText(/Status not shared/i)).toBeDefined();
       expect(
         screen.getByText(/This site does not provide application status\./i),
       ).toBeDefined();
@@ -279,18 +218,10 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       (composition.instanceCapabilities as Record<string, unknown>).recordLifecycle = 'unavailable';
       composition.lifecycleActionClient = unavailableLifecycleActionClient();
       const spy = vi.spyOn(composition.lifecycleActionClient, 'readLifecycle');
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(
-          screen.queryByText(/Correction, withdrawal, and dispute are not available on this site/i),
-        ).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(
+        screen.getByText(/Correction, withdrawal, and dispute are not available on this site/i),
+      ).toBeDefined();
       expect(spy).not.toHaveBeenCalled();
     });
   });
@@ -312,16 +243,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       composition.lifecycleActionClient = lifecycleClientFor({
         actions: [{ action: 'correct', enabled: true }],
       });
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Correct a fact' })).not.toBeNull();
-      });
+      await renderStatus(composition);
       expect((screen.getByRole('button', { name: 'Correct a fact' }) as HTMLButtonElement).disabled)
         .toBe(true);
       expect(screen.getByText(/Correction window closed/i)).toBeDefined();
@@ -361,16 +283,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         actions: [{ action: 'correct', enabled: true }],
         submitCorrection,
       });
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Correct a fact' })).not.toBeNull();
-      });
+      await renderStatus(composition);
       fireEvent.click(screen.getByRole('button', { name: 'Correct a fact' }));
       fireEvent.change(screen.getByLabelText(/Fields to correct/i), {
         target: { value: 'Household size' },
@@ -379,16 +292,15 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         target: { value: 'Typed incorrectly.' },
       });
       fireEvent.click(screen.getByRole('button', { name: 'Submit correction' }));
-      expect(await screen.findByText(/Evidence is required for this correction/i)).toBeDefined();
+      expect(screen.getByText(/Evidence is required for this correction/i)).toBeDefined();
       expect(submitCorrection).not.toHaveBeenCalled();
 
       fireEvent.change(screen.getByLabelText(/Evidence reference/i), {
         target: { value: 'upload:household-statement' },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Submit correction' }));
-      await waitFor(() => {
-        expect(submitCorrection).toHaveBeenCalled();
-      });
+      await settle(() => fireEvent.click(screen.getByRole('button', { name: 'Submit correction' })));
+      expect(screen.getByText(/Correction recorded on the receipt chain/i)).toBeDefined();
+      expect(submitCorrection).toHaveBeenCalledTimes(1);
       expect(submitCorrection.mock.calls[0]?.[0]).toMatchObject({
         correctableFieldSet: ['/householdSize'],
         evidenceRefs: ['upload:household-statement'],
@@ -427,21 +339,11 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         actions: [{ action: 'withdraw', enabled: true }],
         submitWithdrawal,
       });
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Withdraw this submission' })).not.toBeNull();
-      });
+      await renderStatus(composition);
       fireEvent.click(screen.getByRole('button', { name: 'Withdraw this submission' }));
-      fireEvent.click(screen.getAllByRole('button', { name: 'Withdraw this submission' }).at(-1)!);
-      await waitFor(() => {
-        expect(submitWithdrawal).toHaveBeenCalled();
-      });
+      await settle(() => fireEvent.click(screen.getAllByRole('button', { name: 'Withdraw this submission' }).at(-1)!));
+      expect(screen.getByText('Submission withdrawn on the receipt chain.')).toBeDefined();
+      expect(submitWithdrawal).toHaveBeenCalledTimes(1);
       expect(submitWithdrawal.mock.calls[0]?.[0]).toMatchObject({
         reason: undefined,
         partyScope: 'any-party',
@@ -481,24 +383,15 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         actions: [{ action: 'withdraw', enabled: true }],
         submitWithdrawal,
       });
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Withdraw this submission' })).not.toBeNull();
-      });
+      await renderStatus(composition);
       fireEvent.click(screen.getByRole('button', { name: 'Withdraw this submission' }));
+      expect(screen.getByLabelText(/^Reason$/i)).toBeDefined();
       expect(
         screen.queryByLabelText(/Request review of a decision already issued/i),
       ).toBeNull();
-      fireEvent.click(screen.getAllByRole('button', { name: 'Withdraw this submission' }).at(-1)!);
-      await waitFor(() => {
-        expect(submitWithdrawal).toHaveBeenCalled();
-      });
+      await settle(() => fireEvent.click(screen.getAllByRole('button', { name: 'Withdraw this submission' }).at(-1)!));
+      expect(screen.getByText('Submission withdrawn on the receipt chain.')).toBeDefined();
+      expect(submitWithdrawal).toHaveBeenCalledTimes(1);
       expect(submitWithdrawal.mock.calls[0]?.[0].rescissionRequested).toBeUndefined();
     });
 
@@ -538,22 +431,12 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         actions: [{ action: 'withdraw', enabled: true }],
         submitWithdrawal,
       });
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Withdraw this submission' })).not.toBeNull();
-      });
+      await renderStatus(composition);
       fireEvent.click(screen.getByRole('button', { name: 'Withdraw this submission' }));
       fireEvent.click(screen.getByLabelText(/Request review of a decision already issued/i));
-      fireEvent.click(screen.getAllByRole('button', { name: 'Withdraw this submission' }).at(-1)!);
-      await waitFor(() => {
-        expect(submitWithdrawal).toHaveBeenCalled();
-      });
+      await settle(() => fireEvent.click(screen.getAllByRole('button', { name: 'Withdraw this submission' }).at(-1)!));
+      expect(screen.getByText('Withdrawal request sent for agency review.')).toBeDefined();
+      expect(submitWithdrawal).toHaveBeenCalledTimes(1);
       expect(submitWithdrawal.mock.calls[0]?.[0].rescissionRequested).toBe(true);
     });
 
@@ -573,16 +456,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       composition.lifecycleActionClient = lifecycleClientFor({
         actions: [{ action: 'withdraw', enabled: true }],
       });
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Withdraw this submission' })).not.toBeNull();
-      });
+      await renderStatus(composition);
       expect(
         (screen.getByRole('button', { name: 'Withdraw this submission' }) as HTMLButtonElement)
           .disabled,
@@ -614,16 +488,7 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
           },
         ],
       });
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Add a dispute note' })).not.toBeNull();
-      });
+      await renderStatus(composition);
       expect(
         (screen.getByRole('button', { name: 'Add a dispute note' }) as HTMLButtonElement).disabled,
       ).toBe(true);
@@ -636,18 +501,8 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       const composition = createStatusComposition();
       const authenticate = vi.spyOn(composition.identityProvider, 'authenticate');
       const discover = vi.spyOn(composition.identityProvider, 'discover');
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(
-          screen.queryByRole('heading', { name: /Your application status/i }),
-        ).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByRole('list', { name: /Application stages/i })).toBeDefined();
       expect(authenticate).not.toHaveBeenCalled();
       expect(discover).not.toHaveBeenCalled();
     });
@@ -662,18 +517,8 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
         }),
       };
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      render(
-        <StatusRuntime
-          composition={composition}
-          config={departmentAppProfile}
-          route={{ caseLedgerId: DEMO_URN }}
-        />,
-      );
-      await waitFor(() => {
-        expect(
-          screen.queryByText(/We could not load this status/i),
-        ).not.toBeNull();
-      });
+      await renderStatus(composition);
+      expect(screen.getByText(/We could not load this status/i)).toBeDefined();
       expect(consoleSpy).toHaveBeenCalled();
     });
   });
@@ -761,18 +606,7 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
       ],
     };
     patchStatusReader(composition, DEMO_URN, detail);
-    render(
-      <StatusRuntime
-        composition={composition}
-        config={departmentAppProfile}
-        route={{ caseLedgerId: DEMO_URN }}
-      />,
-    );
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('list', { name: /Application stages/i }),
-      ).not.toBeNull();
-    });
+    await renderStatus(composition);
     const strip = screen.getByRole('list', { name: /Application stages/i });
     const cells = within(strip).getAllByRole('listitem');
     const current = cells.find((cell) => cell.getAttribute('aria-current') === 'step');
@@ -793,18 +627,7 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
       ],
     };
     patchStatusReader(composition, DEMO_URN, detail);
-    render(
-      <StatusRuntime
-        composition={composition}
-        config={departmentAppProfile}
-        route={{ caseLedgerId: DEMO_URN }}
-      />,
-    );
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('list', { name: /Application stages/i }),
-      ).not.toBeNull();
-    });
+    await renderStatus(composition);
     const strip = screen.getByRole('list', { name: /Application stages/i });
     const cells = within(strip).getAllByRole('listitem');
     const current = cells.find((cell) => cell.getAttribute('aria-current') === 'step');
@@ -821,18 +644,7 @@ describe('StatusRuntime stage mapping (code-review F-4)', () => {
       ],
     };
     patchStatusReader(composition, DEMO_URN, detail);
-    render(
-      <StatusRuntime
-        composition={composition}
-        config={departmentAppProfile}
-        route={{ caseLedgerId: DEMO_URN }}
-      />,
-    );
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('list', { name: /Application stages/i }),
-      ).not.toBeNull();
-    });
+    await renderStatus(composition);
     const strip = screen.getByRole('list', { name: /Application stages/i });
     const cells = within(strip).getAllByRole('listitem');
     const current = cells.find((cell) => cell.getAttribute('aria-current') === 'step');
@@ -868,18 +680,7 @@ describe('StatusRuntime lifecycle badge (independent arch-review N-2)', () => {
       ],
     };
     patchStatusReader(composition, DEMO_URN, detail);
-    render(
-      <StatusRuntime
-        composition={composition}
-        config={departmentAppProfile}
-        route={{ caseLedgerId: DEMO_URN }}
-      />,
-    );
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('list', { name: /Application stages/i }),
-      ).not.toBeNull();
-    });
+    await renderStatus(composition);
     // Badge appears with honest "Paused" copy.
     expect(screen.getByText(/^Paused\.$/)).toBeDefined();
     // Vocabulary firewall: raw WOS token MUST NOT leak into user-visible prose.
@@ -907,18 +708,7 @@ describe('StatusRuntime lifecycle badge (independent arch-review N-2)', () => {
       ],
     };
     patchStatusReader(composition, DEMO_URN, detail);
-    render(
-      <StatusRuntime
-        composition={composition}
-        config={departmentAppProfile}
-        route={{ caseLedgerId: DEMO_URN }}
-      />,
-    );
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('list', { name: /Application stages/i }),
-      ).not.toBeNull();
-    });
+    await renderStatus(composition);
     // Badge appears with honest "Updating" copy.
     expect(screen.getByText(/^Updating\.$/)).toBeDefined();
     // Vocabulary firewall: raw WOS token MUST NOT leak into user-visible prose.
@@ -1001,16 +791,8 @@ describe('StatusRuntime lifecycle timeline rendering (FW-0038)', () => {
       submitDispute: vi.fn() as never,
     };
 
-    render(
-      <StatusRuntime
-        composition={composition}
-        config={departmentAppProfile}
-        route={{ caseLedgerId: DEMO_URN }}
-      />,
-    );
-    await waitFor(() => {
-      expect(screen.queryByText(/Correction recorded/i)).not.toBeNull();
-    });
+    await renderStatus(composition);
+    expect(screen.getByText(/Correction recorded/i)).toBeDefined();
     expect(screen.getByText(/reason withheld/i)).toBeDefined();
     expect(screen.getByText(/value withheld/i)).toBeDefined();
     expect(screen.getByText(/Withdrawal review requested/i)).toBeDefined();
@@ -1043,18 +825,8 @@ describe('StatusRuntime policy-error path (code-review F-2)', () => {
     composition.orgRuntimePolicy = {
       features: { respondentPlace: 'allowed', status: 'not-a-real-mode' as never },
     };
-    render(
-      <StatusRuntime
-        composition={composition}
-        config={departmentAppProfile}
-        route={{ caseLedgerId: DEMO_URN }}
-      />,
-    );
-    await waitFor(() => {
-      expect(
-        screen.queryByText(/not configured correctly/i),
-      ).not.toBeNull();
-    });
+    await renderStatus(composition);
+    expect(screen.getByText(/not configured correctly/i)).toBeDefined();
     // The typed RuntimePolicyError code surfaces as the support reference
     // (not the URN, not raw stack). Mirrors the FW-0065 plumbing.
     expect(screen.getByText(/Support reference:/i)).toBeDefined();
@@ -1068,9 +840,8 @@ describe('StatusRuntime host task navigation', () => {
     const detail = demoApplicantCaseDetail();
     const renderTaskAction = vi.fn(task => <button>Open {task.title}</button>);
     const composition = createStatusComposition();
-    render(<StatusRuntime composition={composition} config={departmentAppProfile}
-      route={{ caseLedgerId: DEMO_URN }} renderTaskAction={renderTaskAction} />);
-    await waitFor(() => expect(renderTaskAction).toHaveBeenCalledTimes(detail.openTasks.length));
+    await renderStatus(composition, { renderTaskAction });
+    expect(renderTaskAction).toHaveBeenCalledTimes(detail.openTasks.length);
     expect(screen.getByRole('button', { name: 'Open ' + detail.openTasks[0].title })).toBeDefined();
   });
   it('offers no task action for a successfully read case with no open tasks', async () => {
@@ -1078,9 +849,8 @@ describe('StatusRuntime host task navigation', () => {
     const detail = { ...demoApplicantCaseDetail(), openTasks: [] };
     composition.statusReader = { readStatus: async () => detail };
     const renderTaskAction = vi.fn();
-    render(<StatusRuntime composition={composition} config={departmentAppProfile}
-      route={{ caseLedgerId: DEMO_URN }} renderTaskAction={renderTaskAction} />);
-    await screen.findByRole('heading', { name: 'Your application status' });
+    await renderStatus(composition, { renderTaskAction });
+    expect(screen.getByRole('list', { name: /Application stages/i })).toBeDefined();
     expect(renderTaskAction).not.toHaveBeenCalled();
   });
 });
@@ -1094,9 +864,8 @@ it('retires loaded case and task actions when the selected session changes', asy
     subscribe(listener) { receive = listener; listener(state); return () => {}; },
     begin: async () => {}, completeCallback: async () => state, completeSilentCallback: async () => {},
     renew: async () => state, logout: async () => {}, completeLogoutCallback: async () => {}, dispose: () => {} };
-  render(<StatusRuntime composition={composition} config={departmentAppProfile} route={{ caseLedgerId: DEMO_URN }}
-    renderTaskAction={task => <button>Open {task.title}</button>} />);
-  await screen.findByRole('button', { name: 'Open ' + demoApplicantCaseDetail().openTasks[0].title });
+  await renderStatus(composition, { renderTaskAction: task => <button>Open {task.title}</button> });
+  expect(screen.getByRole('button', { name: 'Open ' + demoApplicantCaseDetail().openTasks[0].title })).toBeDefined();
   act(() => receive({ ...state, subject: 'different', revision: 2 }));
   expect(screen.queryByRole('button', { name: /Open/ })).toBeNull();
   expect(screen.getByText('Sign in to view your current application status.')).toBeDefined();
@@ -1108,10 +877,9 @@ it.each(['access-denied', 'unavailable'] as const)('renders %s as a refusal rath
   const composition = createStatusComposition();
   composition.statusReader = { readStatus: async () => { throw new StatusReadError(code); } };
   const action = vi.fn();
-  render(<StatusRuntime composition={composition} config={departmentAppProfile}
-    route={{ caseLedgerId: DEMO_URN }} renderTaskAction={action} />);
-  await screen.findByText(code === 'access-denied' ? 'This application is not available to your signed-in account.'
-    : 'We could not load this status. Try again later.');
+  await renderStatus(composition, { renderTaskAction: action });
+  expect(screen.getByText(code === 'access-denied' ? 'This application is not available to your signed-in account.'
+    : 'We could not load this status. Try again later.')).toBeDefined();
   expect(action).not.toHaveBeenCalled(); expect(screen.queryByRole('list', { name: /Application stages/ })).toBeNull();
   cleanup();
 });

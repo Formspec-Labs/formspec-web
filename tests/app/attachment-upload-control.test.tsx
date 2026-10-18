@@ -22,6 +22,12 @@ import {
 interface FieldHarness {
   field: UseFieldResult;
   readValue(): unknown;
+  /**
+   * Resolves on the control's next write. The stub store hashes with WebCrypto,
+   * which settles on the libuv thread pool after an unbounded number of
+   * event-loop turns, so upload tests await the write rather than count flushes.
+   */
+  nextWrite(): Promise<unknown>;
 }
 
 function makeFieldHarness({
@@ -32,8 +38,10 @@ function makeFieldHarness({
   readonly?: boolean;
 } = {}): FieldHarness {
   let value: unknown = initial ?? null;
+  let onWrite: ((next: unknown) => void) | undefined;
   const setValue = vi.fn((next: unknown) => {
     value = next;
+    onWrite?.(next);
   });
   const touch = vi.fn();
   const field: UseFieldResult = {
@@ -76,6 +84,7 @@ function makeFieldHarness({
   return {
     field,
     readValue: () => value,
+    nextWrite: () => new Promise((resolve) => { onWrite = resolve; }),
   };
 }
 
@@ -295,11 +304,11 @@ describe('FormspecWebAttachmentControl', () => {
     const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input).toBeTruthy();
     Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    const write = harness.nextWrite();
     await act(async () => {
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      await flush();
+      await write;
     });
-    await flush();
 
     const written = harness.readValue() as AttachmentRef | null;
     expect(written).toBeTruthy();
@@ -324,11 +333,11 @@ describe('FormspecWebAttachmentControl', () => {
     ];
     const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
     Object.defineProperty(input, 'files', { value: files, configurable: true });
+    const write = harness.nextWrite();
     await act(async () => {
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      await flush();
+      await write;
     });
-    await flush();
 
     const written = harness.readValue() as AttachmentRef[];
     expect(Array.isArray(written)).toBe(true);
@@ -638,22 +647,22 @@ describe('FormspecWebAttachmentControl', () => {
     const png = await fileFromBytes(new Uint8Array([1]), 'photo.png', 'image/png');
     const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
     Object.defineProperty(input, 'files', { value: [png], configurable: true });
+    // Pick → review settles on microtasks (Image stub, legibility analysis), which act drains.
     await act(async () => {
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      await flush();
     });
-    await flush();
 
-    expect(container?.textContent ?? '').toContain('Upload image');
     const uploadBtn = Array.from(container!.querySelectorAll('button'))
       .find((btn) => btn.textContent === 'Upload image');
+    expect(uploadBtn).toBeDefined();
+    expect(harness.readValue()).toBeNull();
+    const write = harness.nextWrite();
     await act(async () => {
-      uploadBtn?.click();
-      await flush();
+      uploadBtn!.click();
+      await write;
     });
-    await flush();
 
-    expect(harness.readValue()).toBeTruthy();
+    expect(harness.readValue()).toMatchObject({ kind: 'attachment-ref', filename: 'photo.png' });
   });
 
   it('uses canvas legibility analysis for picked images before upload', async () => {

@@ -412,12 +412,15 @@ function LifecycleActionsPanel({
   const [lifecycle, setLifecycle] = useState<LifecycleViewState>(state);
   const [activeAction, setActiveAction] = useState<LifecycleActionKind | null>(null);
   const [submitState, setSubmitState] = useState<LifecycleSubmitState>({ status: 'idle' });
-
-  useEffect(() => {
+  // A newly loaded snapshot resets the panel during render, not in an effect:
+  // a post-commit reset closes an action the respondent opened before effects ran.
+  const [loadedState, setLoadedState] = useState(state);
+  if (state !== loadedState) {
+    setLoadedState(state);
     setLifecycle(state);
     setActiveAction(null);
     setSubmitState({ status: 'idle' });
-  }, [state]);
+  }
 
   if (lifecycle.kind === 'disabled') {
     return <LifecycleUnavailable cause={lifecycle.cause} />;
