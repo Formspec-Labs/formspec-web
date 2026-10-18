@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const scriptPath = join(repoRoot, 'docker/40-formspec-runtime-config.sh');
@@ -24,6 +24,12 @@ afterEach(() => {
 });
 
 describe('container runtime-config entrypoint', () => {
+  // The entrypoint runs in the nginx image, which installs jq (Dockerfile); a host without it cannot run these cases.
+  beforeAll(() => {
+    if (spawnSync('jq', ['--version']).status !== 0) {
+      throw new Error('the runtime-config entrypoint needs jq, which the nginx image installs; run this test where jq is on PATH');
+    }
+  });
   it('emits scalar and Surface bundle values without evaluating input as JavaScript', () => {
     const root = temporaryRoot();
     const target = join(root, 'formspec-runtime-config.js');
