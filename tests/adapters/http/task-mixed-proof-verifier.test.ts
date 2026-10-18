@@ -215,7 +215,7 @@ describe('bounded protected transport overlap (simulated timing; mock Source cry
 
 const nativeMixedCodes = ['not_initialized', 'invalid_initialization', 'input_limit', 'invalid_json', 'invalid_selection', 'invalid_hydration',
   'invalid_proof_index', 'unsupported_family', 'missing_proof', 'extra_proof', 'invalid_original', 'recursive_original', 'proof_refused',
-  'expired', 'unsupported_numeric_domain', 'output_limit', 'internal_failure'];
+  'expired', 'not_yet_valid', 'unsupported_numeric_domain', 'output_limit', 'internal_failure'];
 describe('closed Source mixed native refusal byte contract', () => {
   for (const stage of ['index', 'verify'] as const) it.each(nativeMixedCodes)(`preserves %s from native ${stage} result bytes`, async code => {
     const f = fixture(true); f.nativeRefusal(stage, { version: 1, status: 'refused', code });
