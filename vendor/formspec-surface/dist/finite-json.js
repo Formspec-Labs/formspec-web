@@ -1,6 +1,16 @@
 /** @filedesc Detached finite JSON snapshots and deterministic private replay identity. */
 const MAX_RESPONSE_DATA_DEPTH = 128;
 const MAX_RESPONSE_DATA_NODES = 100_000;
+/**
+ * A number read by `parseJsonExact` (integrity-canonical) whose source text a JS
+ * number cannot hold, such as a 19-digit decimal or an integer past 2^53. It is a
+ * frozen `JSON.rawJSON` value; snapshots keep it and canonical text writes its
+ * source digits, so a Response hash taken downstream still sees every digit.
+ */
+function isRawJson(value) {
+    const isRawJSON = JSON.isRawJSON;
+    return typeof isRawJSON === "function" && isRawJSON(value);
+}
 function cloneFiniteJson(value, active, state, depth, immutable) {
     state.nodes += 1;
     if (state.nodes > MAX_RESPONSE_DATA_NODES ||
@@ -20,6 +30,9 @@ function cloneFiniteJson(value, active, state, depth, immutable) {
     }
     if (typeof value !== "object") {
         throw new TypeError("Response data contains a non-JSON value");
+    }
+    if (isRawJson(value)) {
+        return value;
     }
     if (active.has(value)) {
         throw new TypeError("Response data contains a cycle");
@@ -96,6 +109,9 @@ function cloneFiniteJson(value, active, state, depth, immutable) {
     }
 }
 export function canonicalFiniteJson(value) {
+    if (isRawJson(value)) {
+        return value.rawJSON;
+    }
     if (value === null || typeof value !== "object") {
         const serialized = JSON.stringify(value);
         if (serialized === undefined) {

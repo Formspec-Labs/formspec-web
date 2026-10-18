@@ -19,9 +19,17 @@ function object(value: unknown): Record<string, unknown> {
 async function hash(bytes: Uint8Array<ArrayBuffer>) {
   return 'sha256:' + Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
 }
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((byte, index) => byte === b[index]);
+/** Reads an own data property without invoking accessors. */
+function ownValue(value: unknown, key: string): unknown {
+  const descriptor = value && typeof value === 'object' ? Object.getOwnPropertyDescriptor(value, key) : undefined;
+  return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+}
 
 /** Uses exact retained static wording under a qualified current case lifetime.
  * This does not verify signatures, create an IntakeHandoff, or authorize access.
+ * The Response hash reads `input.response` as handed over: parse records with
+ * `parseJsonExact` so a decimal a JS number cannot hold keeps every digit.
  */
 export async function prepareStaticTaskPresentation(input: {
   readonly definition: FormDefinition;
@@ -38,8 +46,13 @@ export async function prepareStaticTaskPresentation(input: {
   const check = () => { signal.throwIfAborted(); assertSynchronousGuard(assertCurrent); };
   check();
   const definition = snapshotFiniteJson(input.definition, true) as unknown as FormDefinition;
-  const response = snapshotFiniteJson(input.response, true) as unknown as FormResponse;
+  // Hash first; the read-only view comes from the same canonical bytes, so a
+  // JSON.rawJSON number is hashed exactly and read as its nearest JS number.
+  const handoff = canonicalResponseHandoffBytes(input.response);
+  const response = snapshotFiniteJson(JSON.parse(new TextDecoder().decode(handoff.subarray(handoff.indexOf(0) + 1))), true) as unknown as FormResponse;
   const sign = object(snapshotFiniteJson(input.retainedSign, true));
+  let signedHandoff: Uint8Array | undefined;
+  try { signedHandoff = canonicalResponseHandoffBytes(ownValue(input.retainedSign, 'signedCanonicalResponse')); } catch { signedHandoff = undefined; }
   const presentation = object(snapshotFiniteJson(input.retainedPresentation, true));
   if (!response.displayedLocale || !response.displayedLocale.locale?.trim())
     throw new Error('Recorded task Locale required');
@@ -49,7 +62,7 @@ export async function prepareStaticTaskPresentation(input: {
   if (typeof recordRef !== 'string' || typeof recordHash !== 'string' || !digestPattern.test(recordHash)
     || recordRef !== `urn:formspec:task-draft-sign:${recordHash}`
     || typeof sign.signedResponseHash !== 'string' || !digestPattern.test(sign.signedResponseHash)
-    || !equal(sign.signedCanonicalResponse, response)
+    || !signedHandoff || !sameBytes(signedHandoff, handoff)
     || typeof association.formVersionHash !== 'string' || !digestPattern.test(association.formVersionHash)
     || presentation.version !== 1 || presentation.formVersionHash !== association.formVersionHash
     || !equal(presentation.selectedLocale ?? null, response.displayedLocale ?? null)
@@ -58,7 +71,7 @@ export async function prepareStaticTaskPresentation(input: {
   await qualifyCurrent({ signal }); check();
   if (!response.authoredSignatures?.length || !await validateCanonicalFormResponse(response)) throw new Error('Canonical signed task Response required');
   check();
-  const responseHash = await hash(canonicalResponseHandoffBytes(response)); check();
+  const responseHash = await hash(handoff); check();
   if (responseHash !== sign.signedResponseHash) throw new Error('Retained task Response hash differs');
   let selectedDefinition: Record<string, unknown> | undefined;
   let locale: LocaleDocument | null = null;

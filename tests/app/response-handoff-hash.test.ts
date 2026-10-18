@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
-import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
+import { canonicalResponseHandoffBytes, parseJsonExact } from '@formspec-org/integrity-canonical';
 import type { FormResponse } from '@formspec-org/types';
 import { responseHash, ResponseHashUnavailableError } from '../../src/app/respondent-flow.ts';
 import vectors from '../fixtures/response-handoff/vectors.json';
@@ -11,7 +11,8 @@ describe('maintained canonical full-Response handoff hash', () => {
   it.each(vectors.valid)('matches the shared Rust bytes and SHA-256 for $name', async vector => {
     vi.stubGlobal('crypto', webcrypto);
     for (const input of vector.inputJson) {
-      const value = JSON.parse(input) as FormResponse;
+      // parseJsonExact keeps the digits a JS number cannot hold, as the server's text does.
+      const value = parseJsonExact(input) as FormResponse;
       const bytes = canonicalResponseHandoffBytes(value);
       expect(Buffer.from(bytes).toString('hex')).toBe(vector.bytesHex);
       expect(await responseHash(value)).toBe(`sha256:${vector.sha256}`);
