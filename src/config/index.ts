@@ -15,8 +15,6 @@ export type {
   SurfaceBundleMethodConfig,
   SurfaceBundlePublisherAuthorityConfig,
   SurfaceBundleVerificationConfig,
-  TenantBindingConfig,
-  TenantScopeConfig,
   TokenValue,
 } from './types.ts';
 export { nativePackageSigningConfig, readNativePackageSigningConfig } from './native-package-signing.ts';

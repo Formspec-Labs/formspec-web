@@ -16,6 +16,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const scriptPath = join(repoRoot, 'docker/40-formspec-runtime-config.sh');
 const tempRoots = [];
+const scopeKey = '2fdf38da'.padEnd(64, '0');
 
 afterEach(() => {
   for (const root of tempRoots.splice(0)) {
@@ -54,6 +55,7 @@ describe('container runtime-config entrypoint', () => {
     const result = runEntrypoint(target, {
       FORMSPEC_WEB_PROFILE: profileName,
       FORMSPEC_WEB_SERVER_URL: 'https://formspec.example.gov/line\nbreak',
+      FORMSPEC_WEB_SCOPE_KEY: scopeKey,
       FORMSPEC_WEB_SURFACE_BUNDLE_JSON: JSON.stringify(surfaceBundle),
     });
 
@@ -64,6 +66,7 @@ describe('container runtime-config entrypoint', () => {
     expect(plain(context.window.__FORMSPEC_RUNTIME_CONFIG__)).toEqual({
       profileName,
       formspecServerUrl: 'https://formspec.example.gov/line\nbreak',
+      scopeKey,
       responseActionLedgerCapabilityUrl: '',
       oidcIssuer: '',
       oidcClientId: '',
@@ -72,6 +75,28 @@ describe('container runtime-config entrypoint', () => {
       surfaceBundle,
     });
     expect(statSync(target).mode & 0o777).toBe(0o644);
+  });
+
+  it.each(['departmentApp', 'publicPortal'])('requires an explicit deployment scope for %s', profile => {
+    const target = join(temporaryRoot(), 'formspec-runtime-config.js');
+    writeFileSync(target, 'previous-runtime-config\n');
+    const env = { FORMSPEC_WEB_PROFILE: profile, FORMSPEC_WEB_SERVER_URL: 'https://source.example.gov' };
+    for (const value of ['', 'department-reference', 'A'.repeat(64), 'a'.repeat(63), `${scopeKey}\n`]) {
+      const result = runEntrypoint(target, { ...env, FORMSPEC_WEB_SCOPE_KEY: value });
+      expect(result.status, value).not.toBe(0);
+      expect(result.stderr).toContain('FORMSPEC_WEB_SCOPE_KEY');
+      expect(readFileSync(target, 'utf8')).toBe('previous-runtime-config\n');
+    }
+    const result = runEntrypoint(target, { ...env, FORMSPEC_WEB_SCOPE_KEY: scopeKey });
+    expect(result.status, result.stderr).toBe(0);
+    expect(evaluateRuntimeConfig(target).scopeKey).toBe(scopeKey);
+  });
+
+  it('leaves the unconfigured host unbound but refuses a malformed supplied scope', () => {
+    const target = join(temporaryRoot(), 'formspec-runtime-config.js');
+    expect(runEntrypoint(target, {}).status).toBe(0);
+    expect(evaluateRuntimeConfig(target)).not.toHaveProperty('scopeKey');
+    expect(runEntrypoint(target, { FORMSPEC_WEB_SCOPE_KEY: 'bad' }).status).not.toBe(0);
   });
 
   it('emits a supplied attachment byte policy as a number and omits it when absent', () => {

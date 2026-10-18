@@ -5,12 +5,11 @@ import {
 } from '../../../src/adapters/http/response-action-ledger.ts';
 import { demoSampleForm } from '../../../src/demo/index.ts';
 import type { ResponseActionRuntimeContext } from '../../../src/ports/response-action-ledger.ts';
-import { publicPortalProfile } from '../../../src/profiles/profiles.ts';
-import { tenantScopeHeaders } from '../../../src/profiles/tenant-headers.ts';
+import { testScopeKey } from '../../fixtures/scope.ts';
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
 
 describe('Response Actions Ledger HTTP adapter', () => {
-  it('requests a BFF-issued capability with tenant headers and bearer auth', async () => {
+  it('requests a BFF-issued capability with the scope key selector and bearer auth', async () => {
     const { fetch, requests } = recordingFetch((request) => {
       expect(request.method).toBe('POST');
       return jsonResponse({
@@ -20,7 +19,7 @@ describe('Response Actions Ledger HTTP adapter', () => {
     });
     const provider = createHttpResponseActionLedgerCapabilityProvider({
       endpoint: 'https://formspec-bff.example.test/response-actions/ledger/capability',
-      tenantBinding: publicPortalProfile.tenantBinding,
+      scopeKey: testScopeKey,
       accessToken: async () => 'oidc-access-token',
       fetchImpl: fetch,
     });
@@ -41,9 +40,7 @@ describe('Response Actions Ledger HTTP adapter', () => {
     expect(request?.headers.get('accept')).toBe('application/json');
     expect(request?.headers.get('content-type')).toBe('application/json');
     expect(request?.headers.get('authorization')).toBe('Bearer oidc-access-token');
-    for (const [name, value] of Object.entries(tenantScopeHeaders(publicPortalProfile.tenantBinding))) {
-      expect(request?.headers.get(name)).toBe(value);
-    }
+    expect(request?.headers.get('x-stack-scope-key')).toBe(testScopeKey);
     expect(request?.body).toMatchObject({
       formId: 'demo-intake',
       runtimeDefinitionUrl: runtimeContext.runtimeDefinitionUrl,

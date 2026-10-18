@@ -30,6 +30,7 @@ import { HttpTaskCompletion } from '../../src/adapters/http/task-completion.ts';
 import { createTaskResponseCompletion } from '../../src/shared/task-response-completion.ts';
 import { HttpTaskCandidateHydration } from '../../src/adapters/http/task-candidate-hydration.ts';
 import { hydrationFixture } from '../adapters/http/screener-hydration-fixture.ts';
+import { testScopeKey } from '../fixtures/scope.ts';
 import type { ScreenerAssociation, ScreenerRetention } from '../../src/ports/screener-retention.ts';
 import type { ScreenerHydration } from '../../src/ports/screener-hydration.ts';
 import type { SurfaceScreenerCompletionRequest } from '@formspec-org/surface-react';
@@ -152,7 +153,7 @@ describe('generic native package signing session', () => {
     const validateContent = await loadCanonicalSigningContentValidator();
     const documentHash = await hashSigningContent(content, validateContent);
     const unsigned: FormResponse = { ...baseline.response, displayedLocale: { url: locale.url!, version: locale.version, locale: 'en' },
-      extensions: { 'x-formspec-signing-content': { version: '1.0', content, draftId: 'owned-id', draftVersion: 7,
+      extensions: { 'x-formspec-signing-content': { version: '1.0', issuer: 'https://source.example.test/tenant/workspace/production', content, draftId: 'owned-id', draftVersion: 7,
         actorRef: 'server-actor', signerName: 'Generic signer', consentAccepted: true, signedAt: '2026-10-08T12:00:00Z',
         documentHash, documentHashAlgorithm: 'sha-256' } } };
     const digest = createHash('sha256').update(canonicalResponseSignedPayloadBytes(unsigned)).digest('hex');
@@ -178,13 +179,12 @@ describe('generic native package signing session', () => {
       if (mode === 'delayed outcome unknown') return new Promise<Response>(() => {});
       return Response.json({ taskId: selection.taskId, processId: selection.processId, outcome: 'completed',
       newStatus: 'submitted', occurredAt: '2026-10-08T12:05:00Z' }); });
-    const cohort = await createTaskComposition({ source: { baseUrl: 'https://source.test', accessToken: 'respondent', fetchImpl,
-      tenantBinding: { kind: 'bound', scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } } },
-      wos: { baseUrl: 'https://wos.test', accessToken: 'respondent', fetchImpl: complete },
+    const cohort = await createTaskComposition({ source: { scopeKey: testScopeKey, baseUrl: 'https://source.test', accessToken: 'respondent', fetchImpl },
+      wos: { scopeKey: testScopeKey, baseUrl: 'https://wos.test', accessToken: 'respondent', fetchImpl: complete },
       launch: { version: 1, taskId: selection.taskId, expectedTaskRevision: 'neutral-task-revision', formVersionId: 'publication', formVersionHash: `sha256:${'a'.repeat(64)}` },
       completionTimeoutMs: 10_000, completion: selection, draftKey: { formUrl: response.definitionUrl, formVersion: response.definitionVersion, subjectRef: 'server-actor' },
       formId: 'form', definition: policy.definition, locales: [locale], signing: { validateResponse: validateCanonicalFormResponse, validateContent,
-        signingProfileDigest: async value => createHash('sha256').update(canonicalResponseSignedPayloadBytes(value)).digest('hex'), keyId: 'key',
+        signingProfileDigest: async value => createHash('sha256').update(canonicalResponseSignedPayloadBytes(value)).digest('hex'), keyId: 'key', expectedIssuer: 'https://source.example.test/tenant/workspace/production',
         preSignCandidate: async () => ({ assertCurrent() {} }) }, resumeMetadata: { read: () => undefined, write() {}, remove() {} },
       assertCurrentSource() { if (!sourceCurrent) throw new Error('Selected task owner retired'); }, assertCurrentWos() {}, launchOperationId: 'neutral-resume' },
       { signal: new AbortController().signal, assertCurrent() {} });
@@ -276,7 +276,10 @@ describe('generic native package signing session', () => {
         fencedSubmit.disabled = true;
         expect((screen.getByRole('button', { name: 'Submit' }) as HTMLButtonElement).disabled).toBe(true);
         expect(complete).toHaveBeenCalledOnce();
-        const completionBody = JSON.parse(String((complete.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+        const completionInit = (complete.mock.calls[0] as unknown as [string, RequestInit])[1];
+        // WOS completion selects the composition's one scope key, the same one Source calls send.
+        expect(new Headers(completionInit.headers).get('x-stack-scope-key')).toBe(testScopeKey);
+        const completionBody = JSON.parse(String(completionInit.body));
         expect(completionBody.response).toEqual(response);
         expect(completionBody.signedDraft).toEqual(signedDraft);
         expect(canonicalResponseSignedPayloadBytes(host.getSnapshot().controller!.signed!.response)).toEqual(canonicalResponseSignedPayloadBytes(response));
@@ -547,7 +550,7 @@ describe('generic native package signing session', () => {
     const cohort = createHttpAdapterCohort({ baseUrl: 'https://server.example.test', fetchImpl: transport.fetch,
       formIdResolver: () => 'form', resumeMetadata: { read: slot => metadata.get(slot), write: (slot, value) => { metadata.set(slot, structuredClone(value)); }, remove: slot => { metadata.delete(slot); } },
       responseSigning: { validateResponse: validateCanonicalFormResponse, validateContent: await loadCanonicalSigningContentValidator(),
-        signingProfileDigest: async response => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex'), keyId: 'unused-sign-key' } });
+        signingProfileDigest: async response => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex'), keyId: 'unused-sign-key', expectedIssuer: 'https://source.example.test/tenant/workspace/production' } });
     const roles = Object.fromEntries([['saveInitial', 'save-initial'], ['saveOwned', 'save-owned'], ['prepare', 'prepare']].map(([role, actionRef]) =>
       [role, { document, actionRef, requestRef: actionRef, artifactRef: 'urn:test:actions', artifactDigest: `sha256:${'b'.repeat(64)}` }]));
     const policy: NativePackageSigningHostPolicy = { ...test.policy, definition, locales: [locale],

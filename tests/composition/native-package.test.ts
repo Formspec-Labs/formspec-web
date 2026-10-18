@@ -22,11 +22,14 @@ import * as nativeHostModule from '../../src/shared/native-package-signing-host.
 import { createDefaultComposition, type IdentityBinding } from '../../src/composition/default.ts';
 import { resolveActiveConfig } from '../../src/config/runtime.ts';
 import { nativePackageSigningConfig, type NativePackageSigningConfig } from '../../src/config/native-package-signing.ts';
+import { taskCompletionFixture } from '../fixtures/task-completion.ts';
+import { createNativePackageComposition } from '../../src/composition/native-package.ts';
 import type { NativePackageCompositionOptions } from '../../src/composition/native-package.ts';
 import { publicPortalProfile } from '../../src/profiles/profiles.ts';
 import { computeJcsSha256Digest } from '../../src/adapters/http/response-action-ledger.ts';
 import { generateIdempotencyKey } from '../../src/shared/idempotency-key.ts';
 import { sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
+import { otherScopeKey, testScopeKey } from '../fixtures/scope.ts';
 import * as appGraphModule from '@formspec-org/app-graph';
 import { loadCanonicalModulePayloadSchemaResources } from 'formspec-web/adapters/schema';
 
@@ -72,14 +75,14 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
   const bindings = Object.fromEntries([...new Set([...SIGNING_CEREMONY_WIDGET_SHAPE.dataInputs, ...RESPONSE_REVIEW_WIDGET_SHAPE.dataInputs].map(input => input.name))]
     .map(name => { const selected = (ceremonyBindings[name] ?? reviewBindings[name]) as { catalogRef: string; sourceRef: string };
       return [name, { catalogRef: selected.catalogRef, sourceRef: selected.sourceRef }]; }));
-  const signing = nativePackageSigningConfig({ keyId: 'fixture-key', definition: { url: definition.url, version: definition.version },
+  const signing = nativePackageSigningConfig({ keyId: 'fixture-key', expectedIssuer: 'https://source.example.test/tenant/workspace/production', definition: { url: definition.url, version: definition.version },
     bundle: { id: bundle.manifest.id, version: bundle.manifest.version }, module: bundle.manifest.modules![0], initialLocale: 'en',
     roles: Object.fromEntries(Object.entries({ ...(lifecycle ? { startApplication: 'start-application' } : {}), saveInitial: 'save-draft-initial', saveOwned: 'save-draft-owned', prepare: 'prepare', sign: 'sign', submit: 'submit', paper: 'paper' })
       .map(([role, actionRef]) => [role, { artifactRef: bundle.manifest.responseActionDocuments![0].url, actionRef }])), bindings,
     readiness: { instance: 'draftReadiness', readyPath: 'ready', ownedPath: 'owned' },
     ...(lifecycle ? { applicationLifecycle: { instance: 'draftReadiness', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' } } : {}) });
   const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
-    attachmentMaxUploadBytes: 1024 * 1024, tenantBinding: { kind: 'bound', scope: { tenant: 'fixture', workspace: 'fixture', environment: 'test', cell: 'fixture' } } });
+    attachmentMaxUploadBytes: 1024 * 1024, scopeKey: testScopeKey });
   const texts: Record<string, string> = { 'native.json': selectedNativeBytes, 'component.json': JSON.stringify(component),
     'definition.json': JSON.stringify(definition), ...Object.fromEntries(locales.map((locale, index) => [`locale-${index}.json`, JSON.stringify(locale)])) };
   // Package pins cover raw bytes, not the independent canonical publication digest.
@@ -239,7 +242,7 @@ async function completeStudioFixture(scoped: boolean, subject = 'anon:fixture', 
     ...(scoped ? { signingScope: { surface: { url: 'urn:formspec:demo:d1:signing-app:surface', version: '0.3.3' },
       route: 'signing', ceremonySlot: 'ceremony', reviewSlot: 'review' } } : {}) };
   const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
-    tenantBinding: { kind: 'bound', scope: { tenant: 'fixture', workspace: 'fixture', environment: 'test', cell: 'fixture' } } });
+    scopeKey: testScopeKey });
   const screenerSlot = intakeSurface.routes.flatMap(route => route.slots ?? []).find(slot => slot.slotType === 'screener')!;
   const screenerRef = (screenerSlot.binding as { screenerRef: string }).screenerRef;
   const screener = resolved.screenerHandles!.find(handle => handle.ref.url === screenerRef)!.document;
@@ -249,7 +252,7 @@ async function completeStudioFixture(scoped: boolean, subject = 'anon:fixture', 
     accessToken: async () => 'fixture-bearer', subscribe: () => () => {}, dispose: () => {} };
   const provider = { discover: vi.fn(async () => []), authenticate: vi.fn(), revoke: vi.fn(async () => {}), subscribe: vi.fn(() => () => {}) };
   const selection: ScreenerSelection = { evaluationSelection: {
-    scope: { tenant_id: 'fixture', workspace_id: 'fixture', environment_id: 'test', cell_id: 'fixture' },
+    scope: testScopeKey,
     formId: test.publication.form_id, formVersionId: test.publication.form_version_id,
     definitionUrl: definition.url!, definitionVersion: definition.version, definitionHash: test.publication.definition_hash,
     requiredSources: Object.values(definition.instances ?? {}).flatMap(instance => instance.source ? [instance.source] : []) },
@@ -404,7 +407,7 @@ describe('explicit native package composition', () => {
     const signing = { ...test.signing, signingScope: { surface: { ...test.bundle.manifest.surfaces![0], version: test.bundle.manifest.surfaces![0].version! },
       route: 'signing', ceremonySlot: 'ceremony', reviewSlot: 'review' } };
     const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
-      tenantBinding: { kind: 'bound', scope: { tenant: 'fixture', workspace: 'fixture', environment: 'test', cell: 'fixture' } } });
+      scopeKey: testScopeKey });
     const boot = await createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
     const policy = factory.mock.calls[0][0];
     expect(policy.signingScope).toMatchObject({ ...signing.signingScope, surfaceId: 'surface', moduleId: signing.module.id });
@@ -510,7 +513,7 @@ describe('explicit native package composition', () => {
     const response = engine.getResponse({ profile: 'on-submit', id: generateIdempotencyKey() }); engine.dispose();
     await first.composition.draftStore.save(key, response);
     const content = Object.values((test.definition.extensions!['x-formspec-signing-content'] as { entries: Record<string, SigningContent> }).entries).find(content => content.locale === 'es-US')!;
-    const signed = await delegatedSignedResponseFixture({ response, content, actor: 'anon:fixture', draftId: 'fixture-draft', candidateVersion: 4, keyId: test.signing.keyId });
+    const signed = await delegatedSignedResponseFixture({ response, content, actor: 'anon:fixture', draftId: 'fixture-draft', candidateVersion: 4, issuer: test.signing.expectedIssuer, keyId: test.signing.keyId });
     test.setDraft(signed, 'submitted', 6); first.host.dispose();
     const count = test.requests.length;
     const fresh = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
@@ -525,8 +528,7 @@ describe('explicit native package composition', () => {
     const recovered = test.requests.slice(count); expect(recovered.every(request => request.method === 'GET')).toBe(true);
     const ownedRead = recovered.filter(request => request.url.endsWith('/drafts/fixture-draft')); expect(ownedRead).toHaveLength(1);
     expect(ownedRead[0].headers.get('authorization')).toBe('Bearer fixture-token');
-    for (const name of ['tenant', 'workspace', 'cell']) expect(ownedRead[0].headers.get(`x-formspec-${name}-id`)).toBe('fixture');
-    expect(ownedRead[0].headers.get('x-formspec-environment-id')).toBe('test'); fresh.host.dispose();
+    expect(ownedRead[0].headers.get('x-stack-scope-key')).toBe(testScopeKey); fresh.host.dispose();
   });
   it('reports a retained active draft separately from absent access without terminal initialization or writes', async () => {
     const test = await fixture();
@@ -555,7 +557,7 @@ describe('explicit native package composition', () => {
   it('requires config and explicit package URL, leaving ordinary preview unsigned', async () => {
     const test = await fixture();
     expect(() => createDefaultComposition(test.config)).toThrow('explicit package URL');
-    const ordinary = createDefaultComposition(resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test' }),
+    const ordinary = createDefaultComposition(resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', scopeKey: testScopeKey }),
       { packageUrl: '/package.json', initialDefinitionUrl });
     expect(ordinary.nativePackageRespondent).toBeUndefined(); expect(ordinary.responseSigning).toBeUndefined();
     expect(test.requests).toEqual([]);
@@ -698,7 +700,7 @@ describe('explicit native package composition', () => {
     const request = test.requests.find(request => request.url.endsWith('/application-lifecycle'));
     if (mode !== 'anonymous') {
       expect(request?.headers.get('authorization')).toBe('Bearer oidc-bearer');
-      expect(request?.headers.get('x-formspec-tenant-id')).toBe('fixture');
+      expect(request?.headers.get('x-stack-scope-key')).toBe(testScopeKey);
     }
   });
   it.each(['read-failure', 'newer-subscription'] as const)('reconciles native auth setup with %s', async mode => {
@@ -749,19 +751,14 @@ describe('explicit native package composition', () => {
       logout: async () => {}, completeLogoutCallback: async () => {}, accessToken: async () => 'oidc-bearer',
       subscribe: (listener: (state: BrowserAuthSessionState | null) => void) => { authListener = listener; return () => { authListener = undefined; }; }, dispose: () => {} };
     const identityBinding: IdentityBinding = { provider, accessToken: vi.fn(async () => 'oidc-bearer'), browserAuthSession };
-    const config = { ...test.config, tenantBinding: { kind: 'bound' as const, scope: {
-      tenant: 'tenant_test', workspace: 'workspace_test', environment: 'environment_test', cell: 'cell_test',
-    } }, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: { mode: 'oidc-required' as const, oidc: {
+    const config = { ...test.config, scopeKey: otherScopeKey, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: { mode: 'oidc-required' as const, oidc: {
       issuer: claim.provider, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const,
     } } };
     const options = { packageUrl: '/package.json', initialDefinitionUrl, identityBinding };
     const boot = await createDefaultComposition(config, options).nativePackageRespondent!.load();
     const runtime = test.requests.find(request => request.url.endsWith('/runtime/forms/actual-form'))!;
     expect(runtime.headers.get('authorization')).toBe('Bearer oidc-bearer');
-    expect(runtime.headers.get('x-formspec-tenant-id')).toBe('tenant_test');
-    expect(runtime.headers.get('x-formspec-workspace-id')).toBe('workspace_test');
-    expect(runtime.headers.get('x-formspec-environment-id')).toBe('environment_test');
-    expect(runtime.headers.get('x-formspec-cell-id')).toBe('cell_test');
+    expect(runtime.headers.get('x-stack-scope-key')).toBe(otherScopeKey);
     expect(boot.composition.identityProvider).toBe(provider); expect(boot.composition.browserAuthSession).toBe(browserAuthSession);
     const key = { formUrl: test.definition.url, formVersion: test.definition.version, subjectRef: claim.subjectRef };
     const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version };
@@ -885,8 +882,8 @@ async function correctionFixture(taskRequest = true) {
       formVersionId: test.publication.form_version_id, formVersionHash: `sha256:${'a'.repeat(64)}` },
       completion: { taskId, processId, definitionUrl: test.definition.url, definitionVersion: test.definition.version },
       launchOperationId: 'stable-task-launch', subjectRef: 'oidc:task',
-      wos: { baseUrl: 'https://wos.test', accessToken: 'wos-token' }, assertCurrentWos: vi.fn(),
-      hydration: { selection: { scope: { tenant_id: 'fixture', workspace_id: 'fixture', environment_id: 'test', cell_id: 'fixture' },
+      wos: { scopeKey: otherScopeKey, baseUrl: 'https://wos.test', accessToken: 'wos-token' }, assertCurrentWos: vi.fn(),
+      hydration: { selection: { scope: testScopeKey,
         formId: test.publication.form_id, formVersionId: test.publication.form_version_id, definitionUrl: test.definition.url,
         definitionVersion: test.definition.version, definitionHash: test.publication.definition_hash,
         requiredSources: Object.values(test.definition.instances ?? {}).flatMap(instance => typeof instance.source === 'string' ? [instance.source] : []) },
@@ -896,6 +893,67 @@ async function correctionFixture(taskRequest = true) {
 }
 
 describe('explicit correction host through the maintained native loader', () => {
+  it.each(['after-construction', 'during-signing-options', 'during-session-callback', 'during-wos-settings-accessor'] as const)(
+    'retains independent Source and WOS requests with mutation %s', async mode => {
+      const f = await correctionFixture();
+      const host = vi.spyOn(nativeHostModule, 'createNativePackageSigningHost');
+      const fetch = f.test.fetch.getMockImplementation()!;
+      f.test.fetch.mockImplementation(async (input, init) => {
+        if (new URL(String(input)).pathname === '/drafts/task-draft') {
+          f.test.requests.push({ url: String(input), method: init?.method ?? 'GET', headers: new Headers(init?.headers) });
+          return Response.json(f.launched);
+        }
+        return fetch(input, init);
+      });
+      const wosRequests: RequestInit[] = [];
+      Object.assign(f.options.nativeTask.wos, { fetchImpl: async (_input: RequestInfo | URL, init?: RequestInit) => {
+        wosRequests.push(init!);
+        return Response.json({ taskId: f.options.nativeTask.completion.taskId, processId: f.options.nativeTask.completion.processId,
+          outcome: 'completed', newStatus: 'submitted', occurredAt: '2026-10-18T12:00:00Z' });
+      } });
+      const mutate = () => { f.config.scopeKey = otherScopeKey; f.options.nativeTask.wos.scopeKey = testScopeKey; };
+      if (mode === 'during-wos-settings-accessor') Object.defineProperty(f.options.nativeTask.wos, 'accessToken', {
+        enumerable: true, get() { mutate(); return 'wos-token'; } });
+      let composition;
+      if (mode === 'during-signing-options') {
+        const options = { ...f.options, signing: f.test.signing };
+        Object.defineProperty(options, 'signing', { enumerable: true, get() { mutate(); return f.test.signing; } });
+        composition = createNativePackageComposition(f.config, options);
+      } else {
+        if (mode === 'during-session-callback') {
+          const subscribe = f.options.identityBinding.browserAuthSession.subscribe.getMockImplementation()!;
+          f.options.identityBinding.browserAuthSession.subscribe.mockImplementation(listener => { mutate(); return subscribe(listener); });
+        }
+        composition = createDefaultComposition(f.config, f.options);
+      }
+      mutate();
+      const boot = await composition.nativePackageRespondent!.load();
+      try {
+        await boot.composition.draftStore.load({ formUrl: f.test.definition.url, formVersion: f.test.definition.version, subjectRef: 'oidc:task' });
+        const completion = host.mock.calls.at(-1)![0].controller.completion!;
+        const lifetime = { signal: new AbortController().signal, assertCurrent() {} };
+        const input = taskCompletionFixture({ ...sampleFormResponse, definitionUrl: f.test.definition.url, definitionVersion: f.test.definition.version });
+        const prepared = await completion.capture(input, lifetime);
+        await completion.complete(prepared, 'independent-native-completion', lifetime);
+        const requests = f.test.requests.filter(request => new URL(request.url).origin === 'https://server.example.test');
+        expect(requests.length).toBeGreaterThan(1);
+        for (const request of requests) expect(request.headers.get('x-stack-scope-key')).toBe(testScopeKey);
+        expect(wosRequests).toHaveLength(1);
+        expect(new Headers(wosRequests[0].headers).get('x-stack-scope-key')).toBe(otherScopeKey);
+      } finally { boot.host.dispose(); }
+    });
+
+  it.each(['source', 'wos'] as const)('refuses missing or malformed native %s scope before package I/O', async service => {
+    for (const scopeKey of [undefined, null, '', 'A'.repeat(64), 'a'.repeat(63), 17]) {
+      const f = await correctionFixture();
+      Object.assign(service === 'source' ? f.config : f.options.nativeTask.wos, { scopeKey });
+      expect(() => createDefaultComposition(f.config, f.options)).toThrow('scope key');
+      expect(f.test.requests).toHaveLength(0);
+      expect(f.options.identityBinding.browserAuthSession.getSession).not.toHaveBeenCalled();
+      expect(f.options.identityBinding.browserAuthSession.subscribe).not.toHaveBeenCalled();
+    }
+  });
+
   it.each(['unmount', 'session-retirement'] as const)('keeps the latest task hydration alive across asynchronous renderer restoration until %s', async retirement => {
     const f = await correctionFixture();
     f.test.definition.instances!.facts = { source: 'urn:test:external', readonly: true };
@@ -1208,6 +1266,8 @@ describe('explicit correction host through the maintained native loader', () => 
     expect(launch.body).toEqual(f.options.nativeTask.launch);
     expect(launch.headers.get('authorization')).toBe('Bearer task-token');
     expect(launch.headers.get('idempotency-key')).toBe('stable-task-launch');
+    // Source retains its own deployment selection when the WOS namespace differs.
+    expect(launch.headers.get('x-stack-scope-key')).toBe(testScopeKey);
     expect(f.test.requests.some(request => request.method === 'POST' && /forms\/.*\/(drafts|sessions\/anonymous)$/.test(new URL(request.url).pathname))).toBe(false);
     f.retire();
     await expect(boot.composition.draftStore.load({ formUrl: f.test.definition.url, formVersion: f.test.definition.version, subjectRef: 'oidc:task' })).rejects.toThrow();

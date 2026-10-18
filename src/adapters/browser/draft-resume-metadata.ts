@@ -5,7 +5,7 @@ import type { HttpClientConfig } from '../http/http-client.ts';
 export type DraftResumeMetadataStore = ScopedMetadataStore;
 
 export function createBrowserDraftResumeMetadataStore(
-  config: Pick<HttpClientConfig, 'baseUrl' | 'tenantBinding'> & { identityContext?: { issuer: string; clientId: string }; taskContext?: { taskId: string; expectedTaskRevision: string } },
+  config: Pick<HttpClientConfig, 'baseUrl' | 'scopeKey'> & { identityContext?: { issuer: string; clientId: string }; taskContext?: { taskId: string; expectedTaskRevision: string } },
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
 ): DraftResumeMetadataStore {
   if (config.taskContext && (typeof config.taskContext.taskId !== 'string' || !config.taskContext.taskId.trim()
@@ -16,14 +16,7 @@ export function createBrowserDraftResumeMetadataStore(
     endpoint: new URL(config.baseUrl).href.replace(/\/+$/, ''),
     ...(config.identityContext ? { identity: { issuer: config.identityContext.issuer, clientId: config.identityContext.clientId } } : {}),
     ...(config.taskContext ? { task: { taskId: config.taskContext.taskId, expectedTaskRevision: config.taskContext.expectedTaskRevision } } : {}),
-    tenantBinding: config.tenantBinding ? {
-      kind: config.tenantBinding.kind,
-      scope: (() => {
-        const scope = config.tenantBinding.kind === 'bound' ? config.tenantBinding.scope : config.tenantBinding.sentinelScope;
-        return { tenant: scope.tenant, workspace: scope.workspace, environment: scope.environment, cell: scope.cell };
-      })(),
-      headerMode: config.tenantBinding.kind === 'implicit' ? config.tenantBinding.headerMode : null,
-    } : null,
+    scopeKey: config.scopeKey ?? null,
   };
   return createBrowserScopedMetadataStore({ namespace: 'formspec-web:draft-resume:v1', context }, storage);
 }

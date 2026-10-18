@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page, type Route } from '@playwright/test';
+import { parseScopeKey, scopeKeyHeaders } from '../../src/shared/scope-key.ts';
 import type {
   ComponentDocument,
   ComponentGraphProjectionContext,
@@ -8,14 +9,10 @@ import type {
 
 const liveServerBaseUrl = process.env.FORMSPEC_WEB_LIVE_FORMSPEC_SERVER_URL?.replace(/\/+$/, '');
 
-const defaultScope = {
-  'x-formspec-tenant-id': process.env.FORMSPEC_WEB_LIVE_FORMSPEC_TENANT ?? 'tenant_managed_single_cell',
-  'x-formspec-workspace-id':
-    process.env.FORMSPEC_WEB_LIVE_FORMSPEC_WORKSPACE ?? 'workspace_managed_single_cell',
-  'x-formspec-environment-id':
-    process.env.FORMSPEC_WEB_LIVE_FORMSPEC_ENVIRONMENT ?? 'environment_production',
-  'x-formspec-cell-id': process.env.FORMSPEC_WEB_LIVE_FORMSPEC_CELL ?? 'cell_primary',
-} as const;
+// The `x-stack-scope-key` selector (ADR 0168 §1.1). A server serving one scope admits a request
+// that names none, so none is sent unless FORMSPEC_WEB_LIVE_SCOPE_KEY selects one of several.
+const liveScopeKey = process.env.FORMSPEC_WEB_LIVE_SCOPE_KEY;
+const defaultScope = scopeKeyHeaders(liveScopeKey === undefined ? undefined : parseScopeKey(liveScopeKey));
 
 const DEMO_FORM_ID = 'demo-intake';
 const SELECTED_FORM_ID = 'selected-demo-intake';

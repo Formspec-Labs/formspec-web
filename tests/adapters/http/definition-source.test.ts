@@ -8,6 +8,7 @@ import type {
   LocaleDocument,
 } from '../../../src/ports/index.ts';
 import { jsonResponse, problemResponse, recordingFetch } from './test-fetch.ts';
+import { testScopeKey } from '../../fixtures/scope.ts';
 
 const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
 const COMPONENT_GRAPH_CONTEXT_SCHEMA_ID = 'https://formspec.org/schemas/componentGraphProjectionContext/0.1';
@@ -468,7 +469,7 @@ describe('HttpDefinitionSource published Definition identity', () => {
     const payload = await publishedRuntime();
     const { fetch, requests } = recordingFetch(() => jsonResponse(payload));
     const source = new HttpDefinitionSource({ baseUrl: 'https://server.example.test', fetchImpl: fetch,
-      tenantBinding: { kind: 'bound', scope: { tenant: 'test-tenant', workspace: 'test-workspace', environment: 'test-environment', cell: 'test-cell' } } });
+      scopeKey: testScopeKey });
     const [definition, published] = await Promise.all([
       source.getDefinition(sampleFormDefinition.url),
       source.getPublishedDefinition(sampleFormDefinition.url, sampleFormDefinition),
@@ -478,10 +479,7 @@ describe('HttpDefinitionSource published Definition identity', () => {
     expect(requests).toHaveLength(1);
     expect(requests[0].method).toBe('GET');
     expect(requests[0].headers.get('authorization')).toBeNull();
-    expect(requests[0].headers.get('x-formspec-tenant-id')).toBe('test-tenant');
-    expect(requests[0].headers.get('x-formspec-workspace-id')).toBe('test-workspace');
-    expect(requests[0].headers.get('x-formspec-environment-id')).toBe('test-environment');
-    expect(requests[0].headers.get('x-formspec-cell-id')).toBe('test-cell');
+    expect(requests[0].headers.get('x-stack-scope-key')).toBe(testScopeKey);
     published.definition.items[0].label = 'Changed by caller';
     expect(await source.getPublishedDefinition(sampleFormDefinition.url, sampleFormDefinition)).toEqual(payload);
     expect(requests).toHaveLength(1);

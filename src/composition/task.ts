@@ -10,6 +10,7 @@ import { HttpTaskDraftLaunch } from '../adapters/http/task-draft-launch.ts';
 import { HttpTaskCandidateHydration, assertTaskHydrationSelection, taskRequiresExternalHydration, type HttpTaskCandidateHydrationConfig } from '../adapters/http/task-candidate-hydration.ts';
 import { HttpTaskCompletion } from '../adapters/http/task-completion.ts';
 import { defaultFetch, type HttpClientConfig } from '../adapters/http/http-client.ts';
+import { parseScopeKey } from '../shared/scope-key.ts';
 import type { HttpResponseSigningPolicy } from '../adapters/http/response-signing.ts';
 import type { DraftResumeMetadataStore } from '../adapters/browser/draft-resume-metadata.ts';
 import { createTaskResponseCompletion } from '../shared/task-response-completion.ts';
@@ -33,6 +34,11 @@ export async function createTaskComposition(config: {
   launchOperationId: string;
   taskHydration?: Pick<HttpTaskCandidateHydrationConfig, 'selection' | 'identity' | 'receiptVerifier' | 'elapsedNow'>;
 }, lifetime: CompletionLifetime) {
+  // Capture both deployment selections before callbacks or asynchronous work can change either.
+  const sourceScopeKey = parseScopeKey(config.source.scopeKey);
+  const wosScopeKey = parseScopeKey(config.wos.scopeKey);
+  const sourceSettings = { ...config.source, scopeKey: sourceScopeKey };
+  const wosSettings = { ...config.wos, scopeKey: wosScopeKey };
   const requiresHydration = taskRequiresExternalHydration(config.definition);
   const hasCandidateAuthority = !!config.signing.preSignCandidate || !requiresHydration && !!config.taskHydration;
   if (!hasCandidateAuthority || !config.source.accessToken || !config.wos.accessToken
@@ -43,8 +49,6 @@ export async function createTaskComposition(config: {
   }
   const selection = structuredClone({ launch: config.launch, completion: config.completion, draftKey: config.draftKey,
     definition: config.definition, locales: config.locales, formId: config.formId });
-  const sourceSettings = { ...config.source, tenantBinding: config.source.tenantBinding ? structuredClone(config.source.tenantBinding) : undefined };
-  const wosSettings = { ...config.wos, tenantBinding: config.wos.tenantBinding ? structuredClone(config.wos.tenantBinding) : undefined };
   const signing = Object.freeze({ ...config.signing });
   const resumeMetadata = config.resumeMetadata;
   const sourceGuard = config.assertCurrentSource;

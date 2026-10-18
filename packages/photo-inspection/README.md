@@ -13,7 +13,11 @@ The offline decoder kills its child on deadline or cancellation and waits for th
 - policy SHA256: `acfcfd5460da758dafecd3248b3e395c7170f51923e6668251296a0208c56293`
 - result SHA256: `56a3a9af49ad3137f93420558aaa39bfd859d3d0f0e475b1fe0b7ebe338a7985`
 
-Run `npm ci --ignore-scripts` and `npm test` here. This uses prebuilt sharp dependencies without native builds. Node >=20.9.0 is required.
+Run `npm ci --ignore-scripts` at the formspec-web root, then
+`npm run test:photo-inspection`. This package is an npm workspace; the root
+`npm test` and `npm run ci` also run its tests. This uses prebuilt sharp dependencies without native builds. Node >=20.9.0 is required.
+
+The package-local lockfile remains the install input for its independently built provider image.
 
 The registered adapter validates Source’s committed request shape, plain canonical JSON hashes, retained form-version and policy pins, selected instance/source mapping, full attachment inventory, actual bytes and dedicated Keycloak credentials. Source retains applicant authorization and publication authority. The adapter returns only typed `pending` or `unavailable` results, with exact request identifiers; it never returns `qualified`. Missing photo input remains Pending so Save can proceed. Measurements stay in a separate bounded diagnostic receipt. Fresh signed history declarations and task association remain separate.
 

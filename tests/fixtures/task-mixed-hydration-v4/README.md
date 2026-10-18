@@ -20,7 +20,7 @@ fixture outcome. It checks the full selected request and exact object bytes.
 A native-proof refusal control demonstrates that wire admission cannot bypass
 that selected verifier.
 
-Hydration SHA256: `a5bb4cf87f854acd19ad8e097c34e755cbe6a12ba8ce52a2aea628d5c8020bef`.
+Hydration SHA256: `b9e69f9331b9ff70943119ee149733054b97a49f18d2fc7051ce85689a989f8c`.
 Normative V4 schema: `src/adapters/http/source-schemas/evaluation-composition-v4.schema.json`
 (copied from formspec-server `schemas/`); the fixture's `producerProtocol` pins its
 `$id` and SHA256.

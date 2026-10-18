@@ -14,12 +14,11 @@ import type {
   ResponseActionInvokerResult,
   SubmitResult,
 } from '@formspec-org/react';
-import type { TenantBindingConfig } from '../../config/types.ts';
 import type {
   ResponseActionInvokerFactory,
   ResponseActionRuntimeContext,
 } from '../../ports/response-action-ledger.ts';
-import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
+import { scopeKeyHeaders, type ScopeKey } from '../../shared/scope-key.ts';
 import type { AnonymousSession } from './anonymous-session.ts';
 import {
   defaultFormIdResolver,
@@ -134,7 +133,7 @@ export type ResponseActionLedgerCapabilityProvider = (
 
 export interface HttpResponseActionLedgerCapabilityProviderOptions {
   endpoint: string;
-  tenantBinding?: TenantBindingConfig;
+  scopeKey?: ScopeKey;
   accessToken?: string | AccessTokenProvider;
   fetchImpl?: FetchLike;
 }
@@ -154,7 +153,7 @@ export interface ResponseActionLedgerCapabilityResponse {
 
 export interface HttpResponseActionLedgerInvokerOptions {
   endpoint: string;
-  tenantBinding?: TenantBindingConfig;
+  scopeKey?: ScopeKey;
   anonymousSessions: {
     sessionForForm(formUrl: string, version?: string): Promise<AnonymousSession>;
   };
@@ -221,7 +220,7 @@ export function createHttpResponseActionLedgerInvokerFactory(
       });
       await appendSessionOpBatch({
         endpoint: options.endpoint,
-        tenantBinding: options.tenantBinding,
+        scopeKey: options.scopeKey,
         fetchImpl: options.fetchImpl,
         capability,
         appendCommand: ledgerInvocation.command,
@@ -242,7 +241,7 @@ export function createHttpResponseActionLedgerCapabilityProvider(
 
   return async (request) => {
     const fetchImpl = fetchFor(options.fetchImpl);
-    const headers = new Headers(tenantHeaders(options.tenantBinding));
+    const headers = new Headers(scopeKeyHeaders(options.scopeKey));
     headers.set('accept', 'application/json');
     headers.set('content-type', 'application/json');
     const accessToken = await resolveAccessToken(options.accessToken);
@@ -398,7 +397,7 @@ function invocationSemanticOp(
 
 async function appendSessionOpBatch(input: {
   endpoint: string;
-  tenantBinding?: TenantBindingConfig;
+  scopeKey?: ScopeKey;
   fetchImpl?: FetchLike;
   capability: string;
   appendCommand: ResponseActionSessionOpBatchAppendCommand;
@@ -407,7 +406,7 @@ async function appendSessionOpBatch(input: {
     throw new Error('Response Actions Ledger capability must be a non-empty trimmed string.');
   }
   const fetchImpl = fetchFor(input.fetchImpl);
-  const headers = new Headers(tenantHeaders(input.tenantBinding));
+  const headers = new Headers(scopeKeyHeaders(input.scopeKey));
   headers.set('content-type', 'application/json');
   headers.set(RESPONSE_ACTION_LEDGER_CAPABILITY_HEADER, input.capability);
   const response = await fetchImpl(routeUrl(input.endpoint, RESPONSE_ACTION_LEDGER_APPEND_ROUTE), {
@@ -540,10 +539,6 @@ async function resolveAccessToken(
   accessToken: string | AccessTokenProvider | undefined,
 ): Promise<string | undefined> {
   return typeof accessToken === 'function' ? accessToken() : accessToken;
-}
-
-function tenantHeaders(binding?: TenantBindingConfig): HeadersInit {
-  return binding ? tenantScopeHeaders(binding) : {};
 }
 
 function routeUrl(endpoint: string, route: string): string {

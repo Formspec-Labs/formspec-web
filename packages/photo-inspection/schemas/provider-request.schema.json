@@ -47,36 +47,9 @@
           ]
         },
         "scope": {
-          "type": "object",
-          "properties": {
-            "tenant_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "workspace_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "environment_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "cell_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            }
-          },
-          "required": [
-            "tenant_id",
-            "workspace_id",
-            "environment_id",
-            "cell_id"
-          ],
-          "additionalProperties": false
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
         },
         "owner": {
           "type": "object"
@@ -85,36 +58,9 @@
           "type": "object",
           "properties": {
             "scope": {
-              "type": "object",
-              "properties": {
-                "tenant_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "workspace_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "environment_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "cell_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                }
-              },
-              "required": [
-                "tenant_id",
-                "workspace_id",
-                "environment_id",
-                "cell_id"
-              ],
-              "additionalProperties": false
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
             },
             "formId": {
               "type": "string",

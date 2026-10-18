@@ -13,12 +13,15 @@ import type { MixedProofCommand, SourceMixedProofApi } from '../../../src/adapte
 import type { SavedResponseDraft } from '../../../src/ports/response-signing.ts';
 import type { MixedHydrationWire } from '../../../src/ports/mixed-proof.ts';
 import type { EvaluationHydrationWire } from '../../../src/ports/evaluation-hydration.ts';
+const expectedIssuer = 'https://Source.test/independent/scope/';
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 function fixture(currentProducer = false, actualSource?: SourceMixedProofApi) {
-  const base = resolve(dirname(fileURLToPath(import.meta.url)), currentProducer ? '../../fixtures/task-mixed-hydration-v4' : '../../fixtures/mixed-proof-transport-v1/hydrate-task');
+  const base = resolve(dirname(fileURLToPath(import.meta.url)), currentProducer ? '../../fixtures/task-mixed-hydration-scoped-issuer' : '../../fixtures/mixed-proof-transport-v1/hydrate-task');
   const read = (name: string) => Uint8Array.from(readFileSync(resolve(base, name)));
   const json = (name: string) => JSON.parse(new TextDecoder().decode(read(name)));
   const selected = json('selection.json'), view = json('hydration.json'), actual = json('actual-hydration-fixture.json');
+  // The owning exporter supplies host-selected authority separately from proof/candidate bytes.
+  const selectedIssuer = currentProducer ? selected.expectedIssuer : expectedIssuer;
   const proofIndex = json('proof-index.json');
   const indexed = { version: 1, status: 'indexed', proofIndex,
     objects: actual.protectedObjects.map((item: { key: string; metadata: { checksum_sha256: string }; byteLength: number }, bufferIndex: number) =>
@@ -37,7 +40,9 @@ function fixture(currentProducer = false, actualSource?: SourceMixedProofApi) {
     verifyMixedProof(inputs) {
       if (nativeResult?.stage === 'verify') return encode(nativeResult.value);
       if (refusal) throw new Error(refusal);
-      expect(JSON.parse(new TextDecoder().decode(inputs.selectionBytes)).request).toEqual(selected.request);
+      const wire = JSON.parse(new TextDecoder().decode(inputs.selectionBytes));
+      expect(wire.request).toEqual(selected.request);
+      expect(wire.expectedIssuer).toBe(selectedIssuer);
       expect(inputs.buffers).toEqual(actual.protectedObjects.map((item: { file: string }) => read(item.file)));
       return encode(outcome);
     },
@@ -46,12 +51,11 @@ function fixture(currentProducer = false, actualSource?: SourceMixedProofApi) {
     addEventListener: (type, listener) => { if (type === 'message') listeners.add(listener); },
     removeEventListener: (type, listener) => { if (type === 'message') listeners.delete(listener); },
     terminate: () => { terminated++; detach(); } };
-  const config = { publication: selected.request.formVersion, registration: selected.registration, selection: selected.request.selection,
+  const config = { expectedIssuer: selectedIssuer, publication: selected.request.formVersion, registration: selected.registration, selection: selected.request.selection,
     worker: { createWorker: () => { created++; return port; }, module: new Uint8Array([1]), maxModuleBytes: 1, wholeOperationMilliseconds: 1000 },
     monotonicNow: () => now, utcNow: () => selected.currentAt,
     assertCurrent() { if (!current) throw new Error('Owner retired'); },
-    source: { baseUrl: 'https://source.example', accessToken: 'selected-owner', tenantBinding: { kind: 'bound' as const, scope: {
-      tenant: view.scope.tenant_id, workspace: view.scope.workspace_id, environment: view.scope.environment_id, cell: view.scope.cell_id } },
+    source: { baseUrl: 'https://source.example', accessToken: 'selected-owner', scopeKey: view.scope,
       fetchImpl: async (url: RequestInfo | URL, init?: RequestInit) => {
         calls++; now += 10;
         expect(new Headers(init?.headers).get('authorization')).toBe('Bearer selected-owner');
@@ -73,9 +77,17 @@ function fixture(currentProducer = false, actualSource?: SourceMixedProofApi) {
 }
 describe('task proof adapter binding (mock Source verifier; no native proof qualification)', () => {
   it('uses actual saved request and protected objects, subtracting elapsed time from original validity', async () => {
-    const f = fixture(); const result = await createTaskMixedProofVerifier(f.config).verify(f.input, f.lifetime);
+    const f = fixture(); const verifier = createTaskMixedProofVerifier(f.config);
+    f.config.expectedIssuer = 'https://source.test/caller-mutation';
+    const result = await verifier.verify(f.input, f.lifetime);
     expect(result.validForMilliseconds).toBe(90_000 - f.now()); expect(f.calls()).toBe(3); expect(f.terminated()).toBe(1);
   });
+  it.each([undefined, '', 'relative/issuer', 'https://source.test/has space'])(
+    'refuses invalid independent issuer %s before worker or HTTP calls', issuer => {
+      const f = fixture(); Object.assign(f.config, { expectedIssuer: issuer });
+      expect(() => createTaskMixedProofVerifier(f.config)).toThrow('issuer');
+      expect(f.created()).toBe(0); expect(f.calls()).toBe(0);
+    });
   it.each(['publication', 'candidate', 'bytes', 'selection'] as const)('refuses changed %s before protected reads', async change => {
     const f = fixture();
     if (change === 'publication') f.config.publication = { ...f.config.publication, form_id: 'foreign' };
@@ -93,8 +105,9 @@ describe('task proof adapter binding (mock Source verifier; no native proof qual
 
 // Exact current Source producer export. Transport and proof worker protocol are
 // real maintained adapters; Source's cryptographic API is an explicit double.
-async function taskHydrationFixture(actualSource?: SourceMixedProofApi, module?: Uint8Array<ArrayBuffer>) {
+async function taskHydrationFixture(actualSource?: SourceMixedProofApi, module?: Uint8Array<ArrayBuffer>, issuerOverride?: string) {
   const f = fixture(true, actualSource);
+  if (issuerOverride !== undefined) f.config.expectedIssuer = issuerOverride;
   if (module) { f.config.worker.module = module; f.config.worker.maxModuleBytes = module.byteLength; }
   const request = f.selected.request;
   const contextObject = f.actual.protectedObjects.find((item: { metadata: { object_kind: string } }) => item.metadata.object_kind === 'immutable:task-context-observation:v1');
@@ -250,6 +263,12 @@ it.skipIf(!realModule || !realWasm)('runs the complete task adapter/reader/worke
   const success = await taskHydrationFixture(source, module);
   try { const facts = await success.adapter.qualifySaved(success.saved, success.lifetime); facts.assertReady(); expect(facts.view).toEqual(success.input.view); }
   finally { success.adapter.dispose(); }
+  const foreign = await taskHydrationFixture(source, module, 'https://source.test/foreign/workspace/production');
+  try {
+    await expect(foreign.adapter.qualifySaved(foreign.saved, foreign.lifetime)).rejects.toMatchObject({
+      name: 'SourceMixedProofRefusalError', code: 'proof_refused',
+    });
+  } finally { foreign.adapter.dispose(); }
   tamper = true; const refusal = await taskHydrationFixture(source, module);
   try {
     const error = await refusal.adapter.qualifySaved(refusal.saved, refusal.lifetime).catch(failure => failure as Error);

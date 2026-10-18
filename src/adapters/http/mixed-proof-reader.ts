@@ -1,6 +1,6 @@
 import { isRecord } from '../../shared/is-record.ts';
 import canonicalize from 'canonicalize';
-import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
+import { selectsScope, type ScopeKey } from '../../shared/scope-key.ts';
 import { HttpClient } from './http-client.ts';
 import type { HttpClientConfig, HttpJsonResponseWithBytes } from './http-client.ts';
 import { decodeBoundedProofJson, boundedProofJsonField } from '../source-worker/wire.ts';
@@ -19,10 +19,10 @@ const keys = (value: Record<string, unknown>, fields: string[]) => Object.keys(v
 /** Uses owning references/index keys and actual current protected-object routes. */
 export class HttpMixedProofReader {
   private readonly client: HttpClient;
-  private readonly scopeHeaders: Readonly<Record<string, string>>;
+  private readonly scopeKey: ScopeKey;
   constructor(config: HttpClientConfig) {
-    if (!config.tenantBinding) throw new Error('Source mixed proof tenant binding required');
-    this.scopeHeaders = tenantScopeHeaders(config.tenantBinding);
+    if (config.scopeKey === undefined) throw new Error('Source mixed proof scope key required');
+    this.scopeKey = config.scopeKey;
     this.client = new HttpClient(config);
   }
   async readAll(hydration: HttpJsonResponseWithBytes<unknown>, request: InitialNativeRequest, index: MixedProofIndexer,
@@ -32,11 +32,7 @@ export class HttpMixedProofReader {
     check(); const selected = structuredClone(request);
     const hydrationBytes = snapshotInput(hydration.utf8Bytes, SMALL_CAP);
     const view = object(decodeBoundedProofJson(hydrationBytes));
-    if (this.scopeHeaders['x-formspec-tenant-id'] !== selected.scope.tenant_id
-      || this.scopeHeaders['x-formspec-workspace-id'] !== selected.scope.workspace_id
-      || this.scopeHeaders['x-formspec-environment-id'] !== selected.scope.environment_id
-      || this.scopeHeaders['x-formspec-cell-id'] !== selected.scope.cell_id
-      || view.operation !== 'hydrate' || view.draftId !== selected.draftId || view.draftVersion !== selected.draftVersion
+    if (!selectsScope(this.scopeKey, selected.scope) || view.operation !== 'hydrate' || view.draftId !== selected.draftId || view.draftVersion !== selected.draftVersion
       || view.candidateHash !== selected.candidateHash || view.requestHash !== selected.requestHash
       || !equal(view.scope, selected.scope) || !equal(view.owner, selected.owner) || !equal(view.selection, selected.selection)
       || !equal(view.sources, selected.sources) || !selected.draftId || ['.', '..'].includes(selected.draftId)) {

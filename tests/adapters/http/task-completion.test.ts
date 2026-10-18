@@ -2,7 +2,7 @@ import { RESPONSE_SCHEMA_DOCUMENT } from '../../../src/adapters/schema/canonical
 import { describe, expect, it, vi } from 'vitest';
 import { HttpTaskCompletion } from '../../../src/adapters/http/task-completion.ts';
 import { sampleFormResponse } from '../../../src/adapter-conformance/fixtures.ts';
-import type { TenantBindingConfig } from '../../../src/config/types.ts';
+import { testScopeKey } from '../../fixtures/scope.ts';
 import type { TaskSubmission } from '../../../src/ports/task-completion.ts';
 import { jsonResponse } from './test-fetch.ts';
 
@@ -149,32 +149,15 @@ describe('inactive typed WOS task completion adapter', () => {
   });
 });
 
-const selectedNativeScope = { tenant: 'selected-tenant', workspace: 'selected-workspace', environment: 'selected-environment', cell: 'selected-cell' };
-const selectedNativeHeaders = { 'x-wos-tenant-id': selectedNativeScope.tenant, 'x-wos-cell-id': selectedNativeScope.cell };
-const completionBindings: ReadonlyArray<readonly [string, TenantBindingConfig, Record<string, string>]> = [
-  ['bound', { kind: 'bound', scope: selectedNativeScope }, selectedNativeHeaders],
-  ['implicit sentinel', { kind: 'implicit', sentinelScope: selectedNativeScope, headerMode: 'sentinel-until-ext24' }, selectedNativeHeaders],
-  ['implicit omission', { kind: 'implicit', sentinelScope: selectedNativeScope, headerMode: 'omit-post-ext24' }, {}],
-];
-it.each(completionBindings)('uses only native WOS scope headers for %s task completion', async (_mode, tenantBinding, expected) => {
-  const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(outcome));
-  const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'wos-token', fetchImpl,
-    tenantBinding, assertCurrentAuth: () => {} });
-  await adapter.complete(submission, 'native-scope-operation', lifetime());
-  const actual = Object.fromEntries([...new Headers(fetchImpl.mock.calls[0][1]!.headers)].filter(([name]) => name.startsWith('x-')));
-  expect(actual).toEqual(expected);
-});
-it('captures completion scope before a caller can mutate the binding', async () => {
-  const scope = { ...selectedNativeScope };
-  const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(outcome));
-  const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'wos-token', fetchImpl,
-    tenantBinding: { kind: 'bound', scope }, assertCurrentAuth: () => {} });
-  scope.tenant = 'changed-after-construction';
-  await adapter.complete(submission, 'captured-native-scope-operation', lifetime());
-  const headers = new Headers(fetchImpl.mock.calls[0][1]!.headers);
-  expect(headers.get('x-wos-tenant-id')).toBe(selectedNativeScope.tenant);
-  expect(headers.has('x-formspec-tenant-id')).toBe(false);
-});
+it.each([['a bound', testScopeKey, { 'x-stack-scope-key': testScopeKey }], ['an unbound', undefined, {}]] as const)(
+  'selects the WOS scope by key for %s task completion', async (_mode, scopeKey, expected) => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(outcome));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'wos-token', fetchImpl,
+      scopeKey, assertCurrentAuth: () => {} });
+    await adapter.complete(submission, 'native-scope-operation', lifetime());
+    const actual = Object.fromEntries([...new Headers(fetchImpl.mock.calls[0][1]!.headers)].filter(([name]) => name.startsWith('x-')));
+    expect(actual).toEqual(expected);
+  });
 
 
 describe('fixed task Submit diagnostics', () => {

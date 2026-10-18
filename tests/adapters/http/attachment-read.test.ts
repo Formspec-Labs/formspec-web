@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { HttpAttachmentStore } from '../../../src/adapters/http/attachment-store.ts';
+import { testScopeKey as scopeKey } from '../../fixtures/scope.ts';
 
 const bytes = new TextEncoder().encode('retained photo bytes');
 const id = `upload_${'a'.repeat(64)}`;
 const path = `/runtime/forms/form-1/attachments/${id}`;
-const tenantBinding = { kind: 'bound' as const, scope: { tenant: 'tenant', workspace: 'workspace', environment: 'environment', cell: 'cell' } };
 const descriptor = {
   kind: 'attachment-ref', uri: `urn:formspec:attachment:${id}`, url: `urn:formspec:attachment:${id}`,
   upload_id: id, read_url: path, hash: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
@@ -20,7 +20,7 @@ function setup(response = () => reply(), maxUploadBytes: number | undefined = 10
   const token = vi.fn(async () => 'private-test-token');
   const fetchImpl = vi.fn(async () => response());
   const store = new HttpAttachmentStore({
-    baseUrl: 'https://server.test', formId: 'form-1', accessToken: token, fetchImpl, maxUploadBytes, tenantBinding,
+    baseUrl: 'https://server.test', formId: 'form-1', accessToken: token, fetchImpl, maxUploadBytes, scopeKey,
   });
   return { store, token, fetchImpl };
 }
@@ -68,11 +68,11 @@ describe('HttpAttachmentStore owned read', () => {
     expect(ref.extraRetainedField).toBe('kept');
   });
 
-  it('requires scoped read headers before acquiring a session', async () => {
+  it('requires the scope key before acquiring a session', async () => {
     const token = vi.fn(async () => 'token');
     const fetchImpl = vi.fn();
     const store = new HttpAttachmentStore({ baseUrl: 'https://server.test', formId: 'form-1', maxUploadBytes: 100, accessToken: token, fetchImpl });
-    await expect(store.read(descriptor)).rejects.toThrow(/scope headers/);
+    await expect(store.read(descriptor)).rejects.toThrow(/scope key/);
     expect(token).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();
   });
@@ -108,19 +108,14 @@ describe('HttpAttachmentStore owned read', () => {
     await expect(setup(() => reply(changed)).store.read(descriptor)).rejects.toThrow(/digest/);
   });
 
-  it('applies all four scope headers and cancels after token acquisition before HTTP', async () => {
+  it('selects the scope by key and cancels after token acquisition before HTTP', async () => {
     const controller = new AbortController();
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
-      expect(headers.get('x-formspec-tenant-id')).toBe('tenant');
-      expect(headers.get('x-formspec-workspace-id')).toBe('workspace');
-      expect(headers.get('x-formspec-environment-id')).toBe('environment');
-      expect(headers.get('x-formspec-cell-id')).toBe('cell');
+      expect(headers.get('x-stack-scope-key')).toBe(scopeKey);
       return reply();
     });
-    const config = { baseUrl: 'https://server.test', formId: 'form-1', maxUploadBytes: 100, fetchImpl,
-      tenantBinding: { kind: 'bound' as const, scope: { tenant: 'tenant', workspace: 'workspace', environment: 'environment', cell: 'cell' } },
-    };
+    const config = { baseUrl: 'https://server.test', formId: 'form-1', maxUploadBytes: 100, fetchImpl, scopeKey };
     await new HttpAttachmentStore({ ...config, accessToken: 'test-token' }).read(descriptor);
     fetchImpl.mockClear();
     const store = new HttpAttachmentStore({ ...config, accessToken: async () => { controller.abort(); return 'test-token'; } });
@@ -167,7 +162,7 @@ describe('HttpAttachmentStore owned read', () => {
 
   it('refuses a missing session and an already aborted review before HTTP', async () => {
     const fetchImpl = vi.fn();
-    const store = new HttpAttachmentStore({ baseUrl: 'https://server.test', formId: 'form-1', maxUploadBytes: 100, fetchImpl, tenantBinding });
+    const store = new HttpAttachmentStore({ baseUrl: 'https://server.test', formId: 'form-1', maxUploadBytes: 100, fetchImpl, scopeKey });
     await expect(store.read(descriptor)).rejects.toThrow(/session/);
     const controller = new AbortController(); controller.abort();
     await expect(store.read(descriptor, { signal: controller.signal })).rejects.toThrow();

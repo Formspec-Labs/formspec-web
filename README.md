@@ -19,8 +19,9 @@ npm ci
 npm run dev
 ```
 
-The app boots in demo mode and renders the bundled sample form when
-`VITE_FORMSPEC_WEB_SERVER_URL` is unset.
+Without `VITE_FORMSPEC_WEB_SERVER_URL`, the app displays “This site is not ready.”
+A configured backend also requires its deployment scope key and a published
+form selection or complete signed-app configuration.
 
 Docker quickstart:
 

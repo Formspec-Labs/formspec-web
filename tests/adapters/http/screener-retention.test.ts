@@ -4,8 +4,8 @@ import { computeJcsSha256Digest as hash } from '../../../src/adapters/http/respo
 import type { RetainScreenerCompletion, ScreenerRunView, ScreenerSelection } from '../../../src/ports/screener-retention.ts';
 import type { SavedResponseDraft } from '../../../src/ports/response-signing.ts';
 import { recordingFetch, type CapturedHttpRequest } from './test-fetch.ts';
+import { otherScopeKey, testScopeKey as scope } from '../../fixtures/scope.ts';
 
-const scope = { tenant_id: 'tenant', workspace_id: 'workspace', environment_id: 'environment', cell_id: 'cell' };
 const ownerTemplate = { sessionId: 'source-session', subjectRef: 'source-subject', authenticated: {
   issuer: 'https://id.example', subject: 'oidc-subject', clientId: 'client', principalId: 'principal',
   profile: 'profile', actorRef: 'distinct-source-actor', subjectRef: 'source-subject', sessionId: 'source-session',
@@ -71,7 +71,7 @@ async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpReque
     return response(mutate ? mutate(view, request) : view);
   });
   const config = { baseUrl: 'https://source.example', selection, selectionHash, accessToken: 'owner-token', fetchImpl: fetch,
-    tenantBinding: { kind: 'bound' as const, scope: { tenant: 'tenant', workspace: 'workspace', environment: 'environment', cell: 'cell' } } };
+    scopeKey: scope };
   return { adapter: new HttpScreenerRetention(config), config, completion, requests, saved, context };
 }
 
@@ -84,10 +84,16 @@ describe('public Source Screener retention adapter', () => {
     expect(requests).toHaveLength(2);
     expect(requests[0]?.url).toBe('https://source.example/forms/form%2Fid/screener-runs');
     expect(requests[0]?.body).toEqual({ selectionHash: first.run.selectionHash, answers: { yes: { state: 'answered', value: false } } });
-    expect(requests[0]?.headers.get('idempotency-key')).toBe('same-act');
+    // Source's screener-run POST is keyed: the act's one key, reused when the same act is retried.
+    expect(requests.map(request => request.headers.get('idempotency-key'))).toEqual(['same-act', 'same-act']);
     expect(requests[0]?.headers.get('authorization')).toBe('Bearer owner-token');
-    for (const key of ['tenant', 'workspace', 'environment', 'cell']) expect(requests[0]?.headers.get(`x-formspec-${key}-id`)).toBe(key);
+    expect(requests[0]?.headers.get('x-stack-scope-key')).toBe(scope);
     expect(Object.isFrozen(first.run.owner.authenticated)).toBe(true);
+  });
+
+  it.each([['a foreign', otherScopeKey], ['no', undefined]] as const)('refuses %s scope key at construction', async (_mode, scopeKey) => {
+    const { config } = await setup();
+    expect(() => new HttpScreenerRetention({ ...config, scopeKey })).toThrow('selection binding mismatch');
   });
 
   it('PUT reevaluates exact issued typed answers under CAS and owning headers, then GET reconciles the revision', async () => {

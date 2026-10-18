@@ -1,6 +1,7 @@
 import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
 import { decodeBase64 } from '../../shared/base64.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
+import { requireSigningIssuer } from '../../shared/signing-issuer.ts';
 import canonicalize from 'canonicalize';
 import { extractServiceRequestOutputs, hashSigningContent, planServiceRequest, resolveAuthoredSigningContent, resolveServiceRequest } from '@formspec-org/engine/render';
 import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
@@ -32,6 +33,8 @@ export interface HttpResponseSigningPolicy {
   validateContent: (value: unknown) => boolean;
   signingProfileDigest: (response: FormResponse) => Promise<string>;
   keyId: string;
+  /** Independent trusted deployment issuer; never inferred from a Response. */
+  expectedIssuer: string;
   now?: () => string;
   /** Trusted Prepare-only admission of the existing verified saved revision. */
   prePrepareCandidate?: (input: Readonly<{ saved: SavedResponseDraft; response: FormResponse; assertCurrent: () => void }>)
@@ -130,6 +133,7 @@ export class HttpResponseSigning implements ResponseSigning {
   private readonly acts = new Map<string, FrozenAct>();
   constructor(private readonly config: HttpResponseSigningConfig) {
     if (!config.keyId.trim()) throw new Error('Delegated signing key identity is required');
+    this.config = Object.freeze({ ...config, expectedIssuer: requireSigningIssuer(config.expectedIssuer) });
   }
 
   private readonly saves = new Map<string, { identity: string; scope: string; generation: number; settled: boolean; pending: Promise<SavedResponseDraft> }>();
@@ -337,7 +341,7 @@ export class HttpResponseSigning implements ResponseSigning {
         const version = input.preparation.draft.version + 1;
         const candidate = structuredClone(input.preparation.response);
         candidate.extensions = { ...candidate.extensions, 'x-formspec-signing-content': {
-          version: '1.0', draftId: input.preparation.draft.id, draftVersion: version,
+          version: '1.0', issuer: this.config.expectedIssuer, draftId: input.preparation.draft.id, draftVersion: version,
           actorRef: input.preparation.actor.id, signerName: input.assent.signerName, signedAt,
           consentAccepted: true, content: input.preparation.content,
           documentHash: await hashSigningContent(input.preparation.content, this.config.validateContent), documentHashAlgorithm: 'sha-256',
@@ -660,8 +664,10 @@ export class HttpResponseSigning implements ResponseSigning {
 
 /** Checks maintained digest/content/mirrors and key metadata, not independent cryptographic verification. */
 export async function assertDelegatedSignedResponseConsistency(response: FormResponse, policy: HttpResponseSigningPolicy): Promise<void> {
+  const expectedIssuer = requireSigningIssuer(policy.expectedIssuer);
   const candidate = structuredClone(response); delete candidate.authoredSignatures;
   const commitment = candidate.extensions?.['x-formspec-signing-content'];
+  if (commitment?.issuer !== expectedIssuer) throw new Error('Delegated signing issuer differs from the configured issuer');
   const signatures = response.authoredSignatures; const signature = signatures?.[0]; const payload = signature?.signedPayload;
   if (!commitment || !policy.validateContent(commitment.content)
     || await hashSigningContent(commitment.content, policy.validateContent) !== commitment.documentHash) {

@@ -77,7 +77,6 @@ function configuredProfile(profile: FormspecWebConfig): FormspecWebConfig {
       ...profile.referenceAdapters,
       formspecStack: {
         ...profile.referenceAdapters?.formspecStack,
-        tenantHeaderDialect: 'formspec',
         formspecServerUrl: 'https://formspec.example.gov',
         surfaceBundle: validConfig(),
       },

@@ -96,11 +96,15 @@ test.describe('signed respondent production root', () => {
     expect(accessibility.violations).toEqual([]);
 
     await page.getByRole('button', { name: 'Submit', exact: true }).click();
-    await expect(page).toHaveURL(/\/receipt\/CASE-301$/u);
+    await expect.poll(() => routes.requests.some(({ url }) => url.endsWith('/drafts/DRAFT-301/submit'))).toBe(true);
+    const submitted = routes.requests.find(({ url }) => url.endsWith('/drafts/DRAFT-301/submit'))?.body as { canonical_response: { id: string } };
+    const responseId = submitted.canonical_response.id;
+    const receiptPath = `/receipt/${encodeURIComponent(responseId)}`;
+    await expect(page).toHaveURL(new URL(receiptPath, page.url()).href);
     await expect(
       page.getByRole('heading', { level: 1, name: 'Your receipt' }),
     ).toBeVisible();
-    await expect(page.getByText('CASE-301')).toBeVisible();
+    await expect(page.getByText(responseId)).toBeVisible();
     await expect(page.getByText('accepted')).toBeVisible();
     await expect(page.getByLabel('App verification')).toBeVisible();
     await expect(page.locator('h1')).toHaveCount(1);
@@ -148,14 +152,14 @@ test.describe('signed respondent production root', () => {
       'Ada Lovelace',
     );
     await page.goForward();
-    await expect(page).toHaveURL(/\/receipt\/CASE-301$/u);
-    await expect(page.getByText('CASE-301')).toBeVisible();
+    await expect(page).toHaveURL(new URL(receiptPath, page.url()).href);
+    await expect(page.getByText(responseId)).toBeVisible();
 
     await page.reload();
     await expect(
       page.getByRole('heading', { level: 1, name: 'Your receipt' }),
     ).toBeVisible();
-    await expect(page.getByText('CASE-301')).toBeVisible();
+    await expect(page.getByText(responseId)).toBeVisible();
     await expect(page.getByText('accepted')).toBeVisible();
     await expect(page.getByLabel('App verification')).toBeVisible();
     await expect(page).toHaveTitle(BUNDLE_TITLE);

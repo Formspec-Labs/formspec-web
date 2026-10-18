@@ -1,5 +1,6 @@
 import type { EvaluationProviderRegistration } from '../../../src/ports/evaluation-hydration.ts';
 import type { InitialNativeRequest } from '../../../src/ports/initial-mixed-proof.ts';
+import { testScopeKey as scope } from '../../fixtures/scope.ts';
 
 // SCHEMA-ONLY MOCK: arbitrary digests/null leaf receipts are not owning proof successes.
 // These values exercise caller lifecycle only. Actual Source/native/WASM parity is separate.
@@ -8,7 +9,6 @@ export const at = '2026-10-10T12:00:00Z';
 export const until = '2026-10-10T12:00:30Z';
 export const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 export function mockFixture() {
-  const scope = { tenant_id: 't', workspace_id: 'w', environment_id: 'e', cell_id: 'c' };
   const owner = { sessionId: 'session', subjectRef: 'subject', authenticated: {
     issuer: 'https://issuer.example', subject: 'oidc', clientId: null, principalId: 'principal', profile: 'profile',
     actorRef: 'actor', subjectRef: 'subject', sessionId: 'session',

@@ -5,8 +5,9 @@ import { resolveActiveConfig } from '../../src/config/runtime.ts';
 import { publicPortalProfile } from '../../src/profiles/profiles.ts';
 import { webcrypto, createHash } from 'node:crypto';
 import { sampleFormDefinition, sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
+import { deriveScopeKey } from '../../src/shared/scope-key.ts';
 
-const tenantBinding = { kind: 'bound' as const, scope: { tenant: 'tenant_managed_single_cell', workspace: 'workspace_managed_single_cell', environment: 'environment_production', cell: 'cell_primary' } };
+const scope = { tenant: 'tenant-managed-single-cell', workspace: 'workspace-managed-single-cell', environment: 'production' };
 afterEach(() => vi.unstubAllGlobals());
 
 describe('local package preview with real submit', () => {
@@ -23,8 +24,8 @@ describe('local package preview with real submit', () => {
       if (url.endsWith('/runtime/forms/server-form-id')) return new Response(JSON.stringify({ definition: sampleFormDefinition }), { headers: { 'content-type': 'application/json' } });
       return new Response(JSON.stringify({ title: 'not-found', detail: 'active form version not found', status: 404 }), { status: 404, headers: { 'content-type': 'application/problem+json' } });
     });
-    const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'http://127.0.0.1:18080', tenantBinding, attachmentMaxUploadBytes: 1234 });
-    expect(config.tenantBinding).toEqual(tenantBinding);
+    const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'http://127.0.0.1:18080', scopeKey: deriveScopeKey(scope), attachmentMaxUploadBytes: 1234 });
+    expect(config.scopeKey).toBe(deriveScopeKey(scope));
     const composition = createDefaultComposition(config, { initialDefinitionUrl: 'server-form-id', packageUrl: '/package.json' });
     expect(await composition.identityProvider.discover()).toEqual([]);
     expect(composition.localPackagePreview).toBe(true);
@@ -34,9 +35,6 @@ describe('local package preview with real submit', () => {
     expect(composition.attachmentStore.maxUploadBytes).toBe(1234);
     await expect(composition.draftStore.save({ formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version }, sampleFormResponse)).rejects.toMatchObject({ status: 404 });
     expect(requests[1]?.url).toBe('http://127.0.0.1:18080/runtime/forms/server-form-id/sessions/anonymous');
-    expect(requests[0]?.headers.get('x-formspec-tenant-id')).toBe(tenantBinding.scope.tenant);
-    expect(requests[0]?.headers.get('x-formspec-workspace-id')).toBe(tenantBinding.scope.workspace);
-    expect(requests[0]?.headers.get('x-formspec-environment-id')).toBe(tenantBinding.scope.environment);
-    expect(requests[0]?.headers.get('x-formspec-cell-id')).toBe(tenantBinding.scope.cell);
+    expect(requests[0]?.headers.get('x-stack-scope-key')).toBe(deriveScopeKey(scope));
   });
 });

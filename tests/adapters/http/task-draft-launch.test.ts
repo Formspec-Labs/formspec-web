@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { HttpTaskDraftLaunch } from '../../../src/adapters/http/task-draft-launch.ts';
 import { createTaskComposition } from '../../../src/composition/task.ts';
 import { sampleFormDefinition, sampleFormResponse } from '../../../src/adapter-conformance/fixtures.ts';
+import { taskCompletionFixture } from '../../fixtures/task-completion.ts';
+import { otherScopeKey, testScopeKey } from '../../fixtures/scope.ts';
 
 const selection = { version: 1 as const, taskId: 'opaque-actual-task', expectedTaskRevision: 'actual-revision',
   formVersionId: 'actual-publication', formVersionHash: `sha256:${'a'.repeat(64)}` };
@@ -33,13 +35,13 @@ describe('Source-owned task launch', () => {
   });
   it('refuses missing task hydration before launching Source', async () => {
     const fetchImpl = vi.fn();
-    const config = { source: { baseUrl: 'https://source.example.test', accessToken: 'actual-token', fetchImpl },
-      wos: { baseUrl: 'https://wos.example.test', accessToken: 'actual-token' }, launch: selection,
+    const config = { source: { scopeKey: testScopeKey, baseUrl: 'https://source.example.test', accessToken: 'actual-token', fetchImpl },
+      wos: { scopeKey: otherScopeKey, baseUrl: 'https://wos.example.test', accessToken: 'actual-token' }, launch: selection,
       completion: { taskId: selection.taskId, processId: 'actual-process', definitionUrl: sampleFormDefinition.url,
         definitionVersion: sampleFormDefinition.version }, draftKey: { formUrl: sampleFormDefinition.url,
         formVersion: sampleFormDefinition.version, subjectRef: 'actual-owner' }, formId: 'actual-form',
       definition: sampleFormDefinition, locales: [], signing: { validateResponse: () => true, validateContent: () => true,
-        signingProfileDigest: async () => 'hash', keyId: 'actual-key' },
+        signingProfileDigest: async () => 'hash', keyId: 'actual-key', expectedIssuer: 'https://source.example.test/tenant/workspace/production' },
       resumeMetadata: { read: () => undefined, write: () => {}, remove: () => {} },
       assertCurrentSource: () => {}, assertCurrentWos: () => {}, launchOperationId: 'same-key' };
     await expect(createTaskComposition(config, lifetime())).rejects.toThrow('task candidate hydration');
@@ -66,13 +68,12 @@ it('validates the selected completion wait through task composition before any S
 function taskConfig(fetchImpl: typeof fetch) {
   const processId = 'urn:wos:default_process_01hw7rm71vfay8vvw14d2pf2db';
   const launch = { ...selection, taskId: `${processId}/tasks/actual` };
-  return { source: { baseUrl: 'https://source.example.test', accessToken: 'actual-token', fetchImpl,
-      tenantBinding: { kind: 'bound' as const, scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } } },
-    wos: { baseUrl: 'https://wos.example.test', accessToken: 'actual-token' }, launch,
+  return { source: { scopeKey: testScopeKey, baseUrl: 'https://source.example.test', accessToken: 'actual-token', fetchImpl },
+    wos: { scopeKey: otherScopeKey, baseUrl: 'https://wos.example.test', accessToken: 'actual-token' }, launch,
     completion: { taskId: launch.taskId, processId, definitionUrl: sampleFormDefinition.url, definitionVersion: sampleFormDefinition.version },
     draftKey: { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version, subjectRef: 'actual-owner' },
     formId: 'actual-form', definition: sampleFormDefinition, locales: [],
-    signing: { validateResponse: () => true, validateContent: () => true, signingProfileDigest: async () => 'hash', keyId: 'actual-key',
+    signing: { validateResponse: () => true, validateContent: () => true, signingProfileDigest: async () => 'hash', keyId: 'actual-key', expectedIssuer: 'https://source.example.test/tenant/workspace/production',
       preSignCandidate: async () => ({ assertCurrent: () => {} }) },
     resumeMetadata: { read: () => undefined, write: () => {}, remove: () => {} },
     assertCurrentSource: () => {}, assertCurrentWos: () => {}, launchOperationId: 'same-key' };
@@ -115,10 +116,10 @@ it('composes the selected task candidate adapter against the actual launch resul
   const launchView = saved.evidence;
   const pendingView = { ...original.view, providerReceipt: null, results: [{ status: 'pending' as const,
     instanceName: 'facts', sourceRef: 'screening', reason: 'actual-task-origin-unavailable' }] };
-  const fetchImpl = vi.fn(async (url: RequestInfo | URL) => Response.json(new URL(String(url)).pathname === '/runtime/task-drafts' ? launchView : pendingView,
+  const fetchImpl = vi.fn(async (url: RequestInfo | URL, _init?: RequestInit) => Response.json(new URL(String(url)).pathname === '/runtime/task-drafts' ? launchView : pendingView,
     { headers: { 'cache-control': 'no-store' } }));
   const base = taskConfig(fetchImpl);
-  const composed = await createTaskComposition({ ...base, source: { ...base.source, tenantBinding: original.config.tenantBinding },
+  const composed = await createTaskComposition({ ...base, source: { ...base.source, scopeKey: original.config.scopeKey },
     definition: original.config.definition, draftKey: saved.draftKey, formId: original.view.selection.formId,
     launch: { ...base.launch, formVersionId: original.view.selection.formVersionId, formVersionHash: original.view.formVersionHash },
     completion: { ...base.completion, definitionUrl: original.config.definition.url!, definitionVersion: original.config.definition.version },
@@ -129,6 +130,7 @@ it('composes the selected task candidate adapter against the actual launch resul
   expect(facts.view.results[0].status).toBe('pending');
   expect(() => facts.assertReady()).toThrow('pending or unavailable');
   expect(fetchImpl).toHaveBeenCalledTimes(2);
+  for (const [, init] of fetchImpl.mock.calls) expect(new Headers(init?.headers).get('x-stack-scope-key')).toBe(original.config.scopeKey);
   composed.candidateHydration!.dispose();
 });
 
@@ -142,4 +144,39 @@ it('forwards trusted nonserialized Save lifetime options through the task wrappe
       targetDefinition: { url: sampleFormDefinition.url }, actions: [{ id: 'save', intent: 'save-draft', effects: [{ type: 'serviceRequest', requestRef: 'save', idempotencyKey: '@invocation.id' }] }] }, artifactRef: 'urn:test:save', artifactDigest: `sha256:${'a'.repeat(64)}`,
       actionRef: 'save', requestRef: 'save' } }, { assertBeforeDispatch: guard })).rejects.toThrow('task save lifetime retired');
   expect(guard).toHaveBeenCalledOnce(); expect(fetchImpl).toHaveBeenCalledOnce();
+});
+
+
+it.each(['guard', 'settings-accessor'] as const)('routes distinct Source reads and WOS completion through their actual adapters despite caller %s', async mutation => {
+  const sourceFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(view));
+  const config = taskConfig(sourceFetch);
+  Object.assign(config.source, { scopeKey: testScopeKey });
+  const wosFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({
+    taskId: config.completion.taskId, processId: config.completion.processId, outcome: 'completed',
+    newStatus: 'submitted', occurredAt: '2026-10-18T12:00:00Z' }));
+  Object.assign(config.wos, { scopeKey: otherScopeKey, fetchImpl: wosFetch });
+  const mutate = () => { Object.assign(config.source, { scopeKey: otherScopeKey }); Object.assign(config.wos, { scopeKey: testScopeKey }); };
+  if (mutation === 'guard') config.assertCurrentSource = mutate;
+  else Object.defineProperty(config.source, 'fetchImpl', { enumerable: true, get() { mutate(); return sourceFetch; } });
+  const composed = await createTaskComposition(config, lifetime());
+  await composed.draftStore.load(config.draftKey);
+  const prepared = await composed.completion.capture(taskCompletionFixture(sampleFormResponse), lifetime());
+  await composed.completion.complete(prepared, 'scope-routing-completion', lifetime());
+  expect(sourceFetch).toHaveBeenCalledTimes(2);
+  for (const [, init] of sourceFetch.mock.calls) expect(new Headers(init?.headers).get('x-stack-scope-key')).toBe(testScopeKey);
+  expect(wosFetch).toHaveBeenCalledOnce();
+  expect(new Headers(wosFetch.mock.calls[0][1]?.headers).get('x-stack-scope-key')).toBe(otherScopeKey);
+});
+
+it.each(['source', 'wos'] as const)('refuses missing or malformed %s selection before callbacks or I/O', async service => {
+  for (const scopeKey of [undefined, null, '', 'A'.repeat(64), 'a'.repeat(63), 17]) {
+    const fetchImpl = vi.fn();
+    const config = taskConfig(fetchImpl);
+    Object.assign(config[service], { scopeKey });
+    const callback = vi.fn();
+    config.assertCurrentSource = callback; config.assertCurrentWos = callback;
+    config.source.accessToken = callback as unknown as string; config.wos.accessToken = callback as unknown as string;
+    await expect(createTaskComposition(config, { ...lifetime(), assertCurrent: callback })).rejects.toThrow('scope key');
+    expect(fetchImpl).not.toHaveBeenCalled(); expect(callback).not.toHaveBeenCalled();
+  }
 });

@@ -1040,7 +1040,6 @@ describe('RespondentRuntime identity sign-in', () => {
     });
     const responseActionInvoker = createHttpResponseActionLedgerInvokerFactory({
       endpoint,
-      tenantBinding: publicPortalProfile.tenantBinding,
       anonymousSessions,
       capabilityProvider: async (request) => {
         capabilityRequests.push({

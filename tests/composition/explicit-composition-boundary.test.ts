@@ -11,7 +11,7 @@ import type { FormspecWebConfig } from '../../src/config/types.ts';
 
 const config: FormspecWebConfig = { ...publicPortalProfile,
   ports: { ...publicPortalProfile.ports, definitionSource: 'reference-http', draftStore: 'reference-http', submitTransport: 'reference-http' },
-  referenceAdapters: { formspecStack: { formspecServerUrl: 'https://service.example.test', tenantHeaderDialect: 'formspec' } },
+  referenceAdapters: { formspecStack: { formspecServerUrl: 'https://service.example.test' } },
 };
 const route: RouteNarrowing = { routeCite: '/neutral', initialDefinitionUrlSentinel: 'urn:test:no-form', consumes: new Set(), identityBound: false };
 

@@ -13,6 +13,7 @@ const projectName = `formspec-web-quickstart-${process.pid}`;
 const composeEnv = {
   ...process.env,
   FORMSPEC_WEB_SERVER_URL: '',
+  FORMSPEC_WEB_SCOPE_KEY: '',
 };
 const instances = [
   {
@@ -20,14 +21,12 @@ const instances = [
     port: 8080,
     profileName: 'publicPortal',
     brandName: 'formspec-public',
-    respondentName: 'Ada Public',
   },
   {
     url: 'http://127.0.0.1:8081',
     port: 8081,
     profileName: 'departmentApp',
     brandName: 'formspec-department',
-    respondentName: 'Grace Department',
   },
 ];
 
@@ -144,22 +143,16 @@ async function assertRenderedInstance(browser, instance) {
 
   try {
     await page.goto('/');
-    await page.getByRole('heading', { name: 'Demo Benefits Intake' }).waitFor({
+    await page.getByRole('heading', { name: 'This site is not ready.' }).waitFor({
       state: 'visible',
       timeout: 30_000,
     });
     await assertAttribute(page, 'html', 'data-formspec-brand', instance.brandName);
 
-    await page.getByLabel('Full name').fill(instance.respondentName);
-    await page.getByLabel('Email address').fill(`${instance.profileName}@example.test`);
-    await page.getByLabel('Preferred contact method').selectOption('email');
-    await page.getByLabel('Member name').first().fill(instance.respondentName);
-    await page.getByRole('button', { name: 'Submit' }).click();
-    await page.getByRole('heading', { name: 'Submission received' }).waitFor({
-      state: 'visible',
-      timeout: 30_000,
-    });
-    await page.getByText(/^STUB-/).waitFor({ state: 'visible', timeout: 30_000 });
+    if (await page.locator('#formspec-static-shell, form').count() !== 0
+      || await page.getByRole('button', { name: 'Submit', exact: true }).count() !== 0) {
+      throw new Error('Unconfigured deployment exposed a loading shell or form');
+    }
 
     if (consoleFindings.length > 0) {
       throw new Error(

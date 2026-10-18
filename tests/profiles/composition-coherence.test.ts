@@ -101,7 +101,7 @@ function* narrowedCompositionCoherenceCases(): Generator<{
       name: `${label} is coherent`,
       build: () => createRouteNarrowedComposition({ route, config: {
         ...departmentAppProfile,
-        referenceAdapters: { formspecStack: { formspecServerUrl: 'https://service.example.test', tenantHeaderDialect: 'formspec' } },
+        referenceAdapters: { formspecStack: { formspecServerUrl: 'https://service.example.test' } },
       } }),
     };
   }

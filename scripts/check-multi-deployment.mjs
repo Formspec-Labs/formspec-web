@@ -57,14 +57,12 @@ const containers = [
     name: `formspec-web-multi-public-${process.pid}`,
     profileName: 'publicPortal',
     brandName: 'formspec-public',
-    respondentName: 'Ada Public',
     surfaceBundle: respondentSurfaceBundle,
   },
   {
     name: `formspec-web-multi-department-${process.pid}`,
     profileName: 'departmentApp',
     brandName: 'formspec-department',
-    respondentName: 'Grace Department',
   },
 ];
 
@@ -187,22 +185,16 @@ async function assertRenderedInstance(browser, container) {
 
   try {
     await page.goto('/');
-    await page.getByRole('heading', { name: 'Demo Benefits Intake' }).waitFor({
+    await page.getByRole('heading', { name: 'This site is not ready.' }).waitFor({
       state: 'visible',
       timeout: 30_000,
     });
     await assertAttribute(page, 'html', 'data-formspec-brand', container.brandName);
 
-    await page.getByLabel('Full name').fill(container.respondentName);
-    await page.getByLabel('Email address').fill(`${container.profileName}@example.test`);
-    await page.getByLabel('Preferred contact method').selectOption('email');
-    await page.getByLabel('Member name').first().fill(container.respondentName);
-    await page.getByRole('button', { name: 'Submit' }).click();
-    await page.getByRole('heading', { name: 'Submission received' }).waitFor({
-      state: 'visible',
-      timeout: 30_000,
-    });
-    await page.getByText(/^STUB-/).waitFor({ state: 'visible', timeout: 30_000 });
+    if (await page.locator('#formspec-static-shell, form').count() !== 0
+      || await page.getByRole('button', { name: 'Submit', exact: true }).count() !== 0) {
+      throw new Error('Unconfigured deployment exposed a loading shell or form');
+    }
 
     if (consoleFindings.length > 0) {
       throw new Error(

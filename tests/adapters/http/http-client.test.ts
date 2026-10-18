@@ -1,16 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HttpClient } from '../../../src/adapters/http/http-client.ts';
-import { departmentAppProfile } from '../../../src/profiles/index.ts';
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
+import { parseScopeKey, type ScopeKey } from '../../../src/shared/scope-key.ts';
 import { jsonResponse, problemResponse, recordingFetch } from './test-fetch.ts';
 
 describe('HttpClient', () => {
-  it('sends tenant headers, bearer token, and idempotency key', async () => {
+  it('sends the scope key selector, bearer token, and idempotency key', async () => {
     const token = 'token-1';
+    const scopeKey = parseScopeKey('a'.repeat(64));
     const { fetch, requests } = recordingFetch(() => jsonResponse({ ok: true }));
     const client = new HttpClient({
       baseUrl: 'https://formspec-server.example.test/',
-      tenantBinding: departmentAppProfile.tenantBinding,
+      scopeKey,
       accessToken: () => token,
       fetchImpl: fetch,
     });
@@ -20,7 +21,7 @@ describe('HttpClient', () => {
     expect(requests[0]?.url).toBe('https://formspec-server.example.test/drafts/draft-1/submit');
     expect(requests[0]?.headers.get('authorization')).toBe(`Bearer ${token}`);
     expect(requests[0]?.headers.get('idempotency-key')).toBe(key);
-    expect(requests[0]?.headers.get('x-formspec-tenant-id')).toBe('department-reference');
+    expect(requests[0]?.headers.get('x-stack-scope-key')).toBe(scopeKey);
   });
 
   it('refuses redirect following for credentialed JSON requests', async () => {
@@ -112,13 +113,11 @@ describe('HttpClient', () => {
   });
 
 
-  it('keeps the admitted tenant binding immutable after construction', async () => {
-    const binding = structuredClone(departmentAppProfile.tenantBinding!);
+  it('refuses a malformed scope key at construction and sends no selector when unbound', async () => {
     const { fetch, requests } = recordingFetch(() => jsonResponse({ ok: true }));
-    const client = new HttpClient({ baseUrl: 'https://source.example', tenantBinding: binding, fetchImpl: fetch });
-    if (binding.kind === 'bound') binding.scope.tenant = 'crossed';
-    await client.getJson('/private');
-    expect(requests[0]?.headers.get('x-formspec-tenant-id')).toBe('department-reference');
+    expect(() => new HttpClient({ baseUrl: 'https://source.example', scopeKey: 'TENANT' as ScopeKey, fetchImpl: fetch })).toThrow('64 lowercase hex');
+    await new HttpClient({ baseUrl: 'https://source.example', fetchImpl: fetch }).getJson('/private');
+    expect(requests[0]?.headers.has('x-stack-scope-key')).toBe(false);
   });
 
   it('cancels a late response from a transport that ignored abort', async () => {

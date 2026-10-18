@@ -16,7 +16,7 @@ const content: SigningContent = {
 async function signedFixture(options: Parameters<typeof hydrationFixture>[0] = {}) {
   const f = await hydrationFixture(options);
   const response = await delegatedSignedResponseFixture({ response: { ...f.input.saved.response, id: 'signed-response' }, content,
-    actor: f.input.saved.actor.id, draftId: f.input.saved.draft.id, candidateVersion: 2, keyId: 'fixture-key' });
+    actor: f.input.saved.actor.id, draftId: f.input.saved.draft.id, candidateVersion: 2, issuer: 'https://source.example.test/tenant/workspace/production', keyId: 'fixture-key' });
   const { authoredSignatures: _signatures, ...unsignedCandidate } = response;
   const unsignedHash = await hash(unsignedCandidate);
   Object.assign(f.input.saved, { response }); Object.assign(f.input.saved.evidence, { canonical_response: response });

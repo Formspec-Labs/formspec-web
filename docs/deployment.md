@@ -11,7 +11,7 @@ Build the image:
 docker build -t formspec-web:local .
 ```
 
-Run the demo image:
+Run the image:
 
 ```bash
 docker run --rm -p 8080:80 formspec-web:local
@@ -19,7 +19,9 @@ docker run --rm -p 8080:80 formspec-web:local
 
 The image writes `/formspec-runtime-config.js` at container start from
 `FORMSPEC_WEB_*` environment variables. Without `FORMSPEC_WEB_SERVER_URL`, the
-app stays in demo mode and uses the bundled sample form with stub adapters.
+app displays “This site is not ready.” A configured backend also requires its
+scope key, and form routes require `?form=<published-form-id>`. The container
+rejects a missing or malformed scope key before nginx starts.
 
 The reference nginx image serves fingerprinted `/assets/*` files with gzip and
 long immutable cache headers. HTML routes revalidate on every visit, and
@@ -31,6 +33,7 @@ deploy-time environment variables.
 | Variable | Purpose |
 | --- | --- |
 | `FORMSPEC_WEB_PROFILE` | Reference profile name: `publicPortal` or `departmentApp`. |
+| `FORMSPEC_WEB_SCOPE_KEY` | Required with the server URL; the deployment scope key from `config-check` (64 lowercase hex digits). |
 | `FORMSPEC_WEB_SERVER_URL` | Enables production mode and points HTTP adapters at a formspec-server base URL. |
 | `FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` | Optional trusted BFF endpoint that returns per-command Response Actions Ledger append capabilities without exposing mint HMAC material to the browser. The reference `formspec-server` route is `/runtime/response-actions/ledger/capability`. |
 | `FORMSPEC_WEB_OIDC_ISSUER` | Overrides the profile OIDC issuer. |
@@ -45,7 +48,7 @@ value instead of starting with a partial signed-bundle configuration.
 
 ## Compose
 
-Run the local multi-instance demo:
+Run the local multi-instance host:
 
 ```bash
 npm run check:compose-config
@@ -59,8 +62,8 @@ Open:
 - `http://localhost:8081` for `departmentApp`.
 
 Both services leave `FORMSPEC_WEB_SERVER_URL` empty in M7a/M8 local compose, so
-they prove static deployment, profile selection, and brand isolation without
-claiming server-backed OIDC. When the variable is provided, compose forwards it
+they prove static deployment, profile selection, and brand isolation and the configuration refusal without
+claiming server-backed OIDC. When the URL and scope key are provided, compose forwards them
 to both services: `publicPortal` uses the reference anonymous-session draft and
 submit path, while `departmentApp` renders explicit sign-in and remains blocked
 from full server-backed OIDC proof until EXT-23 server validation lands. Compose
@@ -87,10 +90,9 @@ and explicit release authorization. The
 entry point.
 
 The static hosting recipes below are ready-to-run deployment paths for that
-owner decision. For a public evaluation demo, leave the server URL unset so the
-bundled sample form and stub adapters render. For a production-like evaluation,
-point the runtime config at a formspec-server base URL and keep the manual and
-server-side blockers in `docs/testing-plan.md` visible.
+owner decision. A usable deployment requires the formspec-server URL, scope
+key, and explicit form selection or signed-app configuration. Keep the manual
+and server-side blockers in `docs/testing-plan.md` visible.
 
 ## Vercel Static Export
 
@@ -110,9 +112,8 @@ Vercel settings:
 | Output directory | `dist` |
 | Install command | `npm ci` |
 
-For the demo path, do not set `VITE_FORMSPEC_WEB_SERVER_URL`; the app renders
-the bundled sample form. For a production-like evaluation, set
-`VITE_FORMSPEC_WEB_SERVER_URL` and the matching `VITE_FORMSPEC_WEB_PROFILE`
+Set `VITE_FORMSPEC_WEB_SERVER_URL`, `VITE_FORMSPEC_WEB_SCOPE_KEY`,
+and the matching `VITE_FORMSPEC_WEB_PROFILE`
 before build, or replace `dist/formspec-runtime-config.js` in the deployment
 pipeline with a generated `window.__FORMSPEC_RUNTIME_CONFIG__` assignment.
 
@@ -136,11 +137,11 @@ Cloudflare Pages settings:
 | Build output directory | `dist` |
 | Root directory | repository root |
 
-For a demo, leave `VITE_FORMSPEC_WEB_SERVER_URL` unset. For a production-like
-evaluation, set `VITE_FORMSPEC_WEB_SERVER_URL`, `VITE_FORMSPEC_WEB_PROFILE`,
+Set `VITE_FORMSPEC_WEB_SERVER_URL`, `VITE_FORMSPEC_WEB_SCOPE_KEY`,
+`VITE_FORMSPEC_WEB_PROFILE`,
 and any OIDC `VITE_FORMSPEC_WEB_*` values as build variables, or generate
 `dist/formspec-runtime-config.js` during the Pages build step. Pages Functions
-are not required for the static demo path.
+are not required to serve this static web host.
 
 ## Docker Behind Reverse Proxy
 
@@ -151,6 +152,7 @@ docker build -t formspec-web:local .
 docker run --rm -p 127.0.0.1:8080:80 \
   -e FORMSPEC_WEB_PROFILE=publicPortal \
   -e FORMSPEC_WEB_SERVER_URL=https://formspec-server.example.test \
+  -e FORMSPEC_WEB_SCOPE_KEY="$DEPLOYMENT_SCOPE_KEY" \
   formspec-web:local
 ```
 
@@ -176,7 +178,7 @@ dependencies in this compose file. That full stack remains deferred because
 blocks server-side OpenID Connect (OIDC) validation, and
 [EXT-25](../thoughts/specs/2026-05-22-upstream-extension-queue.md#ext-25-production-formspec-server-image)
 tracks a production server image. The current compose file is the shippable
-local web demo.
+local web host.
 
 This is an accepted release boundary for the current web-only compose shape.
 Neither upstream item authorizes this repository to add or deploy the server

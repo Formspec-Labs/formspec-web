@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { decodeEvaluationHydrationWire } from '../../../src/adapters/http/evaluation-hydration-wire.ts';
+import { testScopeKey as scope } from '../../fixtures/scope.ts';
 
 const digest = `sha256:${'a'.repeat(64)}`;
 const at = '2026-10-09T12:00:00Z';
 function fixture() {
-  const scope = { tenant_id: 't', workspace_id: 'w', environment_id: 'e', cell_id: 'c' };
   const owner = { sessionId: 'session', subjectRef: 'subject', authenticated: {
     issuer: 'https://issuer.example', subject: 'oidc', clientId: null, principalId: 'principal', profile: 'profile',
     actorRef: 'actor', subjectRef: 'subject', sessionId: 'session',

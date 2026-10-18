@@ -1,6 +1,5 @@
-import type { TenantBindingConfig } from '../../config/types.ts';
-import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import { IDEMPOTENCY_KEY_HEADER } from '../../shared/idempotency-key.ts';
+import { parseScopeKey, scopeKeyHeaders, type ScopeKey } from '../../shared/scope-key.ts';
 import { isProblemJson, type ProblemJson } from '../../shared/problem-json.ts';
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -8,7 +7,8 @@ export type AccessTokenProvider = () => Promise<string | undefined> | string | u
 
 export interface HttpClientConfig {
   baseUrl: string;
-  tenantBinding?: TenantBindingConfig;
+  /** Sent as `x-stack-scope-key` on every request (ADR 0168 §1.1). */
+  scopeKey?: ScopeKey;
   fetchImpl?: FetchLike;
   accessToken?: string | AccessTokenProvider;
 }
@@ -68,7 +68,7 @@ export function defaultFetch(): FetchLike {
 export class HttpClient {
   readonly baseUrl: string;
   private readonly fetchImpl: FetchLike;
-  private readonly tenantBinding?: TenantBindingConfig;
+  private readonly scopeKey?: ScopeKey;
   private readonly accessToken?: string | AccessTokenProvider;
 
   constructor(config: HttpClientConfig) {
@@ -77,7 +77,7 @@ export class HttpClient {
     }
     this.baseUrl = config.baseUrl.replace(/\/+$/, '');
     this.fetchImpl = config.fetchImpl ?? defaultFetch();
-    this.tenantBinding = config.tenantBinding ? structuredClone(config.tenantBinding) : undefined;
+    this.scopeKey = config.scopeKey === undefined ? undefined : parseScopeKey(config.scopeKey);
     this.accessToken = config.accessToken;
   }
 
@@ -187,10 +187,8 @@ export class HttpClient {
     if (options.body !== undefined) {
       headers.set('content-type', 'application/json');
     }
-    if (this.tenantBinding) {
-      for (const [name, value] of Object.entries(tenantScopeHeaders(this.tenantBinding))) {
-        headers.set(name, value);
-      }
+    for (const [name, value] of Object.entries(scopeKeyHeaders(this.scopeKey))) {
+      headers.set(name, value);
     }
     const token = await resolveAccessToken(this.accessToken);
     if (token) {

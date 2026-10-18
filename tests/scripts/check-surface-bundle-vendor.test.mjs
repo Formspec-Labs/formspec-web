@@ -25,6 +25,61 @@ afterEach(() => {
 });
 
 describe('surface bundle vendor schema selection', () => {
+  it('checks Source schema bytes and refreshes only the selected schema without builds', () => {
+    const fixture = createFixture();
+    const { dir, upstream, files, git } = addSourceFixture(fixture);
+    expect(run(fixture, dir).status).toBe(0);
+    const file = files[0];
+    const source = join(upstream, 'schemas', file);
+    // JSON-equivalent whitespace still changes the bytes and must be caught.
+    writeFileSync(source, `${readFileSync(source, 'utf8')}\n`);
+    git('add', 'schemas');
+    git('commit', '-m', 'Update producer schema');
+    const before = snapshot(fixture);
+    const other = join(fixture.web, dir, files[1]);
+    const otherBytes = readFileSync(other, 'utf8');
+    const check = run(fixture, dir);
+    expect(check.status).toBe(1);
+    expect(check.stderr).toContain(`${dir}/${file} differs from the upstream schema`);
+    const refresh = run(fixture, '--write', `${dir}/${file}`);
+    expect(refresh.status, refresh.stderr).toBe(0);
+    expect(readFileSync(join(fixture.web, dir, file))).toEqual(readFileSync(source));
+    expect(readFileSync(other, 'utf8')).toBe(otherBytes);
+    expect(snapshot(fixture)).toEqual(before);
+    expect(JSON.parse(readFileSync(join(fixture.web, 'vendor/upstream-refs.json'), 'utf8')))
+      .toEqual({ formspec: 'unchanged', 'formspec-server': git('rev-parse', 'HEAD') });
+    expect(run(fixture, dir).status).toBe(0);
+  });
+
+  it('checks Source pins without private producer access and rejects byte drift', () => {
+    const fixture = createFixture();
+    const { dir, upstream, files } = addSourceFixture(fixture);
+    rmSync(upstream, { recursive: true });
+    expect(run(fixture, '--source-pins-only', dir).status).toBe(0);
+    const file = join(fixture.web, dir, files[0]);
+    writeFileSync(file, `${readFileSync(file, 'utf8')}\n`);
+    const result = run(fixture, '--source-pins-only', dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('SHA256SUMS is stale');
+  });
+
+  it('refuses an uncommitted Source refresh before changing copies or provenance', () => {
+    const fixture = createFixture();
+    const { dir, upstream, files } = addSourceFixture(fixture);
+    const before = Object.fromEntries(readdirSync(join(fixture.web, dir)).map(file =>
+      [file, readFileSync(join(fixture.web, dir, file), 'utf8')]));
+    const refs = readFileSync(join(fixture.web, 'vendor/upstream-refs.json'), 'utf8');
+    const source = join(upstream, 'schemas', files[0]);
+    writeFileSync(source, `${readFileSync(source, 'utf8')}\n`);
+    const result = run(fixture, '--write', `${dir}/${files[0]}`);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('does not match the producer commit');
+    for (const [file, bytes] of Object.entries(before)) {
+      expect(readFileSync(join(fixture.web, dir, file), 'utf8')).toBe(bytes);
+    }
+    expect(readFileSync(join(fixture.web, 'vendor/upstream-refs.json'), 'utf8')).toBe(refs);
+  });
+
   it('refreshes source public/runtime metadata and preserves local tooling and unselected packages', () => {
     const fixture = createFixture();
     const { sourceManifest, local, originalLocal, unselected, unselectedBytes } = addPackageFixture(fixture);
@@ -221,6 +276,30 @@ function sourceContent(file) {
   return `${JSON.stringify({ file, revision: 'upstream' })}\n`;
 }
 
+function addSourceFixture(fixture) {
+  const dir = 'src/adapters/http/source-schemas';
+  const upstream = join(fixture.web, '../formspec-server');
+  const files = readdirSync(join(repoRoot, dir)).filter(file => file.endsWith('.schema.json'));
+  mkdirSync(join(upstream, 'schemas'), { recursive: true });
+  mkdirSync(join(fixture.web, dir), { recursive: true });
+  for (const file of files) {
+    cpSync(join(repoRoot, dir, file), join(upstream, 'schemas', file));
+    cpSync(join(repoRoot, dir, file), join(fixture.web, dir, file));
+  }
+  cpSync(join(repoRoot, dir, 'SHA256SUMS'), join(fixture.web, dir, 'SHA256SUMS'));
+  const git = (...args) => {
+    const result = spawnSync('git', ['-c', 'user.name=Schema Fixture', '-c', 'user.email=fixture@example.invalid',
+      '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], { cwd: upstream, encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(result.stderr);
+    return result.stdout.trim();
+  };
+  git('init');
+  git('add', 'schemas');
+  git('commit', '-m', 'Pin producer schemas');
+  writeFileSync(join(fixture.web, 'vendor/upstream-refs.json'), JSON.stringify({ formspec: 'unchanged', 'formspec-server': git('rev-parse', 'HEAD') }));
+  return { dir, upstream, files, git };
+}
+
 function hash(content) {
   return createHash('sha256').update(content).digest('hex');
 }
@@ -238,6 +317,7 @@ function run(fixture, ...args) {
       ...process.env,
       FORMSPEC_SOURCE_DIR: fixture.upstream,
       INTEGRITY_STACK_SOURCE_DIR: fixture.integrity,
+      FORMSPEC_SERVER_SOURCE_DIR: join(fixture.web, '../formspec-server'),
     },
   });
 }

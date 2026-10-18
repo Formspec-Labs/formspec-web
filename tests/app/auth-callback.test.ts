@@ -4,8 +4,9 @@ import { createBrowserScopedMetadataStore } from '../../src/shared/browser-scope
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import type { BrowserAuthSession } from '../../src/ports/browser-auth-session.ts';
 import { completeBrowserAuthCallback, matchBrowserAuthCallback } from '../../src/shared/index.ts';
+import { parseScopeKey } from '../../src/shared/scope-key.ts';
 
-const config = { ...departmentAppProfile, identity: { mode: 'oidc-required' as const,
+const config = { ...departmentAppProfile, scopeKey: parseScopeKey('a'.repeat(64)), identity: { mode: 'oidc-required' as const,
   oidc: { ...departmentAppProfile.identity.oidc!, redirectUri: '/auth/callback',
     silentRedirectUri: '/auth/silent', postLogoutRedirectUri: '/auth/logout' } } };
 const state = { issuer: 'https://idp.example.test', subject: 'subject', expiresAt: '2030-01-01T00:00:00Z', revision: 1 };
@@ -60,7 +61,7 @@ describe('configured callback startup', () => {
   it('refuses a stored deep route after signout', async () => {
     createBrowserScopedMetadataStore({ namespace: 'formspec-web:signin-navigation',
       context: { origin: 'https://web.example.test', issuer: config.identity.oidc.issuer, clientId: config.identity.oidc.clientId,
-        redirectUri: config.identity.oidc.redirectUri, postLogoutRedirectUri: config.identity.oidc.postLogoutRedirectUri, tenantBinding: config.tenantBinding } })
+        redirectUri: config.identity.oidc.redirectUri, postLogoutRedirectUri: config.identity.oidc.postLogoutRedirectUri, scopeKey: config.scopeKey } })
       .write('signout-return', '/review-sign?form=passport&package=%2Fpackage.json');
     const auth = session(); const navigate = vi.fn();
     await expect(completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/logout', createSession: () => auth, navigate }))
@@ -97,7 +98,7 @@ describe('configured callback startup', () => {
   it.each(['https://untrusted.test/?form=x&package=y', '//untrusted.test/?form=x&package=y', '/auth/callback?form=x&package=y', '/auth/silent?form=x&package=y', '/auth/logout?form=x&package=y', '/?form=x&package=y#unsafe', 5])('refuses invalid stored navigation %s after authenticating', async value => {
     createBrowserScopedMetadataStore({ namespace: 'formspec-web:signin-navigation',
       context: { origin: 'https://web.example.test', issuer: config.identity.oidc.issuer, clientId: config.identity.oidc.clientId,
-        redirectUri: config.identity.oidc.redirectUri, postLogoutRedirectUri: config.identity.oidc.postLogoutRedirectUri, tenantBinding: config.tenantBinding } }).write('return', value);
+        redirectUri: config.identity.oidc.redirectUri, postLogoutRedirectUri: config.identity.oidc.postLogoutRedirectUri, scopeKey: config.scopeKey } }).write('return', value);
     const auth = session(); const navigate = vi.fn();
     await expect(completeConfiguredAuthCallback({ config, href: 'https://web.example.test/auth/callback', createSession: () => auth, navigate })).rejects.toThrow(/navigation/);
     expect(auth.completeCallback).toHaveBeenCalledOnce(); expect(auth.dispose).toHaveBeenCalledOnce();

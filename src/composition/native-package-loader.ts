@@ -51,7 +51,7 @@ export async function loadNativePackage(config: FormspecWebConfig, options: Nati
 
 async function loadQualifiedNativePackage(config: FormspecWebConfig, options: NativePackageCompositionOptions, deferred: Composition): Promise<NativePackageBoot> {
   const adapter = config.referenceAdapters!.formspecStack!;
-  const base = { baseUrl: adapter.formspecServerUrl!, tenantBinding: config.tenantBinding,
+  const base = { baseUrl: adapter.formspecServerUrl!, scopeKey: config.scopeKey,
     accessToken: options.identityBinding?.accessToken };
   const payloadSchemaResources = await loadCanonicalModulePayloadSchemaResources();
   const modulePins = options.signing.modules ?? [options.signing.module];
@@ -190,7 +190,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
         || state.issuer !== taskPins!.hydration.identity.issuer || config.identity.oidc!.clientId !== taskPins!.hydration.identity.clientId)
         throw new Error('Native task browser session retired');
     };
-    const signingPolicy = { keyId: pins.keyId, validateResponse: validateCanonicalFormResponse,
+    const signingPolicy = { keyId: pins.keyId, expectedIssuer: pins.expectedIssuer, validateResponse: validateCanonicalFormResponse,
       validateContent, signingProfileDigest: responseSigningDigest,
       ...(nativePins || taskNeedsHydration ? { prePrepareCandidate: async (input: Parameters<NonNullable<HttpResponseSigningPolicy['prePrepareCandidate']>>[0]) => {
         if (!host?.prePrepareCandidate) throw new Error('Native candidate host unavailable');
@@ -202,7 +202,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     if (taskPins && (taskPins.launch.formVersionId !== publication.form_version_id
       || taskPins.hydration.selection.formId !== publication.form_id || taskPins.hydration.selection.definitionHash !== publication.definition_hash
       || taskPins.hydration.selection.formVersionId !== publication.form_version_id)) throw new Error('Native task publication pins mismatch');
-    const taskCohort = taskPins ? await createTaskComposition({ source: { ...base, accessToken: ownedAccessToken },
+    const taskCohort = taskPins ? await createTaskComposition({
+      source: { ...base, accessToken: ownedAccessToken },
       wos: taskPins.wos, completionTimeoutMs: taskPins.completionTimeoutMs, launch: taskPins.launch, completion: taskPins.completion,
       draftKey: { formUrl: definition.url, formVersion: definition.version, subjectRef: taskPins.subjectRef },
       formId: publication.form_id, definition, locales: localeDocuments, signing: signingPolicy, resumeMetadata,

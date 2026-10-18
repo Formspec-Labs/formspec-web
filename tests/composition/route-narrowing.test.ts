@@ -27,7 +27,6 @@ function productionConfig(): FormspecWebConfig {
     referenceAdapters: {
       formspecStack: {
         ...departmentAppProfile.referenceAdapters?.formspecStack,
-        tenantHeaderDialect: 'formspec',
         formspecServerUrl: 'https://formspec-server.example.test',
       },
     },

@@ -24,7 +24,6 @@ import { ResponseSigningUnresolvedError } from '../../ports/response-signing.ts'
 import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
 import { resolveAuthoredSigningContent } from '@formspec-org/engine/render';
 import canonicalize from 'canonicalize';
-import { formspecTenantHeaderNames, tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import type { DraftKey, DraftReadState, DraftStore } from '../../ports/draft-store.ts';
 import type { ApplicationLifecycle, ApplicationLifecycleCapabilities } from '../../ports/application-lifecycle.ts';
 import { HttpApplicationLifecycle } from './application-lifecycle.ts';
@@ -78,10 +77,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     throw new Error('Response signing requires injected draft resume metadata for unresolved operation recovery');
   }
   if (config.qualifiedDraftState && !config.responseSigning) throw new Error('Qualified draft state requires the maintained signing policy');
-  if (config.qualifiedDraftState) {
-    const headers = config.tenantBinding ? tenantScopeHeaders(config.tenantBinding) : {};
-    if (Object.values(formspecTenantHeaderNames).some(name => !headers[name]?.trim())) throw new Error('Qualified draft state requires all four tenant scope headers');
-  }
+  if (config.qualifiedDraftState && config.scopeKey === undefined) throw new Error('Qualified draft state requires the deployment scope key');
   if (config.applicationLifecycle && (!config.qualifiedDraftState || !config.responseSigning)) throw new Error('Application lifecycle requires a qualified signing publication');
   const resolveFormId = config.formIdResolver ?? defaultFormIdResolver;
   const registry = createDraftBindingRegistry({ resumeMetadata: config.resumeMetadata, formIdResolver: config.formIdResolver });

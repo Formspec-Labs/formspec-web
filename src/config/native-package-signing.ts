@@ -2,6 +2,7 @@ import { snapshotFiniteJson } from '@formspec-org/surface';
 import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE } from '@formspec-org/surface-react/widget-metadata';
 import type { NativeSigningScopeSelection } from '../shared/native-signing-scope.ts';
 import type { ResponseActionRole } from '../shared/response-action-controller.ts';
+import { requireSigningIssuer } from '../shared/signing-issuer.ts';
 
 export interface NativeStructuredPanelWidget {
   readonly moduleId: string;
@@ -10,6 +11,8 @@ export interface NativeStructuredPanelWidget {
 
 export interface NativePackageSigningConfig {
   keyId: string;
+  /** Trusted deployment issuer for delegated Response signing, independent of response contents. */
+  expectedIssuer: string;
   definition: { url: string; version: string };
   bundle: { id: string; version: string };
   module: { id: string; version: string };
@@ -39,7 +42,7 @@ const inputNames = [...new Set([...SIGNING_CEREMONY_WIDGET_SHAPE.dataInputs,
 /** Closed, detached deployment configuration; does not admit a package or signing authority. */
 export function nativePackageSigningConfig(value: unknown): NativePackageSigningConfig {
   const config = snapshotFiniteJson(value);
-  closed(config, ['keyId', 'definition', 'bundle', 'module', 'initialLocale', 'roles', 'bindings', 'readiness',
+  closed(config, ['keyId', 'expectedIssuer', 'definition', 'bundle', 'module', 'initialLocale', 'roles', 'bindings', 'readiness',
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'signingScope') ? ['signingScope'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'modules') ? ['modules'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'structuredPanelWidgets') ? ['structuredPanelWidgets'] : []),
@@ -47,6 +50,7 @@ export function nativePackageSigningConfig(value: unknown): NativePackageSigning
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'staticAssets') ? ['staticAssets'] : []),
     ...(config && typeof config === 'object' && Object.hasOwn(config, 'applicationLifecycle') ? ['applicationLifecycle'] : [])]);
   nonblank(config.keyId);
+  requireSigningIssuer(config.expectedIssuer);
   for (const name of ['definition', 'bundle', 'module'] as const) {
     const pin = config[name]; const identity = name === 'definition' ? 'url' : 'id';
     closed(pin, [identity, 'version']); nonblank(pin[identity]); nonblank(pin.version);

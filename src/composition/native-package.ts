@@ -5,6 +5,7 @@ import type { NativeScreenerHydrationFactory } from '../adapters/http/initial-mi
 import type { ComponentDocument, LocaleDocument } from '@formspec-org/types';
 import { validatedAttachmentMaxUploadBytes } from '../config/attachment-policy.ts';
 import type { HttpClientConfig } from '../adapters/http/http-client.ts';
+import { parseScopeKey } from '../shared/scope-key.ts';
 import type { HttpTaskCandidateHydrationConfig } from '../adapters/http/task-candidate-hydration.ts';
 import type { TaskDraftLaunchSelection } from '../ports/task-draft.ts';
 import type { TaskCompletionSelection } from '../ports/task-completion.ts';
@@ -51,6 +52,7 @@ export interface NativeTaskCompositionPins {
   readonly completion: TaskCompletionSelection;
   readonly launchOperationId: string;
   readonly subjectRef: string;
+  /** Independently selected WOS deployment; Source uses FormspecWebConfig.scopeKey. */
   readonly wos: HttpClientConfig;
   readonly completionTimeoutMs?: number;
   readonly assertCurrentWos: () => void;
@@ -73,15 +75,19 @@ export interface NativePackageCompositionOptions {
 
 /** Deferred local hash-pinned package admission, separate from signed-release verification. */
 export function createNativePackageComposition(config: FormspecWebConfig, options: NativePackageCompositionOptions): Composition {
+  const task = options.nativeTask;
+  const sourceScopeKey = task ? parseScopeKey(config.scopeKey) : config.scopeKey;
+  const wosScopeKey = task ? parseScopeKey(task.wos.scopeKey) : undefined;
+  const wos = task ? { ...task.wos, scopeKey: wosScopeKey } : undefined;
   if (typeof options.initialDefinitionUrl !== 'string' || !options.initialDefinitionUrl.trim()) throw new Error('Native package composition requires an explicit initialDefinitionUrl');
   config = structuredClone(config);
+  config.scopeKey = sourceScopeKey;
   options = { ...options, hostEvents: options.hostEvents?.map(value => Object.freeze({ ...value })), signing: nativePackageSigningConfig(options.signing),
     nativeScreener: options.nativeScreener ? snapshotNativeScreener(options.nativeScreener) : undefined,
     screenerCompletion: options.screenerCompletion === undefined ? undefined : Object.freeze({ ...options.screenerCompletion }) };
-  if (options.nativeTask) {
-    const task = options.nativeTask;
+  if (task) {
     options.nativeTask = { ...task, launch: structuredClone(task.launch), completion: structuredClone(task.completion),
-      wos: { ...task.wos, tenantBinding: task.wos.tenantBinding ? structuredClone(task.wos.tenantBinding) : undefined },
+      wos: wos!,
       attachmentFieldPaths: Object.freeze({ ...task.attachmentFieldPaths }), hydration: { ...task.hydration,
         selection: structuredClone(task.hydration.selection), identity: structuredClone(task.hydration.identity),
         receiptVerifier: task.hydration.receiptVerifier ? Object.freeze({ verify: task.hydration.receiptVerifier.verify.bind(task.hydration.receiptVerifier) }) : undefined } };

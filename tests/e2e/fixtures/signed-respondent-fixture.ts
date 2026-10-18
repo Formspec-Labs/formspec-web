@@ -13,7 +13,7 @@ import {
   sigStructureBytes,
 } from '@formspec-org/integrity-cose';
 import sampleForm from '../../../src/demo/sample-form.json' with { type: 'json' };
-import type { FormDefinition } from '@formspec-org/types';
+import type { FormDefinition, FormResponse } from '@formspec-org/types';
 import type {
   RespondentSurfaceBundleConfig,
   RuntimeConfig,
@@ -279,6 +279,7 @@ export async function createSignedRespondentFixture(
     runtimeConfig: {
       profileName: 'publicPortal',
       formspecServerUrl: FORMSPEC_SERVER_URL,
+      scopeKey: 'a'.repeat(64),
       surfaceBundle,
     },
   };
@@ -664,6 +665,14 @@ async function fulfillFormspecServerRoute(
     ...(bodyText ? { body: JSON.parse(bodyText) as unknown } : {}),
   });
   const path = new URL(request.url()).pathname;
+  const writes = requests.filter(({ method, url }) =>
+    method === 'POST' && url.endsWith('/runtime/forms/demo-intake/drafts')
+    || method === 'PATCH' && url.endsWith('/drafts/DRAFT-301'));
+  const saved = writes.at(-1)?.body as { canonical_response: FormResponse; draft_state: Record<string, unknown> } | undefined;
+  const draft = saved && {
+    draft_id: 'DRAFT-301', draft_version: writes.length,
+    canonical_response: saved.canonical_response, draft_state: saved.draft_state,
+  };
   if (
     request.method() === 'POST'
     && /\/runtime\/forms\/demo-intake\/sessions\/anonymous$/u.test(path)
@@ -681,28 +690,32 @@ async function fulfillFormspecServerRoute(
     request.method() === 'POST'
     && /\/runtime\/forms\/demo-intake\/drafts$/u.test(path)
   ) {
-    await json(route, { draft_id: 'DRAFT-301', draft_version: 1 });
+    await json(route, draft);
     return;
   }
   if (
     request.method() === 'POST'
     && /\/drafts\/DRAFT-301\/submit$/u.test(path)
   ) {
-    await json(route, { response_id: 'CASE-301', status: 'accepted' });
+    const body = request.postDataJSON();
+    if (typeof body.canonical_response?.id !== 'string' || body.response_id !== body.canonical_response.id) {
+      throw new Error('E2E submission must preserve the canonical Response identifier');
+    }
+    await json(route, { response_id: body.canonical_response.id, status: 'accepted' });
     return;
   }
   if (
     request.method() === 'PATCH'
     && /\/drafts\/DRAFT-301$/u.test(path)
   ) {
-    await json(route, { draft_id: 'DRAFT-301', draft_version: 2 });
+    await json(route, draft);
     return;
   }
   if (
     request.method() === 'GET'
     && /\/drafts\/DRAFT-301$/u.test(path)
   ) {
-    await json(route, { draft_id: 'DRAFT-301', draft_version: 1 });
+    await json(route, draft ?? { title: 'Draft not found' }, draft ? 200 : 404);
     return;
   }
   await json(route, { title: 'Unexpected E2E route' }, 404);

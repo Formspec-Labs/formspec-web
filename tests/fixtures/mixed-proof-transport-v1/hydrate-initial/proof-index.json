@@ -5,41 +5,41 @@
     "images": {},
     "initialContext": {
       "alphaContext": {
-        "object_artifact_id": "context-observation-de9f7b0e7fad4f673aff2d85ed6ec9e5ce076681c7f08806e0cb786eec794840",
+        "object_artifact_id": "context-observation-bfbebf0c01280e549c88b57f141846a567d1c98d90284fe2bcb1598e0e42f034",
         "aggregate_type": "initial_context",
-        "aggregate_id": "sha256:a7d741678dd76627265e18cdb1adaf113e3cc677d845e49b6998197d44274d4e",
+        "aggregate_id": "sha256:f765e61211159ccff7a10615bc747ec0a3b977a6bc3d80ba9f04335af8953691",
         "object_kind": "immutable:initial-context-observation:v1",
-        "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-de9f7b0e7fad4f673aff2d85ed6ec9e5ce076681c7f08806e0cb786eec794840",
+        "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-bfbebf0c01280e549c88b57f141846a567d1c98d90284fe2bcb1598e0e42f034",
         "content_type": "application/json",
-        "checksum_sha256": "sha256:6472678b461173c5fa7e5f6a58564de22c3b8971b29a42b1c45e7036ff97c37e",
-        "byte_length": 4454
+        "checksum_sha256": "sha256:1625a51c808577c55db88befbee49e3455598fc8abdc5e468dd081f0a7993f42",
+        "byte_length": 4352
       },
       "betaContext": {
-        "object_artifact_id": "context-observation-de9f7b0e7fad4f673aff2d85ed6ec9e5ce076681c7f08806e0cb786eec794840",
+        "object_artifact_id": "context-observation-bfbebf0c01280e549c88b57f141846a567d1c98d90284fe2bcb1598e0e42f034",
         "aggregate_type": "initial_context",
-        "aggregate_id": "sha256:a7d741678dd76627265e18cdb1adaf113e3cc677d845e49b6998197d44274d4e",
+        "aggregate_id": "sha256:f765e61211159ccff7a10615bc747ec0a3b977a6bc3d80ba9f04335af8953691",
         "object_kind": "immutable:initial-context-observation:v1",
-        "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-de9f7b0e7fad4f673aff2d85ed6ec9e5ce076681c7f08806e0cb786eec794840",
+        "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-bfbebf0c01280e549c88b57f141846a567d1c98d90284fe2bcb1598e0e42f034",
         "content_type": "application/json",
-        "checksum_sha256": "sha256:6472678b461173c5fa7e5f6a58564de22c3b8971b29a42b1c45e7036ff97c37e",
-        "byte_length": 4454
+        "checksum_sha256": "sha256:1625a51c808577c55db88befbee49e3455598fc8abdc5e468dd081f0a7993f42",
+        "byte_length": 4352
       },
       "gammaContext": {
-        "object_artifact_id": "context-observation-de9f7b0e7fad4f673aff2d85ed6ec9e5ce076681c7f08806e0cb786eec794840",
+        "object_artifact_id": "context-observation-bfbebf0c01280e549c88b57f141846a567d1c98d90284fe2bcb1598e0e42f034",
         "aggregate_type": "initial_context",
-        "aggregate_id": "sha256:a7d741678dd76627265e18cdb1adaf113e3cc677d845e49b6998197d44274d4e",
+        "aggregate_id": "sha256:f765e61211159ccff7a10615bc747ec0a3b977a6bc3d80ba9f04335af8953691",
         "object_kind": "immutable:initial-context-observation:v1",
-        "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-de9f7b0e7fad4f673aff2d85ed6ec9e5ce076681c7f08806e0cb786eec794840",
+        "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-bfbebf0c01280e549c88b57f141846a567d1c98d90284fe2bcb1598e0e42f034",
         "content_type": "application/json",
-        "checksum_sha256": "sha256:6472678b461173c5fa7e5f6a58564de22c3b8971b29a42b1c45e7036ff97c37e",
-        "byte_length": 4454
+        "checksum_sha256": "sha256:1625a51c808577c55db88befbee49e3455598fc8abdc5e468dd081f0a7993f42",
+        "byte_length": 4352
       }
     },
     "taskContext": {}
   },
   "buffers": [
     {
-      "key": "sha256:b416a3951b2a68ac1b2360837f59f28ad03dac5f9a6f320fb5c8f8e36cd07c55",
+      "key": "sha256:fe9e18b0e6a1a785adb6eb434b1c237a56e894fc34a6feff305f1a80e0b08f61",
       "bytes": 0
     }
   ]

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HttpClient, type FetchLike } from '../../../src/adapters/http/http-client.ts';
-import type { TenantBindingConfig } from '../../../src/config/types.ts';
+import type { FetchLike } from '../../../src/adapters/http/http-client.ts';
+import { testScopeKey } from '../../fixtures/scope.ts';
 import { HttpStatusReader } from '../../../src/adapters/http/status-reader.ts';
 import type { BrowserAuthSessionState } from '../../../src/ports/browser-auth-session.ts';
 
@@ -99,33 +99,11 @@ it('stops waiting promptly when caller cancels a pending session lookup', async 
   expect(f.fetchImpl).not.toHaveBeenCalled();
 });
 
-const nativeScope = { tenant: 'selected-tenant', workspace: 'selected-workspace', environment: 'selected-environment', cell: 'selected-cell' };
-const nativeHeaders = { 'x-wos-tenant-id': nativeScope.tenant, 'x-wos-cell-id': nativeScope.cell };
-const nativeBindings: ReadonlyArray<readonly [string, TenantBindingConfig, Record<string, string>]> = [
-  ['bound', { kind: 'bound', scope: nativeScope }, nativeHeaders],
-  ['implicit sentinel', { kind: 'implicit', sentinelScope: nativeScope, headerMode: 'sentinel-until-ext24' }, nativeHeaders],
-  ['implicit omission', { kind: 'implicit', sentinelScope: nativeScope, headerMode: 'omit-post-ext24' }, {}],
-];
-it.each(nativeBindings)('uses only native WOS scope headers for %s status reads', async (_mode, tenantBinding, expected) => {
-  const f = fixture();
-  await new HttpStatusReader({ ...f.config, tenantBinding }).readStatus({ resourceRef: f.config.caseLedgerId });
-  const actual = Object.fromEntries([...new Headers(f.fetchImpl.mock.calls[0][1]!.headers)]
-    .filter(([name]) => name.startsWith('x-')));
-  expect(actual).toEqual(expected);
-});
-it('captures status scope before a caller can mutate the binding', async () => {
-  const f = fixture(); const scope = { ...nativeScope };
-  const reader = new HttpStatusReader({ ...f.config, tenantBinding: { kind: 'bound', scope } });
-  scope.tenant = 'changed-after-construction';
-  await reader.readStatus({ resourceRef: f.config.caseLedgerId });
-  const headers = new Headers(f.fetchImpl.mock.calls[0][1]!.headers);
-  expect(headers.get('x-wos-tenant-id')).toBe(nativeScope.tenant);
-  expect(headers.has('x-formspec-tenant-id')).toBe(false);
-});
-it('preserves Source HttpClient scope names independently of the WOS adapter', async () => {
-  const f = fixture();
-  await new HttpClient({ ...f.config, tenantBinding: { kind: 'bound', scope: nativeScope } }).getJson('/runtime/forms/example');
-  const actual = Object.fromEntries([...new Headers(f.fetchImpl.mock.calls[0][1]!.headers)].filter(([name]) => name.startsWith('x-')));
-  expect(actual).toEqual({ 'x-formspec-tenant-id': nativeScope.tenant, 'x-formspec-workspace-id': nativeScope.workspace,
-    'x-formspec-environment-id': nativeScope.environment, 'x-formspec-cell-id': nativeScope.cell });
-});
+it.each([['a bound', testScopeKey, { 'x-stack-scope-key': testScopeKey }], ['an unbound', undefined, {}]] as const)(
+  'selects the WOS scope by key for %s status read', async (_mode, scopeKey, expected) => {
+    const f = fixture();
+    await new HttpStatusReader({ ...f.config, scopeKey }).readStatus({ resourceRef: f.config.caseLedgerId });
+    const actual = Object.fromEntries([...new Headers(f.fetchImpl.mock.calls[0][1]!.headers)]
+      .filter(([name]) => name.startsWith('x-')));
+    expect(actual).toEqual(expected);
+  });

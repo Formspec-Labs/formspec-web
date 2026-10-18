@@ -1,6 +1,6 @@
 import { completeConfiguredAuthCallback } from './auth-callback.ts';
 import { createConfiguredBrowserAuthSession, createOidcIdentityBinding, type IdentityBinding } from '../composition/index.ts';
-import { lazy, StrictMode, Suspense } from 'react';
+import { lazy, StrictMode, Suspense, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import rootConfig from '../../formspec.config.ts';
 import { readRuntimeConfig, resolveActiveConfig } from '../config/runtime.ts';
@@ -24,56 +24,63 @@ const NativePackageRoot = lazy(async () => {
   return { default: module.NativePackageRoot };
 });
 
-const activeConfig = resolveActiveConfig(rootConfig, readRuntimeConfig());
 const rootEl = document.getElementById('root');
 if (!rootEl) {
   throw new Error('Root element #root not found');
 }
 
-const signedRespondentRootConfigured =
-  respondentSurfaceDeploymentIsConfigured(activeConfig);
-if (signedRespondentRootConfigured || activeConfig.referenceAdapters?.formspecStack?.nativePackageSigning) {
-  document.getElementById('formspec-static-shell')?.remove();
-} else {
-  applyBrandTheme(document.documentElement, activeConfig.brand);
+try {
+  mountApplication(resolveActiveConfig(rootConfig, readRuntimeConfig()), rootEl);
+} catch {
+  createRoot(rootEl).render(<ConfigurationBootError />);
 }
 
-let sharedIdentityBinding: IdentityBinding | undefined;
-const identityBindingFactory = activeConfig.ports.identityProvider === 'oidc'
-  && activeConfig.referenceAdapters?.formspecStack?.formspecServerUrl
-  ? () => {
-      if (!activeConfig.identity.oidc) throw new Error('OIDC provider is not configured');
-      if (!sharedIdentityBinding) {
-        sharedIdentityBinding = createOidcIdentityBinding(activeConfig.identity.oidc);
-        window.addEventListener('pagehide', (event) => {
-          if (!event.persisted) sharedIdentityBinding?.browserAuthSession?.dispose();
-        });
+function mountApplication(activeConfig: FormspecWebConfig, rootEl: HTMLElement) {
+  const signedRespondentRootConfigured =
+    respondentSurfaceDeploymentIsConfigured(activeConfig);
+  if (signedRespondentRootConfigured || activeConfig.referenceAdapters?.formspecStack?.nativePackageSigning) {
+    document.getElementById('formspec-static-shell')?.remove();
+  } else {
+    applyBrandTheme(document.documentElement, activeConfig.brand);
+  }
+
+  let sharedIdentityBinding: IdentityBinding | undefined;
+  const identityBindingFactory = activeConfig.ports.identityProvider === 'oidc'
+    && activeConfig.referenceAdapters?.formspecStack?.formspecServerUrl
+    ? () => {
+        if (!activeConfig.identity.oidc) throw new Error('OIDC provider is not configured');
+        if (!sharedIdentityBinding) {
+          sharedIdentityBinding = createOidcIdentityBinding(activeConfig.identity.oidc);
+          window.addEventListener('pagehide', (event) => {
+            if (!event.persisted) sharedIdentityBinding?.browserAuthSession?.dispose();
+          });
+        }
+        return sharedIdentityBinding;
       }
-      return sharedIdentityBinding;
-    }
-  : undefined;
+    : undefined;
 
-// Complete callbacks once before React StrictMode or any route composition.
-void completeConfiguredAuthCallback({
-  href: window.location.href, config: activeConfig,
-  createSession: createConfiguredBrowserAuthSession,
-  navigate: (href) => window.location.replace(href),
-}).then((handled) => {
-  if (handled) return;
-  createRoot(rootEl).render(
-    <StrictMode>
-      <RoutedApp config={activeConfig} />
-    </StrictMode>,
-  );
-}).catch(() => {
-  document.getElementById('formspec-static-shell')?.remove();
-  const message = document.createElement('main');
-  message.setAttribute('role', 'alert');
-  message.textContent = 'Sign-in could not be completed. Return to the home page and try again.';
-  rootEl.replaceChildren(message);
-});
+  // Complete callbacks once before React StrictMode or any route composition.
+  void completeConfiguredAuthCallback({
+    href: window.location.href, config: activeConfig,
+    createSession: createConfiguredBrowserAuthSession,
+    navigate: (href) => window.location.replace(href),
+  }).then((handled) => {
+    if (handled) return;
+    createRoot(rootEl).render(
+      <StrictMode>
+        <RoutedApp config={activeConfig} identityBindingFactory={identityBindingFactory} />
+      </StrictMode>,
+    );
+  }).catch(() => {
+    document.getElementById('formspec-static-shell')?.remove();
+    const message = document.createElement('main');
+    message.setAttribute('role', 'alert');
+    message.textContent = 'Sign-in could not be completed. Return to the home page and try again.';
+    rootEl.replaceChildren(message);
+  });
+}
 
-function RoutedApp({ config }: { config: FormspecWebConfig }) {
+function RoutedApp({ config, identityBindingFactory }: { config: FormspecWebConfig; identityBindingFactory?: () => IdentityBinding }) {
   if (config.referenceAdapters?.formspecStack?.nativePackageSigning) {
     return <Suspense fallback={<main className="fs-surface-admission" role="status"><h1>Preparing this form</h1></main>}><NativePackageRoot config={config} identityBindingFactory={identityBindingFactory} /></Suspense>;
   }
@@ -84,11 +91,12 @@ function RoutedApp({ config }: { config: FormspecWebConfig }) {
       </Suspense>
     );
   }
-  return <LegacyRoutedApp config={config} />;
+  return <LegacyRoutedApp config={config} identityBindingFactory={identityBindingFactory} />;
 }
 
-function LegacyRoutedApp({ config }: { config: FormspecWebConfig }) {
+function LegacyRoutedApp({ config, identityBindingFactory }: { config: FormspecWebConfig; identityBindingFactory?: () => IdentityBinding }) {
   const routeState = useRoutedComposition(config, identityBindingFactory);
+  if (routeState.status === 'configuration-error') return <ConfigurationBootError />;
   if (routeState.status === 'form-route-error') {
     return <FormRouteBootError error={routeState.error} />;
   }
@@ -109,6 +117,7 @@ function SignedSurfaceBootPending() {
 }
 
 function FormRouteBootError({ error }: { error: FormRouteError }) {
+  useEffect(() => { document.getElementById('formspec-static-shell')?.remove(); }, []);
   return (
     <main className="shell" aria-busy={false}>
       <div className="shell__inner">
@@ -125,4 +134,14 @@ function FormRouteBootError({ error }: { error: FormRouteError }) {
       </div>
     </main>
   );
+}
+
+function ConfigurationBootError() {
+  useEffect(() => { document.getElementById('formspec-static-shell')?.remove(); }, []);
+  return <main className="shell">
+    <div className="shell__inner" role="alert">
+      <h1>This site is not ready.</h1>
+      <p>Contact the organization that provided this form.</p>
+    </div>
+  </main>;
 }

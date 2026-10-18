@@ -7,12 +7,12 @@ import { loadCanonicalSigningContentValidator } from '../../../src/adapters/sche
 
 /** Schema/mirror-correct service double; its zero signature bytes make no cryptographic-verification claim. */
 export async function delegatedSignedResponseFixture(input: {
-  response: FormResponse; content: SigningContent; actor: string; draftId: string; candidateVersion: number; keyId: string;
+  response: FormResponse; content: SigningContent; actor: string; draftId: string; candidateVersion: number; keyId: string; issuer: string;
 }): Promise<FormResponse> {
   const signedAt = '2026-10-07T12:00:00Z';
   const documentHash = await hashSigningContent(input.content, await loadCanonicalSigningContentValidator());
   const candidate: FormResponse = { ...structuredClone(input.response), extensions: {
-    ...input.response.extensions, 'x-formspec-signing-content': { version: '1.0', content: input.content, documentHash,
+    ...input.response.extensions, 'x-formspec-signing-content': { version: '1.0', issuer: input.issuer, content: input.content, documentHash,
       documentHashAlgorithm: 'sha-256', actorRef: input.actor, draftId: input.draftId, draftVersion: input.candidateVersion,
       signerName: 'Fixture signer', signedAt, consentAccepted: true },
   } };

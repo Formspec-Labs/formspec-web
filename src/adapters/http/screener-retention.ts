@@ -1,4 +1,5 @@
 import { isRecord } from '../../shared/is-record.ts';
+import { selectsScope } from '../../shared/scope-key.ts';
 import { isLosslessHttpIdempotencyKey } from '../../shared/idempotency-key.ts';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
@@ -6,7 +7,6 @@ import canonicalize from 'canonicalize';
 import schema from './source-schemas/native-screener-api.schema.json';
 import { computeJcsSha256Digest } from './response-action-ledger.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
-import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import type {
   AssociateRecovery, AssociateScreenerCandidate, RefreshScreenerRun, RetainScreenerCompletion, ScreenerAssociation,
   ScreenerOperationContext, ScreenerRetention, ScreenerRunView, ScreenerSelection,
@@ -58,7 +58,7 @@ function options(context: ScreenerOperationContext) {
     maxResponseBytes: MAX_BYTES, requireJson: true, requireNoStore: true, successStatuses: [200] };
 }
 
-/** Fixed public endpoints through the existing authenticated tenant-aware HTTP client. */
+/** Fixed public endpoints through the existing authenticated, scope-selecting HTTP client. */
 export class HttpScreenerRetention implements ScreenerRetention {
   private readonly client: HttpClient;
   private readonly selection: ScreenerSelection;
@@ -67,13 +67,8 @@ export class HttpScreenerRetention implements ScreenerRetention {
 
   constructor(config: HttpScreenerRetentionConfig) {
     requireSchema('Selection', config.selection);
-    const headers = config.tenantBinding && tenantScopeHeaders(config.tenantBinding);
-    const scope = config.selection.evaluationSelection.scope;
     if (['.', '..'].includes(config.selection.evaluationSelection.formId)
-      || !headers || headers['x-formspec-tenant-id'] !== scope.tenant_id
-      || headers['x-formspec-workspace-id'] !== scope.workspace_id
-      || headers['x-formspec-environment-id'] !== scope.environment_id
-      || headers['x-formspec-cell-id'] !== scope.cell_id
+      || !selectsScope(config.scopeKey, config.selection.evaluationSelection.scope)
       || !config.selection.evaluationSelection.requiredSources.includes(config.selection.sourceRef)
       || !/^sha256:[0-9a-f]{64}$/.test(config.selectionHash)) throw new Error('Source Screener selection binding mismatch');
     this.client = new HttpClient(config);

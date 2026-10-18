@@ -3,6 +3,7 @@ import type { AssuranceLevel } from '../ports/identity-provider.ts';
 import { readNativePackageSigningConfig } from './native-package-signing.ts';
 import { validatedAttachmentMaxUploadBytes } from './attachment-policy.ts';
 import { getReferenceProfile } from '../profiles/profiles.ts';
+import { parseScopeKey } from '../shared/scope-key.ts';
 import type {
   FormspecWebConfig,
   IdentityPolicyConfig,
@@ -35,7 +36,7 @@ const runtimeEnvMap = {
     'VITE_FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
   ],
 } as const satisfies Record<
-  Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding' | 'attachmentMaxUploadBytes' | 'nativePackageSigning'>,
+  Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'scopeKey' | 'attachmentMaxUploadBytes' | 'nativePackageSigning'>,
   readonly string[]
 >;
 
@@ -56,8 +57,10 @@ export function readRuntimeConfig(): RuntimeConfig {
 
 export function runtimeConfigFromEnvRecord(env: RuntimeEnvRecord): RuntimeConfig {
   const config: RuntimeConfig = {};
+  const scopeKey = env.FORMSPEC_WEB_SCOPE_KEY ?? env.VITE_FORMSPEC_WEB_SCOPE_KEY;
+  if (scopeKey !== undefined) config.scopeKey = parseScopeKey(scopeKey);
   for (const [runtimeKey, envNames] of Object.entries(runtimeEnvMap) as Array<
-    [Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'tenantBinding' | 'attachmentMaxUploadBytes' | 'nativePackageSigning'>, readonly string[]]
+    [Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'scopeKey' | 'attachmentMaxUploadBytes' | 'nativePackageSigning'>, readonly string[]]
   >) {
     const value = firstPresent(env, envNames);
     if (value) {
@@ -120,7 +123,6 @@ function applyRuntimeOverrides(
           ...referenceAdapter,
           ...(nativePackageSigning ? { nativePackageSigning } : {}),
           attachments: maxUploadBytes === undefined ? referenceAdapter?.attachments : { maxUploadBytes },
-          tenantHeaderDialect: referenceAdapter?.tenantHeaderDialect ?? 'formspec',
           formspecServerUrl: runtimeConfig.formspecServerUrl ?? referenceAdapter?.formspecServerUrl,
           responseActionLedgerCapabilityUrl:
             runtimeConfig.responseActionLedgerCapabilityUrl
@@ -133,9 +135,13 @@ function applyRuntimeOverrides(
         }
       : undefined;
 
+  const scopeKey = runtimeConfig.scopeKey === undefined ? profileConfig.scopeKey : parseScopeKey(runtimeConfig.scopeKey);
+  if (formspecStack?.formspecServerUrl && scopeKey === undefined) {
+    throw new Error('A backend-connected deployment requires an explicit scopeKey from config-check');
+  }
   return {
     ...profileConfig,
-    tenantBinding: runtimeConfig.tenantBinding ?? profileConfig.tenantBinding,
+    scopeKey,
     identity: applyIdentityRuntimeOverrides(profileConfig.identity, oidc, magicLink),
     ports: portsForRuntime(profileConfig.ports, formspecStack?.formspecServerUrl),
     referenceAdapters: formspecStack
@@ -228,7 +234,8 @@ function compactRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
   const nativePackageSigning = readNativePackageSigningConfig(config);
   return Object.fromEntries(
     Object.entries(config).filter(([key, value]) => (
-      key === 'nativePackageSigning' ? nativePackageSigning !== undefined : key === 'attachmentMaxUploadBytes' ? value !== undefined : key === 'surfaceBundle' || key === 'tenantBinding'
+      // A present scope key is kept whatever its type, so a malformed one fails resolution instead of falling back.
+      key === 'nativePackageSigning' ? nativePackageSigning !== undefined : key === 'attachmentMaxUploadBytes' || key === 'scopeKey' ? value !== undefined : key === 'surfaceBundle'
         ? typeof value === 'object' && value !== null
         : typeof value === 'string' && value.length > 0
     )).map(([key, value]) => [key, key === 'nativePackageSigning' ? nativePackageSigning : value]),

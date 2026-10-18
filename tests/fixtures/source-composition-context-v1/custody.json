@@ -1,16 +1,16 @@
 {
-  "generatedBy": "formspec-server `cargo test -p formspec-server --lib` with FORMSPEC_COMPOSITION_CONTEXT_DIR (the two native-context files) and FORMSPEC_COMPOSITION_FIXTURE_DIR (the valid and invalid hydrations); regenerated for evaluation-composition v4 (ADR 0166 section 1)",
+  "generatedBy": "formspec-server `cargo test -p formspec-server --lib` with FORMSPEC_COMPOSITION_CONTEXT_DIR (the two native-context files) and FORMSPEC_COMPOSITION_FIXTURE_DIR (the valid and invalid hydrations); regenerated when every scope became its 64-hex scope key (ADR 0168 §1.1)",
   "files": {
-    "invalid-native-hydration-0.json": "aaace380c68878eff48dbee214b1c7f2eb24cc14d980402c40f8b441f591a321",
-    "invalid-native-hydration-1.json": "8524972f22bf4aa07922c978abf5ef5ea053137e7195387639d62a8f22ff26eb",
-    "invalid-native-hydration-2.json": "1ca9e55ff23763f953c6e51a645e31008f2bca1445c78fbf9c3a004ff7fb036f",
-    "invalid-native-hydration-3.json": "288e338d4132ac4c81efbb2221c173f5b5475657bb49d86360726213b8f4d52b",
-    "invalid-native-hydration-4.json": "9bf90558be834c08bef6a460e9e139fbbd39d1bcf407f5e04f5dca981ee361eb",
-    "invalid-native-hydration-5.json": "9cb8f2155468ebe94f7d458d0325040e82d910b6b3ae0c029976e9fd3ede1f80",
-    "invalid-native-hydration-6.json": "0cb9fb3876c7dca0c046de0291f1ebe69a5b984e60f3c712b05883dbae173ef5",
-    "valid-native-hydration.json": "38b10994c764469d6c9bea56b4a16e3ed4f99b0a3b54ce49566d7cda9dd88c8d",
-    "valid-three-source-blocked-hydration.json": "e09cda856cfe7f43e2db693cbb2adb5f9934ccb16d03a94678d32a36eb9e6030",
-    "single-native-native-context.json": "a441a5c5c887b69ca19e00f9a34c63ea4282285677364cdc57d48d189bbd2ccd",
-    "three-source-blocked-native-context.json": "81894331dba420b45ad29de622c9bd8a1b9aeb62097a7487f48602457aa26e67"
+    "invalid-native-hydration-0.json": "f06c7e9c9e3dddf19af69fa619ff307c4a35c84f0975dbf35400b8a5b305d1fd",
+    "invalid-native-hydration-1.json": "44aaa50d3a20661a8c0fe78dc1dedfa310c7343035bef2b680ed5228745f26eb",
+    "invalid-native-hydration-2.json": "94f81346e346c42dbd7970564880aa4aae995a8f0ae33de0b2ab661db2e1c4c8",
+    "invalid-native-hydration-3.json": "d545c642ec246bc0743dbf61fd12cf559f309992ebd8d4822a9f8026fb8248bf",
+    "invalid-native-hydration-4.json": "b6bc808571b426f13376321e9a5fe9506ad3100b73882a837c26e1f416f28269",
+    "invalid-native-hydration-5.json": "5a20ea372d0a8b83ab340ddbdb6ff05cd2ff356fe4794004febb20c4fe45cbc3",
+    "invalid-native-hydration-6.json": "6599f3bde6f0232d0201b4724cf30b54c05b7332bd910e031df20eea7ea91933",
+    "valid-native-hydration.json": "23f1b01ce89c3880d8afa2b6985a7d4945ea494d5c2e7c4d0c83b97073511ba7",
+    "valid-three-source-blocked-hydration.json": "ea19ae436dc6474db8597a06f363043275bf75def29d614e04043bf40bba9e4d",
+    "single-native-native-context.json": "8c0a65427f014e12f580e68eb919515125772ebcb10be05c2f808787af19a785",
+    "three-source-blocked-native-context.json": "04ab75ff5df403b195b22b164fb0dcc4c2fbca323dc6b28f186da60c9acf03aa"
   }
 }

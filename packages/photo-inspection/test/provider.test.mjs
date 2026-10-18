@@ -56,7 +56,7 @@ test('request identities, complete native preimages, unknown fields and byte inv
   const validToken = await fixture.token(fixture.claims);
   for (const mutate of [body => { body.providerVersion = 'changed'; }, body => { body.nativeRequest.canonicalResponse.data.extra = true; },
     body => { body.nativeRequest.owner.subjectRef = 'changed'; }, body => { body.nativeRequest.formVersion.created_by = 'changed'; },
-    body => { body.nativeRequest.selection.scope.tenant_id = 'changed'; }, body => { body.attachments[0].bytesBase64 = 'YQ=='; },
+    body => { body.nativeRequest.selection.scope = 'f'.repeat(64); }, body => { body.attachments[0].bytesBase64 = 'YQ=='; },
     body => { body.callHash = jsonHash('wrong'); }, body => { body.extra = true; }, body => { body.requestedAt = '2000-01-01T00:00:00Z'; },
     body => { body.attachments.push(body.attachments[0]); }, body => { body.nativeRequest.sources.other = 'urn:changed'; }]) {
     const changed = structuredClone(fixture.body); mutate(changed);

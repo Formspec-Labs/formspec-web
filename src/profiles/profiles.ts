@@ -1,33 +1,7 @@
-import type { FormspecWebConfig, TenantBindingConfig } from '../config/types.ts';
-
-const departmentScope = {
-  tenant: 'department-reference',
-  workspace: 'default-workspace',
-  environment: 'prod',
-  cell: 'primary',
-} as const;
-
-const publicSentinelScope = {
-  tenant: 'public-portal-sentinel',
-  workspace: 'public',
-  environment: 'prod',
-  cell: 'edge',
-} as const;
-
-const departmentTenantBinding: TenantBindingConfig = {
-  kind: 'bound',
-  scope: departmentScope,
-};
-
-const publicPortalTenantBinding: TenantBindingConfig = {
-  kind: 'implicit',
-  sentinelScope: publicSentinelScope,
-  headerMode: 'sentinel-until-ext24',
-};
+import type { FormspecWebConfig } from '../config/types.ts';
 
 export const departmentAppProfile = {
   profileName: 'departmentApp',
-  tenantBinding: departmentTenantBinding,
   identity: {
     mode: 'oidc-required',
     oidc: {
@@ -63,7 +37,6 @@ export const departmentAppProfile = {
   },
   referenceAdapters: {
     formspecStack: {
-      tenantHeaderDialect: 'formspec',
       oidc: {
         issuer: 'https://idp.example.gov/realms/formspec',
         clientId: 'formspec-web-department',
@@ -74,9 +47,9 @@ export const departmentAppProfile = {
   },
 } satisfies FormspecWebConfig;
 
+/** Public runtime routes serve the deployment's public scope, so the portal selects none. */
 export const publicPortalProfile = {
   profileName: 'publicPortal',
-  tenantBinding: publicPortalTenantBinding,
   identity: {
     mode: 'anonymous-allowed',
     magicLink: {
@@ -110,7 +83,6 @@ export const publicPortalProfile = {
   },
   referenceAdapters: {
     formspecStack: {
-      tenantHeaderDialect: 'formspec',
       magicLinkCallbackPath: '/magic-link/callback',
     },
   },

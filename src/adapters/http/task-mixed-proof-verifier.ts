@@ -1,3 +1,4 @@
+import { requireSigningIssuer } from '../../shared/signing-issuer.ts';
 import { assertMixedProofRegistration } from './mixed-proof-wire.ts';
 import canonicalize from 'canonicalize';
 import type { EvaluationHydrationWire, EvaluationProviderRegistration } from '../../ports/evaluation-hydration.ts';
@@ -18,6 +19,8 @@ import { snapshotNativeCurrentCheck } from './native-current-check.ts';
  */
 export function createTaskMixedProofVerifier(config: {
   readonly source: HttpClientConfig;
+  /** Independent Source issuer for original signed Responses inside task-context proofs. */
+  readonly expectedIssuer: string;
   readonly publication: Readonly<Record<string, unknown>>;
   readonly registration: EvaluationProviderRegistration;
   readonly selection: EvaluationHydrationWire['selection'];
@@ -27,12 +30,13 @@ export function createTaskMixedProofVerifier(config: {
   readonly utcNow?: () => string;
   assertCurrent(): void;
 }): TaskHydrationReceiptVerifier {
+  const expectedIssuer = requireSigningIssuer(config.expectedIssuer);
   const publication = structuredClone(config.publication);
   const registration = structuredClone(config.registration);
   assertMixedProofRegistration(registration);
   const selection = structuredClone(config.selection);
   const nativeCurrentCheck = config.nativeCurrentCheck === undefined ? undefined : snapshotNativeCurrentCheck(config.nativeCurrentCheck);
-  const source = { ...config.source, tenantBinding: config.source.tenantBinding ? structuredClone(config.source.tenantBinding) : undefined };
+  const source = { ...config.source };
   const workerConfig = { ...config.worker, createWorker: config.worker.createWorker.bind(config.worker),
     module: config.worker.module instanceof Uint8Array ? config.worker.module.slice() : config.worker.module };
   const assertCurrent = config.assertCurrent.bind(config);
@@ -64,7 +68,7 @@ export function createTaskMixedProofVerifier(config: {
     const worker = new MixedProofWorkerClient({ ...workerConfig, monotonicNow: now });
     const reader = new HttpMixedProofReader(source);
     try {
-      const proof = await worker.verify({ request, registration, ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}) },
+      const proof = await worker.verify({ expectedIssuer, request, registration, ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}) },
         (index, context) => reader.readAll({ value: view, utf8Bytes: hydrationBytes }, request, index, context),
         { signal, assertCurrent: check, startedMonotonic, currentAt, currentAtMonotonic });
       check(); proof.assertCurrent();

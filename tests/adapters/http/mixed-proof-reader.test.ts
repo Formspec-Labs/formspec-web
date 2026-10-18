@@ -19,8 +19,7 @@ function fixture() {
   const parent = new AbortController(); const retired = new Error('Owner retired'); let current = true;
   const pending: { position: number; signal: AbortSignal; resolve: (response: Response) => void; reject: (error: Error) => void }[] = [];
   let active = 0, maxActive = 0;
-  const reader = new HttpMixedProofReader({ baseUrl: 'https://source.example', accessToken: 'selected-owner', tenantBinding: { kind: 'bound', scope: {
-    tenant: view.scope.tenant_id, workspace: view.scope.workspace_id, environment: view.scope.environment_id, cell: view.scope.cell_id } },
+  const reader = new HttpMixedProofReader({ baseUrl: 'https://source.example', accessToken: 'selected-owner', scopeKey: view.scope,
     fetchImpl: async (url, init) => {
       expect(init!.method).toBe('POST'); expect(new Headers(init!.headers).get('authorization')).toBe('Bearer selected-owner');
       const body = JSON.parse(String(init!.body)); expect(body.version).toBe(1); expect(body.hydration).toEqual(view);

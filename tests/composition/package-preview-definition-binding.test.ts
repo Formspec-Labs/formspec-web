@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sampleFormDefinition } from '../../src/adapter-conformance/fixtures.ts';
 import { createDefaultComposition } from '../../src/composition/default.ts';
 import { resolveActiveConfig } from '../../src/config/runtime.ts';
+import { parseScopeKey } from '../../src/shared/scope-key.ts';
 import { publicPortalProfile } from '../../src/profiles/profiles.ts';
 
 const selectedUrl = 'selected-server-form';
@@ -53,7 +54,7 @@ function preview(withComponent = false) {
     return new Response(bytes[path]);
   });
   vi.stubGlobal('fetch', fetch);
-  const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'http://127.0.0.1:18080' });
+  const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'http://127.0.0.1:18080', scopeKey: parseScopeKey('a'.repeat(64)) });
   return { composition: createDefaultComposition(config, { initialDefinitionUrl: selectedUrl, packageUrl: '/package.json' }), fetch };
 }
 

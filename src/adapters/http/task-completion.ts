@@ -1,5 +1,4 @@
 import { createSubmitFailureReporter, type SubmitFailureStage } from '../../shared/submit-diagnostic.ts';
-import { wosTenantScopeHeaders } from '../../profiles/wos-tenant-headers.ts';
 import { isLosslessHttpIdempotencyKey } from '../../shared/idempotency-key.ts';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
@@ -27,7 +26,6 @@ const resourceShape = ajv.compile<string>({ $ref: `${commonSchema.$id}#/$defs/Wo
 export class HttpTaskCompletion implements TaskCompletion {
   private readonly reportSubmitFailure = createSubmitFailureReporter();
   private readonly client: HttpClient;
-  private readonly scopeHeaders: Readonly<Record<string, string>>;
   private readonly selection: TaskCompletionSelection;
   private readonly assertCurrentAuth: () => void;
   private readonly completionTimeoutMs: number;
@@ -35,7 +33,6 @@ export class HttpTaskCompletion implements TaskCompletion {
     this.completionTimeoutMs = config.completionTimeoutMs ?? 10_000;
     if (!Number.isSafeInteger(this.completionTimeoutMs) || this.completionTimeoutMs <= 0
       || this.completionTimeoutMs > 2_147_483_647) throw new Error('Task completion timeout must be a finite positive timer bound');
-    this.scopeHeaders = wosTenantScopeHeaders(config.tenantBinding);
     this.selection = snapshotWire(config.selection);
     if (Object.keys(this.selection).sort().join(',') !== 'definitionUrl,definitionVersion,processId,taskId'
       || !resourceShape(this.selection.taskId) || !resourceShape(this.selection.processId)
@@ -44,7 +41,7 @@ export class HttpTaskCompletion implements TaskCompletion {
     }
     const token = config.accessToken;
     this.assertCurrentAuth = config.assertCurrentAuth;
-    this.client = new HttpClient({ ...config, tenantBinding: undefined, accessToken: async () => {
+    this.client = new HttpClient({ ...config, accessToken: async () => {
       assertSynchronousGuard(this.assertCurrentAuth);
       const value = typeof token === 'function' ? await token() : token;
       assertSynchronousGuard(this.assertCurrentAuth);
@@ -67,7 +64,7 @@ export class HttpTaskCompletion implements TaskCompletion {
         || new TextEncoder().encode(JSON.stringify(body)).byteLength > 2 * 1024 * 1024) throw new Error('Task completion candidate mismatch');
       stage = 'task-transport';
       const raw = await this.client.postJson<unknown>(`/api/v1/tasks/${encodeURIComponent(this.selection.taskId)}/response`, body,
-        { headers: this.scopeHeaders, idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check,
+        { idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check,
           assertBeforeDispatch: () => { check(); dispatched = true; },
           timeoutMs: this.completionTimeoutMs, maxResponseBytes: 64 * 1024, requireJson: true, successStatuses: [200] });
       stage = 'task-outcome-validation';

@@ -7,6 +7,7 @@ import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '.
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import { DraftVersionConflictError } from '../../../src/ports/draft-store.ts';
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
+import { otherScopeKey, testScopeKey } from '../../fixtures/scope.ts';
 
 function tabStorage() {
   const values = new Map<string, string>();
@@ -14,25 +15,15 @@ function tabStorage() {
     setItem: (key: string, value: string) => { values.set(key, value); },
     removeItem: (key: string) => { values.delete(key); } };
 }
-const context = { baseUrl: 'https://server.example.test/api', tenantBinding: {
-  kind: 'bound' as const, scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' },
-} };
+const context = { baseUrl: 'https://server.example.test/api', scopeKey: testScopeKey };
 const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version };
 const grant = { session_id: 'session', session_token: 'server-owner-token', subject_ref: 'anon:owner',
   form_id: 'conformance', expires_at: '2099-01-01T00:00:00Z' };
 
 describe('tab metadata anonymous draft resume', () => {
   it.each([
-    { config: context, serializedContext: '{"endpoint":"https://server.example.test/api","tenantBinding":{"kind":"bound","scope":{"tenant":"tenant","workspace":"workspace","environment":"test","cell":"cell"},"headerMode":null}}' },
-    { config: { baseUrl: context.baseUrl }, serializedContext: '{"endpoint":"https://server.example.test/api","tenantBinding":null}' },
-    ...(['sentinel-until-ext24', 'omit-post-ext24'] as const).map(headerMode => ({
-      config: { baseUrl: context.baseUrl, tenantBinding: {
-        kind: 'implicit' as const, sentinelScope: context.tenantBinding.scope, headerMode,
-      } },
-      serializedContext: headerMode === 'sentinel-until-ext24'
-        ? '{"endpoint":"https://server.example.test/api","tenantBinding":{"kind":"implicit","scope":{"tenant":"tenant","workspace":"workspace","environment":"test","cell":"cell"},"headerMode":"sentinel-until-ext24"}}'
-        : '{"endpoint":"https://server.example.test/api","tenantBinding":{"kind":"implicit","scope":{"tenant":"tenant","workspace":"workspace","environment":"test","cell":"cell"},"headerMode":"omit-post-ext24"}}',
-    })),
+    { config: context, serializedContext: `{"endpoint":"https://server.example.test/api","scopeKey":"${testScopeKey}"}` },
+    { config: { baseUrl: context.baseUrl }, serializedContext: '{"endpoint":"https://server.example.test/api","scopeKey":null}' },
   ])('preserves the existing draft metadata address and record bytes for $serializedContext', ({ config, serializedContext }) => {
     const storage = tabStorage();
     const slot = 'grant:form';
@@ -315,15 +306,12 @@ describe('tab metadata anonymous draft resume', () => {
     expect(requests).toHaveLength(2);
   });
 
-  it('isolates all deployment scope fields and rejects copied metadata context', () => {
+  it('isolates the deployment scope and rejects copied metadata context', () => {
     const storage = tabStorage();
     const original = createBrowserDraftResumeMetadataStore(context, storage);
     original.write('grant:form', { token: 'secret' });
-    for (const field of ['tenant', 'workspace', 'environment', 'cell'] as const) {
-      const changed = { ...context, tenantBinding: { ...context.tenantBinding,
-        scope: { ...context.tenantBinding.scope, [field]: 'other' } } };
-      expect(createBrowserDraftResumeMetadataStore(changed, storage).read('grant:form')).toBeUndefined();
-    }
+    expect(createBrowserDraftResumeMetadataStore({ ...context, scopeKey: otherScopeKey }, storage).read('grant:form')).toBeUndefined();
+    expect(createBrowserDraftResumeMetadataStore({ baseUrl: context.baseUrl }, storage).read('grant:form')).toBeUndefined();
     expect(createBrowserDraftResumeMetadataStore({ ...context, baseUrl: 'https://other.example.test/api' }, storage).read('grant:form')).toBeUndefined();
     const [storedKey, raw] = [...storage.values][0];
     storage.values.set(storedKey, raw.replace('"slot":"grant:form"', '"slot":"different"'));

@@ -16,7 +16,8 @@ export async function providerFixture() {
     definition_version: definition.version, status: 'published', definition_json: JSON.stringify(definition), definition_hash: jsonHash(definition),
     theme_ref: null, locale_refs_json: '[]', references_json: null, ontology_json: null, component_document_json: null,
     app_graph_validation_report_json: null, component_graph_json: null, host_evidence_json: null, runtime_config_json: '{}', created_by: 'controlled' };
-  const scope = { tenant_id: 'controlled', workspace_id: 'controlled', environment_id: 'controlled', cell_id: 'controlled' };
+  // The scope key (ADR 0168 §1.1) of tenant-test/workspace-test/environment-test, as Source sends it.
+  const scope = '2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4';
   const selection = { scope, formId: formVersion.form_id, formVersionId: formVersion.form_version_id, definitionUrl: definition.url,
     definitionVersion: definition.version, definitionHash: formVersion.definition_hash, requiredSources: ['urn:controlled:photo', 'urn:controlled:unsupported'] };
   const budgets = { requestBytes: 1_000_000, responseBytes: 100_000, attachmentCount: 2, attachmentBytes: 200_000,

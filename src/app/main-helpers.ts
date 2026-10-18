@@ -8,7 +8,7 @@ import { HISTORY_ROUTE_NARROWING, parseHistoryRoute } from './history-route.ts';
 import { OBLIGATIONS_ROUTE_NARROWING, parseObligationsRoute } from './obligations-route.ts';
 import { SCREENER_ROUTE_NARROWING, parseScreenerRoute } from './screener-route.ts';
 import { STATUS_ROUTE_NARROWING, parseStatusRoute } from './status-route.ts';
-import { parseRootFormRoute } from './form-route.ts';
+import { InvalidFormRouteError, parseRootFormRoute } from './form-route.ts';
 
 /**
  * Picks the right composition factory based on the current route (FW-0068,
@@ -67,6 +67,7 @@ export function chooseComposition({
     });
   }
   const rootFormRoute = parseRootFormRoute(href);
+  if (rootFormRoute?.kind !== 'selected') throw new InvalidFormRouteError('A form must be selected by its publisher link.');
   return createDefaultComposition(
     config,
     {

@@ -178,7 +178,7 @@ export type { BrowserAuthSession, BrowserAuthSessionState, BrowserAuthSessionErr
 
 export type { ApplicationLifecycle, ApplicationLifecycleCapabilities, ApplicationCaseReceipt } from './application-lifecycle.ts';
 
-export type { ScreenerSelection, SourceScope, ScreenerOwner, ScreenerAnswer, ScreenerQualification,
+export type { ScreenerSelection, ScreenerOwner, ScreenerAnswer, ScreenerQualification,
   RetainedScreenerRun, ScreenerRunView, ScreenerAssociation, ScreenerOperationContext,
   RetainScreenerCompletion, AssociateScreenerCandidate, ScreenerRetention } from './screener-retention.ts';
 

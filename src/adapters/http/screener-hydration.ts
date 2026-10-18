@@ -1,11 +1,11 @@
 import { isRecord } from '../../shared/is-record.ts';
+import { selectsScope } from '../../shared/scope-key.ts';
 import canonicalize from 'canonicalize';
 import type { FormDefinition } from '@formspec-org/types';
 import type { EvaluationHydrationResult, EvaluationHydrationWire, NativeScreenerMappingReceipt } from '../../ports/evaluation-hydration.ts';
 import type { HydratedEvaluationCandidate } from '../../ports/evaluation-hydration.ts';
 import type { HydrateScreenerCandidate, ScreenerHydration } from '../../ports/screener-hydration.ts';
 import type { ScreenerSelection } from '../../ports/screener-retention.ts';
-import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import { computeJcsSha256Digest as hash } from './response-action-ledger.ts';
 import { decodeEvaluationHydrationWire } from './evaluation-hydration-wire.ts';
@@ -37,10 +37,7 @@ export class HttpScreenerHydration implements ScreenerHydration {
     this.compositionRegistrationHash = config.compositionRegistrationHash;
     if (this.compositionRegistrationHash !== undefined && !/^sha256:[0-9a-f]{64}$/.test(this.compositionRegistrationHash)) fail('composition pin mismatch');
     this.definition = structuredClone(config.definition); this.monotonicNow = config.monotonicNow ?? (() => performance.now());
-    const scope = this.selection.evaluationSelection.scope;
-    const headers = config.tenantBinding && tenantScopeHeaders(config.tenantBinding);
-    if (!headers || headers['x-formspec-tenant-id'] !== scope.tenant_id || headers['x-formspec-workspace-id'] !== scope.workspace_id
-      || headers['x-formspec-environment-id'] !== scope.environment_id || headers['x-formspec-cell-id'] !== scope.cell_id
+    if (!selectsScope(config.scopeKey, this.selection.evaluationSelection.scope)
       || !/^sha256:[0-9a-f]{64}$/.test(this.selection.instanceMappingHash ?? '')) fail('selection scope mismatch');
     this.client = new HttpClient(config);
   }

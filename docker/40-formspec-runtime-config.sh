@@ -10,6 +10,17 @@ cleanup() {
 
 trap cleanup EXIT HUP INT TERM
 
+scope_key="${FORMSPEC_WEB_SCOPE_KEY:-}"
+if [ -n "$scope_key" ]; then
+  if ! printf '%s' "$scope_key" | jq -R -s -e 'length == 64 and test("^[0-9a-f]+$")' >/dev/null; then
+    echo "FORMSPEC_WEB_SCOPE_KEY must be 64 lowercase hex digits." >&2
+    exit 1
+  fi
+elif [ -n "${FORMSPEC_WEB_SERVER_URL:-}" ]; then
+  echo "FORMSPEC_WEB_SCOPE_KEY is required when FORMSPEC_WEB_SERVER_URL is set; use the deployment's config-check output." >&2
+  exit 1
+fi
+
 surface_bundle_json="${FORMSPEC_WEB_SURFACE_BUNDLE_JSON:-}"
 if [ -n "$surface_bundle_json" ]; then
   if ! surface_bundle_json="$(
@@ -41,6 +52,7 @@ runtime_config="$(
   jq -c -n \
     --arg profile_name "${FORMSPEC_WEB_PROFILE:-}" \
     --arg formspec_server_url "${FORMSPEC_WEB_SERVER_URL:-}" \
+    --arg scope_key "$scope_key" \
     --arg response_action_ledger_capability_url \
       "${FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL:-}" \
     --arg oidc_issuer "${FORMSPEC_WEB_OIDC_ISSUER:-}" \
@@ -58,6 +70,11 @@ runtime_config="$(
       oidcRedirectUri: $oidc_redirect_uri,
       magicLinkCallbackPath: $magic_link_callback_path
     } + (
+      if $scope_key == ""
+      then {}
+      else {scopeKey: $scope_key}
+      end
+    ) + (
       if $surface_bundle == null
       then {}
       else {surfaceBundle: $surface_bundle}

@@ -8,7 +8,7 @@ import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 const config = { ...departmentAppProfile, ports: { ...departmentAppProfile.ports,
   definitionSource: 'reference-http' as const, draftStore: 'reference-http' as const, submitTransport: 'reference-http' as const },
   referenceAdapters: { formspecStack: { ...departmentAppProfile.referenceAdapters?.formspecStack,
-    tenantHeaderDialect: 'formspec' as const, formspecServerUrl: 'https://api.example.test' } } };
+    formspecServerUrl: 'https://api.example.test' } } };
 
 afterEach(() => vi.restoreAllMocks());
 

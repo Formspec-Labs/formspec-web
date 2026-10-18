@@ -213,7 +213,7 @@ describe('generic admitted Response Action controller', () => {
     const producer = fixture(); await producer.widget('sign', await producer.ready());
     const previous = producer.controller.getSnapshot().signed!;
     const value: FormResponse = { ...previous.response, extensions: { ...previous.response.extensions,
-      'x-formspec-signing-content': { version: '1.0', content, draftId: previous.draft.id, draftVersion: previous.draft.version - 1,
+      'x-formspec-signing-content': { version: '1.0', issuer: 'https://source.example.test/tenant/workspace/production', content, draftId: previous.draft.id, draftVersion: previous.draft.version - 1,
         actorRef: previous.actor.id, signerName: 'Actual signer', consentAccepted: true, signedAt: '2026-10-08T12:00:00Z',
         documentHash: 'a'.repeat(64), documentHashAlgorithm: 'sha-256' } } };
     const signed = { ...previous, ...await evidence(value, previous.draft.version), content,
@@ -821,7 +821,7 @@ describe('typed response completion', () => {
     const producer = taskFixture(); const prepared = await producer.ready(); await producer.widget('sign', prepared);
     const generated = producer.controller.getSnapshot().signed!;
     const value: FormResponse = { ...generated.response, extensions: { ...generated.response.extensions, 'x-formspec-signing-content': {
-      version: '1.0' as const, content, draftId: generated.draft.id, draftVersion: generated.draft.version - 1,
+      version: '1.0' as const, issuer: 'https://source.example.test/tenant/workspace/production', content, draftId: generated.draft.id, draftVersion: generated.draft.version - 1,
       actorRef: generated.actor.id, signerName: 'Actual signer', consentAccepted: true, signedAt: '2026-10-08T12:00:00Z',
       documentHash: 'a'.repeat(64), documentHashAlgorithm: 'sha-256' as const } } };
     const previous = { ...generated, ...await evidence(value, generated.draft.version), content,

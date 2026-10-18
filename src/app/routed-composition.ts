@@ -8,6 +8,7 @@ import { subscribeAppRouteTransitions } from './route-transition.ts';
 
 export type RoutedCompositionState =
   | { status: 'ready'; href: string; composition: Composition }
+  | { status: 'configuration-error'; href: string }
   | { status: 'form-route-error'; href: string; error: FormRouteError };
 
 export function bootCompositionForHref(
@@ -15,6 +16,9 @@ export function bootCompositionForHref(
   config: FormspecWebConfig,
   identityBindingFactory?: () => IdentityBinding,
 ): RoutedCompositionState {
+  if (!config.referenceAdapters?.formspecStack?.formspecServerUrl) {
+    return { status: 'configuration-error', href };
+  }
   try {
     return {
       status: 'ready',

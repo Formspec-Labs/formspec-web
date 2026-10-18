@@ -6,6 +6,9 @@ import { computeJcsSha256Digest as hash } from '../../../src/adapters/http/respo
 import type { FormDefinition } from '../../../src/ports/definition-source.ts';
 import type { HydrateScreenerCandidate } from '../../../src/ports/screener-hydration.ts';
 import { mockFixture, at, encode } from '../source-worker/mock-fixture.ts';
+import { otherScopeKey, testScopeKey } from '../../fixtures/scope.ts';
+
+const expectedIssuer = 'https://Source.test/independent/scope/';
 
 // Schema-only boundaries: mocked owning verification does not establish Source semantic success.
 async function fixture() {
@@ -32,8 +35,8 @@ async function fixture() {
   let elapsed = 0;
   const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }));
   const token = vi.fn(async () => 'current-token');
-  const config = { source: { baseUrl: 'https://source.test', fetchImpl: fetch, accessToken: token,
-    tenantBinding: { kind: 'bound' as const, scope: { tenant: 't', workspace: 'w', environment: 'e', cell: 'c' } } },
+  const config = { expectedIssuer, source: { baseUrl: 'https://source.test', fetchImpl: fetch, accessToken: token,
+    scopeKey: testScopeKey },
     definition, publication: { form_id: 'form', form_version_id: 'version', definition_url: 'urn:form', definition_version: '1', definition_hash: definitionHash, definition },
     selection, selectionHash, formVersion, registration: mock.selected.registration, compositionRegistrationHash: mock.selected.registration.registrationHash,
     monotonicNow: () => elapsed, utcNow: () => '2026-10-10T12:00:05Z', assertCurrent: () => {},
@@ -43,6 +46,20 @@ async function fixture() {
 }
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe('general hydration (MOCK owning verifier; schema/guard checks only)', () => {
+  it.each([undefined, '', 'relative/issuer', 'https://source.test/has space'])(
+    'refuses invalid independent issuer %s before credentials, worker or HTTP calls', async issuer => {
+      const f = await fixture(); const createWorker = vi.fn();
+      Object.assign(f.config, { expectedIssuer: issuer });
+      expect(() => new HttpInitialMixedScreenerHydration({ ...f.config,
+        generalWorker: { ...f.config.generalWorker, createWorker } })).toThrow('issuer');
+      expect(createWorker).not.toHaveBeenCalled(); expect(f.fetch).not.toHaveBeenCalled(); expect(f.token).not.toHaveBeenCalled();
+    });
+  it.each([['a foreign', otherScopeKey], ['no', undefined]] as const)('refuses %s scope key before any worker, credential or request', async (_mode, scopeKey) => {
+    const f = await fixture();
+    expect(() => new HttpInitialMixedScreenerHydration({ ...f.config, source: { ...f.config.source, scopeKey } })).toThrow('selection scope mismatch');
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.token).not.toHaveBeenCalled();
+  });
   async function generalFixture(unavailable = false, currentCheck = false, baseAssociation = false) {
     const f = await fixture();
     const registration = structuredClone(f.config.registration);
@@ -81,7 +98,9 @@ describe('general hydration (MOCK owning verifier; schema/guard checks only)', (
       await prepare(async () => encode({}), lifetime);
       return { outcome: {} as never, assertCurrent: f.current, remainingMilliseconds: () => 60_000, refreshRequired: () => false };
     });
-    const adapter = new HttpInitialMixedScreenerHydration({ ...f.config, registration });
+    const config = { ...f.config, registration };
+    const adapter = new HttpInitialMixedScreenerHydration(config);
+    config.expectedIssuer = 'https://source.test/caller-mutation';
     return { f, input, nativeCurrentCheck, adapter, reader, verify, native };
   }
   it('selects fresh native current checks for the exact unchanged signed candidate without an association command', async () => {
@@ -89,7 +108,7 @@ describe('general hydration (MOCK owning verifier; schema/guard checks only)', (
     const original = JSON.stringify(input.saved.response);
     const facts = await adapter.hydrate(input);
     expect(facts.nativeCurrentCheck).toEqual(nativeCurrentCheck); expect(facts.remainingMilliseconds!()).toBe(60_000);
-    expect(verify.mock.calls[0][0]).toMatchObject({ nativeCurrentCheck,
+    expect(verify.mock.calls[0][0]).toMatchObject({ expectedIssuer, nativeCurrentCheck,
       request: { operation: 'hydrate', canonicalResponse: input.saved.response } });
     expect(JSON.parse(String(f.fetch.mock.calls[0]![1]?.body))).toMatchObject({ nativeCurrentCheck });
     expect(JSON.stringify(input.saved.response)).toBe(original); adapter.dispose();

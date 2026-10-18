@@ -2,13 +2,17 @@
 
 The reference profiles model two deployment shapes:
 
-- `departmentApp`: bound tenant scope, OIDC required, department brand.
-- `publicPortal`: implicit public portal scope, anonymous access allowed,
+- `departmentApp`: deployment scope key, OIDC required, department brand.
+- `publicPortal`: public runtime routes, anonymous access allowed,
   lighter brand.
 
 During M7a, the MVP-shippable proof is anonymous-only. The runtime can boot
 `publicPortal` without starting any external identity side effect, and it keeps
 draft keys scoped by the active anonymous `subjectRef`.
+
+For a backend-connected container, set `FORMSPEC_WEB_SCOPE_KEY` to the
+deployment key reported by `config-check`. Both profiles use the same scope-key
+header; the server checks that the caller may access that scope.
 
 ## Anonymous M7a Compose
 

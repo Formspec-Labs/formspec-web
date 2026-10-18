@@ -2,6 +2,7 @@ import { computeJcsSha256Digest } from '../../../src/adapters/http/response-acti
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpTaskCandidateHydration } from '../../../src/adapters/http/task-candidate-hydration.ts';
 import { hydrationFixture } from './screener-hydration-fixture.ts';
+import { otherScopeKey } from '../../fixtures/scope.ts';
 
 afterEach(() => vi.useRealTimers());
 
@@ -44,6 +45,13 @@ describe('task candidate hydration through the maintained Source route', () => {
     expect(facts.view.results[0].status).toBe('pending');
     expect(() => facts.assertReady()).toThrow('pending or unavailable');
   });
+  it.each([['a foreign', otherScopeKey], ['no', undefined]] as const)('refuses %s scope key before obtaining credentials or dispatching', async (_mode, scopeKey) => {
+    const f = await fixture();
+    expect(() => new HttpTaskCandidateHydration({ ...f.config, scopeKey }, f.lifetime)).toThrow('selection mismatch');
+    expect(f.fetchImpl).not.toHaveBeenCalled();
+    expect(f.original.accessToken).not.toHaveBeenCalled();
+  });
+
   it('refuses a different task association before obtaining credentials or dispatching', async () => {
     const f = await fixture();
     const saved = { ...f.saved, evidence: { ...f.saved.evidence, taskDraft: { ...f.config.taskDraft, associationHash: `sha256:${'d'.repeat(64)}` } } };

@@ -1,14 +1,16 @@
 # Getting Started
 
-Five-minute local path from clone to rendered demo form:
+Start the local web host:
 
 ```bash
 npm ci
 npm run dev
 ```
 
-The app starts in demo mode when `VITE_FORMSPEC_WEB_SERVER_URL` is unset. Demo
-mode wires stub adapters and renders `src/demo/sample-form.json`.
+An unconfigured host displays “This site is not ready.” To load a published
+form, set `VITE_FORMSPEC_WEB_SERVER_URL` and `VITE_FORMSPEC_WEB_SCOPE_KEY`
+from the backend config-check output, then open `/?form=<published-form-id>`.
+The host requires an explicit form or a configured signed app.
 
 Docker path:
 
@@ -25,15 +27,15 @@ npm run test:compose-quickstart
 
 `test:compose-quickstart` runs the documented `docker compose up --build`
 path on ports 8080/8081, verifies the isolated runtime profiles and brands, and
-submits both demo forms in Chromium.
+checks the neutral configuration refusal in Chromium.
 
 Open `http://localhost:8080` for `publicPortal` and
-`http://localhost:8081` for `departmentApp`. The default image also starts in
-demo mode. To run against a real `formspec-server`, set
-`FORMSPEC_WEB_SERVER_URL`; `docker-compose.yml` forwards it to both containers:
+`http://localhost:8081` for `departmentApp`. To connect a deployed
+`formspec-server`, set its URL and scope key; compose forwards both:
 
 ```bash
-FORMSPEC_WEB_SERVER_URL=https://formspec-server.example.test docker compose up --build
+FORMSPEC_WEB_SERVER_URL=https://formspec-server.example.test \
+FORMSPEC_WEB_SCOPE_KEY="$DEPLOYMENT_SCOPE_KEY" docker compose up --build
 ```
 
 With a server URL, `publicPortal` uses the reference anonymous-session draft and

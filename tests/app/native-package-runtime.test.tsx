@@ -207,7 +207,7 @@ describe('native package boot and scoped recovery', () => {
     const oidc = departmentAppProfile.identity.oidc!;
     expect(createBrowserScopedMetadataStore({ namespace: 'formspec-web:signin-navigation',
       context: { origin: window.location.origin, issuer: oidc.issuer, clientId: oidc.clientId,
-        redirectUri: oidc.redirectUri, tenantBinding: departmentAppProfile.tenantBinding } }).read('return')).toBe('/?form=new&package=%2Fnew.json');
+        redirectUri: oidc.redirectUri } }).read('return')).toBe('/?form=new&package=%2Fnew.json');
   });
   it.each(['withdraw', 'replace', 'renew'] as const)('retires native review authority when the admitted OIDC session changes: %s', async change => {
     const test = fixture();

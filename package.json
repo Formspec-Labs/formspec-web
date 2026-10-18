@@ -34,7 +34,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "npm run typecheck && npm run lint && vitest run",
+    "test": "npm run typecheck && npm run lint && vitest run && npm run test:photo-inspection",
     "test:unit": "vitest run src/policy src/profiles tests/adapters tests/app tests/composition tests/config tests/demo tests/policy-resolution tests/profiles tests/scripts tests/shared tests/smoke",
     "test:conformance": "vitest run tests/adapter-conformance",
     "test:watch": "vitest",
@@ -52,8 +52,10 @@
     "check:vendor-leaks": "scripts/check-vendor-leaks.sh",
     "check:upstream-theme": "node scripts/check-upstream-theme-assets.mjs",
     "check:surface-bundle-vendor": "node scripts/check-surface-bundle-vendor.mjs",
+    "check:source-schema-vendor": "node scripts/check-surface-bundle-vendor.mjs src/adapters/http/source-schemas",
     "vendor:refresh": "node scripts/check-upstream-theme-assets.mjs --write && node scripts/check-surface-bundle-vendor.mjs --write",
-    "ci": "npm run typecheck && npm run lint && npm run check:testing-plan && npm run check:mvp-audit && npm run check:upstream-blockers && npm run check:release-docs && npm run check:conformance-coverage && npm run test:conformance && npm run test:unit && npm run check:vendor-leaks && npm run check:upstream-theme && npm run test:e2e && npm run build && npm run check:bundle-budget && npm run check:compose-config && npm run test:compose-quickstart && npm run test:deployment && npm run test:multi-deployment && npm run check:surface-bundle-vendor"
+    "ci": "npm run typecheck && npm run lint && npm run check:testing-plan && npm run check:mvp-audit && npm run check:upstream-blockers && npm run check:release-docs && npm run check:conformance-coverage && npm run test:conformance && npm run test:unit && npm run test:photo-inspection && npm run check:vendor-leaks && npm run check:upstream-theme && npm run test:e2e && npm run build && npm run check:bundle-budget && npm run check:compose-config && npm run test:compose-quickstart && npm run test:deployment && npm run test:multi-deployment && npm run check:surface-bundle-vendor",
+    "test:photo-inspection": "npm --workspace=@formspec-web/photo-inspection test"
   },
   "dependencies": {
     "@formspec-org/app-graph": "file:vendor/formspec-app-graph",
@@ -68,6 +70,7 @@
     "@formspec-org/integrity-cose": "file:vendor/integrity-cose",
     "@formspec-org/integrity-signature-adapter-webcrypto": "file:vendor/integrity-signature-adapter-webcrypto",
     "@formspec-org/integrity-signature-port": "file:vendor/integrity-signature-port",
+    "@noble/hashes": "2.4.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "canonicalize": "5.1.0",
@@ -95,5 +98,8 @@
     "typescript-eslint": "^8.20.0",
     "vite": "^7.0.0",
     "vitest": "^4.0.0"
-  }
+  },
+  "workspaces": [
+    "packages/photo-inspection"
+  ]
 }

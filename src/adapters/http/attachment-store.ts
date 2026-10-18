@@ -2,7 +2,7 @@ import { isRecord } from '../../shared/is-record.ts';
 import { abortable } from '../../shared/abortable.ts';
 import type { AttachmentRef, AttachmentStore, AttachmentUploadMetadata } from '../../ports/attachment-store.ts';
 import { AttachmentUploadError } from '../../ports/attachment-store.ts';
-import { formspecTenantHeaderNames, tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
+import { scopeKeyHeaders } from '../../shared/scope-key.ts';
 import { generateIdempotencyKey, IDEMPOTENCY_KEY_HEADER } from '../../shared/idempotency-key.ts';
 import { validatedAttachmentMaxUploadBytes } from '../../config/attachment-policy.ts';
 import type { CompletionLifetime } from '../../ports/response-completion.ts';
@@ -22,13 +22,11 @@ export class HttpAttachmentStore implements AttachmentStore {
 
   private readonly config: HttpAttachmentStoreConfig;
   constructor(config: HttpAttachmentStoreConfig) {
-    this.config = { ...config, tenantBinding: config.tenantBinding ? structuredClone(config.tenantBinding) : undefined,
+    this.config = { ...config,
       taskBinding: config.taskBinding ? { draftId: config.taskBinding.draftId, fieldPaths: Object.freeze({ ...config.taskBinding.fieldPaths }),
         lifetime: { signal: config.taskBinding.lifetime.signal, assertCurrent: config.taskBinding.lifetime.assertCurrent } } : undefined };
     const task = this.config.taskBinding;
-    const scope = config.tenantBinding ? tenantScopeHeaders(config.tenantBinding) : {};
-    if (task && Object.values(formspecTenantHeaderNames).some(name => !scope[name]?.trim()))
-      throw new Error('Task attachments require all four deployment scope headers');
+    if (task && config.scopeKey === undefined) throw new Error('Task attachments require the deployment scope key');
     if (task && (!task.draftId.trim() || ['.', '..'].includes(task.draftId) || !config.accessToken
       || Object.entries(task.fieldPaths).some(([field, path]) => !field.trim()
         || !/^\/(?:[^~]|~[01])+$/.test(path) || path !== '/' + field.replace(/\[(\d+)\]/g, '.$1').split('.').map(part => part.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')) || config.maxUploadBytes === undefined)) throw new Error('Task attachments require explicit draft, paths, owner and finite limit');
@@ -75,9 +73,7 @@ export class HttpAttachmentStore implements AttachmentStore {
     if (size > this.maxUploadBytes) {
       throw new Error('Attachment exceeds the configured read limit');
     }
-    const scopeHeaders = this.config.tenantBinding ? tenantScopeHeaders(this.config.tenantBinding) : {};
-    if ((['x-formspec-tenant-id', 'x-formspec-workspace-id', 'x-formspec-environment-id', 'x-formspec-cell-id'] as const)
-      .some(name => !scopeHeaders[name]?.trim())) throw new Error('Attachment read requires all four deployment scope headers');
+    if (this.config.scopeKey === undefined) throw new Error('Attachment read requires the deployment scope key');
     if (!globalThis.crypto?.subtle) throw new Error('Attachment digest verification is unavailable');
     this.check(signal);
     const tokenPromise = Promise.resolve(typeof this.config.accessToken === 'function' ? this.config.accessToken() : this.config.accessToken);
@@ -90,7 +86,7 @@ export class HttpAttachmentStore implements AttachmentStore {
       url,
       { method: 'GET', redirect: 'error', signal, headers: {
         authorization: `Bearer ${token}`,
-        ...scopeHeaders,
+        ...scopeKeyHeaders(this.config.scopeKey),
       } },
     );
     try { this.check(signal); } catch (error) { void response.body?.cancel().catch(() => {}); throw error; }
@@ -125,7 +121,7 @@ export class HttpAttachmentStore implements AttachmentStore {
       'content-type': mimeType,
       authorization: `Bearer ${token}`,
       [IDEMPOTENCY_KEY_HEADER]: generateIdempotencyKey(),
-      ...(this.config.tenantBinding ? tenantScopeHeaders(this.config.tenantBinding) : {}),
+      ...scopeKeyHeaders(this.config.scopeKey),
     });
     const url = new URL(`${this.config.baseUrl.replace(/\/+$/, '')}${this.basePath()}`);
     url.searchParams.set('filename', metadata.filename);

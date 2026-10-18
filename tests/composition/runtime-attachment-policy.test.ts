@@ -13,7 +13,7 @@ describe('deployment-owned attachment byte limit', () => {
     expect(runtimeConfigFromEnvRecord({})).not.toHaveProperty('attachmentMaxUploadBytes');
     expect(resolveActiveConfig(publicPortalProfile).referenceAdapters?.formspecStack?.attachments?.maxUploadBytes).toBeUndefined();
     const profile = { ...publicPortalProfile, referenceAdapters: { formspecStack: {
-      tenantHeaderDialect: 'formspec' as const, attachments: { maxUploadBytes: 2345 },
+      attachments: { maxUploadBytes: 2345 },
     } } };
     expect(resolveActiveConfig(profile).referenceAdapters?.formspecStack?.attachments?.maxUploadBytes).toBe(2345);
     expect(resolveActiveConfig(profile, { attachmentMaxUploadBytes: 1234 }).referenceAdapters?.formspecStack?.attachments?.maxUploadBytes).toBe(1234);
@@ -31,7 +31,7 @@ describe('deployment-owned attachment byte limit', () => {
   it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('refuses invalid numeric runtime and profile limits %s', value => {
     expect(() => resolveActiveConfig(publicPortalProfile, { attachmentMaxUploadBytes: value })).toThrow(/positive safe integer/);
     expect(() => resolveActiveConfig({ ...publicPortalProfile, referenceAdapters: { formspecStack: {
-      tenantHeaderDialect: 'formspec', attachments: { maxUploadBytes: value },
+      attachments: { maxUploadBytes: value },
     } } })).toThrow(/positive safe integer/);
     vi.stubGlobal('window', { __FORMSPEC_RUNTIME_CONFIG__: { attachmentMaxUploadBytes: value } });
     expect(() => readRuntimeConfig()).toThrow(/positive safe integer/);

@@ -10,7 +10,8 @@ function fixture() {
   const names = [...new Set([...SIGNING_CEREMONY_WIDGET_SHAPE.dataInputs,
     ...RESPONSE_REVIEW_WIDGET_SHAPE.dataInputs].map(input => input.name))];
   return {
-    keyId: 'deployment-key', definition: { url: 'urn:test:definition', version: '0.1.5' },
+    keyId: 'deployment-key', expectedIssuer: 'https://source.example.test/tenant/workspace/production',
+    definition: { url: 'urn:test:definition', version: '0.1.5' },
     bundle: { id: 'https://example.test/package', version: '0.1.5' },
     module: { id: 'x-example-signing', version: '0.1.0' }, initialLocale: 'es-US',
     roles: Object.fromEntries(['saveInitial', 'saveOwned', 'prepare', 'sign', 'submit', 'paper'].map(actionRef =>
@@ -141,6 +142,9 @@ describe('closed native package signing opt-in', () => {
     ['extra top-level option', () => ({ ...fixture(), activation: true })],
     ['extra pin option', () => ({ ...fixture(), definition: { ...fixture().definition, hash: 'invented' } })],
     ['empty key', () => ({ ...fixture(), keyId: ' ' })],
+    ['missing issuer', () => { const value = fixture(); delete (value as Partial<typeof value>).expectedIssuer; return value; }],
+    ['relative issuer', () => ({ ...fixture(), expectedIssuer: 'relative/path' })],
+    ['issuer with whitespace', () => ({ ...fixture(), expectedIssuer: 'https://source.example.test/has space' })],
     ['relative Definition locator', () => ({ ...fixture(), definition: { url: '/relative', version: '0.1.5' } })],
     ['executable bundle locator', () => ({ ...fixture(), bundle: { id: 'javascript:alert(1)', version: '0.1.5' } })],
     ['empty version pin', () => ({ ...fixture(), module: { id: 'x-example', version: '' } })],

@@ -8,12 +8,14 @@ import type { MixedProofCommand, SourceMixedProofApi } from '../../../src/adapte
 import type { ProofWorker } from '../../../src/adapters/source-worker/protocol.ts';
 import { HttpMixedProofReader } from '../../../src/adapters/http/mixed-proof-reader.ts';
 import { decodeMixedHydration } from '../../../src/adapters/http/mixed-proof-wire.ts';
+import { otherScopeKey } from '../../fixtures/scope.ts';
 import type { InitialNativeRequest } from '../../../src/ports/initial-mixed-proof.ts';
+const expectedIssuer = 'https://Source.test/independent/scope/';
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 function fixture(phase: 'initial' | 'task') {
   const base = resolve(dirname(fileURLToPath(import.meta.url)), '../../fixtures/mixed-proof-transport-v1', `hydrate-${phase}`);
   const read = (file: string) => Uint8Array.from(readFileSync(resolve(base, file)));
-  const selection = JSON.parse(new TextDecoder().decode(read('selection.json')));
+  const selection = { ...JSON.parse(new TextDecoder().decode(read('selection.json'))), expectedIssuer };
   const hydrationBytes = read('hydration.json'); const view = JSON.parse(new TextDecoder().decode(hydrationBytes));
   const proofIndex = JSON.parse(new TextDecoder().decode(read('proof-index.json')));
   const actual = JSON.parse(new TextDecoder().decode(read('actual-hydration-fixture.json')));
@@ -41,8 +43,7 @@ describe('general client and actual Hydrate transport (MOCK verifier; no proof q
     const source: SourceMixedProofApi = { initializeMixedProofVerifier: vi.fn(async () => {}),
       indexMixedProofObjects: vi.fn(() => encode(f.indexed)), verifyMixedProof: vi.fn(() => encode(f.outcome)) };
     const w = worker(source); let now = 0; let guarded = true; const paths: string[] = [];
-    const reader = new HttpMixedProofReader({ baseUrl: 'https://source.example', tenantBinding: { kind: 'bound', scope: {
-      tenant: f.view.scope.tenant_id, workspace: f.view.scope.workspace_id, environment: f.view.scope.environment_id, cell: f.view.scope.cell_id } },
+    const reader = new HttpMixedProofReader({ baseUrl: 'https://source.example', scopeKey: f.view.scope,
       accessToken: 'selected', fetchImpl: async (url, init) => {
         paths.push(String(url)); const command = JSON.parse(String(init?.body));
         expect(command.hydration).toEqual(f.view); expect(new Headers(init?.headers).get('authorization')).toBe('Bearer selected');
@@ -59,9 +60,11 @@ describe('general client and actual Hydrate transport (MOCK verifier; no proof q
       f.selection.request as InitialNativeRequest, index, lifetime), { signal: new AbortController().signal, assertCurrent: () => { if (!guarded) throw new Error('retired-owner'); },
       startedMonotonic: 0, currentAt: f.selection.currentAt, currentAtMonotonic: 0 });
     nativeCurrentCheck.runId = 'caller-mutated-run';
+    f.selection.expectedIssuer = 'https://source.test/changed';
     const proof = await pending;
     expect(proof.outcome.results).toHaveLength(3); expect(proof.outcome.results).toEqual(f.actual.expectedFullResults);
     const supplied = vi.mocked(source.verifyMixedProof).mock.calls[0][0];
+    expect(JSON.parse(new TextDecoder().decode(supplied.selectionBytes)).expectedIssuer).toBe(expectedIssuer);
     if (phase === 'initial') expect(JSON.parse(new TextDecoder().decode(supplied.selectionBytes)).nativeCurrentCheck)
       .toEqual({ ...nativeCurrentCheck, runId: 'exact-selected-run' });
     expect(supplied.hydrationBytes).toEqual(f.hydrationBytes); expect(supplied.buffers).toEqual(f.actual.protectedObjects.map((item: { file: string }) => f.read(item.file)));
@@ -92,10 +95,23 @@ describe('general client and actual Hydrate transport (MOCK verifier; no proof q
     now = 1002; current = true; expect(() => proof.assertCurrent()).toThrow();
     client.dispose();
   });
-  it('refuses a foreign tenant before credentials or proof transport', async () => {
+  it.each([undefined, '', 'relative/issuer', 'https://source.test/has space'])(
+    'refuses invalid independent issuer %s before caller callbacks, preparation or worker creation', async issuer => {
+      const f = fixture('initial'); f.selection.expectedIssuer = issuer;
+      const prepare = vi.fn(), createWorker = vi.fn(), assertCurrent = vi.fn();
+      const client = new MixedProofWorkerClient({ createWorker, module: new Uint8Array([1]), maxModuleBytes: 1,
+        wholeOperationMilliseconds: 1000 });
+      await expect(client.verify(f.selection, prepare, { signal: new AbortController().signal, assertCurrent,
+        startedMonotonic: 0, currentAt: f.selection.currentAt, currentAtMonotonic: 0 })).rejects.toThrow('issuer');
+      expect(prepare).not.toHaveBeenCalled(); expect(createWorker).not.toHaveBeenCalled(); expect(assertCurrent).not.toHaveBeenCalled();
+      client.dispose();
+    });
+  it('requires the deployment scope key at construction', () => {
+    expect(() => new HttpMixedProofReader({ baseUrl: 'https://source.example', accessToken: 'selected' })).toThrow('scope key required');
+  });
+  it('refuses a foreign scope before credentials or proof transport', async () => {
     const f = fixture('initial'); let calls = 0;
-    const reader = new HttpMixedProofReader({ baseUrl: 'https://source.example', tenantBinding: { kind: 'bound', scope: {
-      tenant: 'foreign', workspace: f.view.scope.workspace_id, environment: f.view.scope.environment_id, cell: f.view.scope.cell_id } },
+    const reader = new HttpMixedProofReader({ baseUrl: 'https://source.example', scopeKey: otherScopeKey,
       accessToken: () => { calls++; return 'selected'; }, fetchImpl: async () => { calls++; return new Response(); } });
     await expect(reader.readAll({ value: f.view, utf8Bytes: f.hydrationBytes }, f.selection.request,
       async () => encode(f.indexed), { signal: new AbortController().signal, assertCurrent() {} })).rejects.toThrow('current request differs');
@@ -103,8 +119,7 @@ describe('general client and actual Hydrate transport (MOCK verifier; no proof q
   });
   it('retains the original guard despite caller mutation during owning indexing', async () => {
     const f = fixture('initial'); let current = true; let objects = 0;
-    const reader = new HttpMixedProofReader({ baseUrl: 'https://source.example', tenantBinding: { kind: 'bound', scope: {
-      tenant: f.view.scope.tenant_id, workspace: f.view.scope.workspace_id, environment: f.view.scope.environment_id, cell: f.view.scope.cell_id } },
+    const reader = new HttpMixedProofReader({ baseUrl: 'https://source.example', scopeKey: f.view.scope,
       fetchImpl: async url => {
         if (String(url).endsWith('/proofs')) return new Response(f.read('protected-view.json'), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
         objects++; throw new Error('Objects must not dispatch');

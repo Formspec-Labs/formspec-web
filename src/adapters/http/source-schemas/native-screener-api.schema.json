@@ -36,36 +36,9 @@
           "type": "object",
           "properties": {
             "scope": {
-              "type": "object",
-              "properties": {
-                "tenant_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "workspace_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "environment_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "cell_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                }
-              },
-              "required": [
-                "tenant_id",
-                "workspace_id",
-                "environment_id",
-                "cell_id"
-              ],
-              "additionalProperties": false
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
             },
             "formId": {
               "type": "string",
@@ -176,7 +149,7 @@
     },
     "NativeDetermination": {
       "title": "Formspec Determination Record",
-      "description": "A Formspec Determination Record \u2014 the structured output artifact produced by evaluating a Screener Document against respondent inputs. A Determination Record captures the complete evaluation outcome: which routes matched, which were eliminated and why, computed scores, the respondent's input values with answer states, and evaluation metadata. The record references the specific screener version that produced it via the (screener.url, screener.version) tuple. Determination Records are immutable once produced; status may transition from 'completed' to 'expired' when the screener's resultValidity duration elapses, but the evaluation data itself is never modified. Status 'unavailable' indicates the screener was outside its availability window and no evaluation was performed.",
+      "description": "A Formspec Determination Record — the structured output artifact produced by evaluating a Screener Document against respondent inputs. A Determination Record captures the complete evaluation outcome: which routes matched, which were eliminated and why, computed scores, the respondent's input values with answer states, and evaluation metadata. The record references the specific screener version that produced it via the (screener.url, screener.version) tuple. Determination Records are immutable once produced; status may transition from 'completed' to 'expired' when the screener's resultValidity duration elapses, but the evaluation data itself is never modified. Status 'unavailable' indicates the screener was outside its availability window and no evaluation was performed.",
       "type": "object",
       "required": [
         "$formspecDetermination",
@@ -467,36 +440,9 @@
           "const": 1
         },
         "scope": {
-          "type": "object",
-          "properties": {
-            "tenant_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "workspace_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "environment_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "cell_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            }
-          },
-          "required": [
-            "tenant_id",
-            "workspace_id",
-            "environment_id",
-            "cell_id"
-          ],
-          "additionalProperties": false
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
         },
         "runId": {
           "type": "string",
@@ -723,36 +669,9 @@
       "type": "object",
       "properties": {
         "scope": {
-          "type": "object",
-          "properties": {
-            "tenant_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "workspace_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "environment_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "cell_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            }
-          },
-          "required": [
-            "tenant_id",
-            "workspace_id",
-            "environment_id",
-            "cell_id"
-          ],
-          "additionalProperties": false
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
         },
         "draftId": {
           "type": "string",
@@ -1058,36 +977,9 @@
               "type": "object",
               "properties": {
                 "scope": {
-                  "type": "object",
-                  "properties": {
-                    "tenant_id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2048
-                    },
-                    "workspace_id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2048
-                    },
-                    "environment_id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2048
-                    },
-                    "cell_id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2048
-                    }
-                  },
-                  "required": [
-                    "tenant_id",
-                    "workspace_id",
-                    "environment_id",
-                    "cell_id"
-                  ],
-                  "additionalProperties": false
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$",
+                  "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
                 },
                 "formId": {
                   "type": "string",
@@ -1286,36 +1178,9 @@
               ]
             },
             "scope": {
-              "type": "object",
-              "properties": {
-                "tenant_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "workspace_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "environment_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "cell_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                }
-              },
-              "required": [
-                "tenant_id",
-                "workspace_id",
-                "environment_id",
-                "cell_id"
-              ],
-              "additionalProperties": false
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
             },
             "owner": {
               "type": "object",
@@ -1399,36 +1264,9 @@
               "type": "object",
               "properties": {
                 "scope": {
-                  "type": "object",
-                  "properties": {
-                    "tenant_id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2048
-                    },
-                    "workspace_id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2048
-                    },
-                    "environment_id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2048
-                    },
-                    "cell_id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 2048
-                    }
-                  },
-                  "required": [
-                    "tenant_id",
-                    "workspace_id",
-                    "environment_id",
-                    "cell_id"
-                  ],
-                  "additionalProperties": false
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$",
+                  "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
                 },
                 "formId": {
                   "type": "string",

@@ -7,6 +7,15 @@ export {
   type IdempotencyKey,
 } from './idempotency-key.ts';
 export { assertProblemJson, isProblemJson, type ProblemJson } from './problem-json.ts';
+export {
+  SCOPE_KEY_HEADER,
+  deriveScopeKey,
+  parseScopeKey,
+  scopeKeyHeaders,
+  selectsScope,
+  type ScopeKey,
+  type ScopeNames,
+} from './scope-key.ts';
 export { createFrozenHostStateDataSourceRuntime, type FrozenHostStateDataInput } from './frozen-host-state-data.ts';
 export { createResponseSigningDataSourceRuntime, type ResponseSigningDataInput } from './response-signing-data.ts';
 export { createNativeMappedDataSource, type NativeMappedDataSourceInput } from './native-mapped-data-source.ts';
@@ -16,6 +25,7 @@ export { matchBrowserAuthCallback, completeBrowserAuthCallback, type BrowserAuth
 export { createBrowserScopedMetadataStore, type BrowserScopedMetadataConfig, type ScopedMetadataStore } from './browser-scoped-metadata.ts';
 
 export { isApplicationDraftId } from './application-draft-id.ts';
+export { requireSigningIssuer } from './signing-issuer.ts';
 
 export { createEvaluationInstanceResolver } from './evaluation-instance-resolver.ts';
 

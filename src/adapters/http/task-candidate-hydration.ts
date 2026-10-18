@@ -2,6 +2,7 @@ import { NATIVE_SOURCE_OPERATION_MILLISECONDS } from '../../shared/native-operat
 import { abortable } from '../../shared/abortable.ts';
 import canonicalize from 'canonicalize';
 import { isRecord } from '../../shared/is-record.ts';
+import { selectsScope } from '../../shared/scope-key.ts';
 import { snapshotWire } from './wire-json.ts';
 import type { FormDefinition } from '@formspec-org/types';
 import type { CompletionLifetime } from '../../ports/response-completion.ts';
@@ -9,7 +10,6 @@ import type { SavedResponseDraft } from '../../ports/response-signing.ts';
 import type { TaskDraftAssociation } from '../../ports/task-draft.ts';
 import type { EvaluationHydrationWire, HydratedEvaluationCandidate, SavedCandidateHydration } from '../../ports/evaluation-hydration.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
-import { tenantScopeHeaders } from '../../profiles/tenant-headers.ts';
 import { computeJcsSha256Digest as hash } from './response-action-ledger.ts';
 import type { MixedHydrationWire } from '../../ports/mixed-proof.ts';
 import { decodeMixedHydration } from './mixed-proof-wire.ts';
@@ -182,16 +182,12 @@ export function taskRequiresExternalHydration(definition: FormDefinition): boole
 
 /** Validate every operator selection before Source launch creates a durable draft. */
 export function assertTaskHydrationSelection(config: Omit<HttpTaskCandidateHydrationConfig, 'taskDraft'>): void {
-  const headers = config.tenantBinding && tenantScopeHeaders(config.tenantBinding);
   const { selection, definition, formVersionHash, subjectRef, identity } = config;
   const entries = Object.entries(definition.instances ?? {}).filter(([, value]) => typeof value.source === 'string');
   if (new Set(selection.requiredSources).size !== selection.requiredSources.length || entries.length !== selection.requiredSources.length
     || entries.some(([name, value]) => !name.trim() || !selection.requiredSources.includes(value.source!) || value.readonly === false)
     || new Set(entries.map(([, value]) => value.source)).size !== selection.requiredSources.length) fail('selected source coverage mismatch');
-  if (!headers || headers['x-formspec-tenant-id'] !== selection.scope.tenant_id
-    || headers['x-formspec-workspace-id'] !== selection.scope.workspace_id
-    || headers['x-formspec-environment-id'] !== selection.scope.environment_id
-    || headers['x-formspec-cell-id'] !== selection.scope.cell_id
+  if (!selectsScope(config.scopeKey, selection.scope)
     || definition.url !== selection.definitionUrl || definition.version !== selection.definitionVersion
     || ![subjectRef, identity.issuer, identity.subject, selection.formId, selection.formVersionId].every(value => typeof value === 'string' && value.trim())
     || !/^sha256:[a-f0-9]{64}$/.test(formVersionHash) || !/^sha256:[a-f0-9]{64}$/.test(selection.definitionHash)

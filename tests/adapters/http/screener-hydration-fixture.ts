@@ -6,12 +6,12 @@ import type { SavedResponseDraft } from '../../../src/ports/response-signing.ts'
 import type { EvaluationHydrationWire, NativeScreenerMappingReceipt } from '../../../src/ports/evaluation-hydration.ts';
 import type { FormDefinition } from '@formspec-org/types';
 import { recordingFetch } from './test-fetch.ts';
+import { testScopeKey as scope } from '../../fixtures/scope.ts';
 
 export async function hydrationFixture(options: { extraSource?: boolean; taskSource?: boolean; maxEvidenceAgeSeconds?: number; maxValiditySeconds?: number; outputSchemaHash?: string; data?: Record<string, unknown>; mutate?: (view: EvaluationHydrationWire) => void | Promise<void> } = {}) {
   const digest = `sha256:${'a'.repeat(64)}`;
   const at = '2026-10-09T12:00:00Z';
   const expires = new Date(Date.parse(at) + (options.maxValiditySeconds ?? 60) * 1000).toISOString();
-  const scope = { tenant_id: 'tenant', workspace_id: 'workspace', environment_id: 'environment', cell_id: 'cell' };
   const owner = { sessionId: 'session', subjectRef: 'source-subject', authenticated: { issuer: 'https://issuer.example', subject: 'oidc',
     clientId: 'client', principalId: 'principal', profile: 'profile', actorRef: 'separate-actor', subjectRef: 'source-subject', sessionId: 'session' } };
   const definition: FormDefinition = { $formspec: '1.0', url: 'urn:test:form', version: '1.0.0', title: 'Hydration', items: [{ type: 'field', key: 'flag', label: 'Flag', dataType: 'boolean' }],
@@ -69,6 +69,6 @@ export async function hydrationFixture(options: { extraSource?: boolean; taskSou
     return new Response(JSON.stringify(returned), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
   });
   const config = { baseUrl: 'https://source.example', selection, selectionHash, definition, accessToken, fetchImpl: fetch,
-    monotonicNow: () => elapsed, tenantBinding: { kind: 'bound' as const, scope: { tenant: 'tenant', workspace: 'workspace', environment: 'environment', cell: 'cell' } } };
+    monotonicNow: () => elapsed, scopeKey: scope };
   return { config, input: { ...context, saved, run, association }, view, receipt, requests, accessToken, setElapsed: (value: number) => { elapsed = value; } };
 }

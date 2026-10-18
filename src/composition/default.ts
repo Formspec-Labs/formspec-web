@@ -120,7 +120,7 @@ export function createDefaultComposition(
   const notificationDelivery = options.notificationDelivery ?? unavailableNotificationDelivery();
   const baseHttpConfig = {
     baseUrl: serverUrl,
-    tenantBinding: config.tenantBinding,
+    scopeKey: config.scopeKey,
   };
   const initialDefinitionUrl = requiredInitialDefinitionUrl(options.initialDefinitionUrl);
   const packageSource = options.packageUrl ? new PinnedPackageDefinitionSource(options.packageUrl) : undefined;
@@ -212,11 +212,11 @@ export function createDefaultComposition(
   const responseActionInvoker = responseActionCapabilityUrl
     ? createHttpResponseActionLedgerInvokerFactory({
         endpoint: serverUrl,
-        tenantBinding: config.tenantBinding,
+        scopeKey: config.scopeKey,
         anonymousSessions,
         capabilityProvider: createHttpResponseActionLedgerCapabilityProvider({
           endpoint: responseActionCapabilityUrl,
-          tenantBinding: config.tenantBinding,
+          scopeKey: config.scopeKey,
           accessToken: identityBinding.accessToken,
         }),
       })
@@ -377,7 +377,7 @@ export function buildRealIdentityProvider(
 ): IdentityBinding {
   const baseHttpConfig = {
     baseUrl: serverUrl,
-    tenantBinding: config.tenantBinding,
+    scopeKey: config.scopeKey,
   };
   if (config.ports.identityProvider === 'anonymous' && !initialDefinitionUrl) throw new Error('Anonymous identity requires an explicit initialDefinitionUrl');
   const anonymousSessions = new AnonymousSessionBridge(baseHttpConfig);

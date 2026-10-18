@@ -51,7 +51,6 @@ describe('composition root smoke', () => {
       referenceAdapters: {
         formspecStack: {
           ...departmentAppProfile.referenceAdapters?.formspecStack,
-          tenantHeaderDialect: 'formspec',
           formspecServerUrl: 'https://formspec-server.example.test',
         },
       },
@@ -69,7 +68,6 @@ describe('composition root smoke', () => {
       referenceAdapters: {
         formspecStack: {
           ...publicPortalProfile.referenceAdapters?.formspecStack,
-          tenantHeaderDialect: 'formspec',
           formspecServerUrl: 'https://formspec-server.example.test',
           responseActionLedgerCapabilityUrl:
             'https://formspec-bff.example.test/response-actions/ledger/capability',
@@ -88,7 +86,6 @@ describe('composition root smoke', () => {
       referenceAdapters: {
         formspecStack: {
           ...departmentAppProfile.referenceAdapters?.formspecStack,
-          tenantHeaderDialect: 'formspec',
           formspecServerUrl: 'https://formspec-server.example.test',
         },
       },
@@ -107,7 +104,6 @@ describe('composition root smoke', () => {
         referenceAdapters: {
           formspecStack: {
             ...departmentAppProfile.referenceAdapters?.formspecStack,
-            tenantHeaderDialect: 'formspec',
             formspecServerUrl: 'https://formspec-server.example.test',
           },
         },
@@ -147,7 +143,6 @@ describe('composition root smoke', () => {
       referenceAdapters: {
         formspecStack: {
           ...departmentAppProfile.referenceAdapters?.formspecStack,
-          tenantHeaderDialect: 'formspec',
           formspecServerUrl: 'https://formspec-server.example.test',
         },
       },
@@ -197,7 +192,6 @@ describe('composition root smoke', () => {
       referenceAdapters: {
         formspecStack: {
           ...publicPortalProfile.referenceAdapters?.formspecStack,
-          tenantHeaderDialect: 'formspec',
           formspecServerUrl: 'https://formspec-server.example.test',
         },
       },
@@ -358,7 +352,6 @@ function productionFromDeptProfile(): Parameters<typeof createDefaultComposition
     referenceAdapters: {
       formspecStack: {
         ...departmentAppProfile.referenceAdapters?.formspecStack,
-        tenantHeaderDialect: 'formspec',
         formspecServerUrl: 'https://formspec-server.example.test',
       },
     },

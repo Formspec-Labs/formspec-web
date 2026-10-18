@@ -2,6 +2,7 @@ name: ci
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -25,6 +26,7 @@ jobs:
       - run: npm run check:conformance-coverage
       - run: npm run test:conformance
       - run: npm run test:unit
+      - run: npm run test:photo-inspection
       - run: npm run check:vendor-leaks
       - uses: actions/checkout@v4
         with:
@@ -76,3 +78,24 @@ jobs:
         env:
           FORMSPEC_SOURCE_DIR: formspec-source
           INTEGRITY_STACK_SOURCE_DIR: integrity-source
+
+  # Private producer access is limited to trusted runs; fork PRs verify local pins above.
+  source-schema-vendor:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: refs
+        run: node -p "'source=' + require('./vendor/upstream-refs.json')['formspec-server']" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: Formspec-Labs/formspec-server
+          ref: ${{ steps.refs.outputs.source }}
+          path: formspec-server-source
+          token: ${{ secrets.FORMSPEC_SERVER_READ_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check:source-schema-vendor
+        env:
+          FORMSPEC_SERVER_SOURCE_DIR: formspec-server-source

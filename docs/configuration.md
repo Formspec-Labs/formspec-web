@@ -10,9 +10,10 @@ focused subpaths at `src/config/` and `src/profiles/`. `package.json` exposes
 that source surface while the package remains `"private": true`; this is for
 local stack composition, not npm publication.
 
-The portable config names the profile, tenant binding, identity policy, brand
-tokens, and port composition choices. Stack-specific URLs, tenant-header
-dialects, OIDC client endpoints, and magic-link callback paths live under
+The portable config names the profile, scope key, identity policy, brand
+tokens, and port composition choices. The scope key selects one admitted
+tenant/workspace/environment through `x-stack-scope-key`; it grants no access.
+Stack-specific URLs, OIDC client endpoints, and magic-link callback paths live under
 `referenceAdapters.formspecStack` so those details do not leak into the portable
 port contracts. The Response Actions Ledger capability URL is also stack
 specific: for the reference `formspec-server` deployment, point it at
@@ -35,11 +36,21 @@ reference adapters to that base URL. Runtime resolution also switches
 `reference-http`; constructing a production composition while those data ports
 still say `stub` is a configuration error.
 
+Native package signing requires a complete `nativePackageSigning` object in
+trusted runtime JavaScript. Its required `expectedIssuer` is the exact
+scope-derived Source issuer supplied by the deployment, alongside the current
+delegated-response `keyId`. It is distinct from the OAuth issuer and server URL.
+The host validates its URI syntax, freezes the selected value, and compares it
+exactly with the issuer covered by each new or retained signed Response.
+Missing or foreign issuers fail admission. Package URLs do not configure signing
+authority; the retained sample packages require explicit deployment settings.
+
 Supported runtime variables:
 
 | Runtime config key | Docker env | Vite fallback |
 | --- | --- | --- |
 | `profileName` | `FORMSPEC_WEB_PROFILE` | `VITE_FORMSPEC_WEB_PROFILE` |
+| `scopeKey` | `FORMSPEC_WEB_SCOPE_KEY` | `VITE_FORMSPEC_WEB_SCOPE_KEY` |
 | `formspecServerUrl` | `FORMSPEC_WEB_SERVER_URL` | `VITE_FORMSPEC_WEB_SERVER_URL` |
 | `responseActionLedgerCapabilityUrl` | `FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` | `VITE_FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` |
 | `oidcIssuer` | `FORMSPEC_WEB_OIDC_ISSUER` | `VITE_FORMSPEC_WEB_OIDC_ISSUER` |
@@ -47,6 +58,11 @@ Supported runtime variables:
 | `oidcRedirectUri` | `FORMSPEC_WEB_OIDC_REDIRECT_URI` | `VITE_FORMSPEC_WEB_OIDC_REDIRECT_URI` |
 | `magicLinkCallbackPath` | `FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH` | `VITE_FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH` |
 | `surfaceBundle` | `FORMSPEC_WEB_SURFACE_BUNDLE_JSON` | None; supply the object through runtime JavaScript. |
+
+When `FORMSPEC_WEB_SERVER_URL` is set, the container requires
+`FORMSPEC_WEB_SCOPE_KEY`: exactly 64 lowercase hex digits from the backend
+deployment's `config-check` output. Missing or malformed keys stop startup before
+replacing the runtime file. The unconfigured host needs no key.
 
 ## Signed respondent Surface
 
@@ -132,6 +148,7 @@ Docker or Compose:
 
 ```bash
 FORMSPEC_WEB_SERVER_URL=https://formspec-server.example.gov \
+FORMSPEC_WEB_SCOPE_KEY="$DEPLOYMENT_SCOPE_KEY" \
 FORMSPEC_WEB_SURFACE_BUNDLE_JSON="$(jq -c . respondent-surface.json)" \
 docker compose up --build
 ```
@@ -141,3 +158,24 @@ arrays, and JSON `null` stop container startup. The entrypoint uses a JSON
 processor for every scalar and nested value, then atomically replaces
 `/formspec-runtime-config.js`; it does not paste environment values into
 JavaScript source.
+
+## Source API schema copies
+
+`npm run check:surface-bundle-vendor` checks the committed SHA-256 pins for
+`src/adapters/http/source-schemas` without needing private repository access.
+`npm run check:source-schema-vendor` also compares those copies byte for byte
+with the sibling `formspec-server/schemas` directory. Set
+`FORMSPEC_SERVER_SOURCE_DIR` when that checkout lives elsewhere. Refresh only
+these schemas with:
+
+```sh
+npm run check:surface-bundle-vendor -- --write src/adapters/http/source-schemas
+```
+
+Both targeted and full refreshes record the producer commit in
+`vendor/upstream-refs.json`; every retained Source schema must match that commit.
+The `source-schema-vendor` CI job checks that exact producer on pushes to `main`
+and manual runs. It needs `FORMSPEC_SERVER_READ_TOKEN` with read access to the
+private repository. Public pull requests check the committed pins without that
+secret. Setting `FORMSPEC_SERVER_SOURCE_DIR` also enables the producer comparison
+in the full vendor check.

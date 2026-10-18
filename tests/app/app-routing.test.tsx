@@ -142,7 +142,11 @@ describe('App route selection (FW-0039 slice 1)', () => {
 });
 
 function RoutedAppHarness() {
-  const routeState = useRoutedComposition(departmentAppProfile);
+  const routeState = useRoutedComposition({
+    ...departmentAppProfile,
+    referenceAdapters: { formspecStack: { formspecServerUrl: 'https://source.example.test' } },
+  });
+  if (routeState.status === 'configuration-error') return <div role="alert">Configuration unavailable</div>;
   if (routeState.status === 'form-route-error') {
     return <div role="alert">{routeState.error.code}</div>;
   }

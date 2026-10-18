@@ -1,9 +1,10 @@
+import type { ScopeKey } from '../shared/scope-key.ts';
 import type { SavedResponseDraft } from './response-signing.ts';
 
 /** Exact public Source selection; all values come from operator-qualified publication pins. */
 export interface ScreenerSelection {
   readonly evaluationSelection: {
-    readonly scope: SourceScope;
+    readonly scope: ScopeKey;
     readonly formId: string;
     readonly formVersionId: string;
     readonly definitionUrl: string;
@@ -21,12 +22,6 @@ export interface ScreenerSelection {
   readonly qualificationProfile: 'flat-first-match-v1';
   /** Original Source mapping policy pin, when selected before proof issuance. Absence stays absent. */
   readonly instanceMappingHash?: string;
-}
-export interface SourceScope {
-  readonly tenant_id: string;
-  readonly workspace_id: string;
-  readonly environment_id: string;
-  readonly cell_id: string;
 }
 /** Source assigns these opaque identifiers. Browser OIDC subjects are not aliases for them. */
 export interface ScreenerOwner {
@@ -49,7 +44,7 @@ export type ScreenerQualification = { readonly status: 'ready'; readonly target:
   | { readonly status: 'pending'; readonly reason: string };
 export interface RetainedScreenerRun {
   readonly version: 1;
-  readonly scope: SourceScope;
+  readonly scope: ScopeKey;
   readonly runId: string;
   readonly revision: number;
   readonly selectionHash: string;
@@ -71,7 +66,7 @@ export interface ScreenerRunView {
   readonly acceptance: { readonly checkedAt: string; readonly qualification: ScreenerQualification } | null;
 }
 export interface ScreenerAssociation {
-  readonly scope: SourceScope;
+  readonly scope: ScopeKey;
   readonly draftId: string;
   readonly draftVersion: number;
   readonly candidateHash: string;

@@ -3,6 +3,7 @@ import { HttpScreenerHydration } from '../../../src/adapters/http/screener-hydra
 import { createEvaluationInstanceResolver } from '../../../src/shared/evaluation-instance-resolver.ts';
 import { computeJcsSha256Digest as hash } from '../../../src/adapters/http/response-action-ledger.ts';
 import { hydrationFixture } from './screener-hydration-fixture.ts';
+import { otherScopeKey } from '../../fixtures/scope.ts';
 import type { NativeScreenerMappingReceipt } from '../../../src/ports/evaluation-hydration.ts';
 
 async function rehashReceipt(receipt: NativeScreenerMappingReceipt) {
@@ -22,6 +23,13 @@ describe('authenticated native Screener candidate hydration', () => {
     const resolve = createEvaluationInstanceResolver(context);
     await expect(resolve({ instanceName: 'facts', source: 'screening', readonly: true, static: false,
       definition: { url: 'urn:test:form', version: '1.0.0' } }, { signal: new AbortController().signal })).resolves.toMatchObject({ status: 'loaded', value: { eligible: false } });
+  });
+
+  it.each([['a foreign', otherScopeKey], ['no', undefined]] as const)('refuses %s scope key before obtaining credentials or dispatching', async (_mode, scopeKey) => {
+    const f = await hydrationFixture();
+    expect(() => new HttpScreenerHydration({ ...f.config, scopeKey })).toThrow('selection scope mismatch');
+    expect(f.requests).toHaveLength(0);
+    expect(f.accessToken).not.toHaveBeenCalled();
   });
 
   it('keeps other selected sources explicitly unavailable and refuses readiness', async () => {

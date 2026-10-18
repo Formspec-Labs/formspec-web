@@ -7,14 +7,14 @@
     "taskContext": {
       "alphaContext": {
         "proofObject": {
-          "object_artifact_id": "context-observation-260b3bf8bf4c29972cb34d339c51aedb3411300c9b86da1497e48df5b343f091",
+          "object_artifact_id": "context-observation-f6e6ccf4a5b0fa31cb4ea4c55a8bf6e73737b9ef036436dd64d0bb64eaa283df",
           "aggregate_type": "task_context",
-          "aggregate_id": "sha256:b98949594af28c58b931dd2a43851e76f1ff3db0fd8e4b7976995b5a20dfff35",
+          "aggregate_id": "sha256:1f603e31a355b5ecb37951e2228477fd0a05a8f9203766d9471f6178e84ccf59",
           "object_kind": "immutable:task-context-observation:v1",
-          "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-260b3bf8bf4c29972cb34d339c51aedb3411300c9b86da1497e48df5b343f091",
+          "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-f6e6ccf4a5b0fa31cb4ea4c55a8bf6e73737b9ef036436dd64d0bb64eaa283df",
           "content_type": "application/json",
-          "checksum_sha256": "sha256:99d3bc16fbe9791fbe20b36b61ebf6d55b90e492d6b496de13815cdc51e3e0fd",
-          "byte_length": 205379
+          "checksum_sha256": "sha256:4e38162914755a847a30239fef18eb28e4082c999a8456743d6469e89f12b451",
+          "byte_length": 199086
         },
         "originalProofs": {
           "kind": "mixed",
@@ -23,34 +23,34 @@
             "images": {},
             "initialContext": {
               "alphaContext": {
-                "object_artifact_id": "context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_artifact_id": "context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "aggregate_type": "initial_context",
-                "aggregate_id": "sha256:2d6795302b615c1e82dfa5de43f67047ec4d7edec02b67193c115b08184bcf59",
+                "aggregate_id": "sha256:cdbde940b07f89201ff63e286cbebed8b9d47febf010146ffadfa2266eac5890",
                 "object_kind": "immutable:initial-context-observation:v1",
-                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "content_type": "application/json",
-                "checksum_sha256": "sha256:536cae9577868af998fc63695295c4e3a117696fd39be6c51702ac3b473ccf6e",
-                "byte_length": 5691
+                "checksum_sha256": "sha256:a5834cd80ba9e3e275e74290a517e34843ecfd5928bdc9290f80e04b53e443dc",
+                "byte_length": 5589
               },
               "betaContext": {
-                "object_artifact_id": "context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_artifact_id": "context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "aggregate_type": "initial_context",
-                "aggregate_id": "sha256:2d6795302b615c1e82dfa5de43f67047ec4d7edec02b67193c115b08184bcf59",
+                "aggregate_id": "sha256:cdbde940b07f89201ff63e286cbebed8b9d47febf010146ffadfa2266eac5890",
                 "object_kind": "immutable:initial-context-observation:v1",
-                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "content_type": "application/json",
-                "checksum_sha256": "sha256:536cae9577868af998fc63695295c4e3a117696fd39be6c51702ac3b473ccf6e",
-                "byte_length": 5691
+                "checksum_sha256": "sha256:a5834cd80ba9e3e275e74290a517e34843ecfd5928bdc9290f80e04b53e443dc",
+                "byte_length": 5589
               },
               "gammaContext": {
-                "object_artifact_id": "context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_artifact_id": "context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "aggregate_type": "initial_context",
-                "aggregate_id": "sha256:2d6795302b615c1e82dfa5de43f67047ec4d7edec02b67193c115b08184bcf59",
+                "aggregate_id": "sha256:cdbde940b07f89201ff63e286cbebed8b9d47febf010146ffadfa2266eac5890",
                 "object_kind": "immutable:initial-context-observation:v1",
-                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "content_type": "application/json",
-                "checksum_sha256": "sha256:536cae9577868af998fc63695295c4e3a117696fd39be6c51702ac3b473ccf6e",
-                "byte_length": 5691
+                "checksum_sha256": "sha256:a5834cd80ba9e3e275e74290a517e34843ecfd5928bdc9290f80e04b53e443dc",
+                "byte_length": 5589
               }
             }
           }
@@ -58,14 +58,14 @@
       },
       "betaContext": {
         "proofObject": {
-          "object_artifact_id": "context-observation-260b3bf8bf4c29972cb34d339c51aedb3411300c9b86da1497e48df5b343f091",
+          "object_artifact_id": "context-observation-f6e6ccf4a5b0fa31cb4ea4c55a8bf6e73737b9ef036436dd64d0bb64eaa283df",
           "aggregate_type": "task_context",
-          "aggregate_id": "sha256:b98949594af28c58b931dd2a43851e76f1ff3db0fd8e4b7976995b5a20dfff35",
+          "aggregate_id": "sha256:1f603e31a355b5ecb37951e2228477fd0a05a8f9203766d9471f6178e84ccf59",
           "object_kind": "immutable:task-context-observation:v1",
-          "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-260b3bf8bf4c29972cb34d339c51aedb3411300c9b86da1497e48df5b343f091",
+          "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-f6e6ccf4a5b0fa31cb4ea4c55a8bf6e73737b9ef036436dd64d0bb64eaa283df",
           "content_type": "application/json",
-          "checksum_sha256": "sha256:99d3bc16fbe9791fbe20b36b61ebf6d55b90e492d6b496de13815cdc51e3e0fd",
-          "byte_length": 205379
+          "checksum_sha256": "sha256:4e38162914755a847a30239fef18eb28e4082c999a8456743d6469e89f12b451",
+          "byte_length": 199086
         },
         "originalProofs": {
           "kind": "mixed",
@@ -74,34 +74,34 @@
             "images": {},
             "initialContext": {
               "alphaContext": {
-                "object_artifact_id": "context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_artifact_id": "context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "aggregate_type": "initial_context",
-                "aggregate_id": "sha256:2d6795302b615c1e82dfa5de43f67047ec4d7edec02b67193c115b08184bcf59",
+                "aggregate_id": "sha256:cdbde940b07f89201ff63e286cbebed8b9d47febf010146ffadfa2266eac5890",
                 "object_kind": "immutable:initial-context-observation:v1",
-                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "content_type": "application/json",
-                "checksum_sha256": "sha256:536cae9577868af998fc63695295c4e3a117696fd39be6c51702ac3b473ccf6e",
-                "byte_length": 5691
+                "checksum_sha256": "sha256:a5834cd80ba9e3e275e74290a517e34843ecfd5928bdc9290f80e04b53e443dc",
+                "byte_length": 5589
               },
               "betaContext": {
-                "object_artifact_id": "context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_artifact_id": "context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "aggregate_type": "initial_context",
-                "aggregate_id": "sha256:2d6795302b615c1e82dfa5de43f67047ec4d7edec02b67193c115b08184bcf59",
+                "aggregate_id": "sha256:cdbde940b07f89201ff63e286cbebed8b9d47febf010146ffadfa2266eac5890",
                 "object_kind": "immutable:initial-context-observation:v1",
-                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "content_type": "application/json",
-                "checksum_sha256": "sha256:536cae9577868af998fc63695295c4e3a117696fd39be6c51702ac3b473ccf6e",
-                "byte_length": 5691
+                "checksum_sha256": "sha256:a5834cd80ba9e3e275e74290a517e34843ecfd5928bdc9290f80e04b53e443dc",
+                "byte_length": 5589
               },
               "gammaContext": {
-                "object_artifact_id": "context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_artifact_id": "context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "aggregate_type": "initial_context",
-                "aggregate_id": "sha256:2d6795302b615c1e82dfa5de43f67047ec4d7edec02b67193c115b08184bcf59",
+                "aggregate_id": "sha256:cdbde940b07f89201ff63e286cbebed8b9d47febf010146ffadfa2266eac5890",
                 "object_kind": "immutable:initial-context-observation:v1",
-                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "content_type": "application/json",
-                "checksum_sha256": "sha256:536cae9577868af998fc63695295c4e3a117696fd39be6c51702ac3b473ccf6e",
-                "byte_length": 5691
+                "checksum_sha256": "sha256:a5834cd80ba9e3e275e74290a517e34843ecfd5928bdc9290f80e04b53e443dc",
+                "byte_length": 5589
               }
             }
           }
@@ -109,14 +109,14 @@
       },
       "gammaContext": {
         "proofObject": {
-          "object_artifact_id": "context-observation-260b3bf8bf4c29972cb34d339c51aedb3411300c9b86da1497e48df5b343f091",
+          "object_artifact_id": "context-observation-f6e6ccf4a5b0fa31cb4ea4c55a8bf6e73737b9ef036436dd64d0bb64eaa283df",
           "aggregate_type": "task_context",
-          "aggregate_id": "sha256:b98949594af28c58b931dd2a43851e76f1ff3db0fd8e4b7976995b5a20dfff35",
+          "aggregate_id": "sha256:1f603e31a355b5ecb37951e2228477fd0a05a8f9203766d9471f6178e84ccf59",
           "object_kind": "immutable:task-context-observation:v1",
-          "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-260b3bf8bf4c29972cb34d339c51aedb3411300c9b86da1497e48df5b343f091",
+          "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-f6e6ccf4a5b0fa31cb4ea4c55a8bf6e73737b9ef036436dd64d0bb64eaa283df",
           "content_type": "application/json",
-          "checksum_sha256": "sha256:99d3bc16fbe9791fbe20b36b61ebf6d55b90e492d6b496de13815cdc51e3e0fd",
-          "byte_length": 205379
+          "checksum_sha256": "sha256:4e38162914755a847a30239fef18eb28e4082c999a8456743d6469e89f12b451",
+          "byte_length": 199086
         },
         "originalProofs": {
           "kind": "mixed",
@@ -125,34 +125,34 @@
             "images": {},
             "initialContext": {
               "alphaContext": {
-                "object_artifact_id": "context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_artifact_id": "context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "aggregate_type": "initial_context",
-                "aggregate_id": "sha256:2d6795302b615c1e82dfa5de43f67047ec4d7edec02b67193c115b08184bcf59",
+                "aggregate_id": "sha256:cdbde940b07f89201ff63e286cbebed8b9d47febf010146ffadfa2266eac5890",
                 "object_kind": "immutable:initial-context-observation:v1",
-                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "content_type": "application/json",
-                "checksum_sha256": "sha256:536cae9577868af998fc63695295c4e3a117696fd39be6c51702ac3b473ccf6e",
-                "byte_length": 5691
+                "checksum_sha256": "sha256:a5834cd80ba9e3e275e74290a517e34843ecfd5928bdc9290f80e04b53e443dc",
+                "byte_length": 5589
               },
               "betaContext": {
-                "object_artifact_id": "context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_artifact_id": "context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "aggregate_type": "initial_context",
-                "aggregate_id": "sha256:2d6795302b615c1e82dfa5de43f67047ec4d7edec02b67193c115b08184bcf59",
+                "aggregate_id": "sha256:cdbde940b07f89201ff63e286cbebed8b9d47febf010146ffadfa2266eac5890",
                 "object_kind": "immutable:initial-context-observation:v1",
-                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "content_type": "application/json",
-                "checksum_sha256": "sha256:536cae9577868af998fc63695295c4e3a117696fd39be6c51702ac3b473ccf6e",
-                "byte_length": 5691
+                "checksum_sha256": "sha256:a5834cd80ba9e3e275e74290a517e34843ecfd5928bdc9290f80e04b53e443dc",
+                "byte_length": 5589
               },
               "gammaContext": {
-                "object_artifact_id": "context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_artifact_id": "context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "aggregate_type": "initial_context",
-                "aggregate_id": "sha256:2d6795302b615c1e82dfa5de43f67047ec4d7edec02b67193c115b08184bcf59",
+                "aggregate_id": "sha256:cdbde940b07f89201ff63e286cbebed8b9d47febf010146ffadfa2266eac5890",
                 "object_kind": "immutable:initial-context-observation:v1",
-                "object_uri": "object://neutral-context-tests/staged-attachments/996945f82258637271288ea9833351d95ba58b2bfe65f5b70e65f27b8bd749ba/context-observation-37f3a51f83be048f8ce56ee542fece4a020071b8ed27857fc12a2232c1c5d412",
+                "object_uri": "scoped-object:2fdf38daedd2ce79cc467142372c09bb879ee409ca99deacd500395c44b5d9b4/staged-attachments/context-observation-67ef0ce09f9fea02394d5631edefe5b5735daccd4517762b348bf112ecf625dc",
                 "content_type": "application/json",
-                "checksum_sha256": "sha256:536cae9577868af998fc63695295c4e3a117696fd39be6c51702ac3b473ccf6e",
-                "byte_length": 5691
+                "checksum_sha256": "sha256:a5834cd80ba9e3e275e74290a517e34843ecfd5928bdc9290f80e04b53e443dc",
+                "byte_length": 5589
               }
             }
           }
@@ -162,11 +162,11 @@
   },
   "buffers": [
     {
-      "key": "sha256:e2523d5a2cda5ff3e13c2258ef02a1c15c55a1c86622767fe0681b41df2cdde6",
+      "key": "sha256:34ec2f2ba85d02a6dde448c239c08ec013a59642f67b35459ed7f6518f5d83c4",
       "bytes": 0
     },
     {
-      "key": "sha256:eb6a26e7f68cee86f2e8e7f372f0f093e7b84acb407b0aabf296bc60a9680e72",
+      "key": "sha256:58304f8f586a448456f356080afe191e15864df6a751c4286f3838514fe5bb99",
       "bytes": 1
     }
   ]

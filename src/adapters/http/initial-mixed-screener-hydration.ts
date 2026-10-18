@@ -1,3 +1,4 @@
+import { requireSigningIssuer } from '../../shared/signing-issuer.ts';
 import { snapshotNativeCurrentCheck } from './native-current-check.ts';
 import { MixedProofWorkerClient, type MixedProofWorkerConfig } from '../source-worker/general-client.ts';
 import { decodeBoundedProofJson } from '../source-worker/wire.ts';
@@ -15,6 +16,7 @@ import type { HttpPublishedDefinition } from './definition-source.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import { computeJcsSha256Digest as hash } from './response-action-ledger.ts';
 import { isRecord } from '../../shared/is-record.ts';
+import { selectsScope } from '../../shared/scope-key.ts';
 import { freezeWireJson, requireWireJson } from './wire-json.ts';
 
 export interface NativeScreenerHydrationFactoryContext {
@@ -27,6 +29,8 @@ export interface NativeScreenerHydrationFactoryContext {
 }
 export type NativeScreenerHydrationFactory = (context: NativeScreenerHydrationFactoryContext) => ScreenerHydration;
 interface MixedScreenerHydrationBase extends NativeScreenerHydrationFactoryContext {
+  /** Independent Source issuer for original signed Responses inside the selected proofs. */
+  readonly expectedIssuer: string;
   /** Complete pre-sign Source publication selected independently of returned proof packets. */
   readonly formVersion: Readonly<Record<string, unknown>>;
   /** Owning public registration selected before any candidate transport. */
@@ -67,9 +71,12 @@ export class HttpInitialMixedScreenerHydration implements ScreenerHydration {
   private active?: AbortController;
   private disposed = false;
   constructor(config: HttpInitialMixedScreenerHydrationConfig) {
+    const expectedIssuer = requireSigningIssuer(config.expectedIssuer);
     requireWireJson({ formVersion: config.formVersion, registration: config.registration, selection: config.selection });
+    // Refuse a foreign selection before any worker, credential or request exists.
+    if (!selectsScope(config.source.scopeKey, config.selection.evaluationSelection.scope)) fail('selection scope mismatch');
     this.wholeMilliseconds = config.generalWorker.wholeOperationMilliseconds;
-    this.config = { ...config, assertCurrent: config.assertCurrent.bind(config),
+    this.config = { ...config, expectedIssuer, assertCurrent: config.assertCurrent.bind(config),
       generalWorker: { ...config.generalWorker }, definition: structuredClone(config.definition), publication: structuredClone(config.publication),
       formVersion: structuredClone(config.formVersion), registration: structuredClone(config.registration), selection: structuredClone(config.selection) };
     freezeWireJson(this.config.formVersion); freezeWireJson(this.config.registration); freezeWireJson(this.config.selection);
@@ -165,7 +172,7 @@ export class HttpInitialMixedScreenerHydration implements ScreenerHydration {
           maxResponseBytes: 2 * 1024 * 1024, successStatuses: [200], requireJson: true, requireNoStore: true });
       check();
         const currentAt = this.utc(); const currentAtMonotonic = this.now(); check();
-        const proof = await this.generalWorker.verify({ request, registration: this.config.registration, ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}) }, async (index, lifetime) => {
+        const proof = await this.generalWorker.verify({ expectedIssuer: this.config.expectedIssuer, request, registration: this.config.registration, ...(nativeCurrentCheck ? { nativeCurrentCheck } : {}) }, async (index, lifetime) => {
           const bundle = await this.mixedReader.readAll(hydration, request, index, lifetime); check();
           const parsed = decodeBoundedProofJson(bundle.proofIndexBytes);
           if (!isProofIndex(parsed)) fail('proof index mismatch');

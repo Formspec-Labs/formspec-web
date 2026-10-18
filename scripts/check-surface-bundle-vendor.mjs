@@ -1,6 +1,7 @@
 /* global console, process */
 
 import { createHash } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -20,6 +21,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const formspecRoot = resolve(root, process.env.FORMSPEC_SOURCE_DIR ?? '../formspec');
+const sourceRoot = resolve(root, process.env.FORMSPEC_SERVER_SOURCE_DIR ?? '../formspec-server');
 const integrityRoot = resolve(
   root,
   process.env.INTEGRITY_STACK_SOURCE_DIR ?? '../integrity-stack',
@@ -31,8 +33,11 @@ const maxVendoredDistBytes = 100 * 1024;
 // the same verification. Positional arguments narrow the run to those
 // `vendor/<package>` directories, `vendor/formspec-schemas` for all schemas,
 // or an allowlisted `vendor/formspec-schemas/<file>` for one schema.
+// Source API schemas use `src/adapters/http/source-schemas` (or a file beneath it).
 const args = process.argv.slice(2);
 const write = args.includes('--write');
+const sourcePinsOnly = args.includes('--source-pins-only');
+if (write && sourcePinsOnly) throw new Error('--source-pins-only cannot refresh producer schemas.');
 const only = args.filter((arg) => !arg.startsWith('--'));
 
 // These packages retain the maintained source API and runtime dependency metadata.
@@ -170,13 +175,22 @@ const schemaFiles = [
   'verification-receipt.schema.json',
 ];
 
-if (!existsSync(formspecRoot) || !existsSync(integrityRoot)) {
-  throw new Error('Surface bundle upstream sibling checkout is missing.');
-}
+const sourceSchemaDir = 'src/adapters/http/source-schemas';
+const sourceSchemaFiles = [
+  'evaluation-composition-v4.schema.json',
+  'evaluation-composition.schema.json',
+  'evaluation-hydration.schema.json',
+  'native-current-check-selector.schema.json',
+  'native-screener-api.schema.json',
+];
+const sourceSchemaSelectors = sourceSchemaFiles.map(file => `${sourceSchemaDir}/${file}`);
+
 const schemaRoot = join(root, 'vendor/formspec-schemas');
 const schemaSelectors = schemaFiles.map((file) => `vendor/formspec-schemas/${file}`);
 const unknownPackages = only.filter(
   (local) => local !== 'vendor/formspec-schemas'
+    && local !== sourceSchemaDir
+    && !sourceSchemaSelectors.includes(local)
     && !schemaSelectors.includes(local)
     && !packages.some((pkg) => pkg.local === local),
 );
@@ -187,12 +201,62 @@ const selectedPackages = only.length === 0
   ? packages
   : packages.filter((pkg) => only.includes(pkg.local));
 
-const integrityWorkspace = readFileSync(
-  join(integrityRoot, 'Cargo.toml'),
-  'utf8',
-);
-if (!/\[workspace\.package\][\s\S]*?license\s*=\s*"Apache-2\.0"/u.test(integrityWorkspace)) {
-  throw new Error('integrity-stack workspace does not declare Apache-2.0.');
+const selectedSourceSchemas = only.length === 0 || only.includes(sourceSchemaDir)
+  ? sourceSchemaFiles : sourceSchemaFiles.filter(file => only.includes(`${sourceSchemaDir}/${file}`));
+// Public/fork CI checks committed pins without private credentials. A selected Source
+// directory (or explicit env) checks the producer too; trusted CI runs that comparison.
+const checkSourceUpstream = !sourcePinsOnly && (write || process.env.FORMSPEC_SERVER_SOURCE_DIR !== undefined
+  || only.some(local => local === sourceSchemaDir || sourceSchemaSelectors.includes(local)));
+if (selectedSourceSchemas.length > 0) {
+  if (checkSourceUpstream && !existsSync(sourceRoot)) throw new Error('formspec-server checkout is missing; set FORMSPEC_SERVER_SOURCE_DIR.');
+  const sumsPath = join(root, sourceSchemaDir, 'SHA256SUMS');
+  const sums = readFileSync(sumsPath, 'utf8').trimEnd().split('\n');
+  for (const file of selectedSourceSchemas) {
+    if (sums.filter(line => line.endsWith(`  ${file}`)).length !== 1) {
+      throw new Error(`${sourceSchemaDir}/SHA256SUMS must contain one entry for ${file}.`);
+    }
+  }
+  const schemas = selectedSourceSchemas.map(file => ({ file, bytes: readFileSync(join(
+    checkSourceUpstream ? join(sourceRoot, 'schemas') : join(root, sourceSchemaDir), file,
+  )) }));
+  if (write) {
+    const refsPath = join(root, 'vendor/upstream-refs.json');
+    const refs = readJson(refsPath);
+    const git = (...gitArgs) => spawnSync('git', gitArgs, { cwd: sourceRoot, encoding: 'utf8' });
+    const head = git('rev-parse', 'HEAD');
+    if (head.status !== 0) throw new Error('Cannot record the formspec-server producer commit.');
+    // Pinning a new producer requires every retained copy to agree with it, including
+    // unselected files. Check before writing so a partial refresh cannot mislabel them.
+    for (const file of sourceSchemaFiles) {
+      const committed = git('show', `HEAD:schemas/${file}`);
+      const bytes = schemas.find(schema => schema.file === file)?.bytes ?? readFileSync(join(root, sourceSchemaDir, file));
+      if (committed.status !== 0 || !bytes.equals(Buffer.from(committed.stdout))) {
+        throw new Error(`Source schema ${file} does not match the producer commit; refresh the complete Source selection from committed schemas.`);
+      }
+    }
+    for (const { file, bytes } of schemas) writeFileSync(join(root, sourceSchemaDir, file), bytes);
+    for (const { file, bytes } of schemas) {
+      const line = `${createHash('sha256').update(bytes).digest('hex')}  ${file}`;
+      const index = sums.findIndex(entry => entry.endsWith(`  ${file}`));
+      sums[index] = line;
+    }
+    writeFileSync(sumsPath, `${sums.join('\n')}\n`);
+    writeFileSync(refsPath, `${JSON.stringify({ ...refs, 'formspec-server': head.stdout.trim() }, null, 2)}\n`);
+  }
+  for (const { file, bytes } of schemas) {
+    if (!readFileSync(join(root, sourceSchemaDir, file)).equals(bytes)) {
+      throw new Error(`${sourceSchemaDir}/${file} differs from the upstream schema.`);
+    }
+    const pin = `${createHash('sha256').update(bytes).digest('hex')}  ${file}`;
+    if (sums.filter(line => line === pin).length !== 1) throw new Error(`${sourceSchemaDir}/SHA256SUMS is stale for ${file}.`);
+  }
+}
+
+if (selectedPackages.some(pkg => pkg.workspace === integrityRoot)) {
+  const integrityWorkspace = readFileSync(join(integrityRoot, 'Cargo.toml'), 'utf8');
+  if (!/\[workspace\.package\][\s\S]*?license\s*=\s*"Apache-2\.0"/u.test(integrityWorkspace)) {
+    throw new Error('integrity-stack workspace does not declare Apache-2.0.');
+  }
 }
 
 const selectAllSchemas = only.length === 0 || only.includes('vendor/formspec-schemas');
@@ -216,7 +280,7 @@ if (write && selectedSchemaFiles.length > 0) {
   }
   writeFileSync(join(schemaRoot, 'SHA256SUMS'), selectAllSchemas ? `${sumLines.join('\n')}\n` : sumLines.join('\n'));
 }
-const schemaSums = readFileSync(join(schemaRoot, 'SHA256SUMS'), 'utf8');
+const schemaSums = selectedSchemaFiles.length ? readFileSync(join(schemaRoot, 'SHA256SUMS'), 'utf8') : '';
 let schemaBytes = 0;
 for (const file of selectedSchemaFiles) {
   const local = join(schemaRoot, file);
@@ -250,6 +314,7 @@ if (write && only.length === 0) {
   const refs = {};
   for (const [name, dir] of [
     ['formspec', formspecRoot], ['fel-core', resolve(formspecRoot, '../fel-core')], ['integrity-stack', integrityRoot],
+    ['formspec-server', sourceRoot],
   ]) {
     const git = (...gitArgs) => spawnSync('git', gitArgs, { cwd: dir, encoding: 'utf8' });
     if (git('status', '--porcelain').stdout.trim()) throw new Error(`${name} has uncommitted changes; refusing to record its ref.`);
@@ -344,7 +409,7 @@ if (sourceBudgetBytes > maxVendoredDistBytes) {
 }
 
 console.log(
-  `surface bundle vendor ${write ? 'refresh' : 'check'} passed: ${selectedPackages.length} Apache-2.0 package(s), ${selectedSchemaFiles.length} canonical schema(s), ${sourceBudgetBytes} verification bytes, ${schemaBytes} schema bytes, ${totalBytes} total built bytes`,
+  `surface bundle vendor ${write ? 'refresh' : 'check'} passed: ${selectedPackages.length} Apache-2.0 package(s), ${selectedSchemaFiles.length} canonical schema(s), ${selectedSourceSchemas.length} Source API schema(s) (${checkSourceUpstream ? 'upstream bytes and pins' : 'pins only'}), ${sourceBudgetBytes} verification bytes, ${schemaBytes} schema bytes, ${totalBytes} total built bytes`,
 );
 
 function assertPublicRuntimeMetadata(source, local, label) {

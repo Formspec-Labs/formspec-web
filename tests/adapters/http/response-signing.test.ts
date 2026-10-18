@@ -2,11 +2,11 @@ import { diagnoseNativePrepare } from '../../../src/composition/native-package-a
 import type { TaskDraftAssociation } from '../../../src/ports/task-draft.ts';
 import type { HttpResponseSigningPolicy } from '../../../src/adapters/http/response-signing.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { detachedSignatureProtectedHeader, encodeCoseSign1 } from '@formspec-org/integrity-cose';
+import { detachedSignatureProtectedHeader, encodeCoseSign1, sigStructureBytes } from '@formspec-org/integrity-cose';
 import { canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import type { FormResponse, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import { createHttpAdapterCohort } from '../../../src/adapters/http/cohort.ts';
-import { handoffHash } from '../../../src/adapters/http/response-signing.ts';
+import { assertDelegatedSignedResponseConsistency, handoffHash } from '../../../src/adapters/http/response-signing.ts';
 import { AnonymousSessionBridge } from '../../../src/adapters/http/anonymous-session.ts';
 import { createBrowserDraftResumeMetadataStore } from '../../../src/adapters/browser/draft-resume-metadata.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../../src/adapters/schema/index.ts';
@@ -15,8 +15,10 @@ import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '.
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import type { DraftKey } from '../../../src/ports/draft-store.ts';
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
+import { testScopeKey } from '../../fixtures/scope.ts';
 
 const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version };
+const expectedIssuer = 'https://source.example.test/tenant/workspace/production';
 const source = { ref: `${key.formUrl}#/extensions/x-formspec-signing-content/entries/english`, version: '1.0.0' };
 const content: SigningContent = {
   source, locale: 'en-US', documentId: 'declaration', signingIntent: 'urn:formspec:test:intent',
@@ -83,8 +85,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   const values = new Map<string, string>();
   const storage = { getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
-  const context = { baseUrl: 'https://server.example.test', tenantBinding: { kind: 'bound' as const,
-    scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } } };
+  const context = { baseUrl: 'https://server.example.test', scopeKey: testScopeKey };
   const state = { response: structuredClone(response), version: 1, patchCount: 0, signCount: 0,
     patchProblem: undefined as unknown, patchStatus: 200, createdVersion: 1, mutateSave: undefined as ((response: FormResponse) => void) | undefined, lostCreate: false, createCount: 0, status: 'in_progress' as string | undefined, lostPatch: false, lostSign: false, refuseSign: false, signStatus: 200, persistSign: true,
     actor: authenticated ? 'oidc:owner' : 'anon:owner', token: 'owner-token' as string | undefined,
@@ -138,7 +139,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
     return jsonResponse(view());
   });
   const now = vi.fn(() => '2026-10-07T03:00:00.000Z');
-  const policy = { validateResponse: validateCanonicalFormResponse,
+  const policy = { expectedIssuer, validateResponse: validateCanonicalFormResponse,
     validateContent: await loadCanonicalSigningContentValidator(), signingProfileDigest: vi.fn(profileDigest), keyId: 'test-key', now, ...(preSignCandidate ? { preSignCandidate } : {}), ...(prePrepareCandidate ? { prePrepareCandidate } : {}) };
   const statePolicy = { definition: structuredClone(definition), formVersionId: 'publication-1', localeDocuments: [{
     $formspecLocale: '2.0' as const, url: response.displayedLocale!.url, version: response.displayedLocale!.version,
@@ -192,6 +193,62 @@ async function profileDigest(response: FormResponse): Promise<string> {
 }
 
 describe('cohort-owned Response Prepare and Sign', () => {
+  it('signs with the issuer captured at composition even when the caller changes its policy', async () => {
+    const test = await fixture();
+    test.policy.expectedIssuer = 'https://source.example.test/foreign/workspace/production';
+    await test.save();
+    const signed = await test.sign(await test.prepare());
+    expect(signed.response.extensions?.['x-formspec-signing-content']?.issuer).toBe(expectedIssuer);
+  });
+
+  it.each([undefined, '', 'relative/path', 'https://source.example.test/has space'])('refuses malformed expected issuer %s before I/O', async issuer => {
+    const test = await fixture();
+    test.policy.expectedIssuer = issuer as string;
+    const before = test.requests.length;
+    expect(() => test.build()).toThrow(/issuer/i);
+    expect(test.requests).toHaveLength(before);
+  });
+
+  it.each(['missing', 'foreign'] as const)('refuses %s issuer even with matching digest and key metadata', async mode => {
+    const test = await fixture();
+    await test.save();
+    const signed = await test.sign(await test.prepare());
+    const candidate = structuredClone(signed.response);
+    delete candidate.authoredSignatures;
+    if (mode === 'missing') delete (candidate.extensions!['x-formspec-signing-content'] as unknown as Record<string, unknown>).issuer;
+    else candidate.extensions!['x-formspec-signing-content']!.issuer = `${expectedIssuer}/foreign`;
+    const foreign = await signedResponse(candidate);
+    await expect(assertDelegatedSignedResponseConsistency(foreign, test.policy)).rejects.toThrow(/issuer/i);
+  });
+
+  it('refuses a retained signed Response when the independently selected issuer changes', async () => {
+    const test = await fixture(true, true);
+    await test.save();
+    await test.sign(await test.prepare());
+    test.policy.expectedIssuer = `${expectedIssuer}/foreign`;
+    const before = test.requests.length;
+    await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toThrow(/issuer/i);
+    expect(test.requests.slice(before).every(request => request.method === 'GET')).toBe(true);
+  });
+
+  it('rejects a foreign issuer after the same real key signs both issuer values', async () => {
+    const test = await fixture(); await test.save();
+    const signed = await test.sign(await test.prepare());
+    const keys = await crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign', 'verify']);
+    const header = detachedSignatureProtectedHeader(-8, new TextEncoder().encode('test-key'), 'urn:formspec:sig-method:ed25519-cose-sign1@1');
+    for (const issuer of [expectedIssuer, `${expectedIssuer}/foreign`]) {
+      const candidate = structuredClone(signed.response); delete candidate.authoredSignatures;
+      candidate.extensions!['x-formspec-signing-content']!.issuer = issuer;
+      const evidence = await signedResponse(candidate);
+      const preimage = new Uint8Array(sigStructureBytes(header, canonicalResponseSignedPayloadBytes(candidate)));
+      const signature = new Uint8Array(await crypto.subtle.sign('Ed25519', keys.privateKey, preimage));
+      expect(await crypto.subtle.verify('Ed25519', keys.publicKey, signature, preimage)).toBe(true);
+      evidence.authoredSignatures![0].signatureValue = btoa(String.fromCharCode(...encodeCoseSign1(header, null, signature)));
+      if (issuer === expectedIssuer) await expect(assertDelegatedSignedResponseConsistency(evidence, test.policy)).resolves.toBeUndefined();
+      else await expect(assertDelegatedSignedResponseConsistency(evidence, test.policy)).rejects.toThrow(/issuer/i);
+    }
+  });
+
   it.each([
     ['native-prepare-candidate-mismatch', 'candidate-mismatch'],
     ['native-facts-pending-save-required', 'facts-pending-save-required'],
@@ -464,7 +521,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
       subjectRef: 'anon:owner', formVersionId: 'publication-1' });
     expect(Object.isFrozen(state!.response.data)).toBe(true);
     expect(test.requests.at(-1)?.headers.get('authorization')).toBe('Bearer owner-token');
-    for (const name of ['tenant', 'workspace', 'environment', 'cell']) expect(test.requests.at(-1)?.headers.get(`x-formspec-${name}-id`)).toBe(name === 'environment' ? 'test' : name);
+    expect(test.requests.at(-1)?.headers.get('x-stack-scope-key')).toBe(testScopeKey);
     expect(test.requests.filter(request => request.url.endsWith('/sessions/anonymous'))).toHaveLength(1);
     expect(test.state.signCount).toBe(1); expect(test.state.patchCount).toBe(2);
   });
@@ -556,12 +613,12 @@ describe('cohort-owned Response Prepare and Sign', () => {
     expect(test.metadata.read('draft-handles')).toBeUndefined(); expect(test.metadata.read('grant:conformance')).toBeUndefined();
   });
 
-  it('requires complete deployment scope and a configured signing policy for terminal recovery', async () => {
+  it('requires the deployment scope key and a configured signing policy for terminal recovery', async () => {
     const test = await fixture(true);
     expect(() => createHttpAdapterCohort({ baseUrl: 'https://server.example.test', qualifiedDraftState: test.statePolicy }))
       .toThrow(/signing policy/);
     expect(() => createHttpAdapterCohort({ baseUrl: 'https://server.example.test', responseSigning: test.policy,
-      resumeMetadata: test.metadata, qualifiedDraftState: test.statePolicy })).toThrow(/four tenant scope/);
+      resumeMetadata: test.metadata, qualifiedDraftState: test.statePolicy })).toThrow(/deployment scope key/);
   });
 
   it('refuses a non-200 owner read without discarding the retained handle', async () => {

@@ -98,7 +98,6 @@ function productionConfig(): FormspecWebConfig {
     referenceAdapters: {
       formspecStack: {
         ...departmentAppProfile.referenceAdapters?.formspecStack,
-        tenantHeaderDialect: 'formspec',
         formspecServerUrl: 'https://formspec-server.example.test',
       },
     },
@@ -112,7 +111,6 @@ function publicProductionConfig(): FormspecWebConfig {
     referenceAdapters: {
       formspecStack: {
         ...publicPortalProfile.referenceAdapters?.formspecStack,
-        tenantHeaderDialect: 'formspec',
         formspecServerUrl: 'https://formspec-server.example.test',
       },
     },

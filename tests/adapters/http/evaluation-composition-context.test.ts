@@ -46,15 +46,13 @@ async function originalFixture(allSources = false) {
   response: dto.canonical_response, draft: { id: dto.draft_id, version: dto.draft_version, responseHash: await hash(dto.canonical_response) },
   actor: { id: source.owner.subjectRef }, evidence: dto };
   expect(saved.draft.responseHash).toBe(source.candidateHash);
-  const scope = source.selection.evaluationSelection.scope;
   let returned: unknown = view;
   let elapsed = 0;
   const requests: unknown[] = [];
   const adapter = new HttpScreenerHydration({ baseUrl: 'https://source.example', definition: source.definition,
     selection: source.selection, selectionHash: source.selectionHash, compositionRegistrationHash: source.compositionRegistrationHash,
     accessToken: async () => 'test-only-token', monotonicNow: () => elapsed,
-    tenantBinding: { kind: 'bound', scope: { tenant: scope.tenant_id, workspace: scope.workspace_id,
-      environment: scope.environment_id, cell: scope.cell_id } },
+    scopeKey: source.selection.evaluationSelection.scope,
     fetchImpl: async (_url, init) => { requests.push(JSON.parse(String(init?.body))); return new Response(JSON.stringify(returned),
       { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }); } });
   const identity = source.owner.authenticated!;

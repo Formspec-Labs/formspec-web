@@ -1,3 +1,4 @@
+import { requireSigningIssuer } from '../../shared/signing-issuer.ts';
 import { throwIfSourceMixedProofRefusal } from './mixed-refusal.ts';
 import canonicalize from 'canonicalize';
 import { abortable } from '../../shared/abortable.ts';
@@ -65,9 +66,11 @@ export class MixedProofWorkerClient {
   }
   retireFacts(): void { this.generation++; this.active?.abort(new Error('worker-retired')); this.active = undefined; }
   dispose(): void { this.disposed = true; this.retireFacts(); }
-  async verify(selected: Readonly<{ registration: EvaluationProviderRegistration; request: InitialNativeRequest; nativeCurrentCheck?: NativeCurrentCheck }>,
+  async verify(selected: Readonly<{ expectedIssuer: string; registration: EvaluationProviderRegistration; request: InitialNativeRequest; nativeCurrentCheck?: NativeCurrentCheck }>,
     prepare: (index: MixedProofIndexer, lifetime: { signal: AbortSignal; assertCurrent: () => void }) => Promise<PreparedMixedProof>,
     lifetime: ProofWorkerLifetime): Promise<Readonly<{ outcome: MixedProofOutcome; assertCurrent: () => void; remainingMilliseconds: () => number; refreshRequired: () => boolean }>> {
+    // Capture independent authority before caller callbacks, preparation or worker dispatch.
+    const expectedIssuer = requireSigningIssuer(selected.expectedIssuer);
     lifetime = { ...lifetime, assertCurrent: lifetime.assertCurrent.bind(lifetime) };
     this.retireFacts(); const generation = this.generation;
     const active = new AbortController(); this.active = active;
@@ -95,7 +98,7 @@ export class MixedProofWorkerClient {
       }
     };
     check(); requireWireJson(selected);
-    const selection = structuredClone({ version: 1, ...selected, currentAt: lifetime.currentAt });
+    const selection = structuredClone({ version: 1, ...selected, expectedIssuer, currentAt: lifetime.currentAt });
     const selectionBytes = snapshotInput(new TextEncoder().encode(JSON.stringify(selection)), SMALL_CAP);
     let worker: ProofWorker<MixedProofCommand> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;

@@ -36,6 +36,7 @@ import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 import { createHttpAdapterCohort } from '../../src/adapters/http/cohort.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../src/adapters/schema/index.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
+import { testScopeKey } from '../fixtures/scope.ts';
 
 const observed = vi.hoisted(() => ({ forms: [] as unknown[], real: false }));
 vi.mock('../../src/app/RespondentRuntime.tsx', async importOriginal => {
@@ -108,7 +109,7 @@ async function actualFixture(options?: { bundle?: BundleExport; component?: Comp
       const preparation = input.preparation; const content = preparation.content; const signedAt = '2026-10-07T12:00:00Z';
       const documentHash = await hashSigningContent(content, () => true);
       const candidate: FormResponse = signingActs.get(input.operationId)?.candidate ?? { ...structuredClone(preparation.response), extensions: { ...preparation.response.extensions,
-        'x-formspec-signing-content': { version: '1.0', content, documentHash, documentHashAlgorithm: 'sha-256', actorRef: preparation.actor.id,
+        'x-formspec-signing-content': { version: '1.0', issuer: 'https://source.example.test/tenant/workspace/production', content, documentHash, documentHashAlgorithm: 'sha-256', actorRef: preparation.actor.id,
           draftId: preparation.draft.id, draftVersion: ++revision, signerName: input.assent.signerName, signedAt, consentAccepted: true } } };
       if (!signingActs.has(input.operationId)) signingActs.set(input.operationId, { candidate, version: revision });
       const candidateVersion = signingActs.get(input.operationId)!.version;
@@ -447,9 +448,8 @@ describe('maintained native package Surface host', () => {
     const response = { ...seed.getResponse({ profile: 'off' }), id: 'submitted-response-id', status: 'completed' as const }; seed.dispose();
     const content = Object.values((definition.extensions!['x-formspec-signing-content'] as { entries: Record<string, SigningContent> }).entries)
       .find(content => content.locale === 'es-US')!;
-    const signed = await delegatedSignedResponseFixture({ response, content, actor: 'anon:owner', draftId: 'retained-draft', candidateVersion: 4, keyId: 'test-key' });
-    const context = { baseUrl: 'https://server.example.test', tenantBinding: { kind: 'bound' as const,
-      scope: { tenant: 'tenant', workspace: 'workspace', environment: 'test', cell: 'cell' } } };
+    const signed = await delegatedSignedResponseFixture({ response, content, actor: 'anon:owner', draftId: 'retained-draft', candidateVersion: 4, issuer: 'https://source.example.test/tenant/workspace/production', keyId: 'test-key' });
+    const context = { baseUrl: 'https://server.example.test', scopeKey: testScopeKey };
     const transport = recordingFetch(request => {
       expect(request.method).toBe('GET'); expect(request.url).toBe(`${context.baseUrl}/drafts/retained-draft`);
       expect(request.headers.get('authorization')).toBe('Bearer retained-grant');
@@ -462,7 +462,7 @@ describe('maintained native package Surface host', () => {
     const bridge = new AnonymousSessionBridge({ ...context, fetchImpl: transport.fetch, resumeMetadata, formIdResolver: () => 'form' });
     const cohort = createHttpAdapterCohort({ ...context, fetchImpl: transport.fetch, resumeMetadata, anonymousSessions: bridge, formIdResolver: () => 'form',
       qualifiedDraftState: { definition, formVersionId: 'publication', localeDocuments: test.policy.locales },
-      responseSigning: { keyId: 'test-key', validateResponse: validateCanonicalFormResponse, validateContent: await loadCanonicalSigningContentValidator(),
+      responseSigning: { keyId: 'test-key', expectedIssuer: 'https://source.example.test/tenant/workspace/production', validateResponse: validateCanonicalFormResponse, validateContent: await loadCanonicalSigningContentValidator(),
         signingProfileDigest: async response => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex') } });
     const createEngine = vi.fn(createFormEngine);
     const host = createNativePackageSigningHost({ ...test.policy, createEngine, clearDraftAccess: key => cohort.draftStore.delete(key) });
@@ -599,7 +599,7 @@ describe('maintained native package Surface host', () => {
     });
     const metadata = new Map<string, unknown>();
     const signingPolicy = { validateResponse: validateCanonicalFormResponse, validateContent: await loadCanonicalSigningContentValidator(),
-      signingProfileDigest: async (response: FormResponse) => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex'), keyId: 'unused-sign-key' };
+      signingProfileDigest: async (response: FormResponse) => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex'), keyId: 'unused-sign-key', expectedIssuer: 'https://source.example.test/tenant/workspace/production' };
     const makeCohort = () => createHttpAdapterCohort({ baseUrl: 'https://server.example.test', fetchImpl: transport.fetch, formIdResolver: () => 'form',
       resumeMetadata: { read: slot => metadata.get(slot), write: (slot, value) => { metadata.set(slot, structuredClone(value)); }, remove: slot => { metadata.delete(slot); } }, responseSigning: signingPolicy });
     await makeCohort().draftStore.save(key, partial);

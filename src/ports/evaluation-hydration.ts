@@ -1,7 +1,8 @@
 import type { MixedHydrationWire } from './mixed-proof.ts';
 import type { SavedResponseDraft } from './response-signing.ts';
 import type { CompletionLifetime } from './response-completion.ts';
-import type { ScreenerAssociation, ScreenerOwner, ScreenerSelection, SourceScope, NativeCurrentCheck } from './screener-retention.ts';
+import type { ScopeKey } from '../shared/scope-key.ts';
+import type { ScreenerAssociation, ScreenerOwner, ScreenerSelection, NativeCurrentCheck } from './screener-retention.ts';
 
 /** Public Source wire types only. Schema validity does not establish candidate or freshness authority. */
 export interface EvaluationHydrationOwner {
@@ -87,7 +88,7 @@ export interface EvaluationHydrationWire {
   readonly version: 1;
   readonly purpose: 'formspec.instance.hydrate';
   readonly operation: 'hydrate';
-  readonly scope: SourceScope;
+  readonly scope: ScopeKey;
   readonly owner: EvaluationHydrationOwner;
   readonly selection: ScreenerSelection['evaluationSelection'];
   readonly draftId: string;

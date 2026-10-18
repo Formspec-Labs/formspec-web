@@ -1,6 +1,7 @@
 import type { NativePackageSigningConfig } from './native-package-signing.ts';
 export type { NativePackageSigningConfig } from './native-package-signing.ts';
 import type { AssuranceLevel } from '../ports/identity-provider.ts';
+import type { ScopeKey } from '../shared/scope-key.ts';
 
 export type TokenValue = string | number;
 
@@ -8,24 +9,6 @@ export interface BrandConfig {
   name: string;
   tokens: Record<string, TokenValue>;
 }
-
-export interface TenantScopeConfig {
-  tenant: string;
-  workspace: string;
-  environment: string;
-  cell: string;
-}
-
-export type TenantBindingConfig =
-  | {
-      kind: 'bound';
-      scope: TenantScopeConfig;
-    }
-  | {
-      kind: 'implicit';
-      sentinelScope: TenantScopeConfig;
-      headerMode: 'sentinel-until-ext24' | 'omit-post-ext24';
-    };
 
 export interface OidcClientConfig {
   issuer: string;
@@ -138,7 +121,6 @@ export interface FormspecStackReferenceAdapterConfig {
   attachments?: { maxUploadBytes?: number };
   formspecServerUrl?: string;
   responseActionLedgerCapabilityUrl?: string;
-  tenantHeaderDialect: 'formspec';
   oidc?: OidcClientConfig;
   magicLinkCallbackPath?: string;
   /** A complete object activates the verifying respondent root. */
@@ -151,7 +133,8 @@ export interface ReferenceAdapterConfig {
 
 export interface FormspecWebConfig {
   profileName: string;
-  tenantBinding: TenantBindingConfig;
+  /** The deployment scope every reference adapter selects; absent sends no selector (ADR 0168 §1.1). */
+  scopeKey?: ScopeKey;
   identity: IdentityPolicyConfig;
   brand: BrandConfig;
   ports: PortCompositionConfig;
@@ -163,8 +146,8 @@ export interface RuntimeConfig {
   nativePackageSigning?: NativePackageSigningConfig;
   /** Deployment-owned final attachment upload byte limit; omitted means unknown. */
   attachmentMaxUploadBytes?: number;
-  /** Explicit deployment scope supplied by runtime JS. */
-  tenantBinding?: TenantBindingConfig;
+  /** The deployment's scope key (64 lowercase hex, as `config-check` prints it), supplied by runtime JS. */
+  scopeKey?: string;
   profileName?: string;
   formspecServerUrl?: string;
   responseActionLedgerCapabilityUrl?: string;

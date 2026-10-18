@@ -34,7 +34,7 @@ function navigationStore(url: URL, config: FormspecWebConfig) {
   if (!oidc) throw new Error('Native sign-in requires the selected OIDC configuration.');
   return createBrowserScopedMetadataStore({ namespace: 'formspec-web:signin-navigation',
     context: { origin: url.origin, issuer: oidc.issuer, clientId: oidc.clientId,
-      redirectUri: oidc.redirectUri, postLogoutRedirectUri: oidc.postLogoutRedirectUri, tenantBinding: config.tenantBinding } });
+      redirectUri: oidc.redirectUri, postLogoutRedirectUri: oidc.postLogoutRedirectUri, scopeKey: config.scopeKey } });
 }
 
 function nativeSelection(url: URL): boolean {

@@ -5,9 +5,3 @@ export {
   referenceProfiles,
   type ReferenceProfileName,
 } from './profiles.ts';
-export {
-  formspecTenantHeaderNames,
-  tenantScopeHeaders,
-  type FormspecTenantHeaders,
-} from './tenant-headers.ts';
-export { wosTenantHeaderNames, wosTenantScopeHeaders } from './wos-tenant-headers.ts';
