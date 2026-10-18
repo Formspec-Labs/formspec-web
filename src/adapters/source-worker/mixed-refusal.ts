@@ -3,7 +3,7 @@
 const codes = new Set([
   'not_initialized', 'invalid_initialization', 'input_limit', 'invalid_json', 'invalid_selection', 'invalid_hydration',
   'invalid_proof_index', 'unsupported_family', 'missing_proof', 'extra_proof', 'invalid_original', 'recursive_original',
-  'proof_refused', 'expired', 'unsupported_numeric_domain', 'output_limit', 'internal_failure',
+  'proof_refused', 'expired', 'not_yet_valid', 'unsupported_numeric_domain', 'output_limit', 'internal_failure',
 ] as const);
 export type SourceMixedProofRefusalCode = typeof codes extends Set<infer Code> ? Code : never;
 export function isSourceMixedProofRefusalCode(value: unknown): value is SourceMixedProofRefusalCode {
