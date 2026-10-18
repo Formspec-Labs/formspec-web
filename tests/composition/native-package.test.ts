@@ -30,6 +30,8 @@ import { sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
 import * as appGraphModule from '@formspec-org/app-graph';
 import { loadCanonicalModulePayloadSchemaResources } from 'formspec-web/adapters/schema';
 
+/** Lowercase hex SHA-256 of a text, as package manifests pin their files. */
+const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
 const nativeBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/native-bundle.json'), 'utf8');
 const componentBytes = readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/passport-renewal.component.json'), 'utf8');
 const initialDefinitionUrl = 'https://server.example.test/runtime/forms/actual-form';
@@ -129,7 +131,6 @@ async function multiTargetLocaleFixture(options: { omitSelected?: boolean; dupli
     ...(options.appTarget ? { strings: {} } : {}) };
   candidate.manifest.locales.push({ url: otherLocale.url, version: otherLocale.version, locale: otherLocale.locale });
   candidate.documents[otherLocale.url] = otherLocale;
-  const rawDigest = async (bytes: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(bytes)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
   test.texts['other-locale.json'] = JSON.stringify(otherLocale);
   test.files.locales.push({ path: 'other-locale.json', sha256: await rawDigest(test.texts['other-locale.json']) });
   if (options.omitSelected) {
@@ -183,7 +184,6 @@ async function completeStudioFixture(scoped: boolean, subject = 'anon:fixture', 
   const resolved = dereferenceBundleExport(bundle);
   const definition = resolved.definitions.get('urn:formspec:demo:d1:passport-renewal')!;
   const locales = Object.values(bundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document) as LocaleDocument[];
-  const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
   test.texts['native.json'] = bytes; test.files.nativeBundle.sha256 = await rawDigest(bytes);
   test.texts['definition.json'] = JSON.stringify(definition); test.files.definition.sha256 = await rawDigest(test.texts['definition.json']);
   // Actual inline Components remain in the frozen complete graph.
@@ -702,12 +702,9 @@ describe('explicit native package composition', () => {
     }
   });
   it.each(['read-failure', 'newer-subscription'] as const)('reconciles native auth setup with %s', async mode => {
-    const test = await fixture('oidc:fixture');
+    // The complete studio package: a native Screener is admitted only with a screener slot on its entry Surface.
+    const test = await completeStudioFixture(true, 'oidc:fixture');
     const selected = await hydrationFixture();
-    const selection = structuredClone(selected.config.selection);
-    Object.assign(selection.evaluationSelection, { formId: test.publication.form_id, formVersionId: test.publication.form_version_id,
-      definitionUrl: test.definition.url, definitionVersion: test.definition.version, definitionHash: test.publication.definition_hash,
-      scope: { tenant_id: 'fixture', workspace_id: 'fixture', environment_id: 'test', cell_id: 'fixture' } });
     const release = vi.fn();
     const session = { issuer: 'https://idp.test', subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
     let onSession!: (state: BrowserAuthSessionState | null) => void;
@@ -722,8 +719,7 @@ describe('explicit native package composition', () => {
     const provider = { discover: vi.fn(async () => []), authenticate: vi.fn(), revoke: vi.fn(async () => {}), subscribe: vi.fn(() => () => {}) };
     const config = { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: {
       mode: 'oidc-required' as const, oidc: { issuer: session.issuer, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const } } };
-    const composition = createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl,
-      nativeScreener: { selection, selectionHash: await computeJcsSha256Digest(selection), selectionKey: 'native' },
+    const composition = createDefaultComposition(config, { ...test.options,
       identityBinding: { provider, accessToken: async () => 'oidc-bearer', browserAuthSession } });
     if (mode === 'read-failure') await expect(composition.nativePackageRespondent!.load()).rejects.toThrow('session read failed');
     else {
@@ -903,7 +899,6 @@ describe('explicit correction host through the maintained native loader', () => 
   it.each(['unmount', 'session-retirement'] as const)('keeps the latest task hydration alive across asynchronous renderer restoration until %s', async retirement => {
     const f = await correctionFixture();
     f.test.definition.instances!.facts = { source: 'urn:test:external', readonly: true };
-    const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
     f.test.texts['definition.json'] = JSON.stringify(f.test.definition);
     f.test.files.definition.sha256 = await rawDigest(f.test.texts['definition.json']);
     f.test.texts['native.json'] = JSON.stringify(f.test.bundle);
@@ -973,7 +968,6 @@ describe('explicit correction host through the maintained native loader', () => 
   it('saves a task checkpoint with no displayed Locale through the real Save control', async () => {
     const f = await correctionFixture();
     f.test.definition.instances!.facts = { source: 'urn:test:external', readonly: true };
-    const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
     f.test.texts['definition.json'] = JSON.stringify(f.test.definition);
     f.test.files.definition.sha256 = await rawDigest(f.test.texts['definition.json']);
     f.test.texts['native.json'] = JSON.stringify(f.test.bundle);
@@ -1064,7 +1058,6 @@ describe('explicit correction host through the maintained native loader', () => 
     f.test.definition.binds!.push({ path: 'protectedRef', readonly: 'true', relevant: "@instance('facts').posture = 'correction'" });
     f.test.definition.items.push({ key: 'protectedRef', type: 'field', dataType: 'uri', label: 'Protected reference' });
     f.test.definition.instances!.facts = { source: 'urn:test:external', readonly: true };
-    const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
     f.test.texts['definition.json'] = JSON.stringify(f.test.definition);
     f.test.files.definition.sha256 = await rawDigest(f.test.texts['definition.json']);
     f.test.texts['native.json'] = JSON.stringify(f.test.bundle);
@@ -1224,7 +1217,6 @@ describe('explicit correction host through the maintained native loader', () => 
   it('retains the candidate hydration host for an authored external source', async () => {
     const f = await correctionFixture();
     f.test.definition.instances!.facts = { source: 'urn:test:external', readonly: true };
-    const rawDigest = async (value: string) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
     f.test.texts['definition.json'] = JSON.stringify(f.test.definition);
     f.test.files.definition.sha256 = await rawDigest(f.test.texts['definition.json']);
     f.test.texts['native.json'] = JSON.stringify(f.test.bundle);

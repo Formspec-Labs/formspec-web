@@ -192,6 +192,12 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   if (initialDataSites.length && !policy.initialDataSources) throw new Error('native-initial-data-source-capability-unavailable');
   if (entryScreenerSlots.length && (!policy.nativeScreener || !policy.screenerEntryGate)) throw new Error('native-entry-screener-completion-unavailable');
+  // A native Screener configuration on a routed app needs a screener slot on its entry Surface: without one the
+  // Screener never completes through its retention port, and every qualification fails later as an unavailable run.
+  const entrySurfaceRoutes = app.entry ? app.routes.filter(handle => handle.surface === app.entry!.surface) : [];
+  if (policy.nativeScreener && app.entry && !entrySurfaceRoutes.some(handle => handle.route.slots?.some(slot => slot.slotType === 'screener'))) {
+    throw new Error(`native-entry-screener-unbound: entry Surface ${bundle.surfaceRefs?.get(app.entry.surface) ?? app.entry.surfaceId} has no screener slot on any route (${entrySurfaceRoutes.map(handle => handle.routeId).join(', ')})`);
+  }
   if (!!policy.applicationReadiness !== !!policy.controller.applicationLifecycle || !!policy.applicationReadiness !== !!policy.controller.roles.startApplication
     || policy.controller.applicationLifecycle && policy.controller.applicationLifecycle.capabilities.formVersionId !== policy.publication.formVersionId) throw new Error('native-application-policy-unadmitted');
   if (policy.applicationReadiness) {

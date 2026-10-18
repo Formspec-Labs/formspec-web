@@ -355,6 +355,33 @@ describe('generic native package signing session', () => {
     }
   });
 
+  it('refuses a native Screener configuration whose entry Surface has no screener slot', () => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const surfaceUrl = 'urn:test:surface', screenerUrl = 'urn:test:screener';
+    const screener = { $formspecScreener: '1.0', url: screenerUrl, version: '1.0.0',
+      title: 'Eligibility', items: [{ type: 'field', key: 'eligible', dataType: 'boolean', label: 'Eligible' }],
+      evaluation: [{ id: 'route', routes: [{ target: 'surface:intake', when: 'true' }] }] };
+    const intake = { id: 'intake', path: '/', slots: [{ id: 'intake', slotType: 'definition-form', binding: { definitionRef: test.policy.definition.url } }] };
+    const screen = { id: 'eligibility', path: '/eligibility', slots: [{ id: 'screen', slotType: 'screener',
+      binding: { screenerRef: screenerUrl, allowedTargets: ['surface:intake'] } }] };
+    const withRoutes = (routes: unknown[]): BundleExport => ({ ...test.policy.bundle, manifest: { ...test.policy.bundle.manifest,
+      surfaces: [{ url: surfaceUrl }], entrySurface: surfaceUrl, screeners: [{ url: screenerUrl, version: '1.0.0' }] },
+      documents: { ...test.policy.bundle.documents, [screenerUrl]: screener,
+        [surfaceUrl]: { $formspecSurface: '0.3', id: 'surface', entry: 'intake', routes } } });
+    const unexecuted = vi.fn(async () => { throw new Error('Unexecuted native Screener port'); });
+    const policy = (bundle: BundleExport): NativePackageSigningHostPolicy => ({ ...test.policy, bundle,
+      screenerEntryGate: { protectedTargets: ['surface:intake'] },
+      nativeScreener: { selectionKey: 'fixture-screen', retention: { retain: unexecuted, associate: unexecuted },
+        hydration: { hydrate: unexecuted }, context: () => { throw new Error('Unexecuted native Screener owner'); } } });
+    // Authored without the screener slot, the Screener could never complete: refused at admission, naming the Surface.
+    expect(() => createNativePackageSigningHost(policy(withRoutes([intake]))))
+      .toThrow('native-entry-screener-unbound: entry Surface urn:test:surface has no screener slot on any route (intake)');
+    // A screener slot on another route of the entry Surface (D1's eligibility route before intake) is admitted.
+    const host = createNativePackageSigningHost(policy(withRoutes([intake, screen])));
+    expect(host.getStartupRoute('/eligibility').screenerDocuments).toEqual([screener]);
+    host.dispose(); expect(unexecuted).not.toHaveBeenCalled();
+  });
+
   it('admits only an exact deployment-pinned image declared at its native Surface slot', () => {
     const test = fixture(); test.host.dispose(); test.engine.dispose();
     const source = 'https://travel.state.gov/example.jpeg';
