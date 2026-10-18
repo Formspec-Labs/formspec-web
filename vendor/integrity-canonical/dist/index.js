@@ -1,16 +1,50 @@
-/** Distinct Rust-authoritative Response handoff and signing byte profiles. */
-import canonicalize from 'canonicalize';
+/**
+ * Distinct Rust-authoritative Response handoff and signing byte profiles.
+ *
+ * Bytes follow `integrity-canonical-json-v1`: RFC 8785 JCS, except that a number
+ * is written as its exact decimal value in `Number::toString` layout instead of
+ * first being rounded to a double. A JS number serializes exactly as RFC 8785
+ * says; a `JSON.rawJSON` number (see {@link parseJsonExact}) keeps every digit.
+ */
 const HANDOFF_DOMAIN = 'formspec.response.handoff.v1';
 const SIGNING_DOMAIN = 'formspec.response.signed-payload.v1';
+// JSON.parse source text access (ES2026): Node 21+, Chrome 114+, Firefox 135+, Safari 18.4+.
+const json = JSON;
+const isRawJson = (value) => json.isRawJSON?.(value) ?? false;
 /**
- * Builds the Rust-authoritative domain, NUL, and RFC 8785 JCS handoff bytes.
+ * Parses JSON text without losing number digits.
+ *
+ * A number stays a JS number when its source text is exactly that number's own
+ * text; otherwise it becomes `JSON.rawJSON(source)`, which the canonical byte
+ * functions write with every digit. `JSON.parse` keeps the last of repeated
+ * member names; Rust's text functions refuse them.
+ *
+ * @throws SyntaxError for invalid JSON; TypeError where the runtime lacks source text access.
+ */
+export function parseJsonExact(text) {
+    const { rawJSON } = json;
+    if (!rawJSON)
+        throw new TypeError('runtime lacks JSON.rawJSON');
+    return JSON.parse(text, (_key, value, context) => {
+        if (typeof value !== 'number')
+            return value;
+        const source = context?.source;
+        if (source === undefined)
+            throw new TypeError('runtime lacks JSON.parse source text access');
+        return source === JSON.stringify(value) ? value : rawJSON(source);
+    });
+}
+/**
+ * Builds the Rust-authoritative domain, NUL, and canonical JSON handoff bytes.
  *
  * Preserves the complete JSON object, including authoredSignatures. The caller
  * hashes these bytes using genuine SHA-256; this function performs no crypto or
  * Response schema validation. Requires TextEncoder and String.isWellFormed.
+ * Matches Rust `canonical_response_handoff_bytes_from_json` on the same JSON text
+ * when the object comes from {@link parseJsonExact}.
  *
- * @throws TypeError for a non-object root or non-JSON runtime values. The
- * maintained canonicalizer also rejects invalid Unicode strings and keys.
+ * @throws TypeError for a non-object root, non-JSON runtime values, invalid
+ * Unicode strings or keys, or a number outside the binary64 range.
  */
 export function canonicalResponseHandoffBytes(response) {
     return framedBytes(HANDOFF_DOMAIN, responseSnapshot(response));
@@ -31,7 +65,7 @@ export function canonicalResponseSignedPayloadBytes(response) {
     return framedBytes(SIGNING_DOMAIN, payload);
 }
 /**
- * Serializes any JSON value with RFC 8785 JCS, matching Rust `canonical_json_bytes`.
+ * Serializes any JSON value as canonical JSON, matching Rust `canonical_json_from_bytes`.
  *
  * Applies the same admission rules as the Response profiles (no accessors, hooks, cycles, sparse
  * arrays or malformed Unicode) and adds no domain framing. The root may be any JSON value.
@@ -39,26 +73,159 @@ export function canonicalResponseSignedPayloadBytes(response) {
  * @throws TypeError for non-JSON runtime values or malformed Unicode.
  */
 export function canonicalJsonBytes(value) {
-    const json = canonicalize(jsonSnapshot(value, new Set()));
-    if (json === undefined)
-        throw new TypeError('value must have a canonical JSON representation');
-    return new TextEncoder().encode(json);
+    return new TextEncoder().encode(serialize(jsonSnapshot(value, new Set())));
+}
+/** A raw number already laid out canonically by admission, so serialization never lays it out twice. */
+class CanonicalNumber {
+    constructor(text) {
+        this.text = text;
+    }
 }
 function responseSnapshot(response) {
-    if (response === null || typeof response !== 'object' || Array.isArray(response)) {
+    if (response === null || typeof response !== 'object' || Array.isArray(response) || isRawJson(response)) {
         throw new TypeError('response must be a JSON object');
     }
     return jsonSnapshot(response, new Set());
 }
 function framedBytes(domain, response) {
-    const json = canonicalize(response);
-    if (json === undefined)
-        throw new TypeError('response must have a canonical JSON representation');
-    return new TextEncoder().encode(`${domain}\0${json}`);
+    return new TextEncoder().encode(`${domain}\0${serialize(response)}`);
 }
-// Admission checking only: serialization, ordering, and number formatting all
-// belong to the maintained RFC 8785 implementation. Serialize only admitted
-// descriptor values, so runtime Proxy reads cannot replace the checked data.
+// Serializes an admitted snapshot. JSON.stringify escapes strings exactly as RFC 8785
+// §3.2.2.2 requires, and the default sort orders member names by UTF-16 code units (§3.2.3).
+function serialize(value) {
+    if (value === null)
+        return 'null';
+    if (typeof value === 'string' || typeof value === 'number')
+        return JSON.stringify(value);
+    if (typeof value === 'boolean')
+        return value ? 'true' : 'false';
+    if (value instanceof CanonicalNumber)
+        return value.text;
+    if (Array.isArray(value))
+        return `[${Array.prototype.map.call(value, serialize).join(',')}]`;
+    const object = value;
+    return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${serialize(object[key])}`).join(',')}}`;
+}
+// Out of range means a nonzero value that binary64 round-to-nearest-even takes to infinity
+// (magnitude >= 2^1024 - 2^970 = 0.OVERFLOW_DIGITS x 10^309) or to zero (magnitude <= 2^-1075
+// = 5^1075 / 10^1075 = 0.UNDERFLOW_DIGITS x 10^-323). Rust and Python use the same bounds.
+const OVERFLOW_DIGITS = (2n ** 1024n - 2n ** 970n).toString();
+const UNDERFLOW_DIGITS = (5n ** 1075n).toString();
+// Exponents are read up to this magnitude; a larger one is already far out of range.
+const MAX_EXPONENT = 1e15;
+/** Compares 0.digits with 0.bound; neither has trailing zeros. */
+function compareFraction(digits, bound) {
+    const common = Math.min(digits.length, bound.length);
+    for (let at = 0; at < common; at += 1) {
+        const difference = digits.charCodeAt(at) - bound.charCodeAt(at);
+        if (difference !== 0)
+            return difference;
+    }
+    return digits.length - bound.length;
+}
+/**
+ * Lays out JSON number text as its exact decimal value in `Number::toString` layout.
+ *
+ * ECMA-262 §6.1.6.1.20 lays out the digits `s` (`k` of them, no trailing zeros) of a
+ * value `s × 10^(n−k)`; RFC 8785 takes `s` from the nearest double, this takes it
+ * from the text. A nonzero value that binary64 rounding takes to zero or infinity is
+ * refused, decided from the digits alone, as RFC 8785 refuses non-finite values. One
+ * left-to-right scan validates the grammar and finds the parts; work is linear in the text.
+ */
+function canonicalNumber(text) {
+    const refuse = () => { throw new TypeError('response contains a non-number raw JSON value'); };
+    const isDigit = (index) => {
+        const code = text.charCodeAt(index);
+        return code >= 48 && code <= 57;
+    };
+    const length = text.length;
+    let index = text.charCodeAt(0) === 45 ? 1 : 0;
+    const negative = index === 1;
+    const integerStart = index;
+    if (text.charCodeAt(index) === 48)
+        index += 1;
+    else if (isDigit(index))
+        while (isDigit(index))
+            index += 1;
+    else
+        refuse();
+    const integerEnd = index;
+    let fractionStart = index;
+    let fractionEnd = index;
+    if (text.charCodeAt(index) === 46) {
+        fractionStart = index + 1;
+        index = fractionStart;
+        while (isDigit(index))
+            index += 1;
+        fractionEnd = index;
+        if (fractionEnd === fractionStart)
+            refuse();
+    }
+    let exponentSign = 1;
+    let exponentStart = index;
+    let exponentEnd = index;
+    const marker = text.charCodeAt(index);
+    if (marker === 101 || marker === 69) {
+        index += 1;
+        if (text.charCodeAt(index) === 43 || text.charCodeAt(index) === 45) {
+            if (text.charCodeAt(index) === 45)
+                exponentSign = -1;
+            index += 1;
+        }
+        exponentStart = index;
+        while (isDigit(index))
+            index += 1;
+        exponentEnd = index;
+        if (exponentEnd === exponentStart)
+            refuse();
+    }
+    if (index !== length)
+        refuse();
+    const firstNonZero = (from, to) => {
+        for (let at = from; at < to; at += 1)
+            if (text.charCodeAt(at) !== 48)
+                return at;
+        return -1;
+    };
+    const lastNonZero = (from, to) => {
+        for (let at = to - 1; at >= from; at -= 1)
+            if (text.charCodeAt(at) !== 48)
+                return at;
+        return -1;
+    };
+    const firstInInteger = firstNonZero(integerStart, integerEnd);
+    const first = firstInInteger >= 0 ? firstInInteger : firstNonZero(fractionStart, fractionEnd);
+    if (first < 0)
+        return '0';
+    const lastInFraction = lastNonZero(fractionStart, fractionEnd);
+    const last = lastInFraction >= 0 ? lastInFraction : lastNonZero(integerStart, integerEnd);
+    const digits = firstInInteger >= 0 && lastInFraction >= 0
+        ? text.slice(first, integerEnd) + text.slice(fractionStart, last + 1)
+        : text.slice(first, last + 1);
+    const k = digits.length;
+    let exponent = 0;
+    for (let at = exponentStart; at < exponentEnd && exponent < MAX_EXPONENT; at += 1) {
+        exponent = exponent * 10 + text.charCodeAt(at) - 48;
+    }
+    // value = 0.digits × 10^n
+    const n = exponentSign * exponent + (firstInInteger >= 0 ? integerEnd - first : fractionStart - first);
+    if (n > 309 || (n === 309 && compareFraction(digits, OVERFLOW_DIGITS) >= 0)
+        || n < -323 || (n === -323 && compareFraction(digits, UNDERFLOW_DIGITS) <= 0)) {
+        throw new TypeError('response number is outside the binary64 range');
+    }
+    let body;
+    if (k <= n && n <= 21)
+        body = digits + '0'.repeat(n - k);
+    else if (0 < n && n <= 21)
+        body = `${digits.slice(0, n)}.${digits.slice(n)}`;
+    else if (-6 < n && n <= 0)
+        body = `0.${'0'.repeat(-n)}${digits}`;
+    else
+        body = `${digits[0]}${k > 1 ? `.${digits.slice(1)}` : ''}e${n > 0 ? '+' : '-'}${Math.abs(n - 1)}`;
+    return negative ? `-${body}` : body;
+}
+// Admission checking: serialize only admitted descriptor values, so runtime
+// Proxy reads cannot replace the checked data.
 function jsonSnapshot(value, ancestors) {
     if (typeof value === 'string') {
         if (!value.isWellFormed())
@@ -69,6 +236,8 @@ function jsonSnapshot(value, ancestors) {
         return value;
     if (typeof value === 'number' && Number.isFinite(value))
         return value;
+    if (isRawJson(value))
+        return new CanonicalNumber(canonicalNumber(value.rawJSON));
     if (typeof value !== 'object') {
         throw new TypeError('response contains a non-JSON value');
     }
@@ -77,8 +246,8 @@ function jsonSnapshot(value, ancestors) {
     if (array ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) {
         throw new TypeError('response contains a non-JSON object');
     }
-    // The dependency consults inherited toJSON too. Inspect descriptors without
-    // executing inherited getters or allowing prototype hooks to replace data.
+    // Refuse inherited toJSON hooks, inspecting descriptors without executing
+    // inherited getters or letting prototype hooks replace data.
     for (let parent = prototype; parent !== null; parent = Object.getPrototypeOf(parent)) {
         const hook = Object.getOwnPropertyDescriptor(parent, 'toJSON');
         if (hook && (!('value' in hook) || typeof hook.value === 'function')) {
