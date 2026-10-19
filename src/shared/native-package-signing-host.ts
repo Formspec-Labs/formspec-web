@@ -799,6 +799,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     createSurfaceVisit(marker: string, sessionGeneration: number) {
       if (!marker) throw new Error('native-visit-unqualified');
       let ticket: number | undefined;
+      let restoredAccess: typeof ownedDraftRestoration;
+      let restoredTicket: number | undefined;
       const assertVisit = () => {
         if (disposed || cleared || ticket === undefined || ticket !== visitEpoch || sessionGeneration !== authorityGeneration) throw new Error('native-visit-retired');
       };
@@ -807,12 +809,28 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           if (disposed || cleared || sessionGeneration !== authorityGeneration) throw new Error('native-visit-retired');
           ticket = ++visitEpoch;
           if (ownedDraftRestoration) {
-            if (ownedDraftRestoration.visit === undefined) ownedDraftRestoration.visit = ticket;
+            if (ownedDraftRestoration.visit === undefined
+              || !controller && !input && ownedDraftRestoration === restoredAccess && ownedDraftRestoration.visit === restoredTicket)
+              ownedDraftRestoration.visit = ticket;
             else if (ownedDraftRestoration.visit !== ticket) ownedDraftRestoration = undefined;
+            restoredAccess = ownedDraftRestoration; restoredTicket = ticket;
           }
           retireNative('visit-change'); for (const read of reads) read.abort(); reads.clear();
         },
-        dispose() { if (ticket === visitEpoch) { if (ownedDraftRestoration?.visit === ticket) ownedDraftRestoration = undefined; visitEpoch++; retireNative('visit-change'); for (const read of reads) read.abort(); reads.clear(); } ticket = undefined; },
+        dispose() {
+          if (ticket === visitEpoch) {
+            const previousTicket = ticket, access = ownedDraftRestoration;
+            // Retire authority immediately. React's synchronous effect replay may
+            // reactivate this same visit; a different visit cannot inherit it.
+            visitEpoch++; retireNative('visit-change'); for (const read of reads) read.abort(); reads.clear();
+            queueMicrotask(() => {
+              if (ticket === undefined && access && ownedDraftRestoration === access && access.visit === previousTicket) {
+                ownedDraftRestoration = undefined; emit();
+              }
+            });
+          }
+          ticket = undefined;
+        },
         bindRuntime() {
           const initial = createNativeInitialDataSourceRuntime({ sessionGeneration: marker, assertCurrent: assertVisit,
             sites: initialDataSites.map(site => ({ descriptor: site.descriptor, context: { surfaceId: site.handle.surfaceId,

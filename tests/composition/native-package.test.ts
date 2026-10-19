@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, StrictMode } from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
 import type { ResponseActionsDocument } from '@formspec-org/types';
@@ -342,6 +342,39 @@ describe('explicit native package composition', () => {
     expect(test.requests.every(request => request.method === 'GET')).toBe(true);
     mounted.unmount(); boot.host.dispose(); window.history.replaceState(null, '', '/');
   }, 30000);
+  it.each([false, true])('mounts a screened signed checkpoint through actual React startup with StrictMode=%s', async strict => {
+    const test = await completeStudioFixture(true, 'oidc:fixture');
+    const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture', credentialType: 'oidc-token' as const,
+      subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+    const identityBinding = { ...test.options.identityBinding, provider: { discover: async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }],
+      authenticate: async () => claim, revoke: async () => {}, subscribe: (listener: (value: typeof claim) => void) => { listener(claim); return () => {}; } } };
+    const seed = await createDefaultComposition(test.config, { ...test.options, identityBinding }).nativePackageRespondent!.load();
+    const engine = createFormEngine(seed.host.definition); seed.localeDocuments.forEach(document => engine.loadLocale(document)); engine.setLocale('en');
+    engine.setValue('fullName', 'Retained signed person'); engine.setValue('declarationAcknowledged', true);
+    engine.setValue('photo', { kind: 'attachment-ref', uri: 'urn:formspec:attachment:retained-photo', filename: 'fixture.png', mimeType: 'image/png', contentType: 'image/png', size: 1, hash: `sha256:${'c'.repeat(64)}` });
+    const response = { ...engine.getResponse({ profile: 'on-submit', id: generateIdempotencyKey() }), status: 'completed' as const }; engine.dispose();
+    const content = Object.values((seed.host.definition.extensions!['x-formspec-signing-content'] as { entries: Record<string, SigningContent> }).entries).find(content => content.locale === 'en')!;
+    const signed = await delegatedSignedResponseFixture({ response, content, actor: claim.subjectRef, draftId: 'fixture-draft', candidateVersion: 4,
+      issuer: test.signing.expectedIssuer, keyId: test.signing.keyId });
+    seed.host.dispose(); test.setDraft(signed, 'in_progress', 5);
+    const composition = createDefaultComposition(test.config, { ...test.options, identityBinding,
+      ownedDraftResume: { draftId: 'fixture-draft', expectedResponseId: signed.id! } });
+    const boot = await composition.nativePackageRespondent!.load(); await boot.resumeSubmitted!();
+    const route = boot.host.bundle.surfaces.flatMap(surface => surface.routes).find(route => route.slots?.some(slot => slot.slotType === 'definition-form' && (slot.binding as { definitionRef: string }).definitionRef === boot.host.definition.url))!;
+    window.history.replaceState(null, '', route.path!);
+    const runtime = createElement(NativePackageRuntime, { composition, config: test.config });
+    const mounted = render(strict ? createElement(StrictMode, null, runtime) : runtime);
+    try {
+      await screen.findByRole('textbox', { name: /full legal name/i });
+      await vi.waitFor(() => expect(boot.host.getSnapshot().controller?.signed?.draft.version).toBe(5));
+      expect(boot.host.getStartupRoute(route.path!).canRestoreOwnedForm).toBe(true);
+      expect(boot.host.getSnapshot().controller!.signed!.response).toEqual(signed);
+      expect(test.requests.every(request => request.method === 'GET' || request.url.endsWith('/screener-recovery'))).toBe(true);
+      mounted.unmount(); await Promise.resolve();
+      expect(boot.host.getStartupRoute(route.path!).canRestoreOwnedForm).toBe(false);
+    } finally { mounted.unmount(); boot.host.dispose(); window.history.replaceState(null, '', '/'); }
+  }, 30000);
+
   it('awaits runtime then tools for an admitted initial-data Mapping before publishing the host', async () => {
     const test = await completeStudioFixture(true); const order: string[] = [];
     let release: (() => void) | undefined;
@@ -529,6 +562,17 @@ describe('explicit native package composition', () => {
     expect(boot.host.getStartupRoute(formRoute.path!).canRestoreOwnedForm).toBe(true);
     const state = await boot.composition.draftStore.readState!({ formUrl: signed.definitionUrl, formVersion: signed.definitionVersion, subjectRef: claim.subjectRef });
     if (state?.kind !== 'active' || !state.signed) throw Error('Exact signed state required');
+    const generation = boot.host.getSnapshot().sessionGeneration;
+    const visit = boot.host.createSurfaceVisit('original-restored-visit', generation); visit.activate(); visit.dispose();
+    const different = boot.host.createSurfaceVisit('different-restored-visit', generation); different.activate();
+    expect(boot.host.getStartupRoute(formRoute.path!).canRestoreOwnedForm).toBe(false);
+    different.dispose(); await Promise.resolve();
+    await boot.host.restoreOwnedDraftAccess(state.signed, () => {}, 'signed');
+    const unmounted = boot.host.createSurfaceVisit('unmounted-restored-visit', generation); unmounted.activate(); unmounted.dispose();
+    await Promise.resolve(); unmounted.activate();
+    expect(boot.host.getStartupRoute(formRoute.path!).canRestoreOwnedForm).toBe(false);
+    unmounted.dispose(); await Promise.resolve();
+    await boot.host.restoreOwnedDraftAccess(state.signed, () => {}, 'signed');
     const restored = createFormEngine(test.definition); boot.localeDocuments.forEach(document => restored.loadLocale(document)); restored.setLocale(locale);
     restored.loadResponseData(signed.data as Parameters<typeof restored.loadResponseData>[0]);
     const lease = await boot.host.configureRuntime({ engine: restored, definition: test.definition, draftKey: state.signed.draftKey, claim, activeLocale: locale,
