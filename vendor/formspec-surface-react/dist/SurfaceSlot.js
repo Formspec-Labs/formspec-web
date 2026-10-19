@@ -303,6 +303,27 @@ function SurfaceStaticContent({ content, needAnchors, routeId, slotId, semanticO
 export function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, }) {
     return (_jsx(DefaultSurfaceDefinitionForm, { plan: plan, grant: grant, route: route, initialData: initialData, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, responseActionsDocument: responseActionsDocument, semanticControlScope: semanticControlScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, responseActionInvoker: responseActionInvoker, componentDocument: componentDocument, localeDocuments: localeDocuments, activeLocale: activeLocale }));
 }
+/** Stop later owner phases when this effect retires; host authority stays in the ports. */
+function currentEffectDataSourcePorts(isCurrent, { loader, authorize, validatePayload }) {
+    const check = () => {
+        if (!isCurrent())
+            throw new Error('Surface data load effect retired');
+    };
+    const invoke = (dispatch) => {
+        check();
+        const result = dispatch();
+        const complete = (value) => { check(); return value; };
+        // Preserve synchronous ports; only asynchronous results need a continuation.
+        return typeof result?.then === 'function'
+            ? Promise.resolve(result).then(complete)
+            : complete(result);
+    };
+    return {
+        loader: loader ? request => invoke(() => loader(request)) : undefined,
+        authorize: authorize ? request => invoke(() => authorize(request)) : undefined,
+        validatePayload: validatePayload ? request => invoke(() => validatePayload(request)) : undefined,
+    };
+}
 function executeDefinitionFormMapping({ mapping, value, }) {
     const result = createMappingEngine(mapping).reverse(value);
     if (result.diagnostics.length > 0) {
@@ -359,9 +380,11 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
                 params: input.route.params,
                 sessionGeneration: requestedGeneration,
             },
-            loader: dataSourceLoader,
-            authorize: authorizeDataSource,
-            validatePayload: validateDataSourcePayload,
+            ...currentEffectDataSourcePorts(() => current, {
+                loader: dataSourceLoader,
+                authorize: authorizeDataSource,
+                validatePayload: validateDataSourcePayload,
+            }),
             map: executeDefinitionFormMapping,
             site: {
                 surfaceId: input.route.surfaceId,
@@ -553,9 +576,11 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
                 params: route.params,
                 sessionGeneration: runtimeGeneration,
             },
-            loader: dataSourceLoader,
-            authorize: authorizeDataSource,
-            validatePayload: validateDataSourcePayload,
+            ...currentEffectDataSourcePorts(() => current, {
+                loader: dataSourceLoader,
+                authorize: authorizeDataSource,
+                validatePayload: validateDataSourcePayload,
+            }),
             site: {
                 surfaceId: route.surfaceId,
                 routeId: route.routeId,
