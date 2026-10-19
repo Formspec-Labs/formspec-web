@@ -103,6 +103,30 @@ describe('general hydration (MOCK owning verifier; schema/guard checks only)', (
     config.expectedIssuer = 'https://source.test/caller-mutation';
     return { f, input, nativeCurrentCheck, adapter, reader, verify, native };
   }
+  it.each(['exact', 'proof refused', 'foreign original', 'source unavailable', 'expired proof', 'unsigned'] as const)('requires fresh owning proof for recovered history without ready acceptance (MOCK verifier): %s', async mode => {
+    const { f, input, nativeCurrentCheck, adapter, verify, reader, native } = await generalFixture(mode === 'source unavailable', mode !== 'unsigned', true);
+    const recovered = { ...input, run: { ...input.run, acceptance: null } };
+    if (mode === 'proof refused') verify.mockRejectedValueOnce(Error('owning proof refused'));
+    if (mode === 'expired proof') f.current.mockImplementation(() => { throw Error('proof expired'); });
+    if (mode === 'foreign original') reader.mockResolvedValueOnce({ hydrationBytes: encode({}), proofIndexBytes: encode({ version: 1,
+      references: { native: {}, nativeCurrentChecks: { facts: { snapshot: native.snapshot, run: input.run.run,
+        original: { ...native, association: { ...native.association, candidateHash: 'foreign-candidate' } } } } }, buffers: [] }), buffers: [] });
+    try {
+      if (mode === 'exact' || mode === 'source unavailable') {
+        const facts = await adapter.hydrate(recovered);
+        expect(verify).toHaveBeenCalledOnce(); expect(f.fetch).toHaveBeenCalledOnce();
+        expect(facts.nativeCurrentCheck).toEqual(nativeCurrentCheck);
+        if (mode === 'exact') expect(() => facts.assertReady()).not.toThrow();
+        else expect(() => facts.assertReady()).toThrow('required source unavailable');
+        expect(JSON.parse(String(f.fetch.mock.calls[0]![1]?.body))).toMatchObject({ nativeCurrentCheck });
+      } else await expect(adapter.hydrate(recovered)).rejects.toThrow();
+      if (mode === 'unsigned') { expect(f.fetch).not.toHaveBeenCalled(); expect(verify).not.toHaveBeenCalled(); }
+      expect(recovered.run.acceptance).toBeNull();
+      // Only fresh proof acquisition uses the network; no draft, signing, refresh or association command.
+      expect(f.fetch.mock.calls.every(call => String(call[0]).endsWith('/evaluation-instances'))).toBe(true);
+    } finally { adapter.dispose(); }
+  });
+
   it('selects fresh native current checks for the exact unchanged signed candidate without an association command', async () => {
     const { f, input, nativeCurrentCheck, adapter, verify } = await generalFixture(false, true);
     const original = JSON.stringify(input.saved.response);

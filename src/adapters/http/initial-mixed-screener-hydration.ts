@@ -128,7 +128,7 @@ export class HttpInitialMixedScreenerHydration implements ScreenerHydration {
         || association.draftId !== saved.draft.id || association.draftVersion !== saved.draft.version)) fail('original association mismatch');
       const publication = this.config.publication, formVersion = this.config.formVersion;
       if (!equal(retained.selection, this.config.selection) || retained.run.selectionHash !== this.config.selectionHash
-        || retained.acceptance?.qualification.status !== 'ready' || retained.run.qualification.status !== 'ready'
+        || (!nativeCurrentCheck && retained.acceptance?.qualification.status !== 'ready') || retained.run.qualification.status !== 'ready'
         || !equal(retained.run.scope, selected.scope) || owner.authenticated.issuer !== identity.issuer
         || owner.authenticated.subject !== identity.subject || owner.authenticated.clientId !== identity.clientId
         || owner.subjectRef !== owner.authenticated.subjectRef || owner.sessionId !== owner.authenticated.sessionId

@@ -131,7 +131,7 @@ export class HttpScreenerRetention implements ScreenerRetention {
     check(input);
     const saved = structuredClone(input.saved);
     const selected = this.selection.evaluationSelection;
-    if (saved.response.authoredSignatures?.length || ['.', '..'].includes(saved.draft.id)
+    if (['.', '..'].includes(saved.draft.id)
       || saved.actor.id !== saved.evidence.subject_ref || saved.evidence.status !== 'in_progress'
       || saved.draft.id !== saved.evidence.draft_id || saved.draft.version !== saved.evidence.draft_version
       || saved.evidence.form_version_id !== selected.formVersionId || saved.draftKey.formUrl !== selected.definitionUrl

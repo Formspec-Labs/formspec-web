@@ -187,13 +187,6 @@ export function createResponseActionController(config: ResponseActionControllerC
   async function checkEvidence(result: SavedResponseDraft, expected?: FormResponse) {
     await assertSavedResponseDraftEvidence({ context, validateResponse: config.validateResponse, hashResponse: config.hashResponse }, result, expected, actor);
   }
-  function checkRestoredSigned(result: SignedResponseSigning, wording: { source: SigningContentSource; locale: string }) {
-    if ((context.draftKey.subjectRef && result.actor.id !== context.draftKey.subjectRef)
-      || !same(result.content, result.response.extensions?.['x-formspec-signing-content']?.content)
-      || !same(result.content.source, wording.source) || result.content.locale !== wording.locale
-      || result.response.authoredSignatures?.length !== 1 || result.verification?.mode !== 'delegated-service-key'
-      || result.verification.provider !== result.response.authoredSignatures[0].signatureProvider || !result.verification.keyId) throw new ControllerRefusal('context-mismatch');
-  }
   function review(result: PreparedResponseSigning | SignedResponseSigning, stage: 'unsigned' | 'signed', wording: { source: SigningContentSource; locale: string }) {
     if (!same(result.content.source, wording.source) || result.content.locale !== wording.locale
       || !config.reviewReady(freeze(structuredClone({ response: result.response, draft: result.draft, actor: result.actor,
@@ -521,7 +514,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         const unsigned = structuredClone(selected.response); delete unsigned.authoredSignatures;
         const previous = structuredClone(value.response); delete previous.authoredSignatures;
         if (!same(unsigned, previous)) throw new ControllerRefusal('context-mismatch');
-        checkRestoredSigned(result.signed, wording);
+        assertRestoredSignedResponseEvidence(context, result.signed, wording);
         signed = result.signed; saved = signed; actor = signed.actor.id; publish('signed');
         await afterCommit(signed);
       } else {
@@ -537,7 +530,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       const result = freeze(structuredClone(value));
       await checkEvidence(result, restored); current(generation);
       const wording = config.signingContext();
-      checkRestoredSigned(result, wording);
+      assertRestoredSignedResponseEvidence(context, result, wording);
       if (completion?.kind === 'task') {
         try { assertSignedTaskDraft(result.evidence.taskDraft, result.draft); }
         catch { throw new ControllerRefusal('context-mismatch'); }
@@ -558,6 +551,17 @@ function failure(document: Parameters<ResponseActionInvoker>[0]['document'], act
   reason: ResponseActionControllerReason): ResponseActionInvocationResult<SubmitResult> {
   return { status: 'failed', invocationId, resolution: resolveResponseAction(document, actionRef), validationTuple: null,
     detail: null, effectTrace: [], failureReason: reason };
+}
+/** Consistency checks for an already owner-qualified delegated signature; not local cryptographic verification. */
+export function assertRestoredSignedResponseEvidence(
+  context: Pick<ResponseActionControllerContext, 'draftKey'>,
+  result: SignedResponseSigning, wording: { source: SigningContentSource; locale: string },
+): void {
+  if ((context.draftKey.subjectRef && result.actor.id !== context.draftKey.subjectRef)
+    || !same(result.content, result.response.extensions?.['x-formspec-signing-content']?.content)
+    || !same(result.content.source, wording.source) || result.content.locale !== wording.locale
+    || result.response.authoredSignatures?.length !== 1 || result.verification?.mode !== 'delegated-service-key'
+    || result.verification.provider !== result.response.authoredSignatures[0].signatureProvider || !result.verification.keyId) throw new ControllerRefusal('context-mismatch');
 }
 /** Internal shared receipt checks; callers separately fence current owner and operation lifetime. */
 export async function assertSavedResponseDraftEvidence(

@@ -164,6 +164,33 @@ describe('same-session native Screener coordination', () => {
     f.coordinator.dispose();
   });
 
+  it.each(['exact', 'selector changed', 'retired', 'unsigned'] as const)('recovers original signed screening history only for current checks: %s', async mode => {
+    const f = await fixture(false, true);
+    const history = { ...f.input.run, acceptance: null };
+    let current = true;
+    const recover = vi.fn<NonNullable<ScreenerRetention['recover']>>(async input => {
+      input.assertCurrent(); if (mode === 'retired') current = false; return history;
+    });
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>();
+    const hydrate = vi.fn<ScreenerHydration['hydrate']>(async input => ({ view: f.view,
+      nativeCurrentCheck: mode === 'selector changed' ? { ...input.nativeCurrentCheck!, runRevision: 999 } : input.nativeCurrentCheck,
+      assertCurrent: input.assertCurrent, assertReady: input.assertCurrent }));
+    const coordinator = createNativeScreenerCoordinator({ selectionKey: 'selected', retention: { retain: f.retained, associate: f.associated, recover, refresh },
+      hydration: { hydrate }, context: () => ({ identity: f.input.identity, signal: f.input.signal,
+        assertCurrent() { if (!current) throw Error('owner retired'); } }) });
+    const saved = mode === 'unsigned' ? f.input.saved : { ...f.input.saved,
+      response: { ...f.input.saved.response, authoredSignatures: [{}] } } as unknown as typeof f.input.saved;
+    if (mode === 'exact') {
+      const facts = await coordinator.qualifySaved(saved);
+      expect(facts.nativeCurrentCheck).toEqual({ selectionHash: history.run.selectionHash, runId: history.run.runId, runRevision: history.run.revision });
+      expect(hydrate.mock.calls[0][0].run).toBe(history);
+      expect(coordinator.routeAllowed(f.request.target, f.request.document)).toBe(false);
+    } else await expect(coordinator.qualifySaved(saved)).rejects.toThrow();
+    expect(recover).toHaveBeenCalledTimes(mode === 'unsigned' ? 0 : 1);
+    expect(refresh).not.toHaveBeenCalled(); expect(f.associated).not.toHaveBeenCalled(); expect(f.retained).not.toHaveBeenCalled();
+    coordinator.dispose(); f.coordinator.dispose();
+  });
+
   it('uses the exact fresh retained run for signed current checks without replacing the historical association', async () => {
     const f = await fixture(false, true); await f.coordinator.completionPolicy.complete(f.request);
     // This exercises routing only; Source owns cryptographic admission of real signed responses.

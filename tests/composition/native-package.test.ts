@@ -502,6 +502,42 @@ describe('explicit native package composition', () => {
     expect(test.requests.every(request => !request.url.startsWith('https://server.example.test'))).toBe(true);
   });
 
+  it.each(['en', 'es-US'] as const)('opens an exact signed form on fresh boot then restores the same signed act without writes: %s', async locale => {
+    const test = await fixture('oidc:fixture'); await initFormspecEngine();
+    const seed = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    const engine = createFormEngine(test.definition); seed.localeDocuments.forEach(document => engine.loadLocale(document)); engine.setLocale(locale);
+    engine.setValue('declarationAcknowledged', true);
+    engine.setValue('photo', { kind: 'attachment-ref', uri: 'attachment:fixture', filename: 'fixture.png', mimeType: 'image/png', contentType: 'image/png', size: 1, hash: `sha256:${'c'.repeat(64)}` });
+    const response = engine.getResponse({ profile: 'on-submit', id: generateIdempotencyKey() }); engine.dispose(); seed.host.dispose();
+    const content = Object.values((test.definition.extensions!['x-formspec-signing-content'] as { entries: Record<string, SigningContent> }).entries).find(content => content.locale === locale)!;
+    const signed = await delegatedSignedResponseFixture({ response, content, actor: 'oidc:fixture', draftId: 'fixture-draft', candidateVersion: 4,
+      issuer: test.signing.expectedIssuer, keyId: test.signing.keyId });
+    test.setDraft(signed, 'in_progress', 5);
+    const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture', credentialType: 'oidc-token' as const,
+      subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+    const identityBinding: IdentityBinding = { provider: { discover: async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }],
+      authenticate: async () => claim, revoke: async () => {}, subscribe: listener => { listener(claim); return () => {}; } }, accessToken: async () => 'oidc-bearer',
+      browserAuthSession: { getSession: async () => ({ issuer: claim.provider, subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' }),
+        begin: async () => {}, completeCallback: async () => ({ issuer: claim.provider, subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' }), completeSilentCallback: async () => {}, renew: async () => ({ issuer: claim.provider, subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' }), logout: async () => {},
+        completeLogoutCallback: async () => {}, accessToken: async () => 'oidc-bearer', subscribe: () => () => {}, dispose() {} } };
+    const config = { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: { mode: 'oidc-required' as const, oidc: { issuer: claim.provider, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const } } };
+    const count = test.requests.length;
+    const boot = await createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl, identityBinding,
+      ownedDraftResume: { draftId: 'fixture-draft', expectedResponseId: signed.id! } }).nativePackageRespondent!.load();
+    await expect(boot.resumeSubmitted!()).resolves.toBe('active');
+    const formRoute = boot.host.bundle.surfaces.flatMap(surface => surface.routes).find(route => route.slots?.some(slot => slot.slotType === 'definition-form' && (slot.binding as { definitionRef: string }).definitionRef === boot.host.definition.url))!;
+    expect(boot.host.getStartupRoute(formRoute.path!).canRestoreOwnedForm).toBe(true);
+    const state = await boot.composition.draftStore.readState!({ formUrl: signed.definitionUrl, formVersion: signed.definitionVersion, subjectRef: claim.subjectRef });
+    if (state?.kind !== 'active' || !state.signed) throw Error('Exact signed state required');
+    const restored = createFormEngine(test.definition); boot.localeDocuments.forEach(document => restored.loadLocale(document)); restored.setLocale(locale);
+    restored.loadResponseData(signed.data as Parameters<typeof restored.loadResponseData>[0]);
+    const lease = await boot.host.configureRuntime({ engine: restored, definition: test.definition, draftKey: state.signed.draftKey, claim, activeLocale: locale,
+      restoredResponse: state.response, restoredSigning: state.signed });
+    expect(boot.host.getSnapshot().controller?.signed).toEqual(state.signed); expect(boot.host.getSnapshot().locale).toBe(locale);
+    expect(test.requests.slice(count).every(request => request.method === 'GET')).toBe(true);
+    lease.dispose(); restored.dispose(); boot.host.dispose();
+  });
+
   it('preflights a submitted owned draft on fresh package boot without mounting an engine or issuing another credential/write', async () => {
     const test = await fixture(); await initFormspecEngine();
     const first = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();

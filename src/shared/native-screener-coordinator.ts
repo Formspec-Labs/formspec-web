@@ -155,10 +155,16 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
   async function qualifySaved(saved: SavedResponseDraft, caller?: () => void): Promise<HydratedEvaluationCandidate> {
     const operation = begin(undefined, caller);
     try {
-      const issued = run;
-      if (!issued) throw new Error('Native Screener retained run unavailable');
       const candidate = structuredClone(saved);
       const currentCheck = !!candidate.response.authoredSignatures?.length;
+      if (!run && currentCheck) {
+        if (!retention.recover) throw new Error('Native Screener retained recovery unavailable');
+        const recovered = await operation.wait(retention.recover({ saved: candidate, identity: operation.identity,
+          signal: operation.signal, assertCurrent: operation.assertCurrent }));
+        operation.assertCurrent(); run = recovered;
+      }
+      const issued = run;
+      if (!issued) throw new Error('Native Screener retained run unavailable');
       const nativeCurrentCheck = currentCheck ? Object.freeze({ selectionHash: issued.run.selectionHash,
         runId: issued.run.runId, runRevision: issued.run.revision }) : undefined;
       const common = { saved: candidate, run: issued,

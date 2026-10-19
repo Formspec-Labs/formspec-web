@@ -741,6 +741,46 @@ describe('generic native package signing session', () => {
       claim: null, activeLocale: 'es', restoredResponse: response });
     expect(reloaded.getSnapshot().locale).toBe('es'); restored.dispose(); restoredEngine.dispose(); reloaded.dispose(); test.engine.dispose();
   });
+  it.each(['exact', 'actor', 'publication', 'revision', 'content', 'provider', 'signature', 'retired', 'ambiguous', 'changed read'] as const)('opens only exact owned signed restoration access: %s', async mode => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const content = { source: test.policy.signingContext('en').source, locale: 'en', documentId: 'doc', signingIntent: 'urn:test:sign', declaration: 'Declaration',
+      affirmationText: 'Affirmation', delegatedSigningNotice: 'Notice', paperAlternative: 'Paper', electronicConsent: {
+        text: 'Consent', controlLabel: 'Consent', textRef: 'urn:test:consent', version: '1' } } satisfies SigningContent;
+    // Consistency-only fixture; the composition test separately uses real delegated response evidence.
+    const response = { ...test.response, authoredSignatures: [{ signatureProvider: 'urn:test:delegated' }],
+      extensions: { 'x-formspec-signing-content': { content } } } as unknown as FormResponse;
+    const signed: SignedResponseSigning = { draftKey: { formUrl: response.definitionUrl, formVersion: response.definitionVersion, subjectRef: 'server-actor' },
+      response, content, draft: { id: 'owned-id', version: 5, responseHash: await hashResponse(response) }, actor: { id: 'server-actor' },
+      evidence: { draft_id: 'owned-id', draft_version: 5, form_version_id: 'publication', subject_ref: 'server-actor', status: 'in_progress', draft_state: response.data, canonical_response: response },
+      verification: { mode: 'delegated-service-key', provider: 'urn:test:delegated', keyId: 'key' } };
+    if (mode === 'actor') Object.assign(signed.actor, { id: 'foreign' });
+    if (mode === 'publication') Object.assign(signed.evidence, { form_version_id: 'foreign' });
+    if (mode === 'revision') Object.assign(signed.draft, { version: 6 });
+    if (mode === 'content') Object.assign(signed, { content: { ...content, source: { ...content.source, version: 'foreign' } } });
+    if (mode === 'provider') Object.assign(signed.verification, { provider: 'foreign' });
+    if (mode === 'signature') Object.assign(signed.response, { authoredSignatures: [] });
+    const host = createNativePackageSigningHost(test.policy);
+    let current = true;
+    const guard = () => { if (!current) throw Error('retired'); };
+    const opening = host.restoreOwnedDraftAccess(signed, guard, 'signed');
+    if (mode === 'retired') current = false;
+    if (['exact', 'ambiguous', 'changed read'].includes(mode)) {
+      await opening;
+      await expect(host.restoreOwnedDraftAccess(signed, guard)).rejects.toThrow();
+      const engine = createFormEngine(test.policy.definition); engine.loadResponseData(response.data as Parameters<typeof engine.loadResponseData>[0]);
+      try {
+        const reread = mode === 'changed read' ? { ...signed, draft: { ...signed.draft, version: 6 }, evidence: { ...signed.evidence, draft_version: 6 } } : signed;
+        const restoring = host.configureRuntime({ engine, definition: test.policy.definition, draftKey: signed.draftKey, claim: null,
+          activeLocale: 'en', restoredResponse: response, restoredSigning: reread, ...(mode === 'ambiguous' ? { restoredSavedDraft: signed } : {}) });
+        if (mode === 'ambiguous') await expect(restoring).rejects.toThrow('ambiguous');
+        else if (mode === 'changed read') await expect(restoring).rejects.toThrow('native-owned-restoration-changed');
+        else { const lease = await restoring; expect(host.getSnapshot().controller?.signed).toEqual(signed); lease.dispose(); }
+      } finally { engine.dispose(); }
+    } else await expect(opening).rejects.toThrow();
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+    host.dispose();
+  });
+
   it('restores a qualified unsigned saved handle into a fresh host without another Save', async () => {
     const test = fixture(); const first = await test.attach();
     await test.invoke(first, 'save');

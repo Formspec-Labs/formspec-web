@@ -317,6 +317,8 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
         current();
         if (state?.kind === 'active' && state.savedDraft && !state.signed && !state.pendingSign)
           await admittedHost.restoreOwnedDraftAccess(state.savedDraft, current);
+        if (state?.kind === 'active' && state.signed && !state.savedDraft && !state.pendingSign)
+          await admittedHost.restoreOwnedDraftAccess(state.signed, current, 'signed');
         if (state?.kind === 'submitted') await admittedHost.configureSubmittedRuntime({ definition, draftKey, claim, state });
         return state?.kind ?? 'absent';
       }) };

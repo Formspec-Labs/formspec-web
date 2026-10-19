@@ -110,6 +110,28 @@ describe('public Source Screener retention adapter', () => {
     expect(f.requests).toHaveLength(3);
     await expect(f.adapter.refresh({ ...f.context, run: structuredClone(fresh) })).rejects.toThrow('Port-issued');
   });
+  it.each(['exact', 'foreign history', 'retired'] as const)('recovers signed history without fresh acceptance or mutation: %s', async mode => {
+    const f = await setup(undefined, undefined, value => {
+      if (mode === 'foreign history') ((value.result as { history: ScreenerRunView }).history.run.owner.authenticated as { subject: string }).subject = 'foreign';
+      return value;
+    });
+    const retained = await f.adapter.retain(f.completion);
+    // Routing fixture only: the cohort separately verifies the real delegated signature.
+    Object.assign(f.saved.response, { authoredSignatures: [{}] });
+    const count = f.requests.length;
+    const input = { ...f.context, saved: f.saved, assertCurrent: () => { if (mode === 'retired') throw Error('retired'); } };
+    if (mode !== 'exact') await expect(f.adapter.recover(input)).rejects.toThrow();
+    else {
+      const history = await f.adapter.recover(input);
+      expect(history.run).toEqual(retained.run); expect(history.acceptance).toBeNull();
+      expect(f.requests.slice(count)).toMatchObject([{ method: 'POST', url: 'https://source.example/drafts/draft_123/screener-recovery',
+        body: { draftVersion: 7, candidateHash: await hash(f.saved.response) } }]);
+      expect(f.requests[count].headers.get('authorization')).toBe('Bearer owner-token');
+      expect(f.requests[count].headers.get('x-stack-scope-key')).toBe(scope);
+    }
+    expect(f.requests.slice(count).every(request => request.url.endsWith('/screener-recovery'))).toBe(true);
+    if (mode === 'retired') expect(f.requests).toHaveLength(count);
+  });
   it('recovers only the exact owned saved association as history without ready acceptance', async () => {
     const f = await setup(); const retained = await f.adapter.retain(f.completion);
     const history = await f.adapter.recover({ ...f.context, saved: f.saved });

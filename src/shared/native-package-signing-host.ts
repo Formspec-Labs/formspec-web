@@ -18,14 +18,14 @@ import { targetDefinitionMatches, type FormDefinition, type FormResponse, type L
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
 import type { RespondentOwnedRuntimeInput, RespondentOwnedRuntime, RespondentSubmittedRuntimeInput } from '../app/RespondentRuntime.tsx';
-import { createResponseActionController, assertSavedResponseDraftEvidence, type ResponseActionControllerConfig, type ResponseActionControllerSnapshot } from './response-action-controller.ts';
+import { createResponseActionController, assertSavedResponseDraftEvidence, assertRestoredSignedResponseEvidence, type ResponseActionControllerConfig, type ResponseActionControllerSnapshot } from './response-action-controller.ts';
 import { createFrozenHostStateDataSourceRuntime } from './frozen-host-state-data.ts';
 import { createNativeScreenerCoordinator, type NativeScreenerCoordinatorConfig } from './native-screener-coordinator.ts';
 import { createEvaluationInstanceResolver } from './evaluation-instance-resolver.ts';
 import { replaceNativeFormEngine } from './native-engine-replacement.ts';
 import { computeJcsSha256Digest } from '../adapters/http/response-action-ledger.ts';
 import type { HydratedEvaluationCandidate, SavedCandidateHydration } from '../ports/evaluation-hydration.ts';
-import type { SavedResponseDraft } from '../ports/response-signing.ts';
+import type { SavedResponseDraft, SignedResponseSigning } from '../ports/response-signing.ts';
 import { generateIdempotencyKey } from './idempotency-key.ts';
 import { createNativeQualificationReporter, type NativeQualificationStage } from '../composition/native-package-action-diagnostic.ts';
 
@@ -297,7 +297,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     };
     observe(); prepareFlags();
   }
-  let ownedDraftRestoration: { saved: SavedResponseDraft; assertCurrent: () => void; visit?: number } | undefined;
+  let ownedDraftRestoration: { saved: SavedResponseDraft; signed?: true; assertCurrent: () => void; visit?: number } | undefined;
   let restoredScreenerCheckpoint: Pick<SavedResponseDraft, 'draftKey' | 'draft' | 'actor' | 'response'> | undefined;
 
   let locale = policy.initialLocale;
@@ -693,36 +693,43 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return access.visit === undefined || access.visit === visitEpoch;
     } catch { return false; }
   }
+  async function restoreOwnedAccess(value: SavedResponseDraft, assertCurrent: () => void, signed?: SignedResponseSigning): Promise<void> {
+    assertSynchronousGuard(assertCurrent);
+    if (disposed || cleared || controller || input || submitted || !value.response.id
+      || (signed ? !value.response.authoredSignatures?.length : value.response.authoredSignatures?.length || value.response.extensions?.['x-formspec-signing-content']))
+      throw new Error('native-owned-restoration-refused');
+    const saved = structuredClone(value); freezeMetadata(saved);
+    const sourceAuthority = policy.nativeScreener?.context();
+    const check = () => {
+      assertSynchronousGuard(assertCurrent);
+      sourceAuthority?.signal.throwIfAborted();
+      if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
+      if (disposed || cleared || controller || input || submitted) throw new Error('native-owned-restoration-retired');
+      policy.assertOwner(saved.draftKey, saved.actor.id);
+    };
+    check();
+    await assertSavedResponseDraftEvidence({ context: { definition: policy.definition, draftKey: saved.draftKey,
+      publication: policy.publication, responseId: saved.response.id!, generation: String(authorityGeneration) },
+      validateResponse: policy.controller.validateResponse, hashResponse: policy.controller.hashResponse }, saved, saved.response, saved.draftKey.subjectRef ?? saved.actor.id);
+    check();
+    if (signed) {
+      const captured = saved as SignedResponseSigning;
+      assertRestoredSignedResponseEvidence({ draftKey: saved.draftKey }, captured, policy.signingContext(captured.content.locale));
+      check();
+    }
+    ownedDraftRestoration = { saved, ...(signed ? { signed: true as const } : {}), assertCurrent: () => {
+      assertSynchronousGuard(assertCurrent);
+      sourceAuthority?.signal.throwIfAborted();
+      if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
+      if (disposed || cleared) throw new Error('native-owned-restoration-retired');
+      policy.assertOwner(saved.draftKey, saved.actor.id);
+    } };
+    emit();
+  }
   return {
     bundle, definition: policy.definition,
-    async restoreOwnedDraftAccess(value: SavedResponseDraft, assertCurrent: () => void): Promise<void> {
-      assertSynchronousGuard(assertCurrent);
-      if (disposed || cleared || controller || input || submitted || !value.response.id
-        || value.response.authoredSignatures?.length || value.response.extensions?.['x-formspec-signing-content'])
-        throw new Error('native-owned-restoration-refused');
-      const saved = structuredClone(value); freezeMetadata(saved);
-      const sourceAuthority = policy.nativeScreener?.context();
-      const check = () => {
-        assertSynchronousGuard(assertCurrent);
-        sourceAuthority?.signal.throwIfAborted();
-        if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
-        if (disposed || cleared || controller || input || submitted) throw new Error('native-owned-restoration-retired');
-        policy.assertOwner(saved.draftKey, saved.actor.id);
-      };
-      check();
-      await assertSavedResponseDraftEvidence({ context: { definition: policy.definition, draftKey: saved.draftKey,
-        publication: policy.publication, responseId: saved.response.id!, generation: String(authorityGeneration) },
-        validateResponse: policy.controller.validateResponse, hashResponse: policy.controller.hashResponse }, saved, saved.response, saved.draftKey.subjectRef ?? saved.actor.id);
-      check();
-      ownedDraftRestoration = { saved, assertCurrent: () => {
-        assertSynchronousGuard(assertCurrent);
-        sourceAuthority?.signal.throwIfAborted();
-        if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
-        if (disposed || cleared) throw new Error('native-owned-restoration-retired');
-        policy.assertOwner(saved.draftKey, saved.actor.id);
-      } };
-      emit();
-    },
+    restoreOwnedDraftAccess: (value: SavedResponseDraft, assertCurrent: () => void, mode?: 'signed') =>
+      restoreOwnedAccess(value, assertCurrent, mode === 'signed' ? value as SignedResponseSigning : undefined),
     ...(native ? { ...(screener ? { screenerCompletion: screener.completionPolicy } : {}), instanceSourceResolver: unavailableSources, retireCandidateAuthority: () => { ownedDraftRestoration = undefined; retireNative(); },
       prePrepareCandidate: async (candidate: Readonly<{ saved: SavedResponseDraft; response: FormResponse; assertCurrent: () => void }>) => {
         const facts = nativeCandidate; const authority = authorityGeneration; const visit = visitEpoch; const lease = rendererLease;
@@ -927,7 +934,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         if (admission !== rendererAdmission || disposed || cleared || expectedAuthority !== authorityGeneration || expectedVisit !== visitEpoch)
           throw new Error('native-renderer-admission-retired');
       };
-      if (!input && ownedDraftRestoration && !sameSavedDraft(next.restoredSavedDraft, ownedDraftRestoration.saved)) {
+      if (!input && ownedDraftRestoration && !sameSavedDraft(ownedDraftRestoration.signed ? next.restoredSigning : next.restoredSavedDraft, ownedDraftRestoration.saved)) {
         ownedDraftRestoration = undefined; throw new Error('native-owned-restoration-changed');
       }
       if (disposed || cleared || submitted || !same(next.definition, policy.definition) || (responseId && next.restoredResponse && next.restoredResponse.id !== responseId)
