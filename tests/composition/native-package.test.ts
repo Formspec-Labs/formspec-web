@@ -1,7 +1,7 @@
 import { createElement, StrictMode } from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
-import type { ResponseActionsDocument } from '@formspec-org/types';
+import type { DataSourcesDocument, ResponseActionsDocument } from '@formspec-org/types';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { webcrypto } from 'node:crypto';
@@ -1034,6 +1034,72 @@ async function correctionFixture(taskRequest = true) {
 }
 
 describe('explicit correction host through the maintained native loader', () => {
+  it.each(['current', 'retired', 'cleared', 'disposed', 'wrong-site', 'wrong-route'] as const)('qualifies a mixed form/signing entry only through exact restored task access: %s', async mode => {
+    const f = await correctionFixture();
+    const resolved = dereferenceBundleExport(f.test.bundle);
+    const surface = resolved.surfaces[0];
+    const entry = surface.routes.find(route => route.id === surface.entry)!;
+    const signing = surface.routes.find(route => route.path === '/review-sign')!;
+    entry.path = '/task-response';
+    entry.slots = [...entry.slots!, ...signing.slots!];
+    signing.slots = [{ id: 'empty-signing-route', slotType: 'static-content', binding: { kind: 'text', content: 'Signing is on the task form.' } }];
+    for (const catalog of Object.values(f.test.bundle.documents).filter(document => !!document && typeof document === 'object' && '$formspecDataSources' in document) as DataSourcesDocument[]) for (const source of catalog.sources) {
+      if (source.availability.routeRef === signing.id) source.availability.routeRef = entry.id;
+    }
+    f.test.texts['native.json'] = JSON.stringify(f.test.bundle);
+    f.test.files.nativeBundle.sha256 = await rawDigest(f.test.texts['native.json']);
+    const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:task',
+      credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+    Object.assign(f.options.identityBinding.provider, {
+      discover: async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }],
+      authenticate: async () => claim,
+      subscribe: (listener: (value: typeof claim) => void) => { listener(claim); return () => {}; },
+    });
+    const priorFetch = f.test.fetch.getMockImplementation()!;
+    f.test.fetch.mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/drafts/task-draft') {
+        f.test.requests.push({ url: url.href, method: init?.method ?? 'GET', headers: new Headers(init?.headers) });
+        return (init?.method ?? 'GET') === 'DELETE' ? new Response(null, { status: 204 }) : Response.json(f.launched);
+      }
+      return priorFetch(input, init);
+    });
+    if (mode === 'wrong-site') {
+      const factory = nativeHostModule.createNativePackageSigningHost;
+      vi.spyOn(nativeHostModule, 'createNativePackageSigningHost').mockImplementation(policy => factory({ ...policy,
+        ownedDraftRestorationSites: [] }));
+    }
+    const composition = createDefaultComposition(f.config, f.options);
+    const boot = await composition.nativePackageRespondent!.load();
+    let mounted: ReturnType<typeof render> | undefined;
+    try {
+      // Even an authenticated launch does not by itself grant form restoration.
+      expect(() => boot.host.getStartupRoute('/task-response')).toThrow('native-entry-route-unavailable');
+      expect(await boot.resumeSubmitted!()).toBe('active');
+      expect(f.test.requests.some(request => request.method === 'GET' && request.url.endsWith('/drafts/task-draft'))).toBe(true);
+      if (mode === 'retired') f.retire();
+      if (mode === 'disposed') boot.host.dispose();
+      if (!['current', 'cleared'].includes(mode)) {
+        expect(() => boot.host.getStartupRoute(mode === 'wrong-route' ? '/unadmitted' : '/task-response')).toThrow('native-entry-route-unavailable');
+      } else {
+        expect(boot.host.getStartupRoute('/task-response')).toMatchObject({ entryHref: '/task-response',
+          requiresHostState: true, canRestoreOwnedForm: true });
+        window.history.replaceState(null, '', '/task-response');
+        mounted = render(createElement(NativePackageRuntime, { composition, config: f.config }));
+        await screen.findByRole('textbox', { name: /full legal name/i });
+        expect(boot.host.getSnapshot().controller?.saved?.draft.id).toBe('task-draft');
+        expect(boot.host.getSnapshot().controller?.prepared).toBeUndefined();
+        expect(boot.host.getSnapshot().controller?.signed).toBeUndefined();
+        if (mode === 'cleared') {
+          await boot.host.clearDraftAccess();
+          expect(() => boot.host.getStartupRoute('/task-response')).toThrow('native-entry-route-unavailable');
+        }
+      }
+      // Source launch/read fixtures only; no answer edit, Save, Prepare, Sign or completion.
+      expect(f.test.requests.filter(request => request.method !== 'GET' && request.method !== 'DELETE')
+        .map(request => new URL(request.url).pathname)).toEqual(['/runtime/task-drafts']);
+    } finally { mounted?.unmount(); boot.host.dispose(); window.history.replaceState(null, '', '/'); }
+  });
   it.each(['after-construction', 'during-signing-options', 'during-session-callback', 'during-wos-settings-accessor'] as const)(
     'retains independent Source and WOS requests with mutation %s', async mode => {
       const f = await correctionFixture();

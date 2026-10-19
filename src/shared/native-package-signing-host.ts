@@ -775,7 +775,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; requiresScreener?: boolean; canRestoreOwnedForm?: boolean; screenerDocuments?: readonly ScreenerDocument[]; signedReviewHref?: string; signedReviewTitle?: string } {
       const match = matchRoute(app, pathname).match;
       const entry = app.entry;
-      if (!match || !entry || !supportedEntryRoutes.has(entry) || requiredHostRoutes.has(entry)) throw new Error('native-entry-route-unavailable');
+      if (!match || !entry || !supportedEntryRoutes.has(entry)
+        || requiredHostRoutes.has(entry) && !canRestoreOwnedForm(entry)) throw new Error('native-entry-route-unavailable');
       const destination = routeHref(entry);
       if (destination.refusal) throw new Error('native-entry-route-unavailable');
       const requiresScreener = protectedScreenerRoutes?.requiresScreening(match.handle) ?? false;
