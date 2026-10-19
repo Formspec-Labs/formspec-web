@@ -123,12 +123,16 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   signingContext(pins.initialLocale);
   const actionLabels = (locale: string) => {
     const document = localeFor(locale);
-    return Object.fromEntries((['sign', 'submit', 'paper'] as const).map(name => {
+    return Object.fromEntries((['sign', 'submit', 'paper'] as const).flatMap(name => {
       const action = resolveResponseAction(roles[name].document, roles[name].actionRef).action;
+      if (action?.label && 'literal' in action.label) {
+        if (typeof action.label.literal !== 'string' || !action.label.literal.trim()) throw new Error('Authored action label is unavailable for this Locale');
+        return []; // The maintained ceremony consumes authored literal labels directly.
+      }
       const ref = action?.label && 'ref' in action.label ? action.label.ref : undefined;
       const value = ref ? document.strings[ref] : undefined;
       if (typeof value !== 'string' || !value.trim()) throw new Error('Authored action label is unavailable for this Locale');
-      return [ref!, value];
+      return [[ref!, value]];
     }));
   };
   actionLabels(pins.initialLocale);

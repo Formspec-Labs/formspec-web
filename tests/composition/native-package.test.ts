@@ -732,6 +732,67 @@ describe('explicit native package composition', () => {
     boot.host.dispose();
   });
 
+  it.each([false, true])('admits authored literal ceremony labels with mixed references=%s', async mixed => {
+    const test = await fixture();
+    const candidate = JSON.parse(test.texts['native.json']) as BundleExport;
+    const actions = candidate.documents[test.signing.roles.sign.artifactRef] as ResponseActionsDocument;
+    const names = mixed ? ['sign', 'paper'] as const : ['sign', 'submit', 'paper'] as const;
+    for (const name of names) actions.actions.find(action => action.id === test.signing.roles[name].actionRef)!.label = { literal: `Authored ${name}` };
+    test.texts['native.json'] = JSON.stringify(candidate);
+    test.files.nativeBundle.sha256 = await rawDigest(test.texts['native.json']);
+    const factory = vi.spyOn(nativeHostModule, 'createNativePackageSigningHost');
+    const boot = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    const labels = factory.mock.calls[0][0].actionLabels('en');
+    expect(Object.keys(labels)).toHaveLength(mixed ? 1 : 0);
+    for (const name of names) {
+      const selected = test.signing.roles[name];
+      expect(dereferenceBundleExport(factory.mock.calls[0][0].bundle).responseActions[0].actions.find(action => action.id === selected.actionRef)!.label)
+        .toEqual({ literal: `Authored ${name}` });
+    }
+    expect(test.requests.every(request => request.method === 'GET')).toBe(true);
+    boot.host.dispose();
+  });
+
+  it.each([{ literal: '   ' }, { ref: '$action.unavailable.label' }])('refuses an unavailable authored ceremony label %j', async label => {
+    const test = await fixture();
+    const candidate = JSON.parse(test.texts['native.json']) as BundleExport;
+    const actions = candidate.documents[test.signing.roles.sign.artifactRef] as ResponseActionsDocument;
+    actions.actions.find(action => action.id === test.signing.roles.sign.actionRef)!.label = label;
+    test.texts['native.json'] = JSON.stringify(candidate);
+    test.files.nativeBundle.sha256 = await rawDigest(test.texts['native.json']);
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load())
+      .rejects.toThrow('Authored action label is unavailable for this Locale');
+    expect(test.requests.every(request => new URL(request.url).origin !== 'https://server.example.test')).toBe(true);
+  });
+
+  it.skipIf(!process.env.FORMSPEC_NATIVE_PACKAGE_DIR)('admits the exact selected task package through the production loader', async () => {
+    const root = resolve(process.env.FORMSPEC_NATIVE_PACKAGE_DIR!);
+    const roles = JSON.parse(readFileSync(resolve(root, 'task-role-selections.json'), 'utf8')) as { signing: NativePackageSigningConfig }[];
+    const selected = roles.find(role => role.signing.definition.url === 'urn:formspec:demo:d1:passport-review')!;
+    expect(selected.signing.definition.version).toBe('0.4.1');
+    const definitionPin = JSON.parse(readFileSync(resolve(root, 'staff-review-package-manifest.json'), 'utf8')).files.definition;
+    const definition = JSON.parse(readFileSync(resolve(root, definitionPin.path), 'utf8'));
+    vi.stubGlobal('crypto', webcrypto);
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if ((init?.method ?? 'GET') !== 'GET') throw new Error('Package admission must not mutate');
+      requests.push(url.href);
+      if (url.origin === window.location.origin) return new Response(readFileSync(resolve(root, url.pathname.slice(1)), 'utf8'));
+      if (url.href === initialDefinitionUrl) return Response.json({ form_id: 'actual-form', form_version_id: 'actual-publication',
+        definition_url: definition.url, definition_version: definition.version,
+        definition_hash: await computeJcsSha256Digest(definition), definition });
+      throw new Error(`Unexpected package admission request ${url.href}`);
+    });
+    const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: selected.signing, scopeKey: testScopeKey });
+    const factory = vi.spyOn(nativeHostModule, 'createNativePackageSigningHost');
+    const boot = await createDefaultComposition(config, { packageUrl: '/staff-review-package-manifest.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    expect(factory.mock.calls[0][0].definition).toEqual(definition);
+    expect(factory.mock.calls[0][0].actionLabels('en')).toEqual({});
+    expect(requests.filter(url => new URL(url).origin === 'https://server.example.test')).toEqual([initialDefinitionUrl]);
+    boot.host.dispose();
+  });
+
   it('refuses a configured source or action absent from the authored graph before credentials', async () => {
     const test = await fixture();
     for (const signing of [
