@@ -1,4 +1,4 @@
-import { createElement, StrictMode } from 'react';
+import { act, createElement, StrictMode } from 'react';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
 import type { DataSourcesDocument, ResponseActionsDocument } from '@formspec-org/types';
@@ -1034,8 +1034,25 @@ async function correctionFixture(taskRequest = true) {
 }
 
 describe('explicit correction host through the maintained native loader', () => {
-  it.each(['current', 'retired', 'cleared', 'disposed', 'wrong-site', 'wrong-route'] as const)('qualifies a mixed form/signing entry only through exact restored task access: %s', async mode => {
+  it.each(['current', 'retired', 'cleared', 'disposed', 'wrong-site', 'wrong-route', 'prepare'] as const)('qualifies a mixed form/signing entry only through exact restored task access: %s', async mode => {
     const f = await correctionFixture();
+    if (mode === 'prepare') {
+      const omitControls = (value: unknown): unknown => Array.isArray(value)
+        ? value.filter(child => !child || typeof child !== 'object' || !('component' in child) || child.component !== 'ActionButton').map(omitControls)
+        : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, child]) => [key, omitControls(child)])) : value;
+      f.test.component.tree = omitControls(f.test.component.tree);
+      f.test.texts['component.json'] = JSON.stringify(f.test.component);
+      f.test.files.component.sha256 = await rawDigest(f.test.texts['component.json']);
+      await initFormspecEngine();
+      const seed = createFormEngine(f.test.definition);
+      for (const document of Object.values(f.test.bundle.documents)) if (document && typeof document === 'object' && '$formspecLocale' in document) seed.loadLocale(document as LocaleDocument);
+      seed.setLocale('en');
+      for (const [key, value] of Object.entries({ renewalEligible: true, fullName: 'Neutral respondent', dateOfBirth: '1990-01-01', placeOfBirth: 'Neutral place', email: 'neutral@example.test', mailingAddress: 'Neutral address', priorPassportNumber: '000000000', priorPassportIssueDate: '2020-01-01', ssnIssued: false, neverIssuedStatement: 'Never issued', declarationAcknowledged: true })) seed.setValue(key, value);
+      seed.setValue('photo', { kind: 'attachment-ref', uri: 'urn:formspec:attachment:controlled', filename: 'fixture.png', mimeType: 'image/png', contentType: 'image/png', size: 1, hash: `sha256:${'a'.repeat(64)}` });
+      const response = seed.getResponse({ profile: 'off', id: f.launched.canonical_response.id }); seed.dispose();
+      Object.assign(f.launched, { canonical_response: response, draft_state: response.data });
+
+    }
     const resolved = dereferenceBundleExport(f.test.bundle);
     const surface = resolved.surfaces[0];
     const entry = surface.routes.find(route => route.id === surface.entry)!;
@@ -1059,8 +1076,18 @@ describe('explicit correction host through the maintained native loader', () => 
     f.test.fetch.mockImplementation(async (input, init) => {
       const url = new URL(String(input));
       if (url.pathname === '/drafts/task-draft') {
-        f.test.requests.push({ url: url.href, method: init?.method ?? 'GET', headers: new Headers(init?.headers) });
-        return (init?.method ?? 'GET') === 'DELETE' ? new Response(null, { status: 204 }) : Response.json(f.launched);
+        const method = init?.method ?? 'GET';
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+        f.test.requests.push({ url: url.href, method, body, headers: new Headers(init?.headers) });
+        if (method === 'PATCH') {
+          expect(mode).toBe('prepare');
+          expect(body.expected_draft_version).toBe(f.launched.draft_version);
+          expect(body.canonical_response.data.fullName).toBe('Changed fixture name');
+          Object.assign(f.launched, { draft_version: f.launched.draft_version + 1,
+            canonical_response: body.canonical_response, draft_state: body.draft_state });
+        }
+
+        return method === 'DELETE' ? new Response(null, { status: 204 }) : Response.json(f.launched);
       }
       return priorFetch(input, init);
     });
@@ -1079,7 +1106,7 @@ describe('explicit correction host through the maintained native loader', () => 
       expect(f.test.requests.some(request => request.method === 'GET' && request.url.endsWith('/drafts/task-draft'))).toBe(true);
       if (mode === 'retired') f.retire();
       if (mode === 'disposed') boot.host.dispose();
-      if (!['current', 'cleared'].includes(mode)) {
+      if (!['current', 'cleared', 'prepare'].includes(mode)) {
         expect(() => boot.host.getStartupRoute(mode === 'wrong-route' ? '/unadmitted' : '/task-response')).toThrow('native-entry-route-unavailable');
       } else {
         expect(boot.host.getStartupRoute('/task-response')).toMatchObject({ entryHref: '/task-response',
@@ -1090,14 +1117,41 @@ describe('explicit correction host through the maintained native loader', () => 
         expect(boot.host.getSnapshot().controller?.saved?.draft.id).toBe('task-draft');
         expect(boot.host.getSnapshot().controller?.prepared).toBeUndefined();
         expect(boot.host.getSnapshot().controller?.signed).toBeUndefined();
+        if (mode === 'prepare') {
+          const controls = [...mounted.container.querySelectorAll<HTMLButtonElement>('button.formspec-action')];
+          expect(controls).toHaveLength(f.test.document.actions.length);
+          const refs = f.test.document.actions.map(action => action.id);
+          expect(controls.map(button => button.dataset.actionRef)).toEqual(refs);
+          expect(mounted.container.querySelectorAll(`button[data-action-ref="${f.test.signing.roles.saveOwned.actionRef}"]`)).toHaveLength(1);
+          // The form invoker cannot perform Sign/Submit, even when labels are present.
+          await act(async () => { fireEvent.click(controls[refs.indexOf(f.test.signing.roles.sign.actionRef)]); });
+          await vi.waitFor(() => expect(boot.host.getSnapshot().controller?.phase).toBe('refused'));
+          await act(async () => { fireEvent.click(controls[refs.indexOf(f.test.signing.roles.submit.actionRef)]); });
+          expect(f.test.requests.some(request => request.method === 'PATCH')).toBe(false);
+          // Owned actions do not opt into the legacy generic form submission.
+          expect(screen.queryByRole('button', { name: 'Submit form' })).toBeNull();
+          expect(f.test.requests.some(request => request.method === 'PATCH')).toBe(false);
+          fireEvent.change(screen.getByRole('textbox', { name: /full legal name/i }), { target: { value: 'Changed fixture name' } });
+          fireEvent.click(mounted.container.querySelector<HTMLButtonElement>(`button[data-action-ref="${f.test.signing.roles.saveOwned.actionRef}"]`)!);
+          await vi.waitFor(() => expect(boot.host.getSnapshot().controller?.saved?.draft.version,
+            JSON.stringify(boot.host.getSnapshot().controller)).toBe(2));
+          expect(boot.host.getSnapshot().controller?.saved?.response.data.fullName).toBe('Changed fixture name');
+          await vi.waitFor(() => expect(mounted!.container.querySelector(`button[data-action-ref="${f.test.signing.roles.saveOwned.actionRef}"]`)?.getAttribute('aria-busy')).toBe('false'));
+          fireEvent.click(mounted.container.querySelector<HTMLButtonElement>(`button[data-action-ref="${f.test.signing.roles.prepare.actionRef}"]`)!);
+          await vi.waitFor(() => expect(boot.host.getSnapshot().controller?.prepared?.draft.version,
+            JSON.stringify(boot.host.getSnapshot().controller)).toBe(3));
+          expect(boot.host.getSnapshot().controller?.prepared?.response.data.fullName).toBe('Changed fixture name');
+          expect(boot.host.getSnapshot().controller?.signed).toBeUndefined();
+          expect(f.test.requests.filter(request => request.method === 'PATCH')).toHaveLength(2);
+        }
         if (mode === 'cleared') {
           await boot.host.clearDraftAccess();
           expect(() => boot.host.getStartupRoute('/task-response')).toThrow('native-entry-route-unavailable');
         }
       }
-      // Source launch/read fixtures only; no answer edit, Save, Prepare, Sign or completion.
+      // Only the controlled Prepare case saves edited answers; no case signs or completes a task.
       expect(f.test.requests.filter(request => request.method !== 'GET' && request.method !== 'DELETE')
-        .map(request => new URL(request.url).pathname)).toEqual(['/runtime/task-drafts']);
+        .map(request => new URL(request.url).pathname)).toEqual(mode === 'prepare' ? ['/runtime/task-drafts', '/drafts/task-draft', '/drafts/task-draft'] : ['/runtime/task-drafts']);
     } finally { mounted?.unmount(); boot.host.dispose(); window.history.replaceState(null, '', '/'); }
   });
   it.each(['after-construction', 'during-signing-options', 'during-session-callback', 'during-wos-settings-accessor'] as const)(

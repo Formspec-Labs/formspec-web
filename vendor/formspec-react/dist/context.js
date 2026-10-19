@@ -5,7 +5,7 @@ import { createContext, useContext, useMemo, useEffect, useRef, useCallback, use
 import { signal } from '@preact/signals-core';
 import { ActionFeedbackProvider } from './action-feedback.js';
 import { createFormEngine, findResponseActionByIntent, missingSubmitActionFinding, resolveResponseAction, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
-import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, preparePlanContext, ensureActionButton, ensureValidationSummary, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
+import { buildPlatformTheme, mergePlatformAndTenantTheme, planDefinitionFallback, planComponentTree, planContains, preparePlanContext, ensureActionButton, ensureValidationSummary, mergeFormPresentationForPlanning, admitFieldHelpUri, } from '@formspec-org/layout';
 import { useSignal } from './use-signal';
 import { chromeText } from './use-chrome-text';
 const platformTheme = buildPlatformTheme();
@@ -284,11 +284,11 @@ export function FormspecProvider(props) {
                     : undefined,
             };
         }
-        // The host opts into Definition action controls by wiring onSubmit.
+        // A submit callback opts in; an invoker fills only an unauthored control layout.
         // Place each usable response-scoped Action in document order. Exact
         // actionRef deduplication preserves explicitly authored controls, and
         // authored labels keep visible copy in the Action or its Locale reference.
-        if (onSubmit) {
+        if (onSubmit || responseActionInvoker && !planContains(root, 'ActionButton')) {
             for (const action of autoPlacedDefinitionActions(responseActionsDocument, def)) {
                 ensureActionButton(root, planCtx.nextId, { pageMode, actionRef: action.id });
             }
@@ -296,7 +296,7 @@ export function FormspecProvider(props) {
         if (showValidationSummary)
             ensureValidationSummary(root, planCtx.nextId);
         return root;
-    }, [engine, componentDocument, componentGraph, hostEvidence, effectiveThemeDocument, activeBreakpoint, onSubmit, showValidationSummary, responseActionsDocument, mergedFormPresentation]);
+    }, [engine, componentDocument, componentGraph, hostEvidence, effectiveThemeDocument, activeBreakpoint, onSubmit, responseActionInvoker, showValidationSummary, responseActionsDocument, mergedFormPresentation]);
     // §10: surface a finding when the host wires onSubmit but no submit Action
     // is published — otherwise auto-inject silently no-ops.
     useEffect(() => {

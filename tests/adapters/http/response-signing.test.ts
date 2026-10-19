@@ -161,7 +161,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   };
   if (taskAssociation) state.taskDraft = structuredClone(taskAssociation);
   const cohort = build();
-  const prepare = () => cohort.responseSigning!.prepare({ draftKey, definition, formVersionId: 'publication-1', response, source, locale: 'en-US', action: prepareAction });
+  const prepare = (candidate = response) => cohort.responseSigning!.prepare({ draftKey, definition, formVersionId: 'publication-1', response: candidate, source, locale: 'en-US', action: prepareAction });
   const sign = (preparation: PreparedResponseSigning, operationId = generateIdempotencyKey()) => cohort.responseSigning!.sign({
     preparation, assent: { signerName: 'Ada Lovelace', consentAccepted: true }, operationId, action,
   });
@@ -262,6 +262,25 @@ describe('cohort-owned Response Prepare and Sign', () => {
     expect(test.state.version).toBe(saved.draft.version); expect(test.state.response).toEqual(saved.response);
     expect(warn).toHaveBeenCalledExactlyOnceWith('Native form action failed', JSON.stringify({ stage: 'prepare-port', reason }));
     warn.mockRestore();
+  });
+
+  it('saves edited owned answers before Prepare saves and reads its exact successor', async () => {
+    const test = await fixture(false, true);
+    const initial = await test.save();
+    const edited = structuredClone(response);
+    edited.data = { ...edited.data, fullName: 'Edited before signing' };
+    const saved = await test.save(saveAction('PATCH'), edited);
+    expect(saved.draft.id).toBe(initial.draft.id);
+    expect(saved.draft.version).toBe(initial.draft.version + 1);
+    expect(saved.response).toEqual(edited);
+    const before = test.requests.length;
+    const prepared = await test.prepare(edited);
+    expect(prepared.draft.id).toBe(saved.draft.id);
+    expect(prepared.draft.version).toBe(saved.draft.version + 1);
+    expect(prepared.response).toEqual(edited);
+    expect(test.requests.slice(before).map(request => request.method)).toEqual(['GET', 'PATCH', 'GET']);
+    expect(test.state.signCount).toBe(0);
+    expect(test.state.createCount).toBe(1);
   });
 
   it('returns the committed Prepare receipt when freshness expires after dispatch and before readback', async () => {
