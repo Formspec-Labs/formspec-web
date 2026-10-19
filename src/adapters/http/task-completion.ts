@@ -11,6 +11,7 @@ import commonSchema from './workspec-schemas/common.schema.json';
 import taskSchema from './workspec-schemas/task.schema.json';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { TaskCompletionOutcomeUnknown } from '../../ports/response-completion.ts';
+import { isRecord } from '../../shared/is-record.ts';
 
 const ajv = new Ajv2020({ strict: false, strictNumbers: true, allErrors: false });
 addFormats(ajv); ajv.addSchema(commonSchema); ajv.addSchema(taskSchema);
@@ -19,6 +20,35 @@ const outcomeShape = ajv.compile<TaskOutcomeEvent>({ $ref: `${taskSchema.$id}#/$
 const isCompleted = (event: TaskOutcomeEvent): event is CompletedTaskOutcome =>
   event.outcome === 'completed' && event.newStatus === 'submitted';
 const resourceShape = ajv.compile<string>({ $ref: `${commonSchema.$id}#/$defs/WosResourceUrn` });
+
+type PendingReceipt = { acceptedCommandRef: string; receiptUrl: string };
+function pendingReceipt(error: unknown, original?: PendingReceipt): PendingReceipt {
+  if (!(error instanceof HttpAdapterError) || error.status !== 202) throw error;
+  const value = error.responseBody;
+  if (!isRecord(value) || Object.keys(value).sort().join(',') !== 'acceptedCommandRef,receiptUrl'
+    || typeof value.acceptedCommandRef !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(value.acceptedCommandRef)
+    || typeof value.receiptUrl !== 'string'
+    || value.receiptUrl !== `/api/v1/accepted-commands/${value.acceptedCommandRef}?operation=task-submit`
+    || original && (value.acceptedCommandRef !== original.acceptedCommandRef || value.receiptUrl !== original.receiptUrl)) {
+    throw new Error('Pending task receipt mismatch');
+  }
+  return { acceptedCommandRef: value.acceptedCommandRef, receiptUrl: value.receiptUrl };
+}
+async function waitForReceipt(signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abort: (() => void) | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      abort = () => reject(signal.reason);
+      signal.addEventListener('abort', abort, { once: true });
+      timer = setTimeout(resolve, 1000);
+    });
+  } finally {
+    clearTimeout(timer);
+    if (abort) signal.removeEventListener('abort', abort);
+  }
+}
 
 /** Inactive adapter preparation: production composition must supply qualified task launch and WOS auth.
  * Wire/schema checks grant no Source signed-evidence or task authority; WOS owns those checks.
@@ -52,8 +82,11 @@ export class HttpTaskCompletion implements TaskCompletion {
   async complete(submission: TaskSubmission, operationId: string, lifetime: CompletionLifetime): Promise<CompletedTaskOutcome> {
     let stage: SubmitFailureStage = 'task-preflight';
     let dispatched = false;
+    const timeout = new AbortController();
+    const signal = AbortSignal.any([lifetime.signal, timeout.signal]);
+    const timer = setTimeout(() => timeout.abort(new DOMException('Task completion timed out', 'TimeoutError')), this.completionTimeoutMs);
     try {
-      const check = () => { lifetime.signal.throwIfAborted(); assertSynchronousGuard(lifetime.assertCurrent);
+      const check = () => { signal.throwIfAborted(); assertSynchronousGuard(lifetime.assertCurrent);
         assertSynchronousGuard(this.assertCurrentAuth); };
       check(); const body = snapshotWire(submission);
       if (!submissionShape(body) || !['definitionUrl,definitionVersion,response', 'definitionUrl,definitionVersion,response,signedDraft'].includes(Object.keys(body).sort().join(','))
@@ -63,10 +96,23 @@ export class HttpTaskCompletion implements TaskCompletion {
         || !isLosslessHttpIdempotencyKey(operationId)
         || new TextEncoder().encode(JSON.stringify(body)).byteLength > 2 * 1024 * 1024) throw new Error('Task completion candidate mismatch');
       stage = 'task-transport';
-      const raw = await this.client.postJson<unknown>(`/api/v1/tasks/${encodeURIComponent(this.selection.taskId)}/response`, body,
-        { idempotencyKey: operationId, signal: lifetime.signal, assertCurrent: check,
-          assertBeforeDispatch: () => { check(); dispatched = true; },
-          timeoutMs: this.completionTimeoutMs, maxResponseBytes: 64 * 1024, requireJson: true, successStatuses: [200] });
+      const options = { signal, assertCurrent: check, maxResponseBytes: 64 * 1024, requireJson: true, successStatuses: [200] };
+      let raw: unknown;
+      let pending: PendingReceipt | undefined;
+      try {
+        raw = await this.client.postJson<unknown>(`/api/v1/tasks/${encodeURIComponent(this.selection.taskId)}/response`, body,
+          { ...options, idempotencyKey: operationId, assertBeforeDispatch: () => { check(); dispatched = true; } });
+      } catch (error) { pending = pendingReceipt(error); }
+      const original = pending;
+      while (pending) {
+        await waitForReceipt(signal); check();
+        try {
+          // The closed decoder supplies only the original relative TaskSubmit
+          // receipt. Every read resolves fresh credentials and current authority.
+          raw = await this.client.getJson<unknown>(pending.receiptUrl, { ...options, requireNoStore: true });
+          pending = undefined;
+        } catch (error) { pending = pendingReceipt(error, original); }
+      }
       stage = 'task-outcome-validation';
       check(); const event = snapshotFiniteJson(raw);
       if (!outcomeShape(event) || event.taskId !== this.selection.taskId || event.processId !== this.selection.processId
@@ -81,6 +127,6 @@ export class HttpTaskCompletion implements TaskCompletion {
       } catch { /* Error classification is observational too. */ }
       if (dispatched && error instanceof DOMException && error.name === 'TimeoutError') throw new TaskCompletionOutcomeUnknown();
       throw error;
-    }
+    } finally { clearTimeout(timer); }
   }
 }

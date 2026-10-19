@@ -1,5 +1,5 @@
 import { RESPONSE_SCHEMA_DOCUMENT } from '../../../src/adapters/schema/canonical-schemas.ts';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpTaskCompletion } from '../../../src/adapters/http/task-completion.ts';
 import { sampleFormResponse } from '../../../src/adapter-conformance/fixtures.ts';
 import { testScopeKey } from '../../fixtures/scope.ts';
@@ -192,5 +192,152 @@ describe('fixed task Submit diagnostics', () => {
       await expect(adapter.complete(submission, 'operation', lifetime())).rejects.toBe(original);
       expect(warn).toHaveBeenCalledOnce();
     } finally { warn.mockRestore(); }
+  });
+});
+
+describe('original accepted task receipt', () => {
+  const receipt = { acceptedCommandRef: 'command_original-1',
+    receiptUrl: '/api/v1/accepted-commands/command_original-1?operation=task-submit' };
+  const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status, headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
+  });
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('keeps one POST and reads the original receipt with fresh current credentials until committed', async () => {
+    const accessToken = vi.fn().mockResolvedValueOnce('first-token').mockResolvedValueOnce('second-token').mockResolvedValueOnce('third-token');
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => reply(receipt, 202));
+    fetchImpl.mockResolvedValueOnce(reply(receipt, 202)).mockResolvedValueOnce(reply(receipt, 202)).mockResolvedValueOnce(reply(outcome));
+    const current = vi.fn();
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', scopeKey: testScopeKey, selection,
+      accessToken, fetchImpl, assertCurrentAuth: current, completionTimeoutMs: 5000 });
+    const pending = adapter.complete(submission, 'original-operation', lifetime());
+    const settled = pending.then(value => ({ value }), error => ({ error }));
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await settled;
+    if ('error' in result) throw result.error;
+    expect(result.value).toEqual(outcome);
+    expect(fetchImpl).toHaveBeenCalledTimes(3); expect(accessToken).toHaveBeenCalledTimes(3);
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      `https://wos.test/api/v1/tasks/${encodeURIComponent(selection.taskId)}/response`,
+      `https://wos.test${receipt.receiptUrl}`, `https://wos.test${receipt.receiptUrl}`,
+    ]);
+    expect(fetchImpl.mock.calls.map(([, init]) => init!.method)).toEqual(['POST', 'GET', 'GET']);
+    expect(fetchImpl.mock.calls.map(([, init]) => new Headers(init!.headers).get('authorization')))
+      .toEqual(['Bearer first-token', 'Bearer second-token', 'Bearer third-token']);
+    for (const [, init] of fetchImpl.mock.calls) expect(new Headers(init!.headers).get('x-stack-scope-key')).toBe(testScopeKey);
+    expect(new Headers(fetchImpl.mock.calls[0][1]!.headers).get('idempotency-key')).toBe('original-operation');
+    for (const [, init] of fetchImpl.mock.calls.slice(1)) {
+      expect(init!.body).toBeUndefined(); expect(new Headers(init!.headers).has('idempotency-key')).toBe(false);
+    }
+    expect(current).toHaveBeenCalled();
+  });
+
+  it.each([
+    { ...receipt, receiptUrl: `https://foreign.test${receipt.receiptUrl}` },
+    { ...receipt, receiptUrl: `https://wos.test${receipt.receiptUrl}` },
+    { ...receipt, receiptUrl: receipt.receiptUrl + '&operation=task-submit' },
+    { ...receipt, receiptUrl: receipt.receiptUrl.replace('task-submit', 'intake-create') },
+    { ...receipt, acceptedCommandRef: '../foreign' },
+    { ...receipt, acceptedCommandRef: 'a'.repeat(129) },
+    { ...receipt, extra: true },
+    { receiptUrl: receipt.receiptUrl },
+  ])('refuses an unqualified pending URL/reference without following it: %j', body => {
+    const accessToken = vi.fn(() => 'token'); const fetchImpl = vi.fn(async () => reply(body, 202));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken, fetchImpl, assertCurrentAuth: () => {} });
+    return expect(adapter.complete(submission, 'same-operation', lifetime())).rejects.toThrow('Pending task receipt mismatch')
+      .then(() => { expect(fetchImpl).toHaveBeenCalledOnce(); expect(accessToken).toHaveBeenCalledOnce(); });
+  });
+
+  it('refuses a changed receipt reference during pending reads', async () => {
+    const next = { acceptedCommandRef: 'other', receiptUrl: '/api/v1/accepted-commands/other?operation=task-submit' };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(reply(receipt, 202)).mockResolvedValueOnce(reply(next, 202));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'token', fetchImpl, assertCurrentAuth: () => {} });
+    const pending = adapter.complete(submission, 'same-operation', lifetime());
+    const refused = expect(pending).rejects.toThrow('Pending task receipt mismatch');
+    await vi.advanceTimersByTimeAsync(1000); await refused;
+    expect(fetchImpl.mock.calls.map(([, init]) => init.method)).toEqual(['POST', 'GET']);
+  });
+
+  it.each([403, 404, 409])('preserves a permanent receipt refusal %s without resubmitting', async status => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(reply(receipt, 202)).mockResolvedValueOnce(reply({ title: 'Refused' }, status));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'token', fetchImpl, assertCurrentAuth: () => {} });
+    const pending = adapter.complete(submission, 'same-operation', lifetime());
+    const refused = expect(pending).rejects.toMatchObject({ name: 'HttpAdapterError', status });
+    await vi.advanceTimersByTimeAsync(1000); await refused; expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([{ ...outcome, taskId: selection.taskId + '.foreign' },
+    { ...outcome, processId: 'urn:wos:other_process_01hw7rm71vfay8vvw14d2pf2db' },
+    { ...outcome, outcome: 'drafted' }, { ...outcome, newStatus: 'pending' }])('validates the actual committed receipt against the original task: %j', async body => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(reply(receipt, 202)).mockResolvedValueOnce(reply(body));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'token', fetchImpl, assertCurrentAuth: () => {} });
+    const pending = adapter.complete(submission, 'same-operation', lifetime());
+    const refused = expect(pending).rejects.toThrow('Task completion outcome mismatch');
+    await vi.advanceTimersByTimeAsync(1000); await refused; expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not reset the whole completion deadline after the accepted POST', async () => {
+    const fetchImpl = vi.fn(() => new Promise<Response>(resolve => setTimeout(() => resolve(reply(receipt, 202)), 750)));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'token', fetchImpl,
+      assertCurrentAuth: () => {}, completionTimeoutMs: 1500 });
+    const pending = adapter.complete(submission, 'same-operation', lifetime());
+    const unknown = expect(pending).rejects.toMatchObject({ name: 'TaskCompletionOutcomeUnknown' });
+    await vi.advanceTimersByTimeAsync(1500); await unknown; expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('rechecks current authority before another credential or receipt fetch', async () => {
+    let current = true;
+    const accessToken = vi.fn(() => 'token'); const fetchImpl = vi.fn(async () => reply(receipt, 202));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken, fetchImpl,
+      assertCurrentAuth: () => { if (!current) throw new Error('retired'); } });
+    const pending = adapter.complete(submission, 'same-operation', lifetime());
+    const refused = expect(pending).rejects.toThrow('retired');
+    await vi.advanceTimersByTimeAsync(0); current = false;
+    await vi.advanceTimersByTimeAsync(1000); await refused;
+    expect(fetchImpl).toHaveBeenCalledOnce(); expect(accessToken).toHaveBeenCalledOnce();
+  });
+
+  it('keeps receipt body streaming inside the original deadline', async () => {
+    const body = new ReadableStream<Uint8Array>({ pull() {} }, { highWaterMark: 0 });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(reply(receipt, 202)).mockResolvedValueOnce(new Response(body,
+      { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'token', fetchImpl,
+      assertCurrentAuth: () => {}, completionTimeoutMs: 1500 });
+    const pending = adapter.complete(submission, 'same-operation', lifetime());
+    const unknown = expect(pending).rejects.toMatchObject({ name: 'TaskCompletionOutcomeUnknown' });
+    await vi.advanceTimersByTimeAsync(1500); await unknown; expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('rechecks authority after delayed credentials for the receipt GET', async () => {
+    let release!: (token: string) => void; let current = true;
+    const delayed = new Promise<string>(resolve => { release = resolve; });
+    const accessToken = vi.fn().mockResolvedValueOnce('first-token').mockReturnValueOnce(delayed);
+    const fetchImpl = vi.fn(async () => reply(receipt, 202));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken, fetchImpl,
+      assertCurrentAuth: () => { if (!current) throw new Error('receipt session retired'); } });
+    const pending = adapter.complete(submission, 'same-operation', lifetime());
+    const refused = expect(pending).rejects.toThrow('receipt session retired');
+    await vi.advanceTimersByTimeAsync(1000); expect(accessToken).toHaveBeenCalledTimes(2);
+    current = false; release('late-token'); await refused;
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('cancels pending receipt observation when its caller lifetime ends', async () => {
+    const abort = new AbortController();
+    const fetchImpl = vi.fn(async () => reply(receipt, 202));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'token', fetchImpl, assertCurrentAuth: () => {} });
+    const pending = adapter.complete(submission, 'same-operation', { signal: abort.signal, assertCurrent() {} });
+    const refused = expect(pending).rejects.toThrow('visit retired');
+    await vi.advanceTimersByTimeAsync(0); abort.abort(new Error('visit retired')); await refused;
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('refuses a cacheable final protected receipt', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(reply(receipt, 202)).mockResolvedValueOnce(jsonResponse(outcome));
+    const adapter = new HttpTaskCompletion({ baseUrl: 'https://wos.test', selection, accessToken: 'token', fetchImpl, assertCurrentAuth: () => {} });
+    const pending = adapter.complete(submission, 'same-operation', lifetime());
+    const refused = expect(pending).rejects.toThrow('must prohibit storage');
+    await vi.advanceTimersByTimeAsync(1000); await refused; expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });
