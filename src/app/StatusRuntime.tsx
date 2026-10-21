@@ -366,6 +366,11 @@ function ReadyStatus({
       <h1 id="status-title">Your application status</h1>
       <p className="status-surface__subtitle">{detail.summary.title ?? 'Application'}</p>
 
+      <dl aria-label="Application reference">
+        <dt>Application reference</dt><dd>{detail.summary.id}</dd>
+        <dt>Last updated</dt><dd><time dateTime={detail.summary.updatedAt}>{formatDate(detail.summary.updatedAt)}</time></dd>
+      </dl>
+
       {lifecycleBadge ? <LifecycleBadge badge={lifecycleBadge} /> : null}
 
       <StageStrip current={currentStage} />

@@ -73,6 +73,16 @@ describe('StatusRuntime (FW-0039 slice 1)', () => {
       composition = createStatusComposition();
     });
 
+    it('shows actual case identity and the selected public decision without inventing one from active lifecycle', async () => {
+      const detail = demoApplicantCaseDetail();
+      detail.statusTimeline = [{ event: 'decision-reached', occurredAt: '2026-10-21T04:17:50Z', summary: 'Approved' }];
+      composition = { ...composition, statusReader: stubStatusReader([[DEMO_URN, detail]]) };
+      await renderStatus(composition);
+      expect(screen.getByText(detail.summary.id)).toBeDefined();
+      expect(screen.getByText('Approved')).toBeDefined();
+      expect(screen.getByText('Last updated')).toBeDefined();
+    });
+
     it('renders the page heading + 5-stage strip with current step marked', async () => {
       await renderStatus(composition);
       expect(screen.getByRole('heading', { name: /Your application status/i, level: 1 })).toBeDefined();
