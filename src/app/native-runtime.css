@@ -4,7 +4,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border-block: 1px solid var(--formspec-color-border, #c9d3cd);
+  border-block: 1px solid var(--formspec-color-border);
   padding: 0.75rem 0;
 }
 
@@ -17,39 +17,39 @@
 .locale-button {
   font: inherit;
   min-height: 44px;
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border: 1px solid var(--formspec-color-border);
   border-radius: 8px;
   padding: 0.55rem 0.85rem;
-  background: #fff;
-  color: var(--formspec-color-foreground, #1f2933);
+  background: var(--formspec-color-surface-1);
+  color: var(--formspec-color-foreground);
   cursor: pointer;
 }
 
 .locale-button[aria-pressed="true"] {
-  border-color: var(--formspec-color-primary, #155e56);
-  background: color-mix(in srgb, var(--formspec-color-primary, #155e56) 10%, white);
-  color: var(--formspec-color-primary, #155e56);
+  border-color: var(--formspec-color-primary);
+  background: color-mix(in srgb, var(--formspec-color-primary) 14%, var(--formspec-color-surface-1));
+  color: var(--formspec-color-foreground);
   font-weight: 750;
 }
 
 .respondent-toolbar__meta {
-  color: var(--formspec-color-muted, #5d6b66);
+  color: var(--formspec-color-muted-foreground);
   font-size: 0.88rem;
   text-transform: capitalize;
 }
 
 .submit-notice {
-  color: var(--formspec-color-muted, #5d6b66);
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  color: var(--formspec-color-muted-foreground);
+  border: 1px solid var(--formspec-color-border);
   border-radius: 8px;
   padding: 0.85rem 1rem;
-  background: #f8fbfa;
+  background: var(--formspec-color-surface-2);
 }
 
 .submit-notice--error {
-  border-color: #9f1c1c;
-  background: #fff8f8;
-  color: #7f1d1d;
+  border-color: var(--formspec-color-error);
+  background: var(--formspec-color-error-surface);
+  color: var(--formspec-color-error);
 }
 
 /* Native package chrome stays outside the authored route theme. */
@@ -68,6 +68,7 @@
 
 .native-package-status h1 {
   margin: 0 0 1rem;
+  font-family: var(--formspec-font-heading);
   font-size: clamp(1.5rem, 4vw, 2rem);
   line-height: 1.2;
 }
@@ -85,8 +86,8 @@
 
 .native-package-workspace .locale-button:hover:not(:disabled),
 .native-package-status .locale-button:hover {
-  border-color: var(--formspec-color-primary, #155e56);
-  background: var(--formspec-color-surface, #edf3ef);
+  border-color: var(--formspec-color-primary);
+  background: var(--formspec-color-surface);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -99,7 +100,7 @@
   box-sizing: border-box;
   width: min(100% - 2rem, 72rem);
   margin: 0.75rem auto;
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
   font-size: 0.95rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -122,7 +123,7 @@
 }
 
 .locale-button:focus-visible {
-  outline: 3px solid var(--formspec-color-ring, #155e56);
+  outline: 3px solid var(--formspec-color-focus);
   outline-offset: 3px;
 }
 

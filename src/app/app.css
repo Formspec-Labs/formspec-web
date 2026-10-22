@@ -1,10 +1,100 @@
 @import './status.css';
 @import './native-runtime.css';
+
 :root {
-  color-scheme: light;
-  font-family: "Inter", "Segoe UI", sans-serif;
-  background: var(--formspec-color-background, #f7f8f5);
-  color: var(--formspec-color-foreground, #1f2933);
+  color-scheme: light dark;
+  --formspec-color-background: #f6f0e6;
+  --formspec-color-surface: #efe7da;
+  --formspec-color-surface-1: #fdfaf4;
+  --formspec-color-surface-2: #f3ece0;
+  --formspec-color-card: #fdfaf4;
+  --formspec-color-foreground: #1f1b17;
+  --formspec-color-text: #1f1b17;
+  --formspec-color-muted-foreground: #5c5349;
+  --formspec-color-text-secondary: #5c5349;
+  --formspec-color-muted: #efe7da;
+  --formspec-color-border: #d1c8ba;
+  --formspec-color-border-strong: #8b8175;
+  --formspec-color-primary: #27594f;
+  --formspec-color-primary-hover: #1e463e;
+  --formspec-color-primary-foreground: #ffffff;
+  --formspec-color-focus: #27594f;
+  --formspec-color-ring: var(--formspec-color-focus);
+  --formspec-color-error: #b42318;
+  --formspec-color-error-surface: #fdeceb;
+  --formspec-color-warning: #9b5b00;
+  --formspec-color-warning-surface: #fff2db;
+  --formspec-color-success: #1b6545;
+  --formspec-color-success-surface: #ebf5ef;
+  --formspec-font-family: "Instrument Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --formspec-font-sans: var(--formspec-font-family);
+  --formspec-font-heading: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --formspec-font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+  font-family: var(--formspec-font-family);
+  background: var(--formspec-color-background);
+  color: var(--formspec-color-foreground);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-fs-appearance="light"]) {
+    color-scheme: dark;
+    --formspec-color-background: #161311;
+    --formspec-color-surface: #1d1916;
+    --formspec-color-surface-1: #211c19;
+    --formspec-color-surface-2: #2b2420;
+    --formspec-color-card: #211c19;
+    --formspec-color-foreground: #f3ecdf;
+    --formspec-color-text: #f3ecdf;
+    --formspec-color-muted-foreground: #bfb3a3;
+    --formspec-color-text-secondary: #bfb3a3;
+    --formspec-color-muted: #2b2420;
+    --formspec-color-border: #3d352e;
+    --formspec-color-border-strong: #8b8073;
+    --formspec-color-primary: #8bb8ac;
+    --formspec-color-primary-hover: #a3c9bf;
+    --formspec-color-primary-foreground: #14221e;
+    --formspec-color-focus: #a3c9bf;
+    --formspec-color-ring: var(--formspec-color-focus);
+    --formspec-color-error: #ffb4ab;
+    --formspec-color-error-surface: #3b1b19;
+    --formspec-color-warning: #f3c36f;
+    --formspec-color-warning-surface: #352712;
+    --formspec-color-success: #7fd1a8;
+    --formspec-color-success-surface: #142e22;
+  }
+}
+
+:root[data-fs-appearance="dark"],
+[data-fs-appearance="dark"],
+.dark {
+  color-scheme: dark;
+  --formspec-color-background: #161311;
+  --formspec-color-surface: #1d1916;
+  --formspec-color-surface-1: #211c19;
+  --formspec-color-surface-2: #2b2420;
+  --formspec-color-card: #211c19;
+  --formspec-color-foreground: #f3ecdf;
+  --formspec-color-text: #f3ecdf;
+  --formspec-color-muted-foreground: #bfb3a3;
+  --formspec-color-text-secondary: #bfb3a3;
+  --formspec-color-muted: #2b2420;
+  --formspec-color-border: #3d352e;
+  --formspec-color-border-strong: #8b8073;
+  --formspec-color-primary: #8bb8ac;
+  --formspec-color-primary-hover: #a3c9bf;
+  --formspec-color-primary-foreground: #14221e;
+  --formspec-color-focus: #a3c9bf;
+  --formspec-color-ring: var(--formspec-color-focus);
+  --formspec-color-error: #ffb4ab;
+  --formspec-color-error-surface: #3b1b19;
+  --formspec-color-warning: #f3c36f;
+  --formspec-color-warning-surface: #352712;
+  --formspec-color-success: #7fd1a8;
+  --formspec-color-success-surface: #142e22;
+}
+
+.formspec-container {
+  --formspec-default-text-muted: var(--formspec-color-muted-foreground);
 }
 
 * {
@@ -15,6 +105,9 @@ body {
   min-width: 320px;
   min-height: 100svh;
   margin: 0;
+  font-family: var(--formspec-font-family);
+  background: var(--formspec-color-background);
+  color: var(--formspec-color-foreground);
 }
 
 button,
@@ -25,13 +118,14 @@ select {
 }
 
 :focus-visible {
-  outline: 3px solid var(--formspec-color-ring, #155e56);
+  outline: 3px solid var(--formspec-color-focus);
   outline-offset: 3px;
 }
 
 .shell {
   min-height: 100svh;
-  background: var(--formspec-color-background, #f7f8f5);
+  background: var(--formspec-color-background);
+  color: var(--formspec-color-foreground);
 }
 
 .shell__inner {
@@ -43,22 +137,24 @@ select {
 .shell__status {
   width: min(100% - 2rem, 38rem);
   margin: 4rem auto;
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border: 1px solid var(--formspec-color-border);
   border-radius: 8px;
   padding: 1rem;
-  background: var(--formspec-color-card, #fff);
-  color: var(--formspec-color-muted, #5d6b66);
+  background: var(--formspec-color-card);
+  color: var(--formspec-color-muted-foreground);
 }
 
 .shell__status h2 {
   margin: 0 0 0.5rem;
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
+  font-family: var(--formspec-font-heading);
   font-size: 1.2rem;
 }
 
 .shell__status h1 {
   margin: 0 0 0.5rem;
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
+  font-family: var(--formspec-font-heading);
   font-size: 1.45rem;
 }
 
@@ -68,19 +164,20 @@ select {
 }
 
 .shell__status--error {
-  border-color: #9f1c1c;
-  background: #fff8f8;
-  color: #7f1d1d;
+  border-color: var(--formspec-color-error);
+  background: var(--formspec-color-error-surface);
+  color: var(--formspec-color-error);
 }
 
 .respondent-flow {
   display: grid;
   gap: 1.1rem;
   padding: clamp(1rem, 4vw, 2rem);
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border: 1px solid var(--formspec-color-border);
   border-radius: 8px;
-  background: var(--formspec-color-card, #fff);
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  background: var(--formspec-color-card);
+  color: var(--formspec-color-foreground);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--formspec-color-foreground) 6%, transparent);
 }
 
 .respondent-flow .fs-issuer-chrome-slot:empty {
@@ -102,7 +199,7 @@ select {
 }
 
 .respondent-flow .fs-issuer-name {
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
   font-weight: 750;
 }
 
@@ -112,7 +209,7 @@ select {
 .respondent-header p,
 .confirmation-panel p,
 .support-code {
-  color: var(--formspec-color-muted, #5d6b66);
+  color: var(--formspec-color-muted-foreground);
 }
 
 .respondent-header {
@@ -122,7 +219,7 @@ select {
 }
 
 .respondent-header--unbranded {
-  border-bottom: 1px solid var(--formspec-color-border, #c9d3cd);
+  border-bottom: 1px solid var(--formspec-color-border);
   padding-bottom: 1rem;
 }
 
@@ -130,17 +227,18 @@ select {
   margin: 0;
   font-size: 0.86rem;
   font-weight: 750;
-  letter-spacing: 0;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .respondent-header h1 {
   max-width: 42rem;
   margin: 0;
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
+  font-family: var(--formspec-font-heading);
   font-size: clamp(1.8rem, 5vw, 3.1rem);
   line-height: 1.08;
-  letter-spacing: 0;
+  letter-spacing: -0.015em;
 }
 
 .respondent-header p {
@@ -150,10 +248,15 @@ select {
   line-height: 1.55;
 }
 
+.respondent-case-ref {
+  font-family: var(--formspec-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 .respondent-place {
   display: grid;
   gap: 0.9rem;
-  border-block: 1px solid var(--formspec-color-border, #c9d3cd);
+  border-block: 1px solid var(--formspec-color-border);
   padding-block: 1rem;
 }
 
@@ -170,7 +273,7 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border: 1px solid var(--formspec-color-border);
   border-radius: 8px;
   padding: 0.65rem 0.75rem;
 }
@@ -184,7 +287,8 @@ select {
 
 .respondent-place__header h2 {
   margin: 0.15rem 0 0;
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
+  font-family: var(--formspec-font-heading);
   font-size: 1.25rem;
   line-height: 1.2;
 }
@@ -194,7 +298,7 @@ select {
 .place-list__empty,
 .place-list__item p,
 .place-list__item small {
-  color: var(--formspec-color-muted, #5d6b66);
+  color: var(--formspec-color-muted-foreground);
 }
 
 .respondent-place__trust {
@@ -209,7 +313,7 @@ select {
   min-height: 44px;
   display: grid;
   align-items: center;
-  border-top: 1px solid var(--formspec-color-border, #c9d3cd);
+  border-top: 1px solid var(--formspec-color-border);
   font-size: 0.94rem;
 }
 
@@ -221,10 +325,10 @@ select {
 
 .respondent-place__stat {
   min-height: 4rem;
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border: 1px solid var(--formspec-color-border);
   border-radius: 8px;
   padding: 0.7rem 0.8rem;
-  background: #fbfcfb;
+  background: var(--formspec-color-surface-2);
 }
 
 .respondent-place__stat strong,
@@ -233,14 +337,15 @@ select {
 }
 
 .respondent-place__stat strong {
-  color: var(--formspec-color-primary, #155e56);
+  color: var(--formspec-color-primary);
   font-size: 1.35rem;
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
 .respondent-place__stat span {
   margin-top: 0.2rem;
-  color: var(--formspec-color-muted, #5d6b66);
+  color: var(--formspec-color-muted-foreground);
   font-size: 0.82rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -258,7 +363,7 @@ select {
 
 .place-list h3 {
   margin: 0 0 0.35rem;
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
   font-size: 0.95rem;
   line-height: 1.2;
 }
@@ -273,7 +378,7 @@ select {
 
 .place-list__item,
 .place-list__empty {
-  border-top: 1px solid var(--formspec-color-border, #c9d3cd);
+  border-top: 1px solid var(--formspec-color-border);
   padding-block: 0.7rem;
 }
 
@@ -294,7 +399,7 @@ select {
 .place-list__row strong {
   min-width: 0;
   overflow-wrap: anywhere;
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
   font-size: 0.94rem;
   line-height: 1.25;
 }
@@ -311,11 +416,11 @@ select {
 .place-pill {
   flex: 0 0 auto;
   max-width: 9rem;
-  border: 1px solid color-mix(in srgb, var(--formspec-color-primary, #155e56) 26%, white);
+  border: 1px solid color-mix(in srgb, var(--formspec-color-primary) 26%, var(--formspec-color-surface-1));
   border-radius: 999px;
   padding: 0.18rem 0.48rem;
-  background: color-mix(in srgb, var(--formspec-color-primary, #155e56) 8%, white);
-  color: var(--formspec-color-primary, #155e56);
+  background: color-mix(in srgb, var(--formspec-color-primary) 12%, var(--formspec-color-surface-1));
+  color: var(--formspec-color-primary);
   font-size: 0.72rem;
   font-weight: 750;
   line-height: 1.25;
@@ -325,9 +430,9 @@ select {
 
 .place-pill--due,
 .place-pill--overdue {
-  border-color: #b45309;
-  background: #fff7ed;
-  color: #92400e;
+  border-color: var(--formspec-color-warning);
+  background: var(--formspec-color-warning-surface);
+  color: var(--formspec-color-warning);
 }
 
 .auth-required {
@@ -335,10 +440,10 @@ select {
   gap: 0.85rem;
   width: min(100% - 2rem, 34rem);
   margin: 4rem auto;
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border: 1px solid var(--formspec-color-border);
   border-radius: 8px;
   padding: clamp(1rem, 3vw, 1.5rem);
-  background: var(--formspec-color-card, #fff);
+  background: var(--formspec-color-card);
 }
 
 .auth-required h1,
@@ -347,7 +452,8 @@ select {
 }
 
 .auth-required h1 {
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
+  font-family: var(--formspec-font-heading);
   font-size: 1.45rem;
   line-height: 1.2;
 }
@@ -360,13 +466,18 @@ select {
 
 .auth-required__actions button {
   min-height: 44px;
-  border: 1px solid var(--formspec-color-primary, #155e56);
+  border: 1px solid var(--formspec-color-primary);
   border-radius: 8px;
   padding: 0.65rem 0.95rem;
-  background: var(--formspec-color-primary, #155e56);
-  color: var(--formspec-color-primary-foreground, #fff);
+  background: var(--formspec-color-primary);
+  color: var(--formspec-color-primary-foreground);
   cursor: pointer;
   font-weight: 750;
+}
+
+.auth-required__actions button:hover:not(:disabled) {
+  background: var(--formspec-color-primary-hover);
+  border-color: var(--formspec-color-primary-hover);
 }
 
 .auth-required__actions button:disabled {
@@ -392,10 +503,10 @@ select {
   grid-template-columns: minmax(0, 1fr);
   min-inline-size: 0;
   gap: 0.65rem;
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border: 1px solid var(--formspec-color-border);
   border-radius: 8px;
   padding: clamp(1rem, 3vw, 1.5rem);
-  background: #f8fbfa;
+  background: var(--formspec-color-surface-2);
 }
 
 .confirmation-panel h2,
@@ -406,26 +517,28 @@ select {
 
 .confirmation-panel strong {
   overflow-wrap: anywhere;
-  color: var(--formspec-color-primary, #155e56);
+  color: var(--formspec-color-primary);
+  font-family: var(--formspec-font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 1.35rem;
 }
 
 .confirmation-panel a {
   min-height: 44px;
-  color: var(--formspec-color-primary, #155e56);
+  color: var(--formspec-color-primary);
   font-weight: 700;
 }
 
 .public-terminal-actions {
   display: grid;
   gap: 0.75rem;
-  border-top: 1px solid var(--formspec-color-border, #c9d3cd);
+  border-top: 1px solid var(--formspec-color-border);
   margin-top: 0.35rem;
   padding-top: 1rem;
 }
 
 .public-terminal-actions h3 {
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
   font-size: 1rem;
   line-height: 1.25;
 }
@@ -439,13 +552,18 @@ select {
 
 .public-terminal-actions button {
   min-height: 44px;
-  border: 1px solid var(--formspec-color-primary, #155e56);
+  border: 1px solid var(--formspec-color-primary);
   border-radius: 8px;
   padding: 0.62rem 0.9rem;
-  background: var(--formspec-color-primary, #155e56);
-  color: var(--formspec-color-primary-foreground, #fff);
+  background: var(--formspec-color-primary);
+  color: var(--formspec-color-primary-foreground);
   cursor: pointer;
   font-weight: 750;
+}
+
+.public-terminal-actions button:hover:not(:disabled) {
+  background: var(--formspec-color-primary-hover);
+  border-color: var(--formspec-color-primary-hover);
 }
 
 .public-terminal-actions button:disabled {
@@ -459,26 +577,26 @@ select {
 }
 
 .public-terminal-actions__sms label {
-  color: var(--formspec-color-foreground, #1f2933);
+  color: var(--formspec-color-foreground);
   font-weight: 700;
 }
 
 .public-terminal-actions__sms input {
   min-width: min(100%, 14rem);
-  border: 1px solid var(--formspec-color-border, #c9d3cd);
+  border: 1px solid var(--formspec-color-border);
   border-radius: 8px;
   padding: 0.62rem 0.75rem;
-  background: #fff;
-  color: var(--formspec-color-foreground, #1f2933);
+  background: var(--formspec-color-surface-1);
+  color: var(--formspec-color-foreground);
 }
 
 .public-terminal-actions__status {
-  color: var(--formspec-color-primary, #155e56);
+  color: var(--formspec-color-primary);
   font-weight: 700;
 }
 
 .public-terminal-actions__error {
-  color: #7f1d1d;
+  color: var(--formspec-color-error);
   font-weight: 700;
 }
 
@@ -489,6 +607,8 @@ select {
 
 .support-code {
   margin-top: 0.65rem;
+  font-family: var(--formspec-font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 0.88rem;
 }
 
@@ -553,8 +673,8 @@ select {
   }
 
   .confirmation-panel {
-    border-color: #1f2933;
-    background: #fff;
+    border-color: var(--formspec-color-border-strong);
+    background: var(--formspec-color-surface-1);
   }
 
   .public-terminal-actions__print-url:not(:empty) {
@@ -610,6 +730,7 @@ select {
 
 .screener-determination__name {
   margin: 0 0 1rem;
+  font-family: var(--formspec-font-heading);
   font-size: 1.25rem;
 }
 
@@ -656,8 +777,8 @@ select {
   display: inline-block;
   padding: 0.625rem 1rem;
   border-radius: 0.375rem;
-  background: currentColor;
-  color: white;
+  background: var(--formspec-color-primary);
+  color: var(--formspec-color-primary-foreground);
   text-decoration: none;
 }
 
@@ -691,7 +812,7 @@ select {
   position: relative;
   display: inline-block;
   max-width: 100%;
-  border: 1px solid #9aa6b2;
+  border: 1px solid var(--formspec-color-border-strong);
   cursor: crosshair;
   touch-action: none;
 }
@@ -699,15 +820,15 @@ select {
 .formspec-file-redaction-box {
   position: absolute;
   display: block;
-  background: #000;
-  border: 1px solid #fff;
+  background: var(--formspec-color-foreground);
+  border: 1px solid var(--formspec-color-surface-1);
   opacity: 0.88;
   pointer-events: none;
 }
 
 .formspec-file-legibility {
   margin: 0 0 0.5rem;
-  color: #8a5a00;
+  color: var(--formspec-color-warning);
 }
 
 .formspec-safe-address-field__reveal {
@@ -716,7 +837,7 @@ select {
 
 .respondent-preview-note {
   margin: 0;
-  color: var(--formspec-color-muted, #5d6b66);
+  color: var(--formspec-color-muted-foreground);
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -730,8 +851,9 @@ select {
 }
 
 .confirmation-panel .confirmation-panel__submission-id {
-  color: var(--formspec-color-foreground, #1f2933);
-  font-family: ui-monospace, monospace;
+  color: var(--formspec-color-foreground);
+  font-family: var(--formspec-font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 0.88rem;
   font-weight: 500;
   line-height: 1.5;
@@ -740,6 +862,5 @@ select {
 
 .public-terminal-actions button.public-terminal-actions__secondary {
   background: transparent;
-  color: var(--formspec-color-primary, #155e56);
+  color: var(--formspec-color-primary);
 }
-
