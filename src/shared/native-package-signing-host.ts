@@ -13,7 +13,7 @@ import canonicalize from 'canonicalize';
 import { createFormEngine, preactReactiveRuntime, type IFormEngine, type RegistryEntry } from '@formspec-org/engine/render';
 import type { SemanticControlScope } from '@formspec-org/react';
 import { captureResponseFieldMetadata, composeSurfaceApp, matchRoute, routeHref, createThemeAuthority, createWidgetRegistry, dataSourceAvailableToWidget, dereferenceBundleExport, flattenRegistryEntries, planMatchedRoute, resolveDataSourceDescriptor, type BundleExport, type DataSourceDescriptor, type SlotPlan, type SurfaceStaticAssetResolver } from '@formspec-org/surface';
-import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, responseReviewHash, starterWidgetModule, type ResponseReviewData, type ResponseReviewOptions, type ResponseReviewState } from '@formspec-org/surface-react';
+import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, responseReviewHash, starterWidgetModule, type ResponseReviewData, type ResponseReviewOptions, type ResponseReviewState, type SurfaceWidgetModule } from '@formspec-org/surface-react';
 import { targetDefinitionMatches, type FormDefinition, type FormResponse, type LocaleDocument, type ScreenerDocument, type ValidationReport } from '@formspec-org/types';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { DraftKey } from '../ports/draft-store.ts';
@@ -40,6 +40,8 @@ export type NativeInitialDataSourceFactory = (context: {
   readonly assertCurrent: () => void;
 }) => NativeInitialDataSourcePorts;
 
+export type WidgetShapeDeclaration = NonNullable<RegistryEntry['widgetShape']>;
+
 export interface NativePackageSigningHostPolicy {
   bundle: BundleExport;
   moduleId: string;
@@ -47,6 +49,10 @@ export interface NativePackageSigningHostPolicy {
   /** Explicit deployment module pins; omission preserves the single signing-module host. */
   modules?: readonly { id: string; version: string }[];
   structuredPanelWidgets?: readonly NativeStructuredPanelWidget[];
+  /** Custom domain widget modules admitted alongside starter widget modules. */
+  domainWidgetModules?: readonly SurfaceWidgetModule[];
+  /** Additional admitted widget shape declarations for Tier 2 widgets. */
+  allowedWidgetShapes?: readonly WidgetShapeDeclaration[];
   staticAssets?: readonly { kind: 'image'; source: string }[];
   definition: FormDefinition;
   registryEntries: readonly RegistryEntry[];
@@ -103,18 +109,26 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   if (policy.nativeScreener && policy.candidateHydration) throw new Error('native-candidate-hydration-selection-ambiguous');
   const selectedHydration = policy.candidateHydration;
   const selectedStatusReader = policy.statusReader;
+  const selectedDomainWidgetModules = policy.domainWidgetModules
+    ? Object.freeze(policy.domainWidgetModules.map(module => Object.freeze({
+        moduleId: module.moduleId,
+        widgets: Object.freeze({ ...module.widgets }),
+        ...(module.contracts ? { contracts: structuredClone(module.contracts) } : {}),
+      })))
+    : undefined;
   policy = { ...policy, candidateHydration: selectedHydration ? Object.freeze({
     qualifySaved: selectedHydration.qualifySaved.bind(selectedHydration),
     retireFacts: selectedHydration.retireFacts.bind(selectedHydration),
     dispose: selectedHydration.dispose.bind(selectedHydration),
   }) : undefined, statusReader: selectedStatusReader ? Object.freeze({
     readStatus: selectedStatusReader.readStatus.bind(selectedStatusReader),
-  }) : undefined, applicantStatus: policy.applicantStatus !== undefined ? structuredClone(policy.applicantStatus) : undefined, screenerEntryGate: policy.screenerEntryGate ? structuredClone(policy.screenerEntryGate) : undefined, signingScope: policy.signingScope ? structuredClone(policy.signingScope) : undefined, modules: structuredClone(policy.modules), structuredPanelWidgets: structuredClone(policy.structuredPanelWidgets), staticAssets: structuredClone(policy.staticAssets), bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
+  }) : undefined, applicantStatus: policy.applicantStatus !== undefined ? structuredClone(policy.applicantStatus) : undefined, screenerEntryGate: policy.screenerEntryGate ? structuredClone(policy.screenerEntryGate) : undefined, signingScope: policy.signingScope ? structuredClone(policy.signingScope) : undefined, modules: structuredClone(policy.modules), structuredPanelWidgets: structuredClone(policy.structuredPanelWidgets), domainWidgetModules: selectedDomainWidgetModules, allowedWidgetShapes: policy.allowedWidgetShapes ? structuredClone(policy.allowedWidgetShapes) : undefined, staticAssets: structuredClone(policy.staticAssets), bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
     registryEntries: structuredClone(policy.registryEntries), locales: structuredClone(policy.locales), bindings: structuredClone(policy.bindings),
     applicationReadiness: structuredClone(policy.applicationReadiness), readiness: structuredClone(policy.readiness), publication: structuredClone(policy.publication),
     nativeScreener: policy.nativeScreener ? Object.freeze({ ...policy.nativeScreener }) : undefined,
     controller: { ...policy.controller, roles: structuredClone(policy.controller.roles) } };
-  freezeMetadata(policy.structuredPanelWidgets); freezeMetadata(policy.modules); freezeMetadata(policy.staticAssets); freezeMetadata(policy.bundle); freezeMetadata(policy.definition); freezeMetadata(policy.registryEntries); freezeMetadata(policy.locales);
+  freezeMetadata(policy.structuredPanelWidgets); freezeMetadata(policy.allowedWidgetShapes); freezeMetadata(policy.modules); freezeMetadata(policy.staticAssets); freezeMetadata(policy.bundle); freezeMetadata(policy.definition); freezeMetadata(policy.registryEntries); freezeMetadata(policy.locales);
+  if (policy.domainWidgetModules) { for (const module of policy.domainWidgetModules) freezeMetadata(module.contracts); }
   freezeMetadata(policy.signingScope); freezeMetadata(policy.screenerEntryGate); freezeMetadata(policy.applicantStatus);
   freezeMetadata(policy.bindings); freezeMetadata(policy.readiness); freezeMetadata(policy.publication); freezeMetadata(policy.controller.roles);
   const bundle = dereferenceBundleExport(policy.bundle);
@@ -136,13 +150,61 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   if (policy.structuredPanelWidgets && (!panelPins.length || new Set(panelPins.map(pin => pin.moduleId)).size !== panelPins.length
     || panelPins.some(pin => !modulePins.some(module => module.id === pin.moduleId)
       || !['0.1.0', '0.1.1', '0.1.2'].includes(pin.registryEntryVersion)))) throw new Error('native-resource-unadmitted');
+  const reservedSigningWidgetNames = new Set([
+    SIGNING_CEREMONY_WIDGET_SHAPE.widgetName,
+    RESPONSE_REVIEW_WIDGET_SHAPE.widgetName,
+    'signing-ceremony',
+    'x-signing-ceremony',
+    'response-review',
+    'x-response-review',
+  ]);
+  if (policy.domainWidgetModules) {
+    for (const domainModule of policy.domainWidgetModules) {
+      const keys = [
+        ...Object.keys(domainModule.widgets ?? {}),
+        ...Object.keys(domainModule.contracts ?? {}),
+      ];
+      if (keys.some(key => reservedSigningWidgetNames.has(key))) {
+        throw new Error('native-widget-shape-unadmitted');
+      }
+    }
+  }
   const panelVersions = new Map(panelPins.map(pin => [pin.moduleId, pin.registryEntryVersion]));
-  const registerModules = (review?: ResponseReviewOptions) => modulePins.map(module => starterWidgetModule(module.id, {
-    ...(module.id === policy.moduleId && review ? { responseReview: review } : {}),
-    ...(panelVersions.has(module.id) ? {
-      structuredPanelRegistryEntryVersion: panelVersions.get(module.id),
-    } : {}),
-  }));
+  const registerModules = (review?: ResponseReviewOptions): SurfaceWidgetModule[] => {
+    const baseModules = modulePins.map(module => starterWidgetModule(module.id, {
+      ...(module.id === policy.moduleId && review ? { responseReview: review } : {}),
+      ...(panelVersions.has(module.id) ? {
+        structuredPanelRegistryEntryVersion: panelVersions.get(module.id),
+      } : {}),
+    }));
+    if (!policy.domainWidgetModules?.length) return baseModules;
+    const byId = new Map<string, SurfaceWidgetModule>(
+      baseModules.map(module => [module.moduleId, {
+        moduleId: module.moduleId,
+        widgets: { ...module.widgets },
+        ...(module.contracts ? { contracts: { ...module.contracts } } : {}),
+      }]),
+    );
+    for (const domainModule of policy.domainWidgetModules) {
+      const existing = byId.get(domainModule.moduleId);
+      if (existing) {
+        byId.set(domainModule.moduleId, {
+          moduleId: existing.moduleId,
+          widgets: { ...existing.widgets, ...domainModule.widgets },
+          ...(existing.contracts || domainModule.contracts
+            ? { contracts: { ...existing.contracts, ...domainModule.contracts } }
+            : {}),
+        });
+      } else {
+        byId.set(domainModule.moduleId, {
+          moduleId: domainModule.moduleId,
+          widgets: { ...domainModule.widgets },
+          ...(domainModule.contracts ? { contracts: { ...domainModule.contracts } } : {}),
+        });
+      }
+    }
+    return [...byId.values()];
+  };
   const widgets = createWidgetRegistry({ registryEntries: flattened.entries, modules: registerModules() });
   const app = composeSurfaceApp(bundle.surfaces, { entrySurface: bundle.entrySurface });
   const staticAssetResolver: SurfaceStaticAssetResolver | undefined = policy.staticAssets ? request => {
@@ -198,10 +260,32 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     for (const slot of slots) {
       if (slot.slotType !== 'module-widget') continue;
       if (slot.resolution.status !== 'resolved' || !slot.resolution.declared) throw new Error('native-widget-unadmitted');
-      if (slot.key.moduleId !== policy.moduleId) continue;
-      const shape = slot.key.widgetName === SIGNING_CEREMONY_WIDGET_SHAPE.widgetName ? SIGNING_CEREMONY_WIDGET_SHAPE
-        : slot.key.widgetName === RESPONSE_REVIEW_WIDGET_SHAPE.widgetName ? RESPONSE_REVIEW_WIDGET_SHAPE : undefined;
-      if (!shape || !same(slot.resolution.entry?.widgetShape, shape)) throw new Error('native-widget-shape-unadmitted');
+      const isCeremonyWidget = slot.key.widgetName === SIGNING_CEREMONY_WIDGET_SHAPE.widgetName
+        || slot.key.widgetName === 'signing-ceremony'
+        || slot.key.widgetName === 'x-signing-ceremony';
+      const isReviewWidget = slot.key.widgetName === RESPONSE_REVIEW_WIDGET_SHAPE.widgetName
+        || slot.key.widgetName === 'response-review'
+        || slot.key.widgetName === 'x-response-review';
+      if (isCeremonyWidget || isReviewWidget) {
+        const expectedShape = isCeremonyWidget ? SIGNING_CEREMONY_WIDGET_SHAPE : RESPONSE_REVIEW_WIDGET_SHAPE;
+        if (slot.key.moduleId !== policy.moduleId
+          || slot.key.widgetName !== expectedShape.widgetName
+          || !same(slot.resolution.entry?.widgetShape, expectedShape)) {
+          throw new Error('native-widget-shape-unadmitted');
+        }
+        continue;
+      }
+      const candidateShape = slot.resolution.entry?.widgetShape;
+      if (!candidateShape) throw new Error('native-widget-shape-unadmitted');
+      const isStructuredPanel = candidateShape.deliveryContractId === STRUCTURED_PANEL_DELIVERY_CONTRACT_ID
+        && same(candidateShape.props, STRUCTURED_PANEL_CONFIG_SCHEMA)
+        && same(candidateShape.renderedConfigNodes, STRUCTURED_PANEL_RENDERED_CONFIG_NODES);
+      const isAllowedShape = policy.allowedWidgetShapes?.some(allowed => same(candidateShape, allowed)) ?? false;
+      const isDomainWidget = policy.domainWidgetModules?.some(module => module.moduleId === slot.key.moduleId
+        && Object.hasOwn(module.widgets, slot.key.widgetName)) ?? false;
+      if (!isStructuredPanel && !isAllowedShape && !isDomainWidget && slot.key.moduleId === policy.moduleId) {
+        throw new Error('native-widget-shape-unadmitted');
+      }
     }
   }
   if (initialDataSites.length && !policy.initialDataSources) throw new Error('native-initial-data-source-capability-unavailable');
@@ -411,7 +495,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     };
     let diagnosticStage: NativeQualificationStage = 'source-qualification';
     try {
-      const facts = await abortable(AbortSignal.any([stage.signal, ...(caller ? [caller.signal] : [])]), qualifySaved(saved, assertCurrent)); assertCurrent();
+      const facts = await abortable(AbortSignal.any([stage.signal, ...(caller ? [caller.signal] : [])]), qualifySaved(saved, assertCurrent, { allowRefresh: true })); assertCurrent();
       diagnosticStage = 'renderer-exchange';
       if (!await installFacts(facts, saved, old, lease, AbortSignal.any([stage.signal, nativeLifetime.signal, ...(caller ? [caller.signal] : [])]), assertCurrent)) {
         nativeReadiness = 'needs-save'; emit(); return;
@@ -946,6 +1030,29 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           const requestFor = (request: Parameters<NonNullable<typeof runtime>['dataSourceLoader']>[0]) => {
             const delivery = runtime; const deliveryGeneration = generation;
             assertVisit(); current(deliveryGeneration);
+            const provenanceSource = request.descriptor?.source?.runtime?.provenance?.source;
+            const isResponseReviewSource = provenanceSource === 'admitted-response-review'
+              || provenanceSource?.startsWith('admitted-response-review:');
+            const isSharedResponseSource = provenanceSource === 'admitted-signing-cohort:response';
+            const isCeremonyStateSource = !isSharedResponseSource && (
+              provenanceSource === 'admitted-signing-cohort'
+              || provenanceSource?.startsWith('admitted-signing-cohort:')
+            );
+            if (isResponseReviewSource) {
+              if (request.context?.moduleId !== policy.moduleId
+                || request.context?.widgetName !== RESPONSE_REVIEW_WIDGET_SHAPE.widgetName) {
+                throw new Error('native-signing-scope-unadmitted');
+              }
+            } else if (isCeremonyStateSource) {
+              if (request.context?.moduleId !== policy.moduleId
+                || request.context?.widgetName !== SIGNING_CEREMONY_WIDGET_SHAPE.widgetName) {
+                throw new Error('native-signing-scope-unadmitted');
+              }
+            } else if (request.context?.moduleId !== policy.moduleId
+              || (request.context?.widgetName !== SIGNING_CEREMONY_WIDGET_SHAPE.widgetName
+                && request.context?.widgetName !== RESPONSE_REVIEW_WIDGET_SHAPE.widgetName)) {
+              throw new Error('native-signing-scope-unadmitted');
+            }
             if (policy.signingScope && !signingScopeAllows(policy.signingScope, request.context)) throw new Error('native-signing-scope-unadmitted');
             if (request.context.sessionGeneration !== marker) throw new Error('native-visit-unqualified');
             return { delivery, request: { ...request, context: { ...request.context, sessionGeneration: deliveryGeneration } } };
@@ -997,7 +1104,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
                 }
               }
               try { const captured = requestFor(request); return captured.delivery?.authorizeDataSource(captured.request) ?? { status: 'refused', reason: 'native-state-unavailable' }; }
-              catch { return { status: 'refused', reason: 'native-visit-retired' }; }
+              catch (error) { return { status: 'refused', reason: error instanceof Error && error.message === 'native-signing-scope-unadmitted' ? 'native-signing-scope-unadmitted' : 'native-visit-retired' }; }
             }) satisfies NonNullable<typeof runtime>['authorizeDataSource'],
             dataSourceLoader: ((request) => {
               if (initial.owns(request)) return initial.dataSourceLoader(request);
@@ -1018,7 +1125,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
                 }
               }
               try { const captured = requestFor(request); return captured.delivery?.dataSourceLoader(captured.request) ?? { status: 'unavailable', reason: 'native-state-unavailable' }; }
-              catch { return { status: 'unavailable', reason: 'native-visit-retired' }; }
+              catch (error) { return { status: 'unavailable', reason: error instanceof Error && error.message === 'native-signing-scope-unadmitted' ? 'native-signing-scope-unadmitted' : 'native-visit-retired' }; }
             }) satisfies NonNullable<typeof runtime>['dataSourceLoader'],
             dataSourceRevision: (request: Parameters<NonNullable<typeof runtime>['dataSourceLoader']>[0]) => {
               if (request.descriptor?.sourceRef === 'host:qualified-applicant-status') {
@@ -1047,6 +1154,10 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
               let stage: 'host-admission' | 'host-result-fence' = 'host-admission';
               try {
                 assertVisit(); if (!controller) throw new Error('native-runtime-unavailable');
+                if (action.source?.moduleId !== policy.moduleId
+                  || action.source?.widgetName !== SIGNING_CEREMONY_WIDGET_SHAPE.widgetName) {
+                  throw new Error('native-signing-scope-unadmitted');
+                }
                 if (policy.signingScope && (!signingScopeAllows(policy.signingScope, { ...action.source.route, slotId: action.source.slotId, moduleId: action.source.moduleId, widgetName: action.source.widgetName })
                   || action.source.slotId !== policy.signingScope.ceremonySlot || action.source.moduleId !== policy.signingScope.moduleId
                   || action.source.widgetName !== SIGNING_CEREMONY_WIDGET_SHAPE.widgetName)) throw new Error('native-signing-scope-unadmitted');

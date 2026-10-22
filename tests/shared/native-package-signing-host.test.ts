@@ -12,7 +12,8 @@ import { createFormEngine, hashSigningContent } from '@formspec-org/engine/rende
 import { createSemanticControlRegistry } from '@formspec-org/react';
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import { composeSurfaceApp, flattenRegistryEntries, dereferenceBundleExport, resolveDataSourceDescriptor, planStaticContent, type BundleExport } from '@formspec-org/surface';
-import { SIGNING_CEREMONY_WIDGET_SHAPE, deriveSurfaceRuntimeGeneration, responseReviewHash, starterWidgetModule, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE, type ResponseReviewData } from '@formspec-org/surface-react';
+import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, deriveSurfaceRuntimeGeneration, responseReviewHash, starterWidgetModule, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE, type ResponseReviewData } from '@formspec-org/surface-react';
+import { admitBrowserHostDeployment, browserHostDeployment } from '../../../ops/managed-single-cell/hosts/web-host/browser-host-deployment.ts';
 import type { DataSourcesDocument, FormResponse, LocaleDocument, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
 import { createNativePackageSigningHost, captureFields, type NativePackageSigningHostPolicy } from '../../src/shared/native-package-signing-host.ts';
@@ -664,7 +665,7 @@ describe('generic native package signing session', () => {
     const ports = visit.bindRuntime();
     const binding = test.policy.bindings.response;
     const descriptor = resolveDataSourceDescriptor(test.host.bundle.dataSources!, binding)!;
-    const request = { descriptor, context: { surfaceId: 'surface', surfaceRef: 'urn:test:surface', routeId: 'review', slotId: 'review', params: {}, sessionGeneration: marker } };
+    const request = { descriptor, context: { surfaceId: 'surface', surfaceRef: 'urn:test:surface', routeId: 'review', slotId: 'review', moduleId: 'test', widgetName: 'SigningCeremony', params: {}, sessionGeneration: marker } };
     expect(await ports.dataSourceLoader(request)).toMatchObject({ status: 'unavailable' });
     visit.activate(); expect(await ports.dataSourceLoader(request)).toMatchObject({ status: 'loaded', revision: snapshot.controller!.prepared!.draft.version });
     const responseRevision = ports.dataSourceRevision(request);
@@ -1873,5 +1874,308 @@ describe('restored unsigned Screener checkpoints', () => {
       expect(test.renewRun).toHaveBeenCalledOnce();
       lease.dispose();
     } finally { test.cleanup(); }
+  });
+});
+
+describe('two-tier widget admission, Blocker 3 isolation, and N-surface deployment routing', () => {
+  it('enforces Tier 1 strict identity for SigningCeremony and ResponseReview and rejects impersonating domainWidgetModules', () => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const actual = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/native-bundle.json'), 'utf8')) as BundleExport;
+    const resolved = dereferenceBundleExport(actual);
+    const basePolicy: NativePackageSigningHostPolicy = {
+      ...test.policy,
+      bundle: actual,
+      moduleId: actual.manifest.modules![0].id,
+      definition: [...resolved.definitions.values()][0],
+      locales: Object.values(actual.documents).filter(document => !!document && typeof document === 'object' && '$formspecLocale' in document) as LocaleDocument[],
+      registryEntries: flattenRegistryEntries(resolved.registries).entries,
+      readiness: { instance: 'draftReadiness', readyPath: 'ready', ownedPath: 'owned' },
+      controller: { ...test.policy.controller, roles: {} },
+      bindings: {},
+      hostEvents: unexecutedHostEvents(actual, [...resolved.definitions.values()][0].url),
+    };
+
+    for (const widgetName of [SIGNING_CEREMONY_WIDGET_SHAPE.widgetName, RESPONSE_REVIEW_WIDGET_SHAPE.widgetName]) {
+      const mutated = structuredClone(actual);
+      const registry = Object.values(mutated.documents).find(document => !!document && typeof document === 'object' && '$formspecRegistry' in document) as unknown as {
+        entries: { widgetShape?: { widgetName: string; props: object } }[];
+      };
+      const entry = registry.entries.find(candidate => candidate.widgetShape?.widgetName === widgetName)!;
+      entry.widgetShape!.props = { type: 'object', additionalProperties: true };
+      expect(() => createNativePackageSigningHost({
+        ...basePolicy,
+        bundle: mutated,
+        registryEntries: flattenRegistryEntries(dereferenceBundleExport(mutated).registries).entries,
+      })).toThrow('native-widget-shape-unadmitted');
+    }
+
+    for (const impersonatedName of ['SigningCeremony', 'signing-ceremony', 'ResponseReview', 'response-review']) {
+      expect(() => createNativePackageSigningHost({
+        ...basePolicy,
+        domainWidgetModules: [{
+          moduleId: basePolicy.moduleId,
+          widgets: { [impersonatedName]: () => null },
+        }],
+      })).toThrow('native-widget-shape-unadmitted');
+    }
+  });
+
+  it('admits Tier 2 structured panels and custom domainWidgetModules on policy.moduleId without throwing native-widget-shape-unadmitted', () => {
+    const test = fixture(); test.host.dispose(); test.engine.dispose();
+    const registryUrl = 'urn:test:tier2-registry';
+    const surfaceUrl = 'urn:test:surface';
+    const common = { version: '0.1.0', status: 'stable', description: 'Tier 2 widget test', compatibility: { formspecVersion: '>=1.0.0' } };
+    const customWidgetShape = {
+      widgetName: 'CustomSummaryWidget',
+      props: { type: 'object', additionalProperties: false, properties: { heading: { type: 'string' } } },
+      deliveryContractId: 'urn:test:contract:custom-summary:v1',
+      renderedConfigNodes: [] as const,
+    };
+    const registry = {
+      $formspecRegistry: '1.1',
+      publisher: { name: 'Test' },
+      published: '2026-01-01T00:00:00Z',
+      entries: [
+        { ...common, name: test.policy.moduleId, category: 'module', contributes: ['x-structured-panel', 'x-custom-summary'] },
+        {
+          ...common,
+          name: 'x-structured-panel',
+          category: 'widget',
+          widgetShape: {
+            widgetName: 'StructuredPanel',
+            props: STRUCTURED_PANEL_CONFIG_SCHEMA,
+            deliveryContractId: STRUCTURED_PANEL_DELIVERY_CONTRACT_ID,
+            renderedConfigNodes: STRUCTURED_PANEL_RENDERED_CONFIG_NODES,
+          },
+        },
+        {
+          ...common,
+          name: 'x-custom-summary',
+          category: 'widget',
+          widgetShape: customWidgetShape,
+        },
+      ],
+    };
+    const bundle: BundleExport = {
+      ...test.policy.bundle,
+      manifest: {
+        ...test.policy.bundle.manifest,
+        registries: [{ url: registryUrl }],
+        surfaces: [{ url: surfaceUrl }],
+        entrySurface: surfaceUrl,
+      },
+      documents: {
+        ...test.policy.bundle.documents,
+        [registryUrl]: registry,
+        [surfaceUrl]: {
+          $formspecSurface: '0.2',
+          id: 'surface',
+          entry: 'review',
+          routes: [{
+            id: 'review',
+            path: '/',
+            slots: [
+              { id: 'panel-slot', slotType: 'module-widget', binding: { moduleId: test.policy.moduleId, widgetName: 'StructuredPanel', config: {} } },
+              { id: 'custom-slot', slotType: 'module-widget', binding: { moduleId: test.policy.moduleId, widgetName: 'CustomSummaryWidget', config: { heading: 'Summary' } } },
+            ],
+          }],
+        },
+      },
+    };
+    const customComponent = () => null;
+    const host = createNativePackageSigningHost({
+      ...test.policy,
+      bundle,
+      registryEntries: flattenRegistryEntries(dereferenceBundleExport(bundle).registries).entries,
+      domainWidgetModules: [{
+        moduleId: test.policy.moduleId,
+        widgets: { CustomSummaryWidget: customComponent },
+        contracts: {
+          CustomSummaryWidget: {
+            deliveryContractId: customWidgetShape.deliveryContractId,
+            registryEntryVersion: '0.1.0',
+            renderedConfigNodes: [],
+          },
+        },
+      }],
+      allowedWidgetShapes: [customWidgetShape],
+    });
+    const moduleEntry = host.widgetModules.find(m => m.moduleId === test.policy.moduleId)!;
+    expect(moduleEntry.widgets.CustomSummaryWidget).toBe(customComponent);
+    expect(moduleEntry.widgets.StructuredPanel).toBeDefined();
+    host.dispose();
+  });
+
+  it('enforces Blocker 3 isolation against Tier 2 and custom widgets even when signingScope is omitted', async () => {
+    const test = fixture();
+    expect(test.policy.signingScope).toBeUndefined();
+    const lease = await test.prepared();
+    const snapshot = test.host.getSnapshot();
+    const marker = test.host.allocateSurfaceSessionMarker(snapshot.sessionGeneration);
+    const visit = test.host.createSurfaceVisit(marker, snapshot.sessionGeneration);
+    visit.activate();
+    const ports = visit.bindRuntime();
+
+    // Ceremony cohort source (content) must be accessible only to SigningCeremony on policy.moduleId
+    const contentDescriptor = resolveDataSourceDescriptor(test.host.bundle.dataSources!, test.policy.bindings.content)!;
+    // ResponseReview source (presentation) must be accessible only to ResponseReview on policy.moduleId
+    const presentationDescriptor = resolveDataSourceDescriptor(test.host.bundle.dataSources!, test.policy.bindings.presentation)!;
+
+    for (const badContext of [
+      { moduleId: 'test', widgetName: 'StructuredPanel' },
+      { moduleId: 'test', widgetName: 'CustomSummaryWidget' },
+      { moduleId: 'x-other-module', widgetName: 'SigningCeremony' },
+      { moduleId: 'test', widgetName: 'ResponseReview' }, // ResponseReview cannot read ceremony-only content source
+    ]) {
+      const req = {
+        descriptor: contentDescriptor,
+        context: {
+          surfaceId: 'surface',
+          surfaceRef: 'urn:test:surface',
+          routeId: 'review',
+          slotId: 'review',
+          ...badContext,
+          params: {},
+          sessionGeneration: marker,
+        },
+      };
+      expect(await ports.authorizeDataSource(req)).toEqual({ status: 'refused', reason: 'native-signing-scope-unadmitted' });
+      expect(await ports.dataSourceLoader(req)).toEqual({ status: 'unavailable', reason: 'native-signing-scope-unadmitted' });
+      expect(ports.dataSourceRevision(req)).toBeUndefined();
+    }
+
+    for (const badReviewContext of [
+      { moduleId: 'test', widgetName: 'StructuredPanel' },
+      { moduleId: 'test', widgetName: 'CustomSummaryWidget' },
+      { moduleId: 'x-other-module', widgetName: 'ResponseReview' },
+      { moduleId: 'test', widgetName: 'SigningCeremony' }, // SigningCeremony cannot read responseReview-only presentation source
+    ]) {
+      const req = {
+        descriptor: presentationDescriptor,
+        context: {
+          surfaceId: 'surface',
+          surfaceRef: 'urn:test:surface',
+          routeId: 'review',
+          slotId: 'review',
+          ...badReviewContext,
+          params: {},
+          sessionGeneration: marker,
+        },
+      };
+      expect(await ports.authorizeDataSource(req)).toEqual({ status: 'refused', reason: 'native-signing-scope-unadmitted' });
+      expect(await ports.dataSourceLoader(req)).toEqual({ status: 'unavailable', reason: 'native-signing-scope-unadmitted' });
+      expect(ports.dataSourceRevision(req)).toBeUndefined();
+    }
+
+    const signRole = test.policy.controller.roles.sign!;
+    for (const badActionSource of [
+      { ...signRole.widgetSource!, widgetName: 'StructuredPanel' },
+      { ...signRole.widgetSource!, widgetName: 'ResponseReview' },
+      { ...signRole.widgetSource!, moduleId: 'x-other-module', widgetName: 'SigningCeremony' },
+    ]) {
+      await expect(ports.widgetActionExecutor({
+        document: signRole.document,
+        actionRef: signRole.actionRef,
+        invocationId: 'tier2-unadmitted-action',
+        source: badActionSource,
+        input: {},
+      })).rejects.toThrow('native-signing-scope-unadmitted');
+    }
+    expect(test.sign).not.toHaveBeenCalled();
+
+    visit.dispose(); lease.dispose(); test.host.dispose(); test.engine.dispose();
+  });
+
+  it('admits 1-surface, 2-surface, and 3+ surface browser host deployments while rejecting duplicate or ambiguous route paths', () => {
+    const baseDeployment = {
+      version: 1 as const,
+      browserOrigins: ['https://portal.example.test'],
+      wosOrigin: 'https://wos.example.test',
+      initialHostEvents: [],
+      taskHostEvents: [],
+    };
+
+    // 1-surface deployment (taskResponse and reviewer omitted)
+    const oneSurface = admitBrowserHostDeployment({
+      ...baseDeployment,
+      routes: {
+        caseStatus: '/status',
+        auditPrefix: '/audit',
+        signInReturnPaths: ['/apply'],
+      },
+    });
+    expect(oneSurface.routes.taskResponse).toBeUndefined();
+    expect(oneSurface.routes.reviewer).toBeUndefined();
+
+    // 2-surface deployment
+    const twoSurface = browserHostDeployment({
+      ...baseDeployment,
+      routes: {
+        caseStatus: '/status',
+        reviewer: '/reviewer',
+        auditPrefix: '/audit',
+        signInReturnPaths: ['/apply'],
+      },
+    });
+    expect(twoSurface.routes.reviewer).toBe('/reviewer');
+    expect(twoSurface.routes.taskResponse).toBeUndefined();
+
+    // 3+ surface deployment with surfaceRoutes
+    const multiSurface = admitBrowserHostDeployment({
+      ...baseDeployment,
+      routes: {
+        caseStatus: '/status',
+        taskResponse: '/task-response',
+        reviewer: '/reviewer',
+        auditPrefix: '/audit',
+        signInReturnPaths: ['/apply'],
+      },
+      surfaceRoutes: [
+        { path: '/intake', surfaceId: 'applicant-intake', role: 'applicant' },
+        { path: '/specialist-review', surfaceId: 'specialist-workbench', role: 'reviewer' },
+        { path: '/ombudsman', surfaceId: 'ombudsman-portal', role: 'auditor' },
+      ],
+    });
+    expect(multiSurface.surfaceRoutes).toHaveLength(3);
+
+    // Rejects duplicate path between routes and surfaceRoutes
+    expect(() => admitBrowserHostDeployment({
+      ...baseDeployment,
+      routes: {
+        caseStatus: '/status',
+        auditPrefix: '/audit',
+        signInReturnPaths: ['/apply'],
+      },
+      surfaceRoutes: [
+        { path: '/status', surfaceId: 'duplicate-status' },
+      ],
+    })).toThrow('Ambiguous deployment routes');
+
+    // Rejects duplicate path within surfaceRoutes
+    expect(() => admitBrowserHostDeployment({
+      ...baseDeployment,
+      routes: {
+        caseStatus: '/status',
+        auditPrefix: '/audit',
+        signInReturnPaths: ['/apply'],
+      },
+      surfaceRoutes: [
+        { path: '/custom', surfaceId: 'surface-a' },
+        { path: '/custom', surfaceId: 'surface-b' },
+      ],
+    })).toThrow('Ambiguous deployment routes');
+
+    // Rejects surfaceRoute colliding with auditPrefix + '/'
+    expect(() => admitBrowserHostDeployment({
+      ...baseDeployment,
+      routes: {
+        caseStatus: '/status',
+        auditPrefix: '/audit',
+        signInReturnPaths: ['/apply'],
+      },
+      surfaceRoutes: [
+        { path: '/audit/subroute', surfaceId: 'bad-audit-subroute' },
+      ],
+    })).toThrow('Ambiguous deployment routes');
   });
 });

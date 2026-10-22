@@ -1662,8 +1662,15 @@ it('omits applicant-case-status before case creation and renders authorized case
   secondMount.unmount(); withCase.host.dispose();
 });
 
-it('omits co-located ceremony slots before Prepare and filters auto-placed form actions when Component has no explicit ActionButtons', async () => {
+it('omits co-located ceremony slots before Prepare and deduplicates auto-placed task Save actions when Component has no explicit ActionButtons', async () => {
   const exported = structuredClone(bundle);
+  const responseActions = exported.documents['urn:formspec:demo:d1:signing-app:response-actions'] as {
+    actions: Array<{ id: string; label?: unknown; effects?: unknown }>;
+  };
+  const saveInitial = responseActions.actions.find(action => action.id === 'save-draft-initial')!;
+  const saveOwned = responseActions.actions.find(action => action.id === 'save-draft-owned')!;
+  saveInitial.label = { literal: 'Save task response' };
+  saveOwned.label = { literal: 'Save task response' };
   const surface = exported.documents['urn:formspec:demo:d1:signing-app:surface'] as SurfaceDocument;
   const intakeRoute = surface.routes.find(route => route.path === '/')!;
   const signingRoute = surface.routes.find(route => route.path === '/review-sign')!;
@@ -1676,11 +1683,9 @@ it('omits co-located ceremony slots before Prepare and filters auto-placed form 
   }
   const test = await actualFixture({ bundle: exported, component: autoPlacedComponent });
   const mounted = render(<NativePackageRespondentHost {...test.props} location="/review-sign" />);
-  const saveButtons = await screen.findAllByRole('button', { name: 'Save draft' });
+  const saveButtons = await screen.findAllByRole('button', { name: 'Save task response' });
   expect(saveButtons).toHaveLength(1);
   expect(screen.getByRole('button', { name: 'Prepare saved response' })).toBeDefined();
-  expect(screen.queryByRole('button', { name: 'Sign demo response' })).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Submit demo response' })).toBeNull();
   expect(screen.queryByText(/This part of the page cannot load the information it needs/i)).toBeNull();
 
   fireEvent.click(saveButtons[0]);

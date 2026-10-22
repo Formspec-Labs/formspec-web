@@ -175,33 +175,14 @@ function filterAutoPlacedFormActions(
   host: NativePackageSigningHost,
 ): ResolvedRespondentFormInput['responseActionsDocument'] {
   if (!document || hasExplicitActionButton(componentDocument.tree)) return document;
-  const excluded = new Set<string>();
   const roles = host.actionRoles;
-  if (roles?.sign) excluded.add(roles.sign);
-  if (roles?.submit) excluded.add(roles.submit);
-  if (roles?.paper) excluded.add(roles.paper);
-  for (const surface of host.bundle.surfaces) {
-    for (const route of surface.routes) {
-      for (const slot of route.slots ?? []) {
-        if (slot.slotType !== 'module-widget') continue;
-        const binding = record(slot.binding);
-        if (binding?.moduleId !== host.moduleId) continue;
-        const actionBindings = record(binding.actionBindings);
-        if (!actionBindings) continue;
-        for (const entry of Object.values(actionBindings)) {
-          const actionRef = record(entry)?.actionRef;
-          if (typeof actionRef === 'string') excluded.add(actionRef);
-        }
-      }
-    }
-  }
-  if (roles?.saveInitial && roles?.saveOwned
-    && document.actions.some(action => action.id === roles.saveInitial)
-    && document.actions.some(action => action.id === roles.saveOwned)) {
-    excluded.add(roles.saveInitial);
-  }
-  if (excluded.size === 0) return document;
-  const actions = document.actions.filter(action => !excluded.has(action.id));
-  if (actions.length === document.actions.length) return document;
+  if (!roles?.saveInitial || !roles?.saveOwned || roles.saveInitial === roles.saveOwned) return document;
+  const initialAction = document.actions.find(action => action.id === roles.saveInitial);
+  const ownedAction = document.actions.find(action => action.id === roles.saveOwned);
+  if (!initialAction || !ownedAction) return document;
+  const duplicateSaveDefinition = canonicalize(initialAction.effects) === canonicalize(ownedAction.effects)
+    || canonicalize(initialAction.label) === canonicalize(ownedAction.label);
+  if (!duplicateSaveDefinition) return document;
+  const actions = document.actions.filter(action => action.id !== roles.saveInitial);
   return { ...document, actions } as typeof document;
 }

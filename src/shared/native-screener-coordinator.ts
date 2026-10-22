@@ -157,7 +157,7 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
     try {
       const candidate = structuredClone(saved);
       const currentCheck = !!candidate.response.authoredSignatures?.length;
-      const allowRefresh = options?.allowRefresh !== false && !currentCheck && !candidate.response.extensions?.['x-formspec-signing-content'];
+      const allowRefresh = options?.allowRefresh === true && !currentCheck && !candidate.response.extensions?.['x-formspec-signing-content'];
       if (!run && currentCheck) {
         if (!retention.recover) throw new Error('Native Screener retained recovery unavailable');
         const recovered = await operation.wait(retention.recover({ saved: candidate, identity: operation.identity,
