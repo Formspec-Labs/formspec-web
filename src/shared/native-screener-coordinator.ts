@@ -152,16 +152,37 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
       } finally { finish(operation); }
     },
   }) satisfies SurfaceScreenerCompletionPolicy;
-  async function qualifySaved(saved: SavedResponseDraft, caller?: () => void): Promise<HydratedEvaluationCandidate> {
+  async function qualifySaved(saved: SavedResponseDraft, caller?: () => void, options?: { readonly allowRefresh?: boolean }): Promise<HydratedEvaluationCandidate> {
     const operation = begin(undefined, caller);
     try {
       const candidate = structuredClone(saved);
       const currentCheck = !!candidate.response.authoredSignatures?.length;
+      const allowRefresh = options?.allowRefresh !== false && !currentCheck && !candidate.response.extensions?.['x-formspec-signing-content'];
       if (!run && currentCheck) {
         if (!retention.recover) throw new Error('Native Screener retained recovery unavailable');
         const recovered = await operation.wait(retention.recover({ saved: candidate, identity: operation.identity,
           signal: operation.signal, assertCurrent: operation.assertCurrent }));
         operation.assertCurrent(); run = recovered;
+      } else if (allowRefresh && (!run || run.acceptance?.qualification.status !== 'ready') && retention.recover && retention.refresh) {
+        if (!run) {
+          const recovered = await operation.wait(retention.recover({ saved: candidate, identity: operation.identity,
+            signal: operation.signal, assertCurrent: operation.assertCurrent }));
+          operation.assertCurrent(); run = recovered;
+        }
+        if (run.acceptance?.qualification.status !== 'ready') {
+          let issuedLatest = run;
+          const refreshCommon = { identity: operation.identity, signal: operation.signal, assertCurrent: operation.assertCurrent };
+          if (uncertainRefresh) {
+            if (!retention.load) throw new Error('Native Screener refresh recovery unavailable');
+            issuedLatest = await operation.wait(retention.load({ ...refreshCommon, run: issuedLatest })); operation.assertCurrent();
+            run = issuedLatest;
+          }
+          uncertainRefresh = true;
+          const fresh = await operation.wait(retention.refresh({ ...refreshCommon, run: issuedLatest }));
+          operation.assertCurrent(); run = fresh; uncertainRefresh = false;
+          if (fresh.acceptance?.qualification.status !== 'ready' || fresh.run.qualification.status !== 'ready')
+            throw new Error('Native Screener refreshed acceptance unavailable');
+        }
       }
       const issued = run;
       if (!issued) throw new Error('Native Screener retained run unavailable');
@@ -212,8 +233,9 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
     } finally { finish(operation); }
   }
   return Object.freeze({ completionPolicy, qualifySaved, refreshSaved, retireFacts, routeAllowed,
+    retireAuthority: () => { run = undefined; retireRoute(false); retireFacts(); },
     preSignCandidate: async (input: { saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }) => {
-      const facts = await qualifySaved(input.saved, input.assertCurrent);
+      const facts = await qualifySaved(input.saved, input.assertCurrent, { allowRefresh: false });
       facts.assertReady();
       return Object.freeze({ assertCurrent: facts.assertCurrent });
     },

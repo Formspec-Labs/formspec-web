@@ -67,7 +67,7 @@ function fixture() {
     localeDocuments: [], location: '/', onNavigate: vi.fn() };
   return { props, host, configureRuntime, dispose };
 }
-async function actualFixture(options?: { bundle?: BundleExport; component?: ComponentDocument; lifecycle?: NonNullable<NativePackageSigningHostPolicy['controller']['applicationLifecycle']>; candidateHydration?: NativePackageSigningHostPolicy['candidateHydration']; nativeScreener?: NativePackageSigningHostPolicy['nativeScreener']; screenerEntryGate?: NativePackageSigningHostPolicy['screenerEntryGate']; createEngine?: NativePackageSigningHostPolicy['createEngine']; onSaved?: (response: FormResponse, revision: number) => void }) {
+async function actualFixture(options?: { bundle?: BundleExport; component?: ComponentDocument; lifecycle?: NonNullable<NativePackageSigningHostPolicy['controller']['applicationLifecycle']>; candidateHydration?: NativePackageSigningHostPolicy['candidateHydration']; nativeScreener?: NativePackageSigningHostPolicy['nativeScreener']; screenerEntryGate?: NativePackageSigningHostPolicy['screenerEntryGate']; createEngine?: NativePackageSigningHostPolicy['createEngine']; onSaved?: (response: FormResponse, revision: number) => void; modules?: NativePackageSigningHostPolicy['modules']; structuredPanelWidgets?: NativePackageSigningHostPolicy['structuredPanelWidgets']; statusReader?: NativePackageSigningHostPolicy['statusReader'] }) {
     const sourceBundle = options?.bundle ?? bundle;
     const admittedComponent = options?.component ?? component;
     observed.real = true; vi.stubGlobal('crypto', webcrypto);
@@ -133,7 +133,7 @@ async function actualFixture(options?: { bundle?: BundleExport; component?: Comp
     let completeRead!: (blob: Blob) => void;
     const read = vi.fn(async () => new Promise<Blob>(resolve => { completeRead = resolve; }));
     const clear = vi.fn(async () => {}); const invalidateAuthority = vi.fn();
-    const policy: NativePackageSigningHostPolicy = { candidateHydration: options?.candidateHydration, screenerEntryGate: options?.screenerEntryGate, nativeScreener: options?.nativeScreener, createEngine: options?.createEngine, bundle: sourceBundle, definition, moduleId: binding.moduleId, locales, initialLocale: 'en',
+    const policy: NativePackageSigningHostPolicy = { candidateHydration: options?.candidateHydration, screenerEntryGate: options?.screenerEntryGate, nativeScreener: options?.nativeScreener, createEngine: options?.createEngine, modules: options?.modules, structuredPanelWidgets: options?.structuredPanelWidgets, statusReader: options?.statusReader, bundle: sourceBundle, definition, moduleId: binding.moduleId, locales, initialLocale: 'en',
       registryEntries: flattenRegistryEntries(resolved.registries).entries, publication: { formId: 'form', formVersionId: 'publication' },
       readiness: { instance: 'draftReadiness', readyPath: 'ready', ownedPath: 'owned' }, clearDraftAccess: clear,
       applicationReadiness: options?.lifecycle ? { instance: 'draftReadiness', canStartPath: 'canStart', startedPath: 'started', persistentSavingPath: 'persistentSaving' } : undefined,
@@ -171,7 +171,9 @@ async function actualFixture(options?: { bundle?: BundleExport; component?: Comp
         terminals.push({ status: terminal.status, valid: terminal.detail?.validationReport?.valid }); return result;
       } };
     };
-    const composition = createTestComposition({ definition: testDefinition }); const navigate = vi.fn();
+    const composition = createTestComposition({ definition: testDefinition });
+    if (options?.statusReader) composition.statusReader = options.statusReader;
+    const navigate = vi.fn();
     const props = { host, composition, config: departmentAppProfile, componentDocument: admittedComponent, componentRouteResolver: componentResolver(admittedComponent), localeDocuments: locales, location: '/', onNavigate: navigate };
     return { policy, host, props, saveDraft, prepare, navigate, terminals, getEngine: () => mountedEngine, getRuntimeInput: () => runtimeInput, invokerFailures, read, reports, photoBytes, completeRead: (blob: Blob) => completeRead(blob), clear, sign, signWrites, submit };
 }
@@ -1587,5 +1589,109 @@ it.each(['current', 'expired'] as const)('settles one %s-facts Prepare across it
   expect(test.terminals.at(-1)).toEqual({ status: 'completed', valid: true });
   expect(test.host.getSnapshot().controller?.prepared).toBeDefined();
   await vi.waitFor(() => expect(test.navigate).toHaveBeenCalledWith('/review-sign'));
+  mounted.unmount(); test.host.dispose();
+});
+
+it('omits applicant-case-status before case creation and renders authorized case status when present', async () => {
+  const v21 = JSON.parse(readFileSync(resolve('tests/fixtures/native-screener-locale-v2.1.bundle.json'), 'utf8')) as BundleExport;
+  const exported = structuredClone(lifecycleBundle);
+  exported.manifest.modules = [...(exported.manifest.modules ?? []), { id: 'x-case-file-review', version: '0.1.0' }];
+  exported.manifest.registries = [...(exported.manifest.registries ?? []), { url: 'urn:formspec:doc:167d105b5025dcd4:registry', version: '1.1.0' }];
+  exported.documents = { ...exported.documents, 'urn:formspec:doc:167d105b5025dcd4:registry': structuredClone(v21.documents['urn:formspec:doc:167d105b5025dcd4:registry']) };
+  const v21Sources = v21.documents['urn:formspec:demo:d1:complete-app:data-sources:applicant-tasks'] as { sources: Record<string, unknown>[] };
+  const statusSource = structuredClone(v21Sources.sources.find(source => source.id === 'host:qualified-applicant-status')!);
+  const signingSources = exported.documents['urn:formspec:demo:d1:signing-app:data-sources'] as { sources: Record<string, unknown>[] };
+  signingSources.sources.push(statusSource);
+  const v21Surface = v21.documents['urn:formspec:demo:d1:signing-app:surface'] as SurfaceDocument;
+  const v21SigningRoute = v21Surface.routes.find(route => route.path === '/review-sign')!;
+  const statusSlot = structuredClone(v21SigningRoute.slots!.find(slot => slot.id === 'applicant-case-status')!);
+  ((statusSlot.binding as { dataBindings: Record<string, { catalogRef: string }> }).dataBindings.caseFile).catalogRef = 'urn:formspec:demo:d1:signing-app:data-sources';
+  const surface = exported.documents['urn:formspec:demo:d1:signing-app:surface'] as SurfaceDocument;
+  surface.routes.find(route => route.path === '/review-sign')!.slots!.push(statusSlot);
+
+  const withoutCase = await actualFixture({
+    bundle: exported,
+    component: lifecycleComponent,
+    lifecycle: lifecycleFixture(false, true).lifecycle,
+    modules: exported.manifest.modules,
+    structuredPanelWidgets: [{ moduleId: 'x-case-file-review', registryEntryVersion: '0.1.0' }],
+  });
+  const firstMount = render(<NativePackageRespondentHost {...withoutCase.props} location="/" />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Save progress' }));
+  await vi.waitFor(() => expect(withoutCase.saveDraft).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole('button', { name: 'Prepare saved response' }));
+  await vi.waitFor(() => expect(withoutCase.prepare).toHaveBeenCalledOnce());
+  firstMount.rerender(<NativePackageRespondentHost {...withoutCase.props} location="/review-sign" />);
+  await vi.waitFor(() => expect(withoutCase.read).toHaveBeenCalledOnce());
+  withoutCase.completeRead(new Blob([withoutCase.photoBytes], { type: 'image/png' }));
+  await screen.findByRole('region', { name: 'Review and sign this demo response' });
+  expect(screen.queryByText(/This part of the page cannot load the information it needs/i)).toBeNull();
+  expect(screen.queryByText('Your application and recorded notices')).toBeNull();
+  firstMount.unmount(); withoutCase.host.dispose();
+
+  const { lifecycle } = lifecycleFixture(true, true);
+  const readStatus = vi.fn(async () => ({
+    summary: { id: 'urn:wos:real-case', workflowUrl: 'urn:formspec:demo:d1:passport-renewal', lifecycleState: 'active' as const, actionNeeded: true, createdAt: '2026-10-08T09:00:00Z', updatedAt: '2026-10-08T10:00:00Z' },
+    openTasks: [{ id: 'task-1', processId: 'urn:wos:real-case', title: 'Replace photo with white background', status: 'pending' as const, kind: 'correspondence-response' as const, createdAt: '2026-10-08T10:00:00Z' }],
+    recentNotifications: [{ id: 'notice-1', kind: 'task-assigned' as const, status: 'unread' as const, title: 'Photo background needs replacement', body: 'Please upload a replacement photo.', createdAt: '2026-10-08T10:00:00Z' }],
+    statusTimeline: [],
+  }));
+  const withCase = await actualFixture({
+    bundle: exported,
+    component: lifecycleComponent,
+    lifecycle,
+    modules: exported.manifest.modules,
+    structuredPanelWidgets: [{ moduleId: 'x-case-file-review', registryEntryVersion: '0.1.0' }],
+    statusReader: { readStatus },
+  });
+  const secondMount = render(<NativePackageRespondentHost {...withCase.props} location="/" />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Start application' }));
+  await vi.waitFor(() => expect(lifecycle.start).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(readStatus).toHaveBeenCalledWith({ resourceRef: 'urn:wos:real-case' }));
+  await vi.waitFor(() => expect(withCase.host.getSnapshot().applicantStatus).toBeDefined());
+  fireEvent.click(screen.getByRole('button', { name: 'Prepare saved response' }));
+  await vi.waitFor(() => expect(withCase.prepare).toHaveBeenCalledOnce());
+  secondMount.rerender(<NativePackageRespondentHost {...withCase.props} location="/review-sign" />);
+  await vi.waitFor(() => expect(withCase.read).toHaveBeenCalledOnce());
+  withCase.completeRead(new Blob([withCase.photoBytes], { type: 'image/png' }));
+  await screen.findByText('Your application and recorded notices');
+  expect(screen.getByText('APP-001')).toBeDefined();
+  expect(screen.getByText('Replace photo with white background')).toBeDefined();
+  expect(screen.getByText('Photo background needs replacement')).toBeDefined();
+  expect(screen.queryByText(/This part of the page cannot load the information it needs/i)).toBeNull();
+  secondMount.unmount(); withCase.host.dispose();
+});
+
+it('omits co-located ceremony slots before Prepare and filters auto-placed form actions when Component has no explicit ActionButtons', async () => {
+  const exported = structuredClone(bundle);
+  const surface = exported.documents['urn:formspec:demo:d1:signing-app:surface'] as SurfaceDocument;
+  const intakeRoute = surface.routes.find(route => route.path === '/')!;
+  const signingRoute = surface.routes.find(route => route.path === '/review-sign')!;
+  signingRoute.slots = [structuredClone(intakeRoute.slots![0]), ...signingRoute.slots!];
+  const autoPlacedComponent = structuredClone(component);
+  if ('children' in autoPlacedComponent.tree && Array.isArray(autoPlacedComponent.tree.children)) {
+    autoPlacedComponent.tree.children = autoPlacedComponent.tree.children.filter(
+      child => !(child && typeof child === 'object' && 'component' in child && child.component === 'ActionButton'),
+    );
+  }
+  const test = await actualFixture({ bundle: exported, component: autoPlacedComponent });
+  const mounted = render(<NativePackageRespondentHost {...test.props} location="/review-sign" />);
+  const saveButtons = await screen.findAllByRole('button', { name: 'Save draft' });
+  expect(saveButtons).toHaveLength(1);
+  expect(screen.getByRole('button', { name: 'Prepare saved response' })).toBeDefined();
+  expect(screen.queryByRole('button', { name: 'Sign demo response' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Submit demo response' })).toBeNull();
+  expect(screen.queryByText(/This part of the page cannot load the information it needs/i)).toBeNull();
+
+  fireEvent.click(saveButtons[0]);
+  await vi.waitFor(() => expect(test.saveDraft).toHaveBeenCalledOnce());
+  expect(test.terminals.at(-1)?.status).toBe('completed');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Prepare saved response' }));
+  await vi.waitFor(() => expect(test.prepare).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(test.read).toHaveBeenCalledOnce());
+  test.completeRead(new Blob([test.photoBytes], { type: 'image/png' }));
+  await screen.findByRole('region', { name: 'Review and sign this demo response' });
+  expect(screen.queryByText(/This part of the page cannot load the information it needs/i)).toBeNull();
   mounted.unmount(); test.host.dispose();
 });

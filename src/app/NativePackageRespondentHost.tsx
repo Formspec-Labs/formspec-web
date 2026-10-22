@@ -29,7 +29,52 @@ export interface NativePackageRespondentHostProps {
 export function NativePackageRespondentHost(props: NativePackageRespondentHostProps) {
   const state = useSyncExternalStore(props.host.subscribe, props.host.getSnapshot, props.host.getSnapshot);
   const modules = props.host.widgetModules;
-  const model = useSurfaceApp({ bundle: props.host.bundle, widgetModules: modules });
+  const hasApplicantStatus = Boolean(state.applicantStatus);
+  const hasPreparedOrSignedCeremony = Boolean(state.controller?.prepared || state.controller?.signed || state.runtime);
+  const effectiveBundle = useMemo(() => {
+    const original = props.host.bundle;
+    let changed = false;
+    const nextSurfaceRefs = original.surfaceRefs ? new Map(original.surfaceRefs) : undefined;
+    let nextEntrySurface = original.entrySurface;
+    const nextSurfaces = original.surfaces.map(surface => {
+      let surfaceChanged = false;
+      const nextRoutes = surface.routes.map(route => {
+        const slots = route.slots ?? [];
+        const hasDefinitionForm = slots.some(slot => slot.slotType === 'definition-form');
+        const statusSlotId = props.host.applicantStatusSlot?.slotId ?? 'applicant-case-status';
+        const statusModuleId = props.host.applicantStatusSlot?.moduleId ?? 'x-case-file-review';
+        const filteredSlots = slots.filter(slot => {
+          if (slot.slotType !== 'module-widget') return true;
+          const moduleId = record(slot.binding)?.moduleId;
+          if (slot.id === statusSlotId && moduleId === statusModuleId && !hasApplicantStatus) {
+            return false;
+          }
+          if (hasDefinitionForm && moduleId === props.host.moduleId && !hasPreparedOrSignedCeremony) {
+            return false;
+          }
+          return true;
+        });
+        if (filteredSlots.length === slots.length) return route;
+        surfaceChanged = true;
+        return { ...route, slots: filteredSlots as typeof route.slots };
+      });
+      if (!surfaceChanged) return surface;
+      changed = true;
+      const nextSurface: typeof surface = { ...surface, routes: nextRoutes as typeof surface.routes };
+      const ref = original.surfaceRefs?.get(surface);
+      if (nextSurfaceRefs && ref !== undefined) nextSurfaceRefs.set(nextSurface, ref);
+      if (original.entrySurface === surface) nextEntrySurface = nextSurface;
+      return nextSurface;
+    });
+    if (!changed) return original;
+    return {
+      ...original,
+      surfaces: nextSurfaces,
+      ...(nextEntrySurface ? { entrySurface: nextEntrySurface } : {}),
+      ...(nextSurfaceRefs ? { surfaceRefs: nextSurfaceRefs } : {}),
+    };
+  }, [props.host.bundle, props.host.moduleId, hasApplicantStatus, hasPreparedOrSignedCeremony]);
+  const model = useSurfaceApp({ bundle: effectiveBundle, widgetModules: modules });
   const sessionMarker = useMemo(() => props.host.allocateSurfaceSessionMarker(state.sessionGeneration), [props.host, props.location, state.sessionGeneration]);
   const marker = deriveSurfaceRuntimeGeneration({ app: model.app, location: props.location, sessionGeneration: sessionMarker });
   const visit = useMemo(() => props.host.createSurfaceVisit(marker, state.sessionGeneration), [props.host, marker, state.sessionGeneration]);
@@ -40,6 +85,9 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
   useEffect(() => {
     if (!state.cleared) void props.host.qualifyCurrentVisit?.().catch(() => {});
   }, [visit, state.cleared, props.host]);
+  useEffect(() => {
+    if (!state.cleared) props.host.syncApplicantStatus?.(props.composition.statusReader);
+  }, [props.host, props.composition.statusReader, state.cleared, state.application?.caseLedgerId, state.application?.status, state.locale]);
   const ports = useMemo(() => visit.bindRuntime(), [visit]);
   const locales = useMemo(() => [...props.localeDocuments], [props.localeDocuments]);
   const definitionLocales = useMemo(() => new Map([...props.host.bundle.definitions.values()].map(definition => [definition.url,
@@ -58,12 +106,13 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
       return <Fragment key={key}>{renderDefaultDefinitionForm({ ...slot, componentDocument, localeDocuments: slotLocales,
         activeLocale: state.locale || undefined })}</Fragment>;
     }
+    const responseActionsDocument = filterAutoPlacedFormActions(slot.responseActionsDocument, componentDocument, props.host);
     const key = canonicalize({ definition: slot.plan.definition, theme: slot.grant.themeDocument,
-      registry: slot.plan.registryEntries, actions: slot.responseActionsDocument, route: slot.route, locale: state.locale, initialData: slot.initialData })!;
+      registry: slot.plan.registryEntries, actions: responseActionsDocument, route: slot.route, locale: state.locale, initialData: slot.initialData })!;
     let entry = forms.get(key);
     if (!entry) {
       entry = { completed: slot.onActionCompleted, form: { definition: slot.plan.definition, themeDocument: slot.grant.themeDocument,
-        registryEntries: slot.plan.registryEntries, responseActionsDocument: slot.responseActionsDocument, initialData: slot.initialData,
+        registryEntries: slot.plan.registryEntries, responseActionsDocument, initialData: slot.initialData,
         localeDocuments: slotLocales, activeLocale: state.locale || undefined, componentDocument,
         instanceSourceResolver: props.host.instanceSourceResolver, configureRuntime: props.host.configureRuntime, configureSubmittedRuntime: props.composition.draftStore.readState ? props.host.configureSubmittedRuntime : undefined, onActionCompleted: (action, result) => entry!.completed?.(action, result) } };
       forms.set(key, entry);
@@ -72,9 +121,9 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     return <RespondentDefinitionController composition={props.composition} config={props.config} form={entry.form} />;
   }, [forms, definitionLocales, props.componentDocument, props.componentRouteResolver, props.host, props.composition, props.config, state.locale]);
   const resolveRouteTitle: SurfaceRouteTitleResolver = useCallback(handle => {
-    if (!props.host.bundle.surfaces.includes(handle.surface)
+    if (!effectiveBundle.surfaces.includes(handle.surface)
       || !handle.surface.routes.includes(handle.route) || handle.route.title !== undefined) return undefined;
-    const url = props.host.bundle.surfaceRefs?.get(handle.surface);
+    const url = effectiveBundle.surfaceRefs?.get(handle.surface);
     const refs = props.host.bundle.manifest.surfaces?.filter(ref => ref.url === url) ?? [];
     const selectedForm = (handle.route.slots ?? []).some(slot => {
       if (slot.slotType !== 'definition-form' || !slot.binding || typeof slot.binding !== 'object'
@@ -85,7 +134,7 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     });
     if (!selectedForm) return undefined;
     return state.formTitle || undefined;
-  }, [props.host, props.componentRouteResolver, props.componentDocument, state.formTitle]);
+  }, [effectiveBundle, props.host, props.componentRouteResolver, props.componentDocument, state.formTitle]);
   if (state.cleared) return null;
   return <>
     {state.controller?.retrySignAvailable && ports.retrySigningResult ? <SessionStatus>
@@ -97,7 +146,7 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     {state.nativeReadiness && state.nativeReadiness !== 'ready' ? <SessionStatus>
       <p role="status" lang="en">{state.nativeReadiness === 'needs-save' ? 'Save progress to refresh checks.' : state.nativeReadiness === 'expired' ? 'Checks expired. Refresh checks before preparing.' : 'Checks pending.'}</p>
     </SessionStatus> : null}
-    <SurfaceApp screenerCompletion={props.screenerCompletion ?? props.host.screenerCompletion} activeLocale={props.screenerLocale} localeDocuments={locales} bundle={props.host.bundle} location={props.location} onNavigate={props.onNavigate} resolveNavigationHref={props.resolveNavigationHref}
+    <SurfaceApp screenerCompletion={props.screenerCompletion ?? props.host.screenerCompletion} activeLocale={props.screenerLocale} localeDocuments={locales} bundle={effectiveBundle} location={props.location} onNavigate={props.onNavigate} resolveNavigationHref={props.resolveNavigationHref}
     staticAssetResolver={props.host.staticAssetResolver}
     widgetModules={modules} appTitle={state.formTitle || undefined} resolveRouteTitle={resolveRouteTitle}
     sessionGeneration={sessionMarker} widgetActionExecutor={ports.widgetActionExecutor}
@@ -106,4 +155,53 @@ export function NativePackageRespondentHost(props: NativePackageRespondentHostPr
     dataSourceRevision={ports.dataSourceRevision}
     validateDataSourcePayload={ports.validateDataSourcePayload}
     renderDefinitionForm={renderDefinitionForm} /></>;
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function hasExplicitActionButton(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(hasExplicitActionButton);
+  const node = value as Record<string, unknown>;
+  if (node.component === 'ActionButton') return true;
+  return hasExplicitActionButton(node.children);
+}
+
+function filterAutoPlacedFormActions(
+  document: ResolvedRespondentFormInput['responseActionsDocument'],
+  componentDocument: ComponentDocument,
+  host: NativePackageSigningHost,
+): ResolvedRespondentFormInput['responseActionsDocument'] {
+  if (!document || hasExplicitActionButton(componentDocument.tree)) return document;
+  const excluded = new Set<string>();
+  const roles = host.actionRoles;
+  if (roles?.sign) excluded.add(roles.sign);
+  if (roles?.submit) excluded.add(roles.submit);
+  if (roles?.paper) excluded.add(roles.paper);
+  for (const surface of host.bundle.surfaces) {
+    for (const route of surface.routes) {
+      for (const slot of route.slots ?? []) {
+        if (slot.slotType !== 'module-widget') continue;
+        const binding = record(slot.binding);
+        if (binding?.moduleId !== host.moduleId) continue;
+        const actionBindings = record(binding.actionBindings);
+        if (!actionBindings) continue;
+        for (const entry of Object.values(actionBindings)) {
+          const actionRef = record(entry)?.actionRef;
+          if (typeof actionRef === 'string') excluded.add(actionRef);
+        }
+      }
+    }
+  }
+  if (roles?.saveInitial && roles?.saveOwned
+    && document.actions.some(action => action.id === roles.saveInitial)
+    && document.actions.some(action => action.id === roles.saveOwned)) {
+    excluded.add(roles.saveInitial);
+  }
+  if (excluded.size === 0) return document;
+  const actions = document.actions.filter(action => !excluded.has(action.id));
+  if (actions.length === document.actions.length) return document;
+  return { ...document, actions } as typeof document;
 }

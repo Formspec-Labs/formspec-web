@@ -26,6 +26,7 @@ import { replaceNativeFormEngine } from './native-engine-replacement.ts';
 import { computeJcsSha256Digest } from '../adapters/http/response-action-ledger.ts';
 import type { HydratedEvaluationCandidate, SavedCandidateHydration } from '../ports/evaluation-hydration.ts';
 import type { SavedResponseDraft, SignedResponseSigning } from '../ports/response-signing.ts';
+import type { ApplicantCaseDetail, ApplicantStatusResource, StatusReader } from '../ports/status-reader.ts';
 import { generateIdempotencyKey } from './idempotency-key.ts';
 import { createNativeQualificationReporter, type NativeQualificationStage } from '../composition/native-package-action-diagnostic.ts';
 
@@ -82,6 +83,16 @@ export interface NativePackageSigningHostPolicy {
   /** Trusted host policy; allowedTargets alone does not grant or restrict route access. */
   /** Explicit checked saved-candidate source; cannot substitute for entry Screener evidence. */
   candidateHydration?: SavedCandidateHydration;
+  /** Optional applicant case status reader for embedded status widgets. */
+  statusReader?: StatusReader;
+  /** Optional pre-resolved applicant status payload for embedded status widgets. */
+  applicantStatus?: Readonly<Record<string, unknown>> | null;
+  /** Optional slot/module/source binding for embedded applicant status widgets. */
+  applicantStatusSlot?: {
+    readonly moduleId?: string;
+    readonly slotId?: string;
+    readonly sourceRef?: string;
+  };
   /** Internal admitted sites whose Definition and Component match this owned form. */
   ownedDraftRestorationSites?: readonly { surfaceRef: string; routeId: string; slotId: string }[];
   screenerEntryGate?: { readonly protectedTargets: readonly string[] };
@@ -91,17 +102,20 @@ export interface NativePackageSigningHostPolicy {
 export function createNativePackageSigningHost(policy: NativePackageSigningHostPolicy) {
   if (policy.nativeScreener && policy.candidateHydration) throw new Error('native-candidate-hydration-selection-ambiguous');
   const selectedHydration = policy.candidateHydration;
+  const selectedStatusReader = policy.statusReader;
   policy = { ...policy, candidateHydration: selectedHydration ? Object.freeze({
     qualifySaved: selectedHydration.qualifySaved.bind(selectedHydration),
     retireFacts: selectedHydration.retireFacts.bind(selectedHydration),
     dispose: selectedHydration.dispose.bind(selectedHydration),
-  }) : undefined, screenerEntryGate: policy.screenerEntryGate ? structuredClone(policy.screenerEntryGate) : undefined, signingScope: policy.signingScope ? structuredClone(policy.signingScope) : undefined, modules: structuredClone(policy.modules), structuredPanelWidgets: structuredClone(policy.structuredPanelWidgets), staticAssets: structuredClone(policy.staticAssets), bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
+  }) : undefined, statusReader: selectedStatusReader ? Object.freeze({
+    readStatus: selectedStatusReader.readStatus.bind(selectedStatusReader),
+  }) : undefined, applicantStatus: policy.applicantStatus !== undefined ? structuredClone(policy.applicantStatus) : undefined, screenerEntryGate: policy.screenerEntryGate ? structuredClone(policy.screenerEntryGate) : undefined, signingScope: policy.signingScope ? structuredClone(policy.signingScope) : undefined, modules: structuredClone(policy.modules), structuredPanelWidgets: structuredClone(policy.structuredPanelWidgets), staticAssets: structuredClone(policy.staticAssets), bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
     registryEntries: structuredClone(policy.registryEntries), locales: structuredClone(policy.locales), bindings: structuredClone(policy.bindings),
     applicationReadiness: structuredClone(policy.applicationReadiness), readiness: structuredClone(policy.readiness), publication: structuredClone(policy.publication),
     nativeScreener: policy.nativeScreener ? Object.freeze({ ...policy.nativeScreener }) : undefined,
     controller: { ...policy.controller, roles: structuredClone(policy.controller.roles) } };
   freezeMetadata(policy.structuredPanelWidgets); freezeMetadata(policy.modules); freezeMetadata(policy.staticAssets); freezeMetadata(policy.bundle); freezeMetadata(policy.definition); freezeMetadata(policy.registryEntries); freezeMetadata(policy.locales);
-  freezeMetadata(policy.signingScope); freezeMetadata(policy.screenerEntryGate);
+  freezeMetadata(policy.signingScope); freezeMetadata(policy.screenerEntryGate); freezeMetadata(policy.applicantStatus);
   freezeMetadata(policy.bindings); freezeMetadata(policy.readiness); freezeMetadata(policy.publication); freezeMetadata(policy.controller.roles);
   const bundle = dereferenceBundleExport(policy.bundle);
   const flattened = flattenRegistryEntries(bundle.registries);
@@ -349,9 +363,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   const historicalScreenerCheckpoint = (saved: SavedResponseDraft) => !!restoredScreenerCheckpoint
     && same(saved.draftKey, restoredScreenerCheckpoint.draftKey) && same(saved.draft, restoredScreenerCheckpoint.draft)
     && same(saved.actor, restoredScreenerCheckpoint.actor) && same(saved.response, restoredScreenerCheckpoint.response);
-  const qualifySaved = (saved: SavedResponseDraft, assertCurrent: () => void) => {
+  const qualifySaved = (saved: SavedResponseDraft, assertCurrent: () => void, options?: { readonly allowRefresh?: boolean }) => {
     if (historicalScreenerCheckpoint(saved)) throw new Error('native-restored-screener-save-required');
-    return screener ? screener.qualifySaved(saved, assertCurrent)
+    return screener ? screener.qualifySaved(saved, assertCurrent, options)
       : policy.candidateHydration!.qualifySaved(saved, { signal: AbortSignal.any([nativeLifetime.signal,
         ...(nativeStage ? [nativeStage.signal] : [])]), assertCurrent });
   };
@@ -462,7 +476,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const timer = setTimeout(() => stage.abort(new Error('native-facts-deadline')), NATIVE_SOURCE_OPERATION_MILLISECONDS);
     const promise = (async () => {
       try {
-        const facts = await abortable(signal, qualifySaved(saved, checkAuthority)); check(); facts.assertReady();
+        const facts = await abortable(signal, qualifySaved(saved, checkAuthority, { allowRefresh: false })); check(); facts.assertReady();
         const outputs = await isolated(saved.response, selectedLocale, engine => ({
           fields: captureFields(engine, saved.response), validationReport: engine.getValidationReport({ profile: 'on-submit' }),
         }), saved, facts) as { fields: ResponseReviewData['presentation']['fields']; validationReport: ValidationReport };
@@ -489,12 +503,87 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     reviewedRefresh = { identity, promise };
     try { await promise; } finally { if (reviewedRefresh?.promise === promise) reviewedRefresh = undefined; }
   }
+  const applicantStatusSlot = Object.freeze({
+    moduleId: policy.applicantStatusSlot?.moduleId ?? 'x-case-file-review',
+    slotId: policy.applicantStatusSlot?.slotId ?? 'applicant-case-status',
+    sourceRef: policy.applicantStatusSlot?.sourceRef ?? 'host:qualified-applicant-status',
+  });
+  let applicantStatus: Readonly<Record<string, unknown>> | undefined;
+  let activeStatusReader: StatusReader | undefined = policy.statusReader;
+  let statusReadKey: string | undefined;
+  let statusReadAbort: AbortController | undefined;
+  function updateApplicantStatusRevision(value: Readonly<Record<string, unknown>>) {
+    for (const catalog of catalogs) {
+      const descriptor = resolveDataSourceDescriptor([catalog], { catalogRef: catalog.catalogRef, sourceRef: applicantStatusSlot.sourceRef });
+      if (!descriptor) continue;
+      const key = JSON.stringify([descriptor.catalogRef, descriptor.sourceRef]);
+      const serialized = canonicalize(value)!;
+      const previous = sourceRevisions.get(key);
+      if (previous?.value !== serialized) sourceRevisions.set(key, { value: serialized, revision: (previous?.revision ?? 0) + 1 });
+    }
+  }
+  if (policy.applicantStatus) {
+    applicantStatus = structuredClone(policy.applicantStatus);
+    freezeMetadata(applicantStatus);
+    updateApplicantStatusRevision(applicantStatus);
+  }
+  function syncApplicantStatus(reader?: StatusReader) {
+    if (reader) activeStatusReader = Object.freeze({ readStatus: reader.readStatus.bind(reader) });
+    if (disposed || cleared) return;
+    if (policy.applicantStatus !== undefined) {
+      const next = policy.applicantStatus ? structuredClone(policy.applicantStatus) : undefined;
+      if (next) { freezeMetadata(next); updateApplicantStatusRevision(next); }
+      if (!same(applicantStatus, next)) { applicantStatus = next; emit(); }
+      return;
+    }
+    const currentApp = application;
+    const selectedReader = activeStatusReader;
+    if (!currentApp?.caseLedgerId || !selectedReader) {
+      statusReadAbort?.abort(); statusReadAbort = undefined; statusReadKey = undefined;
+      if (applicantStatus !== undefined) { applicantStatus = undefined; emit(); }
+      return;
+    }
+    const key = canonicalize({
+      caseLedgerId: currentApp.caseLedgerId,
+      caseReference: currentApp.caseReference,
+      status: currentApp.status,
+      locale,
+    })!;
+    if (statusReadKey === key && (applicantStatus !== undefined || statusReadAbort !== undefined)) return;
+    statusReadAbort?.abort();
+    const abort = new AbortController();
+    statusReadAbort = abort;
+    statusReadKey = key;
+    void Promise.resolve(selectedReader.readStatus({ resourceRef: currentApp.caseLedgerId }))
+      .then(resource => {
+        if (abort.signal.aborted || disposed || cleared || statusReadKey !== key || application?.caseLedgerId !== currentApp.caseLedgerId) return;
+        statusReadAbort = undefined;
+        if (!resource) {
+          if (applicantStatus !== undefined) { applicantStatus = undefined; emit(); }
+          return;
+        }
+        const next = toQualifiedApplicantStatus(resource, currentApp, locale);
+        freezeMetadata(next);
+        updateApplicantStatusRevision(next);
+        if (!same(applicantStatus, next)) {
+          applicantStatus = next;
+          emit();
+        }
+      })
+      .catch(() => {
+        if (abort.signal.aborted || disposed || cleared || statusReadKey !== key || application?.caseLedgerId !== currentApp.caseLedgerId) return;
+        statusReadAbort = undefined; statusReadKey = undefined;
+        if (applicantStatus !== undefined) { applicantStatus = undefined; emit(); }
+      });
+  }
   const applicationStatus = (): Pick<ResponseActionControllerSnapshot, 'application' | 'applicationLookup'> => ({
     ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}) });
+  const applicantStatusSnapshot = (): { applicantStatus?: Readonly<Record<string, unknown>> } =>
+    applicantStatus ? { applicantStatus } : {};
   const checkpointStatus = (): { checkpointState?: 'unsaved' | 'saving' | 'saved' | 'failed' } => policy.controller.applicationLifecycle ? { checkpointState } : {};
   const nativeStatus = (): { nativeReadiness?: 'pending' | 'ready' | 'needs-save' | 'expired' } => native ? { nativeReadiness } : {};
-  let hostSnapshot = { ...checkpointStatus(), ...applicationStatus(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted };
-  const emit = () => { prepareFlags(); hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
+  let hostSnapshot = { ...checkpointStatus(), ...applicationStatus(), ...applicantStatusSnapshot(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted };
+  const emit = () => { prepareFlags(); hostSnapshot = Object.freeze({ ...checkpointStatus(), ...applicationStatus(), ...applicantStatusSnapshot(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
   function fence() {
     generation++; runtime = undefined; review = undefined; expectedReviewIdentity = undefined; reviewState = undefined; reviewValidation = undefined;
     for (const read of reads) read.abort();
@@ -502,7 +591,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function current(expected: number) { if (disposed || generation !== expected) throw new Error('native-context-obsolete'); }
   function stop(reason: Parameters<NativePackageSigningHostPolicy['invalidateAuthority']>[0]) {
-    if (reason === 'clear' || reason === 'dispose') { ownedDraftRestoration = undefined; application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; restoredScreenerCheckpoint = undefined; if (input) input = { ...input, restoredSavedDraft: undefined }; }
+    if (reason === 'clear' || reason === 'dispose') { statusReadAbort?.abort(); statusReadAbort = undefined; statusReadKey = undefined; applicantStatus = undefined; ownedDraftRestoration = undefined; application = undefined; applicationLookup = undefined; ownedResponseSeed = undefined; submitted = undefined; restoredScreenerCheckpoint = undefined; if (input) input = { ...input, restoredSavedDraft: undefined }; }
     if ((reason === 'edit' || reason === 'locale') && ownedDraftRestoration) ownedDraftRestoration.visit = undefined;
     retireNative();
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
@@ -617,7 +706,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           ownedDraftRestoration.saved = structuredClone(saved); freezeMetadata(ownedDraftRestoration.saved);
         } else ownedDraftRestoration = undefined;
       }
-      application = publicSnapshot.application; applicationLookup = publicSnapshot.applicationLookup; applicationFlags();
+      application = publicSnapshot.application; applicationLookup = publicSnapshot.applicationLookup; applicationFlags(); syncApplicantStatus();
       if (['saveInitial', 'saveOwned'].includes(publicSnapshot.phase) || publicSnapshot.phase === 'startApplication' && !publicSnapshot.owned) {
         pendingCheckpoint = true; checkpointState = 'saving';
       } else if (pendingCheckpoint) {
@@ -676,7 +765,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     value = selected.locale;
     checkpointState = 'unsaved';
     const saved = publicSnapshot?.saved?.response; stop('locale'); locale = value;
-    rendererEngine?.setLocale(value); start(saved);
+    rendererEngine?.setLocale(value); start(saved); syncApplicantStatus();
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
   }
   const widgetModules = registerModules(reviewOptions); freezeMetadata(widgetModules);
@@ -730,7 +819,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     bundle, definition: policy.definition,
     restoreOwnedDraftAccess: (value: SavedResponseDraft, assertCurrent: () => void, mode?: 'signed') =>
       restoreOwnedAccess(value, assertCurrent, mode === 'signed' ? value as SignedResponseSigning : undefined),
-    ...(native ? { ...(screener ? { screenerCompletion: screener.completionPolicy } : {}), instanceSourceResolver: unavailableSources, retireCandidateAuthority: () => { ownedDraftRestoration = undefined; retireNative(); },
+    ...(native ? { ...(screener ? { screenerCompletion: screener.completionPolicy } : {}), instanceSourceResolver: unavailableSources, retireCandidateAuthority: () => { ownedDraftRestoration = undefined; screener?.retireAuthority(); retireNative(); },
       prePrepareCandidate: async (candidate: Readonly<{ saved: SavedResponseDraft; response: FormResponse; assertCurrent: () => void }>) => {
         const facts = nativeCandidate; const authority = authorityGeneration; const visit = visitEpoch; const lease = rendererLease;
         const check = () => {
@@ -754,23 +843,39 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         }
         qualificationSequence++; nativeStage?.abort(); nativeStage = new AbortController();
         nativeReadiness = 'pending'; nativeCandidate = undefined;
-        const facts = await qualifySaved(input.saved, input.assertCurrent);
+        const facts = await qualifySaved(input.saved, input.assertCurrent, { allowRefresh: false });
         facts.assertReady();
         await isolated(input.saved.response, locale, () => undefined, input.saved, facts);
         facts.assertReady();
         return Object.freeze({ assertCurrent: facts.assertCurrent });
       },
       qualifyCurrentVisit: async () => { const saved = publicSnapshot?.saved; if (saved) await qualifyCommitted(saved); },
-    } : {}), moduleId: policy.moduleId, widgetModules, ...(staticAssetResolver ? { staticAssetResolver } : {}),
+    } : {}), moduleId: policy.moduleId, ...(policy.applicantStatusSlot ? { applicantStatusSlot } : {}), widgetModules, ...(staticAssetResolver ? { staticAssetResolver } : {}),
+    ...((activeStatusReader || policy.applicantStatus !== undefined || policy.controller.applicationLifecycle) ? { syncApplicantStatus } : {}),
+    ...(Object.keys(policy.controller.roles).length > 0 ? {
+      actionRoles: Object.freeze({
+        ...(policy.controller.roles.saveInitial ? { saveInitial: policy.controller.roles.saveInitial.actionRef } : {}),
+        ...(policy.controller.roles.saveOwned ? { saveOwned: policy.controller.roles.saveOwned.actionRef } : {}),
+        ...(policy.controller.roles.prepare ? { prepare: policy.controller.roles.prepare.actionRef } : {}),
+        ...(policy.controller.roles.sign ? { sign: policy.controller.roles.sign.actionRef } : {}),
+        ...(policy.controller.roles.submit ? { submit: policy.controller.roles.submit.actionRef } : {}),
+        ...(policy.controller.roles.paper ? { paper: policy.controller.roles.paper.actionRef } : {}),
+      }),
+    } : {}),
     ...(policy.controller.applicationLifecycle ? { applicationCapabilities: policy.controller.applicationLifecycle.capabilities,
       async refreshApplication() {
-        if (controller) return controller.refreshApplication();
+        statusReadKey = undefined;
+        if (controller) {
+          const result = await controller.refreshApplication();
+          syncApplicantStatus();
+          return result;
+        }
         if (disposed || cleared || !submittedKey || (!application && !applicationLookup)) throw new Error('native-application-unavailable');
         const expected = authorityGeneration;
         const receipt = await policy.controller.applicationLifecycle!.load(submittedKey);
         if (disposed || cleared || authorityGeneration !== expected || application && (!receipt || receipt.caseLedgerId !== application.caseLedgerId
           || receipt.draftRef !== application.draftRef || application.status === 'submitted' && receipt.status !== 'submitted')) throw new Error('native-application-context-retired');
-        application = receipt ? structuredClone(receipt) : undefined; applicationLookup = undefined; freezeMetadata(application); emit();
+        application = receipt ? structuredClone(receipt) : undefined; applicationLookup = undefined; freezeMetadata(application); syncApplicantStatus(); emit();
       } } : {}), reviewOptions, selectLocale,
     getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; requiresScreener?: boolean; canRestoreOwnedForm?: boolean; screenerDocuments?: readonly ScreenerDocument[]; signedReviewHref?: string; signedReviewTitle?: string } {
       const match = matchRoute(app, pathname).match;
@@ -845,6 +950,15 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
             if (request.context.sessionGeneration !== marker) throw new Error('native-visit-unqualified');
             return { delivery, request: { ...request, context: { ...request.context, sessionGeneration: deliveryGeneration } } };
           };
+          const isApplicantStatusSource = (request: Parameters<NonNullable<typeof runtime>['dataSourceLoader']>[0]) =>
+            request.descriptor?.sourceRef === applicantStatusSlot.sourceRef
+            && request.context?.slotId === applicantStatusSlot.slotId
+            && request.context?.moduleId === applicantStatusSlot.moduleId
+            && same(resolveDataSourceDescriptor(catalogs, {
+              catalogRef: request.descriptor.catalogRef,
+              sourceRef: request.descriptor.sourceRef,
+            }), request.descriptor)
+            && dataSourceAvailableToWidget(request.descriptor, request.context);
           return {
             ...(native ? { retrySigningResult: async () => {
               assertVisit();
@@ -869,15 +983,55 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
             } } : {}),
             authorizeDataSource: ((request) => {
               if (initial.owns(request)) return initial.authorizeDataSource(request);
+              if (request.descriptor?.sourceRef === 'host:qualified-applicant-status') {
+                try {
+                  assertVisit();
+                  if (request.context.sessionGeneration !== marker || !isApplicantStatusSource(request)) {
+                    return { status: 'refused', reason: 'native-visit-retired' };
+                  }
+                  return applicantStatus
+                    ? { status: 'authorized' }
+                    : { status: 'refused', reason: 'native-state-unavailable' };
+                } catch {
+                  return { status: 'refused', reason: 'native-visit-retired' };
+                }
+              }
               try { const captured = requestFor(request); return captured.delivery?.authorizeDataSource(captured.request) ?? { status: 'refused', reason: 'native-state-unavailable' }; }
               catch { return { status: 'refused', reason: 'native-visit-retired' }; }
             }) satisfies NonNullable<typeof runtime>['authorizeDataSource'],
             dataSourceLoader: ((request) => {
               if (initial.owns(request)) return initial.dataSourceLoader(request);
+              if (request.descriptor?.sourceRef === 'host:qualified-applicant-status') {
+                try {
+                  assertVisit();
+                  if (request.context.sessionGeneration !== marker || !isApplicantStatusSource(request)) {
+                    return { status: 'unavailable', reason: 'native-visit-retired' };
+                  }
+                  if (!applicantStatus) return { status: 'unavailable', reason: 'native-state-unavailable' };
+                  const revision = sourceRevisions.get(JSON.stringify([request.descriptor.catalogRef, request.descriptor.sourceRef]))?.revision ?? 1;
+                  const recordId = typeof applicantStatus.caseReference === 'string' && applicantStatus.caseReference.trim()
+                    ? applicantStatus.caseReference
+                    : application?.caseLedgerId ?? 'applicant-status';
+                  return { status: 'loaded', value: structuredClone(applicantStatus), freshness: 'fresh', recordId, revision };
+                } catch {
+                  return { status: 'unavailable', reason: 'native-visit-retired' };
+                }
+              }
               try { const captured = requestFor(request); return captured.delivery?.dataSourceLoader(captured.request) ?? { status: 'unavailable', reason: 'native-state-unavailable' }; }
               catch { return { status: 'unavailable', reason: 'native-visit-retired' }; }
             }) satisfies NonNullable<typeof runtime>['dataSourceLoader'],
             dataSourceRevision: (request: Parameters<NonNullable<typeof runtime>['dataSourceLoader']>[0]) => {
+              if (request.descriptor?.sourceRef === 'host:qualified-applicant-status') {
+                try {
+                  assertVisit();
+                  if (request.context.sessionGeneration !== marker || !isApplicantStatusSource(request) || !applicantStatus) {
+                    return undefined;
+                  }
+                  return sourceRevisions.get(JSON.stringify([request.descriptor.catalogRef, request.descriptor.sourceRef]))?.revision;
+                } catch {
+                  return undefined;
+                }
+              }
               try {
                 const captured = requestFor(request);
                 const selected = publicSnapshot?.signed ?? publicSnapshot?.prepared;
@@ -943,7 +1097,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       submittedKey = structuredClone(next.draftKey); freezeMetadata(submittedKey);
       responseId = response.id; locale = selectedLocale.locale;
       submitted = Object.freeze({ referenceNumber: response.id, recordKind: 'response' });
-      fence(); emit();
+      fence(); syncApplicantStatus(); emit();
       return { invalidate: () => { if (!disposed) { stop('clear'); emit(); } }, dispose: () => {} };
     },
     async configureRuntime(next: RespondentOwnedRuntimeInput): Promise<RespondentOwnedRuntime> {
@@ -1005,7 +1159,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       assertAdmission();
       const scope = policy.semanticScope(responseId, ++renderInstance);
       if (scope.responseId !== responseId) throw new Error('native-response-scope-refused');
-      applicationFlags();
+      applicationFlags(); syncApplicantStatus();
       next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot!.owned);
       next.engine.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, true); emit();
       let active = true;
@@ -1038,6 +1192,21 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       }
       bind();
       return { responseActionInvoker: async action => {
+        const actionDoc = action.document;
+        const fullDocument = actionDoc ? bundle.responseActions.find(doc =>
+          doc.version === actionDoc.version
+          && same(doc.targetDefinition, actionDoc.targetDefinition)
+          && same(doc['x-formspec-runtime'], actionDoc['x-formspec-runtime'])
+          && actionDoc.actions.every(candidate => doc.actions.some(admitted => same(admitted, candidate)))
+        ) : undefined;
+        if (fullDocument && !same(fullDocument, actionDoc)) {
+          const mappedActionRef = !publicSnapshot?.owned
+            && action.actionRef === policy.controller.roles.saveOwned?.actionRef
+            && same(policy.controller.roles.saveInitial?.document, fullDocument)
+            ? policy.controller.roles.saveInitial!.actionRef
+            : action.actionRef;
+          action = { ...action, document: fullDocument, actionRef: mappedActionRef };
+        }
         const expected = authorityGeneration; const expectedVisit = visitEpoch;
         if (!active || disposed) throw new Error('native-renderer-retired');
         const assertCurrent = () => {
@@ -1184,4 +1353,43 @@ function savedDraftIdentity(saved: SavedResponseDraft | undefined) {
 }
 function sameSavedDraft(a: SavedResponseDraft | undefined, b: SavedResponseDraft | undefined) {
   return same(savedDraftIdentity(a), savedDraftIdentity(b));
+}
+
+function toQualifiedApplicantStatus(
+  resource: ApplicantStatusResource | Readonly<Record<string, unknown>>,
+  app: NonNullable<ResponseActionControllerSnapshot['application']>,
+  activeLocale: string,
+): Readonly<Record<string, unknown>> {
+  if ('caseReference' in resource && 'notices' in resource && 'freeHelp' in resource && 'paperAlternative' in resource && 'retention' in resource) {
+    return structuredClone(resource as Record<string, unknown>);
+  }
+  const detail = resource as ApplicantCaseDetail;
+  const status = detail.summary.lifecycleState === 'completed'
+    ? 'approved'
+    : detail.summary.lifecycleState === 'terminated'
+      ? 'denied'
+      : detail.openTasks.length > 0
+        ? 'waiting'
+        : app.status === 'submitted'
+          ? 'received'
+          : 'started';
+  const noticeLocale: 'en' | 'es-US' = activeLocale === 'es-US' ? 'es-US' : 'en';
+  return {
+    caseReference: app.caseReference || detail.summary.id,
+    status,
+    requestedItems: detail.openTasks.map(task => task.title),
+    currentNoticeRef: detail.recentNotifications[0]?.id ?? null,
+    notices: detail.recentNotifications.map(notice => ({
+      kind: notice.kind,
+      reason: notice.title,
+      requestedItems: [] as string[],
+      sentAt: notice.createdAt ?? null,
+      dueDate: null,
+      locale: noticeLocale,
+      otherLanguageHelp: 'Free help is available in English and Spanish.',
+    })),
+    freeHelp: 'Free help is available in English and Spanish.',
+    paperAlternative: 'Mail or in-person paper service remains available.',
+    retention: 'Retained according to program record rules.',
+  };
 }

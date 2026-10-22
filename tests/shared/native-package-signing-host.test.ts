@@ -1852,4 +1852,26 @@ describe('restored unsigned Screener checkpoints', () => {
       lease.dispose();
     } finally { test.cleanup(); }
   });
+  it('recovers and refreshes expired screening authority on Save progress after reauthentication without losing answers', async () => {
+    const test = await restoredFixture(true);
+    try {
+      const lease = await test.configure(); test.advance(301_000);
+      await test.invoke(lease, 'save-owned');
+      expect(test.recover).toHaveBeenCalledOnce();
+      expect(test.renewRun).toHaveBeenCalledOnce();
+      const successor = test.host.getSnapshot().controller!.saved!;
+      expect(successor.draft.id).toBe(test.saved.draft.id);
+      expect(successor.draft.version).toBe(test.saved.draft.version + 1);
+      expect(successor.response.data).toEqual(test.saved.response.data);
+      expect(test.host.getSnapshot().nativeReadiness).toBe('ready');
+      expect(test.associate).toHaveBeenCalledOnce();
+      expect(test.associate.mock.calls[0][0].saved.draft.version).toBe(successor.draft.version);
+      expect(test.hydrate).toHaveBeenCalledOnce();
+      await test.invoke(lease, 'prepare');
+      expect(test.prepare).toHaveBeenCalledOnce();
+      expect(test.recover).toHaveBeenCalledOnce();
+      expect(test.renewRun).toHaveBeenCalledOnce();
+      lease.dispose();
+    } finally { test.cleanup(); }
+  });
 });
