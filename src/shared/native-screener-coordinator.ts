@@ -207,10 +207,10 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
   async function refreshSaved(saved: SavedResponseDraft, caller: () => void): Promise<void> {
     const operation = begin(undefined, caller);
     try {
-      if (saved.response.authoredSignatures?.length) throw new Error('Signed Screener refresh requires current check');
+      const candidate = structuredClone(saved);
       if (!run) {
         if (!retention.recover) throw new Error('Native Screener retained recovery unavailable');
-        const recovered = await operation.wait(retention.recover({ saved, identity: operation.identity,
+        const recovered = await operation.wait(retention.recover({ saved: candidate, identity: operation.identity,
           signal: operation.signal, assertCurrent: operation.assertCurrent }));
         operation.assertCurrent(); run = recovered;
       }

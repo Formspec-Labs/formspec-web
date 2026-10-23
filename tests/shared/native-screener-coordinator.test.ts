@@ -205,6 +205,110 @@ describe('same-session native Screener coordination', () => {
     f.coordinator.dispose();
   });
 
+  it('refreshes an expired retained run for a signed saved candidate and renews nativeCurrentCheck', async () => {
+    const f = await fixture(false, true);
+    const history = { ...f.input.run, acceptance: null, run: { ...f.input.run.run, revision: 1 } };
+    const fresh = { ...f.input.run, run: { ...f.input.run.run, revision: 2 } };
+    const recover = vi.fn<NonNullable<ScreenerRetention['recover']>>(async () => history);
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>(async () => fresh);
+    const coordinator = createNativeScreenerCoordinator({
+      selectionKey: 'selected',
+      retention: { retain: f.retained, associate: f.associated, recover, refresh },
+      hydration: { hydrate: f.hydrated },
+      context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent }),
+    });
+    const signed = {
+      ...f.input.saved,
+      response: { ...f.input.saved.response, authoredSignatures: [{ signature: 'sig_test' }] },
+    } as unknown as typeof f.input.saved;
+
+    // 1. Initial qualify recovers history with revision 1
+    const initialFacts = await coordinator.qualifySaved(signed);
+    expect(initialFacts.nativeCurrentCheck).toEqual({
+      selectionHash: history.run.selectionHash,
+      runId: history.run.runId,
+      runRevision: 1,
+    });
+    expect(recover).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+
+    // 2. Explicit refreshSaved refreshes the existing recovered run to revision 2
+    await coordinator.refreshSaved(signed, () => {});
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh.mock.calls[0][0].run).toBe(history);
+
+    // 3. Subsequent qualifySaved uses the fresh run with renewed nativeCurrentCheck revision 2
+    const renewedFacts = await coordinator.qualifySaved(signed);
+    expect(renewedFacts.nativeCurrentCheck).toEqual({
+      selectionHash: fresh.run.selectionHash,
+      runId: fresh.run.runId,
+      runRevision: 2,
+    });
+    // No second recovery or association occurred
+    expect(recover).toHaveBeenCalledTimes(1);
+    expect(f.associated).not.toHaveBeenCalled();
+
+    coordinator.dispose();
+    f.coordinator.dispose();
+  });
+
+  it('rejects signed refresh when refreshed acceptance or qualification is not ready', async () => {
+    const f = await fixture(false, true);
+    const history = { ...f.input.run, acceptance: null, run: { ...f.input.run.run, revision: 1 } };
+    const unreadyAcceptance = { ...f.input.run, acceptance: { ...f.input.run.acceptance!, qualification: { status: 'pending' as const, reason: 'unqualified' } }, run: { ...f.input.run.run, revision: 2 } };
+    const recover = vi.fn<NonNullable<ScreenerRetention['recover']>>(async () => history);
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>(async () => unreadyAcceptance);
+    const coordinator = createNativeScreenerCoordinator({
+      selectionKey: 'selected',
+      retention: { retain: f.retained, associate: f.associated, recover, refresh },
+      hydration: { hydrate: f.hydrated },
+      context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent }),
+    });
+    const signed = {
+      ...f.input.saved,
+      response: { ...f.input.saved.response, authoredSignatures: [{ signature: 'sig_test' }] },
+    } as unknown as typeof f.input.saved;
+
+    await expect(coordinator.refreshSaved(signed, () => {})).rejects.toThrow('Native Screener refreshed acceptance unavailable');
+    coordinator.dispose();
+    f.coordinator.dispose();
+  });
+
+  it('refreshes signed saved candidate directly when run was not previously recovered', async () => {
+    const f = await fixture(false, true);
+    const history = { ...f.input.run, acceptance: null, run: { ...f.input.run.run, revision: 1 } };
+    const fresh = { ...f.input.run, run: { ...f.input.run.run, revision: 2 } };
+    const recover = vi.fn<NonNullable<ScreenerRetention['recover']>>(async () => history);
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>(async () => fresh);
+    const coordinator = createNativeScreenerCoordinator({
+      selectionKey: 'selected',
+      retention: { retain: f.retained, associate: f.associated, recover, refresh },
+      hydration: { hydrate: f.hydrated },
+      context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent }),
+    });
+    const signed = {
+      ...f.input.saved,
+      response: { ...f.input.saved.response, authoredSignatures: [{ signature: 'sig_test' }] },
+    } as unknown as typeof f.input.saved;
+
+    // Direct refresh without prior qualifySaved
+    await coordinator.refreshSaved(signed, () => {});
+    expect(recover).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    const facts = await coordinator.qualifySaved(signed);
+    expect(facts.nativeCurrentCheck).toEqual({
+      selectionHash: fresh.run.selectionHash,
+      runId: fresh.run.runId,
+      runRevision: 2,
+    });
+    expect(recover).toHaveBeenCalledTimes(1);
+    expect(f.associated).not.toHaveBeenCalled();
+
+    coordinator.dispose();
+    f.coordinator.dispose();
+  });
+
   it('retains the original attempt and false answers, then associates and hydrates the exact saved candidate with issued run identity', async () => {
     const f = await fixture();
     await expect(f.coordinator.completionPolicy.complete(f.request)).resolves.toEqual({ status: 'accepted' });
