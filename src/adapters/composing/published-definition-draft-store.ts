@@ -13,6 +13,7 @@ export function publishedDefinitionDraftStore(
     list: subject => store.list(subject),
     delete: key => store.delete(key),
     invalidateSubject: subject => store.invalidateSubject(subject),
+    ...(store.initializeDraft ? { initializeDraft: (key, versionId) => store.initializeDraft!(key, versionId) } : {}),
     async save(key, response, options) {
       const guard = options?.assertBeforeDispatch?.bind(options);
       const [local, server] = await Promise.all([authored(), published()]);

@@ -244,3 +244,61 @@ it('refuses an asynchronous direct adapter resume guard before credential resolu
     { draftId: 'owned', expectedResponseId: 'response' }, async () => {})).rejects.toThrow('guard must be synchronous');
   expect(accessToken).not.toHaveBeenCalled(); expect(requests).toHaveLength(0);
 });
+
+describe('durable draft initialization (fs-7xqu / ADR 0168)', () => {
+  it('initializes durable draft identity before save and subsequent save uses PATCH', async () => {
+    let draftVersion = 1;
+    let canonicalResponse = sampleFormResponse;
+    const { fetch, requests } = recordingFetch((request) => {
+      if (
+        request.method === 'POST' &&
+        request.url.endsWith('/runtime/forms/conformance/drafts')
+      ) {
+        return jsonResponse({
+          draft_id: 'draft-server-minted-1',
+          draft_version: 1,
+          canonical_response: canonicalResponse,
+          draft_state: {},
+          is_initialization_only: true,
+        });
+      }
+      if (request.method === 'PATCH' && request.url.endsWith('/drafts/draft-server-minted-1')) {
+        draftVersion += 1;
+        canonicalResponse = (request.body as { canonical_response: typeof sampleFormResponse }).canonical_response;
+        return jsonResponse({
+          draft_id: 'draft-server-minted-1',
+          draft_version: draftVersion,
+          canonical_response: canonicalResponse,
+          draft_state: canonicalResponse.data,
+          is_initialization_only: false,
+        });
+      }
+      return jsonResponse({ title: 'unexpected' }, 500);
+    });
+
+    const adapter = new HttpDraftStore({
+      baseUrl: 'https://formspec-server.example.test',
+      fetchImpl: fetch,
+    });
+    const key = { formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef: 'S-1' };
+
+    const init = await adapter.initializeDraft!(key);
+    expect(init).toEqual({
+      draftId: 'draft-server-minted-1',
+      isInitializationOnly: true,
+    });
+
+    const retry = await adapter.initializeDraft!(key);
+    expect(retry).toEqual({
+      draftId: 'draft-server-minted-1',
+      isInitializationOnly: false,
+    });
+
+    await adapter.save(key, { ...sampleFormResponse, data: { fullName: 'Ada Lovelace' } });
+
+    expect(requests.map((r) => `${r.method} ${new URL(r.url).pathname}`)).toEqual([
+      'POST /runtime/forms/conformance/drafts',
+      'PATCH /drafts/draft-server-minted-1',
+    ]);
+  });
+});

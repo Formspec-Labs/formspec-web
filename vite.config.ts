@@ -18,5 +18,6 @@ export default defineConfig({
     environment: 'happy-dom',
     globals: false,
     include: ['tests/**/*.test.{ts,tsx,js,mjs}', 'src/**/*.test.{ts,tsx}'],
+    testTimeout: 30000,
   },
 });

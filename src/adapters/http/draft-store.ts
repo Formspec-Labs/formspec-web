@@ -30,11 +30,15 @@ interface DraftView {
   draft_version?: number;
   draft_state?: Record<string, unknown>;
   canonical_response?: FormResponse;
+  is_initialization_only?: boolean;
+  isInitializationOnly?: boolean;
 }
 export interface OwnedDraftView {
   draft_id: string; draft_version: number; draft_state: Record<string, unknown>; canonical_response: FormResponse;
   form_version_id?: string; subject_ref?: string; status?: string;
   taskDraft?: TaskDraftAssociation;
+  is_initialization_only?: boolean;
+  isInitializationOnly?: boolean;
 }
 
 export class HttpDraftStore implements DraftStore {
@@ -80,6 +84,48 @@ export class HttpDraftStore implements DraftStore {
 
   async load(key: DraftKey, assertCurrent: () => void = () => {}): Promise<FormResponse | undefined> {
     return this.read(key, view => Promise.resolve(view.canonical_response), assertCurrent);
+  }
+
+  async initializeDraft(
+    key: DraftKey,
+    formVersionId?: string,
+  ): Promise<{ draftId: string; isInitializationOnly: boolean }> {
+    const existing = this.bindings.get(key);
+    if (existing) {
+      return { draftId: existing.draftId, isInitializationOnly: false };
+    }
+    const formId = this.formIdResolver(key.formUrl, key.formVersion);
+    const respondentSubject = respondentSubjectRef(key);
+    const anonymousSessionToken = respondentSubject
+      ? undefined
+      : await this.resolveAnonymousSessionToken(key);
+    const draft = await this.client.postJson<DraftView>(
+      `/runtime/forms/${encodeURIComponent(formId)}/drafts`,
+      {
+        anonymous_session_token: anonymousSessionToken,
+        anonymous_subject_ref: anonymousSubjectRef(key),
+        respondent_subject_ref: anonymousSessionToken ? undefined : respondentSubject,
+        party_ref: key.partyRef,
+        draft_state: {},
+        canonical_response: {
+          id: `urn:uuid:${crypto.randomUUID()}`,
+          definitionUrl: key.formUrl,
+          definitionVersion: key.formVersion ?? formVersionId ?? '1.0.0',
+          data: {},
+        },
+      },
+      { headers: bearerHeaders(anonymousSessionToken) },
+    );
+    const isInit = draft.is_initialization_only ?? draft.isInitializationOnly ?? true;
+    this.bindings.put(key, {
+      draftId: draft.draft_id,
+      draftVersion: draft.draft_version ?? 1,
+      response: draft.canonical_response,
+    });
+    return {
+      draftId: draft.draft_id,
+      isInitializationOnly: isInit,
+    };
   }
 
   private async read<T>(key: DraftKey, qualify: (view: OwnedDraftView) => Promise<T>, assertCurrent: () => void = () => {}, missingIsAbsent = true, selection?: OwnedDraftResumeSelection): Promise<T | undefined> {

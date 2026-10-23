@@ -63,6 +63,8 @@ export interface DraftStore {
   readState?(key: DraftKey): Promise<DraftReadState | undefined>;
   /** Explicit authenticated lookup of an existing draft; qualification must precede binding. */
   resumeState?(key: DraftKey, selection: OwnedDraftResumeSelection, assertCurrent?: () => void): Promise<DraftReadState>;
+  /** Initializes durable draft identity before Save or Sign per ADR 0168. */
+  initializeDraft?(key: DraftKey, formVersionId?: string): Promise<{ draftId: string; isInitializationOnly: boolean }>;
   /** Trusted synchronous guard checked immediately before persistence dispatch. */
   save(key: DraftKey, response: FormResponse, options?: { readonly assertBeforeDispatch?: () => void }): Promise<void>;
   list(subjectRef: string): Promise<DraftKey[]>;
