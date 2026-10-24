@@ -174,8 +174,8 @@ npm run check:surface-bundle-vendor -- --write src/adapters/http/source-schemas
 
 Both targeted and full refreshes record the producer commit in
 `vendor/upstream-refs.json`; every retained Source schema must match that commit.
-The `source-schema-vendor` CI job checks that exact producer on pushes to `main`
-and manual runs. It needs `FORMSPEC_SERVER_READ_TOKEN` with read access to the
-private repository. Public pull requests check the committed pins without that
-secret. Setting `FORMSPEC_SERVER_SOURCE_DIR` also enables the producer comparison
-in the full vendor check.
+formspec-server is private, so this repository's CI checks only the committed
+pins; formspec-stack's CI, which already checks formspec-server out, runs
+`npm run check:source-schema-vendor` against that exact producer commit. Setting
+`FORMSPEC_SERVER_SOURCE_DIR` also enables the producer comparison in the full
+vendor check.

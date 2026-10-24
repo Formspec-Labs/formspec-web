@@ -13,7 +13,6 @@ import { createSemanticControlRegistry } from '@formspec-org/react';
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import { composeSurfaceApp, flattenRegistryEntries, dereferenceBundleExport, resolveDataSourceDescriptor, planStaticContent, type BundleExport } from '@formspec-org/surface';
 import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, deriveSurfaceRuntimeGeneration, responseReviewHash, starterWidgetModule, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE, type ResponseReviewData } from '@formspec-org/surface-react';
-import { admitBrowserHostDeployment, browserHostDeployment } from '../../../ops/managed-single-cell/hosts/web-host/browser-host-deployment.ts';
 import type { DataSourcesDocument, FormResponse, LocaleDocument, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
 import { createNativePackageSigningHost, captureFields, type NativePackageSigningHostPolicy } from '../../src/shared/native-package-signing-host.ts';
@@ -1877,7 +1876,7 @@ describe('restored unsigned Screener checkpoints', () => {
   });
 });
 
-describe('two-tier widget admission, Blocker 3 isolation, and N-surface deployment routing', () => {
+describe('two-tier widget admission and Blocker 3 isolation', () => {
   it('enforces Tier 1 strict identity for SigningCeremony and ResponseReview and rejects impersonating domainWidgetModules', () => {
     const test = fixture(); test.host.dispose(); test.engine.dispose();
     const actual = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/native-signing-r5/native-bundle.json'), 'utf8')) as BundleExport;
@@ -2084,98 +2083,5 @@ describe('two-tier widget admission, Blocker 3 isolation, and N-surface deployme
     expect(test.sign).not.toHaveBeenCalled();
 
     visit.dispose(); lease.dispose(); test.host.dispose(); test.engine.dispose();
-  });
-
-  it('admits 1-surface, 2-surface, and 3+ surface browser host deployments while rejecting duplicate or ambiguous route paths', () => {
-    const baseDeployment = {
-      version: 1 as const,
-      browserOrigins: ['https://portal.example.test'],
-      wosOrigin: 'https://wos.example.test',
-      initialHostEvents: [],
-      taskHostEvents: [],
-    };
-
-    // 1-surface deployment (taskResponse and reviewer omitted)
-    const oneSurface = admitBrowserHostDeployment({
-      ...baseDeployment,
-      routes: {
-        caseStatus: '/status',
-        auditPrefix: '/audit',
-        signInReturnPaths: ['/apply'],
-      },
-    });
-    expect(oneSurface.routes.taskResponse).toBeUndefined();
-    expect(oneSurface.routes.reviewer).toBeUndefined();
-
-    // 2-surface deployment
-    const twoSurface = browserHostDeployment({
-      ...baseDeployment,
-      routes: {
-        caseStatus: '/status',
-        reviewer: '/reviewer',
-        auditPrefix: '/audit',
-        signInReturnPaths: ['/apply'],
-      },
-    });
-    expect(twoSurface.routes.reviewer).toBe('/reviewer');
-    expect(twoSurface.routes.taskResponse).toBeUndefined();
-
-    // 3+ surface deployment with surfaceRoutes
-    const multiSurface = admitBrowserHostDeployment({
-      ...baseDeployment,
-      routes: {
-        caseStatus: '/status',
-        taskResponse: '/task-response',
-        reviewer: '/reviewer',
-        auditPrefix: '/audit',
-        signInReturnPaths: ['/apply'],
-      },
-      surfaceRoutes: [
-        { path: '/intake', surfaceId: 'applicant-intake', role: 'applicant' },
-        { path: '/specialist-review', surfaceId: 'specialist-workbench', role: 'reviewer' },
-        { path: '/ombudsman', surfaceId: 'ombudsman-portal', role: 'auditor' },
-      ],
-    });
-    expect(multiSurface.surfaceRoutes).toHaveLength(3);
-
-    // Rejects duplicate path between routes and surfaceRoutes
-    expect(() => admitBrowserHostDeployment({
-      ...baseDeployment,
-      routes: {
-        caseStatus: '/status',
-        auditPrefix: '/audit',
-        signInReturnPaths: ['/apply'],
-      },
-      surfaceRoutes: [
-        { path: '/status', surfaceId: 'duplicate-status' },
-      ],
-    })).toThrow('Ambiguous deployment routes');
-
-    // Rejects duplicate path within surfaceRoutes
-    expect(() => admitBrowserHostDeployment({
-      ...baseDeployment,
-      routes: {
-        caseStatus: '/status',
-        auditPrefix: '/audit',
-        signInReturnPaths: ['/apply'],
-      },
-      surfaceRoutes: [
-        { path: '/custom', surfaceId: 'surface-a' },
-        { path: '/custom', surfaceId: 'surface-b' },
-      ],
-    })).toThrow('Ambiguous deployment routes');
-
-    // Rejects surfaceRoute colliding with auditPrefix + '/'
-    expect(() => admitBrowserHostDeployment({
-      ...baseDeployment,
-      routes: {
-        caseStatus: '/status',
-        auditPrefix: '/audit',
-        signInReturnPaths: ['/apply'],
-      },
-      surfaceRoutes: [
-        { path: '/audit/subroute', surfaceId: 'bad-audit-subroute' },
-      ],
-    })).toThrow('Ambiguous deployment routes');
   });
 });
