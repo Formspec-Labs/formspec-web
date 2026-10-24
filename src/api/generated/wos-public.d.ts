@@ -1346,7 +1346,7 @@ export interface components {
             /** @description Absolute URI of the governing Workflow Document. */
             workflowUrl: components["schemas"]["WorkflowUrl"];
         };
-        /** @description Cursor-paginated applicant case page (ADR 0082 D-7). Default ordering is `updatedAt` descending so applicants see their most recently active cases first. */
+        /** @description Cursor-paginated applicant case page (ADR 0082 D-7). Ordering is case id descending (creation order, newest first), which is keyset-stable. A page may be short or empty while `hasMore` is true; clients MUST follow `hasMore`, not page length. */
         ApplicantCaseSummaryPage: {
             /** @description Opaque token for the next page. Omitted when hasMore is false. */
             cursor?: string;
@@ -2290,7 +2290,7 @@ export interface components {
              */
             effect: string;
             /**
-             * @description Short identifier or label for the factor.
+             * @description Short identifier or label for the evaluated counterfactual factor.
              * @example incomeReduction
              * @example applicantRace
              */
@@ -2348,11 +2348,15 @@ export interface components {
              */
             criterion: string;
             /**
-             * @description Optional human-readable detail for the criterion result.
+             * @description Optional human-readable detail explaining the criterion evaluation result.
              * @example Reported income $17,500 below SNAP threshold $20,000.
              */
             detail?: string;
-            /** @description True when the criterion was satisfied by the case facts. */
+            /**
+             * @description True when the criterion was satisfied by the evaluated case facts.
+             * @example true
+             * @example false
+             */
             satisfied: boolean;
         };
         /** @description Exposes complete native history and explicitly validated accepted presentation evidence. */
@@ -3729,12 +3733,12 @@ export interface components {
         /** @description Reference to an authoritative rule applied in a decision. Mirrors `wos-workflow.schema.json#/$defs/RuleReference` (governance S6.2). Inlined at the API layer so codegen does not need a cross-schema resolver; structurally aligned so the API projection is byte-compatible with the kernel definition. */
         RuleReference: {
             /**
-             * @description Formal citation to the source document.
+             * @description Formal citation to the authoritative source document in standard legal format.
              * @example 42 CFR § 435.916
              */
             citation?: string;
             /**
-             * @description Human-readable summary of the rule.
+             * @description Human-readable summary of what this authoritative rule requires or prohibits.
              * @example Annual renewal of eligibility required for continued benefit receipt.
              */
             description?: string;
@@ -4447,7 +4451,7 @@ export interface components {
              */
             workflowVersion: string;
         };
-        /** @description Request body for `POST /api/v1/cases/{case_id}/processes` in the reference server. Servers create or accept the process identifier, bind it to the durable case ledger, pin `definitionVersion` when supplied, and set the initial `caseState` from `initialCaseState` when present. */
+        /** @description Request body for `POST /api/v1/cases/{case_id}/processes` on an existing case in the admitted scope. The server mints the process identifier, binds it to the case, pins `definitionVersion` when supplied, and sets the initial `caseState` from `initialCaseState` when present. Caller-selected identifiers and tenant values are refused. */
         WorkflowProcessCreateRequest: {
             /** @description Absolute URI of the WOS Workflow Document this process is created against. */
             definitionUrl: components["schemas"]["WorkflowUrl"];
@@ -4455,10 +4459,6 @@ export interface components {
             definitionVersion?: string;
             /** @description Optional initial case-state object applied to the newly bound process. */
             initialCaseState?: components["schemas"]["CaseStateValue"];
-            /** @description Optional caller-supplied workflow process TypeID or WOS process URN. When omitted, the server allocates a new process TypeID for the supplied case ledger. */
-            processId?: components["schemas"]["ProcessPathId"];
-            /** @description Explicit deployment tenant for this instance (ADR 0068 D-1.1). When omitted, the server resolves it from `X-WOS-Tenant`. */
-            tenant?: string;
         };
         /** @description Holds subresource for a workflow process (ADR 0082 D-3). Returns active holds; small, bounded set per instance, so not cursor-paginated. */
         WorkflowProcessHoldList: {
@@ -4574,8 +4574,6 @@ export interface operations {
     applicant_list_cases: {
         parameters: {
             query?: {
-                /** @description When true, restrict results to cases where at least one applicant-owed task is `pending` or `drafted`. */
-                actionNeeded?: boolean | null;
                 /** @description Opaque resume token returned by the previous page (ADR 0082 D-7). */
                 cursor?: components["schemas"]["ApplicantCaseListOptionsCursor"] | null;
                 /** @description Filter to cases in the supplied lifecycle posture. Repeating the query parameter narrows to a posture set. */

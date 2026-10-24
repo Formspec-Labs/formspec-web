@@ -1,5 +1,5 @@
 {
-  "sourceRevision": "de19fd0c48df137dad2640b9ed6bd92836ff9bf4",
+  "sourceRevision": "6d780fe1a2e55da8db706932d507d8ba33ca0802",
   "scope": "Exact maintained applicant schema and complete declared API reference closure. Backend owner separately qualifies runtime authority and response behavior.",
   "files": {
     "_common.schema.json": {
@@ -8,7 +8,7 @@
     },
     "applicant.schema.json": {
       "source": "work-spec/schemas/api/applicant.schema.json",
-      "sha256": "300269b99912867ef72f4b33111b7302c7a0a8da47e2d4ea6395f0e9c697984f"
+      "sha256": "395aa8bdb3176e402c4604367a90e59f1af54ae59093bb4eef0af947c1146f46"
     },
     "error.schema.json": {
       "source": "work-spec/schemas/api/error.schema.json",
@@ -20,7 +20,7 @@
     },
     "instance.schema.json": {
       "source": "work-spec/schemas/api/instance.schema.json",
-      "sha256": "570bdbb40385fdbabb8e8c0e962ac06b8226f03e6549861e5600d79b07ad74ca"
+      "sha256": "78b6bc3ea5ab55eaa542ad80b7645e336f84b8fed5df4d00a712938496986c71"
     },
     "pagination.schema.json": {
       "source": "work-spec/schemas/api/pagination.schema.json",
@@ -28,7 +28,7 @@
     },
     "task.schema.json": {
       "source": "work-spec/schemas/api/task.schema.json",
-      "sha256": "868e196134f2ada08461740f43f4c26d63d32ae7272d1a4352cc9e109253ae44"
+      "sha256": "a1ae65c3b18f9d79cf95f34fd7eb2aab95b631d07c42ce419074545408401a91"
     }
   }
 }
