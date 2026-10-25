@@ -419,6 +419,7 @@ async function publishDemoIntake(
     $formspec: '1.0',
     url: input.runtimeDefinitionUrl,
     version: definitionVersion,
+    status: 'active',
     title,
     items: [{ key: 'name', type: 'field', dataType: 'string', label: 'Name' }],
     binds: [{ path: 'name', required: 'true' }],
