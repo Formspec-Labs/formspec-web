@@ -30,7 +30,7 @@ selected by `FORMSPEC_SOURCE_MIXED_PROOF_MODULE` and
 package through the task hydration adapter, protected reader and worker bridge.
 It verifies the authentic proof, refuses a different configured issuer, and
 refuses altered protected bytes. That gate passed 71 tests without skips against
-the producer above. This controlled fixture does not establish live D1 authority
+producer commit `c4abcfd`. This controlled fixture does not establish live D1 authority
 or deployment acceptance.
 
 Hydration SHA-256:
