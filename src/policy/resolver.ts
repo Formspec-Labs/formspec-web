@@ -40,7 +40,7 @@ import {
   type ResolvedRecordLifecycleWindow,
   type ResolvedRecordLifecycleWithdrawablePolicy,
   type ResolvedRuntimeProfile,
-  type SafeAddressAccessClass,
+  isSafeAddressSubjectKind,
   type SafeAddressFieldPolicy,
   type SafeAddressReceiptPostureTier,
   type SafeAddressRuntimeConfig,
@@ -464,7 +464,7 @@ function validateSafeAddressLimits(value: unknown, layer: 'org' | 'form'): void 
   }
   const candidate = value as {
     receiptPostureTier?: unknown;
-    enabledClasses?: unknown;
+    enabledSubjectKinds?: unknown;
     acpJurisdictionsAccepted?: unknown;
     authorizedAudiences?: unknown;
     substituteAddressDirectoryRef?: unknown;
@@ -480,14 +480,18 @@ function validateSafeAddressLimits(value: unknown, layer: 'org' | 'form'): void 
       'limits.safeAddress.receiptPostureTier must be verifier-grade | phase-1-fallback',
     );
   }
-  validateOptionalStringArray(layer, 'limits.safeAddress.enabledClasses', candidate.enabledClasses);
+  validateOptionalStringArray(
+    layer,
+    'limits.safeAddress.enabledSubjectKinds',
+    candidate.enabledSubjectKinds,
+  );
   if (
-    Array.isArray(candidate.enabledClasses) &&
-    !candidate.enabledClasses.every((entry) => isSafeAddressAccessClass(entry))
+    Array.isArray(candidate.enabledSubjectKinds) &&
+    !candidate.enabledSubjectKinds.every(isSafeAddressSubjectKind)
   ) {
     throw new InvalidRuntimePolicyError(
       layer,
-      'limits.safeAddress.enabledClasses entries must be safe-address | safe-contact | safe-employer',
+      'limits.safeAddress.enabledSubjectKinds entries must be address | contact | employer',
     );
   }
   validateOptionalStringArray(
@@ -535,10 +539,10 @@ function validateSafeAddressField(layer: 'org' | 'form', value: unknown): void {
       'limits.safeAddress.fields[].path must be an RFC 6901-style JSON pointer',
     );
   }
-  if (!isSafeAddressAccessClass(field.accessClass)) {
+  if (field.subjectKind !== undefined && !isSafeAddressSubjectKind(field.subjectKind)) {
     throw new InvalidRuntimePolicyError(
       layer,
-      'limits.safeAddress.fields[].accessClass must be safe-address | safe-contact | safe-employer',
+      'limits.safeAddress.fields[].subjectKind must be address | contact | employer',
     );
   }
   validateOptionalStringArray(layer, 'limits.safeAddress.fields[].visibleTo', field.visibleTo);
@@ -590,10 +594,6 @@ function resolveMultiPartyPolicy(value: unknown): MultiPartyRuntimeConfig {
   });
 }
 
-function isSafeAddressAccessClass(value: unknown): value is SafeAddressAccessClass {
-  return value === 'safe-address' || value === 'safe-contact' || value === 'safe-employer';
-}
-
 function isSafeAddressReceiptPostureTier(
   value: unknown,
 ): value is SafeAddressReceiptPostureTier {
@@ -607,10 +607,10 @@ function resolveSafeAddressPolicy(
   const org = safeAddressLimitObject(orgLimit);
   const form = safeAddressLimitObject(formLimit);
   const fields = fieldPolicies(form.fields);
-  const enabledClasses =
-    nonEmptyStringArrayFrom(form.enabledClasses)?.filter(isSafeAddressAccessClass) ??
-    nonEmptyStringArrayFrom(org.enabledClasses)?.filter(isSafeAddressAccessClass) ??
-    unique(fields.map((field) => field.accessClass));
+  const enabledSubjectKinds =
+    nonEmptyStringArrayFrom(form.enabledSubjectKinds)?.filter(isSafeAddressSubjectKind) ??
+    nonEmptyStringArrayFrom(org.enabledSubjectKinds)?.filter(isSafeAddressSubjectKind) ??
+    unique(fields.flatMap((field) => (field.subjectKind ? [field.subjectKind] : [])));
   const authorizedAudiences = resolveSafeAddressAuthorizedAudiences(
     org.authorizedAudiences,
     form.authorizedAudiences,
@@ -629,13 +629,7 @@ function resolveSafeAddressPolicy(
   if (fields.length === 0) {
     throw new InvalidRuntimePolicyError(
       'form',
-      'safeAddress is enabled but no safe-* field policy was declared',
-    );
-  }
-  if (enabledClasses.length === 0) {
-    throw new InvalidRuntimePolicyError(
-      'form',
-      'safeAddress is enabled but no safe-* class was declared',
+      'safeAddress is enabled but no protected field policy was declared',
     );
   }
   if (acpJurisdictionsAccepted.length === 0) {
@@ -661,7 +655,7 @@ function resolveSafeAddressPolicy(
   );
 
   return Object.freeze({
-    enabledClasses: Object.freeze([...enabledClasses]),
+    enabledSubjectKinds: Object.freeze([...enabledSubjectKinds]),
     receiptPostureTier,
     substituteAddressDirectoryRef:
       stringValue(form.substituteAddressDirectoryRef) ??
@@ -746,7 +740,7 @@ function freezeSafeAddressField(field: SafeAddressFieldPolicy): SafeAddressField
   return Object.freeze({
     path: field.path,
     label: field.label,
-    accessClass: field.accessClass,
+    subjectKind: field.subjectKind,
     visibleTo: field.visibleTo ? Object.freeze([...field.visibleTo]) : undefined,
     plaintextAudiences: field.plaintextAudiences
       ? Object.freeze([...field.plaintextAudiences])

@@ -800,11 +800,11 @@ describe('StatusRuntime lifecycle timeline rendering (FW-0038)', () => {
             {
               path: '/safeAddress',
               label: 'Protected address',
-              originalValue: { text: '123 Private St', accessClass: 'safe-address' },
-              correctedValue: { text: '456 Private St', accessClass: 'safe-address' },
+              originalValue: { text: '123 Private St', accessClass: 'protected' },
+              correctedValue: { text: '456 Private St', accessClass: 'protected' },
             },
           ],
-          reason: { text: 'Protected address reason', accessClass: 'safe-address' },
+          reason: { text: 'Protected address reason', accessClass: 'protected' },
         },
         {
           kind: 'withdrawal',

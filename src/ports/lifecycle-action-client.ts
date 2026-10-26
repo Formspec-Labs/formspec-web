@@ -44,8 +44,9 @@ export type LifecycleEventKind =
 export interface LifecycleProtectedText {
   readonly text: string;
   /**
-   * Omitted / `unclassified` renders openly. `safe-*` classes render masked
-   * on public receipt/status/verifier surfaces per FW-0060.
+   * Formspec Access-Class Registry token. Omitted / `unclassified` renders
+   * openly; every other class (`protected`, `cui.*`, …) renders masked on
+   * public receipt/status/verifier surfaces per FW-0060.
    */
   readonly accessClass?: string;
 }

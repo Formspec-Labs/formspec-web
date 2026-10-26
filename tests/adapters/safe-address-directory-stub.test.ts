@@ -6,12 +6,12 @@ describe('stubSafeAddressDirectory', () => {
     const directory = stubSafeAddressDirectory();
     await expect(directory.validateSubstituteAddress({
       jurisdictionKey: 'CA-ACP',
-      accessClass: 'safe-address',
+      subjectKind: 'address',
       candidate: 'PO Box 846, Sacramento, CA 95812',
     })).resolves.toMatchObject({ valid: true });
     await expect(directory.validateSubstituteAddress({
       jurisdictionKey: 'CA-ACP',
-      accessClass: 'safe-address',
+      subjectKind: 'address',
       candidate: '123 Fake St',
     })).resolves.toMatchObject({ valid: false, reason: 'not-recognized' });
   });

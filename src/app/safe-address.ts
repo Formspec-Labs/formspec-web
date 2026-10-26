@@ -2,15 +2,19 @@ import type { LifecycleProtectedText } from '../ports/lifecycle-action-client.ts
 import type { SafeAddressDirectory } from '../ports/safe-address-directory.ts';
 import type { SafeAddressFieldPolicy, SafeAddressRuntimeConfig } from '../policy/index.ts';
 
-export function isSafeAccessClass(value: string | undefined): boolean {
-  return value?.startsWith('safe-') === true;
+/**
+ * A public surface lacks authority for every class but `unclassified`, so it
+ * masks them all (Respondent Ledger §7.8; Formspec Access-Class Registry).
+ */
+export function isRestrictedAccessClass(value: string | undefined): boolean {
+  return value !== undefined && value !== 'unclassified';
 }
 
 export function renderSafeAddressProtectedText(
   value: LifecycleProtectedText,
   withheldCopy: string,
 ): string {
-  return isSafeAccessClass(value.accessClass) ? withheldCopy : value.text;
+  return isRestrictedAccessClass(value.accessClass) ? withheldCopy : value.text;
 }
 
 export function safeAddressVerifierLine({
@@ -75,7 +79,7 @@ async function validateAgainstAcceptedJurisdictions({
     const result = await directory.validateSubstituteAddress({
       jurisdictionKey,
       candidate,
-      accessClass: field.accessClass,
+      subjectKind: field.subjectKind,
     });
     if (result.valid === true) {
       return { valid: true };

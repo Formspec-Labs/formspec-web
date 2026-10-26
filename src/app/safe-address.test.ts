@@ -10,13 +10,24 @@ import type { SafeAddressRuntimeConfig } from '../policy/index.ts';
 describe('safe-address render helpers', () => {
   it('masks safe-* lifecycle text while leaving unclassified text visible', () => {
     expect(renderSafeAddressProtectedText(
-      { text: '123 Private St', accessClass: 'safe-address' },
+      { text: '123 Private St', accessClass: 'protected' },
       'value withheld',
     )).toBe('value withheld');
     expect(renderSafeAddressProtectedText(
       { text: 'ordinary note' },
       'value withheld',
     )).toBe('ordinary note');
+  });
+
+  it('masks every class but unclassified (Respondent Ledger §7.8)', () => {
+    expect(renderSafeAddressProtectedText(
+      { text: 'note', accessClass: 'unclassified' },
+      'value withheld',
+    )).toBe('note');
+    expect(renderSafeAddressProtectedText(
+      { text: 'income', accessClass: 'cui.privacy' },
+      'value withheld',
+    )).toBe('value withheld');
   });
 
   it('renders verifier-grade and phase-1 fallback copy distinctly', () => {
@@ -36,7 +47,7 @@ describe('safe-address render helpers', () => {
       directory: testSafeAddressDirectory(),
       data: { protectedHomeAddress: 'PO Box 846, Sacramento, CA 95812' },
       config: {
-        enabledClasses: ['safe-address'],
+        enabledSubjectKinds: ['address'],
         receiptPostureTier: 'phase-1-fallback',
         substituteAddressDirectoryRef: 'composition:safeAddressDirectory',
         acpJurisdictionsAccepted: ['CA-ACP'],
@@ -45,7 +56,7 @@ describe('safe-address render helpers', () => {
           {
             path: '/protectedHomeAddress',
             label: 'Protected home address',
-            accessClass: 'safe-address',
+            subjectKind: 'address',
           },
         ],
       },
@@ -57,7 +68,7 @@ describe('safe-address render helpers', () => {
       directory: testSafeAddressDirectory(),
       data: { protectedHomeAddress: '123 Private St' },
       config: {
-        enabledClasses: ['safe-address'],
+        enabledSubjectKinds: ['address'],
         receiptPostureTier: 'phase-1-fallback',
         substituteAddressDirectoryRef: 'composition:safeAddressDirectory',
         acpJurisdictionsAccepted: ['CA-ACP'],
@@ -66,7 +77,7 @@ describe('safe-address render helpers', () => {
           {
             path: '/protectedHomeAddress',
             label: 'Protected home address',
-            accessClass: 'safe-address',
+            subjectKind: 'address',
           },
         ],
       },
@@ -88,7 +99,7 @@ describe('safe-address render helpers', () => {
       data: { protectedHomeAddress: 'PO Box 846, Sacramento, CA 95812' },
     })).resolves.toBeUndefined();
     expect(validate.mock.calls.map(([request]) => request.jurisdictionKey)).toEqual(['OTHER-ACP', 'CA-ACP']);
-    expect(validate.mock.calls.every(([request]) => request.accessClass === 'safe-address')).toBe(true);
+    expect(validate.mock.calls.every(([request]) => request.subjectKind === 'address')).toBe(true);
   });
 
   it('reports the last jurisdiction refusal when every accepted jurisdiction refuses', async () => {
@@ -104,9 +115,9 @@ describe('safe-address render helpers', () => {
 });
 
 function boundaryConfig(jurisdictions = ['CA-ACP']): SafeAddressRuntimeConfig {
-  return { enabledClasses: ['safe-address'], receiptPostureTier: 'phase-1-fallback', substituteAddressDirectoryRef: 'composition:safeAddressDirectory',
+  return { enabledSubjectKinds: ['address'], receiptPostureTier: 'phase-1-fallback', substituteAddressDirectoryRef: 'composition:safeAddressDirectory',
     acpJurisdictionsAccepted: jurisdictions, authorizedAudiences: ['issuer_verification'],
-    fields: [{ path: '/protectedHomeAddress', label: 'Protected home address', accessClass: 'safe-address' }] };
+    fields: [{ path: '/protectedHomeAddress', label: 'Protected home address', subjectKind: 'address' }] };
 }
 
 function testSafeAddressDirectory(): SafeAddressDirectory {
@@ -116,14 +127,14 @@ function testSafeAddressDirectory(): SafeAddressDirectory {
         {
           jurisdictionKey: 'CA-ACP',
           label: 'California Safe at Home',
-          accessClass: 'safe-address',
+          subjectKind: 'address',
         },
       ];
     },
     async validateSubstituteAddress(request) {
       if (
         request.jurisdictionKey === 'CA-ACP' &&
-        request.accessClass === 'safe-address' &&
+        request.subjectKind === 'address' &&
         request.candidate === 'PO Box 846, Sacramento, CA 95812'
       ) {
         return {

@@ -473,7 +473,7 @@ describe('extractSafeAddressPolicy', () => {
           dataType: 'string',
           label: 'Protected home address',
           accessControl: {
-            class: 'safe-address',
+            class: 'protected', subjectKind: 'address',
             plaintextAudiences: ['issuer_verification'],
           },
           visibleTo: ['issuer_verification'],
@@ -493,7 +493,7 @@ describe('extractSafeAddressPolicy', () => {
       fields: [
         {
           path: '/protectedHomeAddress',
-          accessClass: 'safe-address',
+          subjectKind: 'address',
           visibleTo: ['issuer_verification'],
           plaintextAudiences: ['issuer_verification'],
         },
@@ -512,7 +512,7 @@ describe('extractSafeAddressPolicy', () => {
           fields: [
             {
               path: '/safeContact',
-              accessClass: 'safe-contact',
+              subjectKind: 'contact',
               effectiveAudiences: ['issuer_verification'],
             },
           ],
@@ -523,9 +523,38 @@ describe('extractSafeAddressPolicy', () => {
     const policy = extractSafeAddressPolicy(definition);
     expect(policy?.features.safeAddress).toBe('required');
     expect(policy?.limits?.safeAddress).toMatchObject({
-      enabledClasses: ['safe-contact'],
+      enabledSubjectKinds: ['contact'],
       acpJurisdictionsAccepted: ['WA-ACP'],
     });
+  });
+
+  it('extracts protected fields without a subject kind, and ignores retired safe-* classes', () => {
+    const definition = {
+      ...baseDefinition,
+      items: [
+        {
+          key: 'protectedPhone',
+          type: 'field',
+          dataType: 'string',
+          label: 'Protected phone',
+          accessControl: { class: 'protected' },
+        },
+        {
+          key: 'legacyAddress',
+          type: 'field',
+          dataType: 'string',
+          label: 'Legacy address',
+          accessControl: { class: 'safe-address' },
+        },
+      ],
+    } as FormDefinition;
+    const safeAddress = extractSafeAddressPolicy(definition)?.limits?.safeAddress as {
+      fields: readonly { path: string; subjectKind?: string }[];
+      enabledSubjectKinds: readonly string[];
+    };
+    expect(safeAddress.fields).toEqual([expect.objectContaining({ path: '/protectedPhone' })]);
+    expect(safeAddress.fields[0]?.subjectKind).toBeUndefined();
+    expect(safeAddress.enabledSubjectKinds).toEqual([]);
   });
 
   it('treats false as an explicit form-level forbid', () => {
@@ -546,7 +575,7 @@ describe('extractSafeAddressPolicy', () => {
           type: 'field',
           dataType: 'string',
           label: 'Protected home address',
-          accessControl: { class: 'safe-address' },
+          accessControl: { class: 'protected', subjectKind: 'address' },
         },
       ],
       extensions: { 'x-formspec-safe-address': false },
@@ -554,7 +583,7 @@ describe('extractSafeAddressPolicy', () => {
     const policy = extractSafeAddressPolicy(definition);
     expect(policy?.features.safeAddress).toBe('required');
     expect(policy?.limits?.safeAddress).toMatchObject({
-      fields: [{ path: '/protectedHomeAddress', accessClass: 'safe-address' }],
+      fields: [{ path: '/protectedHomeAddress', subjectKind: 'address' }],
     });
   });
 });

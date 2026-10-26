@@ -6,7 +6,7 @@ defineSafeAddressDirectoryConformance('stub SafeAddressDirectory conformance', (
   expectedJurisdiction: {
     jurisdictionKey: 'CA-ACP',
     label: 'California Safe at Home',
-    accessClass: 'safe-address',
+    subjectKind: 'address',
   },
   validCandidate: 'PO Box 846, Sacramento, CA 95812',
   invalidCandidate: '123 Fake St',

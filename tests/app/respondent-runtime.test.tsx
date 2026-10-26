@@ -1215,7 +1215,7 @@ describe('RespondentRuntime identity sign-in', () => {
           type: 'field',
           dataType: 'string',
           label: 'Protected home address',
-          accessControl: { class: 'safe-address' },
+          accessControl: { class: 'protected', subjectKind: 'address' },
         },
       ],
       extensions: {
@@ -1226,7 +1226,7 @@ describe('RespondentRuntime identity sign-in', () => {
           fields: [
             {
               path: '/protectedHomeAddress',
-              accessClass: 'safe-address',
+              subjectKind: 'address',
               visibleTo: ['issuer_verification'],
             },
           ],
@@ -1283,7 +1283,7 @@ describe('RespondentRuntime identity sign-in', () => {
           type: 'field',
           dataType: 'string',
           label: 'Protected home address',
-          accessControl: { class: 'safe-address' },
+          accessControl: { class: 'protected', subjectKind: 'address' },
         },
       ],
       extensions: {
@@ -1294,7 +1294,7 @@ describe('RespondentRuntime identity sign-in', () => {
           fields: [
             {
               path: '/protectedHomeAddress',
-              accessClass: 'safe-address',
+              subjectKind: 'address',
             },
           ],
         },
@@ -1344,7 +1344,7 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(composition.safeAddressDirectory.validateSubstituteAddress).toHaveBeenCalledWith({
       jurisdictionKey: 'CA-ACP',
       candidate: 'PO Box 846, Sacramento, CA 95812',
-      accessClass: 'safe-address',
+      subjectKind: 'address',
     });
     expect(composition.submitTransport.submit).toHaveBeenCalledOnce();
   });
@@ -1360,7 +1360,7 @@ describe('RespondentRuntime identity sign-in', () => {
           type: 'field',
           dataType: 'string',
           label: 'Protected home address',
-          accessControl: { class: 'safe-address' },
+          accessControl: { class: 'protected', subjectKind: 'address' },
         },
       ],
       extensions: {
@@ -1372,7 +1372,7 @@ describe('RespondentRuntime identity sign-in', () => {
             {
               path: '/protectedHomeAddress',
               label: 'Protected home address',
-              accessClass: 'safe-address',
+              subjectKind: 'address',
             },
           ],
         },

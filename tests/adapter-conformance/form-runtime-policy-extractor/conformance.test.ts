@@ -147,7 +147,7 @@ const safeAddressDefinition: FormDefinition = {
       type: 'field',
       dataType: 'string',
       label: 'Protected home address',
-      accessControl: { class: 'safe-address' },
+      accessControl: { class: 'protected', subjectKind: 'address' },
     },
   ],
   extensions: {

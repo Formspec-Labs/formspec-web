@@ -70,13 +70,24 @@ export interface OrgRuntimePolicy {
   readonly limits?: Readonly<Partial<Record<RuntimeFeatureKey, unknown>>>;
 }
 
-export type SafeAddressAccessClass = 'safe-address' | 'safe-contact' | 'safe-employer';
+/**
+ * Renderer-only qualifier of the Formspec `protected` access class
+ * (Definition `accessControl.subjectKind`, ADR 0157 §4). It picks mask copy
+ * and the substitute-address directory; it never reaches a receipt, ledger
+ * event, or export.
+ */
+export type SafeAddressSubjectKind = 'address' | 'contact' | 'employer';
+
+export function isSafeAddressSubjectKind(value: unknown): value is SafeAddressSubjectKind {
+  return value === 'address' || value === 'contact' || value === 'employer';
+}
 export type SafeAddressReceiptPostureTier = 'verifier-grade' | 'phase-1-fallback';
 
 export interface SafeAddressFieldPolicy {
   readonly path: string;
   readonly label?: string;
-  readonly accessClass: SafeAddressAccessClass;
+  /** Omitted when the Definition gives `protected` no subject kind. */
+  readonly subjectKind?: SafeAddressSubjectKind;
   /**
    * Party-policy side of the FW-0049 x FW-0050 intersection. These are the
    * already-resolved audience tokens or party/audience references for the
@@ -96,7 +107,7 @@ export interface SafeAddressFieldPolicy {
 }
 
 export interface SafeAddressRuntimeConfig {
-  readonly enabledClasses: readonly SafeAddressAccessClass[];
+  readonly enabledSubjectKinds: readonly SafeAddressSubjectKind[];
   readonly receiptPostureTier: SafeAddressReceiptPostureTier;
   readonly substituteAddressDirectoryRef: string;
   readonly acpJurisdictionsAccepted: readonly string[];

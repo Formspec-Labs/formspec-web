@@ -1643,7 +1643,7 @@ export function defineSafeAddressDirectoryConformance(
       for (const entry of jurisdictions) {
         expect(entry.jurisdictionKey.length).toBeGreaterThan(0);
         expect(entry.label.length).toBeGreaterThan(0);
-        expect(['safe-address', 'safe-contact', 'safe-employer']).toContain(entry.accessClass);
+        expect(['address', 'contact', 'employer']).toContain(entry.subjectKind);
         expect('substitutes' in entry).toBe(false);
       }
     });
@@ -1652,7 +1652,7 @@ export function defineSafeAddressDirectoryConformance(
       const subject = setup();
       const result = await subject.adapter.validateSubstituteAddress({
         jurisdictionKey: subject.expectedJurisdiction.jurisdictionKey,
-        accessClass: subject.expectedJurisdiction.accessClass,
+        subjectKind: subject.expectedJurisdiction.subjectKind,
         candidate: subject.validCandidate,
       });
       expect(result.valid).toBe(true);
@@ -1666,7 +1666,7 @@ export function defineSafeAddressDirectoryConformance(
       const subject = setup();
       await expect(subject.adapter.validateSubstituteAddress({
         jurisdictionKey: subject.expectedJurisdiction.jurisdictionKey,
-        accessClass: subject.expectedJurisdiction.accessClass,
+        subjectKind: subject.expectedJurisdiction.subjectKind,
         candidate: subject.invalidCandidate,
       })).resolves.toMatchObject({
         valid: false,

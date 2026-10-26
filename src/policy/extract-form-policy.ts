@@ -19,10 +19,11 @@ import type {
   RecordLifecyclePolicy,
   RecordLifecycleWindowPolicy,
   RecordLifecycleWithdrawablePolicy,
-  SafeAddressAccessClass,
   SafeAddressFieldPolicy,
   SafeAddressRuntimeConfig,
+  SafeAddressSubjectKind,
 } from './policy-shapes.ts';
+import { isSafeAddressSubjectKind } from './policy-shapes.ts';
 
 /**
  * Returns `'required'` when the definition contains any field with
@@ -279,7 +280,8 @@ function parseMultiPartyDeadlinePolicy(
 /**
  * FW-0060 safe-address form-policy walker. While EXT-31/EXT-32 are still
  * PROPOSAL-status this accepts the build-slice extension carrier and also
- * discovers items with `accessControl.class` in the `safe-*` namespace.
+ * discovers items whose Formspec `accessControl.class` is `protected`
+ * (Access-Class Registry), reading the optional `accessControl.subjectKind`.
  */
 export function extractSafeAddressPolicy(
   definition: FormDefinition,
@@ -295,7 +297,7 @@ export function extractSafeAddressPolicy(
   }
   if (!block.enabled && fields.length === 0) return undefined;
   const config: SafeAddressRuntimeConfig = {
-    enabledClasses: block.enabledClasses ?? uniqueSafeClasses(fields),
+    enabledSubjectKinds: block.enabledSubjectKinds ?? uniqueSubjectKinds(fields),
     receiptPostureTier: block.receiptPostureTier ?? 'phase-1-fallback',
     substituteAddressDirectoryRef:
       block.substituteAddressDirectoryRef ?? 'composition:safeAddressDirectory',
@@ -316,7 +318,7 @@ function parseSafeAddressBlock(value: unknown): {
   enabled: boolean;
   mode?: 'optional' | 'required';
   receiptPostureTier?: SafeAddressRuntimeConfig['receiptPostureTier'];
-  enabledClasses?: readonly SafeAddressAccessClass[];
+  enabledSubjectKinds?: readonly SafeAddressSubjectKind[];
   acpJurisdictionsAccepted?: readonly string[];
   authorizedAudiences?: readonly string[];
   substituteAddressDirectoryRef?: string;
@@ -337,7 +339,7 @@ function parseSafeAddressBlock(value: unknown): {
       block.receiptPostureTier === 'phase-1-fallback'
         ? block.receiptPostureTier
         : undefined,
-    enabledClasses: safeClassArray(block.enabledClasses),
+    enabledSubjectKinds: subjectKindArray(block.enabledSubjectKinds),
     acpJurisdictionsAccepted: stringArray(block.acpJurisdictionsAccepted),
     authorizedAudiences: stringArray(block.authorizedAudiences),
     substituteAddressDirectoryRef: nonEmptyString(block.substituteAddressDirectoryRef),
@@ -354,12 +356,16 @@ function safeAddressFieldsFromItems(
   const fields: SafeAddressFieldPolicy[] = [];
   for (const item of items) {
     const path = `/${[...ancestors, item.key].join('/')}`;
-    const accessClass = safeAccessClass(item);
-    if (accessClass) {
+    const accessControl = item.accessControl as
+      | { class?: unknown; subjectKind?: unknown }
+      | undefined;
+    if (accessControl?.class === 'protected') {
       fields.push({
         path,
         label: item.label,
-        accessClass,
+        subjectKind: isSafeAddressSubjectKind(accessControl.subjectKind)
+          ? accessControl.subjectKind
+          : undefined,
         visibleTo: stringArray((item as { visibleTo?: unknown }).visibleTo),
         plaintextAudiences: stringArray(
           (item.accessControl as { plaintextAudiences?: unknown } | undefined)
@@ -378,27 +384,20 @@ function safeAddressFieldsFromItems(
   return fields;
 }
 
-function safeAccessClass(item: FormItem): SafeAddressAccessClass | undefined {
-  const value = (item.accessControl as { class?: unknown } | undefined)?.class;
-  if (value === 'safe-address' || value === 'safe-contact' || value === 'safe-employer') {
-    return value;
-  }
-  return undefined;
-}
-
 function safeAddressFieldArray(value: unknown): readonly SafeAddressFieldPolicy[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const fields = value
     .map((entry): SafeAddressFieldPolicy | undefined => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
       const candidate = entry as Record<string, unknown>;
-      const accessClass = safeClass(candidate.accessClass);
       const path = nonEmptyString(candidate.path);
-      if (!path || !accessClass) return undefined;
+      if (!path) return undefined;
       return {
         path,
         label: nonEmptyString(candidate.label),
-        accessClass,
+        subjectKind: isSafeAddressSubjectKind(candidate.subjectKind)
+          ? candidate.subjectKind
+          : undefined,
         visibleTo: stringArray(candidate.visibleTo),
         plaintextAudiences: stringArray(candidate.plaintextAudiences),
         effectiveAudiences: stringArray(candidate.effectiveAudiences),
@@ -419,21 +418,16 @@ function parseSafeAddressRendererHints(
   return { maskRenderToken, revealAffordanceLabel };
 }
 
-function safeClass(value: unknown): SafeAddressAccessClass | undefined {
-  if (value === 'safe-address' || value === 'safe-contact' || value === 'safe-employer') {
-    return value;
-  }
-  return undefined;
-}
-
-function safeClassArray(value: unknown): readonly SafeAddressAccessClass[] | undefined {
+function subjectKindArray(value: unknown): readonly SafeAddressSubjectKind[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const classes = value.filter((entry): entry is SafeAddressAccessClass => safeClass(entry) !== undefined);
-  return classes.length > 0 ? classes : undefined;
+  const kinds = value.filter(isSafeAddressSubjectKind);
+  return kinds.length > 0 ? kinds : undefined;
 }
 
-function uniqueSafeClasses(fields: readonly SafeAddressFieldPolicy[]): readonly SafeAddressAccessClass[] {
-  return [...new Set(fields.map((field) => field.accessClass))];
+function uniqueSubjectKinds(
+  fields: readonly SafeAddressFieldPolicy[],
+): readonly SafeAddressSubjectKind[] {
+  return [...new Set(fields.flatMap((field) => (field.subjectKind ? [field.subjectKind] : [])))];
 }
 
 function recordLifecycleBlockEnablesAnyAction(value: unknown): boolean {

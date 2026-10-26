@@ -265,6 +265,25 @@ describe('resolveRuntimeFeatures — recordLifecycle policy (FW-0038)', () => {
 });
 
 describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
+  it('refuses the retired safe-* class split as a subject kind (ADR 0157)', () => {
+    expect(() =>
+      resolveRuntimeFeatures({
+        mode: 'production',
+        instance: allAvailable,
+        org: allowAllOrg,
+        form: {
+          features: { safeAddress: 'required' },
+          limits: {
+            safeAddress: {
+              enabledSubjectKinds: ['safe-address'],
+              fields: [{ path: '/protectedHomeAddress', subjectKind: 'address' }],
+            },
+          },
+        },
+      }),
+    ).toThrowError(/enabledSubjectKinds entries must be address \| contact \| employer/);
+  });
+
   it('resolves the safeAddress runtime block when protected fields are valid', () => {
     const profile = resolveRuntimeFeatures({
       mode: 'production',
@@ -287,7 +306,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
               {
                 path: '/protectedHomeAddress',
                 label: 'Protected home address',
-                accessClass: 'safe-address',
+                subjectKind: 'address',
                 visibleTo: ['issuer_verification'],
               },
             ],
@@ -296,7 +315,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
       },
     });
     const config = getSafeAddressRuntimeConfig(profile);
-    expect(config?.enabledClasses).toEqual(['safe-address']);
+    expect(config?.enabledSubjectKinds).toEqual(['address']);
     expect(config?.fields[0]?.path).toBe('/protectedHomeAddress');
     expect(config?.acpJurisdictionsAccepted).toEqual(['CA-ACP']);
   });
@@ -324,7 +343,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
             fields: [
               {
                 path: '/protectedHomeAddress',
-                accessClass: 'safe-address',
+                subjectKind: 'address',
               },
             ],
           },
@@ -361,7 +380,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
               fields: [
                 {
                   path: '/protectedHomeAddress',
-                  accessClass: 'safe-address',
+                  subjectKind: 'address',
                 },
               ],
             },
@@ -393,7 +412,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
             fields: [
               {
                 path: '/protectedHomeAddress',
-                accessClass: 'safe-address',
+                subjectKind: 'address',
               },
             ],
           },
@@ -424,7 +443,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
             fields: [
               {
                 path: '/protectedHomeAddress',
-                accessClass: 'safe-address',
+                subjectKind: 'address',
                 visibleTo: ['issuer_verification', 'respondent_public_receipt'],
                 plaintextAudiences: ['issuer_verification', 'respondent_public_receipt'],
               },
@@ -459,7 +478,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
             fields: [
               {
                 path: '/protectedHomeAddress',
-                accessClass: 'safe-address',
+                subjectKind: 'address',
                 visibleTo: ['issuer_verification'],
               },
             ],
@@ -494,7 +513,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
               fields: [
                 {
                   path: '/protectedHomeAddress',
-                  accessClass: 'safe-address',
+                  subjectKind: 'address',
                   visibleTo: ['respondent_public_receipt'],
                   plaintextAudiences: ['respondent_public_receipt'],
                 },
@@ -528,7 +547,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
               fields: [
                 {
                   path: '/protectedHomeAddress',
-                  accessClass: 'safe-address',
+                  subjectKind: 'address',
                   effectiveAudiences: ['respondent_public_receipt'],
                 },
               ],
@@ -560,7 +579,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
               fields: [
                 {
                   path: '/protectedHomeAddress',
-                  accessClass: 'safe-address',
+                  subjectKind: 'address',
                   visibleTo: ['respondent_public_receipt'],
                   plaintextAudiences: ['respondent_public_receipt'],
                 },
@@ -593,7 +612,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
               fields: [
                 {
                   path: '/protectedHomeAddress',
-                  accessClass: 'safe-address',
+                  subjectKind: 'address',
                   effectiveAudiences: ['respondent_public_receipt'],
                 },
               ],
@@ -624,7 +643,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
             fields: [
               {
                 path: '/protectedHomeAddress',
-                accessClass: 'safe-address',
+                subjectKind: 'address',
                 plaintextAudiences: ['respondent_public_receipt'],
                 effectiveAudiences: ['issuer_verification'],
               },
@@ -660,7 +679,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
               fields: [
                 {
                   path: '/protectedHomeAddress',
-                  accessClass: 'safe-address',
+                  subjectKind: 'address',
                   visibleTo: ['respondent_public_receipt'],
                   plaintextAudiences: ['issuer_verification'],
                 },
@@ -693,7 +712,7 @@ describe('resolveRuntimeFeatures — safeAddress policy (FW-0060)', () => {
               fields: [
                 {
                   path: '/protectedHomeAddress',
-                  accessClass: 'safe-address',
+                  subjectKind: 'address',
                   effectiveAudiences: [],
                 },
               ],

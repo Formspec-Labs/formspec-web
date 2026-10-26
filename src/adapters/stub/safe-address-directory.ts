@@ -14,19 +14,19 @@ const DEFAULT_ENTRIES: readonly StubSafeAddressEntry[] = [
   {
     jurisdictionKey: 'CA-ACP',
     label: 'California Safe at Home',
-    accessClass: 'safe-address',
+    subjectKind: 'address',
     substitutes: ['PO Box 846, Sacramento, CA 95812'],
   },
   {
     jurisdictionKey: 'WA-ACP',
     label: 'Washington Address Confidentiality Program',
-    accessClass: 'safe-address',
+    subjectKind: 'address',
     substitutes: ['PO Box 257, Olympia, WA 98507'],
   },
   {
     jurisdictionKey: 'USMS-WitSec',
     label: 'USMS Witness Security',
-    accessClass: 'safe-address',
+    subjectKind: 'address',
     substitutes: ['Protected federal substitute address'],
   },
 ];
@@ -37,10 +37,10 @@ export function stubSafeAddressDirectory(
   const byJurisdiction = new Map(entries.map((entry) => [entry.jurisdictionKey, entry]));
   const adapter: SafeAddressDirectory = {
     async supportedJurisdictions() {
-      return entries.map(({ jurisdictionKey, label, accessClass }) => ({
+      return entries.map(({ jurisdictionKey, label, subjectKind }) => ({
         jurisdictionKey,
         label,
-        accessClass,
+        subjectKind,
       }));
     },
     async validateSubstituteAddress(
@@ -55,12 +55,12 @@ export function stubSafeAddressDirectory(
           message: 'This protection program is not configured for this site.',
         };
       }
-      if (request.accessClass && request.accessClass !== entry.accessClass) {
+      if (request.subjectKind && request.subjectKind !== entry.subjectKind) {
         return {
           valid: false,
           jurisdictionKey: request.jurisdictionKey,
-          reason: 'unsupported-class',
-          message: 'This protection program does not validate that protected field class.',
+          reason: 'unsupported-subject-kind',
+          message: 'This protection program does not validate that kind of protected field.',
         };
       }
       const normalizedCandidate = normalize(request.candidate);
