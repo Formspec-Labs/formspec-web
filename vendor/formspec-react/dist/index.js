@@ -35,3 +35,4 @@ export { ValidationSummary } from './validation-summary';
 import { buildPlatformTheme } from '@formspec-org/layout';
 export const defaultTheme = buildPlatformTheme();
 export { useChromeText, chromeText } from './use-chrome-text';
+export { renderSanitizedMarkdown, simpleMarkdown } from './node-renderer-display';

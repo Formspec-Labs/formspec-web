@@ -15,6 +15,10 @@ dist/
 !vendor/formspec-react/dist/**
 !vendor/formspec-surface-bundle-signing/dist/
 !vendor/formspec-surface-bundle-signing/dist/**
+!vendor/formspec-signature-port/dist/
+!vendor/formspec-signature-port/dist/**
+!vendor/formspec-signature-cose/dist/
+!vendor/formspec-signature-cose/dist/**
 !vendor/integrity-cose/dist/
 !vendor/integrity-cose/dist/**
 !vendor/integrity-signature-port/dist/

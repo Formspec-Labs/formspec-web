@@ -35,8 +35,10 @@
  * `RegistryEntry.name` would resolve nothing the day a module uses a
  * PascalCase widget name — which the schema explicitly permits.
  */
-import { resolveWidgetContribution } from '@formspec-org/app-graph';
+import { resolveWidgetContribution, widgetContractMismatchReasons, } from '@formspec-org/app-graph';
 import { surfaceDiagnostic } from './diagnostics.js';
+/** The one comparison, shared with the authoring host check; see `@formspec-org/app-graph`. */
+export { widgetContractMismatchReasons };
 /**
  * The Registry entry whose `widgetShape.widgetName` matches, reached through the
  * declaring module's `contributes[]` rather than by scanning every widget entry.
@@ -95,51 +97,6 @@ export function createWidgetRegistry(input = {}) {
             return surfaceDiagnostic('WIDGET-UNDECLARED', `Nothing in this bundle declares a widget "${key.widgetName}" on module "${key.moduleId}", and nothing the host registered supplies one.`, site, { moduleId: key.moduleId, widgetName: key.widgetName, hostComponentRendered: false });
         },
     };
-}
-function objectRecord(value) {
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-        ? value
-        : undefined;
-}
-function normalizedRenderedConfigNodes(value) {
-    if (!Array.isArray(value))
-        return undefined;
-    const normalized = [];
-    for (const rawNode of value) {
-        const node = objectRecord(rawNode);
-        if (typeof node?.pointerPattern !== 'string' || typeof node.kind !== 'string') {
-            return undefined;
-        }
-        normalized.push(`${node.pointerPattern}\u0000${node.kind}`);
-    }
-    return normalized.sort();
-}
-function widgetContractMismatchReasons(entry, contract) {
-    const shape = objectRecord(entry.widgetShape);
-    const deliveryContractId = shape?.deliveryContractId;
-    const renderedConfigNodes = shape?.renderedConfigNodes;
-    const declaresRuntimeContract = deliveryContractId !== undefined || renderedConfigNodes !== undefined;
-    if (!declaresRuntimeContract)
-        return [];
-    if (!contract)
-        return ['runtime-contract-missing'];
-    const reasons = [];
-    if (entry.version !== contract.registryEntryVersion) {
-        reasons.push('registry-entry-version-mismatch');
-    }
-    if (typeof deliveryContractId !== 'string'
-        || deliveryContractId !== contract.deliveryContractId) {
-        reasons.push('delivery-contract-id-mismatch');
-    }
-    const declaredNodes = normalizedRenderedConfigNodes(renderedConfigNodes);
-    const deliveredNodes = normalizedRenderedConfigNodes(contract.renderedConfigNodes);
-    if (declaredNodes === undefined
-        || deliveredNodes === undefined
-        || declaredNodes.length !== deliveredNodes.length
-        || declaredNodes.some((node, index) => node !== deliveredNodes[index])) {
-        reasons.push('rendered-config-inventory-mismatch');
-    }
-    return reasons;
 }
 /**
  * Registry documents → the flat entry list renderers take as a prop.

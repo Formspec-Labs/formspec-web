@@ -67,6 +67,17 @@ function cellText(value) {
         return String(value);
     return JSON.stringify(value);
 }
+function detectCellKind(id, value) {
+    if (!value)
+        return undefined;
+    if (/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(value))
+        return 'timestamp';
+    if (/^(urn:|sha256:|[A-Z0-9]+-[A-Z0-9-]+)/.test(value))
+        return 'identifier';
+    if (id && /^(status|state|priority)$/i.test(id))
+        return 'status';
+    return undefined;
+}
 const SAFE_PATH_PART = /^[a-zA-Z0-9_-]+$/;
 const SAFE_PAYLOAD_NAME = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 const UNSAFE_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);
@@ -186,10 +197,14 @@ export function QueueTable({ config, data, slot, actions = [], emitAction, }) {
     return (_jsx("div", { className: "fs-surface-queue", "data-widget": "queue-table", "data-row-count": rows.length, children: rows.length === 0 || columns.length === 0 ? (_jsx(WidgetEmptyState, { children: emptyMessage })) : (_jsx("div", { className: "fs-surface-queue__scroll", 
             // A scrolling region needs to be reachable and named, or a keyboard
             // user cannot scroll it at all.
-            tabIndex: 0, role: "region", "aria-label": caption ?? slot.title ?? 'Queue', children: _jsxs("table", { className: "fs-surface-queue__table", "data-probe": "queue-table", children: [caption && _jsx("caption", { className: "fs-surface-queue__caption", children: caption }), _jsx("thead", { children: _jsxs("tr", { children: [columns.map((column) => (_jsx("th", { scope: "col", "data-numeric": column.numeric ? 'true' : undefined, children: column.label }, column.key))), rendersRowAction ? (_jsx("th", { scope: "col", "data-action-column": "", ...needTraceAttributes(rowActionAnchors, rowAction.needAnchors), children: rowActionColumnLabel })) : null] }) }), _jsx("tbody", { children: rows.map((row, index) => {
+            tabIndex: 0, role: "region", "aria-label": caption ?? slot.title ?? 'Queue', children: _jsxs("table", { className: "fs-surface-queue__table", "data-probe": "queue-table", children: [caption && (_jsx("caption", { className: `fs-surface-queue__caption${caption === slot.title ? ' fs-surface-visually-hidden' : ''}`, children: caption })), _jsx("thead", { children: _jsxs("tr", { children: [columns.map((column) => (_jsx("th", { scope: "col", "data-numeric": column.numeric ? 'true' : undefined, children: column.label }, column.key))), rendersRowAction ? (_jsx("th", { scope: "col", "data-action-column": "", ...needTraceAttributes(rowActionAnchors, rowAction.needAnchors), children: rowActionColumnLabel })) : null] }) }), _jsx("tbody", { children: rows.map((row, index) => {
                             const rowLabel = cellText(rowHeaderKey ? row[rowHeaderKey] : undefined);
                             const selectedInput = selectedRowActionInput(rowActionConfig?.payload, row);
-                            return (_jsxs("tr", { children: [columns.map((column) => column.key === rowHeaderKey ? (_jsx("th", { scope: "row", children: cellText(row[column.key]) }, column.key)) : (_jsx("td", { "data-numeric": column.numeric ? 'true' : undefined, children: cellText(row[column.key]) }, column.key))), rendersRowAction ? (_jsx("td", { "data-action-column": "", ...needTraceAttributes(rowActionAnchors, rowAction.needAnchors), children: selectedInput.accepted ? (_jsx(QueueRowActionButton, { action: rowAction, rowLabel: rowLabel || undefined, input: selectedInput.input, emphasis: rowActionEmphasis, pendingLabel: nonEmptyString(rowActionConfig?.pendingLabel), successMessage: nonEmptyString(rowActionConfig?.successMessage), failureMessage: nonEmptyString(rowActionConfig?.failureMessage), anchors: rowActionAnchors, emitAction: emitAction })) : null })) : null] }, (rowKey ? cellText(row[rowKey]) : '') ||
+                            return (_jsxs("tr", { children: [columns.map((column) => {
+                                        const text = cellText(row[column.key]);
+                                        const cellKind = detectCellKind(column.key, text);
+                                        return column.key === rowHeaderKey ? (_jsx("th", { scope: "row", "data-cell-kind": cellKind, children: text }, column.key)) : (_jsx("td", { "data-numeric": column.numeric ? 'true' : undefined, "data-cell-kind": cellKind, children: text }, column.key));
+                                    }), rendersRowAction ? (_jsx("td", { "data-action-column": "", ...needTraceAttributes(rowActionAnchors, rowAction.needAnchors), children: selectedInput.accepted ? (_jsx(QueueRowActionButton, { action: rowAction, rowLabel: rowLabel || undefined, input: selectedInput.input, emphasis: rowActionEmphasis, pendingLabel: nonEmptyString(rowActionConfig?.pendingLabel), successMessage: nonEmptyString(rowActionConfig?.successMessage), failureMessage: nonEmptyString(rowActionConfig?.failureMessage), anchors: rowActionAnchors, emitAction: emitAction })) : null })) : null] }, (rowKey ? cellText(row[rowKey]) : '') ||
                                 `row-${index}:${rowLabel}`));
                         }) })] }) })) }));
 }

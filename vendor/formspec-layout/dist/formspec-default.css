@@ -239,6 +239,8 @@ formspec-render {
 
 .formspec-container {
   font-family: var(--formspec-font-family, "Instrument Sans", "Avenir Next", "Segoe UI", sans-serif);
+  --formspec-default-font-heading: "Fraunces", "Instrument Serif", Georgia, serif;
+  --formspec-default-font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 0.96rem;
   line-height: 1.6;
   color: var(--formspec-color-foreground, #20241f);
@@ -270,6 +272,7 @@ formspec-render {
   --formspec-default-primary: var(--formspec-color-primary, #27594f);
   --formspec-default-primary-strong: var(--formspec-color-primary-dark, #1d443c);
   --formspec-default-danger: var(--formspec-color-error, #c1281f);
+  --formspec-default-error: var(--formspec-default-danger);
   --formspec-default-danger-strong: #b1261d;
   --formspec-default-success: var(--formspec-color-success, #2f855a);
   --formspec-default-warning: var(--formspec-color-warning, #946112);
@@ -303,6 +306,7 @@ formspec-render {
   --formspec-default-readonly-input-border: var(--formspec-readonly-input-border, #d8d0c3);
   --formspec-default-readonly-input-text: var(--formspec-readonly-input-text, #4f473d);
   --formspec-default-danger-surface: color-mix(in srgb, var(--formspec-default-danger) 10%, white);
+  --formspec-default-error-surface: var(--formspec-default-danger-surface);
   --formspec-default-danger-surface-soft: #fdf1ef;
   --formspec-default-success-surface: #ebf5ef;
   --formspec-default-warning-surface: #fff2db;
@@ -357,6 +361,7 @@ formspec-render {
   --formspec-default-primary: var(--formspec-color-dark-primary, #8bb8ac);
   --formspec-default-primary-strong: #b6d7cf;
   --formspec-default-danger: var(--formspec-color-dark-error, #ff8b7f);
+  --formspec-default-error: var(--formspec-default-danger);
   --formspec-default-danger-strong: #ffb2a9;
   --formspec-default-success: var(--formspec-color-dark-success, #79c89d);
   --formspec-default-warning: var(--formspec-color-dark-warning, #e2b35c);
@@ -402,6 +407,7 @@ formspec-render {
 
   /* Status surfaces — computed from accents and background */
   --formspec-default-danger-surface: color-mix(in srgb, var(--formspec-default-danger) 18%, var(--formspec-default-bg));
+  --formspec-default-error-surface: var(--formspec-default-danger-surface);
   --formspec-default-danger-surface-soft: #2c1c19;
   --formspec-default-success-surface: color-mix(in srgb, var(--formspec-default-success) 12%, var(--formspec-default-bg));
   --formspec-default-warning-surface: color-mix(in srgb, var(--formspec-default-warning) 14%, var(--formspec-default-bg));
@@ -448,6 +454,9 @@ formspec-render {
   gap: var(--formspec-spacing-md, 1rem) var(--formspec-spacing-field, 0.75rem);
 }
 
+/* Every text and control size an item draws in this skin (here and in the inputs, data and surfaces sheets)
+ * multiplies `--formspec-size-scale`, which the core §4.2.5.3 `size` hint sets on the item
+ * (default.utilities.css); outside one it is unset and the factor is 1. */
 .formspec-container :where(input:not([type="radio"]):not([type="checkbox"]):not([type="range"]):not([hidden]):not(.formspec-combobox-input):not(.formspec-file-input-hidden)),
 .formspec-container :where(textarea),
 .formspec-container :where(select) {
@@ -458,7 +467,7 @@ formspec-render {
   border-radius: var(--formspec-default-radius-sm);
   box-sizing: border-box;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--formspec-size-scale, 1));
   line-height: 1.5;
   letter-spacing: 0.002em;
   color: var(--formspec-default-text);
@@ -492,7 +501,7 @@ formspec-render {
 .formspec-container :where(label) {
   display: block;
   margin-bottom: 0.4rem;
-  font-size: 0.84rem;
+  font-size: calc(0.84rem * var(--formspec-size-scale, 1));
   font-weight: 560;
   letter-spacing: 0.01em;
   color: var(--formspec-default-text);
@@ -500,10 +509,11 @@ formspec-render {
 
 .formspec-container :where(button) {
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
 }
 
 .formspec-container :where(h1) {
+  font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
   font-size: 1.7rem;
   font-weight: 700;
   line-height: 1.1;
@@ -511,6 +521,7 @@ formspec-render {
 }
 
 .formspec-container :where(h2) {
+  font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
   font-size: 1.3rem;
   font-weight: 700;
   line-height: 1.15;
@@ -518,10 +529,15 @@ formspec-render {
 }
 
 .formspec-container :where(h3) {
+  font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
   font-size: 1.02rem;
   font-weight: 650;
   line-height: 1.3;
   letter-spacing: -0.015em;
+}
+
+.formspec-container :where(code, kbd, samp, pre) {
+  font-family: var(--formspec-font-mono, var(--formspec-default-font-mono));
 }
 
 .formspec-container :where(h4) {
@@ -559,7 +575,7 @@ formspec-render {
   width: 100%;
   margin: 0 0 0.4rem;
   padding: 0;
-  font-size: 0.84rem;
+  font-size: calc(0.84rem * var(--formspec-size-scale, 1));
   font-weight: 560;
   letter-spacing: 0.01em;
   color: var(--formspec-default-text);
@@ -596,6 +612,10 @@ formspec-render {
   align-items: center;
   column-gap: 0.75rem;
   row-gap: var(--formspec-spacing-xs, 0.25rem);
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--formspec-default-border-muted);
+  border-radius: var(--formspec-default-radius-sm);
+  background: var(--formspec-default-surface-quiet);
 }
 
 .formspec-field--toggle > .formspec-label {
@@ -635,7 +655,7 @@ formspec-render {
 }
 
 .formspec-description {
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--formspec-size-scale, 1));
   line-height: 1.55;
   color: var(--formspec-description-color, var(--formspec-default-text-muted));
 }
@@ -658,7 +678,7 @@ formspec-render {
 
 .formspec-hint {
   margin: 0 0 0.25rem;
-  font-size: 0.855rem;
+  font-size: calc(0.855rem * var(--formspec-size-scale, 1));
   line-height: 1.5;
   color: var(--formspec-default-text-subtle);
 }
@@ -675,7 +695,7 @@ formspec-render {
   padding: 0.6rem 0.8rem;
   cursor: pointer;
   color: var(--formspec-default-text);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   font-weight: 600;
 }
 
@@ -696,56 +716,57 @@ formspec-render {
 }
 
 .formspec-field-help-title {
-  font-size: 0.9375rem;
+  font-size: calc(0.9375rem * var(--formspec-size-scale, 1));
 }
 
 .formspec-field-help-reference p {
   color: var(--formspec-default-text-subtle);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   line-height: 1.5;
 }
 
 .formspec-heading {
+  font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
   color: var(--formspec-default-text);
 }
 
 h1.formspec-heading {
   margin: 1.5rem 0 0.5rem;
-  font-size: 1.55rem;
+  font-size: calc(1.55rem * var(--formspec-size-scale, 1));
   font-weight: 700;
   letter-spacing: -0.03em;
 }
 
 h2.formspec-heading {
   margin: 1.5rem 0 0.5rem;
-  font-size: 1.28rem;
+  font-size: calc(1.28rem * var(--formspec-size-scale, 1));
   font-weight: 700;
   letter-spacing: -0.025em;
 }
 
 h3.formspec-heading {
   margin: 1rem 0 0.25rem;
-  font-size: 1.02rem;
+  font-size: calc(1.02rem * var(--formspec-size-scale, 1));
   font-weight: 650;
 }
 
 h4.formspec-heading {
   margin: 0.75rem 0 0.25rem;
-  font-size: 0.9375rem;
+  font-size: calc(0.9375rem * var(--formspec-size-scale, 1));
   font-weight: 600;
 }
 
 h5.formspec-heading,
 h6.formspec-heading {
   margin: 0.5rem 0 0.25rem;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   font-weight: 600;
 }
 
 .formspec-error {
   min-height: 1.25rem;
   margin-top: 0.25rem;
-  font-size: 0.8125rem;
+  font-size: calc(0.8125rem * var(--formspec-size-scale, 1));
   font-weight: 500;
   color: var(--formspec-default-danger);
 }
@@ -821,7 +842,7 @@ h6.formspec-heading {
   display: flex;
   align-items: center;
   padding: 0 0.7rem;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   color: var(--formspec-default-text-subtle);
   background: color-mix(in srgb, var(--formspec-default-surface-muted) 68%, white);
 }
@@ -870,11 +891,15 @@ h6.formspec-heading {
   border-radius: var(--formspec-default-radius-pill);
   background: var(--formspec-default-readonly-badge-bg);
   color: var(--formspec-default-readonly-badge-text);
-  font-size: 0.68rem;
+  font-size: calc(0.68rem * var(--formspec-size-scale, 1));
   font-weight: 650;
   line-height: 1;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.formspec-field--readonly .formspec-required {
+  display: none;
 }
 
 .formspec-field--readonly :is(.formspec-input, input, textarea, select),
@@ -1044,7 +1069,9 @@ h6.formspec-heading {
 /* Core §4.2.5.3 styleHints, carried onto an item's root as classes by the resolver. Zero specificity: they are
  * the author's defaults, so a state or a Theme class restyles over them. A tone is the leading bar this skin
  * already gives headings; muted re-points the skin's text tokens for everything in the item; size scales the
- * item's words and controls together. */
+ * item's words and controls together: it sets `--formspec-size-scale`, which every text and control size the
+ * skin gives an item multiplies (default.base.css), so the hint itself stays at zero specificity, and it
+ * re-points the spacing tokens the skin's gaps read. */
 :where(.formspec-emphasis-primary, .formspec-emphasis-success, .formspec-emphasis-warning, .formspec-emphasis-danger) {
   border-inline-start: 3px solid var(--formspec-emphasis-tone);
   padding-inline-start: var(--formspec-spacing-md, 0.75rem);
@@ -1061,8 +1088,33 @@ h6.formspec-heading {
   color: var(--formspec-default-text-muted);
 }
 
-:where(.formspec-size-compact) { zoom: 0.875; }
-:where(.formspec-size-large) { zoom: 1.125; }
+:where(.formspec-size-compact) {
+  --formspec-size-scale: 0.875;
+  font-size: 0.875em;
+  --formspec-spacing-xs: 0.25rem;
+  --formspec-spacing-sm: 0.4rem;
+  --formspec-spacing-md: 0.65rem;
+  --formspec-spacing-field: 0.65rem;
+}
+
+:where(.formspec-size-large) {
+  --formspec-size-scale: 1.125;
+  font-size: 1.125em;
+  --formspec-spacing-xs: 0.4rem;
+  --formspec-spacing-sm: 0.65rem;
+  --formspec-spacing-md: 1.1rem;
+  --formspec-spacing-field: 1rem;
+}
+
+/* A size inside another one compounds (core §4.2.5.3), so a compact item in a large group reads near normal
+ * scale. A custom property cannot multiply the value it inherits, so the nested pairs carry the product
+ * (exact to two levels; a third level resolves to one of the pairs). */
+:where(.formspec-size-large .formspec-size-compact, .formspec-size-compact .formspec-size-large) {
+  --formspec-size-scale: 0.984375;
+}
+
+:where(.formspec-size-large .formspec-size-large) { --formspec-size-scale: 1.265625; }
+:where(.formspec-size-compact .formspec-size-compact) { --formspec-size-scale: 0.765625; }
 
 /* @filedesc Input widgets and field-specific affordances for the default Formspec skin. */
 
@@ -1102,7 +1154,7 @@ h6.formspec-heading {
 }
 
 .formspec-toggle-label {
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--formspec-default-text-subtle);
@@ -1262,7 +1314,7 @@ h6.formspec-heading {
   border: none;
   border-radius: 0;
   background: transparent;
-  font-size: 0.9375rem;
+  font-size: calc(0.9375rem * var(--formspec-size-scale, 1));
   line-height: 1.4;
   color: var(--formspec-default-text);
   box-shadow: none;
@@ -1301,7 +1353,7 @@ h6.formspec-heading {
   border-radius: var(--formspec-default-radius-sm);
   background: transparent;
   color: var(--formspec-default-text-subtle);
-  font-size: 1.125rem;
+  font-size: calc(1.125rem * var(--formspec-size-scale, 1));
   line-height: 1;
   cursor: pointer;
 }
@@ -1343,7 +1395,7 @@ h6.formspec-heading {
   border: 1px solid var(--formspec-default-border-input);
   border-radius: var(--formspec-default-radius-pill);
   background: color-mix(in srgb, var(--formspec-default-primary) 6%, white);
-  font-size: 0.8rem;
+  font-size: calc(0.8rem * var(--formspec-size-scale, 1));
   font-weight: 500;
   line-height: 1.3;
   color: var(--formspec-default-text);
@@ -1361,7 +1413,7 @@ h6.formspec-heading {
   border-radius: 50%;
   background: transparent;
   color: inherit;
-  font-size: 1rem;
+  font-size: calc(1rem * var(--formspec-size-scale, 1));
   line-height: 1;
   cursor: pointer;
   opacity: 0.7;
@@ -1398,7 +1450,7 @@ h6.formspec-heading {
   background: transparent !important;
   box-sizing: border-box;
   font-family: inherit;
-  font-size: 0.9375rem;
+  font-size: calc(0.9375rem * var(--formspec-size-scale, 1));
   line-height: 1.4;
   color: var(--formspec-default-text);
   transition: var(--formspec-default-transition-fast);
@@ -1425,7 +1477,7 @@ h6.formspec-heading {
   border-radius: var(--formspec-default-radius-sm);
   background: transparent;
   color: var(--formspec-default-text-subtle);
-  font-size: 1.125rem;
+  font-size: calc(1.125rem * var(--formspec-size-scale, 1));
   line-height: 1;
   cursor: pointer;
 }
@@ -1440,7 +1492,7 @@ h6.formspec-heading {
   align-self: center;
   width: 2rem;
   margin-right: 0.15rem;
-  font-size: 0.65rem;
+  font-size: calc(0.65rem * var(--formspec-size-scale, 1));
   line-height: 1;
   color: var(--formspec-default-text-subtle);
   text-align: center;
@@ -1476,7 +1528,7 @@ h6.formspec-heading {
   margin: 0;
   padding: 0.45rem 0.75rem;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   line-height: 1.35;
   color: var(--formspec-default-text);
 }
@@ -1503,7 +1555,7 @@ h6.formspec-heading {
   padding: 0 0.75rem;
   border-right: 1px solid var(--formspec-default-border-strong);
   white-space: nowrap;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   font-weight: 600;
   color: var(--formspec-default-text-subtle);
   background: color-mix(in srgb, var(--formspec-default-surface-muted) 72%, white);
@@ -1531,7 +1583,7 @@ h6.formspec-heading {
   border-right: 1px solid var(--formspec-default-border-strong);
   background: transparent;
   color: var(--formspec-default-text);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -1581,7 +1633,7 @@ h6.formspec-heading {
   border: none;
   background: transparent;
   color: var(--formspec-default-text);
-  font-size: 1rem;
+  font-size: calc(1rem * var(--formspec-size-scale, 1));
   font-weight: 600;
   line-height: 1;
   transition: var(--formspec-default-transition-fast);
@@ -1646,7 +1698,7 @@ h6.formspec-heading {
   display: flex;
   gap: 6px;
   cursor: pointer;
-  font-size: 24px;
+  font-size: calc(24px * var(--formspec-size-scale, 1));
 }
 
 .formspec-rating-star {
@@ -1692,7 +1744,7 @@ h6.formspec-heading {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   color: var(--formspec-default-text-faint);
 }
 
@@ -1732,13 +1784,13 @@ h6.formspec-heading {
 }
 
 .formspec-file-drop-icon {
-  font-size: 1rem;
+  font-size: calc(1rem * var(--formspec-size-scale, 1));
   line-height: 1;
   color: var(--formspec-default-text-subtle);
 }
 
 .formspec-file-drop-label {
-  font-size: 0.9rem;
+  font-size: calc(0.9rem * var(--formspec-size-scale, 1));
   color: var(--formspec-default-text);
   font-weight: 560;
 }
@@ -1758,7 +1810,7 @@ h6.formspec-heading {
   border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 84%, white);
   border-radius: var(--formspec-default-radius-sm);
   background: color-mix(in srgb, var(--formspec-default-surface-quiet) 80%, white);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
 }
 
 .formspec-file-list-item + .formspec-file-list-item {
@@ -1790,7 +1842,7 @@ h6.formspec-heading {
   -webkit-appearance: none;
   background: transparent;
   color: var(--formspec-default-text-faint);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   transition: var(--formspec-default-transition-fast);
 }
 
@@ -1805,7 +1857,7 @@ h6.formspec-heading {
   appearance: none;
   -webkit-appearance: none;
   background: none;
-  font-size: 0.75rem;
+  font-size: calc(0.75rem * var(--formspec-size-scale, 1));
   text-decoration: underline;
 }
 
@@ -1832,7 +1884,7 @@ h6.formspec-heading {
   border-radius: var(--formspec-default-radius-sm);
   background: color-mix(in srgb, var(--formspec-default-surface) 78%, white);
   color: var(--formspec-default-text-subtle);
-  font-size: 0.84rem;
+  font-size: calc(0.84rem * var(--formspec-size-scale, 1));
   font-weight: 560;
   letter-spacing: 0.01em;
 }
@@ -1841,6 +1893,16 @@ h6.formspec-heading {
   border-color: var(--formspec-default-border-strong);
   background: var(--formspec-default-surface-soft);
   color: var(--formspec-default-text);
+}
+
+@media (pointer: coarse) {
+  .formspec-select-clear,
+  .formspec-combobox-chip-remove {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    width: 2.75rem;
+    height: 2.75rem;
+  }
 }
 
 /* @filedesc Surface components and content containers for the default Formspec skin. */
@@ -1934,7 +1996,7 @@ hr.formspec-divider {
 .formspec-repeat-instance-label {
   margin: 0;
   color: var(--formspec-default-text-strong);
-  font-size: 0.8125rem;
+  font-size: calc(0.8125rem * var(--formspec-size-scale, 1));
   font-weight: 650;
   letter-spacing: 0.035em;
   text-transform: uppercase;
@@ -2011,9 +2073,14 @@ hr.formspec-divider {
 .formspec-group-title {
   margin: 0 0 0.5rem;
   color: var(--formspec-default-text);
-  font-size: 1.18rem;
+  font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
+  font-size: calc(1.18rem * var(--formspec-size-scale, 1));
   font-weight: 650;
   letter-spacing: -0.028em;
+}
+
+.formspec-section > :is(h1, h2, h3) {
+  font-family: var(--formspec-font-heading, var(--formspec-default-font-heading));
 }
 
 .formspec-group-title {
@@ -2031,14 +2098,6 @@ hr.formspec-divider {
   padding-inline-start: 0.6rem;
 }
 
-/* Every rendered form has this direct root stack. Keep one brand-bearing
- * surface even when the Definition contains only plain fields and therefore
- * has no section heading, legend, or submit control. */
-.formspec-container > .formspec-stack {
-  border-inline-start: 3px solid var(--formspec-default-primary);
-  padding-inline-start: var(--formspec-spacing-md, 0.75rem);
-}
-
 .formspec-card-title {
   margin-bottom: 0;
 }
@@ -2053,8 +2112,17 @@ hr.formspec-divider {
 
 .formspec-text {
   margin: 0;
+  max-width: 65ch;
   color: var(--formspec-default-text);
   line-height: 1.6;
+}
+
+.formspec-validation-summary,
+.formspec-container .formspec-validation-summary {
+  padding: 1rem 1.25rem;
+  border-inline-start: 4px solid var(--formspec-default-error);
+  border-radius: var(--formspec-default-radius-md);
+  background: var(--formspec-default-error-surface);
 }
 
 .formspec-alert {
@@ -2350,6 +2418,29 @@ hr.formspec-divider {
 
 .fs-issuer-query-indicator {
   margin-left: auto;
+}
+
+:is(.formspec-card, .formspec-panel) .formspec-screener {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 480px) {
+  .formspec-card {
+    padding-inline: 0.9rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .formspec-alert-close {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    width: 2.75rem;
+    height: 2.75rem;
+  }
 }
 
 /* @filedesc Navigation, overlay, and workflow components for the default Formspec skin. */
@@ -2689,9 +2780,9 @@ hr.formspec-divider {
   flex-direction: column;
   gap: 0.25rem;
   padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 68%, white);
+  border: none;
   border-radius: var(--formspec-default-radius-sm);
-  background: color-mix(in srgb, white 82%, var(--formspec-default-surface));
+  background: color-mix(in srgb, white 72%, var(--formspec-default-surface-quiet));
 }
 
 .formspec-screener-continue {
@@ -2968,7 +3059,7 @@ hr.formspec-divider {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   line-height: 1.45;
   border: 1px solid color-mix(in srgb, var(--formspec-default-border-subtle) 82%, white);
   border-radius: var(--formspec-default-radius-md);
@@ -2996,7 +3087,7 @@ hr.formspec-divider {
   border: 1px solid color-mix(in srgb, var(--formspec-default-border-control) 82%, white);
   border-radius: var(--formspec-default-radius-sm);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
 }
 
 .formspec-datatable-input:disabled {
@@ -3017,7 +3108,7 @@ hr.formspec-divider {
   border-radius: var(--formspec-default-radius-sm) 0 0 var(--formspec-default-radius-sm);
   background: var(--formspec-default-surface-soft);
   color: var(--formspec-default-text-muted);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--formspec-size-scale, 1));
   white-space: nowrap;
 }
 
@@ -3034,7 +3125,7 @@ hr.formspec-divider {
   appearance: none;
   -webkit-appearance: none;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: calc(0.8125rem * var(--formspec-size-scale, 1));
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
@@ -3059,7 +3150,7 @@ hr.formspec-divider {
 .formspec-row-number {
   width: 2rem;
   color: var(--formspec-default-text-faint);
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--formspec-size-scale, 1));
   text-align: center;
 }
 

@@ -109,14 +109,20 @@ export function resetToolsWasmDynamicImportCountForTest() {
 /** Parse a FEL expression and return whether it's valid. */
 export function wasmParseFEL(expression) {
     assertWasmToolsReadySync();
-    return wasmTools().parseFEL(expression);
+    const fn = wasmTools().parseFel ?? wasmTools().parseFEL;
+    return fn(expression);
 }
+/** Alias for `wasmParseFEL` using modern camelCase. */
+export const wasmParseFel = wasmParseFEL;
 /** Tokenize a FEL expression and return positioned token records. */
 export function wasmTokenizeFEL(expression) {
     assertWasmToolsReadySync();
-    const resultJson = wasmTools().tokenizeFEL(expression);
+    const fn = wasmTools().tokenizeFel ?? wasmTools().tokenizeFEL;
+    const resultJson = fn(expression);
     return JSON.parse(resultJson);
 }
+/** Alias for `wasmTokenizeFEL` using modern camelCase. */
+export const wasmTokenizeFel = wasmTokenizeFEL;
 /** Extract full dependency info from a FEL expression. */
 export function wasmExtractDependencies(expression) {
     assertWasmToolsReadySync();
@@ -173,14 +179,20 @@ export function wasmLintDocumentWithRegistries(doc, registries) {
 /** Collect the rewriteable targets in a FEL expression. */
 export function wasmCollectFELRewriteTargets(expression) {
     assertWasmToolsReadySync();
-    const resultJson = wasmTools().collectFELRewriteTargets(expression);
+    const fn = wasmTools().collectFelRewriteTargets ?? wasmTools().collectFELRewriteTargets;
+    const resultJson = fn(expression);
     return JSON.parse(resultJson);
 }
+/** Alias for `wasmCollectFELRewriteTargets` using modern camelCase. */
+export const wasmCollectFelRewriteTargets = wasmCollectFELRewriteTargets;
 /** Rewrite a FEL expression using explicit rewrite maps. */
 export function wasmRewriteFELReferences(expression, rewrites) {
     assertWasmToolsReadySync();
-    return wasmTools().rewriteFELReferences(expression, JSON.stringify(rewrites));
+    const fn = wasmTools().rewriteFelReferences ?? wasmTools().rewriteFELReferences;
+    return fn(expression, JSON.stringify(rewrites));
 }
+/** Alias for `wasmRewriteFELReferences` using modern camelCase. */
+export const wasmRewriteFelReferences = wasmRewriteFELReferences;
 /** Rewrite FEL using definition-assembly `RewriteMap` JSON (fragment + host keys). */
 export function wasmRewriteFelForAssembly(expression, mapJson) {
     assertWasmToolsReadySync();
@@ -194,8 +206,11 @@ export function wasmRewriteMessageTemplate(message, rewrites) {
 /** Print a FEL expression AST back to normalized source. */
 export function wasmPrintFEL(expression) {
     assertWasmToolsReadySync();
-    return wasmTools().printFEL(expression);
+    const fn = wasmTools().printFel ?? wasmTools().printFEL;
+    return fn(expression);
 }
+/** Alias for `wasmPrintFEL` using modern camelCase. */
+export const wasmPrintFel = wasmPrintFEL;
 /** Parse FEL and lift a homogeneous `and` / `or` chain into Studio condition-group JSON when possible. */
 export function wasmTryLiftConditionGroup(expression) {
     assertWasmToolsReadySync();

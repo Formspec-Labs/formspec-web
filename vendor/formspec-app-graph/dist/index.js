@@ -4,7 +4,7 @@ export { widgetActionScopeMatches, CANONICAL_RESPONSE_SCHEMA_REF } from './widge
 export { artifactIdentityKey, compareDiagnostics, createAppGraphReport, diagnosticSourceForHandle, normalizeDiagnostics, } from './report.js';
 export { componentNodeIdentityKey, } from './component-identity.js';
 export { produceBundleExportAppGraphValidationReport, produceAppGraphValidationReport, } from './producer.js';
-export { artifactResolutionGraphInput, resolveArtifacts, resolveBundleExportArtifacts, } from './artifact-resolver.js';
+export { APP_MANIFEST_VERSIONS, appManifestVersionAtLeast, artifactResolutionGraphInput, resolveArtifacts, resolveBundleExportArtifacts, } from './artifact-resolver.js';
 export { evaluateActorPostureAdmission, evaluateModulePostureAdmission, } from './posture-admission.js';
 export { moduleResolverInputFromAppGraph, resolveModules, } from './module-resolver.js';
 export { validateComponentGraphContexts, } from './component-graph-context.js';
@@ -15,19 +15,22 @@ export { validateExperienceActionRefs, } from './experience-action-refs.js';
 export { validateExperienceReferentialIntegrity, } from './experience-referential-integrity.js';
 export { validateExecutableSchemaContracts, } from './executable-schema-contracts.js';
 export { DATA_SOURCE_CONTRACT_CODES, validateDataSources, } from './data-sources.js';
-export { normalizeLocaleTag, validateLocaleAssociations, } from './locale-associations.js';
+export { LOCALE_ASSOCIATION_CODES, normalizeLocaleTag, validateLocaleAssociations, } from './locale-associations.js';
 export { validateNeedsCoverage, } from './needs-coverage.js';
 export { NEED_COMPLETION_SHAPES, NEED_USABLE_OUTCOME_CODES, validateNeedUsableOutcomes, } from './need-usable-outcomes.js';
-export { collectRenderedNeedTraceNodes, RENDERED_NEED_TRACE_CODES, validateRenderedNeedTrace, } from './rendered-need-trace.js';
+export { collectRenderedNeedTraceNodes, RENDERED_NEED_TRACE_CODES, runRenderedNeedTrace, validateRenderedNeedTrace, } from './rendered-need-trace.js';
+export { LOCALE_LINT_ORIGIN, lintPathToJsonPointer, localeLintValidator, } from './locale-lint.js';
 export { validateScreenerSurfaceTargets, } from './screener-surface-targets.js';
 export { validateSurfaceDefinitionSlots, } from './surface-definition-slots.js';
 export { validateSurfaceExperienceUnits, } from './surface-experience-units.js';
 export { CLOSED_RESPONSE_ACTION_INTENTS, validateSurfaceResponseActionTriggers, } from './surface-response-action-triggers.js';
 export { routeHasWidgetActionSource, validateSurfaceWidgetActions, } from './surface-widget-actions.js';
 export { STRUCTURED_PANEL_CONTRACT_CODES, structuredPanelConfirmationAdmission, validateStructuredPanelContracts, } from './structured-panel-contracts.js';
+export { UX_AUTHORING_QUALITY_CODES, validateUxAuthoringQuality, } from './ux-authoring-quality.js';
 export { UX_TITLE_DUPLICATE_CODE, validateUxTitleDuplicates, } from './ux-title-duplicates.js';
 export { validateThemeTokenRegistry, } from './theme-token-registry.js';
 export { PLATFORM_BRAND_TOKEN_KEY, PLATFORM_TOKEN_KEYS, } from './platform-token-keys.js';
+export { HOST_WIDGET_CONTRACT_CODES, hostWidgetContractSet, hostWidgetContractVariants, selectHostWidgetContract, validateHostWidgetContracts, widgetContractMismatchReasons, } from './widget-runtime-contract.js';
 export { resolveWidgetContribution, } from './widget-contribution.js';
 // `ROUTE_CLASS_THEME_AUTHORITY` is a RENDERING rule that until now only a
 // validator could import: it was exported from its module but not from this

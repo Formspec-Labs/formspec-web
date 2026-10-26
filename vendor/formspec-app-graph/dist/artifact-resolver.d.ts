@@ -54,6 +54,14 @@ export interface ArtifactResolutionGraphInput {
     artifacts: NonNullable<AppGraphValidationRequest['artifacts']>;
     artifactResolution: AppGraphDiagnosticReport;
 }
+/** App Manifest `$formspecBundle` versions, oldest first (App Manifest spec §2.2). */
+export declare const APP_MANIFEST_VERSIONS: readonly ["2.0", "2.1", "2.2", "2.3", "2.4", "2.5"];
+export type AppManifestVersion = typeof APP_MANIFEST_VERSIONS[number];
+/**
+ * Whether `version` is a known App Manifest version at or after `minimum`.
+ * Each 2.x minor is additive, so a rule introduced in one minor holds in every later one.
+ */
+export declare function appManifestVersionAtLeast(version: unknown, minimum: AppManifestVersion): boolean;
 export declare function artifactResolutionGraphInput(report: ArtifactResolutionReport): ArtifactResolutionGraphInput;
 export declare function resolveArtifacts(request: ArtifactResolverRequest): Promise<ArtifactResolutionReport>;
 /**

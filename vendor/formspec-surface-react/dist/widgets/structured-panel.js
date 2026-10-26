@@ -103,6 +103,17 @@ function scalarText(value) {
     const scalar = scalarValue(value);
     return scalar === undefined ? undefined : String(scalar);
 }
+function detectCellKind(id, value) {
+    if (!value)
+        return undefined;
+    if (/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(value))
+        return 'timestamp';
+    if (/^(urn:|sha256:|[A-Z0-9]+-[A-Z0-9-]+)/.test(value))
+        return 'identifier';
+    if (id && /^(status|state|priority)$/i.test(id))
+        return 'status';
+    return undefined;
+}
 /** Own data properties only; refused access is different from absent evidence. */
 function selectJsonValue(root, path) {
     if (typeof path !== 'string' || !path.length)
@@ -240,7 +251,7 @@ function StructuredActionButton({ action, label, emphasis, anchors, input, emitA
             invoke();
         }, ...traceAttributes(anchors), children: visibleLabel }));
 }
-function blockFrame(block, headingLevel, content) {
+function blockFrame(block, headingLevel, content, parentTitle) {
     const id = safeId(block.id);
     if (!id)
         return null;
@@ -248,10 +259,11 @@ function blockFrame(block, headingLevel, content) {
     if (anchors.length === 0)
         return null;
     const title = nonEmptyString(block.title);
+    const suppressTitle = Boolean(title && (title === id || (parentTitle !== undefined && title === parentTitle)));
     const renderedContent = content(anchors);
     if (renderedContent === null || renderedContent === undefined)
         return null;
-    return (_jsxs("section", { className: "fs-structured-panel__block", "data-block-id": id, "data-block-type": nonEmptyString(block.type), ...traceAttributes(anchors), children: [title ? (_jsx(Heading, { level: headingLevel, className: "fs-structured-panel__block-title", children: title })) : null, renderedContent] }, id));
+    return (_jsxs("section", { className: "fs-structured-panel__block", "data-block-id": id, "data-block-type": nonEmptyString(block.type), ...traceAttributes(anchors), children: [title ? (_jsx(Heading, { level: headingLevel, className: `fs-structured-panel__block-title${suppressTitle ? ' fs-surface-visually-hidden' : ''}`, children: title })) : null, renderedContent] }, id));
 }
 function blockEmpty(block, anchors) {
     const message = nonEmptyString(block.emptyMessage);
@@ -296,13 +308,18 @@ function renderedKeyValueItems(block, data, routeParams) {
             : [{ id, label, ...value, anchors }];
     });
 }
-function renderKeyValue(block, data, routeParams, headingLevel) {
+function renderKeyValue(block, data, routeParams, headingLevel, parentTitle) {
     return blockFrame(block, headingLevel, (anchors) => {
         const items = renderedKeyValueItems(block, data, routeParams);
         if (items.length === 0)
             return blockEmpty(block, anchors);
-        return (_jsx("dl", { className: "fs-structured-panel__facts", children: items.map((item) => (_jsxs("div", { className: "fs-structured-panel__fact", "data-field-id": item.id, ...traceAttributes(item.anchors), children: [_jsx("dt", { children: item.label }), _jsx("dd", { children: item.value })] }, item.id))) }));
-    });
+        return (_jsx("dl", { className: "fs-structured-panel__facts", children: items.map((item) => {
+                const cellKind = detectCellKind(item.id, item.value);
+                return (_jsxs("div", { className: "fs-structured-panel__fact", "data-field-id": item.id, "data-field-format": cellKind === 'timestamp' || cellKind === 'identifier'
+                        ? 'mono'
+                        : undefined, ...traceAttributes(item.anchors), children: [_jsx("dt", { children: item.label }), _jsx("dd", { "data-cell-kind": cellKind, children: item.value })] }, item.id));
+            }) }));
+    }, parentTitle);
 }
 function renderList(block, data, headingLevel) {
     return blockFrame(block, headingLevel, (anchors) => {
@@ -376,16 +393,22 @@ function admittedTableRowAction(block, availableActions) {
         confirmation: confirmation.status === 'admitted' ? confirmation.confirmation : undefined,
     };
 }
-function renderTable(block, data, headingLevel, availableActions, emitAction) {
+function renderTable(block, data, headingLevel, availableActions, emitAction, parentTitle) {
     return blockFrame(block, headingLevel, (anchors) => {
         const rows = renderedTableRows(block, data);
         const columns = renderedTableColumns(block);
         if (rows.length === 0 || columns.length === 0)
             return blockEmpty(block, anchors);
         const caption = nonEmptyString(block.caption);
+        const blockTitle = nonEmptyString(block.title);
+        const suppressCaption = Boolean(caption && (caption === blockTitle || caption === parentTitle));
         const responsiveMode = block.responsiveMode === 'scroll' ? 'scroll' : 'stack';
         const rowAction = admittedTableRowAction(block, availableActions);
-        return (_jsx("div", { className: "fs-structured-panel__table-scroll", "data-responsive-mode": responsiveMode, role: "region", tabIndex: 0, "aria-label": caption ?? nonEmptyString(block.title) ?? safeId(block.id), children: _jsxs("table", { className: "fs-structured-panel__table", children: [caption ? _jsx("caption", { children: caption }) : null, _jsx("thead", { children: _jsxs("tr", { children: [columns.map((column) => (_jsx("th", { scope: "col", "data-column-id": column.id, "data-numeric": column.numeric ? 'true' : undefined, ...traceAttributes(column.anchors), children: column.label }, column.id))), rowAction ? (_jsx("th", { scope: "col", "data-column-id": "action", ...traceAttributes(rowAction.anchors), children: rowAction.columnLabel })) : null] }) }), _jsx("tbody", { children: rows.map((row, rowIndex) => (_jsxs("tr", { children: [columns.map((column) => (_jsx("td", { "data-column-id": column.id, "data-column-label": column.label, "data-numeric": column.numeric ? 'true' : undefined, ...traceAttributes(column.anchors), children: scalarText(readStructuredPanelPath(row, column.path)) ?? '' }, column.id))), rowAction ? (_jsx("td", { "data-column-id": "action", "data-column-label": rowAction.columnLabel, ...traceAttributes(rowAction.anchors), children: rowAction.config.payload !== undefined &&
+        return (_jsx("div", { className: "fs-structured-panel__table-scroll", "data-responsive-mode": responsiveMode, role: "region", tabIndex: 0, "aria-label": caption ?? blockTitle ?? safeId(block.id), children: _jsxs("table", { className: "fs-structured-panel__table", children: [caption ? (_jsx("caption", { className: suppressCaption ? 'fs-surface-visually-hidden' : undefined, children: caption })) : null, _jsx("thead", { children: _jsxs("tr", { children: [columns.map((column) => (_jsx("th", { scope: "col", "data-column-id": column.id, "data-numeric": column.numeric ? 'true' : undefined, ...traceAttributes(column.anchors), children: column.label }, column.id))), rowAction ? (_jsx("th", { scope: "col", "data-column-id": "action", ...traceAttributes(rowAction.anchors), children: rowAction.columnLabel })) : null] }) }), _jsx("tbody", { children: rows.map((row, rowIndex) => (_jsxs("tr", { children: [columns.map((column) => {
+                                    const cellValue = scalarText(readStructuredPanelPath(row, column.path)) ?? '';
+                                    const cellKind = detectCellKind(column.id, cellValue);
+                                    return (_jsx("td", { "data-column-id": column.id, "data-column-label": column.label, "data-numeric": column.numeric ? 'true' : undefined, "data-cell-kind": cellKind, ...traceAttributes(column.anchors), children: cellValue }, column.id));
+                                }), rowAction ? (_jsx("td", { "data-column-id": "action", "data-column-label": rowAction.columnLabel, ...traceAttributes(rowAction.anchors), children: rowAction.config.payload !== undefined &&
                                         selectedActionPayload(rowAction.config.payload, row) === undefined
                                         ? null
                                         : (_jsx(StructuredActionButton, { action: rowAction.action, label: rowAction.label, emphasis: rowAction.emphasis, anchors: rowAction.anchors, input: selectedActionPayload(rowAction.config.payload, row), emitAction: emitAction, rowAction: true, pendingLabel: nonEmptyString(rowAction.config.pendingLabel), successMessage: nonEmptyString(rowAction.config.successMessage), failureMessage: nonEmptyString(rowAction.config.failureMessage), confirmation: rowAction.confirmation }, JSON.stringify([
@@ -396,7 +419,7 @@ function renderTable(block, data, headingLevel, availableActions, emitAction) {
                                             nonEmptyString(rowAction.config.successMessage),
                                             nonEmptyString(rowAction.config.failureMessage),
                                         ]))) })) : null] }, `row-${rowIndex}`))) })] }) }));
-    });
+    }, parentTitle);
 }
 function renderProgress(block, data, headingLevel) {
     return blockFrame(block, headingLevel, (anchors) => {
@@ -421,7 +444,7 @@ function renderProgress(block, data, headingLevel) {
         return (_jsxs("div", { className: "fs-structured-panel__progress", ...traceAttributes(anchors), children: [label ? _jsx("span", { children: label }) : null, _jsx("progress", { value: Math.min(Math.max(value, 0), max), max: max }), _jsxs("strong", { children: [value, suffix] })] }));
     });
 }
-function renderBlock(candidate, data, routeParams, headingLevel, availableActions, emitAction) {
+function renderBlock(candidate, data, routeParams, headingLevel, availableActions, emitAction, parentTitle) {
     const block = record(candidate);
     if (!block)
         return null;
@@ -431,11 +454,11 @@ function renderBlock(candidate, data, routeParams, headingLevel, availableAction
         case 'metric':
             return renderMetric(block, data, headingLevel);
         case 'key-value':
-            return renderKeyValue(block, data, routeParams, headingLevel);
+            return renderKeyValue(block, data, routeParams, headingLevel, parentTitle);
         case 'list':
             return renderList(block, data, headingLevel);
         case 'table':
-            return renderTable(block, data, headingLevel, availableActions, emitAction);
+            return renderTable(block, data, headingLevel, availableActions, emitAction, parentTitle);
         case 'progress':
             return renderProgress(block, data, headingLevel);
         default:
@@ -571,13 +594,24 @@ export function StructuredPanel({ actions = [], config, data, emitAction, headin
     const title = panelAnchors.length > 0 ? nonEmptyString(panel.title) : undefined;
     const body = panelAnchors.length > 0 ? nonEmptyString(panel.body) : undefined;
     const header = eyebrow || state || title || body;
+    const routeTitle = nonEmptyString(route.title);
+    const suppressPanelTitle = Boolean(title && (title === slot.title || title === authoredPanelId || title === routeTitle));
+    const suppressSingleBlockTitle = Boolean(title &&
+        !suppressPanelTitle &&
+        configuredBlocks.length === 1 &&
+        !eyebrow &&
+        !state &&
+        !body);
     const blockHeadingLevel = title ? nextLevel(headingLevel) : headingLevel;
+    const parentTitle = suppressSingleBlockTitle
+        ? nonEmptyString(record(configuredBlocks[0])?.title) ?? title ?? slot.title
+        : title ?? slot.title;
     const renderedBlockEntries = configuredBlocks.flatMap((candidate) => {
         const block = record(candidate);
         const id = safeId(block?.id);
         if (!block || !id)
             return [];
-        const node = renderBlock(block, data, route.params, blockHeadingLevel, actions, emitAction);
+        const node = renderBlock(block, data, route.params, blockHeadingLevel, actions, emitAction, parentTitle);
         return node === null || node === undefined
             ? []
             : [{ block, id, node }];
@@ -621,5 +655,5 @@ export function StructuredPanel({ actions = [], config, data, emitAction, headin
             return null;
         return (_jsx("div", { className: "fs-structured-panel", "data-widget": "structured-panel", "data-panel-id": panelId, "data-trace-state": "present", ...traceAttributes(allAnchors), children: _jsx(WidgetEmptyState, { children: emptyMessage }) }));
     }
-    return (_jsxs("article", { className: "fs-structured-panel", "data-widget": "structured-panel", "data-panel-id": panelId, "data-trace-state": "present", ...traceAttributes(allAnchors), children: [header ? (_jsxs("header", { className: "fs-structured-panel__header", ...traceAttributes(panelAnchors), children: [_jsxs("div", { className: "fs-structured-panel__meta", children: [eyebrow ? _jsx("span", { "data-panel-field": "eyebrow", children: eyebrow }) : null, state ? _jsx("span", { "data-panel-field": "state", children: state }) : null] }), title ? (_jsx(Heading, { level: headingLevel, className: "fs-structured-panel__title", children: title })) : null, body ? _jsx("p", { className: "fs-structured-panel__body", children: body }) : null] })) : null, renderedBlocks.length > 0 ? (_jsx("div", { className: "fs-structured-panel__blocks", children: renderedBlocks })) : null, renderedActions] }));
+    return (_jsxs("article", { className: "fs-structured-panel", "data-widget": "structured-panel", "data-panel-id": panelId, "data-trace-state": "present", ...traceAttributes(allAnchors), children: [header ? (_jsxs("header", { className: "fs-structured-panel__header", ...traceAttributes(panelAnchors), children: [_jsxs("div", { className: "fs-structured-panel__meta", children: [eyebrow ? _jsx("span", { "data-panel-field": "eyebrow", children: eyebrow }) : null, state ? _jsx("span", { "data-panel-field": "state", children: state }) : null] }), title ? (_jsx(Heading, { level: headingLevel, className: `fs-structured-panel__title${suppressPanelTitle ? ' fs-surface-visually-hidden' : ''}`, children: title })) : null, body ? _jsx("p", { className: "fs-structured-panel__body", children: body }) : null] })) : null, renderedBlocks.length > 0 ? (_jsx("div", { className: "fs-structured-panel__blocks", children: renderedBlocks })) : null, renderedActions] }));
 }

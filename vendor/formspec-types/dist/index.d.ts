@@ -64,6 +64,8 @@ export type FormItem = Item & {
         instance: string;
         path: string;
     };
+    /** Definition-local documents this Field declares as its attestation scope. */
+    attests?: import('./generated/definition.js').DocumentId[];
     presentation?: Presentation;
     relevant?: string;
     visible?: string;
@@ -73,7 +75,7 @@ export type FormItem = Item & {
     constraint?: string;
     message?: string;
 };
-type FormDefinitionKnownFields = Pick<GeneratedFormDefinition, '$formspec' | 'url' | 'version' | 'versionAlgorithm' | 'derivedFrom' | 'name' | 'title' | 'description' | 'date' | 'metadata' | 'shapes' | 'instances' | 'variables' | 'nonRelevantBehavior' | 'issuer' | 'optionSets' | 'migrations' | 'fees' | 'extensions'>;
+type FormDefinitionKnownFields = Pick<GeneratedFormDefinition, '$formspec' | 'url' | 'version' | 'versionAlgorithm' | 'derivedFrom' | 'name' | 'title' | 'description' | 'documents' | 'date' | 'metadata' | 'shapes' | 'instances' | 'variables' | 'nonRelevantBehavior' | 'issuer' | 'optionSets' | 'migrations' | 'fees' | 'extensions'>;
 export type FormDefinition = FormDefinitionKnownFields & {
     items: FormItem[];
     status?: GeneratedFormDefinition['status'];

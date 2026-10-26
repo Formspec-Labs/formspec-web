@@ -2,11 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { generationNeedAnchors } from '@formspec-org/surface';
 import { Heading } from './heading.js';
 import { needTraceAttributes } from './need-trace.js';
-/** Registry inventory entries required by the generic shell state renderer. */
-export const MODULE_WIDGET_STATE_RENDERED_CONFIG_NODES = [
-    { pointerPattern: '/stateViews/*', kind: 'module-widget-state-view' },
-    { pointerPattern: '/stateViews/*/actions/*', kind: 'module-widget-state-action' },
-];
+export { MODULE_WIDGET_STATE_RENDERED_CONFIG_NODES } from './widgets/starter-contract-metadata.js';
 function record(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
         ? value

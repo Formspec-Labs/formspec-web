@@ -109,7 +109,7 @@ export function FileUploadControl({ field, node, common, isReadonly }) {
     const browseBtnClass = 'formspec-file-browse-btn formspec-focus-ring formspec-button-secondary';
     if (!dragDrop) {
         // Siblings only — formspec-file-upload lives on the field root (parity with default web component adapter).
-        return (_jsxs(_Fragment, { children: [hiddenInput, _jsxs("button", { type: "button", className: browseBtnClass, onClick: () => fileInputRef.current?.click(), disabled: isReadonly, children: ["Choose file", multiple ? 's' : ''] }), fileList, errorEl] }));
+        return (_jsxs(_Fragment, { children: [hiddenInput, _jsx("button", { type: "button", className: browseBtnClass, onClick: () => fileInputRef.current?.click(), disabled: isReadonly, children: chrome(multiple ? 'fileUpload.browseMultiple' : 'fileUpload.browse') }), fileList, errorEl] }));
     }
     return (_jsxs(_Fragment, { children: [_jsx("div", { className: `formspec-file-drop-zone formspec-focus-ring${isDragOver ? ' formspec-file-drop-zone--active' : ''}`, 
                 // Not an interactive role: the Browse button inside is the one keyboard control (WCAG 4.1.2).
@@ -118,6 +118,6 @@ export function FileUploadControl({ field, node, common, isReadonly }) {
                     setIsDragOver(false);
                     addFiles(e.dataTransfer.files);
                 }, children: _jsxs("div", { className: "formspec-file-drop-content", children: [_jsx("span", { className: "formspec-file-drop-icon", "aria-hidden": "true", children: '\u21F5' }), _jsx("span", { className: "formspec-file-drop-label", children: files.length === 0
-                                ? (multiple ? 'Drag & drop files here' : 'Drag & drop a file here')
-                                : `${files.length} file${files.length !== 1 ? 's' : ''} selected` }), _jsx("button", { type: "button", className: browseBtnClass, onClick: () => fileInputRef.current?.click(), disabled: isReadonly, children: "Browse" })] }) }), hiddenInput, fileList, errorEl] }));
+                                ? chrome(multiple ? 'fileUpload.dropzoneMultiple' : 'fileUpload.dropzone')
+                                : `${files.length} file${files.length !== 1 ? 's' : ''} selected` }), _jsx("button", { type: "button", className: browseBtnClass, onClick: () => fileInputRef.current?.click(), disabled: isReadonly, children: chrome(multiple ? 'fileUpload.browseMultiple' : 'fileUpload.browse') })] }) }), hiddenInput, fileList, errorEl] }));
 }

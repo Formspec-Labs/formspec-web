@@ -14,7 +14,16 @@ export type WasmFelAnalysisResultJson = {
     variables: string[];
     functions: string[];
 };
-export type WasmModule = typeof import('../wasm-pkg-runtime/formspec_wasm_runtime.js');
+export type WasmModule = typeof import('../wasm-pkg-runtime/formspec_wasm_runtime.js') & {
+    evalFel?: (expression: string, fields_json: string) => string;
+    evalFelWithContext?: (expression: string, context_json: string, extensions?: FelExtensionHost | null) => string;
+    evalFelWithTrace?: (expression: string, fields_json: string) => string;
+    evalFelWithContextTrace?: (expression: string, context_json: string, extensions?: FelExtensionHost | null) => string;
+    interpolateFelTemplate?: (template: string, context_json: string, extensions?: FelExtensionHost | null) => string;
+    getFelDependencies?: (expression: string) => string;
+    analyzeFel?: (expression: string) => string;
+    analyzeFelWithFieldTypes?: (expression: string, field_types_json: string) => string;
+};
 /** Whether the WASM module has been initialized and is ready for use. */
 export declare function isWasmReady(): boolean;
 /** How the host supplies the WASM module. */
@@ -46,6 +55,8 @@ export interface FelEvalResult {
 }
 /** Evaluate a FEL expression with optional field values. Returns the evaluated value. */
 export declare function wasmEvalFEL(expression: string, fields?: Record<string, any>): any;
+/** Alias for `wasmEvalFEL` using modern camelCase. */
+export declare const wasmEvalFel: typeof wasmEvalFEL;
 /** FEL evaluation context for the richer WASM evaluator. */
 export interface WasmFelContext {
     fields: Record<string, any>;
@@ -74,8 +85,8 @@ export interface WasmFelContext {
 }
 /** Evaluate a FEL expression with full FormspecEnvironment context (value + diagnostics flag). */
 export declare function wasmEvalFELWithContextEnvelope(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FelEvalResult;
-/** Evaluate a FEL expression with full FormspecEnvironment context. Returns the value only. */
-export declare function wasmEvalFELWithContext(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): any;
+/** Alias for `wasmEvalFELWithContextEnvelope` using modern camelCase. */
+export declare const wasmEvalFelWithContextEnvelope: typeof wasmEvalFELWithContextEnvelope;
 /** Host extension functions (Core §3.12) handed to evaluating exports; Rust calls `arity` and `invoke`. */
 export type FelExtensionHost = import('../wasm-pkg-runtime/formspec_wasm_runtime.js').FelExtensionHost;
 /** Throws when `name` may not be an extension function: a FEL built-in or reserved word (Core §3.12). */
@@ -148,8 +159,12 @@ export interface FelTraceResult {
  * losing FEL type fidelity (money/date) but gaining universal readability.
  */
 export declare function wasmEvalFELWithTrace(expression: string, fields?: Record<string, unknown>): FelTraceResult;
+/** Alias for `wasmEvalFELWithTrace` using modern camelCase. */
+export declare const wasmEvalFelWithTrace: typeof wasmEvalFELWithTrace;
 /** Evaluate a FEL expression against full FormspecEnvironment context and trace each step. */
 export declare function wasmEvalFELWithContextTrace(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FelTraceResult;
+/** Alias for `wasmEvalFELWithContextTrace` using modern camelCase. */
+export declare const wasmEvalFelWithContextTrace: typeof wasmEvalFELWithContextTrace;
 /** Interpolation result from Rust: resolved text plus one warning per expression left literal. */
 export interface WasmInterpolated {
     text: string;
@@ -160,6 +175,8 @@ export interface WasmInterpolated {
 }
 /** Locale §3.3.1: resolve every `{{expression}}` in `template` against a FEL context, in one call. */
 export declare function wasmInterpolateFELTemplate(template: string, context: WasmFelContext, extensions?: FelExtensionHost): WasmInterpolated;
+/** Alias for `wasmInterpolateFELTemplate` using modern camelCase. */
+export declare const wasmInterpolateFelTemplate: typeof wasmInterpolateFELTemplate;
 /**
  * Locale §3.3.1 with a host evaluator: Rust scans the template and applies the escape, failure,
  * and coercion rules; `evaluate(expression)` returns JSON `{ value, hasErrorDiagnostics? }` or throws.

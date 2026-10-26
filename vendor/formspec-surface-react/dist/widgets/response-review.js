@@ -5,8 +5,9 @@ import canonicalize from "canonicalize";
 import { snapshotFiniteJson, } from "@formspec-org/surface";
 import { Heading, nextLevel } from "../heading.js";
 import { WidgetEmptyState } from "./empty-state.js";
-import { RESPONSE_REVIEW_COPY_KEYS, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA, } from './response-review-metadata.js';
+import { RESPONSE_REVIEW_COPY_KEYS, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011, } from './response-review-metadata.js';
 export * from './response-review-metadata.js';
+import { createAcceptedReviewFieldSelection, resolveAcceptedResponseReviewFieldSelection } from './response-review-selection.js';
 const object = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const text = (v) => typeof v === "string" && v.length > 0;
 const own = (v, key) => Object.prototype.hasOwnProperty.call(v, key);
@@ -46,7 +47,7 @@ function assertUnicode(value) {
         }
     }
 }
-function capture(props) {
+function capture(props, acceptedSelectionProfile) {
     try {
         // Reject accessors/cycles before reading values; detach everything the display can consume.
         const data = snapshotFiniteJson(props.data);
@@ -80,9 +81,27 @@ function capture(props) {
                 (!Array.isArray(r.authoredSignatures) ||
                     r.authoredSignatures.length === 0)))
             return undefined;
+        const selected = own(config, 'fieldSelection');
+        if ((acceptedSelectionProfile === 'selected' && !selected) ||
+            (acceptedSelectionProfile === 'legacy' && selected))
+            return undefined;
+        let selection;
+        if (selected) {
+            if (p.phase !== 'accepted-record' || !own(p, 'fieldSelection'))
+                return undefined;
+            const policy = config.fieldSelection;
+            const expected = resolveAcceptedResponseReviewFieldSelection(d, r, policy);
+            if (canonicalize(expected) !== canonicalize(p.fieldSelection))
+                return undefined;
+            selection = createAcceptedReviewFieldSelection(d.items, policy.fieldPaths);
+        }
+        else if (own(p, 'fieldSelection'))
+            return undefined;
         if (p.phase === "accepted-record") {
             const task = own(p, "taskSign");
-            const schema = task ? ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA : ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA;
+            const schema = selected
+                ? (task ? ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011 : ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011)
+                : (task ? ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA : ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA);
             if (Object.keys(p).some(key => !own(schema.properties, key)))
                 return undefined;
             if (task) {
@@ -118,7 +137,7 @@ function capture(props) {
             return undefined;
         const copy = c;
         const attachments = [];
-        const nodes = walk(d.items, r.data, "", p, copy, attachments);
+        const nodes = walk(d.items, r.data, "", p, copy, attachments, selection);
         return {
             headingLevel: props.headingLevel,
             data,
@@ -136,7 +155,7 @@ function capture(props) {
         return undefined;
     }
 }
-function walk(items, values, prefix, p, copy, attachments) {
+function walk(items, values, prefix, p, copy, attachments, selection) {
     const nodes = [];
     const consumed = new Set();
     const keys = new Set();
@@ -150,6 +169,9 @@ function walk(items, values, prefix, p, copy, attachments) {
         if (!own(values, item.key))
             continue;
         const path = prefix ? `${prefix}.${item.key}` : item.key;
+        if (selection && !(item.type === 'field' && selection.includes(path)) &&
+            !(item.type === 'group' && selection.contains(path)))
+            continue;
         const value = values[item.key];
         const metadata = own(p.fields, path)
             ? p.fields[path]
@@ -165,15 +187,15 @@ function walk(items, values, prefix, p, copy, attachments) {
                     kind: "group",
                     path,
                     label: metadata.label,
-                    children: value.map((row, i) => ({
-                        kind: "group",
-                        path: `${path}[${i}]`,
-                        label: `${metadata.label} ${i + 1}`,
-                        children: walk(item.children, row, `${path}[${i}]`, p, copy, attachments),
-                    })),
+                    children: value.flatMap((row, i) => selection && !selection.contains(`${path}[${i}]`) ? [] : [{
+                            kind: "group",
+                            path: `${path}[${i}]`,
+                            label: `${metadata.label} ${i + 1}`,
+                            children: walk(item.children, row, `${path}[${i}]`, p, copy, attachments, selection),
+                        }]).filter(row => !selection || row.children.length > 0),
                 });
                 // An empty repeated group is still a recorded value.
-                if (!value.length)
+                if (!value.length && !selection)
                     nodes.push({
                         kind: "value",
                         path: `${path}:empty`,
@@ -183,7 +205,9 @@ function walk(items, values, prefix, p, copy, attachments) {
                     });
             }
             else if (object(value) && item.repeatable !== true) {
-                const children = walk(item.children, value, path, p, copy, attachments);
+                const children = walk(item.children, value, path, p, copy, attachments, selection);
+                if (selection && !children.length)
+                    continue;
                 nodes.push(children.length
                     ? { kind: "group", path, label: metadata.label, children }
                     : {
@@ -194,6 +218,8 @@ function walk(items, values, prefix, p, copy, attachments) {
                         attachment: false,
                     });
             }
+            else if (selection)
+                throw Error("Invalid selected review group");
             else
                 nodes.push({
                     kind: "value",
@@ -223,7 +249,7 @@ function walk(items, values, prefix, p, copy, attachments) {
         }
     }
     for (const key of Object.keys(values))
-        if (!consumed.has(key)) {
+        if (!selection && !consumed.has(key)) {
             const path = prefix ? `${prefix}.${key}` : key;
             nodes.push({
                 kind: "value",
@@ -257,9 +283,9 @@ function Value({ node, copy, }) {
                         return (_jsx("li", { children: option?.length === 1
                                 ? `${option[0].label} (${String(entry)})`
                                 : JSON.stringify(entry) }, i));
-                    }) }), _jsx("pre", { className: "fs-response-review-json", children: JSON.stringify(v, null, 2) })] }));
+                    }) }), _jsx("pre", { className: "fs-response-review-json fs-surface-review__structured", children: JSON.stringify(v, null, 2) })] }));
     // JSON preserves all keys, values, array order and scalar types without string coercion.
-    return (_jsx("pre", { className: "fs-response-review-json", children: JSON.stringify(v, null, 2) }));
+    return (_jsx("pre", { className: "fs-response-review-json fs-surface-review__structured", children: JSON.stringify(v, null, 2) }));
 }
 const raster = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 function byteMedia(bytes) {
@@ -435,7 +461,7 @@ function ReviewBody({ capture: c, options, }) {
         return (_jsx(WidgetEmptyState, { children: failed ? c.copy.unavailable : c.copy.pending }));
     const render = (nodes, level) => nodes.map((node) => node.kind === "group" ? (_jsxs("section", { className: "fs-response-review-group", children: [_jsx(Heading, { level: level, children: node.label }), render(node.children, nextLevel(level))] }, node.path)) : (_jsxs("dl", { className: "fs-response-review-row", "data-response-path": node.path, children: [_jsx("dt", { children: node.label }), _jsx("dd", { children: node.attachment ? (_jsx(Attachment, { capture: c, node: node, read: readAttachment, onStatus: onStatus })) : (_jsx(Value, { node: node, copy: c.copy })) })] }, node.path)));
     return (_jsxs("section", { className: "fs-response-review", "aria-label": c.copy.heading, lang: p.locale, children: [_jsx(Heading, { level: c.headingLevel, children: c.copy.heading }), _jsx("p", { className: "fs-response-review-intro", children: p.phase === "accepted-record" ? c.copy.acceptedRecord
-                    : p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), _jsxs("dl", { className: "fs-response-review-context", children: [p.phase !== "accepted-record" ? _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }) : null, _jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: r.authoredSignatures?.length ?? 0 })] })] }), render(c.nodes, nextLevel(c.headingLevel)), _jsxs("details", { className: "fs-response-review-record-details", children: [_jsx("summary", { children: c.copy.responseId }), _jsx("p", { children: r.id })] })] }));
+                    : p.phase === "before-sign" ? c.copy.beforeSign : c.copy.beforeSubmit }), _jsxs("dl", { className: "fs-response-review-context fs-response-review__meta", children: [p.phase !== "accepted-record" ? _jsxs("div", { children: [_jsx("dt", { children: c.copy.draftVersion }), _jsx("dd", { children: p.draft.version })] }) : null, _jsxs("div", { children: [_jsx("dt", { children: c.copy.locale }), _jsx("dd", { children: p.locale })] }), _jsxs("div", { children: [_jsx("dt", { children: c.copy.signatures }), _jsx("dd", { children: r.authoredSignatures?.length ?? 0 })] })] }), render(c.nodes, nextLevel(c.headingLevel)), _jsxs("details", { className: "fs-response-review-record-details", children: [_jsx("summary", { children: c.copy.responseId }), _jsx("p", { children: r.id })] })] }));
 }
 function unavailableCopy(props) {
     try {
@@ -458,8 +484,8 @@ function unavailableCopy(props) {
     }
 }
 let nextReviewGeneration = 0;
-export function ResponseReview(props) {
-    const c = capture(props);
+function ProfiledResponseReview(props) {
+    const c = capture(props, props.acceptedSelectionProfile);
     // Stable detached capture prevents a new snapshot object from restarting every preview render.
     const stable = useMemo(() => c, [c?.identity]);
     const generation = useMemo(() => ++nextReviewGeneration, [
@@ -486,6 +512,11 @@ export function ResponseReview(props) {
             ...(props.onAcceptedReviewState ? { onAcceptedReviewState: props.onAcceptedReviewState } : {}),
         } }, generation));
 }
-export function createResponseReviewWidget(options = {}) {
-    return (props) => _jsx(ResponseReview, { ...props, ...options });
+export function ResponseReview(props) {
+    return _jsx(ProfiledResponseReview, { ...props, acceptedSelectionProfile: undefined });
+}
+export function createResponseReviewWidget(options = {}, 
+/** Deployment profile admission; grants no access or signing authority. */
+acceptedSelectionProfile) {
+    return (props) => _jsx(ProfiledResponseReview, { ...props, ...options, acceptedSelectionProfile: acceptedSelectionProfile });
 }

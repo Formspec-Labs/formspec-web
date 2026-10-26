@@ -209,6 +209,7 @@ export class FelContext {
 if (Symbol.dispose) FelContext.prototype[Symbol.dispose] = FelContext.prototype.free;
 
 /**
+ * Legacy alias for [`analyze_fel_wasm`] using uppercase `FEL`.
  * @param {string} expression
  * @returns {string}
  */
@@ -240,10 +241,7 @@ export function analyzeFEL(expression) {
 }
 
 /**
- * Analyze a FEL expression with field data type context for type-mismatch warnings.
- *
- * `field_types_json` is a JSON object mapping field paths to data type strings,
- * e.g. `{"revenue": "money", "age": "number"}`.
+ * Legacy alias for [`analyze_fel_with_field_types_wasm`] using uppercase `FEL`.
  * @param {string} expression
  * @param {string} field_types_json
  * @returns {string}
@@ -258,6 +256,75 @@ export function analyzeFELWithFieldTypes(expression, field_types_json) {
         const ptr1 = passStringToWasm0(field_types_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
         wasm.analyzeFELWithFieldTypes(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr3 = r0;
+        var len3 = r1;
+        if (r3) {
+            ptr3 = 0; len3 = 0;
+            throw takeObject(r2);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * @param {string} expression
+ * @returns {string}
+ */
+export function analyzeFel(expression) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.analyzeFel(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr2 = r0;
+        var len2 = r1;
+        if (r3) {
+            ptr2 = 0; len2 = 0;
+            throw takeObject(r2);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Analyze a FEL expression with field data type context for type-mismatch warnings.
+ *
+ * `field_types_json` is a JSON object mapping field paths to data type strings,
+ * e.g. `{"revenue": "money", "age": "number"}`.
+ * @param {string} expression
+ * @param {string} field_types_json
+ * @returns {string}
+ */
+export function analyzeFelWithFieldTypes(expression, field_types_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(field_types_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.analyzeFelWithFieldTypes(retptr, ptr0, len0, ptr1, len1);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -416,6 +483,7 @@ export function coerceFieldValue(item_json, bind_json, definition_json, value_js
 }
 
 /**
+ * Legacy alias for [`collect_fel_rewrite_targets_wasm`] using uppercase `FEL`.
  * @param {string} expression
  * @returns {string}
  */
@@ -427,6 +495,37 @@ export function collectFELRewriteTargets(expression) {
         const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
         wasm.collectFELRewriteTargets(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr2 = r0;
+        var len2 = r1;
+        if (r3) {
+            ptr2 = 0; len2 = 0;
+            throw takeObject(r2);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * @param {string} expression
+ * @returns {string}
+ */
+export function collectFelRewriteTargets(expression) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.collectFelRewriteTargets(retptr, ptr0, len0);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -544,8 +643,7 @@ export function detectDocumentType(doc_json) {
 }
 
 /**
- * Parse and evaluate a FEL expression with optional field values (JSON object).
- * Returns the result as a JSON string.
+ * Legacy alias for [`eval_fel`] using uppercase `FEL`.
  * @param {string} expression
  * @param {string} fields_json
  * @returns {string}
@@ -580,10 +678,7 @@ export function evalFEL(expression, fields_json) {
 }
 
 /**
- * Evaluate a FEL expression with full FormspecEnvironment context.
- * `context_json` is a JSON object: { fields, variables?, mipStates?, repeatContext? }
- *
- * `extensions` resolves calls to host extension functions (Core §3.12).
+ * Legacy alias for [`eval_fel_with_context`] using uppercase `FEL`.
  * @param {string} expression
  * @param {string} context_json
  * @param {FelExtensionHost | null} [extensions]
@@ -619,9 +714,7 @@ export function evalFELWithContext(expression, context_json, extensions) {
 }
 
 /**
- * Evaluate a FEL expression with full context and trace each evaluation step.
- *
- * `extensions` resolves calls to host extension functions (Core §3.12).
+ * Legacy alias for [`eval_fel_with_context_trace`] using uppercase `FEL`.
  * @param {string} expression
  * @param {string} context_json
  * @param {FelExtensionHost | null} [extensions]
@@ -657,11 +750,7 @@ export function evalFELWithContextTrace(expression, context_json, extensions) {
 }
 
 /**
- * Evaluate a FEL expression with a structured trace of evaluation steps.
- *
- * Returns a JSON string of shape `{ "value": ..., "diagnostics": [...], "trace": [TraceStep, ...] }`.
- * TraceStep is the tagged union from [`fel_core::TraceStep`] (`kind` = `"FieldResolved"`,
- * `"FunctionCalled"`, `"BinaryOp"`, `"IfBranch"`, `"ShortCircuit"`).
+ * Legacy alias for [`eval_fel_with_trace`] using uppercase `FEL`.
  * @param {string} expression
  * @param {string} fields_json
  * @returns {string}
@@ -676,6 +765,158 @@ export function evalFELWithTrace(expression, fields_json) {
         const ptr1 = passStringToWasm0(fields_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
         wasm.evalFELWithTrace(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr3 = r0;
+        var len3 = r1;
+        if (r3) {
+            ptr3 = 0; len3 = 0;
+            throw takeObject(r2);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Parse and evaluate a FEL expression with optional field values (JSON object).
+ * Returns the result as a JSON string.
+ * @param {string} expression
+ * @param {string} fields_json
+ * @returns {string}
+ */
+export function evalFel(expression, fields_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(fields_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.evalFel(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr3 = r0;
+        var len3 = r1;
+        if (r3) {
+            ptr3 = 0; len3 = 0;
+            throw takeObject(r2);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Evaluate a FEL expression with full FormspecEnvironment context.
+ * `context_json` is a JSON object: { fields, variables?, mipStates?, repeatContext? }
+ *
+ * `extensions` resolves calls to host extension functions (Core §3.12).
+ * @param {string} expression
+ * @param {string} context_json
+ * @param {FelExtensionHost | null} [extensions]
+ * @returns {string}
+ */
+export function evalFelWithContext(expression, context_json, extensions) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(context_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.evalFelWithContext(retptr, ptr0, len0, ptr1, len1, isLikeNone(extensions) ? 0 : addHeapObject(extensions));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr3 = r0;
+        var len3 = r1;
+        if (r3) {
+            ptr3 = 0; len3 = 0;
+            throw takeObject(r2);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Evaluate a FEL expression with full context and trace each evaluation step.
+ *
+ * `extensions` resolves calls to host extension functions (Core §3.12).
+ * @param {string} expression
+ * @param {string} context_json
+ * @param {FelExtensionHost | null} [extensions]
+ * @returns {string}
+ */
+export function evalFelWithContextTrace(expression, context_json, extensions) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(context_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.evalFelWithContextTrace(retptr, ptr0, len0, ptr1, len1, isLikeNone(extensions) ? 0 : addHeapObject(extensions));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr3 = r0;
+        var len3 = r1;
+        if (r3) {
+            ptr3 = 0; len3 = 0;
+            throw takeObject(r2);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Evaluate a FEL expression with a structured trace of evaluation steps.
+ *
+ * Returns a JSON string of shape `{ "value": ..., "diagnostics": [...], "trace": [TraceStep, ...] }`.
+ * TraceStep is the tagged union from [`fel_core::TraceStep`] (`kind` = `"FieldResolved"`,
+ * `"FunctionCalled"`, `"BinaryOp"`, `"IfBranch"`, `"ShortCircuit"`).
+ * @param {string} expression
+ * @param {string} fields_json
+ * @returns {string}
+ */
+export function evalFelWithTrace(expression, fields_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(fields_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.evalFelWithTrace(retptr, ptr0, len0, ptr1, len1);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -991,7 +1232,7 @@ export function generateChangelog(old_def_json, new_def_json, definition_url) {
 }
 
 /**
- * Extract field dependencies from a FEL expression.
+ * Legacy alias for [`get_fel_deps`] using uppercase `FEL`.
  * @param {string} expression
  * @returns {string}
  */
@@ -1023,10 +1264,39 @@ export function getFELDependencies(expression) {
 }
 
 /**
- * Resolve `{{expression}}` sequences in `template` against a FEL context (Locale §3.3.1).
- *
- * `context_json` has the `evalFELWithContext` shape; `extensions` resolves host
- * extension functions. Returns JSON `{ text, warnings: [{ expression, message }] }`.
+ * Extract field dependencies from a FEL expression.
+ * @param {string} expression
+ * @returns {string}
+ */
+export function getFelDependencies(expression) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.getFelDependencies(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr2 = r0;
+        var len2 = r1;
+        if (r3) {
+            ptr2 = 0; len2 = 0;
+            throw takeObject(r2);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Legacy alias for [`interpolate_fel_template`] using uppercase `FEL`.
  * @param {string} template
  * @param {string} context_json
  * @param {FelExtensionHost | null} [extensions]
@@ -1042,6 +1312,45 @@ export function interpolateFELTemplate(template, context_json, extensions) {
         const ptr1 = passStringToWasm0(context_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
         wasm.interpolateFELTemplate(retptr, ptr0, len0, ptr1, len1, isLikeNone(extensions) ? 0 : addHeapObject(extensions));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr3 = r0;
+        var len3 = r1;
+        if (r3) {
+            ptr3 = 0; len3 = 0;
+            throw takeObject(r2);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Resolve `{{expression}}` sequences in `template` against a FEL context (Locale §3.3.1).
+ *
+ * `context_json` has the `evalFelWithContext` shape; `extensions` resolves host
+ * extension functions. Returns JSON `{ text, warnings: [{ expression, message }] }`.
+ * @param {string} template
+ * @param {string} context_json
+ * @param {FelExtensionHost | null} [extensions]
+ * @returns {string}
+ */
+export function interpolateFelTemplate(template, context_json, extensions) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(template, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(context_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.interpolateFelTemplate(retptr, ptr0, len0, ptr1, len1, isLikeNone(extensions) ? 0 : addHeapObject(extensions));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -1290,7 +1599,7 @@ export function normalizeIndexedPath(path) {
 }
 
 /**
- * Parse a FEL expression and return whether it's valid.
+ * Legacy alias for [`parse_fel`] using uppercase `FEL`.
  * @param {string} expression
  * @returns {boolean}
  */
@@ -1298,6 +1607,18 @@ export function parseFEL(expression) {
     const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.parseFEL(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * Parse a FEL expression and return whether it's valid.
+ * @param {string} expression
+ * @returns {boolean}
+ */
+export function parseFel(expression) {
+    const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.parseFel(ptr0, len0);
     return ret !== 0;
 }
 
@@ -1401,7 +1722,7 @@ export function prepareFelExpression(options_json) {
 }
 
 /**
- * Print a FEL expression AST back to normalized source string.
+ * Legacy alias for [`print_fel`] using uppercase `FEL`.
  * @param {string} expression
  * @returns {string}
  */
@@ -1413,6 +1734,38 @@ export function printFEL(expression) {
         const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
         wasm.printFEL(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr2 = r0;
+        var len2 = r1;
+        if (r3) {
+            ptr2 = 0; len2 = 0;
+            throw takeObject(r2);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Print a FEL expression AST back to normalized source string.
+ * @param {string} expression
+ * @returns {string}
+ */
+export function printFel(expression) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.printFel(retptr, ptr0, len0);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -1465,6 +1818,7 @@ export function resolveOptionSetsOnDefinition(definition_json) {
 }
 
 /**
+ * Legacy alias for [`rewrite_fel_references_wasm`] using uppercase `FEL`.
  * @param {string} expression
  * @param {string} rewrites_json
  * @returns {string}
@@ -1514,6 +1868,40 @@ export function rewriteFelForAssembly(expression, map_json) {
         const ptr1 = passStringToWasm0(map_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
         wasm.rewriteFelForAssembly(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr3 = r0;
+        var len3 = r1;
+        if (r3) {
+            ptr3 = 0; len3 = 0;
+            throw takeObject(r2);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * @param {string} expression
+ * @param {string} rewrites_json
+ * @returns {string}
+ */
+export function rewriteFelReferences(expression, rewrites_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(rewrites_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.rewriteFelReferences(retptr, ptr0, len0, ptr1, len1);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -1592,6 +1980,7 @@ export function sanitizeFelIdentifier(s) {
 }
 
 /**
+ * Legacy alias for [`tokenize_fel`] using uppercase `FEL`.
  * @param {string} expression
  * @returns {string}
  */
@@ -1603,6 +1992,37 @@ export function tokenizeFEL(expression) {
         const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
         wasm.tokenizeFEL(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr2 = r0;
+        var len2 = r1;
+        if (r3) {
+            ptr2 = 0; len2 = 0;
+            throw takeObject(r2);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * @param {string} expression
+ * @returns {string}
+ */
+export function tokenizeFel(expression) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.tokenizeFel(retptr, ptr0, len0);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);

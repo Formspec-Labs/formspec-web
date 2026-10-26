@@ -1,7 +1,7 @@
-import { MODULE_WIDGET_STATE_RENDERED_CONFIG_NODES } from '../widget-state.js';
-import { ResponseReview, createResponseReviewWidget, RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, ACCEPTED_RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES } from './response-review.js';
+import { starterWidgetContracts } from './starter-contract-metadata.js';
+import { ResponseReview, createResponseReviewWidget } from './response-review.js';
 import { IntakeBanner } from './intake-banner.js';
-import { SigningCeremony, SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES } from './signing-ceremony.js';
+import { SigningCeremony } from './signing-ceremony.js';
 import { CeremonyFrame } from './ceremony-frame.js';
 import { ReceiptPanel } from './receipt-panel.js';
 import { QueueTable } from './queue-table.js';
@@ -41,77 +41,19 @@ export const STARTER_WIDGETS = {
     QueueTable,
     StructuredPanel,
 };
-export const STRUCTURED_PANEL_DELIVERY_CONTRACT_ID = '@formspec-org/surface-react/StructuredPanel@0.1';
-export const QUEUE_TABLE_DELIVERY_CONTRACT_ID = '@formspec-org/surface-react/QueueTable@0.1';
-export const RECEIPT_PANEL_DELIVERY_CONTRACT_ID = '@formspec-org/surface-react/ReceiptPanel@0.1';
-export const CEREMONY_FRAME_DELIVERY_CONTRACT_ID = '@formspec-org/surface-react/CeremonyFrame@0.1';
-export const STRUCTURED_PANEL_RENDERED_CONFIG_NODES = [
-    { pointerPattern: '', kind: 'structured-panel' },
-    { pointerPattern: '/blocks/*', kind: 'structured-panel-block' },
-    { pointerPattern: '/blocks/*/items/*', kind: 'structured-panel-field' },
-    { pointerPattern: '/blocks/*/columns/*', kind: 'structured-panel-column' },
-    { pointerPattern: '/blocks/*/rowAction', kind: 'structured-panel-row-action' },
-    {
-        pointerPattern: '/blocks/*/rowAction/confirmation',
-        kind: 'structured-panel-action-confirmation',
-    },
-    { pointerPattern: '/actions/*', kind: 'structured-panel-action' },
-    {
-        pointerPattern: '/actions/*/confirmation',
-        kind: 'structured-panel-action-confirmation',
-    },
-    ...MODULE_WIDGET_STATE_RENDERED_CONFIG_NODES,
-];
-export const QUEUE_TABLE_RENDERED_CONFIG_NODES = [
-    { pointerPattern: '', kind: 'queue-table' },
-    { pointerPattern: '/columns/*', kind: 'queue-table-column' },
-    { pointerPattern: '/rowAction', kind: 'queue-table-row-action' },
-];
-export const RECEIPT_PANEL_RENDERED_CONFIG_NODES = [
-    { pointerPattern: '', kind: 'receipt-panel' },
-];
-export const CEREMONY_FRAME_RENDERED_CONFIG_NODES = [
-    { pointerPattern: '', kind: 'ceremony-frame' },
-];
+export * from './starter-contract-metadata.js';
 export function starterWidgetModule(moduleId, options = {}) {
-    const structuredPanelVersion = options.structuredPanelRegistryEntryVersion ?? '0.1.0';
-    if (structuredPanelVersion !== '0.1.0' && structuredPanelVersion !== '0.1.1' && structuredPanelVersion !== '0.1.2') {
-        throw new Error('Unsupported StructuredPanel Registry entry version');
-    }
-    const contract = (deliveryContractId, renderedConfigNodes, registryEntryVersion = '0.1.0') => ({
-        deliveryContractId,
-        registryEntryVersion,
-        renderedConfigNodes,
-    });
-    const structuredPanelContract = contract(STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, structuredPanelVersion);
-    const queueTableContract = contract(QUEUE_TABLE_DELIVERY_CONTRACT_ID, QUEUE_TABLE_RENDERED_CONFIG_NODES);
-    const receiptPanelContract = contract(RECEIPT_PANEL_DELIVERY_CONTRACT_ID, RECEIPT_PANEL_RENDERED_CONFIG_NODES);
-    const signingCeremonyContract = contract(SIGNING_CEREMONY_DELIVERY_CONTRACT_ID, SIGNING_CEREMONY_RENDERED_CONFIG_NODES);
-    const ceremonyFrameContract = contract(CEREMONY_FRAME_DELIVERY_CONTRACT_ID, CEREMONY_FRAME_RENDERED_CONFIG_NODES);
+    const contracts = starterWidgetContracts(options);
+    const acceptedReviewMode = contracts.AcceptedResponseReview.registryEntryVersion === '0.1.1' ? 'selected' : 'legacy';
     return {
         moduleId,
-        widgets: options.responseReview ? {
+        widgets: {
             ...STARTER_WIDGETS,
             ResponseReview: createResponseReviewWidget(options.responseReview),
             'x-response-review': createResponseReviewWidget(options.responseReview),
-            AcceptedResponseReview: createResponseReviewWidget(options.responseReview),
-            'x-accepted-response-review': createResponseReviewWidget(options.responseReview),
-        } : STARTER_WIDGETS,
-        contracts: {
-            AcceptedResponseReview: contract(ACCEPTED_RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES),
-            'x-accepted-response-review': contract(ACCEPTED_RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES),
-            ResponseReview: contract(RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES),
-            'x-response-review': contract(RESPONSE_REVIEW_DELIVERY_CONTRACT_ID, RESPONSE_REVIEW_RENDERED_CONFIG_NODES),
-            StructuredPanel: structuredPanelContract,
-            'x-structured-panel': structuredPanelContract,
-            QueueTable: queueTableContract,
-            'x-queue-panel': queueTableContract,
-            ReceiptPanel: receiptPanelContract,
-            'x-receipt-panel': receiptPanelContract,
-            SigningCeremony: signingCeremonyContract,
-            'x-signing-ceremony': signingCeremonyContract,
-            CeremonyFrame: ceremonyFrameContract,
-            'x-ceremony-frame': ceremonyFrameContract,
+            AcceptedResponseReview: createResponseReviewWidget(options.responseReview, acceptedReviewMode),
+            'x-accepted-response-review': createResponseReviewWidget(options.responseReview, acceptedReviewMode),
         },
+        contracts,
     };
 }

@@ -21,6 +21,8 @@ export { resolvePageSequence } from './page-sequence.js';
 export type { PageSequenceEntry } from './page-sequence.js';
 export { positionPopupNearTrigger, clearPopupFixedPosition, POPUP_EDGE_PADDING, POPUP_TRIGGER_GAP, MODAL_FIRST_FOCUSABLE_SELECTOR, } from './popup-position.js';
 export type { PopupPlacement } from './popup-position.js';
+export { bindAutoModal } from './auto-modal.js';
+export type { AutoModal } from './auto-modal.js';
 export { characterCountLimitMessage, characterCountStatus, CHARACTER_COUNT_ANNOUNCE_DELAY_MS, } from './character-count.js';
 export type { UiStringLookup } from './character-count.js';
 export { UI_STRINGS, fillUiParams } from './ui-strings.js';

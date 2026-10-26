@@ -22,6 +22,7 @@
  * platform's binds this one. Both go through the same seam.
  */
 import type { SurfaceWidget, SurfaceWidgetModule } from '../widget-api.js';
+import { type StarterWidgetContractOptions } from './starter-contract-metadata.js';
 import { type ResponseReviewOptions } from './response-review.js';
 export * from './response-review.js';
 export { IntakeBanner } from './intake-banner.js';
@@ -47,62 +48,8 @@ export { STRUCTURED_JSON_BLOCK_CONFIG_SCHEMA, STRUCTURED_PANEL_CONFIG_SCHEMA } f
  * the schema permits both, since this field carries no pattern.
  */
 export declare const STARTER_WIDGETS: Readonly<Record<string, SurfaceWidget>>;
-export declare const STRUCTURED_PANEL_DELIVERY_CONTRACT_ID = "@formspec-org/surface-react/StructuredPanel@0.1";
-export declare const QUEUE_TABLE_DELIVERY_CONTRACT_ID = "@formspec-org/surface-react/QueueTable@0.1";
-export declare const RECEIPT_PANEL_DELIVERY_CONTRACT_ID = "@formspec-org/surface-react/ReceiptPanel@0.1";
-export declare const CEREMONY_FRAME_DELIVERY_CONTRACT_ID = "@formspec-org/surface-react/CeremonyFrame@0.1";
-export declare const STRUCTURED_PANEL_RENDERED_CONFIG_NODES: readonly [{
-    readonly pointerPattern: "";
-    readonly kind: "structured-panel";
-}, {
-    readonly pointerPattern: "/blocks/*";
-    readonly kind: "structured-panel-block";
-}, {
-    readonly pointerPattern: "/blocks/*/items/*";
-    readonly kind: "structured-panel-field";
-}, {
-    readonly pointerPattern: "/blocks/*/columns/*";
-    readonly kind: "structured-panel-column";
-}, {
-    readonly pointerPattern: "/blocks/*/rowAction";
-    readonly kind: "structured-panel-row-action";
-}, {
-    readonly pointerPattern: "/blocks/*/rowAction/confirmation";
-    readonly kind: "structured-panel-action-confirmation";
-}, {
-    readonly pointerPattern: "/actions/*";
-    readonly kind: "structured-panel-action";
-}, {
-    readonly pointerPattern: "/actions/*/confirmation";
-    readonly kind: "structured-panel-action-confirmation";
-}, {
-    readonly pointerPattern: "/stateViews/*";
-    readonly kind: "module-widget-state-view";
-}, {
-    readonly pointerPattern: "/stateViews/*/actions/*";
-    readonly kind: "module-widget-state-action";
-}];
-export declare const QUEUE_TABLE_RENDERED_CONFIG_NODES: readonly [{
-    readonly pointerPattern: "";
-    readonly kind: "queue-table";
-}, {
-    readonly pointerPattern: "/columns/*";
-    readonly kind: "queue-table-column";
-}, {
-    readonly pointerPattern: "/rowAction";
-    readonly kind: "queue-table-row-action";
-}];
-export declare const RECEIPT_PANEL_RENDERED_CONFIG_NODES: readonly [{
-    readonly pointerPattern: "";
-    readonly kind: "receipt-panel";
-}];
-export declare const CEREMONY_FRAME_RENDERED_CONFIG_NODES: readonly [{
-    readonly pointerPattern: "";
-    readonly kind: "ceremony-frame";
-}];
-export interface StarterWidgetModuleOptions {
+export * from './starter-contract-metadata.js';
+export interface StarterWidgetModuleOptions extends StarterWidgetContractOptions {
     responseReview?: ResponseReviewOptions;
-    /** Explicit deployment support for the maintained whole-panel props schema. */
-    structuredPanelRegistryEntryVersion?: '0.1.0' | '0.1.1' | '0.1.2';
 }
 export declare function starterWidgetModule(moduleId: string, options?: StarterWidgetModuleOptions): SurfaceWidgetModule;

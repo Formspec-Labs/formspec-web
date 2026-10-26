@@ -40,7 +40,6 @@ export declare class FormEngine implements IFormEngine {
     private _felContext;
     private readonly _groupItems;
     private readonly _shapeTiming;
-    private readonly _instanceCalculateBinds;
     private readonly _displaySignalPaths;
     private readonly _prePopulateReadonly;
     private readonly _seedFromGroups;
@@ -215,8 +214,13 @@ export declare class FormEngine implements IFormEngine {
     private static resolveInstanceSource;
     private initializeInstanceSource;
     private initializeBindConfigs;
-    private collectInstanceCalculateBinds;
-    private validateInstanceCalculateTargets;
+    /**
+     * Core §4.3.3 / §3.10.1: a Bind path resolves to an Item, so one naming an instance (`instances.<name>…`,
+     * `@instance('<name>')…`) is a definition error. Instance data is host-written (`setInstanceValue`).
+     */
+    private rejectInstancePathBinds;
+    /** `instances` is a legal Item key, so a path whose `itemPath` names an Item is that Item, never an instance target. */
+    private instanceTargetUnlessItem;
     private registerItems;
     private registerItemChildren;
     private initializeFieldSignal;
@@ -225,8 +229,6 @@ export declare class FormEngine implements IFormEngine {
     private initializeRemoteOptions;
     private writeInstanceValue;
     private validateInstanceSchema;
-    private evaluateExpression;
-    private felContextInput;
     /**
      * The locale FEL formats and reports: the host's runtime locale when it set one, else the Locale
      * document currently selected — so `setLocale('fr')` alone renders French dates, and the patterns
@@ -240,8 +242,7 @@ export declare class FormEngine implements IFormEngine {
      * `_evaluate` (evaluation version), rows through structure changes, instances through the instance
      * version. Reading those signals also re-runs a caller's computed whenever the snapshot would change.
      * Each read then names only its expression and Item path, so it costs the scope it resolves against
-     * rather than the size of the form. In-flight evaluation reads use `evaluateExpression`, which builds a
-     * one-shot context from the partial state it is midway through producing.
+     * rather than the size of the form.
      */
     private felContext;
     private repeatCountsSnapshot;
@@ -258,8 +259,6 @@ export declare class FormEngine implements IFormEngine {
     private shapedEvalResult;
     private _evaluate;
     private evaluateResultForTrigger;
-    private applyInstanceCalculates;
-    private syncInstanceCalculateSignals;
     private normalizeExpressionForWasm;
     private resolveRepeatPath;
     private clearRepeatSubtree;

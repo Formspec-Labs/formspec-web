@@ -110,5 +110,6 @@ export function createAppGraphReport(input) {
         diagnostics,
         phases,
         support: input.support ? { ...input.support } : undefined,
+        ...(input.renderedNeedTrace ? { renderedNeedTrace: input.renderedNeedTrace } : {}),
     };
 }

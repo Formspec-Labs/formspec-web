@@ -1,5 +1,5 @@
 /** @filedesc Opt-in strict validation from every authored render node to an adopted, current Need. */
-import { type AppGraphContext, type AppGraphDiagnostic, type AppGraphSourcePointer, type ResolvedArtifactHandle } from './types.js';
+import { type AppGraphContext, type AppGraphDiagnostic, type AppGraphRenderedNeedTraceMode, type AppGraphRenderedNeedTraceRecord, type AppGraphSourcePointer, type ResolvedArtifactHandle } from './types.js';
 type JsonRecord = Record<string, unknown>;
 export declare const RENDERED_NEED_TRACE_CODES: {
     readonly needsUnpaired: "APP-GRAPH-RENDERED-NEEDS-UNPAIRED";
@@ -76,4 +76,13 @@ export declare function collectRenderedNeedTraceNodes(context: AppGraphContext, 
  * profile through `crossArtifactValidators`.
  */
 export declare function validateRenderedNeedTrace(context: AppGraphContext, previewScenarios?: readonly ResolvedArtifactHandle[]): AppGraphDiagnostic[];
+/**
+ * Run the strict profile under `mode` and return its findings with the
+ * report record (Needs spec S10.3) that lets a server check the run instead of
+ * re-running it. `definitions` names every loaded Definition the run covered.
+ */
+export declare function runRenderedNeedTrace(context: AppGraphContext, mode: AppGraphRenderedNeedTraceMode): {
+    diagnostics: AppGraphDiagnostic[];
+    record: AppGraphRenderedNeedTraceRecord;
+};
 export {};

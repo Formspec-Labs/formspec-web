@@ -6,4 +6,6 @@ export declare function responseReviewHash(value: unknown): Promise<string>;
 /** Bare SHA-256 hex of the complete Response under the maintained handoff profile. */
 export declare function responseReviewHandoffHash(response: unknown, produce: ResponseReviewOptions["canonicalResponseHandoffBytes"]): Promise<string>;
 export declare function ResponseReview(props: ResponseReviewProps): import("react/jsx-runtime").JSX.Element;
-export declare function createResponseReviewWidget(options?: ResponseReviewOptions): SurfaceWidget;
+export declare function createResponseReviewWidget(options?: ResponseReviewOptions, 
+/** Deployment profile admission; grants no access or signing authority. */
+acceptedSelectionProfile?: 'legacy' | 'selected'): SurfaceWidget;

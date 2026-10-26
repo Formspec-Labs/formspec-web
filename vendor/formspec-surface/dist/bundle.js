@@ -1,3 +1,4 @@
+import { appManifestVersionAtLeast } from '@formspec-org/app-graph';
 import { surfaceDiagnostic } from './diagnostics.js';
 function isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -35,7 +36,7 @@ export function dereferenceBundleExport(bundle) {
     });
     const surfaces = resolvedSurfaces.map(({ document }) => document);
     let entrySurface;
-    if (bundle.manifest.$formspecBundle === '2.4') {
+    if (appManifestVersionAtLeast(bundle.manifest.$formspecBundle, '2.4')) {
         const refs = bundle.manifest.surfaces ?? [];
         const selector = bundle.manifest.entrySurface;
         if (selector !== undefined) {

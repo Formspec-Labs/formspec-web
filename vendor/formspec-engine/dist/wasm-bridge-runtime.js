@@ -74,17 +74,19 @@ function parseFelEvalEnvelope(resultJson) {
 }
 /** Evaluate a FEL expression with optional field values. Returns the evaluated value. */
 export function wasmEvalFEL(expression, fields = {}) {
-    return parseFelEvalEnvelope(wasm().evalFEL(expression, JSON.stringify(fields))).value;
+    const fn = wasm().evalFel ?? wasm().evalFEL;
+    return parseFelEvalEnvelope(fn(expression, JSON.stringify(fields))).value;
 }
+/** Alias for `wasmEvalFEL` using modern camelCase. */
+export const wasmEvalFel = wasmEvalFEL;
 /** Evaluate a FEL expression with full FormspecEnvironment context (value + diagnostics flag). */
 export function wasmEvalFELWithContextEnvelope(expression, context, extensions) {
-    const resultJson = wasm().evalFELWithContext(expression, JSON.stringify(context), extensions);
+    const fn = wasm().evalFelWithContext ?? wasm().evalFELWithContext;
+    const resultJson = fn(expression, JSON.stringify(context), extensions);
     return parseFelEvalEnvelope(resultJson);
 }
-/** Evaluate a FEL expression with full FormspecEnvironment context. Returns the value only. */
-export function wasmEvalFELWithContext(expression, context, extensions) {
-    return wasmEvalFELWithContextEnvelope(expression, context, extensions).value;
-}
+/** Alias for `wasmEvalFELWithContextEnvelope` using modern camelCase. */
+export const wasmEvalFelWithContextEnvelope = wasmEvalFELWithContextEnvelope;
 /** Throws when `name` may not be an extension function: a FEL built-in or reserved word (Core §3.12). */
 export function wasmCheckFELExtensionName(name) {
     wasm().checkFELExtensionName(name);
@@ -97,18 +99,27 @@ export function wasmCheckFELExtensionName(name) {
  * losing FEL type fidelity (money/date) but gaining universal readability.
  */
 export function wasmEvalFELWithTrace(expression, fields = {}) {
-    const resultJson = wasm().evalFELWithTrace(expression, JSON.stringify(fields));
+    const fn = wasm().evalFelWithTrace ?? wasm().evalFELWithTrace;
+    const resultJson = fn(expression, JSON.stringify(fields));
     return JSON.parse(resultJson);
 }
+/** Alias for `wasmEvalFELWithTrace` using modern camelCase. */
+export const wasmEvalFelWithTrace = wasmEvalFELWithTrace;
 /** Evaluate a FEL expression against full FormspecEnvironment context and trace each step. */
 export function wasmEvalFELWithContextTrace(expression, context, extensions) {
-    const resultJson = wasm().evalFELWithContextTrace(expression, JSON.stringify(context), extensions);
+    const fn = wasm().evalFelWithContextTrace ?? wasm().evalFELWithContextTrace;
+    const resultJson = fn(expression, JSON.stringify(context), extensions);
     return JSON.parse(resultJson);
 }
+/** Alias for `wasmEvalFELWithContextTrace` using modern camelCase. */
+export const wasmEvalFelWithContextTrace = wasmEvalFELWithContextTrace;
 /** Locale §3.3.1: resolve every `{{expression}}` in `template` against a FEL context, in one call. */
 export function wasmInterpolateFELTemplate(template, context, extensions) {
-    return JSON.parse(wasm().interpolateFELTemplate(template, JSON.stringify(context), extensions));
+    const fn = wasm().interpolateFelTemplate ?? wasm().interpolateFELTemplate;
+    return JSON.parse(fn(template, JSON.stringify(context), extensions));
 }
+/** Alias for `wasmInterpolateFELTemplate` using modern camelCase. */
+export const wasmInterpolateFelTemplate = wasmInterpolateFELTemplate;
 /**
  * Locale §3.3.1 with a host evaluator: Rust scans the template and applies the escape, failure,
  * and coercion rules; `evaluate(expression)` returns JSON `{ value, hasErrorDiagnostics? }` or throws.

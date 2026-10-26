@@ -42,8 +42,12 @@ export function focusFieldIn(container, path) {
             stepButtons[stepIndex]?.click();
         }
     }
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    fieldEl.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+    const prefersReducedMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        : false;
+    if (typeof fieldEl.scrollIntoView === 'function') {
+        fieldEl.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+    }
     const input = fieldEl.querySelector('input, select, textarea, button, [tabindex]');
     if (!input)
         return false;

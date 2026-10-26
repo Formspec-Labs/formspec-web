@@ -1,4 +1,5 @@
 /** @filedesc Shared AppGraphValidator report kernel. */
+import { validateHostWidgetContracts } from './widget-runtime-contract.js';
 import { APP_GRAPH_PHASES, } from './types.js';
 import { appGraphSourceFromModuleSource, compareDiagnostics, createAppGraphReport, diagnosticSourceForHandle, normalizeDiagnostics, } from './report.js';
 import { validateComponentRouteTargets } from './component-routes.js';
@@ -10,6 +11,7 @@ import { validateExperienceReferentialIntegrity } from './experience-referential
 import { validateExecutableSchemaContracts } from './executable-schema-contracts.js';
 import { validateLocaleAssociations } from './locale-associations.js';
 import { validateNeedsCoverage } from './needs-coverage.js';
+import { runRenderedNeedTrace } from './rendered-need-trace.js';
 import { validateScreenerSurfaceTargets } from './screener-surface-targets.js';
 import { validateSurfaceDefinitionSlots } from './surface-definition-slots.js';
 import { validateSurfaceExperienceUnits } from './surface-experience-units.js';
@@ -18,6 +20,7 @@ import { validateSurfaceWidgetActions } from './surface-widget-actions.js';
 import { validateStructuredPanelContracts } from './structured-panel-contracts.js';
 import { validateThemeTokenRegistry } from './theme-token-registry.js';
 import { validateUiGraphPolicy } from './ui-graph-policy.js';
+import { validateUxAuthoringQuality } from './ux-authoring-quality.js';
 import { validateUxTitleDuplicates } from './ux-title-duplicates.js';
 const UI_GRAPH_POLICY_SCHEMA_ID = 'https://formspec.org/schemas/uiGraphPolicy/0.1';
 const COMPONENT_GRAPH_CONTEXT_SCHEMA_ID = 'https://formspec.org/schemas/componentGraphProjectionContext/0.1';
@@ -261,17 +264,23 @@ function runCrossArtifactValidators(validators, request, handles, schemaResults,
         validateStructuredPanelContracts,
         validateThemeTokenRegistry,
         validateUiGraphPolicy,
+        validateUxAuthoringQuality,
         validateUxTitleDuplicates,
+        validateHostWidgetContracts,
         ...(validators ?? []),
     ];
-    return allValidators.flatMap((validator) => validator({
+    return allValidators.flatMap((validator) => validator(crossArtifactContext(request, handles, schemaResults, evidenceResults)));
+}
+function crossArtifactContext(request, handles, schemaResults, evidenceResults) {
+    return {
         manifest: request.manifest,
         handles: [...handles],
         schemaResults: [...schemaResults],
         evidenceResults: [...evidenceResults],
         hostEvidence: request.hostEvidence,
         moduleResolution: request.moduleResolution,
-    }));
+        hostWidgetContracts: request.hostWidgetContracts,
+    };
 }
 function moduleResolutionDiagnostic(diagnostic) {
     const relatedSources = diagnostic.relatedSources
@@ -341,6 +350,7 @@ export function validateAppGraph(request) {
     const schemaStatus = schemaPhaseStatus(schemaAndEvidenceResults);
     let crossArtifactStatus;
     let crossDiagnostics = [];
+    let renderedNeedTrace;
     if (unresolved.length > 0) {
         crossArtifactStatus = phaseStatus('cross-artifact', 'skipped', 'unresolved-artifacts');
     }
@@ -353,6 +363,11 @@ export function validateAppGraph(request) {
     else {
         crossArtifactStatus = phaseStatus('cross-artifact', 'completed');
         crossDiagnostics = runCrossArtifactValidators(request.crossArtifactValidators, request, handles, schemaResults, evidenceResults);
+        if (request.renderedNeedTrace) {
+            const trace = runRenderedNeedTrace(crossArtifactContext(request, handles, schemaResults, evidenceResults), request.renderedNeedTrace);
+            crossDiagnostics.push(...trace.diagnostics);
+            renderedNeedTrace = trace.record;
+        }
     }
     const diagnostics = normalizeDiagnostics([
         ...importedDiagnostics(request, handles),
@@ -368,5 +383,6 @@ export function validateAppGraph(request) {
         evidenceResults,
         phases: phaseStatuses(request, schemaStatus, crossArtifactStatus),
         support: request.options?.support,
+        ...(renderedNeedTrace ? { renderedNeedTrace } : {}),
     });
 }

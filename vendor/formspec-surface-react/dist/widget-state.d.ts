@@ -2,14 +2,7 @@
 import type { ReactNode } from 'react';
 import type { SurfaceWidgetAction, SurfaceWidgetProps } from './widget-api.js';
 export type ModuleWidgetStateName = 'loading' | 'empty' | 'unavailable' | 'error';
-/** Registry inventory entries required by the generic shell state renderer. */
-export declare const MODULE_WIDGET_STATE_RENDERED_CONFIG_NODES: readonly [{
-    readonly pointerPattern: "/stateViews/*";
-    readonly kind: "module-widget-state-view";
-}, {
-    readonly pointerPattern: "/stateViews/*/actions/*";
-    readonly kind: "module-widget-state-action";
-}];
+export { MODULE_WIDGET_STATE_RENDERED_CONFIG_NODES } from './widgets/starter-contract-metadata.js';
 export interface ModuleWidgetEmptyWhen {
     inputName: string;
     path?: string;
@@ -52,4 +45,3 @@ export interface ModuleWidgetStateViewProps {
  * trace never authorizes state copy or controls.
  */
 export declare function ModuleWidgetStateView({ state, config, headingLevel, actions, emitAction, onRetry, fallback, }: ModuleWidgetStateViewProps): ReactNode;
-export {};

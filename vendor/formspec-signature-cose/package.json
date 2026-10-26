@@ -1,0 +1,28 @@
+{
+  "name": "@formspec/signature-cose",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Formspec-Labs/formspec.git",
+    "directory": "packages/formspec-signature-cose"
+  },
+  "version": "0.1.0",
+  "description": "Formspec COSE_Sign1 decode helpers for signature adapters",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@formspec-org/integrity-cose": "^0.1.0"
+  }
+}

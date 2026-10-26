@@ -1,3 +1,4 @@
+export { resolveAcceptedResponseReviewFieldSelection } from './response-review-selection.js';
 export const RESPONSE_REVIEW_COPY_KEYS = [
     "heading",
     "pending",
@@ -237,8 +238,66 @@ export const ACCEPTED_TASK_RESPONSE_REVIEW_STATE_SCHEMA = {
         taskSign: ACCEPTED_TASK_RESPONSE_REVIEW_SIGN_SCHEMA,
     },
 };
+/** Successor authored display policy; original 0.1.0 widget props stay immutable. */
+const selectionText = { type: 'string', minLength: 1 };
+const selectedPath = {
+    type: 'string',
+    pattern: '^[A-Za-z][A-Za-z0-9_]*(\\[(?:0|[1-9][0-9]*|\\*)\\])?(\\.[A-Za-z][A-Za-z0-9_]*(\\[(?:0|[1-9][0-9]*|\\*)\\])?)*$',
+};
+export const ACCEPTED_RESPONSE_REVIEW_FIELD_SELECTION_POLICY_SCHEMA = {
+    type: 'object', additionalProperties: false,
+    required: ['policyId', 'definitionUrl', 'definitionVersion', 'fieldPaths'],
+    properties: { policyId: selectionText, definitionUrl: selectionText, definitionVersion: selectionText,
+        fieldPaths: { type: 'array', minItems: 1, uniqueItems: true, items: selectedPath } },
+};
+export const ACCEPTED_RESPONSE_REVIEW_FIELD_SELECTION_SCHEMA = {
+    type: 'object', additionalProperties: false,
+    required: ['policyId', 'definitionUrl', 'definitionVersion', 'permittedPaths'],
+    properties: { policyId: selectionText, definitionUrl: selectionText, definitionVersion: selectionText,
+        permittedPaths: { type: 'array', uniqueItems: true, items: {
+                ...selectedPath, pattern: selectedPath.pattern.replaceAll('|\\*', ''),
+            } } },
+};
+export const ACCEPTED_RESPONSE_REVIEW_CONFIG_SCHEMA_V011 = {
+    ...ACCEPTED_RESPONSE_REVIEW_CONFIG_SCHEMA,
+    required: [...ACCEPTED_RESPONSE_REVIEW_CONFIG_SCHEMA.required, 'fieldSelection'],
+    properties: { ...ACCEPTED_RESPONSE_REVIEW_CONFIG_SCHEMA.properties,
+        fieldSelection: ACCEPTED_RESPONSE_REVIEW_FIELD_SELECTION_POLICY_SCHEMA },
+};
+export const ACCEPTED_RESPONSE_REVIEW_RENDERED_CONFIG_NODES_V011 = [
+    ...RESPONSE_REVIEW_RENDERED_CONFIG_NODES,
+    { pointerPattern: '/fieldSelection', kind: 'response-review-field-selection' },
+    { pointerPattern: '/fieldSelection/fieldPaths/*', kind: 'response-review-selected-field' },
+];
+export const ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE_V011 = {
+    ...ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE,
+    props: ACCEPTED_RESPONSE_REVIEW_CONFIG_SCHEMA_V011,
+    renderedConfigNodes: ACCEPTED_RESPONSE_REVIEW_RENDERED_CONFIG_NODES_V011,
+};
+export const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011 = {
+    ...ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA,
+    required: [...ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA.required, 'fieldSelection'],
+    properties: { ...ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA.properties,
+        fieldSelection: ACCEPTED_RESPONSE_REVIEW_FIELD_SELECTION_SCHEMA },
+};
+export const ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011 = {
+    ...ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA,
+    required: [...ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA.required, 'fieldSelection'],
+    properties: { ...ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA.properties,
+        fieldSelection: ACCEPTED_RESPONSE_REVIEW_FIELD_SELECTION_SCHEMA },
+};
+export const ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA_V011 = {
+    ...ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA,
+    properties: { ...ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA.properties,
+        presentation: ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011 },
+};
+export const ACCEPTED_TASK_RESPONSE_REVIEW_DATA_SCHEMA_V011 = {
+    ...ACCEPTED_TASK_RESPONSE_REVIEW_DATA_SCHEMA,
+    properties: { ...ACCEPTED_TASK_RESPONSE_REVIEW_DATA_SCHEMA.properties,
+        presentation: ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011 },
+};
 export const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA = {
-    oneOf: [ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA],
+    oneOf: [ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011],
 };
 export const ACCEPTED_RESPONSE_REVIEW_DATA_UNION_SCHEMA = {
     ...ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA,
@@ -248,7 +307,7 @@ export const ACCEPTED_RESPONSE_REVIEW_STATE_UNION_SCHEMA = {
     oneOf: [ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_STATE_SCHEMA],
 };
 export const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA = {
-    oneOf: [RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA],
+    oneOf: [RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA, ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011, ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011],
 };
 export const RESPONSE_REVIEW_STATE_UNION_SCHEMA = {
     oneOf: [RESPONSE_REVIEW_STATE_SCHEMA, ACCEPTED_RESPONSE_REVIEW_STATE_SCHEMA, ACCEPTED_TASK_RESPONSE_REVIEW_STATE_SCHEMA],

@@ -70,6 +70,8 @@
     "@formspec-org/surface-bundle-signing": "file:vendor/formspec-surface-bundle-signing",
     "@formspec-org/surface-react": "file:vendor/formspec-surface-react",
     "@formspec-org/types": "file:vendor/formspec-types",
+    "@formspec/signature-cose": "file:vendor/formspec-signature-cose",
+    "@formspec/signature-port": "file:vendor/formspec-signature-port",
     "@noble/hashes": "2.4.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",

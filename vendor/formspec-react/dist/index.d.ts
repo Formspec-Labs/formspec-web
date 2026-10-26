@@ -47,3 +47,4 @@ export type { ValidationSummaryProps } from './validation-summary';
 export declare const defaultTheme: import("@formspec-org/layout").ThemeDocument;
 export { useChromeText, chromeText } from './use-chrome-text';
 export type { ChromeText } from './use-chrome-text';
+export { renderSanitizedMarkdown, simpleMarkdown } from './node-renderer-display';

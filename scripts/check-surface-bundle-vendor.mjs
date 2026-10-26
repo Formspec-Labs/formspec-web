@@ -45,6 +45,7 @@ const only = args.filter((arg) => !arg.startsWith('--'));
 const maintainedManifestPackages = new Set([
   'vendor/formspec-types', 'vendor/formspec-engine', 'vendor/formspec-app-graph',
   'vendor/formspec-layout', 'vendor/formspec-react', 'vendor/formspec-surface', 'vendor/formspec-surface-react',
+  'vendor/formspec-signature-port', 'vendor/formspec-signature-cose',
 ]);
 const publicRuntimeFields = ['name', 'version', 'description', 'main', 'types', 'exports',
   'files', 'sideEffects', 'dependencies', 'peerDependencies'];
@@ -75,6 +76,24 @@ const packages = [
     source: resolve(formspecRoot, 'packages/formspec-surface-bundle-signing'),
     workspace: formspecRoot,
     files: ['index.d.ts', 'index.js', 'types.d.ts', 'types.js', 'verify.d.ts', 'verify.js'],
+    licenseSource: 'package',
+    sourceBudget: true,
+  },
+  // The engine's runtime dependencies; their manifests stay maintained so npm sees the
+  // integrity packages they need, which the vendored integrity copies satisfy.
+  {
+    local: 'vendor/formspec-signature-port',
+    source: resolve(formspecRoot, 'packages/formspec-signature-port'),
+    workspace: formspecRoot,
+    files: ['index.d.ts', 'index.js'],
+    licenseSource: 'package',
+    sourceBudget: true,
+  },
+  {
+    local: 'vendor/formspec-signature-cose',
+    source: resolve(formspecRoot, 'packages/formspec-signature-cose'),
+    workspace: formspecRoot,
+    files: ['index.d.ts', 'index.js'],
     licenseSource: 'package',
     sourceBudget: true,
   },

@@ -15,3 +15,4 @@ export { createFieldViewModel } from './field-view-model.js';
 export { optionMatchesComboboxQuery } from './combobox-option-filter.js';
 export { createFormViewModel } from './form-view-model.js';
 export { evaluateResponseActionEffectExpression } from './response-action-effect-expression.js';
+export { prepareDocumentAttestations, finalizeDocumentAttestations, verifyDocumentAttestations } from './document-attestations.js';

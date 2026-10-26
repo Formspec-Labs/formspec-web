@@ -15,6 +15,7 @@ export const STRUCTURED_PANEL_CONTRACT_CODES = {
     actionLabelNonLiteral: 'STRUCTURED-PANEL-ACTION-LABEL-NON-LITERAL',
     actionConfirmationInvalid: 'STRUCTURED-PANEL-ACTION-CONFIRMATION-INVALID',
     dataPathImpossible: 'STRUCTURED-PANEL-DATA-PATH-IMPOSSIBLE',
+    blockTitleSlug: 'STRUCTURED-PANEL-BLOCK-TITLE-SLUG',
 };
 const CONFIRMATION_LABELS = ['heading', 'body', 'confirmLabel', 'cancelLabel'];
 function panelPointer(widget, suffix = '') {
@@ -40,10 +41,16 @@ function panelDiagnostic(widget, code, pointer, message, reason, details = {}, r
         },
     };
 }
+const STRUCTURED_PANEL_DELIVERY_CONTRACT_IDS = new Set([
+    STRUCTURED_PANEL_DELIVERY_CONTRACT_ID,
+    'StructuredPanel',
+    'x-structured-panel',
+]);
 function isStructuredPanel(widget, contribution) {
     const deliveryContractId = stringProp(widgetShape(contribution), 'deliveryContractId');
-    if (deliveryContractId === STRUCTURED_PANEL_DELIVERY_CONTRACT_ID)
+    if (deliveryContractId !== undefined && STRUCTURED_PANEL_DELIVERY_CONTRACT_IDS.has(deliveryContractId)) {
         return true;
+    }
     // Keep pre-delivery-contract bundles lintable. A declared, different
     // delivery contract wins over the conventional legacy names.
     return deliveryContractId === undefined
@@ -83,6 +90,36 @@ function duplicateConfigDiagnostics(widget, config) {
         }
     });
     diagnostics.push(...duplicateStringDiagnostics(widget, recordArray(ownProp(config, 'actions')), 'outputName', panelPointer(widget, '/actions'), STRUCTURED_PANEL_CONTRACT_CODES.duplicateActionOutput, 'action output'));
+    return diagnostics;
+}
+const SLUG_TITLE_REGEX = /^(?:[a-z0-9]+(?:[-_][a-z0-9]+)+|[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*)$/;
+function isSlugLikeBlockTitle(title, blockId) {
+    const trimmed = title.trim();
+    if (trimmed.length === 0 || /\s/u.test(trimmed))
+        return false;
+    if (blockId !== undefined && trimmed === blockId)
+        return true;
+    return SLUG_TITLE_REGEX.test(trimmed);
+}
+function blockTitleSlugDiagnostics(widget, config) {
+    const blocks = recordArray(ownProp(config, 'blocks'));
+    const diagnostics = [];
+    blocks.forEach((block, blockIndex) => {
+        const title = stringProp(block, 'title');
+        if (title === undefined)
+            return;
+        const blockId = stringProp(block, 'id');
+        if (!isSlugLikeBlockTitle(title, blockId))
+            return;
+        diagnostics.push({
+            ...panelDiagnostic(widget, STRUCTURED_PANEL_CONTRACT_CODES.blockTitleSlug, panelPointer(widget, `/blocks/${blockIndex}/title`), `StructuredPanel block '${blockId ?? blockIndex}' has slug-shaped title '${title}'; use a human-readable heading instead.`, 'block-title-is-slug', {
+                blockIndex,
+                ...(blockId ? { blockId } : {}),
+                title,
+            }),
+            severity: 'warning',
+        });
+    });
     return diagnostics;
 }
 function responseActions(context, actionRef) {
@@ -565,7 +602,7 @@ export function validateStructuredPanelContracts(context) {
             const config = record(ownProp(widget.binding, 'config'));
             if (!config)
                 continue;
-            diagnostics.push(...duplicateConfigDiagnostics(widget, config), ...actionDiagnostics(context, widget, config), ...confirmationDiagnostics(widget, config), ...dataPathDiagnostics(context, widget, config));
+            diagnostics.push(...duplicateConfigDiagnostics(widget, config), ...blockTitleSlugDiagnostics(widget, config), ...actionDiagnostics(context, widget, config), ...confirmationDiagnostics(widget, config), ...dataPathDiagnostics(context, widget, config));
         }
     }
     return diagnostics;

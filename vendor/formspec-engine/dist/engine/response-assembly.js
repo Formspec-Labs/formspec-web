@@ -80,7 +80,7 @@ function normalizeSignedPayload(signature, index, responseId, definitionUrl, def
     };
 }
 /** Emit only JSON-Schema–declared AuthoredSignature properties (additionalProperties: false). */
-function toNormalizedAuthoredSignatureRecord(signature, index, responseId, definitionUrl, definitionVersion, meta) {
+export function toNormalizedAuthoredSignatureRecord(signature, index, responseId, definitionUrl, definitionVersion, meta) {
     const signerName = signature.signerName ?? meta?.author?.name;
     if (!signerName || !signerName.trim()) {
         throw new Error(`authoredSignatures[${index}] requires signerName or meta.author.name`);
@@ -101,7 +101,7 @@ function toNormalizedAuthoredSignatureRecord(signature, index, responseId, defin
         documentId: signature.documentId,
         signingIntent,
         signatureValue: signature.signatureValue,
-        signerName: signerName.trim(),
+        signerName: signature.signingActId === undefined ? signerName.trim() : signerName,
         consentAccepted: signature.consentAccepted,
         consentTextRef: signature.consentTextRef,
         consentVersion: signature.consentVersion,
@@ -128,7 +128,17 @@ function toNormalizedAuthoredSignatureRecord(signature, index, responseId, defin
     if (identityBinding) {
         record.identityBinding = identityBinding;
     }
+    for (const field of ['signingActId', 'documentRef', 'presentationHash', 'witnessedSignatureRef']) {
+        if (signature[field] !== undefined)
+            record[field] = cloneValue(signature[field]);
+    }
     return record;
+}
+/** Refuse new claims on legacy paths that cannot carry the committed root data. */
+function requireLegacySignature(signature) {
+    if (['signingActId', 'documentRef', 'presentationHash', 'witnessedSignatureRef'].some(field => field in signature)) {
+        throw new Error('Declared-document evidence requires finalizeDocumentAttestations');
+    }
 }
 /**
  * Append whole-response signing evidence to an already emitted, completed JSON Response.
@@ -147,6 +157,10 @@ export function attachAuthoredSignature(response, signature) {
     const definitionVersion = requireNonEmptyString(snapshot.definitionVersion, 'Response.definitionVersion');
     if (!signature || 'partyRole' in signature || 'coveredPaths' in signature) {
         throw new Error('attachAuthoredSignature accepts whole-response evidence only');
+    }
+    requireLegacySignature(signature);
+    if (snapshot.extensions?.['x-formspec-document-attestations'] !== undefined) {
+        throw new Error('Declared-document evidence requires finalizeDocumentAttestations');
     }
     const prior = snapshot.authoredSignatures;
     if (prior !== undefined && !Array.isArray(prior)) {
@@ -203,6 +217,7 @@ function prepareAuthoredSignaturesSection(meta, responsePins) {
     if (!signatures || signatures.length === 0) {
         return { authoredSignatures: undefined, envelopeResponseId: meta?.id };
     }
+    signatures.forEach(requireLegacySignature);
     const responseId = resolveResponseId(meta?.id, signatures);
     if (!responseId) {
         throw new Error('authoredSignatures require a stable response id');

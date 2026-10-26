@@ -4,6 +4,13 @@ import type { ValidationReport, ValidationResult } from '@formspec-org/types';
 import type { EvalResult } from '../diff.js';
 import type { AuthoredSignatureInput, PinnedResponseReference } from '../interfaces.js';
 import type { EvalShapeTiming } from './wasm-fel.js';
+/** Emit only JSON-Schema–declared AuthoredSignature properties (additionalProperties: false). */
+export declare function toNormalizedAuthoredSignatureRecord(signature: AuthoredSignatureInput, index: number, responseId: string, definitionUrl: string, definitionVersion: string, meta: {
+    author?: {
+        id: string;
+        name?: string;
+    };
+} | undefined): Record<string, unknown>;
 /**
  * Append whole-response signing evidence to an already emitted, completed JSON Response.
  * Preserves all other Response content and returns independent nested objects. Does not

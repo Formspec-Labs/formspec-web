@@ -58,11 +58,15 @@ export function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceL
             }
         };
     }, [grant]);
+    const titleLevel = resolveRouteTitleLevel(plan.headingBaseLevel);
+    const titleText = presentedRouteTitle(handle, resolveRouteTitle);
+    const titleId = `fs-surface-title-${handle.routeId}`;
     const route = {
         surfaceId: handle.surfaceId,
         surfaceRef: plan.surfaceRef,
         routeId: handle.routeId,
         routeClass: handle.route.routeClass,
+        title: titleText,
         params,
     };
     const semanticOutputScope = resolveSemanticOutputScope?.({
@@ -70,10 +74,16 @@ export function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceL
         route,
         runtimeGeneration,
     });
-    const titleLevel = resolveRouteTitleLevel(plan.headingBaseLevel);
-    const titleText = presentedRouteTitle(handle, resolveRouteTitle);
-    const titleId = `fs-surface-title-${handle.routeId}`;
-    return (_jsxs("article", { ref: container, className: `fs-surface-route fs-surface-route--${grant.admitsTenantTheme ? 'branded' : 'platform'}`, "data-route": handle.routeId, "data-surface": handle.surfaceId, "data-route-class": handle.route.routeClass ?? 'unclassified', "data-tenant-theme": grant.admitsTenantTheme ? 'admitted' : 'refused', "data-tenant-token-count": grant.tenantTokenKeys.length, ...needTraceAttributes(generationNeedAnchors(handle.route)), ...(titleLevel === undefined
+    const hasWidgetSlot = plan.slots.some((slotPlan) => slotPlan.slotType === 'module-widget');
+    const hasDecisionFormSlot = plan.slots.some((slotPlan) => slotPlan.slotType === 'definition-form');
+    const routeClass = String(handle.route.routeClass ?? 'unclassified');
+    const routeLayout = (routeClass === 'review' && plan.slots.length > 1) ||
+        (handle.route.routeClass === 'operation' &&
+            hasWidgetSlot &&
+            hasDecisionFormSlot)
+        ? 'split'
+        : undefined;
+    return (_jsxs("article", { ref: container, className: `fs-surface-route fs-surface-route--${grant.admitsTenantTheme ? 'branded' : 'platform'}`, "data-route": handle.routeId, "data-surface": handle.surfaceId, "data-route-class": handle.route.routeClass ?? 'unclassified', "data-route-layout": routeLayout, "data-tenant-theme": grant.admitsTenantTheme ? 'admitted' : 'refused', "data-tenant-token-count": grant.tenantTokenKeys.length, ...needTraceAttributes(generationNeedAnchors(handle.route)), ...(titleLevel === undefined
             ? { 'aria-label': titleText }
             : { 'aria-labelledby': titleId }), children: [titleLevel !== undefined && (_jsx(Heading, { level: titleLevel, className: "fs-surface-route__title", id: titleId, children: titleText })), showThemeNotice && (_jsx("p", { className: `fs-surface-themenote fs-surface-themenote--${grant.posture}`, "data-probe": "theme-note", children: grant.reason })), _jsx("div", { className: "fs-surface-route__slots", children: plan.slots.map((slotPlan) => (_jsx(SurfaceSlotFrame, { plan: slotPlan, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, grant: grant, route: route, strings: text, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: plan.transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, definitionActionInvoker: definitionActionInvoker, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: (action, result) => {
                         // The form's own submit ran under Response Actions authority and

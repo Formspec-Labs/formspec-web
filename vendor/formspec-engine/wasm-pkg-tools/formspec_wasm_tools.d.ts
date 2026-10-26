@@ -48,7 +48,17 @@ export class FelContext {
     prepare(expression: string, item_path: string, replace_self_ref: boolean): string;
 }
 
+/**
+ * Legacy alias for [`analyze_fel_wasm`] using uppercase `FEL`.
+ */
 export function analyzeFEL(expression: string): string;
+
+/**
+ * Legacy alias for [`analyze_fel_with_field_types_wasm`] using uppercase `FEL`.
+ */
+export function analyzeFELWithFieldTypes(expression: string, field_types_json: string): string;
+
+export function analyzeFel(expression: string): string;
 
 /**
  * Analyze a FEL expression with field data type context for type-mismatch warnings.
@@ -56,7 +66,7 @@ export function analyzeFEL(expression: string): string;
  * `field_types_json` is a JSON object mapping field paths to data type strings,
  * e.g. `{"revenue": "money", "age": "number"}`.
  */
-export function analyzeFELWithFieldTypes(expression: string, field_types_json: string): string;
+export function analyzeFelWithFieldTypes(expression: string, field_types_json: string): string;
 
 /**
  * Apply `definition.migrations` to flat response `data` (FEL `transform` steps run in Rust).
@@ -77,7 +87,12 @@ export function checkFELExtensionName(name: string): void;
  */
 export function coerceFieldValue(item_json: string, bind_json: string, definition_json: string, value_json: string): string;
 
+/**
+ * Legacy alias for [`collect_fel_rewrite_targets_wasm`] using uppercase `FEL`.
+ */
 export function collectFELRewriteTargets(expression: string): string;
+
+export function collectFelRewriteTargets(expression: string): string;
 
 /**
  * Compute dependency groups from recorded changeset entries.
@@ -102,10 +117,30 @@ export function deriveJsonLdContext(definition_json: string, ontology_json: stri
 export function detectDocumentType(doc_json: string): any;
 
 /**
+ * Legacy alias for [`eval_fel`] using uppercase `FEL`.
+ */
+export function evalFEL(expression: string, fields_json: string): string;
+
+/**
+ * Legacy alias for [`eval_fel_with_context`] using uppercase `FEL`.
+ */
+export function evalFELWithContext(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
+
+/**
+ * Legacy alias for [`eval_fel_with_context_trace`] using uppercase `FEL`.
+ */
+export function evalFELWithContextTrace(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
+
+/**
+ * Legacy alias for [`eval_fel_with_trace`] using uppercase `FEL`.
+ */
+export function evalFELWithTrace(expression: string, fields_json: string): string;
+
+/**
  * Parse and evaluate a FEL expression with optional field values (JSON object).
  * Returns the result as a JSON string.
  */
-export function evalFEL(expression: string, fields_json: string): string;
+export function evalFel(expression: string, fields_json: string): string;
 
 /**
  * Evaluate a FEL expression with full FormspecEnvironment context.
@@ -113,14 +148,14 @@ export function evalFEL(expression: string, fields_json: string): string;
  *
  * `extensions` resolves calls to host extension functions (Core §3.12).
  */
-export function evalFELWithContext(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
+export function evalFelWithContext(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
 
 /**
  * Evaluate a FEL expression with full context and trace each evaluation step.
  *
  * `extensions` resolves calls to host extension functions (Core §3.12).
  */
-export function evalFELWithContextTrace(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
+export function evalFelWithContextTrace(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
 
 /**
  * Evaluate a FEL expression with a structured trace of evaluation steps.
@@ -129,7 +164,7 @@ export function evalFELWithContextTrace(expression: string, context_json: string
  * TraceStep is the tagged union from [`fel_core::TraceStep`] (`kind` = `"FieldResolved"`,
  * `"FunctionCalled"`, `"BinaryOp"`, `"IfBranch"`, `"ShortCircuit"`).
  */
-export function evalFELWithTrace(expression: string, fields_json: string): string;
+export function evalFelWithTrace(expression: string, fields_json: string): string;
 
 /**
  * Evaluate a Formspec definition against provided data (4-phase batch processor).
@@ -182,17 +217,27 @@ export function formspecWasmSplitAbiVersion(): string;
 export function generateChangelog(old_def_json: string, new_def_json: string, definition_url: string): string;
 
 /**
- * Extract field dependencies from a FEL expression.
+ * Legacy alias for [`get_fel_deps`] using uppercase `FEL`.
  */
 export function getFELDependencies(expression: string): string;
 
 /**
- * Resolve `{{expression}}` sequences in `template` against a FEL context (Locale §3.3.1).
- *
- * `context_json` has the `evalFELWithContext` shape; `extensions` resolves host
- * extension functions. Returns JSON `{ text, warnings: [{ expression, message }] }`.
+ * Extract field dependencies from a FEL expression.
+ */
+export function getFelDependencies(expression: string): string;
+
+/**
+ * Legacy alias for [`interpolate_fel_template`] using uppercase `FEL`.
  */
 export function interpolateFELTemplate(template: string, context_json: string, extensions?: FelExtensionHost | null): string;
+
+/**
+ * Resolve `{{expression}}` sequences in `template` against a FEL context (Locale §3.3.1).
+ *
+ * `context_json` has the `evalFelWithContext` shape; `extensions` resolves host
+ * extension functions. Returns JSON `{ text, warnings: [{ expression, message }] }`.
+ */
+export function interpolateFelTemplate(template: string, context_json: string, extensions?: FelExtensionHost | null): string;
 
 /**
  * Resolve `{{expression}}` sequences with a host evaluator under Rust's template rules.
@@ -227,9 +272,14 @@ export function listBuiltinFunctions(): string;
 export function normalizeIndexedPath(path: string): string;
 
 /**
- * Parse a FEL expression and return whether it's valid.
+ * Legacy alias for [`parse_fel`] using uppercase `FEL`.
  */
 export function parseFEL(expression: string): boolean;
+
+/**
+ * Parse a FEL expression and return whether it's valid.
+ */
+export function parseFel(expression: string): boolean;
 
 export function parseRegistry(registry_json: string): string;
 
@@ -245,21 +295,31 @@ export function planSchemaValidation(doc_json: string, document_type_override?: 
 export function prepareFelExpression(options_json: string): string;
 
 /**
- * Print a FEL expression AST back to normalized source string.
+ * Legacy alias for [`print_fel`] using uppercase `FEL`.
  */
 export function printFEL(expression: string): string;
+
+/**
+ * Print a FEL expression AST back to normalized source string.
+ */
+export function printFel(expression: string): string;
 
 /**
  * Copy `optionSets` entries onto fields that reference `optionSet` (mutates a JSON clone).
  */
 export function resolveOptionSetsOnDefinition(definition_json: string): string;
 
+/**
+ * Legacy alias for [`rewrite_fel_references_wasm`] using uppercase `FEL`.
+ */
 export function rewriteFELReferences(expression: string, rewrites_json: string): string;
 
 /**
  * Rewrite FEL using assembly `RewriteMap` JSON (`fragmentRootKey`, `hostGroupKey`, `importedKeys`, `keyPrefix`).
  */
 export function rewriteFelForAssembly(expression: string, map_json: string): string;
+
+export function rewriteFelReferences(expression: string, rewrites_json: string): string;
 
 export function rewriteMessageTemplate(message: string, rewrites_json: string): string;
 
@@ -268,7 +328,12 @@ export function rewriteMessageTemplate(message: string, rewrites_json: string): 
  */
 export function sanitizeFelIdentifier(s: string): string;
 
+/**
+ * Legacy alias for [`tokenize_fel`] using uppercase `FEL`.
+ */
 export function tokenizeFEL(expression: string): string;
+
+export function tokenizeFel(expression: string): string;
 
 /**
  * Try to lift a FEL expression into Studio `ConditionGroup` JSON (`lifted` / `unlifted`).
@@ -300,6 +365,8 @@ export interface InitOutput {
     readonly evalFELWithContext: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly evalFELWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly evalFELWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly evalFelWithContext: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly evalFelWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly evaluateDefinition: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly evaluateScreenerDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly executeMappingDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
@@ -316,6 +383,7 @@ export interface InitOutput {
     readonly generateChangelog: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly getFELDependencies: (a: number, b: number, c: number) => void;
     readonly interpolateFELTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly interpolateFelTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly interpolateTemplate: (a: number, b: number, c: number, d: number) => void;
     readonly isValidFelIdentifier: (a: number, b: number) => number;
     readonly itemAtPath: (a: number, b: number, c: number, d: number, e: number) => void;
@@ -339,6 +407,16 @@ export interface InitOutput {
     readonly validateExtensionUsage: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly validateLifecycleTransition: (a: number, b: number, c: number, d: number) => number;
     readonly wellKnownRegistryUrl: (a: number, b: number, c: number) => void;
+    readonly analyzeFel: (a: number, b: number, c: number) => void;
+    readonly collectFelRewriteTargets: (a: number, b: number, c: number) => void;
+    readonly getFelDependencies: (a: number, b: number, c: number) => void;
+    readonly printFel: (a: number, b: number, c: number) => void;
+    readonly tokenizeFel: (a: number, b: number, c: number) => void;
+    readonly parseFel: (a: number, b: number) => number;
+    readonly analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly evalFel: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly evalFelWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly rewriteFelReferences: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

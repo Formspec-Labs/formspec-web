@@ -1,9 +1,8 @@
-/** @filedesc Internal helpers shared by FormEngine (paths, coercion, validation shaping, FEL context). */
+/** @filedesc Internal helpers shared by FormEngine (paths, coercion, validation shaping, FEL path rewriting). */
 import type { EngineSignal } from '../reactivity/types.js';
 import type { FormBind, FormDefinition, FormItem, OptionEntry, ValidationResult } from '@formspec-org/types';
 import type { EvalValidation } from '../diff.js';
 import type { FormEngineRuntimeContext, FormFieldValue, JsonRecord, JsonValue, MappingDiagnostic, RuntimeMappingResult } from '../interfaces.js';
-import { type FelExtensionHost, type WasmFelContext } from '../wasm-bridge-runtime.js';
 export type EngineBindConfig = FormBind & {
     remoteOptions?: string;
     precision?: number;
@@ -28,15 +27,6 @@ export declare function validateDataType(value: FormFieldValue, dataType: string
 export declare function cloneValue<T>(value: T): T;
 export declare function isJsonRecord(value: unknown): value is JsonRecord;
 export declare function normalizeWasmValue<T>(value: T): T;
-/**
- * Encode a field value in the FEL type envelope its `dataType` declares (Core §2.1.3).
- *
- * `money` objects become `{ $type: 'money', amount, currency }`; `date` and
- * `dateTime` strings become `{ $type: 'date', value }`. WASM (fel-core) decodes
- * both, including the ISO date parse; this only tags the declared type.
- */
-export declare function tagFelValueByPath(path: string, value: FormFieldValue, fieldDataTypes: Record<string, string | undefined>): FormFieldValue;
-export declare function toWasmContextValue<T>(value: T): T;
 export declare function deepEqual(left: unknown, right: unknown): boolean;
 export declare function resolveNowProvider(now: FormEngineRuntimeContext['now']): () => Date;
 export declare function coerceDate(value: RuntimeNowInput): Date;
@@ -52,21 +42,10 @@ export declare function getAncestorBasePaths(path: string): string[];
 export declare function getScopeAncestors(scopePath: string): string[];
 export declare function getNestedValue(target: unknown, path: string): FormFieldValue;
 export declare function setNestedPathValue(target: JsonRecord, path: string, value: FormFieldValue): void;
-export declare function setExpressionContextValue(target: JsonRecord, path: string, value: FormFieldValue): void;
 export declare function setResponsePathValue(target: JsonRecord, path: string, value: FormFieldValue): void;
 export declare function replaceBareCurrentFieldRefs(expression: string, currentFieldName: string): string;
 export declare function flattenObject(value: JsonValue, prefix?: string, output?: JsonRecord): JsonRecord;
-/** FEL context snapshot of the non-repeat fields under `prefix`, leaves tagged by `dataType`. */
-export declare function buildGroupSnapshotForPath(prefix: string, signals: Record<string, EngineSignal<FormFieldValue>>, fieldDataTypes: Record<string, string | undefined>): JsonRecord;
-/** FEL context rows of repeat group `groupPath`, leaves tagged by `dataType`. One pass over signals: O(signals). */
-export declare function buildRepeatCollection(groupPath: string, count: number, signals: Record<string, EngineSignal<FormFieldValue>>, fieldDataTypes: Record<string, string | undefined>): JsonValue[];
-export declare function getRepeatAncestors(currentItemPath: string, repeats: Record<string, EngineSignal<number>>): Array<{
-    groupPath: string;
-    index: number;
-    count: number;
-}>;
 export declare function isEmptyValue(value: unknown): boolean;
-export declare function safeEvaluateExpression(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FormFieldValue;
 export declare function extractInlineBind(item: FormItem, path: string): EngineBindConfig | null;
 export declare function detectNamedCycle(graph: Map<string, Set<string>>, message: string): void;
 export declare function topoSortKeys<T extends {

@@ -1,0 +1,28 @@
+{
+  "name": "@formspec/signature-port",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Formspec-Labs/formspec.git",
+    "directory": "packages/formspec-signature-port"
+  },
+  "version": "0.1.0",
+  "description": "Formspec signature verifier port — Verifier interface and VerificationReceipt types",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@formspec-org/integrity-signature-port": "^0.1.0"
+  }
+}

@@ -27,6 +27,7 @@ export { planComponentTree, planDefinitionFallback, planContains, ensureActionBu
 export { resolvePageSequence } from './page-sequence.js';
 // Anchored overlays (Modal / Popover positioning)
 export { positionPopupNearTrigger, clearPopupFixedPosition, POPUP_EDGE_PADDING, POPUP_TRIGGER_GAP, MODAL_FIRST_FOCUSABLE_SELECTOR, } from './popup-position.js';
+export { bindAutoModal } from './auto-modal.js';
 // TextInput character count copy (theme widgetConfig.maxLength)
 export { characterCountLimitMessage, characterCountStatus, CHARACTER_COUNT_ANNOUNCE_DELAY_MS, } from './character-count.js';
 // Closed renderer-chrome string inventory (Locale spec §3.1.10 `$ui.<ChromeStringKey>`)

@@ -1,7 +1,9 @@
 /** @filedesc FormspecForm — auto-renderer that walks LayoutNode tree into React elements. */
 import React from 'react';
-import type { FormspecProviderProps } from './context';
+import type { IFormEngine } from '@formspec-org/engine';
+import type { FormspecProviderProps, SubmitResult } from './context';
 import type { ScreenerRoute, ScreenerRouteType } from './screener/types';
+import { type SubmitOptions } from './use-form';
 export interface FormspecFormProps extends Omit<FormspecProviderProps, 'children'> {
     /** Optional className on the root container. */
     className?: string;
@@ -32,6 +34,14 @@ export interface FormspecFormProps extends Omit<FormspecProviderProps, 'children
 export declare function FormspecForm(props: FormspecFormProps): import("react/jsx-runtime").JSX.Element;
 export interface FormspecFormContentProps {
     className?: string;
+}
+export interface WalkBridgeSubmitOptions extends SubmitOptions {
+    emitEvent?: boolean;
+}
+export interface WalkBridgeElement extends HTMLDivElement {
+    engine?: IFormEngine;
+    submit?: (options?: WalkBridgeSubmitOptions) => SubmitResult;
+    locale?: string;
 }
 /** Render the current provider's form, including its scoped tokens and issuer chrome. */
 export declare function FormspecFormContent({ className }: FormspecFormContentProps): import("react/jsx-runtime").JSX.Element;

@@ -9,6 +9,7 @@ export declare const STRUCTURED_PANEL_CONTRACT_CODES: {
     readonly actionLabelNonLiteral: "STRUCTURED-PANEL-ACTION-LABEL-NON-LITERAL";
     readonly actionConfirmationInvalid: "STRUCTURED-PANEL-ACTION-CONFIRMATION-INVALID";
     readonly dataPathImpossible: "STRUCTURED-PANEL-DATA-PATH-IMPOSSIBLE";
+    readonly blockTitleSlug: "STRUCTURED-PANEL-BLOCK-TITLE-SLUG";
 };
 /** A confirmation a StructuredPanel renderer can show: every label plus its own Need trace. */
 export interface AdmittedStructuredPanelConfirmation {

@@ -14,6 +14,8 @@ reimplementing it.
 | `@formspec-org/layout` | `../formspec/packages/formspec-layout` |
 | `@formspec-org/surface` | `../formspec/packages/formspec-surface` |
 | `@formspec-org/surface-react` | `../formspec/packages/formspec-surface-react` |
+| `@formspec/signature-port` | `../formspec/packages/formspec-signature-port` |
+| `@formspec/signature-cose` | `../formspec/packages/formspec-signature-cose` |
 | `@formspec-org/integrity-cose` | `../integrity-stack/packages/integrity-cose` |
 | `@formspec-org/integrity-signature-port` | `../integrity-stack/packages/integrity-signature-port` |
 | `@formspec-org/integrity-signature-adapter-webcrypto` | `../integrity-stack/packages/integrity-signature-adapter-webcrypto` |

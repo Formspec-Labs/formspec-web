@@ -15,9 +15,9 @@ import { validateInstanceDataAgainstSchema } from './instance-schema.js';
 import { patchDeltaSignalsFromWasm, patchErrorSignalsFromWasm, patchValueSignalsFromWasm, } from './reactive-patches.js';
 import { applyRepeatGroupTreeSnapshot, clearRepeatIndexedSubtree, snapshotRepeatGroupTree, } from './repeat-ops.js';
 import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
-import { buildWasmFelExpressionContext, mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
+import { mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
 import { felContextSchema, felContextSnapshot } from './fel-context.js';
-import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getAncestorBasePaths, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, safeEvaluateExpression, setNestedPathValue, setResponsePathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
+import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getAncestorBasePaths, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, setNestedPathValue, setResponsePathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
 import { collectSeedFromGroups, repeatHasHostData, resolvePrePopulateFromInstance, } from './instance-seeding.js';
 import { DefaultValidationProfileResolver, } from '../validation/index.js';
 export class FormEngine {
@@ -45,7 +45,6 @@ export class FormEngine {
         this._felContext = null;
         this._groupItems = new Map();
         this._shapeTiming = new Map();
-        this._instanceCalculateBinds = [];
         this._displaySignalPaths = new Set();
         this._prePopulateReadonly = new Set();
         this._seedFromResolvedPaths = new Set();
@@ -115,8 +114,7 @@ export class FormEngine {
         this.initializeOptionSignals();
         this.initializeInstances();
         this.initializeBindConfigs(this.definition.items);
-        this.collectInstanceCalculateBinds();
-        this.validateInstanceCalculateTargets();
+        this.rejectInstancePathBinds();
         validateVariableDefinitionCycles(this._variableDefs);
         validateCalculateBindCycles(this._bindConfigs);
         this.registerItems(this.definition.items);
@@ -374,20 +372,20 @@ export class FormEngine {
         if (typeof name !== 'string') {
             throw new TypeError('setValue path cannot be null');
         }
-        const instanceTarget = parseInstanceTarget(name);
+        const basePath = toBasePath(name);
+        const instanceTarget = this.instanceTargetUnlessItem(name, basePath);
         if (instanceTarget) {
             this.writeInstanceValue(instanceTarget.instanceName, instanceTarget.instancePath, value);
             this._evaluate();
             return;
         }
-        if (this.writeFieldData(name, value)) {
+        if (this.writeFieldData(name, value, basePath)) {
             ((_a = this.writeSources)[name] ?? (_a[name] = this._rx.signal(null))).value = options.source ?? 'user';
             this._evaluate();
         }
     }
     /** Coerces and stores a field value without evaluating; false for calculated or undeclared fields. */
-    writeFieldData(name, value) {
-        const basePath = toBasePath(name);
+    writeFieldData(name, value, basePath = toBasePath(name)) {
         if (this._calculatedFields.has(basePath)) {
             return false;
         }
@@ -1117,7 +1115,7 @@ export class FormEngine {
             const inlineBind = extractInlineBind(item, path);
             if (inlineBind) {
                 this._bindConfigs[path] = { ...this._bindConfigs[path], ...inlineBind };
-                if (inlineBind.calculate && !parseInstanceTarget(path)) {
+                if (inlineBind.calculate) {
                     this._calculatedFields.add(path);
                 }
             }
@@ -1129,7 +1127,7 @@ export class FormEngine {
             // Core §4.3.3 / Rust BindTargets: only `[*]` is stripped; a concrete `[n]` names no Item.
             const path = bind.path.replace(/\[\*\]/g, '');
             this._bindConfigs[path] = { ...this._bindConfigs[path], ...bind, path };
-            if (bind.calculate && !parseInstanceTarget(bind.path)) {
+            if (bind.calculate) {
                 this._calculatedFields.add(path);
             }
         }
@@ -1149,27 +1147,21 @@ export class FormEngine {
             this._variableSignalKeys.set(variableDef.name, existing);
         }
     }
-    collectInstanceCalculateBinds() {
-        for (const bind of Object.values(this._bindConfigs)) {
-            if (bind.calculate && parseInstanceTarget(bind.path)) {
-                this._instanceCalculateBinds.push(bind);
+    /**
+     * Core §4.3.3 / §3.10.1: a Bind path resolves to an Item, so one naming an instance (`instances.<name>…`,
+     * `@instance('<name>')…`) is a definition error. Instance data is host-written (`setInstanceValue`).
+     */
+    rejectInstancePathBinds() {
+        for (const bind of this.definition.binds ?? []) {
+            if (this.instanceTargetUnlessItem(bind.path, bind.path.replace(/\[\*\]/g, ''))) {
+                throw new Error(`Bind path '${bind.path}' names an instance, not an Item (Core §4.3.3); `
+                    + 'write instance data with setInstanceValue');
             }
         }
     }
-    validateInstanceCalculateTargets() {
-        for (const bind of this._instanceCalculateBinds) {
-            const target = parseInstanceTarget(bind.path);
-            if (!target) {
-                continue;
-            }
-            const instance = this.definition.instances?.[target.instanceName];
-            if (!instance) {
-                throw new Error(`Unknown instance '${target.instanceName}' targeted by bind '${bind.path}'`);
-            }
-            if (instance.readonly !== false) {
-                throw new Error(`Calculate bind cannot target readonly instance '${target.instanceName}'`);
-            }
-        }
+    /** `instances` is a legal Item key, so a path whose `itemPath` names an Item is that Item, never an instance target. */
+    instanceTargetUnlessItem(path, itemPath) {
+        return this._groupItems.has(itemPath) ? null : parseInstanceTarget(path);
     }
     registerItems(items, prefix = '') {
         var _a, _b, _c, _d, _e, _f;
@@ -1366,12 +1358,12 @@ export class FormEngine {
             this._remoteOptionsTasks.push(task);
         }
     }
-    writeInstanceValue(instanceName, path, value, options) {
+    writeInstanceValue(instanceName, path, value) {
         const instance = this.definition.instances?.[instanceName];
         if (!instance) {
             throw new Error(`Unknown instance '${instanceName}'`);
         }
-        if (!options?.bypassReadonly && instance.readonly !== false) {
+        if (instance.readonly !== false) {
             throw new Error(`Instance '${instanceName}' is readonly`);
         }
         let nextValue;
@@ -1393,36 +1385,6 @@ export class FormEngine {
         const schema = this.definition.instances?.[instanceName]?.schema;
         validateInstanceDataAgainstSchema(instanceName, data, schema && typeof schema === 'object' ? schema : undefined);
     }
-    evaluateExpression(expression, currentItemPath = '', dataOverride, resultOverride, scopedVariableOverrides, replaceSelfRef = false) {
-        return safeEvaluateExpression(this.normalizeExpressionForWasm(expression, currentItemPath, replaceSelfRef), buildWasmFelExpressionContext(this.felContextInput(currentItemPath, {
-            resultOverride,
-            dataOverride,
-            scopedVariableOverrides,
-        })), this._extensionFunctions);
-    }
-    felContextInput(currentItemPath, overrides = {}) {
-        return {
-            currentItemPath,
-            data: this._data,
-            fullResult: this._fullResult,
-            ...overrides,
-            fieldSignals: this.signals,
-            validationResults: this.validationResults,
-            relevantSignals: this.relevantSignals,
-            readonlySignals: this.readonlySignals,
-            requiredSignals: this.requiredSignals,
-            repeats: this.repeats,
-            bindConfigs: this._bindConfigs,
-            fieldDataTypes: this._fieldDataTypes,
-            variableDefs: this._variableDefs,
-            variableSignals: this.variableSignals,
-            instanceData: this.instanceData,
-            nowIso: this.nowISO(),
-            locale: this.felLocale(),
-            dateFormats: this._localeStore.dateFormats() ?? undefined,
-            meta: this._runtimeContext.meta,
-        };
-    }
     /**
      * The locale FEL formats and reports: the host's runtime locale when it set one, else the Locale
      * document currently selected — so `setLocale('fr')` alone renders French dates, and the patterns
@@ -1438,8 +1400,7 @@ export class FormEngine {
      * `_evaluate` (evaluation version), rows through structure changes, instances through the instance
      * version. Reading those signals also re-runs a caller's computed whenever the snapshot would change.
      * Each read then names only its expression and Item path, so it costs the scope it resolves against
-     * rather than the size of the form. In-flight evaluation reads use `evaluateExpression`, which builds a
-     * one-shot context from the partial state it is midway through producing.
+     * rather than the size of the form.
      */
     felContext() {
         // The Locale version is part of the key: a switch changes the date patterns the snapshot carries.
@@ -1634,9 +1595,6 @@ export class FormEngine {
             repeatCounts: this.repeatCountsSnapshot(),
         }), this._extensionFunctions);
         const evalResult = this.shapedEvalResult(baseResult);
-        // Apply TS-side fixups that WASM can't handle:
-        // 1. Instance calculate write-back (binds targeting @instance(...) paths)
-        this.applyInstanceCalculates(evalResult);
         // Shape timing is enforced in Rust `revalidate` for the default continuous WASM eval;
         // no TS-side filter needed for parity with batch eval.
         const delta = diffEvalResults(this._previousEvalResult, evalResult);
@@ -1662,7 +1620,6 @@ export class FormEngine {
                 variableSignalKeys: this._variableSignalKeys,
                 prePopulateReadonly: this._prePopulateReadonly,
             });
-            this.syncInstanceCalculateSignals();
             patchErrorSignalsFromWasm(this._rx, {
                 validationResults: this.validationResults,
                 errorSignals: this.errorSignals,
@@ -1679,36 +1636,6 @@ export class FormEngine {
             registryDocuments: this._registryDocuments,
             repeatCounts: this.repeatCountsSnapshot(),
         }), this._extensionFunctions));
-    }
-    applyInstanceCalculates(result) {
-        let changed = false;
-        for (const bind of this._instanceCalculateBinds) {
-            const target = parseInstanceTarget(bind.path);
-            if (!target || !bind.calculate) {
-                continue;
-            }
-            const value = this.evaluateExpression(bind.calculate, '', this._data, result);
-            const before = cloneValue(this.getInstanceData(target.instanceName, target.instancePath));
-            this.writeInstanceValue(target.instanceName, target.instancePath, value, { bypassReadonly: true });
-            if (!deepEqual(before, this.getInstanceData(target.instanceName, target.instancePath))) {
-                changed = true;
-            }
-        }
-        return changed;
-    }
-    syncInstanceCalculateSignals() {
-        for (const bind of this._instanceCalculateBinds) {
-            const target = parseInstanceTarget(bind.path);
-            if (!target || !bind.calculate) {
-                continue;
-            }
-            const nextValue = this.evaluateExpression(bind.calculate);
-            if ((nextValue === null || nextValue === undefined)
-                && this.getInstanceData(target.instanceName, target.instancePath) !== undefined) {
-                continue;
-            }
-            this.writeInstanceValue(target.instanceName, target.instancePath, nextValue, { bypassReadonly: true });
-        }
     }
     normalizeExpressionForWasm(expression, currentItemPath = '', replaceSelfRef = false) {
         return normalizeExpressionForWasmEvaluation({

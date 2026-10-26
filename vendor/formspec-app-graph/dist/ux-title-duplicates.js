@@ -156,10 +156,16 @@ function componentDiagnostics(component) {
     const tree = record(ownProp(record(component.document), 'tree'));
     return tree ? componentTreeDiagnostics(component, tree, '/tree') : [];
 }
+const STRUCTURED_PANEL_DELIVERY_CONTRACT_IDS = new Set([
+    STRUCTURED_PANEL_DELIVERY_CONTRACT_ID,
+    'StructuredPanel',
+    'x-structured-panel',
+]);
 function isStructuredPanel(widget, contribution) {
     const deliveryContractId = stringProp(widgetShape(contribution), 'deliveryContractId');
-    if (deliveryContractId === STRUCTURED_PANEL_DELIVERY_CONTRACT_ID)
+    if (deliveryContractId !== undefined && STRUCTURED_PANEL_DELIVERY_CONTRACT_IDS.has(deliveryContractId)) {
         return true;
+    }
     return deliveryContractId === undefined
         && (widget.widgetName === 'StructuredPanel' || widget.widgetName === 'x-structured-panel');
 }
@@ -189,6 +195,18 @@ function structuredPanelDiagnostics(context) {
             const panelTitle = titleCandidate(surface, `${basePointer}/title`, stringProp(config, 'title'), 'structured-panel');
             if (!panelTitle)
                 continue;
+            const routes = recordArray(ownProp(record(surface.document), 'routes'));
+            const route = routes[widget.routeIndex];
+            const routeTitle = stringProp(route, 'title') ?? stringProp(route, 'id');
+            const routeCandidate = titleCandidate(surface, stringProp(route, 'title') !== undefined
+                ? `/routes/${widget.routeIndex}/title`
+                : `/routes/${widget.routeIndex}/id`, routeTitle, 'surface-route');
+            if (routeCandidate && routeCandidate.normalizedTitle === panelTitle.normalizedTitle) {
+                diagnostics.push(...duplicateTitleDiagnostics([routeCandidate, panelTitle], {
+                    kind: 'surface-route-structured-panel',
+                    label: `Surface route '${widget.routeId ?? widget.routeIndex}' and ${panelLabel}`,
+                }));
+            }
             for (const blockTitle of blockTitles) {
                 if (panelTitle.normalizedTitle !== blockTitle.normalizedTitle)
                     continue;

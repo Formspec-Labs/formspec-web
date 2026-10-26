@@ -1,8 +1,15 @@
-/** @filedesc App Manifest 2.4 Locale reference and target coherence checks. */
+/** @filedesc App Manifest 2.4+ Locale reference and target coherence checks. */
+import { appManifestVersionAtLeast } from './artifact-resolver.js';
 import { satisfies, valid, validRange } from 'semver';
 import { diagnosticSourceForHandle } from './report.js';
 import { isExactVersion } from './component-routes.js';
 import { handlesByKind, ownProp, record, recordArray, stringProp, } from './surface-widgets.js';
+export const LOCALE_ASSOCIATION_CODES = {
+    localeRef: 'APP-GRAPH-LOCALE-REF',
+    localeTarget: 'APP-GRAPH-LOCALE-TARGET',
+    localeDuplicate: 'APP-GRAPH-LOCALE-DUPLICATE',
+    localeUiChromeMissing: 'APP-GRAPH-LOCALE-UI-CHROME-MISSING',
+};
 /**
  * Normalize the case conventions that are significant to BCP 47 comparison.
  *
@@ -173,13 +180,131 @@ function duplicateTupleDiagnostics(tuples) {
     }
     return diagnostics;
 }
+function definitionItemChildren(item) {
+    const children = recordArray(ownProp(item, 'children'));
+    return children.length > 0 ? children : recordArray(ownProp(item, 'items'));
+}
+function definitionItemsNeedSelectChrome(items) {
+    for (const item of items) {
+        if (stringProp(item, 'type') === 'field') {
+            const presentation = record(ownProp(item, 'presentation'));
+            const widgetHint = stringProp(presentation, 'widgetHint');
+            if (widgetHint === 'Select')
+                return true;
+            if (stringProp(item, 'dataType') === 'choice'
+                && widgetHint !== 'RadioGroup'
+                && widgetHint !== 'CheckboxGroup') {
+                return true;
+            }
+        }
+        const nested = definitionItemChildren(item);
+        if (nested.length > 0 && definitionItemsNeedSelectChrome(nested))
+            return true;
+    }
+    return false;
+}
+function definitionItemsNeedFileUploadChrome(items) {
+    for (const item of items) {
+        if (stringProp(item, 'type') === 'field') {
+            const presentation = record(ownProp(item, 'presentation'));
+            const widgetHint = stringProp(presentation, 'widgetHint');
+            if (stringProp(item, 'dataType') === 'attachment' || widgetHint === 'FileUpload') {
+                return true;
+            }
+        }
+        const nested = definitionItemChildren(item);
+        if (nested.length > 0 && definitionItemsNeedFileUploadChrome(nested))
+            return true;
+    }
+    return false;
+}
+/** The Definition URL a Component document renders, under any of its target spellings. */
+export function componentTargetUrl(compDoc) {
+    const target = record(ownProp(compDoc, 'target'));
+    const targetDefinition = record(ownProp(compDoc, 'targetDefinition'));
+    return stringProp(target, 'url')
+        ?? stringProp(target, 'definitionRef')
+        ?? stringProp(targetDefinition, 'url')
+        ?? stringProp(targetDefinition, 'definitionRef')
+        ?? stringProp(compDoc, 'definitionRef');
+}
+function componentTreeHasNode(node, componentName) {
+    if (stringProp(node, 'component') === componentName)
+        return true;
+    return recordArray(ownProp(node, 'children')).some((child) => componentTreeHasNode(child, componentName));
+}
+function localeUiChromeDiagnostics(context, tuples) {
+    const definitions = handlesByKind(context.handles, 'definition');
+    const components = handlesByKind(context.handles, 'component');
+    const diagnostics = [];
+    for (const tuple of tuples) {
+        if (tuple.kind !== 'definition')
+            continue;
+        if (/^en(?:-|$)/i.test(tuple.locale))
+            continue;
+        const matchingDefinitions = definitions.filter((def) => def.ref?.url === tuple.url
+            && stringProp(record(def.document), 'url') === tuple.url);
+        if (matchingDefinitions.length !== 1)
+            continue;
+        const targetDef = matchingDefinitions[0];
+        const defItems = recordArray(ownProp(record(targetDef.document), 'items'));
+        const targetingComponents = components.filter((comp) => componentTargetUrl(record(comp.document)) === tuple.url);
+        const needsSelectChrome = definitionItemsNeedSelectChrome(defItems)
+            || targetingComponents.some((comp) => {
+                const tree = record(ownProp(record(comp.document), 'tree'));
+                return tree ? componentTreeHasNode(tree, 'Select') : false;
+            });
+        const needsFileUploadChrome = definitionItemsNeedFileUploadChrome(defItems)
+            || targetingComponents.some((comp) => {
+                const tree = record(ownProp(record(comp.document), 'tree'));
+                return tree ? componentTreeHasNode(tree, 'FileUpload') : false;
+            });
+        if (!needsSelectChrome && !needsFileUploadChrome)
+            continue;
+        const strings = record(ownProp(record(tuple.handle.document), 'strings'));
+        const missingKeys = [];
+        if (needsSelectChrome) {
+            const placeholder = stringProp(strings, '$ui.select.placeholder');
+            if (!placeholder || placeholder.trim().length === 0) {
+                missingKeys.push('$ui.select.placeholder');
+            }
+        }
+        if (needsFileUploadChrome) {
+            const browse = stringProp(strings, '$ui.fileUpload.browse');
+            const dropzone = stringProp(strings, '$ui.fileUpload.dropzone');
+            if ((!browse || browse.trim().length === 0) && (!dropzone || dropzone.trim().length === 0)) {
+                missingKeys.push('$ui.fileUpload.browse');
+            }
+        }
+        if (missingKeys.length === 0)
+            continue;
+        diagnostics.push({
+            code: LOCALE_ASSOCIATION_CODES.localeUiChromeMissing,
+            severity: 'warning',
+            phase: 'cross-artifact',
+            origin: 'app-graph-validator',
+            message: `Non-English Locale '${tuple.handle.slot}' ('${tuple.locale}') for Definition '${tuple.url}' is missing UI chrome string key(s): ${missingKeys.join(', ')}.`,
+            primarySource: diagnosticSourceForHandle(tuple.handle, '/strings'),
+            relatedSources: [diagnosticSourceForHandle(targetDef, '/items')],
+            details: {
+                reason: 'missing-ui-chrome-keys',
+                locale: tuple.locale,
+                targetKind: tuple.kind,
+                targetUrl: tuple.url,
+                missingKeys,
+            },
+        });
+    }
+    return diagnostics;
+}
 export function validateLocaleAssociations(context) {
-    if (stringProp(manifestRecord(context), '$formspecBundle') !== '2.4')
+    if (!appManifestVersionAtLeast(stringProp(manifestRecord(context), '$formspecBundle'), '2.4'))
         return [];
     const perLocale = perLocaleDiagnostics(context);
     return [
         ...duplicateRefDiagnostics(context),
         ...perLocale.diagnostics,
         ...duplicateTupleDiagnostics(perLocale.tuples),
+        ...localeUiChromeDiagnostics(context, perLocale.tuples),
     ];
 }

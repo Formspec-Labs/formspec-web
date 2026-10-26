@@ -1,6 +1,16 @@
 /** @filedesc Shared ArtifactResolver kernel for App Manifest sibling refs. */
+/** App Manifest `$formspecBundle` versions, oldest first (App Manifest spec §2.2). */
+export const APP_MANIFEST_VERSIONS = ['2.0', '2.1', '2.2', '2.3', '2.4', '2.5'];
+/**
+ * Whether `version` is a known App Manifest version at or after `minimum`.
+ * Each 2.x minor is additive, so a rule introduced in one minor holds in every later one.
+ */
+export function appManifestVersionAtLeast(version, minimum) {
+    const index = APP_MANIFEST_VERSIONS.indexOf(version);
+    return index >= 0 && index >= APP_MANIFEST_VERSIONS.indexOf(minimum);
+}
 const DEFAULT_SUPPORT = {
-    bundleVersions: ['2.0', '2.1', '2.2', '2.3', '2.4'],
+    bundleVersions: [...APP_MANIFEST_VERSIONS],
     artifactKinds: [
         'definition',
         'experience',
@@ -63,23 +73,7 @@ function supportProfile(support) {
     };
 }
 function versionAllowed(bundleVersion, minimum) {
-    if (!minimum)
-        return true;
-    if (minimum === '2.1') {
-        return bundleVersion === '2.1'
-            || bundleVersion === '2.2'
-            || bundleVersion === '2.3'
-            || bundleVersion === '2.4';
-    }
-    if (minimum === '2.2') {
-        return bundleVersion === '2.2'
-            || bundleVersion === '2.3'
-            || bundleVersion === '2.4';
-    }
-    if (minimum === '2.3') {
-        return bundleVersion === '2.3' || bundleVersion === '2.4';
-    }
-    return bundleVersion === '2.4';
+    return !minimum || appManifestVersionAtLeast(bundleVersion, minimum);
 }
 function versionGateCode(minimum) {
     if (minimum === '2.4')

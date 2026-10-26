@@ -2,7 +2,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 /** @filedesc Default layout component — semantic HTML containers with CSS class structure. */
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { positionPopupNearTrigger, clearPopupFixedPosition, MODAL_FIRST_FOCUSABLE_SELECTOR, } from '@formspec-org/layout';
+import { bindAutoModal, positionPopupNearTrigger, clearPopupFixedPosition, MODAL_FIRST_FOCUSABLE_SELECTOR, } from '@formspec-org/layout';
 import { useWhen } from '../../use-when';
 import { projectionMetadataAttrs } from '../../projection-metadata.js';
 import { routeLandmarkAttrs } from '../../route-landmark.js';
@@ -313,21 +313,22 @@ function ModalLayout({ node, children, themeClass, style }) {
     const closeModal = useCallback(() => {
         dialogRef.current?.close();
     }, []);
+    // `trigger: "auto"`: open exactly while `when` holds and the dialog's tab panel is shown (Component spec §6.16, §8.1).
+    const autoModalRef = useRef(null);
     useLayoutEffect(() => {
-        if (triggerMode !== 'auto')
-            return;
         const d = dialogRef.current;
-        if (!d)
+        if (triggerMode !== 'auto' || !d)
             return;
-        if (autoOpenDesired && !d.open) {
-            clearPopupFixedPosition(d);
-            d.showModal();
-            focusDialogContent();
-        }
-        else if (!autoOpenDesired && d.open) {
-            d.close();
-        }
-    }, [triggerMode, autoOpenDesired, focusDialogContent]);
+        const auto = bindAutoModal(d, focusDialogContent);
+        autoModalRef.current = auto;
+        return () => {
+            auto.dispose();
+            autoModalRef.current = null;
+        };
+    }, [triggerMode, focusDialogContent]);
+    useLayoutEffect(() => {
+        autoModalRef.current?.setCondition(autoOpenDesired);
+    }, [autoOpenDesired, triggerMode, focusDialogContent]);
     const handleDialogClick = useCallback((e) => {
         if (closable && e.target === dialogRef.current) {
             closeModal();

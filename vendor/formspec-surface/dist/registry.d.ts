@@ -1,3 +1,41 @@
+/**
+ * @filedesc The module-widget runtime seam: `{moduleId, widgetName}` → a component.
+ *
+ * ## What the platform already had, and what it did not
+ *
+ * The Registry declares a widget's name, version, status, `childrenPolicy` and
+ * `tokenSlots`; the ModuleResolver admits it; lint E603 checks the module is
+ * declared; the UI Graph Policy validator reasons about its theming. All of that
+ * is admission. **Nothing delivered.** A module could declare a widget it had no
+ * way to ship (gap ledger `module-widget-runtime`).
+ *
+ * This module is the delivery channel: a host registers {@link WidgetModule}s,
+ * and a `module-widget` binding resolves through the same identity the Registry
+ * already uses. It is generic over the component type so the renderer-independent
+ * core owns the lookup and each renderer binding owns only its component shape —
+ * the same split `formspec-react` and `formspec-webcomponent` already have.
+ *
+ * ## Three fields called `widgetName`, and only one of them is this one
+ *
+ * ADR 0160 §2.4 (with the residual named in §8.1). Conflating these is the
+ * defect the ADR spent a section not closing, so it is worth the four lines:
+ *
+ * | Field | Vocabulary | Pattern |
+ * |---|---|---|
+ * | `RegistryEntry.name` | globally unique contribution id | `^x-[a-z][a-z0-9]*(-…)*$` |
+ * | `RegistryEntry.widgetShape.widgetName` | the module's own widget name | **none** — often PascalCase |
+ * | Theme `widget` (`common.schema.json` `CustomWidgetName`) | a third | `^x-[A-Za-z0-9][A-Za-z0-9_.-]*$` |
+ *
+ * A Surface `module-widget` binding's `widgetName` is the **second** — the
+ * schema documents it as "matches `widgetShape.widgetName`" and carries no
+ * pattern. So {@link createWidgetRegistry} keys its lookup on
+ * `widgetShape.widgetName` within the module's `contributes[]`, through the
+ * shared `resolveWidgetContribution` helper from `@formspec-org/app-graph`,
+ * and reports the contribution id separately. A registry keyed on
+ * `RegistryEntry.name` would resolve nothing the day a module uses a
+ * PascalCase widget name — which the schema explicitly permits.
+ */
+import { widgetContractMismatchReasons, type WidgetRenderedConfigNodeContract, type WidgetRuntimeContract } from '@formspec-org/app-graph';
 import type { RegistryDocument, RegistryEntry } from '@formspec-org/types';
 import { type SurfaceDiagnostic, type SurfaceDiagnosticSite } from './diagnostics.js';
 export interface WidgetKey {
@@ -26,15 +64,10 @@ export interface WidgetModule<TComponent> {
      */
     contracts?: Readonly<Record<string, WidgetRuntimeContract>>;
 }
-export interface WidgetRenderedConfigNodeContract {
-    pointerPattern: string;
-    kind: string;
-}
-export interface WidgetRuntimeContract {
-    deliveryContractId: string;
-    registryEntryVersion: string;
-    renderedConfigNodes: readonly WidgetRenderedConfigNodeContract[];
-}
+/** Owned by `@formspec-org/app-graph`, which compares it at authoring time too. */
+export type { WidgetRenderedConfigNodeContract, WidgetRuntimeContract };
+/** The one comparison, shared with the authoring host check; see `@formspec-org/app-graph`. */
+export { widgetContractMismatchReasons };
 /**
  * Two independent axes, never collapsed into one: **declared** is whether a
  * Registry in the bundle says the widget exists, **implemented** is whether the

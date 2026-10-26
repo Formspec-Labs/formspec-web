@@ -10,6 +10,9 @@ import { FormspecNode } from './node-renderer';
 import { ActionFeedbackContent } from './action-feedback.js';
 import { IssuerChromeSlot, parseQueryIssuerOverride } from './issuer';
 import { FormspecScreener } from './screener/FormspecScreener';
+import { useForm } from './use-form';
+import { useLocale } from './use-locale';
+import { focusFirstInvalidField } from './use-focus-field';
 /** Match `<formspec-render>`: emit theme + component tokens on `.formspec-container` so CSS variables resolve the same as the web component (e.g. radio group border). */
 function syncSystemAppearanceClass(el, systemPrefersDark) {
     if (!el)
@@ -111,18 +114,63 @@ function ScreenerGate({ screenerDocument, className, seedAnswers, renderExternal
 }
 /** Render the current provider's form, including its scoped tokens and issuer chrome. */
 export function FormspecFormContent({ className }) {
-    const { engine, layoutPlan } = useFormspecContext();
+    const { engine, layoutPlan, recordSubmit, onSubmit, setShowValidationSummaryAttr, } = useFormspecContext();
+    const { submit: submitForm } = useForm();
+    const { activeLocale, direction } = useLocale();
     const containerRef = useEmitThemeTokensOnFormspecContainerRef();
-    if (!layoutPlan) {
-        const containerClass = className
-            ? `formspec-container ${className}`
-            : 'formspec-container';
-        return (_jsxs("div", { ref: containerRef, className: containerClass, children: [_jsx(IssuerChromeSlot, { engine: engine, hostOrigin: browserHostOrigin(), mode: issuerChromeModeFromClassName(className) }), "No layout plan available."] }));
-    }
+    useLayoutEffect(() => {
+        const el = containerRef.current;
+        if (!el)
+            return;
+        el.engine = engine;
+        el.submit = (options) => {
+            const result = submitForm(options);
+            recordSubmit(result);
+            if (result.validationReport && !result.validationReport.valid) {
+                focusFirstInvalidField(el, result.validationReport.results);
+            }
+            if (options?.emitEvent !== false) {
+                onSubmit?.(result);
+            }
+            return result;
+        };
+        Object.defineProperty(el, 'locale', {
+            configurable: true,
+            get: () => engine.getActiveLocale?.() ?? '',
+            set: (code) => {
+                engine.setLocale(code);
+                if (code) {
+                    el.setAttribute('lang', code);
+                    el.setAttribute('dir', engine.getLocaleDirection());
+                }
+                else {
+                    el.removeAttribute('lang');
+                    el.removeAttribute('dir');
+                }
+            },
+        });
+        setShowValidationSummaryAttr?.(el.hasAttribute('show-validation-summary'));
+        const observer = new MutationObserver(() => {
+            setShowValidationSummaryAttr?.(el.hasAttribute('show-validation-summary'));
+        });
+        observer.observe(el, {
+            attributes: true,
+            attributeFilter: ['show-validation-summary'],
+        });
+        return () => {
+            observer.disconnect();
+            delete el.engine;
+            delete el.submit;
+            Reflect.deleteProperty(el, 'locale');
+        };
+    }, [engine, submitForm, recordSubmit, onSubmit, setShowValidationSummaryAttr]);
     const containerClass = className
         ? `formspec-container ${className}`
         : 'formspec-container';
-    return (_jsxs("div", { ref: containerRef, className: containerClass, children: [_jsx(IssuerChromeSlot, { engine: engine, hostOrigin: browserHostOrigin(), mode: issuerChromeModeFromClassName(className) }), _jsx(ActionFeedbackContent, { children: _jsx(FormspecNode, { node: layoutPlan }) })] }));
+    if (!layoutPlan) {
+        return (_jsxs("div", { ref: containerRef, className: containerClass, "data-formspec-render-root": "", lang: activeLocale || undefined, dir: activeLocale ? direction : undefined, children: [_jsx(IssuerChromeSlot, { engine: engine, hostOrigin: browserHostOrigin(), mode: issuerChromeModeFromClassName(className) }), "No layout plan available."] }));
+    }
+    return (_jsxs("div", { ref: containerRef, className: containerClass, "data-formspec-render-root": "", lang: activeLocale || undefined, dir: activeLocale ? direction : undefined, children: [_jsx(IssuerChromeSlot, { engine: engine, hostOrigin: browserHostOrigin(), mode: issuerChromeModeFromClassName(className) }), _jsx(ActionFeedbackContent, { children: _jsx(FormspecNode, { node: layoutPlan }) })] }));
 }
 /** Check whether a standalone screener document is active. */
 function hasActiveScreenerDoc(screenerDocument) {

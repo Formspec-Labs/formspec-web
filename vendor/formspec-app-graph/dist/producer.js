@@ -3,7 +3,7 @@ import { artifactResolutionGraphInput, resolveArtifacts, resolveBundleExportArti
 import { moduleResolverInputFromAppGraph, resolveModules, snapshotModulePayloadSchemaResources, } from './module-resolver.js';
 import { validateAppGraph } from './validator.js';
 import { prepareComponentRouteResolver } from './component-route-resolution.js';
-function finishAppGraphValidationReport(request, artifactResolutionReport) {
+function finishAppGraphValidationReport(request, artifactResolutionReport, manifestDiagnostics = []) {
     const graphInput = artifactResolutionGraphInput(artifactResolutionReport);
     const moduleResolutionReport = resolveModules(moduleResolverInputFromAppGraph({
         manifest: graphInput.manifest,
@@ -16,7 +16,9 @@ function finishAppGraphValidationReport(request, artifactResolutionReport) {
     const validationRequest = {
         manifest: graphInput.manifest,
         artifacts: graphInput.artifacts,
-        artifactResolution: graphInput.artifactResolution,
+        artifactResolution: manifestDiagnostics.length === 0
+            ? graphInput.artifactResolution
+            : { diagnostics: [...(graphInput.artifactResolution.diagnostics ?? []), ...manifestDiagnostics] },
         ...(request.hostEvidence ? { hostEvidence: request.hostEvidence } : {}),
         moduleResolution: moduleResolutionReport,
         ...(request.surfaceLocal ? { surfaceLocal: request.surfaceLocal } : {}),
@@ -27,6 +29,8 @@ function finishAppGraphValidationReport(request, artifactResolutionReport) {
         schemaValidators: request.schemaValidators,
         ...(request.evidenceSchemaValidators ? { evidenceSchemaValidators: request.evidenceSchemaValidators } : {}),
         ...(request.crossArtifactValidators ? { crossArtifactValidators: request.crossArtifactValidators } : {}),
+        ...(request.hostWidgetContracts ? { hostWidgetContracts: request.hostWidgetContracts } : {}),
+        ...(request.renderedNeedTrace ? { renderedNeedTrace: request.renderedNeedTrace } : {}),
         ...(request.validationOptions ? { options: request.validationOptions } : {}),
     };
     const report = validateAppGraph(validationRequest);
@@ -50,6 +54,13 @@ export async function produceBundleExportAppGraphValidationReport(request) {
         ...request,
         moduleSupport: snapshotModulePayloadSchemaResources(request.moduleSupport),
     };
+    const declaredNeeds = manifestNeedsEvidence(request.manifest, documents);
+    if (declaredNeeds.evidence) {
+        pipelineRequest.hostEvidence = {
+            ...pipelineRequest.hostEvidence,
+            needsDocuments: [...(pipelineRequest.hostEvidence?.needsDocuments ?? []), declaredNeeds.evidence],
+        };
+    }
     const artifactResolutionReport = await resolveBundleExportArtifacts({
         manifest: request.manifest,
         documents,
@@ -58,5 +69,43 @@ export async function produceBundleExportAppGraphValidationReport(request) {
         ...(request.digest ? { digest: request.digest } : {}),
         ...(request.schemaId ? { schemaId: request.schemaId } : {}),
     });
-    return finishAppGraphValidationReport(pipelineRequest, artifactResolutionReport);
+    return finishAppGraphValidationReport(pipelineRequest, artifactResolutionReport, declaredNeeds.diagnostic ? [declaredNeeds.diagnostic] : []);
+}
+const NEEDS_SCHEMA_ID = 'https://formspec.org/schemas/needs/1.0';
+/**
+ * The App Manifest's optional `needs` member (App Manifest §3.2, Needs §2.1) is
+ * an explicit pairing: the declared document joins the Needs host evidence, so
+ * coverage and the rendered-Need trace read it like a caller's pairing. A
+ * declared document the bundle does not carry, or one of another kind or
+ * version, is refused rather than silently unpaired.
+ */
+function manifestNeedsEvidence(manifest, documents) {
+    const ref = manifest?.needs;
+    if (ref === undefined)
+        return {};
+    const url = typeof ref?.url === 'string' ? ref.url : undefined;
+    const document = url !== undefined && Object.prototype.hasOwnProperty.call(documents, url)
+        ? documents[url]
+        : undefined;
+    const reason = document === undefined
+        ? 'needs-document-missing'
+        : document?.$formspecNeeds !== '1.0'
+            ? 'needs-document-kind'
+            : ref.version !== undefined && document.version !== ref.version
+                ? 'needs-document-version'
+                : undefined;
+    if (reason) {
+        return {
+            diagnostic: {
+                code: 'APP-GRAPH-NEEDS-REF',
+                severity: 'error',
+                phase: 'artifact-resolution',
+                origin: 'app-graph-validator',
+                message: `App Manifest needs '${url ?? '<no url>'}' does not resolve to a Needs 1.0 document of the declared version in this bundle.`,
+                primarySource: { artifactSlot: 'manifest', artifactKind: 'manifest', jsonPointer: '/needs' },
+                details: { reason, url, version: ref.version },
+            },
+        };
+    }
+    return { evidence: { schemaId: NEEDS_SCHEMA_ID, source: url, document } };
 }

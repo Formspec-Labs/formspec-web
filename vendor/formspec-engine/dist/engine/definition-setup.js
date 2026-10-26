@@ -1,6 +1,6 @@
 /** @filedesc Definition constructor helpers: option-set inlining and static FEL cycle detection. */
 import { wasmAnalyzeFEL, wasmGetFELDependencies, wasmResolveOptionSetsOnDefinition, } from '../wasm-bridge-runtime.js';
-import { detectNamedCycle, parentPathOf, parseInstanceTarget, resolveRelativeDependency, toBasePath, } from './helpers.js';
+import { detectNamedCycle, parentPathOf, resolveRelativeDependency, toBasePath, } from './helpers.js';
 export function resolveOptionSetsOnDefinition(definition) {
     return JSON.parse(wasmResolveOptionSetsOnDefinition(JSON.stringify(definition)));
 }
@@ -18,7 +18,7 @@ export function validateVariableDefinitionCycles(variableDefs) {
 export function validateCalculateBindCycles(bindConfigs) {
     const graph = new Map();
     for (const [path, bind] of Object.entries(bindConfigs)) {
-        if (!bind.calculate || parseInstanceTarget(path)) {
+        if (!bind.calculate) {
             continue;
         }
         const deps = new Set();

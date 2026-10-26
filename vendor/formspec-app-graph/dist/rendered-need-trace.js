@@ -323,7 +323,7 @@ function surfaceNodes(handle, entries) {
             out.push(generationNode(handle, 'surface-route-navigation', `${routePointer}/navigation`, navigation, `${nodeLabel(route, `routes[${routeIndex}]`)} navigation`));
         }
         else if (!navigation) {
-            out.push(failedInventoryNode(handle, 'surface-route-navigation', `${routePointer}/navigation`, `${nodeLabel(route, `routes[${routeIndex}]`)} implicit navigation`, RENDERED_NEED_TRACE_CODES.navigationImplicit, `Route '${nodeLabel(route, `routes[${routeIndex}]`)}' would render an implicit navigation label. Author an explicit navigation object with its own Need trace or set navigation.visible to false.`, 'implicit-navigation-derived-from-route'));
+            out.push(failedInventoryNode(handle, 'surface-route-navigation', `${routePointer}/navigation`, `${nodeLabel(route, `routes[${routeIndex}]`)} implicit navigation`, RENDERED_NEED_TRACE_CODES.navigationImplicit, `Route '${nodeLabel(route, `routes[${routeIndex}]`)}' would render an implicit navigation label. Author an explicit navigation object with its own Need trace; a hidden one (visible: false) needs the trace too, because its scope still shapes shell navigation.`, 'implicit-navigation-derived-from-route'));
         }
         if (Array.isArray(route.slots)) {
             route.slots.forEach((rawSlot, slotIndex) => {
@@ -851,15 +851,40 @@ function validateNode(node, needsById, needsRoots) {
  * profile through `crossArtifactValidators`.
  */
 export function validateRenderedNeedTrace(context, previewScenarios = []) {
+    return traceDiagnostics(pairedNeedsDocuments(context), collectRenderedNeedTraceNodes(context, previewScenarios));
+}
+function nodeCarriesTrace(node) {
+    return node.anchors.length > 0
+        || node.invalidAnchors.length > 0
+        || (node.typedNeedRefs?.length ?? 0) > 0;
+}
+/**
+ * Run the strict profile under `mode` and return its findings with the
+ * report record (Needs spec S10.3) that lets a server check the run instead of
+ * re-running it. `definitions` names every loaded Definition the run covered.
+ */
+export function runRenderedNeedTrace(context, mode) {
     const paired = pairedNeedsDocuments(context);
+    const nodes = collectRenderedNeedTraceNodes(context);
+    const applies = mode === 'required' || paired.length > 0 || nodes.some(nodeCarriesTrace);
+    const definitions = context.handles
+        .filter((handle) => handle.artifactKind === 'definition' && handle.status === 'loaded')
+        .flatMap((handle) => {
+        const url = stringProp(record(handle.document), 'url');
+        const version = stringProp(record(handle.document), 'version');
+        return url && version ? [{ url, version }] : [];
+    });
+    return applies
+        ? { diagnostics: traceDiagnostics(paired, nodes), record: { status: 'completed', definitions } }
+        : { diagnostics: [], record: { status: 'not-applicable', definitions } };
+}
+function traceDiagnostics(paired, nodes) {
     if (paired.length === 0) {
-        const nodes = collectRenderedNeedTraceNodes(context, previewScenarios);
         const first = nodes[0];
         if (!first)
             return [];
         return [traceDiagnostic(RENDERED_NEED_TRACE_CODES.needsUnpaired, `Strict rendered-Need validation found ${nodes.length} rendered node${nodes.length === 1 ? '' : 's'} but no paired Needs 1.0 document.`, first, first.pointer, 'needs-document-unpaired', { renderedNodeCount: nodes.length }, [])];
     }
     const { byId, roots } = pairedNeeds(paired);
-    return collectRenderedNeedTraceNodes(context, previewScenarios)
-        .flatMap((node) => validateNode(node, byId, roots));
+    return nodes.flatMap((node) => validateNode(node, byId, roots));
 }

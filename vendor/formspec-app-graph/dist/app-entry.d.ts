@@ -1,4 +1,4 @@
-/** @filedesc App Manifest 2.4 entry Surface and selected route validation. */
+/** @filedesc App Manifest 2.4+ entry Surface and selected route validation. */
 import type { AppGraphContext, AppGraphDiagnostic } from './types.js';
 /**
  * Select the App Manifest 2.4 entry Surface and validate that Surface's entry.

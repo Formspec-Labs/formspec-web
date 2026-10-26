@@ -110,6 +110,8 @@ export interface FormspecContextValue {
     fieldHelpLabel: string;
     /** Effective formPresentation (definition merged with component document). */
     formPresentation?: Record<string, unknown>;
+    /** Synchronize the `show-validation-summary` attribute from `.formspec-container`. */
+    setShowValidationSummaryAttr?: (show: boolean) => void;
 }
 /** @internal The provider's value, or `null` outside one — read it through {@link useFormspecContext}. */
 export declare const FormspecContext: React.Context<FormspecContextValue | null>;

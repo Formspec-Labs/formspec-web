@@ -1,6 +1,9 @@
 /** @filedesc Canonical ResponseReview metadata without renderer runtime imports. */
 import type { CapturedResponseFields, FiniteJsonValue } from '@formspec-org/surface';
 import type { FormDefinition, FormResponse } from '@formspec-org/types';
+import type { AcceptedResponseReviewFieldSelection } from './response-review-selection.js';
+export { resolveAcceptedResponseReviewFieldSelection } from './response-review-selection.js';
+export type { AcceptedResponseReviewFieldSelectionPolicy, AcceptedResponseReviewFieldSelection } from './response-review-selection.js';
 import type { SurfaceWidgetProps } from '../widget-api.js';
 export declare const RESPONSE_REVIEW_COPY_KEYS: readonly ["heading", "pending", "beforeSign", "beforeSubmit", "responseId", "draftVersion", "locale", "signatures", "additionalAnswers", "emptyString", "nullValue", "trueValue", "falseValue", "emptyArray", "emptyObject", "attachmentPending", "attachmentUnavailable", "attachmentFailed", "attachmentPreview", "attachmentDetails", "retry", "unavailable"];
 export type ResponseReviewCopy = Readonly<Record<(typeof RESPONSE_REVIEW_COPY_KEYS)[number], string>>;
@@ -74,10 +77,22 @@ export interface AcceptedTaskResponseReviewState extends Omit<ResponseReviewStat
     taskSign: AcceptedTaskResponseReviewSign;
     handoffId?: never;
 }
-export type AcceptedResponseReviewInput = AcceptedResponseReviewData | AcceptedTaskResponseReviewData;
+export interface AcceptedResponseReviewPresentationV011 extends AcceptedResponseReviewPresentation {
+    fieldSelection: AcceptedResponseReviewFieldSelection;
+}
+export interface AcceptedTaskResponseReviewPresentationV011 extends AcceptedTaskResponseReviewPresentation {
+    fieldSelection: AcceptedResponseReviewFieldSelection;
+}
+export interface AcceptedResponseReviewDataV011 extends Omit<AcceptedResponseReviewData, 'presentation'> {
+    presentation: AcceptedResponseReviewPresentationV011;
+}
+export interface AcceptedTaskResponseReviewDataV011 extends Omit<AcceptedTaskResponseReviewData, 'presentation'> {
+    presentation: AcceptedTaskResponseReviewPresentationV011;
+}
+export type AcceptedResponseReviewInput = AcceptedResponseReviewData | AcceptedTaskResponseReviewData | AcceptedResponseReviewDataV011 | AcceptedTaskResponseReviewDataV011;
 export type AcceptedResponseReviewStateInput = AcceptedResponseReviewState | AcceptedTaskResponseReviewState;
 export type ResponseReviewInput = ResponseReviewData | AcceptedResponseReviewInput;
-export type ResponseReviewPresentationInput = ResponseReviewPresentation | AcceptedResponseReviewPresentation | AcceptedTaskResponseReviewPresentation;
+export type ResponseReviewPresentationInput = ResponseReviewPresentation | AcceptedResponseReviewPresentation | AcceptedTaskResponseReviewPresentation | AcceptedResponseReviewPresentationV011 | AcceptedTaskResponseReviewPresentationV011;
 export interface AcceptedResponseReviewAttachmentRequest extends AcceptedResponseReviewData {
     path: string;
     descriptor: FiniteJsonValue;
@@ -410,12 +425,20 @@ export declare const RESPONSE_REVIEW_STATE_SCHEMA: {
 export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA: {
     readonly type: "object";
     readonly additionalProperties: false;
-    readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "handoffId"];
+    readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId"];
     readonly properties: {
         readonly phase: {
             readonly const: "accepted-record";
         };
         readonly handoffId: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionUrl: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionVersion: {
             readonly type: "string";
             readonly minLength: 1;
         };
@@ -426,14 +449,6 @@ export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA: {
         readonly responseHash: {
             readonly type: "string";
             readonly pattern: "^[a-f0-9]{64}$";
-        };
-        readonly definitionUrl: {
-            readonly type: "string";
-            readonly minLength: 1;
-        };
-        readonly definitionVersion: {
-            readonly type: "string";
-            readonly minLength: 1;
         };
         readonly fields: {
             readonly type: "object";
@@ -485,12 +500,20 @@ export declare const ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA: {
         readonly presentation: {
             readonly type: "object";
             readonly additionalProperties: false;
-            readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "handoffId"];
+            readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId"];
             readonly properties: {
                 readonly phase: {
                     readonly const: "accepted-record";
                 };
                 readonly handoffId: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionUrl: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionVersion: {
                     readonly type: "string";
                     readonly minLength: 1;
                 };
@@ -501,14 +524,6 @@ export declare const ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA: {
                 readonly responseHash: {
                     readonly type: "string";
                     readonly pattern: "^[a-f0-9]{64}$";
-                };
-                readonly definitionUrl: {
-                    readonly type: "string";
-                    readonly minLength: 1;
-                };
-                readonly definitionVersion: {
-                    readonly type: "string";
-                    readonly minLength: 1;
                 };
                 readonly fields: {
                     readonly type: "object";
@@ -606,7 +621,7 @@ export declare const ACCEPTED_TASK_RESPONSE_REVIEW_SIGN_SCHEMA: {
     };
 };
 export declare const ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA: {
-    readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "taskSign"];
+    readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign"];
     readonly properties: {
         readonly taskSign: {
             readonly type: "object";
@@ -623,6 +638,14 @@ export declare const ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA: {
                 };
             };
         };
+        readonly definitionUrl: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionVersion: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
         readonly locale: {
             readonly type: "string";
             readonly minLength: 1;
@@ -633,14 +656,6 @@ export declare const ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA: {
         readonly responseHash: {
             readonly type: "string";
             readonly pattern: "^[a-f0-9]{64}$";
-        };
-        readonly definitionUrl: {
-            readonly type: "string";
-            readonly minLength: 1;
-        };
-        readonly definitionVersion: {
-            readonly type: "string";
-            readonly minLength: 1;
         };
         readonly fields: {
             readonly type: "object";
@@ -681,7 +696,7 @@ export declare const ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA: {
 export declare const ACCEPTED_TASK_RESPONSE_REVIEW_DATA_SCHEMA: {
     readonly properties: {
         readonly presentation: {
-            readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "taskSign"];
+            readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign"];
             readonly properties: {
                 readonly taskSign: {
                     readonly type: "object";
@@ -698,6 +713,14 @@ export declare const ACCEPTED_TASK_RESPONSE_REVIEW_DATA_SCHEMA: {
                         };
                     };
                 };
+                readonly definitionUrl: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionVersion: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
                 readonly locale: {
                     readonly type: "string";
                     readonly minLength: 1;
@@ -708,14 +731,6 @@ export declare const ACCEPTED_TASK_RESPONSE_REVIEW_DATA_SCHEMA: {
                 readonly responseHash: {
                     readonly type: "string";
                     readonly pattern: "^[a-f0-9]{64}$";
-                };
-                readonly definitionUrl: {
-                    readonly type: "string";
-                    readonly minLength: 1;
-                };
-                readonly definitionVersion: {
-                    readonly type: "string";
-                    readonly minLength: 1;
                 };
                 readonly fields: {
                     readonly type: "object";
@@ -817,16 +832,636 @@ export declare const ACCEPTED_TASK_RESPONSE_REVIEW_STATE_SCHEMA: {
         };
     }];
 };
+export declare const ACCEPTED_RESPONSE_REVIEW_FIELD_SELECTION_POLICY_SCHEMA: {
+    readonly type: "object";
+    readonly additionalProperties: false;
+    readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "fieldPaths"];
+    readonly properties: {
+        readonly policyId: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionUrl: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionVersion: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly fieldPaths: {
+            readonly type: "array";
+            readonly minItems: 1;
+            readonly uniqueItems: true;
+            readonly items: {
+                readonly type: "string";
+                readonly pattern: "^[A-Za-z][A-Za-z0-9_]*(\\[(?:0|[1-9][0-9]*|\\*)\\])?(\\.[A-Za-z][A-Za-z0-9_]*(\\[(?:0|[1-9][0-9]*|\\*)\\])?)*$";
+            };
+        };
+    };
+};
+export declare const ACCEPTED_RESPONSE_REVIEW_FIELD_SELECTION_SCHEMA: {
+    readonly type: "object";
+    readonly additionalProperties: false;
+    readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+    readonly properties: {
+        readonly policyId: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionUrl: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionVersion: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly permittedPaths: {
+            readonly type: "array";
+            readonly uniqueItems: true;
+            readonly items: {
+                readonly pattern: string;
+                readonly type: "string";
+            };
+        };
+    };
+};
+export declare const ACCEPTED_RESPONSE_REVIEW_CONFIG_SCHEMA_V011: {
+    readonly required: readonly ["copy", "fieldSelection"];
+    readonly properties: {
+        readonly fieldSelection: {
+            readonly type: "object";
+            readonly additionalProperties: false;
+            readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "fieldPaths"];
+            readonly properties: {
+                readonly policyId: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionUrl: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionVersion: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly fieldPaths: {
+                    readonly type: "array";
+                    readonly minItems: 1;
+                    readonly uniqueItems: true;
+                    readonly items: {
+                        readonly type: "string";
+                        readonly pattern: "^[A-Za-z][A-Za-z0-9_]*(\\[(?:0|[1-9][0-9]*|\\*)\\])?(\\.[A-Za-z][A-Za-z0-9_]*(\\[(?:0|[1-9][0-9]*|\\*)\\])?)*$";
+                    };
+                };
+            };
+        };
+        readonly copy: {
+            readonly additionalProperties: {
+                readonly required: readonly ["heading", "pending", "beforeSign", "beforeSubmit", "responseId", "draftVersion", "locale", "signatures", "additionalAnswers", "emptyString", "nullValue", "trueValue", "falseValue", "emptyArray", "emptyObject", "attachmentPending", "attachmentUnavailable", "attachmentFailed", "attachmentPreview", "attachmentDetails", "retry", "unavailable", "acceptedRecord"];
+                readonly properties: {
+                    readonly acceptedRecord: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly "x-generation": {
+                        readonly type: "object";
+                    };
+                };
+                readonly type: "object";
+                readonly additionalProperties: false;
+            };
+            readonly type: "object";
+            readonly minProperties: 1;
+            readonly propertyNames: {
+                readonly pattern: "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$";
+            };
+        };
+        readonly "x-generation": {
+            readonly type: "object";
+        };
+    };
+    readonly type: "object";
+    readonly additionalProperties: false;
+};
+export declare const ACCEPTED_RESPONSE_REVIEW_RENDERED_CONFIG_NODES_V011: readonly [{
+    readonly pointerPattern: "";
+    readonly kind: "response-review";
+}, {
+    readonly pointerPattern: "/copy/*";
+    readonly kind: "response-review-copy";
+}, {
+    readonly pointerPattern: "/fieldSelection";
+    readonly kind: "response-review-field-selection";
+}, {
+    readonly pointerPattern: "/fieldSelection/fieldPaths/*";
+    readonly kind: "response-review-selected-field";
+}];
+export declare const ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE_V011: {
+    readonly props: {
+        readonly required: readonly ["copy", "fieldSelection"];
+        readonly properties: {
+            readonly fieldSelection: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "fieldPaths"];
+                readonly properties: {
+                    readonly policyId: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionUrl: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionVersion: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly fieldPaths: {
+                        readonly type: "array";
+                        readonly minItems: 1;
+                        readonly uniqueItems: true;
+                        readonly items: {
+                            readonly type: "string";
+                            readonly pattern: "^[A-Za-z][A-Za-z0-9_]*(\\[(?:0|[1-9][0-9]*|\\*)\\])?(\\.[A-Za-z][A-Za-z0-9_]*(\\[(?:0|[1-9][0-9]*|\\*)\\])?)*$";
+                        };
+                    };
+                };
+            };
+            readonly copy: {
+                readonly additionalProperties: {
+                    readonly required: readonly ["heading", "pending", "beforeSign", "beforeSubmit", "responseId", "draftVersion", "locale", "signatures", "additionalAnswers", "emptyString", "nullValue", "trueValue", "falseValue", "emptyArray", "emptyObject", "attachmentPending", "attachmentUnavailable", "attachmentFailed", "attachmentPreview", "attachmentDetails", "retry", "unavailable", "acceptedRecord"];
+                    readonly properties: {
+                        readonly acceptedRecord: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly "x-generation": {
+                            readonly type: "object";
+                        };
+                    };
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                };
+                readonly type: "object";
+                readonly minProperties: 1;
+                readonly propertyNames: {
+                    readonly pattern: "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$";
+                };
+            };
+            readonly "x-generation": {
+                readonly type: "object";
+            };
+        };
+        readonly type: "object";
+        readonly additionalProperties: false;
+    };
+    readonly renderedConfigNodes: readonly [{
+        readonly pointerPattern: "";
+        readonly kind: "response-review";
+    }, {
+        readonly pointerPattern: "/copy/*";
+        readonly kind: "response-review-copy";
+    }, {
+        readonly pointerPattern: "/fieldSelection";
+        readonly kind: "response-review-field-selection";
+    }, {
+        readonly pointerPattern: "/fieldSelection/fieldPaths/*";
+        readonly kind: "response-review-selected-field";
+    }];
+    readonly widgetName: "AcceptedResponseReview";
+    readonly deliveryContractId: "@formspec-org/surface-react/AcceptedResponseReview@0.1";
+    readonly dataInputs: {
+        name: string;
+        required: boolean;
+    }[];
+    readonly childrenPolicy: "none";
+};
+export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011: {
+    readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId", "fieldSelection"];
+    readonly properties: {
+        readonly fieldSelection: {
+            readonly type: "object";
+            readonly additionalProperties: false;
+            readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+            readonly properties: {
+                readonly policyId: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionUrl: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionVersion: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly permittedPaths: {
+                    readonly type: "array";
+                    readonly uniqueItems: true;
+                    readonly items: {
+                        readonly pattern: string;
+                        readonly type: "string";
+                    };
+                };
+            };
+        };
+        readonly phase: {
+            readonly const: "accepted-record";
+        };
+        readonly handoffId: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionUrl: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionVersion: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly locale: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly responseHash: {
+            readonly type: "string";
+            readonly pattern: "^[a-f0-9]{64}$";
+        };
+        readonly fields: {
+            readonly type: "object";
+            readonly additionalProperties: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["label"];
+                readonly properties: {
+                    readonly label: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly options: {
+                        readonly type: "array";
+                        readonly items: {
+                            readonly type: "object";
+                            readonly additionalProperties: false;
+                            readonly required: readonly ["value", "label"];
+                            readonly properties: {
+                                readonly value: {
+                                    readonly type: "string";
+                                    readonly minLength: 1;
+                                };
+                                readonly label: {
+                                    readonly type: "string";
+                                    readonly minLength: 1;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+    readonly type: "object";
+    readonly additionalProperties: false;
+};
+export declare const ACCEPTED_TASK_RESPONSE_REVIEW_PRESENTATION_SCHEMA_V011: {
+    readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign", "fieldSelection"];
+    readonly properties: {
+        readonly fieldSelection: {
+            readonly type: "object";
+            readonly additionalProperties: false;
+            readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+            readonly properties: {
+                readonly policyId: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionUrl: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionVersion: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly permittedPaths: {
+                    readonly type: "array";
+                    readonly uniqueItems: true;
+                    readonly items: {
+                        readonly pattern: string;
+                        readonly type: "string";
+                    };
+                };
+            };
+        };
+        readonly taskSign: {
+            readonly type: "object";
+            readonly additionalProperties: false;
+            readonly required: readonly ["recordRef", "recordHash"];
+            readonly properties: {
+                readonly recordRef: {
+                    readonly type: "string";
+                    readonly pattern: "^urn:formspec:task-draft-sign:sha256:[a-f0-9]{64}$";
+                };
+                readonly recordHash: {
+                    readonly type: "string";
+                    readonly pattern: "^sha256:[a-f0-9]{64}$";
+                };
+            };
+        };
+        readonly definitionUrl: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly definitionVersion: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly locale: {
+            readonly type: "string";
+            readonly minLength: 1;
+        };
+        readonly phase: {
+            readonly const: "accepted-record";
+        };
+        readonly responseHash: {
+            readonly type: "string";
+            readonly pattern: "^[a-f0-9]{64}$";
+        };
+        readonly fields: {
+            readonly type: "object";
+            readonly additionalProperties: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["label"];
+                readonly properties: {
+                    readonly label: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly options: {
+                        readonly type: "array";
+                        readonly items: {
+                            readonly type: "object";
+                            readonly additionalProperties: false;
+                            readonly required: readonly ["value", "label"];
+                            readonly properties: {
+                                readonly value: {
+                                    readonly type: "string";
+                                    readonly minLength: 1;
+                                };
+                                readonly label: {
+                                    readonly type: "string";
+                                    readonly minLength: 1;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+    readonly type: "object";
+    readonly additionalProperties: false;
+};
+export declare const ACCEPTED_RESPONSE_REVIEW_DATA_SCHEMA_V011: {
+    readonly properties: {
+        readonly presentation: {
+            readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId", "fieldSelection"];
+            readonly properties: {
+                readonly fieldSelection: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+                    readonly properties: {
+                        readonly policyId: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly definitionUrl: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly definitionVersion: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly permittedPaths: {
+                            readonly type: "array";
+                            readonly uniqueItems: true;
+                            readonly items: {
+                                readonly pattern: string;
+                                readonly type: "string";
+                            };
+                        };
+                    };
+                };
+                readonly phase: {
+                    readonly const: "accepted-record";
+                };
+                readonly handoffId: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionUrl: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionVersion: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly locale: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly responseHash: {
+                    readonly type: "string";
+                    readonly pattern: "^[a-f0-9]{64}$";
+                };
+                readonly fields: {
+                    readonly type: "object";
+                    readonly additionalProperties: {
+                        readonly type: "object";
+                        readonly additionalProperties: false;
+                        readonly required: readonly ["label"];
+                        readonly properties: {
+                            readonly label: {
+                                readonly type: "string";
+                                readonly minLength: 1;
+                            };
+                            readonly options: {
+                                readonly type: "array";
+                                readonly items: {
+                                    readonly type: "object";
+                                    readonly additionalProperties: false;
+                                    readonly required: readonly ["value", "label"];
+                                    readonly properties: {
+                                        readonly value: {
+                                            readonly type: "string";
+                                            readonly minLength: 1;
+                                        };
+                                        readonly label: {
+                                            readonly type: "string";
+                                            readonly minLength: 1;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+            readonly type: "object";
+            readonly additionalProperties: false;
+        };
+        readonly definition: {
+            readonly $ref: "https://formspec.org/schemas/definition/1.0";
+        };
+        readonly response: {
+            readonly $ref: "https://formspec.org/schemas/response/1.0";
+        };
+    };
+    readonly type: "object";
+    readonly additionalProperties: false;
+    readonly required: readonly ["definition", "response", "presentation"];
+};
+export declare const ACCEPTED_TASK_RESPONSE_REVIEW_DATA_SCHEMA_V011: {
+    readonly properties: {
+        readonly presentation: {
+            readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign", "fieldSelection"];
+            readonly properties: {
+                readonly fieldSelection: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+                    readonly properties: {
+                        readonly policyId: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly definitionUrl: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly definitionVersion: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly permittedPaths: {
+                            readonly type: "array";
+                            readonly uniqueItems: true;
+                            readonly items: {
+                                readonly pattern: string;
+                                readonly type: "string";
+                            };
+                        };
+                    };
+                };
+                readonly taskSign: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["recordRef", "recordHash"];
+                    readonly properties: {
+                        readonly recordRef: {
+                            readonly type: "string";
+                            readonly pattern: "^urn:formspec:task-draft-sign:sha256:[a-f0-9]{64}$";
+                        };
+                        readonly recordHash: {
+                            readonly type: "string";
+                            readonly pattern: "^sha256:[a-f0-9]{64}$";
+                        };
+                    };
+                };
+                readonly definitionUrl: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly definitionVersion: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly locale: {
+                    readonly type: "string";
+                    readonly minLength: 1;
+                };
+                readonly phase: {
+                    readonly const: "accepted-record";
+                };
+                readonly responseHash: {
+                    readonly type: "string";
+                    readonly pattern: "^[a-f0-9]{64}$";
+                };
+                readonly fields: {
+                    readonly type: "object";
+                    readonly additionalProperties: {
+                        readonly type: "object";
+                        readonly additionalProperties: false;
+                        readonly required: readonly ["label"];
+                        readonly properties: {
+                            readonly label: {
+                                readonly type: "string";
+                                readonly minLength: 1;
+                            };
+                            readonly options: {
+                                readonly type: "array";
+                                readonly items: {
+                                    readonly type: "object";
+                                    readonly additionalProperties: false;
+                                    readonly required: readonly ["value", "label"];
+                                    readonly properties: {
+                                        readonly value: {
+                                            readonly type: "string";
+                                            readonly minLength: 1;
+                                        };
+                                        readonly label: {
+                                            readonly type: "string";
+                                            readonly minLength: 1;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+            readonly type: "object";
+            readonly additionalProperties: false;
+        };
+        readonly definition: {
+            readonly $ref: "https://formspec.org/schemas/definition/1.0";
+        };
+        readonly response: {
+            readonly $ref: "https://formspec.org/schemas/response/1.0";
+        };
+    };
+    readonly type: "object";
+    readonly additionalProperties: false;
+    readonly required: readonly ["definition", "response", "presentation"];
+};
 export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
     readonly oneOf: readonly [{
         readonly type: "object";
         readonly additionalProperties: false;
-        readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "handoffId"];
+        readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId"];
         readonly properties: {
             readonly phase: {
                 readonly const: "accepted-record";
             };
             readonly handoffId: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionUrl: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionVersion: {
                 readonly type: "string";
                 readonly minLength: 1;
             };
@@ -837,14 +1472,6 @@ export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
             readonly responseHash: {
                 readonly type: "string";
                 readonly pattern: "^[a-f0-9]{64}$";
-            };
-            readonly definitionUrl: {
-                readonly type: "string";
-                readonly minLength: 1;
-            };
-            readonly definitionVersion: {
-                readonly type: "string";
-                readonly minLength: 1;
             };
             readonly fields: {
                 readonly type: "object";
@@ -880,7 +1507,7 @@ export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
             };
         };
     }, {
-        readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "taskSign"];
+        readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign"];
         readonly properties: {
             readonly taskSign: {
                 readonly type: "object";
@@ -897,6 +1524,14 @@ export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
                     };
                 };
             };
+            readonly definitionUrl: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionVersion: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
             readonly locale: {
                 readonly type: "string";
                 readonly minLength: 1;
@@ -908,6 +1543,78 @@ export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
                 readonly type: "string";
                 readonly pattern: "^[a-f0-9]{64}$";
             };
+            readonly fields: {
+                readonly type: "object";
+                readonly additionalProperties: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["label"];
+                    readonly properties: {
+                        readonly label: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly options: {
+                            readonly type: "array";
+                            readonly items: {
+                                readonly type: "object";
+                                readonly additionalProperties: false;
+                                readonly required: readonly ["value", "label"];
+                                readonly properties: {
+                                    readonly value: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                    readonly label: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        readonly type: "object";
+        readonly additionalProperties: false;
+    }, {
+        readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId", "fieldSelection"];
+        readonly properties: {
+            readonly fieldSelection: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+                readonly properties: {
+                    readonly policyId: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionUrl: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionVersion: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly permittedPaths: {
+                        readonly type: "array";
+                        readonly uniqueItems: true;
+                        readonly items: {
+                            readonly pattern: string;
+                            readonly type: "string";
+                        };
+                    };
+                };
+            };
+            readonly phase: {
+                readonly const: "accepted-record";
+            };
+            readonly handoffId: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
             readonly definitionUrl: {
                 readonly type: "string";
                 readonly minLength: 1;
@@ -915,6 +1622,113 @@ export declare const ACCEPTED_RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
             readonly definitionVersion: {
                 readonly type: "string";
                 readonly minLength: 1;
+            };
+            readonly locale: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly responseHash: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
+            };
+            readonly fields: {
+                readonly type: "object";
+                readonly additionalProperties: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["label"];
+                    readonly properties: {
+                        readonly label: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly options: {
+                            readonly type: "array";
+                            readonly items: {
+                                readonly type: "object";
+                                readonly additionalProperties: false;
+                                readonly required: readonly ["value", "label"];
+                                readonly properties: {
+                                    readonly value: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                    readonly label: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        readonly type: "object";
+        readonly additionalProperties: false;
+    }, {
+        readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign", "fieldSelection"];
+        readonly properties: {
+            readonly fieldSelection: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+                readonly properties: {
+                    readonly policyId: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionUrl: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionVersion: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly permittedPaths: {
+                        readonly type: "array";
+                        readonly uniqueItems: true;
+                        readonly items: {
+                            readonly pattern: string;
+                            readonly type: "string";
+                        };
+                    };
+                };
+            };
+            readonly taskSign: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["recordRef", "recordHash"];
+                readonly properties: {
+                    readonly recordRef: {
+                        readonly type: "string";
+                        readonly pattern: "^urn:formspec:task-draft-sign:sha256:[a-f0-9]{64}$";
+                    };
+                    readonly recordHash: {
+                        readonly type: "string";
+                        readonly pattern: "^sha256:[a-f0-9]{64}$";
+                    };
+                };
+            };
+            readonly definitionUrl: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionVersion: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly locale: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly phase: {
+                readonly const: "accepted-record";
+            };
+            readonly responseHash: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
             };
             readonly fields: {
                 readonly type: "object";
@@ -959,12 +1773,20 @@ export declare const ACCEPTED_RESPONSE_REVIEW_DATA_UNION_SCHEMA: {
             readonly oneOf: readonly [{
                 readonly type: "object";
                 readonly additionalProperties: false;
-                readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "handoffId"];
+                readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId"];
                 readonly properties: {
                     readonly phase: {
                         readonly const: "accepted-record";
                     };
                     readonly handoffId: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionUrl: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionVersion: {
                         readonly type: "string";
                         readonly minLength: 1;
                     };
@@ -975,14 +1797,6 @@ export declare const ACCEPTED_RESPONSE_REVIEW_DATA_UNION_SCHEMA: {
                     readonly responseHash: {
                         readonly type: "string";
                         readonly pattern: "^[a-f0-9]{64}$";
-                    };
-                    readonly definitionUrl: {
-                        readonly type: "string";
-                        readonly minLength: 1;
-                    };
-                    readonly definitionVersion: {
-                        readonly type: "string";
-                        readonly minLength: 1;
                     };
                     readonly fields: {
                         readonly type: "object";
@@ -1018,7 +1832,7 @@ export declare const ACCEPTED_RESPONSE_REVIEW_DATA_UNION_SCHEMA: {
                     };
                 };
             }, {
-                readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "taskSign"];
+                readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign"];
                 readonly properties: {
                     readonly taskSign: {
                         readonly type: "object";
@@ -1035,6 +1849,14 @@ export declare const ACCEPTED_RESPONSE_REVIEW_DATA_UNION_SCHEMA: {
                             };
                         };
                     };
+                    readonly definitionUrl: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionVersion: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
                     readonly locale: {
                         readonly type: "string";
                         readonly minLength: 1;
@@ -1046,6 +1868,78 @@ export declare const ACCEPTED_RESPONSE_REVIEW_DATA_UNION_SCHEMA: {
                         readonly type: "string";
                         readonly pattern: "^[a-f0-9]{64}$";
                     };
+                    readonly fields: {
+                        readonly type: "object";
+                        readonly additionalProperties: {
+                            readonly type: "object";
+                            readonly additionalProperties: false;
+                            readonly required: readonly ["label"];
+                            readonly properties: {
+                                readonly label: {
+                                    readonly type: "string";
+                                    readonly minLength: 1;
+                                };
+                                readonly options: {
+                                    readonly type: "array";
+                                    readonly items: {
+                                        readonly type: "object";
+                                        readonly additionalProperties: false;
+                                        readonly required: readonly ["value", "label"];
+                                        readonly properties: {
+                                            readonly value: {
+                                                readonly type: "string";
+                                                readonly minLength: 1;
+                                            };
+                                            readonly label: {
+                                                readonly type: "string";
+                                                readonly minLength: 1;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+                readonly type: "object";
+                readonly additionalProperties: false;
+            }, {
+                readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId", "fieldSelection"];
+                readonly properties: {
+                    readonly fieldSelection: {
+                        readonly type: "object";
+                        readonly additionalProperties: false;
+                        readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+                        readonly properties: {
+                            readonly policyId: {
+                                readonly type: "string";
+                                readonly minLength: 1;
+                            };
+                            readonly definitionUrl: {
+                                readonly type: "string";
+                                readonly minLength: 1;
+                            };
+                            readonly definitionVersion: {
+                                readonly type: "string";
+                                readonly minLength: 1;
+                            };
+                            readonly permittedPaths: {
+                                readonly type: "array";
+                                readonly uniqueItems: true;
+                                readonly items: {
+                                    readonly pattern: string;
+                                    readonly type: "string";
+                                };
+                            };
+                        };
+                    };
+                    readonly phase: {
+                        readonly const: "accepted-record";
+                    };
+                    readonly handoffId: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
                     readonly definitionUrl: {
                         readonly type: "string";
                         readonly minLength: 1;
@@ -1053,6 +1947,113 @@ export declare const ACCEPTED_RESPONSE_REVIEW_DATA_UNION_SCHEMA: {
                     readonly definitionVersion: {
                         readonly type: "string";
                         readonly minLength: 1;
+                    };
+                    readonly locale: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly responseHash: {
+                        readonly type: "string";
+                        readonly pattern: "^[a-f0-9]{64}$";
+                    };
+                    readonly fields: {
+                        readonly type: "object";
+                        readonly additionalProperties: {
+                            readonly type: "object";
+                            readonly additionalProperties: false;
+                            readonly required: readonly ["label"];
+                            readonly properties: {
+                                readonly label: {
+                                    readonly type: "string";
+                                    readonly minLength: 1;
+                                };
+                                readonly options: {
+                                    readonly type: "array";
+                                    readonly items: {
+                                        readonly type: "object";
+                                        readonly additionalProperties: false;
+                                        readonly required: readonly ["value", "label"];
+                                        readonly properties: {
+                                            readonly value: {
+                                                readonly type: "string";
+                                                readonly minLength: 1;
+                                            };
+                                            readonly label: {
+                                                readonly type: "string";
+                                                readonly minLength: 1;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+                readonly type: "object";
+                readonly additionalProperties: false;
+            }, {
+                readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign", "fieldSelection"];
+                readonly properties: {
+                    readonly fieldSelection: {
+                        readonly type: "object";
+                        readonly additionalProperties: false;
+                        readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+                        readonly properties: {
+                            readonly policyId: {
+                                readonly type: "string";
+                                readonly minLength: 1;
+                            };
+                            readonly definitionUrl: {
+                                readonly type: "string";
+                                readonly minLength: 1;
+                            };
+                            readonly definitionVersion: {
+                                readonly type: "string";
+                                readonly minLength: 1;
+                            };
+                            readonly permittedPaths: {
+                                readonly type: "array";
+                                readonly uniqueItems: true;
+                                readonly items: {
+                                    readonly pattern: string;
+                                    readonly type: "string";
+                                };
+                            };
+                        };
+                    };
+                    readonly taskSign: {
+                        readonly type: "object";
+                        readonly additionalProperties: false;
+                        readonly required: readonly ["recordRef", "recordHash"];
+                        readonly properties: {
+                            readonly recordRef: {
+                                readonly type: "string";
+                                readonly pattern: "^urn:formspec:task-draft-sign:sha256:[a-f0-9]{64}$";
+                            };
+                            readonly recordHash: {
+                                readonly type: "string";
+                                readonly pattern: "^sha256:[a-f0-9]{64}$";
+                            };
+                        };
+                    };
+                    readonly definitionUrl: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionVersion: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly locale: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly phase: {
+                        readonly const: "accepted-record";
+                    };
+                    readonly responseHash: {
+                        readonly type: "string";
+                        readonly pattern: "^[a-f0-9]{64}$";
                     };
                     readonly fields: {
                         readonly type: "object";
@@ -1279,12 +2280,20 @@ export declare const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
     }, {
         readonly type: "object";
         readonly additionalProperties: false;
-        readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "handoffId"];
+        readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId"];
         readonly properties: {
             readonly phase: {
                 readonly const: "accepted-record";
             };
             readonly handoffId: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionUrl: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionVersion: {
                 readonly type: "string";
                 readonly minLength: 1;
             };
@@ -1295,14 +2304,6 @@ export declare const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
             readonly responseHash: {
                 readonly type: "string";
                 readonly pattern: "^[a-f0-9]{64}$";
-            };
-            readonly definitionUrl: {
-                readonly type: "string";
-                readonly minLength: 1;
-            };
-            readonly definitionVersion: {
-                readonly type: "string";
-                readonly minLength: 1;
             };
             readonly fields: {
                 readonly type: "object";
@@ -1338,7 +2339,7 @@ export declare const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
             };
         };
     }, {
-        readonly required: readonly [...("locale" | "phase" | "responseHash" | "definitionUrl" | "definitionVersion" | "fields")[], "taskSign"];
+        readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign"];
         readonly properties: {
             readonly taskSign: {
                 readonly type: "object";
@@ -1355,6 +2356,14 @@ export declare const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
                     };
                 };
             };
+            readonly definitionUrl: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionVersion: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
             readonly locale: {
                 readonly type: "string";
                 readonly minLength: 1;
@@ -1366,6 +2375,78 @@ export declare const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
                 readonly type: "string";
                 readonly pattern: "^[a-f0-9]{64}$";
             };
+            readonly fields: {
+                readonly type: "object";
+                readonly additionalProperties: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["label"];
+                    readonly properties: {
+                        readonly label: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly options: {
+                            readonly type: "array";
+                            readonly items: {
+                                readonly type: "object";
+                                readonly additionalProperties: false;
+                                readonly required: readonly ["value", "label"];
+                                readonly properties: {
+                                    readonly value: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                    readonly label: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        readonly type: "object";
+        readonly additionalProperties: false;
+    }, {
+        readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "handoffId", "fieldSelection"];
+        readonly properties: {
+            readonly fieldSelection: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+                readonly properties: {
+                    readonly policyId: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionUrl: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionVersion: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly permittedPaths: {
+                        readonly type: "array";
+                        readonly uniqueItems: true;
+                        readonly items: {
+                            readonly pattern: string;
+                            readonly type: "string";
+                        };
+                    };
+                };
+            };
+            readonly phase: {
+                readonly const: "accepted-record";
+            };
+            readonly handoffId: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
             readonly definitionUrl: {
                 readonly type: "string";
                 readonly minLength: 1;
@@ -1373,6 +2454,113 @@ export declare const RESPONSE_REVIEW_PRESENTATION_UNION_SCHEMA: {
             readonly definitionVersion: {
                 readonly type: "string";
                 readonly minLength: 1;
+            };
+            readonly locale: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly responseHash: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
+            };
+            readonly fields: {
+                readonly type: "object";
+                readonly additionalProperties: {
+                    readonly type: "object";
+                    readonly additionalProperties: false;
+                    readonly required: readonly ["label"];
+                    readonly properties: {
+                        readonly label: {
+                            readonly type: "string";
+                            readonly minLength: 1;
+                        };
+                        readonly options: {
+                            readonly type: "array";
+                            readonly items: {
+                                readonly type: "object";
+                                readonly additionalProperties: false;
+                                readonly required: readonly ["value", "label"];
+                                readonly properties: {
+                                    readonly value: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                    readonly label: {
+                                        readonly type: "string";
+                                        readonly minLength: 1;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        readonly type: "object";
+        readonly additionalProperties: false;
+    }, {
+        readonly required: readonly [...("definitionUrl" | "definitionVersion" | "locale" | "phase" | "responseHash" | "fields")[], "taskSign", "fieldSelection"];
+        readonly properties: {
+            readonly fieldSelection: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["policyId", "definitionUrl", "definitionVersion", "permittedPaths"];
+                readonly properties: {
+                    readonly policyId: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionUrl: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly definitionVersion: {
+                        readonly type: "string";
+                        readonly minLength: 1;
+                    };
+                    readonly permittedPaths: {
+                        readonly type: "array";
+                        readonly uniqueItems: true;
+                        readonly items: {
+                            readonly pattern: string;
+                            readonly type: "string";
+                        };
+                    };
+                };
+            };
+            readonly taskSign: {
+                readonly type: "object";
+                readonly additionalProperties: false;
+                readonly required: readonly ["recordRef", "recordHash"];
+                readonly properties: {
+                    readonly recordRef: {
+                        readonly type: "string";
+                        readonly pattern: "^urn:formspec:task-draft-sign:sha256:[a-f0-9]{64}$";
+                    };
+                    readonly recordHash: {
+                        readonly type: "string";
+                        readonly pattern: "^sha256:[a-f0-9]{64}$";
+                    };
+                };
+            };
+            readonly definitionUrl: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly definitionVersion: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly locale: {
+                readonly type: "string";
+                readonly minLength: 1;
+            };
+            readonly phase: {
+                readonly const: "accepted-record";
+            };
+            readonly responseHash: {
+                readonly type: "string";
+                readonly pattern: "^[a-f0-9]{64}$";
             };
             readonly fields: {
                 readonly type: "object";

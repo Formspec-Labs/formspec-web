@@ -104,9 +104,9 @@ export interface ResolvedBundle {
     localeDocuments?: readonly LocaleDocument[];
     surfaces: readonly SurfaceDocument[];
     /**
-     * The exact loaded Surface selected by App Manifest 2.4.
+     * The exact loaded Surface selected by App Manifest 2.4 and later.
      *
-     * `null` means 2.4 selected no Surface (valid zero-Surface app, ambiguous
+     * `null` means 2.4+ selected no Surface (valid zero-Surface app, ambiguous
      * omission, or unresolved explicit selector). Older 2.x bundles omit this
      * property so composition retains their historical manifest-order rule.
      */
