@@ -59,7 +59,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     expect(runtime.invalidate).not.toHaveBeenCalled();
   });
 
-  it('forwards the qualified saved handle from readState into owned runtime configuration', async () => {
+  it.each(['retained', 'initialization-retry', 'qualification-failure'] as const)('qualifies saved recovery before owned runtime configuration: %s', async mode => {
     const composition = anonymousComposition(createTestComposition({ definition: testDefinition }));
     const response: FormResponse = { $formspecResponse: '1.0', id: 'retained-owned-response',
       definitionUrl: definition.url, definitionVersion: definition.version, status: 'in-progress',
@@ -68,17 +68,28 @@ describe('draft recovery inside a definition-form Surface slot', () => {
       draft: { id: 'retained-owned-draft', version: 7, responseHash: 'qualified-by-reader' }, actor: { id: 'owner' },
       evidence: { draft_id: 'retained-owned-draft', draft_version: 7, form_version_id: 'publication',
         subject_ref: 'owner', status: 'in_progress' as const, draft_state: response.data, canonical_response: response } };
-    const readState = vi.fn(async () => ({ kind: 'active' as const, response, savedDraft: saved }));
-    composition.draftStore.readState = readState;
+    const readState = vi.fn<() => Promise<import('../../src/ports/draft-store.ts').DraftReadState | undefined>>(async () => ({ kind: 'active', response, savedDraft: saved }));
+    if (mode !== 'retained') readState.mockResolvedValueOnce(undefined);
+    if (mode === 'qualification-failure') readState.mockRejectedValueOnce(new Error('Owned recovery qualification refused'));
+    const initializeDraft = vi.fn(async () => ({ draftId: saved.draft.id, isInitializationOnly: false, response }));
+    composition.draftStore = { ...composition.draftStore, readState, initializeDraft };
     const load = vi.spyOn(composition.draftStore, 'load');
     const save = vi.spyOn(composition.draftStore, 'save');
     const configureRuntime = vi.fn(async (_input: RespondentOwnedRuntimeInput) => ownedRuntime());
     const configureSubmittedRuntime = vi.fn(async () => ({ invalidate: vi.fn(), dispose: vi.fn() }));
     const view = render(<RespondentDefinitionController composition={composition} config={departmentAppProfile}
       form={{ ...resolvedForm(), configureRuntime, configureSubmittedRuntime }} />);
-    await waitFor(() => expect(configureRuntime).toHaveBeenCalledOnce());
-    expect(configureRuntime.mock.calls[0][0]).toMatchObject({ restoredResponse: response, restoredSavedDraft: saved });
-    expect(readState).toHaveBeenCalledOnce();
+    if (mode === 'qualification-failure') {
+      await screen.findByText('Owned recovery qualification refused');
+      expect(configureRuntime).not.toHaveBeenCalled();
+      expect(screen.queryByLabelText('Name')).toBeNull();
+    } else {
+      await waitFor(() => expect(configureRuntime).toHaveBeenCalledOnce());
+      expect(configureRuntime.mock.calls[0][0]).toMatchObject({ restoredResponse: response, restoredSavedDraft: saved });
+      expect((await screen.findByLabelText('Name') as HTMLInputElement).value).toBe('Retained answer');
+    }
+    expect(readState).toHaveBeenCalledTimes(mode === 'retained' ? 1 : 2);
+    expect(initializeDraft).toHaveBeenCalledTimes(mode === 'retained' ? 0 : 1);
     expect(load).not.toHaveBeenCalled(); expect(save).not.toHaveBeenCalled();
     expect(configureSubmittedRuntime).not.toHaveBeenCalled(); view.unmount();
   });

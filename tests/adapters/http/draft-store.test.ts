@@ -8,7 +8,7 @@ import {
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
 
 describe('HttpDraftStore', () => {
-  it('creates, verifies, and updates drafts through the formspec-server routes', async () => {
+  it('saves, verifies, and updates initialized drafts through the formspec-server routes', async () => {
     let draftVersion = 1;
     let canonicalResponse = sampleFormResponse;
     const { fetch, requests } = recordingFetch((request) => {
@@ -28,7 +28,7 @@ describe('HttpDraftStore', () => {
       }
       return jsonResponse({ title: 'unexpected' }, 500);
     });
-    const adapter = new HttpDraftStore({
+    const adapter = new HttpDraftStore({ bindingRegistry: retainedRegistry(),
       baseUrl: 'https://formspec-server.example.test',
       fetchImpl: fetch,
     });
@@ -40,19 +40,18 @@ describe('HttpDraftStore', () => {
 
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`))
       .toEqual([
-        'POST /runtime/forms/conformance/drafts',
+        'PATCH /drafts/draft-http-1',
         'GET /drafts/draft-http-1',
         'PATCH /drafts/draft-http-1',
       ]);
     expect(requests[0]?.body).toMatchObject({
-      respondent_subject_ref: 'S-1',
       draft_state: sampleFormResponse.data,
       canonical_response: sampleFormResponse,
     });
     expect(requests[2]?.body).toMatchObject({
       draft_state: { fullName: 'Grace Hopper' },
       canonical_response: { ...sampleFormResponse, data: { fullName: 'Grace Hopper' } },
-      expected_draft_version: 1,
+      expected_draft_version: 2,
     });
   });
 
@@ -60,7 +59,7 @@ describe('HttpDraftStore', () => {
     const { fetch, requests } = recordingFetch(() =>
       jsonResponse({ draft_id: 'draft-http-1', draft_version: 1, canonical_response: sampleFormResponse, draft_state: sampleFormResponse.data }),
     );
-    const adapter = new HttpDraftStore({
+    const adapter = new HttpDraftStore({ bindingRegistry: retainedRegistry(),
       baseUrl: 'https://formspec-server.example.test',
       fetchImpl: fetch,
     });
@@ -69,7 +68,7 @@ describe('HttpDraftStore', () => {
     await adapter.save(key, sampleFormResponse);
     await adapter.delete(key);
     await expect(adapter.load(key)).resolves.toBeUndefined();
-    expect(requests.map((request) => request.method)).toEqual(['POST']);
+    expect(requests.map((request) => request.method)).toEqual(['PATCH']);
   });
 
   it('authenticates anonymous create, read, and repeated save without creating another draft', async () => {
@@ -92,7 +91,7 @@ describe('HttpDraftStore', () => {
       }
       return jsonResponse({ title: 'unexpected' }, 500);
     });
-    const adapter = new HttpDraftStore({
+    const adapter = new HttpDraftStore({ bindingRegistry: retainedRegistry(),
       baseUrl: 'https://formspec-server.example.test',
       fetchImpl: fetch,
       anonymousSessionToken: 'anonymous-token-1',
@@ -111,18 +110,17 @@ describe('HttpDraftStore', () => {
 
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`))
       .toEqual([
-        'POST /runtime/forms/conformance/drafts',
+        'PATCH /drafts/draft-http-1',
         'PATCH /drafts/draft-http-1',
         'GET /drafts/draft-http-1',
       ]);
     expect(requests[0]?.body).toMatchObject({
-      anonymous_session_token: 'anonymous-token-1',
-      anonymous_subject_ref: 'anon:server-subject',
+      expected_draft_version: 1,
     });
     expect(requests[1]?.body).toMatchObject({
       draft_state: { fullName: 'Grace Hopper' },
       canonical_response: { ...sampleFormResponse, data: { fullName: 'Grace Hopper' } },
-      expected_draft_version: 1,
+      expected_draft_version: 2,
     });
     expect(requests.map(request => request.headers.get('authorization'))).toEqual([
       'Bearer anonymous-token-1',
@@ -149,6 +147,7 @@ describe('HttpDraftStore', () => {
     });
     const adapter = new HttpDraftStore({ baseUrl: 'https://formspec-server.example.test', fetchImpl: fetch, bindingRegistry });
 
+    bindingRegistry.put(key, { draftId: 'draft-http-1', draftVersion: 1, response: sampleFormResponse });
     await adapter.save(key, sampleFormResponse);
     await expect(adapter.load(key)).resolves.toEqual(serverResponse);
     expect(bindingRegistry.get(key)).toMatchObject({ draftVersion: 7, response: serverResponse });
@@ -166,7 +165,7 @@ describe('HttpDraftStore', () => {
       displayedIssuer: { url: 'https://example.test/issuer', version: '1.0.0' },
     };
     const { fetch, requests } = recordingFetch(() => jsonResponse({ draft_id: 'draft-http-1', draft_version: 1, canonical_response: response, draft_state: response.data }));
-    const adapter = new HttpDraftStore({ baseUrl: 'https://formspec-server.example.test', fetchImpl: fetch });
+    const adapter = new HttpDraftStore({ bindingRegistry: retainedRegistry(), baseUrl: 'https://formspec-server.example.test', fetchImpl: fetch });
     await adapter.save({ formUrl: response.definitionUrl, formVersion: response.definitionVersion, subjectRef: 'S-1' }, response);
     expect((requests[0]?.body as { canonical_response: unknown }).canonical_response).toEqual(response);
   });
@@ -238,7 +237,7 @@ describe('qualified explicit locator binding', () => {
 it('refuses an asynchronous direct adapter resume guard before credential resolution', async () => {
   const accessToken = vi.fn(async () => 'owned-token');
   const { fetch, requests } = recordingFetch(() => jsonResponse({}));
-  const adapter = new HttpDraftStore({ baseUrl: 'https://server.example.test', accessToken, fetchImpl: fetch,
+  const adapter = new HttpDraftStore({ bindingRegistry: retainedRegistry(), baseUrl: 'https://server.example.test', accessToken, fetchImpl: fetch,
     qualifyReadState: async () => ({ kind: 'active', response: sampleFormResponse }) });
   await expect(adapter.resumeState!({ formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version, subjectRef: 'owner' },
     { draftId: 'owned', expectedResponseId: 'response' }, async () => {})).rejects.toThrow('guard must be synchronous');
@@ -246,59 +245,82 @@ it('refuses an asynchronous direct adapter resume guard before credential resolu
 });
 
 describe('durable draft initialization (fs-7xqu / ADR 0168)', () => {
-  it('initializes durable draft identity before save and subsequent save uses PATCH', async () => {
-    let draftVersion = 1;
-    let canonicalResponse = sampleFormResponse;
-    const { fetch, requests } = recordingFetch((request) => {
-      if (
-        request.method === 'POST' &&
-        request.url.endsWith('/runtime/forms/conformance/drafts')
-      ) {
-        return jsonResponse({
-          draft_id: 'draft-server-minted-1',
-          draft_version: 1,
-          canonical_response: canonicalResponse,
-          draft_state: {},
-          is_initialization_only: true,
-        });
-      }
-      if (request.method === 'PATCH' && request.url.endsWith('/drafts/draft-server-minted-1')) {
-        draftVersion += 1;
-        canonicalResponse = (request.body as { canonical_response: typeof sampleFormResponse }).canonical_response;
-        return jsonResponse({
-          draft_id: 'draft-server-minted-1',
-          draft_version: draftVersion,
-          canonical_response: canonicalResponse,
-          draft_state: canonicalResponse.data,
-          is_initialization_only: false,
-        });
-      }
-      return jsonResponse({ title: 'unexpected' }, 500);
+  const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version, subjectRef: 'S-1' };
+  const empty = { draft_id: 'draft-server-minted-1', draft_version: 1, form_version_id: 'published-version',
+    subject_ref: 'S-1', status: 'in_progress', canonical_response: null, draft_state: {}, is_initialization_only: true };
+
+  it('initializes without constructing a Response, then PATCHes the first Save and reads current retry state', async () => {
+    let current: Record<string, unknown> = { ...empty };
+    const { fetch, requests } = recordingFetch(request => {
+      if (request.method === 'PATCH') current = { ...empty, draft_version: 2, is_initialization_only: false,
+        canonical_response: sampleFormResponse, draft_state: sampleFormResponse.data };
+      return jsonResponse(current);
     });
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.example.test', formVersionId: 'published-version', fetchImpl: fetch });
+    await expect(adapter.initializeDraft(key)).resolves.toEqual({ draftId: empty.draft_id, isInitializationOnly: true });
+    await adapter.save(key, sampleFormResponse);
+    await expect(adapter.initializeDraft(key)).resolves.toEqual({ draftId: empty.draft_id, isInitializationOnly: false, response: sampleFormResponse });
+    expect(requests.map(request => request.method)).toEqual(['POST', 'PATCH', 'POST']);
+    expect(requests[0].body).toEqual({ form_version_id: 'published-version' });
+    expect(requests[0].headers.get('Idempotency-Key')).toBeTruthy();
+    expect(requests[2].headers.get('Idempotency-Key')).toBe(requests[0].headers.get('Idempotency-Key'));
+    expect(requests[1].body).toMatchObject({ expected_draft_version: 1, canonical_response: sampleFormResponse });
+  });
 
-    const adapter = new HttpDraftStore({
-      baseUrl: 'https://formspec-server.example.test',
-      fetchImpl: fetch,
-    });
-    const key = { formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef: 'S-1' };
+  it('retains the attempt key before an unknown outcome across fresh adapter and registry instances', async () => {
+    const metadata = new Map<string, unknown>();
+    const resumeMetadata = { read: (slot: string) => structuredClone(metadata.get(slot)),
+      write: (slot: string, value: unknown) => { metadata.set(slot, structuredClone(value)); }, remove: (slot: string) => { metadata.delete(slot); } };
+    const keys: (string | null)[] = [];
+    let lost = true;
+    const { fetch } = recordingFetch(request => { keys.push(request.headers.get('Idempotency-Key'));
+      if (lost) { lost = false; throw new TypeError('connection lost after commit'); } return jsonResponse(empty); });
+    const adapter = () => new HttpDraftStore({ baseUrl: 'https://source.example.test', formVersionId: 'published-version', fetchImpl: fetch,
+      bindingRegistry: createDraftBindingRegistry({ resumeMetadata }) });
+    await expect(adapter().initializeDraft(key)).rejects.toThrow('connection lost');
+    await expect(adapter().initializeDraft(key)).resolves.toMatchObject({ draftId: empty.draft_id });
+    expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]);
+    expect(JSON.stringify([...metadata.values()])).not.toContain('canonical_response');
+  });
 
-    const init = await adapter.initializeDraft!(key);
-    expect(init).toEqual({
-      draftId: 'draft-server-minted-1',
-      isInitializationOnly: true,
-    });
+  it('coalesces concurrent initialization requests and refuses a late retired-owner result', async () => {
+    let complete!: (response: Response) => void;
+    const { fetch, requests } = recordingFetch(() => new Promise<Response>(resolve => { complete = resolve; }));
+    const registry = createDraftBindingRegistry();
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.example.test', formVersionId: 'published-version', fetchImpl: fetch, bindingRegistry: registry });
+    const first = adapter.initializeDraft(key), second = adapter.initializeDraft(key);
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    await adapter.retireSubject('S-1');
+    complete(jsonResponse(empty));
+    await expect(first).rejects.toThrow('retired'); await expect(second).rejects.toThrow('retired');
+    expect(registry.get(key)).toBeUndefined();
+  });
 
-    const retry = await adapter.initializeDraft!(key);
-    expect(retry).toEqual({
-      draftId: 'draft-server-minted-1',
-      isInitializationOnly: false,
-    });
+  it('keeps empty initialized identity available without hydrating an empty Response', async () => {
+    const registry = createDraftBindingRegistry(); registry.put(key, { draftId: empty.draft_id, draftVersion: 1 });
+    const { fetch } = recordingFetch(() => jsonResponse(empty));
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.example.test', fetchImpl: fetch, bindingRegistry: registry });
+    await expect(adapter.load(key)).resolves.toBeUndefined(); expect(registry.get(key)?.draftId).toBe(empty.draft_id);
+  });
 
-    await adapter.save(key, { ...sampleFormResponse, data: { fullName: 'Ada Lovelace' } });
+  it.each([{ is_initialization_only: undefined }, { subject_ref: 'foreign-owner' }, { form_version_id: 'foreign-version' },
+    { draft_version: 2 }, { canonical_response: sampleFormResponse }, { status: 'submitted' }])('refuses malformed or foreign initialization %j', async change => {
+    const { fetch } = recordingFetch(() => jsonResponse({ ...empty, ...change }));
+    const registry = createDraftBindingRegistry();
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.example.test', formVersionId: 'published-version', fetchImpl: fetch, bindingRegistry: registry });
+    await expect(adapter.initializeDraft(key)).rejects.toThrow(); expect(registry.get(key)).toBeUndefined();
+  });
 
-    expect(requests.map((r) => `${r.method} ${new URL(r.url).pathname}`)).toEqual([
-      'POST /runtime/forms/conformance/drafts',
-      'PATCH /drafts/draft-server-minted-1',
-    ]);
+  it('refuses Save before initialization instead of sending caller-selected identity', async () => {
+    const { fetch, requests } = recordingFetch(() => jsonResponse(empty));
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.example.test', fetchImpl: fetch });
+    await expect(adapter.save(key, sampleFormResponse)).rejects.toThrow('initialized'); expect(requests).toHaveLength(0);
   });
 });
+
+function retainedRegistry() {
+  const registry = createDraftBindingRegistry();
+  for (const subjectRef of ['S-1', 'anon:server-subject']) registry.put({ formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef },
+    { draftId: 'draft-http-1', draftVersion: 1, response: sampleFormResponse });
+  return registry;
+}

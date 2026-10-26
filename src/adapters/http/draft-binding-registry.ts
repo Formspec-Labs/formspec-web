@@ -10,6 +10,7 @@
 import type { DraftKey, FormResponse } from '../../ports/draft-store.ts';
 import { DraftVersionConflictError } from '../../ports/draft-store.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
+import { generateIdempotencyKey } from '../../shared/idempotency-key.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 
 export interface DraftBindingSnapshot {
@@ -20,6 +21,7 @@ export interface DraftBindingSnapshot {
 }
 
 export interface DraftBindingRegistry {
+  initializationKey(key: DraftKey): string;
   get(key: DraftKey): DraftBindingSnapshot | undefined;
   put(key: DraftKey, snapshot: DraftBindingSnapshot): void;
   delete(key: DraftKey): void;
@@ -35,9 +37,22 @@ export function createDraftBindingRegistry(options: {
 } = {}): DraftBindingRegistry {
   const map = new Map<string, { key: DraftKey; snapshot: DraftBindingSnapshot }>();
   const resolveFormId = options.formIdResolver ?? defaultFormIdResolver;
+  const attempts = new Map<string, { key: DraftKey; token: string }>();
   let restored = false;
   const restore = () => {
     if (restored) return;
+    const pending = options.resumeMetadata?.read('draft-initializations');
+    if (pending !== undefined) {
+      if (!Array.isArray(pending)) throw new Error('Stored initialization attempts are invalid');
+      for (const entry of pending) {
+        if (!entry?.key || typeof entry.key.formUrl !== 'string' || !entry.key.formUrl
+          || (entry.key.formVersion !== undefined && typeof entry.key.formVersion !== 'string')
+          || (entry.key.subjectRef !== undefined && typeof entry.key.subjectRef !== 'string')
+          || (entry.key.partyRef !== undefined && typeof entry.key.partyRef !== 'string')
+          || typeof entry.token !== 'string' || !entry.token.trim()) throw new Error('Stored initialization attempt is invalid');
+        attempts.set(serializeKey(entry.key), { key: copyKey(entry.key), token: entry.token });
+      }
+    }
     const saved = options.resumeMetadata?.read('draft-handles');
     if (saved !== undefined) {
       if (!Array.isArray(saved)) throw new Error('Stored draft handles are invalid');
@@ -73,7 +88,23 @@ export function createDraftBindingRegistry(options: {
     && (left.subjectRef ?? null) === (right.subjectRef ?? null)
     && (left.partyRef ?? null) === (right.partyRef ?? null)
   );
+  const persistAttempts = () => {
+    if (attempts.size) options.resumeMetadata?.write('draft-initializations', [...attempts.values()]);
+    else options.resumeMetadata?.remove('draft-initializations');
+  };
   return {
+    initializationKey(key) {
+      restore();
+      const serialized = serializeKey(key);
+      let attempt = attempts.get(serialized);
+      if (!attempt) {
+        attempt = { key: copyKey(key), token: generateIdempotencyKey() };
+        attempts.set(serialized, attempt);
+        // Persist before dispatch; a lost response or reload must reuse this key.
+        persistAttempts();
+      }
+      return attempt.token;
+    },
     get(key) {
       restore();
       const matching = map.get(serializeKey(key));
@@ -96,6 +127,8 @@ export function createDraftBindingRegistry(options: {
       try { restore(); } catch {
         // Explicit clear may discard corrupt locators; reading them still fails closed.
         options.resumeMetadata?.remove('draft-handles');
+        options.resumeMetadata?.remove('draft-initializations');
+        attempts.clear();
         map.clear();
         restored = true;
         return;
@@ -104,6 +137,10 @@ export function createDraftBindingRegistry(options: {
       for (const [serialized, entry] of map) {
         if (sameScope(entry.key, key)) map.delete(serialized);
       }
+      for (const [serialized, attempt] of attempts) {
+        if (sameScope(attempt.key, key)) attempts.delete(serialized);
+      }
+      persistAttempts();
       persist();
     },
     entries() {

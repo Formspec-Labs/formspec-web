@@ -591,12 +591,16 @@ describe('maintained native package Surface host', () => {
     seed.dispose();
     let response: FormResponse = partial; let revision = 0;
     const view = () => ({ draft_id: 'owned-draft', form_version_id: 'publication', subject_ref: 'server-actor', status: 'in_progress',
-      draft_version: revision, draft_state: response.data, canonical_response: structuredClone(response) });
+      draft_version: revision, is_initialization_only: revision === 1, draft_state: revision === 1 ? {} : response.data, canonical_response: revision === 1 ? null : structuredClone(response) });
     const transport = recordingFetch(request => {
       if (request.method === 'GET') return jsonResponse(view());
+      if (request.method === 'POST') {
+        expect(request.body).toEqual({ form_version_id: 'publication' });
+        expect(revision).toBe(0); revision = 1; return jsonResponse(view());
+      }
       const body = request.body as { canonical_response: FormResponse; expected_draft_version?: number };
-      if (request.method === 'PATCH') { expect(request.url).toBe('https://server.example.test/drafts/owned-draft'); expect(body.expected_draft_version).toBe(revision); }
-      else { expect(request.method).toBe('POST'); expect(revision).toBe(0); }
+      expect(request.method).toBe('PATCH'); expect(request.url).toBe('https://server.example.test/drafts/owned-draft');
+      expect(body.expected_draft_version).toBe(revision);
       response = structuredClone(body.canonical_response); revision++; return jsonResponse(view());
     });
     const metadata = new Map<string, unknown>();
@@ -604,7 +608,9 @@ describe('maintained native package Surface host', () => {
       signingProfileDigest: async (response: FormResponse) => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex'), keyId: 'unused-sign-key', expectedIssuer: 'https://source.example.test/tenant/workspace/production' };
     const makeCohort = () => createHttpAdapterCohort({ baseUrl: 'https://server.example.test', fetchImpl: transport.fetch, formIdResolver: () => 'form',
       resumeMetadata: { read: slot => metadata.get(slot), write: (slot, value) => { metadata.set(slot, structuredClone(value)); }, remove: slot => { metadata.delete(slot); } }, responseSigning: signingPolicy });
-    await makeCohort().draftStore.save(key, partial);
+    const initial = makeCohort();
+    await initial.draftStore.initializeDraft!(key, 'publication');
+    await initial.draftStore.save(key, partial);
     const cohort = makeCohort();
     const host = createNativePackageSigningHost({ ...fixture.policy, initialLocale: 'es-US',
       controller: { ...fixture.policy.controller, signing: cohort.responseSigning!, validateResponse: validateCanonicalFormResponse },
@@ -630,13 +636,13 @@ describe('maintained native package Surface host', () => {
     await vi.waitFor(() => expect(host.getSnapshot().controller?.phase, JSON.stringify({ invocations, requests: transport.requests, scratch: engine.getInstanceData('draftReadiness'), initialWhen: engine.compileExpression("@instance('draftReadiness').ready and not(@instance('draftReadiness').owned)", '')(), ownedWhen: engine.compileExpression("@instance('draftReadiness').ready and @instance('draftReadiness').owned", '')(), snapshot: host.getSnapshot().controller })).toBe('saved'));
     expect(invocations).toHaveLength(1);
     expect(invocations[0]).toMatchObject({ status: 'completed', resolution: { action: { id: 'save-draft-owned' } } });
-    expect(revision).toBe(2); expect(response.id).toBe(partial.id); expect(response.data).toEqual(capturedData);
+    expect(revision).toBe(3); expect(response.id).toBe(partial.id); expect(response.data).toEqual(capturedData);
     expect(transport.requests.filter(request => request.method === 'POST')).toHaveLength(1);
-    expect(transport.requests.filter(request => request.method === 'PATCH')).toHaveLength(1);
+    expect(transport.requests.filter(request => request.method === 'PATCH')).toHaveLength(2);
     expect(transport.requests.filter(request => request.method === 'GET')).toHaveLength(3);
     fireEvent.click(await screen.findByRole('button', { name: 'Preparar la respuesta guardada' }));
     await vi.waitFor(() => expect(host.getSnapshot().controller?.phase).toBe('prepared'));
-    expect(revision).toBe(3); expect(host.getSnapshot().controller?.prepared?.response).toEqual(response);
+    expect(revision).toBe(4); expect(host.getSnapshot().controller?.prepared?.response).toEqual(response);
     mounted.unmount(); host.dispose();
   });
   it('uses the qualified form title and existing provider container across languages without writes', async () => {

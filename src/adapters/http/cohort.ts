@@ -46,6 +46,7 @@ export interface HttpAdapterCohortConfig extends HttpClientConfig {
   taskDraft?: { key: DraftKey; view: VerifiedDraftEvidence };
   applicationLifecycle?: { capabilities: ApplicationLifecycleCapabilities; action: AdmittedResponseAction };
   formIdResolver?: FormIdResolver;
+  formVersionId?: string;
   /**
    * When supplied, the cohort routes anonymous session bookkeeping through
    * the shared bridge — the draft store consults `tokenForDraftKey(key)` on
@@ -110,6 +111,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
   const draftStore: HttpDraftStore = new HttpDraftStore({
     ...httpConfig,
     bindingRegistry: registry,
+    formVersionId: statePolicy?.formVersionId ?? config.formVersionId,
     requireExistingBinding: taskDraftSelection !== undefined,
     qualifyReadState: statePolicy ? async (key, view, current) => {
       const owner = await ownerFor(key); current();
@@ -236,6 +238,12 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     });
   };
   const scopedDrafts: DraftStore = {
+    ...(!taskDraftSelection ? { initializeDraft: (key: DraftKey, version?: string) => fence.run(key, async generation => {
+      responseSigning.assertEditable(key);
+      const result = await draftStore.initializeDraft(key, version);
+      fence.assertCurrent(key, generation);
+      return result;
+    }) } : {}),
     load: key => fence.run(key, async generation => draftStore.load(key, () => fence.assertCurrent(key, generation))),
     ...(draftStore.readState ? { readState: (key: DraftKey) => readScopedState(key, (key, current) => draftStore.readState!(key, current)) } : {}),
     ...(draftStore.resumeState && config.accessToken && !anonymousSessions && !taskDraftSelection ? {
@@ -259,10 +267,11 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       responseSigning.clearScope(key);
     }),
     async invalidateSubject(subject) {
+      // Retire first dispatches even when their response has not installed a handle yet.
+      await draftStore.retireSubject(subject);
       if (statePolicy && subject && !subject.startsWith('anon:')) {
         const keys = registry.entries().filter(entry => entry.key.subjectRef === subject).map(entry => entry.key);
         for (const key of keys) fence.invalidate(key);
-        await draftStore.retireSubject(subject);
         return;
       }
       for (const key of await draftStore.list(subject)) await scopedDrafts.delete(key);

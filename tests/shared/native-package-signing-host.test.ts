@@ -543,22 +543,25 @@ describe('generic native package signing session', () => {
       validation: { profile: id === 'prepare' ? 'on-submit' : 'off', blocking: id === 'prepare' ? 'block-on-error' : 'non-blocking', persistence: id === 'prepare' ? 'complete-response' : 'draft-checkpoint' },
       effects: [{ type: 'serviceRequest', requestRef: id, idempotencyKey: '@invocation.id' }] })) as unknown as ResponseActionsDocument['actions'];
     document['x-formspec-runtime'] = { version: '1.0', requests: document.actions.map(action => {
-      const initial = action.id === 'save-initial';
       return { id: action.id, adapter: 'http-json', successStatuses: [200], request: {
-        method: initial ? 'POST' : 'PATCH', pathTemplate: initial ? '/runtime/forms/{formId}/drafts' : '/drafts/{draftId}',
-        pathBindings: initial ? { formId: { from: 'input', path: 'formId' } } : { draftId: { from: 'input', path: 'draftId' } },
+        method: 'PATCH', pathTemplate: '/drafts/{draftId}',
+        pathBindings: { draftId: { from: 'input', path: 'draftId' } },
         bodyBindings: { '/canonical_response': { from: 'input', path: 'frozenResponse' }, '/draft_state': { from: 'input', path: 'frozenResponse.data' },
-          ...(!initial ? { '/expected_draft_version': { from: 'input', path: 'draftVersion' } } : {}) } } };
+          '/expected_draft_version': { from: 'input', path: 'draftVersion' } } } };
     }) as unknown as NonNullable<ResponseActionsDocument['x-formspec-runtime']>['requests'] };
     const key = { formUrl: definition.url, formVersion: definition.version, subjectRef: 'server-actor' };
     let version = 0; let stored: FormResponse | undefined;
     const view = () => ({ draft_id: 'owned-id', form_version_id: 'publication', subject_ref: 'server-actor', draft_version: version,
-      status: 'in_progress', draft_state: stored!.data, canonical_response: structuredClone(stored) });
+      status: 'in_progress', is_initialization_only: !stored, draft_state: stored?.data ?? {}, canonical_response: stored ? structuredClone(stored) : null });
     const transport = recordingFetch(request => {
       if (request.method === 'GET') return jsonResponse(view());
+      if (request.method === 'POST') {
+        expect(request.url).toBe('https://server.example.test/runtime/forms/form/drafts');
+        expect(request.body).toEqual({ form_version_id: 'publication' });
+        expect(version).toBe(0); version = 1; return jsonResponse(view());
+      }
       const body = request.body as { canonical_response: FormResponse; expected_draft_version?: number };
-      if (request.method === 'PATCH') expect(body.expected_draft_version).toBe(version);
-      else { expect(request.method).toBe('POST'); expect(request.url).toBe('https://server.example.test/runtime/forms/form/drafts'); expect(version).toBe(0); }
+      expect(request.method).toBe('PATCH'); expect(body.expected_draft_version).toBe(version);
       stored = structuredClone(body.canonical_response); version++; return jsonResponse(view());
     });
     const metadata = new Map<string, unknown>();
@@ -573,6 +576,7 @@ describe('generic native package signing session', () => {
       controller: { ...test.policy.controller, signing: cohort.responseSigning!, roles, validateResponse: validateCanonicalFormResponse },
       signingContext: () => ({ source, locale: 'en' }), invalidateAuthority: (_reason, actualKey) => { if (actualKey) cohort.invalidateResponseSigningScope!(actualKey); },
       clearDraftAccess: actualKey => cohort.draftStore.delete(actualKey) };
+    await cohort.draftStore.initializeDraft!(key, 'publication');
     let host = createNativePackageSigningHost(policy);
     let engine = createFormEngine(definition); engine.loadLocale(locale); engine.setLocale('en'); engine.setValue('fullName', 'Partial');
     let lease = await host.configureRuntime({ engine, definition, draftKey: key, claim: null, activeLocale: 'en' });
@@ -580,7 +584,7 @@ describe('generic native package signing session', () => {
       invocationContext: { invocationId: `node:${actionRef}` }, ports: { dispatchHostEvent: vi.fn(), submit: () => ({
         response: { ...engine.getResponse({ profile: actionRef === 'prepare' ? 'on-submit' : 'off' }), id: test.response.id },
         validationReport: engine.getValidationReport({ profile: actionRef === 'prepare' ? 'on-submit' : 'off' }) }) } });
-    await invoke('save-initial'); expect(host.getSnapshot().controller).toMatchObject({ phase: 'saved' }); expect(host.getSnapshot().controller?.saved?.draft.version).toBe(1);
+    await invoke('save-initial'); expect(host.getSnapshot().controller).toMatchObject({ phase: 'saved' }); expect(host.getSnapshot().controller?.saved?.draft.version).toBe(2);
     engine.setValue('fullName', 'Complete'); engine.setValue('fullName', 'Complete edited');
     const attachment = { kind: 'attachment-ref', uri: 'attachment:uploaded', contentType: 'image/png', mimeType: 'image/png',
       filename: 'uploaded.png', size: 17, hash: `sha256:${'c'.repeat(64)}` };
@@ -589,7 +593,7 @@ describe('generic native package signing session', () => {
       const capturedData = structuredClone(engine.getResponse({ profile: 'off' }).data);
       lease.dispose(); host.dispose(); engine.dispose();
       const restored = await cohort.draftStore.load(key);
-      expect(restored?.data.photo).toBeNull(); expect(version).toBe(1);
+      expect(restored?.data.photo).toBeNull(); expect(version).toBe(2);
       host = createNativePackageSigningHost(policy);
       engine = createFormEngine(definition); engine.loadLocale(locale); engine.setLocale('en');
       engine.loadResponseData(restored!.data as Parameters<typeof engine.loadResponseData>[0]);
@@ -599,11 +603,11 @@ describe('generic native package signing session', () => {
     }
     expect(host.getSnapshot().controller?.owned).toBe(true);
     expect(host.getSnapshot().controller?.saved).toBeUndefined(); expect(host.getSnapshot().runtime).toBeUndefined();
-    await invoke('save-owned'); expect(host.getSnapshot().controller?.saved?.draft.version).toBe(2);
+    await invoke('save-owned'); expect(host.getSnapshot().controller?.saved?.draft.version).toBe(3);
     expect(stored!.data.photo).toEqual(attachment);
     expect(transport.requests.filter(request => request.method === 'POST')).toHaveLength(1);
-    expect(transport.requests.filter(request => request.method === 'PATCH')).toHaveLength(1);
-    await invoke('prepare'); expect(host.getSnapshot().controller?.prepared?.draft.version).toBe(3);
+    expect(transport.requests.filter(request => request.method === 'PATCH')).toHaveLength(2);
+    await invoke('prepare'); expect(host.getSnapshot().controller?.prepared?.draft.version).toBe(4);
     expect(host.getSnapshot().controller?.prepared?.response).toEqual(stored);
     lease.dispose(); host.dispose(); engine.dispose(); test.engine.dispose();
   });

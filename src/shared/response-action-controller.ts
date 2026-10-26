@@ -244,8 +244,8 @@ export function createResponseActionController(config: ResponseActionControllerC
     busy = deliveryId;
     publish(role);
     const pending = (async () => {
-      // The cohort owns hidden locator planning on a restored owned Save with no exposed evidence.
-      if (request && role !== 'submit' && role !== 'startApplication' && (role !== 'saveOwned' || saved)) {
+      // The cohort owns initialized locator planning before the first Save and on restored Save without exposed evidence.
+      if (request && role !== 'submit' && role !== 'startApplication' && role !== 'saveInitial' && (role !== 'saveOwned' || saved)) {
         const planned = planServiceRequest(request, { input: { ...input, formId: context.publication.formId,
           draftId: subject?.draft.id, draftVersion: subject?.draft.version,
           frozenResponse: response }, route: {}, session: {} });

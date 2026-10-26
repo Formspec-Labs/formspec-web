@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { createFormEngine } from '@formspec-org/engine';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
-import { RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
+import { RespondentDefinitionController, RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
 import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import type { DraftKey, DraftStore } from '../../src/ports/draft-store.ts';
 import type { SubmitTransport } from '../../src/ports/submit-transport.ts';
@@ -173,5 +173,32 @@ describe('canonical draft wording (ADR 0082 D16.2)', () => {
     fireEvent.click(button);
     await waitFor(() => expect(save).toHaveBeenCalledTimes(previousSaves + 1));
     expect(save.mock.calls.at(-1)?.[1].displayedLocale?.locale).toBe('es-US');
+  });
+});
+
+
+describe('durable identity before respondent setup', () => {
+  it('waits for initialization before configuring actions and preserves defaults, prefill, and Locale', async () => {
+    const base = createTestComposition({ definition: testDefinition });
+    const authored: FormDefinition = { ...definition,
+      items: [...definition.items, { key: 'defaulted', type: 'field', dataType: 'string', label: 'Defaulted', initialValue: 'Authored default' }] };
+    let finish!: (value: { draftId: string; isInitializationOnly: boolean }) => void;
+    let initialized = false;
+    const initializeDraft = vi.fn(() => new Promise<{ draftId: string; isInitializationOnly: boolean }>(resolve => { finish = value => { initialized = true; resolve(value); }; }));
+    const configureRuntime = vi.fn(async (input: Parameters<NonNullable<import('../../src/app/RespondentRuntime.tsx').ResolvedRespondentFormInput['configureRuntime']>>[0]) => {
+      expect(initialized).toBe(true); expect(input.restoredResponse).toBeUndefined();
+      expect(input.engine.getResponse({ profile: 'off' }).data).toMatchObject({ name: 'Prefilled name', defaulted: 'Authored default' });
+      expect(input.activeLocale).toBe('es-us');
+      return { semanticControlScope: undefined, responseActionInvoker: async () => { throw new Error('unused action'); }, invalidate() {}, dispose() {} };
+    });
+    render(<RespondentDefinitionController config={departmentAppProfile} composition={{ ...base,
+      initialDefinitionUrl: authored.url, draftStore: { ...base.draftStore, load: async () => undefined, initializeDraft } }}
+      form={{ definition: authored, themeDocument: { $formspecTheme: '1.0', version: '1.0.0' }, registryEntries: [],
+        responseActionsDocument: undefined, initialData: { data: { name: 'Prefilled name' }, freshness: 'fresh' },
+        localeDocuments: [spanish], activeLocale: 'es-us', configureRuntime }} />);
+    await waitFor(() => expect(initializeDraft).toHaveBeenCalledOnce()); expect(configureRuntime).not.toHaveBeenCalled();
+    finish({ draftId: 'server-minted', isInitializationOnly: true });
+    await waitFor(() => expect(configureRuntime).toHaveBeenCalledOnce());
+    await screen.findByLabelText('Nombre');
   });
 });

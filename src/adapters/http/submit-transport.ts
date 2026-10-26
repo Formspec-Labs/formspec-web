@@ -99,19 +99,17 @@ export class HttpSubmitTransport implements SubmitTransport {
     const response = await this.client.postJson<ResponseView>(
       `/drafts/${encodeURIComponent(draftId)}/submit`,
       {
-        response_id: configuredId ?? snapshotId,
         response_data: snapshot.data,
         canonical_response: snapshot,
         ...(options.nativeCurrentCheck ? { nativeCurrentCheck: options.nativeCurrentCheck } : {}),
         subject_ref: handoff.subjectRef ?? null,
-        party_ref: partyRefFromHandoff(handoff) ?? null,
         anonymous_session_token: token,
         signing_requested: this.resolveSigningRequested(handoff),
       },
       { idempotencyKey, headers: token ? { authorization: `Bearer ${token}` } : {}, assertCurrent: () => assertSynchronousGuard(assertCurrent) },
     );
-    if (snapshotId && response.response_id !== snapshotId) {
-      throw new Error('Server response identity differs from the canonical Response');
+    if (typeof response.response_id !== 'string' || !response.response_id.trim()) {
+      throw new Error('Server submission has no durable record identity');
     }
     const confirmation: SubmitConfirmation = {
       recordKind: 'response',
@@ -152,11 +150,6 @@ function requireCanonicalResponse(handoff: IntakeHandoff): CanonicalResponse {
     throw new Error('HTTP SubmitTransport requires a canonical Response snapshot with object data');
   }
   return response;
-}
-
-function partyRefFromHandoff(handoff: IntakeHandoff): string | undefined {
-  const candidate = handoff.extensions?.['x-formspec-active-party-ref'];
-  return typeof candidate === 'string' && candidate.length > 0 ? candidate : undefined;
 }
 
 function snapshotSubmitOptions(options: SubmitOptions): SubmitOptions {

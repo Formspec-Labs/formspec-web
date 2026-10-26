@@ -1218,7 +1218,6 @@ export interface components {
             themeHash?: string | null;
         };
         AdminMembershipCreateCommand: {
-            membership_id: string;
             principal_id: string;
             reason: string;
             role: string;
@@ -1365,24 +1364,14 @@ export interface components {
             status: string;
             version: string;
         };
-        /** @description Request body for creating a draft. */
+        /** @description Internal complete-response seed command; public creation uses initialization. */
         CreateAnonymousSessionCommand: {
             session_id?: string | null;
-        };
-        /** @description Request body for creating a draft. */
-        CreateDraftCommand: {
-            anonymous_session_token?: string | null;
-            anonymous_subject_ref?: string | null;
-            canonical_response: unknown;
-            draft_id?: string | null;
-            draft_state?: unknown;
-            respondent_subject_ref?: string | null;
         };
         /** @description Request body for creating a form. */
         CreateFormCommand: {
             created_by: string;
             display_name: string;
-            form_id?: string | null;
             slug: string;
         };
         /** @description Request body for creating a signature envelope. */
@@ -1398,6 +1387,7 @@ export interface components {
             /** Format: int64 */
             draft_version: number;
             form_version_id: string;
+            is_initialization_only?: boolean | null;
             status: string;
             subject_ref: string;
             taskDraft?: components["schemas"]["TaskDraftView"] | null;
@@ -1468,6 +1458,10 @@ export interface components {
             owner_principal_id: string;
             slug: string;
             version_lineage: string[];
+        };
+        /** @description Request body for initializing a draft before any canonical Response exists. */
+        InitializeDraftCommand: {
+            form_version_id: string;
         };
         NotificationAuditView: {
             audit_events: string[];
@@ -1723,7 +1717,6 @@ export interface components {
             definition_url?: string | null;
             /** @description Transitional compatibility field; must match `definition.version` when present. */
             definition_version?: string | null;
-            form_version_id?: string | null;
             host_evidence?: unknown;
             /** @description The Locale documents the form is published with, one per locale code. */
             locale_documents?: unknown[];
@@ -1978,7 +1971,6 @@ export interface components {
             /** @description Explicit current run locator, frozen with this Submit idempotency body. */
             nativeCurrentCheck?: Record<string, never> | null;
             response_data?: unknown;
-            response_id?: string | null;
             signing_requested?: boolean;
             subject_ref?: string | null;
         };
@@ -4930,7 +4922,10 @@ export interface operations {
     create_draft: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Required stable initialization attempt key; exact retries read the current owned draft */
+                "Idempotency-Key": string;
+            };
             path: {
                 /** @description Form identifier. */
                 form_id: string;
@@ -4939,7 +4934,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateDraftCommand"];
+                "application/json": components["schemas"]["InitializeDraftCommand"];
             };
         };
         responses: {
