@@ -1322,7 +1322,7 @@ export interface components {
              *       "reason": "Application denied."
              *     }
              */
-            machineReadable: Record<string, never>;
+            machineReadable: Record<string, unknown>;
             /**
              * @description Lowercase SHA-256 hex digest of the canonical case-file snapshot captured on the determination.
              * @example b19f000c0cd497b52c4a78e50641651e4b1e96931a1b1558984d69e722f73f5e
@@ -3317,11 +3317,11 @@ export interface components {
         LatestSignedTaskAccepted: {
             acceptedArtifact: unknown;
             /** @description formspec-server-ports' `RetainedTaskDraftArtifactsV1`. */
-            artifactSnapshot: Record<string, never>;
+            artifactSnapshot: Record<string, unknown>;
             kind: components["schemas"]["LatestAcceptedKind"];
             recordId: string;
             /** @description formspec-server-ports' `TaskDraftSignedEvidenceRequestV1`. */
-            signedDraft: Record<string, never>;
+            signedDraft: Record<string, unknown>;
             /** @description The owning signed evidence exactly as Source returned it: its Response keeps every digit for the reviewer that hashes it. */
             signedEvidence: unknown;
             signedRecord: unknown;

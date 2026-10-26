@@ -11,14 +11,20 @@ import openapiTS, {
 // Delegate closed, structured, composed, and constrained schemas to the generator.
 // In particular, nullable is a constraint: the generator owns its null handling.
 const openObjectAnnotations = new Set([
-  'type', 'description', 'title', '$comment', 'readOnly', 'writeOnly', 'deprecated',
+  'type', 'description', 'title', '$comment', 'readOnly', 'writeOnly', 'deprecated', 'examples',
 ]);
 
-export function openObjectType(schema) {
+function openObjectType(schema) {
   if (schema.type === 'object'
     && Object.entries(schema).every(([key, value]) => value === undefined || openObjectAnnotations.has(key))) {
     return tsRecord(STRING, UNKNOWN);
   }
+}
+
+// Render and print with the compiler used by openapi-typescript in this module.
+// Consumers share text, never compiler-specific AST nodes.
+export async function renderApiTypes(input) {
+  return COMMENT_HEADER + astToString(await openapiTS(input, { transform: openObjectType }));
 }
 
 async function generate(args) {
@@ -27,7 +33,7 @@ async function generate(args) {
   }
   const input = pathToFileURL(resolve(args[0]));
   const output = new URL('../src/api/generated/source-public.d.ts', import.meta.url);
-  const generated = COMMENT_HEADER + astToString(await openapiTS(input, { transform: openObjectType }));
+  const generated = await renderApiTypes(input);
   if (args[1] === '--check') {
     if (await readFile(output, 'utf8') !== generated) {
       error('Generated Source API types are not up-to-date.');
