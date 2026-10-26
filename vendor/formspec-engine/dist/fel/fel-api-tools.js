@@ -1,6 +1,6 @@
 /** @filedesc FEL/registry/lint/changelog helpers backed by tools WASM (`wasm-bridge-tools` only; ADR 0050). */
-import { wasmCollectFELRewriteTargets, wasmDeriveJsonLdContext, wasmFindRegistryEntry, wasmGenerateChangelog, wasmLintDocument, wasmListBuiltinFunctions, wasmParseRegistry, wasmPrintFEL, wasmRewriteFelForAssembly, wasmRewriteFELReferences, wasmRewriteMessageTemplate, wasmTokenizeFEL, wasmTryLiftConditionGroup, wasmValidateExtensionUsage, wasmValidateLifecycleTransition, wasmWellKnownRegistryUrl, } from '../wasm-bridge-tools.js';
-export const tokenizeFEL = wasmTokenizeFEL;
+import { wasmCollectFelRewriteTargets, wasmDeriveJsonLdContext, wasmFindRegistryEntry, wasmGenerateChangelog, wasmLintDocument, wasmListBuiltinFunctions, wasmParseRegistry, wasmPrintFel, wasmRewriteFelForAssembly, wasmRewriteFelReferences, wasmRewriteMessageTemplate, wasmTokenizeFel, wasmTryLiftConditionGroup, wasmValidateExtensionUsage, wasmValidateLifecycleTransition, wasmWellKnownRegistryUrl, } from '../wasm-bridge-tools.js';
+export const tokenizeFEL = wasmTokenizeFel;
 function mapRewriteEntries(entries, rewrite) {
     if (!rewrite || entries.length === 0)
         return undefined;
@@ -31,8 +31,8 @@ function mapRewriteNavigationTargets(entries, rewrite) {
 }
 /** Rewrite FEL references using callback options (bridges to WASM rewrite). */
 export function rewriteFELReferences(expression, options) {
-    const targets = wasmCollectFELRewriteTargets(expression);
-    return wasmRewriteFELReferences(expression, {
+    const targets = wasmCollectFelRewriteTargets(expression);
+    return wasmRewriteFelReferences(expression, {
         fieldPaths: mapRewriteEntries(targets.fieldPaths, options.rewriteFieldPath),
         currentPaths: mapRewriteEntries(targets.currentPaths, options.rewriteCurrentPath),
         variables: mapRewriteEntries(targets.variables, options.rewriteVariable),
@@ -48,7 +48,7 @@ export const validateLifecycleTransition = wasmValidateLifecycleTransition;
 export const wellKnownRegistryUrl = wasmWellKnownRegistryUrl;
 export const deriveJsonLdContext = wasmDeriveJsonLdContext;
 export const generateChangelog = wasmGenerateChangelog;
-export const printFEL = wasmPrintFEL;
+export const printFEL = wasmPrintFel;
 export const tryLiftConditionGroup = wasmTryLiftConditionGroup;
 export function getBuiltinFELFunctionCatalog() {
     return wasmListBuiltinFunctions();

@@ -1,6 +1,6 @@
 /** @filedesc Tools-backed native adapter for Response Action effect expressions. */
 import { RESPONSE_ACTIONS_EFFECT_TIME_BINDINGS } from './precondition-catalog.js';
-import { wasmEvalFELWithContextEnvelope } from './wasm-bridge-runtime.js';
+import { wasmEvalFelWithContextEnvelope } from './wasm-bridge-runtime.js';
 import { wasmExtractDependencies } from './wasm-bridge-tools.js';
 /**
  * Native FEL evaluation of fields and effect-time object bindings. Requires
@@ -23,7 +23,7 @@ export function evaluateResponseActionEffectExpression(expression, context) {
             throw new Error('missing effect expression binding');
         }
     }
-    const evaluated = wasmEvalFELWithContextEnvelope(expression, {
+    const evaluated = wasmEvalFelWithContextEnvelope(expression, {
         fields: context.fields,
         variables: context.bindings,
         nowIso: context.nowIso,

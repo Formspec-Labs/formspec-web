@@ -21,7 +21,7 @@ import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual
 import { collectSeedFromGroups, repeatHasHostData, resolvePrePopulateFromInstance, } from './instance-seeding.js';
 import { DefaultValidationProfileResolver, } from '../validation/index.js';
 export class FormEngine {
-    constructor(definition, optionsOrRuntimeContext, legacyRegistryEntries) {
+    constructor(definition, options = {}) {
         this.signals = {};
         this.relevantSignals = {};
         this.requiredSignals = {};
@@ -75,7 +75,6 @@ export class FormEngine {
         this._runtimeContext = {
             nowProvider: () => new Date(),
         };
-        const options = FormEngine.normalizeConstructorOptions(optionsOrRuntimeContext, legacyRegistryEntries);
         const { runtimeContext, registryEntries, reactiveRuntime = preactReactiveRuntime, issuerFetcher, issuerOverride, extensionFunctions, } = options;
         this._instanceSourceResolver = options.instanceSourceResolver;
         this._rx = reactiveRuntime;
@@ -899,27 +898,6 @@ export class FormEngine {
     }
     nowISO() {
         return this._runtimeContext.nowProvider().toISOString();
-    }
-    static normalizeConstructorOptions(optionsOrRuntimeContext, legacyRegistryEntries) {
-        const maybeOptions = optionsOrRuntimeContext;
-        const hasOptionsShape = maybeOptions !== undefined && (Object.prototype.hasOwnProperty.call(maybeOptions, 'runtimeContext')
-            || Object.prototype.hasOwnProperty.call(maybeOptions, 'registryEntries')
-            || Object.prototype.hasOwnProperty.call(maybeOptions, 'reactiveRuntime')
-            || Object.prototype.hasOwnProperty.call(maybeOptions, 'issuerFetcher')
-            || Object.prototype.hasOwnProperty.call(maybeOptions, 'issuerOverride')
-            || Object.prototype.hasOwnProperty.call(maybeOptions, 'extensionFunctions')
-            || Object.prototype.hasOwnProperty.call(maybeOptions, 'responseData')
-            || Object.prototype.hasOwnProperty.call(maybeOptions, 'instanceSourceResolver'));
-        if (hasOptionsShape) {
-            return {
-                ...maybeOptions,
-                registryEntries: maybeOptions.registryEntries ?? legacyRegistryEntries,
-            };
-        }
-        return {
-            runtimeContext: optionsOrRuntimeContext,
-            registryEntries: legacyRegistryEntries,
-        };
     }
     initializeOptionSignals() {
         const visit = (items, prefix = '') => {

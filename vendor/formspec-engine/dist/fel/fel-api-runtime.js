@@ -1,11 +1,11 @@
 /** @filedesc Path helpers and runtime-WASM FEL surface (`wasm-bridge-runtime` only; ADR 0050). */
-import { wasmAnalyzeFEL, wasmAnalyzeFELWithFieldTypes, wasmComputeDependencyGroups, wasmEvalFELWithTrace, wasmEvalFELWithContextTrace, wasmEvaluateDefinition, wasmGetFELDependencies, wasmIsValidFelIdentifier, wasmItemAtPath, wasmNormalizeIndexedPath, wasmSanitizeFelIdentifier, } from '../wasm-bridge-runtime.js';
+import { wasmAnalyzeFel, wasmAnalyzeFelWithFieldTypes, wasmComputeDependencyGroups, wasmEvalFelWithTrace, wasmEvalFelWithContextTrace, wasmEvaluateDefinition, wasmGetFelDependencies, wasmIsValidFelIdentifier, wasmItemAtPath, wasmNormalizeIndexedPath, wasmSanitizeFelIdentifier, } from '../wasm-bridge-runtime.js';
 import { lineColumnAtCharOffset, normalizeFelAnalysisError, } from './normalize-fel-analysis-error.js';
 export { lineColumnAtCharOffset, normalizeFelAnalysisError };
 export const normalizeIndexedPath = wasmNormalizeIndexedPath;
 export const itemAtPath = wasmItemAtPath;
 export function analyzeFEL(expression) {
-    const raw = wasmAnalyzeFEL(expression);
+    const raw = wasmAnalyzeFel(expression);
     return {
         ...raw,
         errors: raw.errors.map(e => normalizeFelAnalysisError(expression, e)),
@@ -13,7 +13,7 @@ export function analyzeFEL(expression) {
 }
 /** Analyze a FEL expression with field data type context for type-mismatch warnings. */
 export function analyzeFELWithFieldTypes(expression, fieldTypes) {
-    const raw = wasmAnalyzeFELWithFieldTypes(expression, fieldTypes);
+    const raw = wasmAnalyzeFelWithFieldTypes(expression, fieldTypes);
     return {
         ...raw,
         errors: raw.errors.map(e => normalizeFelAnalysisError(expression, e)),
@@ -47,14 +47,14 @@ export function itemLocationAtPath(items, path) {
     return { parent: currentItems, index, item: currentItems[index] };
 }
 export function getFELDependencies(expression) {
-    return wasmGetFELDependencies(expression);
+    return wasmGetFelDependencies(expression);
 }
 /**
  * Evaluate a FEL expression and return a structured trace of evaluation steps.
  * See `FelTraceStep` for the step variants; wire format matches Rust `fel_core::TraceStep`.
  */
-export const evalFELWithTrace = wasmEvalFELWithTrace;
-export const evalFELWithContextTrace = wasmEvalFELWithContextTrace;
+export const evalFELWithTrace = wasmEvalFelWithTrace;
+export const evalFELWithContextTrace = wasmEvalFelWithContextTrace;
 export const evaluateDefinition = wasmEvaluateDefinition;
 /** Check if a string is a valid FEL identifier (canonical Rust lexer rule). */
 export const isValidFELIdentifier = wasmIsValidFelIdentifier;

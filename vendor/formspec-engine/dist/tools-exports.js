@@ -2,7 +2,7 @@
 export { normalizeIndexedPath, itemAtPath, tokenizeFEL, analyzeFEL, normalizePathSegment, splitNormalizedPath, itemLocationAtPath, rewriteFELReferences, rewriteMessageTemplate, lintDocument, parseRegistry, findRegistryEntry, validateLifecycleTransition, wellKnownRegistryUrl, generateChangelog, printFEL, tryLiftConditionGroup, evaluateDefinition, getBuiltinFELFunctionCatalog, getFELDependencies, isValidFELIdentifier, sanitizeFELIdentifier, validateExtensionUsage, createSchemaValidator, rewriteFEL, } from './fel/fel-api.js';
 export { createMappingEngine, RuntimeMappingEngine } from './mapping/RuntimeMappingEngine.js';
 /** FEL eval for tooling (WASM); returns a JSON-compatible value. */
-export { wasmEvalFEL as evalFEL } from './wasm-bridge-runtime.js';
+export { wasmEvalFel as evalFEL } from './wasm-bridge-runtime.js';
 /** @deprecated Use `lintDocument(doc, { registryDocuments })`. */
 export { wasmLintDocumentWithRegistries as lintDocumentWithRegistries } from './wasm-bridge-tools.js';
 export { wasmEvaluateScreenerDocument } from './wasm-bridge-runtime.js';

@@ -1,12 +1,6 @@
 /** @filedesc Tools WASM — lazy init and wrappers for `formspec_wasm_tools` (lint, mapping, assembly, FEL authoring helpers). */
 import type { FELConditionGroupLiftResult } from './interfaces.js';
-export type WasmToolsModule = typeof import('../wasm-pkg-tools/formspec_wasm_tools.js') & {
-    parseFel?: (expression: string) => boolean;
-    tokenizeFel?: (expression: string) => string;
-    printFel?: (expression: string) => string;
-    collectFelRewriteTargets?: (expression: string) => string;
-    rewriteFelReferences?: (expression: string, rewrites_json: string) => string;
-};
+export type WasmToolsModule = typeof import('../wasm-pkg-tools/formspec_wasm_tools.js');
 /** Whether the tools WASM module has been initialized and is ready for use. */
 export declare function isWasmToolsReady(): boolean;
 /**
@@ -24,18 +18,14 @@ export declare function getToolsWasmDynamicImportCountForTest(): number;
 /** @internal Reset import counter (use only in isolated test processes). */
 export declare function resetToolsWasmDynamicImportCountForTest(): void;
 /** Parse a FEL expression and return whether it's valid. */
-export declare function wasmParseFEL(expression: string): boolean;
-/** Alias for `wasmParseFEL` using modern camelCase. */
-export declare const wasmParseFel: typeof wasmParseFEL;
+export declare function wasmParseFel(expression: string): boolean;
 /** Tokenize a FEL expression and return positioned token records. */
-export declare function wasmTokenizeFEL(expression: string): Array<{
+export declare function wasmTokenizeFel(expression: string): Array<{
     tokenType: string;
     text: string;
     start: number;
     end: number;
 }>;
-/** Alias for `wasmTokenizeFEL` using modern camelCase. */
-export declare const wasmTokenizeFel: typeof wasmTokenizeFEL;
 /** Extract full dependency info from a FEL expression. */
 export declare function wasmExtractDependencies(expression: string): {
     fields: string[];
@@ -117,7 +107,7 @@ export declare function wasmLintDocumentWithRegistries(doc: unknown, registries:
     diagnostics: any[];
 };
 /** Collect the rewriteable targets in a FEL expression. */
-export declare function wasmCollectFELRewriteTargets(expression: string): {
+export declare function wasmCollectFelRewriteTargets(expression: string): {
     fieldPaths: string[];
     currentPaths: string[];
     variables: string[];
@@ -127,18 +117,14 @@ export declare function wasmCollectFELRewriteTargets(expression: string): {
         name: string;
     }>;
 };
-/** Alias for `wasmCollectFELRewriteTargets` using modern camelCase. */
-export declare const wasmCollectFelRewriteTargets: typeof wasmCollectFELRewriteTargets;
 /** Rewrite a FEL expression using explicit rewrite maps. */
-export declare function wasmRewriteFELReferences(expression: string, rewrites: {
+export declare function wasmRewriteFelReferences(expression: string, rewrites: {
     fieldPaths?: Record<string, string>;
     currentPaths?: Record<string, string>;
     variables?: Record<string, string>;
     instanceNames?: Record<string, string>;
     navigationTargets?: Record<string, string>;
 }): string;
-/** Alias for `wasmRewriteFELReferences` using modern camelCase. */
-export declare const wasmRewriteFelReferences: typeof wasmRewriteFELReferences;
 /** Rewrite FEL using definition-assembly `RewriteMap` JSON (fragment + host keys). */
 export declare function wasmRewriteFelForAssembly(expression: string, mapJson: string): string;
 /** Rewrite FEL expressions embedded in {{...}} interpolation segments. */
@@ -150,9 +136,7 @@ export declare function wasmRewriteMessageTemplate(message: string, rewrites: {
     navigationTargets?: Record<string, string>;
 }): string;
 /** Print a FEL expression AST back to normalized source. */
-export declare function wasmPrintFEL(expression: string): string;
-/** Alias for `wasmPrintFEL` using modern camelCase. */
-export declare const wasmPrintFel: typeof wasmPrintFEL;
+export declare function wasmPrintFel(expression: string): string;
 /** Parse FEL and lift a homogeneous `and` / `or` chain into Studio condition-group JSON when possible. */
 export declare function wasmTryLiftConditionGroup(expression: string): FELConditionGroupLiftResult;
 /** Return the builtin FEL function catalog exported by the Rust runtime. */

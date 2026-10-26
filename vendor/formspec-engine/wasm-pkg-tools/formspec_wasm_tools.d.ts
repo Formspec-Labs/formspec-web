@@ -48,16 +48,6 @@ export class FelContext {
     prepare(expression: string, item_path: string, replace_self_ref: boolean): string;
 }
 
-/**
- * Legacy alias for [`analyze_fel_wasm`] using uppercase `FEL`.
- */
-export function analyzeFEL(expression: string): string;
-
-/**
- * Legacy alias for [`analyze_fel_with_field_types_wasm`] using uppercase `FEL`.
- */
-export function analyzeFELWithFieldTypes(expression: string, field_types_json: string): string;
-
 export function analyzeFel(expression: string): string;
 
 /**
@@ -78,7 +68,7 @@ export function assembleDefinition(definition_json: string, fragments_json: stri
 /**
  * Throws when `name` may not be registered: a FEL built-in or reserved word (Core §3.12 rule 1).
  */
-export function checkFELExtensionName(name: string): void;
+export function checkFelExtensionName(name: string): void;
 
 /**
  * Coerce a field value using item + bind + definition metadata (JSON in/out).
@@ -86,11 +76,6 @@ export function checkFELExtensionName(name: string): void;
  * `bind_json` may be empty, `"null"`, or a JSON object. Mirrors TS `coerceFieldValue`.
  */
 export function coerceFieldValue(item_json: string, bind_json: string, definition_json: string, value_json: string): string;
-
-/**
- * Legacy alias for [`collect_fel_rewrite_targets_wasm`] using uppercase `FEL`.
- */
-export function collectFELRewriteTargets(expression: string): string;
 
 export function collectFelRewriteTargets(expression: string): string;
 
@@ -115,26 +100,6 @@ export function deriveJsonLdContext(definition_json: string, ontology_json: stri
  * Returns the document type string or null.
  */
 export function detectDocumentType(doc_json: string): any;
-
-/**
- * Legacy alias for [`eval_fel`] using uppercase `FEL`.
- */
-export function evalFEL(expression: string, fields_json: string): string;
-
-/**
- * Legacy alias for [`eval_fel_with_context`] using uppercase `FEL`.
- */
-export function evalFELWithContext(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
-
-/**
- * Legacy alias for [`eval_fel_with_context_trace`] using uppercase `FEL`.
- */
-export function evalFELWithContextTrace(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
-
-/**
- * Legacy alias for [`eval_fel_with_trace`] using uppercase `FEL`.
- */
-export function evalFELWithTrace(expression: string, fields_json: string): string;
 
 /**
  * Parse and evaluate a FEL expression with optional field values (JSON object).
@@ -217,19 +182,9 @@ export function formspecWasmSplitAbiVersion(): string;
 export function generateChangelog(old_def_json: string, new_def_json: string, definition_url: string): string;
 
 /**
- * Legacy alias for [`get_fel_deps`] using uppercase `FEL`.
- */
-export function getFELDependencies(expression: string): string;
-
-/**
  * Extract field dependencies from a FEL expression.
  */
 export function getFelDependencies(expression: string): string;
-
-/**
- * Legacy alias for [`interpolate_fel_template`] using uppercase `FEL`.
- */
-export function interpolateFELTemplate(template: string, context_json: string, extensions?: FelExtensionHost | null): string;
 
 /**
  * Resolve `{{expression}}` sequences in `template` against a FEL context (Locale §3.3.1).
@@ -272,11 +227,6 @@ export function listBuiltinFunctions(): string;
 export function normalizeIndexedPath(path: string): string;
 
 /**
- * Legacy alias for [`parse_fel`] using uppercase `FEL`.
- */
-export function parseFEL(expression: string): boolean;
-
-/**
  * Parse a FEL expression and return whether it's valid.
  */
 export function parseFel(expression: string): boolean;
@@ -295,11 +245,6 @@ export function planSchemaValidation(doc_json: string, document_type_override?: 
 export function prepareFelExpression(options_json: string): string;
 
 /**
- * Legacy alias for [`print_fel`] using uppercase `FEL`.
- */
-export function printFEL(expression: string): string;
-
-/**
  * Print a FEL expression AST back to normalized source string.
  */
 export function printFel(expression: string): string;
@@ -308,11 +253,6 @@ export function printFel(expression: string): string;
  * Copy `optionSets` entries onto fields that reference `optionSet` (mutates a JSON clone).
  */
 export function resolveOptionSetsOnDefinition(definition_json: string): string;
-
-/**
- * Legacy alias for [`rewrite_fel_references_wasm`] using uppercase `FEL`.
- */
-export function rewriteFELReferences(expression: string, rewrites_json: string): string;
 
 /**
  * Rewrite FEL using assembly `RewriteMap` JSON (`fragmentRootKey`, `hostGroupKey`, `importedKeys`, `keyPrefix`).
@@ -327,11 +267,6 @@ export function rewriteMessageTemplate(message: string, rewrites_json: string): 
  * Sanitize a string into a valid FEL identifier.
  */
 export function sanitizeFelIdentifier(s: string): string;
-
-/**
- * Legacy alias for [`tokenize_fel`] using uppercase `FEL`.
- */
-export function tokenizeFEL(expression: string): string;
 
 export function tokenizeFel(expression: string): string;
 
@@ -351,22 +286,20 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_felcontext_free: (a: number, b: number) => void;
-    readonly analyzeFEL: (a: number, b: number, c: number) => void;
-    readonly analyzeFELWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly analyzeFel: (a: number, b: number, c: number) => void;
+    readonly analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly applyMigrationsToResponseData: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly assembleDefinition: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly checkFELExtensionName: (a: number, b: number, c: number) => void;
+    readonly checkFelExtensionName: (a: number, b: number, c: number) => void;
     readonly coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
-    readonly collectFELRewriteTargets: (a: number, b: number, c: number) => void;
+    readonly collectFelRewriteTargets: (a: number, b: number, c: number) => void;
     readonly computeDependencyGroups: (a: number, b: number, c: number) => void;
     readonly deriveJsonLdContext: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly detectDocumentType: (a: number, b: number, c: number) => void;
-    readonly evalFEL: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly evalFELWithContext: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-    readonly evalFELWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-    readonly evalFELWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly evalFel: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly evalFelWithContext: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly evalFelWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly evalFelWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly evaluateDefinition: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly evaluateScreenerDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly executeMappingDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
@@ -381,8 +314,7 @@ export interface InitOutput {
     readonly findRegistryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly formspecWasmSplitAbiVersion: (a: number) => void;
     readonly generateChangelog: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
-    readonly getFELDependencies: (a: number, b: number, c: number) => void;
-    readonly interpolateFELTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly getFelDependencies: (a: number, b: number, c: number) => void;
     readonly interpolateFelTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly interpolateTemplate: (a: number, b: number, c: number, d: number) => void;
     readonly isValidFelIdentifier: (a: number, b: number) => number;
@@ -392,31 +324,21 @@ export interface InitOutput {
     readonly lintDocument: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly listBuiltinFunctions: (a: number) => void;
     readonly normalizeIndexedPath: (a: number, b: number, c: number) => void;
-    readonly parseFEL: (a: number, b: number) => number;
+    readonly parseFel: (a: number, b: number) => number;
     readonly parseRegistry: (a: number, b: number, c: number) => void;
     readonly planSchemaValidation: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly prepareFelExpression: (a: number, b: number, c: number) => void;
-    readonly printFEL: (a: number, b: number, c: number) => void;
+    readonly printFel: (a: number, b: number, c: number) => void;
     readonly resolveOptionSetsOnDefinition: (a: number, b: number, c: number) => void;
-    readonly rewriteFELReferences: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly rewriteFelForAssembly: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly rewriteFelReferences: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly rewriteMessageTemplate: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly sanitizeFelIdentifier: (a: number, b: number, c: number) => void;
-    readonly tokenizeFEL: (a: number, b: number, c: number) => void;
+    readonly tokenizeFel: (a: number, b: number, c: number) => void;
     readonly tryLiftConditionGroup: (a: number, b: number, c: number) => void;
     readonly validateExtensionUsage: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly validateLifecycleTransition: (a: number, b: number, c: number, d: number) => number;
     readonly wellKnownRegistryUrl: (a: number, b: number, c: number) => void;
-    readonly analyzeFel: (a: number, b: number, c: number) => void;
-    readonly collectFelRewriteTargets: (a: number, b: number, c: number) => void;
-    readonly getFelDependencies: (a: number, b: number, c: number) => void;
-    readonly printFel: (a: number, b: number, c: number) => void;
-    readonly tokenizeFel: (a: number, b: number, c: number) => void;
-    readonly parseFel: (a: number, b: number) => number;
-    readonly analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly evalFel: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly evalFelWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly rewriteFelReferences: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

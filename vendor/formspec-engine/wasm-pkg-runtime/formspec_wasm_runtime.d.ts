@@ -48,16 +48,6 @@ export class FelContext {
     prepare(expression: string, item_path: string, replace_self_ref: boolean): string;
 }
 
-/**
- * Legacy alias for [`analyze_fel_wasm`] using uppercase `FEL`.
- */
-export function analyzeFEL(expression: string): string;
-
-/**
- * Legacy alias for [`analyze_fel_with_field_types_wasm`] using uppercase `FEL`.
- */
-export function analyzeFELWithFieldTypes(expression: string, field_types_json: string): string;
-
 export function analyzeFel(expression: string): string;
 
 /**
@@ -76,7 +66,7 @@ export function applyMigrationsToResponseData(definition_json: string, response_
 /**
  * Throws when `name` may not be registered: a FEL built-in or reserved word (Core §3.12 rule 1).
  */
-export function checkFELExtensionName(name: string): void;
+export function checkFelExtensionName(name: string): void;
 
 /**
  * Coerce a field value using item + bind + definition metadata (JSON in/out).
@@ -92,26 +82,6 @@ export function coerceFieldValue(item_json: string, bind_json: string, definitio
  * of `DependencyGroup` objects.
  */
 export function computeDependencyGroups(entries_json: string): string;
-
-/**
- * Legacy alias for [`eval_fel`] using uppercase `FEL`.
- */
-export function evalFEL(expression: string, fields_json: string): string;
-
-/**
- * Legacy alias for [`eval_fel_with_context`] using uppercase `FEL`.
- */
-export function evalFELWithContext(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
-
-/**
- * Legacy alias for [`eval_fel_with_context_trace`] using uppercase `FEL`.
- */
-export function evalFELWithContextTrace(expression: string, context_json: string, extensions?: FelExtensionHost | null): string;
-
-/**
- * Legacy alias for [`eval_fel_with_trace`] using uppercase `FEL`.
- */
-export function evalFELWithTrace(expression: string, fields_json: string): string;
 
 /**
  * Parse and evaluate a FEL expression with optional field values (JSON object).
@@ -170,19 +140,9 @@ export function evaluateScreenerDocument(screener_json: string, answers_json: st
 export function formspecWasmSplitAbiVersion(): string;
 
 /**
- * Legacy alias for [`get_fel_deps`] using uppercase `FEL`.
- */
-export function getFELDependencies(expression: string): string;
-
-/**
  * Extract field dependencies from a FEL expression.
  */
 export function getFelDependencies(expression: string): string;
-
-/**
- * Legacy alias for [`interpolate_fel_template`] using uppercase `FEL`.
- */
-export function interpolateFELTemplate(template: string, context_json: string, extensions?: FelExtensionHost | null): string;
 
 /**
  * Resolve `{{expression}}` sequences in `template` against a FEL context (Locale §3.3.1).
@@ -232,18 +192,16 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_felcontext_free: (a: number, b: number) => void;
-    readonly analyzeFEL: (a: number, b: number, c: number) => void;
-    readonly analyzeFELWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly analyzeFel: (a: number, b: number, c: number) => void;
+    readonly analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly applyMigrationsToResponseData: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
-    readonly checkFELExtensionName: (a: number, b: number, c: number) => void;
+    readonly checkFelExtensionName: (a: number, b: number, c: number) => void;
     readonly coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly computeDependencyGroups: (a: number, b: number, c: number) => void;
-    readonly evalFEL: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly evalFELWithContext: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-    readonly evalFELWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-    readonly evalFELWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly evalFel: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly evalFelWithContext: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly evalFelWithContextTrace: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly evalFelWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly evaluateDefinition: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly evaluateScreenerDocument: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly felcontext_evaluate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
@@ -253,8 +211,7 @@ export interface InitOutput {
     readonly felcontext_new: (a: number, b: number, c: number) => void;
     readonly felcontext_prepare: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly formspecWasmSplitAbiVersion: (a: number) => void;
-    readonly getFELDependencies: (a: number, b: number, c: number) => void;
-    readonly interpolateFELTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly getFelDependencies: (a: number, b: number, c: number) => void;
     readonly interpolateFelTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly interpolateTemplate: (a: number, b: number, c: number, d: number) => void;
     readonly isValidFelIdentifier: (a: number, b: number) => number;
@@ -264,11 +221,6 @@ export interface InitOutput {
     readonly prepareFelExpression: (a: number, b: number, c: number) => void;
     readonly resolveOptionSetsOnDefinition: (a: number, b: number, c: number) => void;
     readonly sanitizeFelIdentifier: (a: number, b: number, c: number) => void;
-    readonly analyzeFel: (a: number, b: number, c: number) => void;
-    readonly getFelDependencies: (a: number, b: number, c: number) => void;
-    readonly analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly evalFel: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly evalFelWithTrace: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

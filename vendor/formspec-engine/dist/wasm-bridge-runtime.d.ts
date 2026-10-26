@@ -14,16 +14,7 @@ export type WasmFelAnalysisResultJson = {
     variables: string[];
     functions: string[];
 };
-export type WasmModule = typeof import('../wasm-pkg-runtime/formspec_wasm_runtime.js') & {
-    evalFel?: (expression: string, fields_json: string) => string;
-    evalFelWithContext?: (expression: string, context_json: string, extensions?: FelExtensionHost | null) => string;
-    evalFelWithTrace?: (expression: string, fields_json: string) => string;
-    evalFelWithContextTrace?: (expression: string, context_json: string, extensions?: FelExtensionHost | null) => string;
-    interpolateFelTemplate?: (template: string, context_json: string, extensions?: FelExtensionHost | null) => string;
-    getFelDependencies?: (expression: string) => string;
-    analyzeFel?: (expression: string) => string;
-    analyzeFelWithFieldTypes?: (expression: string, field_types_json: string) => string;
-};
+export type WasmModule = typeof import('../wasm-pkg-runtime/formspec_wasm_runtime.js');
 /** Whether the WASM module has been initialized and is ready for use. */
 export declare function isWasmReady(): boolean;
 /** How the host supplies the WASM module. */
@@ -54,9 +45,7 @@ export interface FelEvalResult {
     hasErrorDiagnostics: boolean;
 }
 /** Evaluate a FEL expression with optional field values. Returns the evaluated value. */
-export declare function wasmEvalFEL(expression: string, fields?: Record<string, any>): any;
-/** Alias for `wasmEvalFEL` using modern camelCase. */
-export declare const wasmEvalFel: typeof wasmEvalFEL;
+export declare function wasmEvalFel(expression: string, fields?: Record<string, any>): any;
 /** FEL evaluation context for the richer WASM evaluator. */
 export interface WasmFelContext {
     fields: Record<string, any>;
@@ -84,13 +73,11 @@ export interface WasmFelContext {
     meta?: Record<string, string | number | boolean>;
 }
 /** Evaluate a FEL expression with full FormspecEnvironment context (value + diagnostics flag). */
-export declare function wasmEvalFELWithContextEnvelope(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FelEvalResult;
-/** Alias for `wasmEvalFELWithContextEnvelope` using modern camelCase. */
-export declare const wasmEvalFelWithContextEnvelope: typeof wasmEvalFELWithContextEnvelope;
+export declare function wasmEvalFelWithContextEnvelope(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FelEvalResult;
 /** Host extension functions (Core §3.12) handed to evaluating exports; Rust calls `arity` and `invoke`. */
 export type FelExtensionHost = import('../wasm-pkg-runtime/formspec_wasm_runtime.js').FelExtensionHost;
 /** Throws when `name` may not be an extension function: a FEL built-in or reserved word (Core §3.12). */
-export declare function wasmCheckFELExtensionName(name: string): void;
+export declare function wasmCheckFelExtensionName(name: string): void;
 /**
  * A single recorded event during FEL evaluation.
  *
@@ -158,13 +145,9 @@ export interface FelTraceResult {
  * (MCP tools, error explainers). Values in the trace are projected to JSON,
  * losing FEL type fidelity (money/date) but gaining universal readability.
  */
-export declare function wasmEvalFELWithTrace(expression: string, fields?: Record<string, unknown>): FelTraceResult;
-/** Alias for `wasmEvalFELWithTrace` using modern camelCase. */
-export declare const wasmEvalFelWithTrace: typeof wasmEvalFELWithTrace;
+export declare function wasmEvalFelWithTrace(expression: string, fields?: Record<string, unknown>): FelTraceResult;
 /** Evaluate a FEL expression against full FormspecEnvironment context and trace each step. */
-export declare function wasmEvalFELWithContextTrace(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FelTraceResult;
-/** Alias for `wasmEvalFELWithContextTrace` using modern camelCase. */
-export declare const wasmEvalFelWithContextTrace: typeof wasmEvalFELWithContextTrace;
+export declare function wasmEvalFelWithContextTrace(expression: string, context: WasmFelContext, extensions?: FelExtensionHost): FelTraceResult;
 /** Interpolation result from Rust: resolved text plus one warning per expression left literal. */
 export interface WasmInterpolated {
     text: string;
@@ -174,9 +157,7 @@ export interface WasmInterpolated {
     }>;
 }
 /** Locale §3.3.1: resolve every `{{expression}}` in `template` against a FEL context, in one call. */
-export declare function wasmInterpolateFELTemplate(template: string, context: WasmFelContext, extensions?: FelExtensionHost): WasmInterpolated;
-/** Alias for `wasmInterpolateFELTemplate` using modern camelCase. */
-export declare const wasmInterpolateFelTemplate: typeof wasmInterpolateFELTemplate;
+export declare function wasmInterpolateFelTemplate(template: string, context: WasmFelContext, extensions?: FelExtensionHost): WasmInterpolated;
 /**
  * Locale §3.3.1 with a host evaluator: Rust scans the template and applies the escape, failure,
  * and coercion rules; `evaluate(expression)` returns JSON `{ value, hasErrorDiagnostics? }` or throws.
@@ -203,7 +184,7 @@ export declare function wasmApplyMigrationsToResponseData(definitionJson: string
 /** Coerce an inbound field value (whitespace, numeric strings, money, precision). */
 export declare function wasmCoerceFieldValue(itemJson: string, bindJson: string, definitionJson: string, valueJson: string): string;
 /** Extract field path dependencies from a FEL expression. Returns an array of path strings. */
-export declare function wasmGetFELDependencies(expression: string): string[];
+export declare function wasmGetFelDependencies(expression: string): string[];
 /** Normalize a dotted path by stripping repeat indices. */
 export declare function wasmNormalizeIndexedPath(path: string): string;
 /** Resolve an item in a nested item tree by dotted path. */
@@ -277,9 +258,9 @@ export declare function wasmEvaluateDefinition(definition: unknown, data: Record
  */
 export declare function wasmEvaluateScreenerDocument(screener: unknown, answers: Record<string, unknown>, context?: Record<string, unknown>, extensions?: FelExtensionHost): import('@formspec-org/types').DeterminationRecord;
 /** Analyze a FEL expression and return structural info. */
-export declare function wasmAnalyzeFEL(expression: string): WasmFelAnalysisResultJson;
+export declare function wasmAnalyzeFel(expression: string): WasmFelAnalysisResultJson;
 /** Analyze a FEL expression with field data type context for type-mismatch warnings. */
-export declare function wasmAnalyzeFELWithFieldTypes(expression: string, fieldTypes: Record<string, string>): WasmFelAnalysisResultJson;
+export declare function wasmAnalyzeFelWithFieldTypes(expression: string, fieldTypes: Record<string, string>): WasmFelAnalysisResultJson;
 /** Check if a string is a valid FEL identifier. */
 export declare function wasmIsValidFelIdentifier(s: string): boolean;
 /** Sanitize a string into a valid FEL identifier. */

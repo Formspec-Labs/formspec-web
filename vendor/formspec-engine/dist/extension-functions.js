@@ -1,5 +1,5 @@
 /** @filedesc Host FEL extension functions (Core §3.12) registered on an engine and handed to WASM. */
-import { wasmCheckFELExtensionName } from './wasm-bridge-runtime.js';
+import { wasmCheckFelExtensionName } from './wasm-bridge-runtime.js';
 /**
  * One engine's extension functions, in the shape Rust's evaluator calls (`FelExtensionHost`).
  *
@@ -13,7 +13,7 @@ export class FelExtensionFunctions {
     }
     /** Registers `name`, replacing an earlier registration; throws for a FEL built-in or reserved word. */
     register(name, registration) {
-        wasmCheckFELExtensionName(name);
+        wasmCheckFelExtensionName(name);
         this.functions.set(name, { ...registration });
     }
     arity(name) {

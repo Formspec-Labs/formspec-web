@@ -8,6 +8,8 @@ import type {
   AppGraphSchemaValidator,
   SchemaValidationOutcome,
 } from '@formspec-org/app-graph';
+import type { FormDefinition } from '@formspec-org/types';
+import { extractSafeAddressPolicy } from '../../../src/policy/extract-form-policy.ts';
 import {
   createSurfaceDataSourcePayloadValidator,
   createSigningDataSourcePayloadValidator,
@@ -22,7 +24,7 @@ const CONTENT_REF = 'https://formspec.org/schemas/common/1.0#/$defs/SigningConte
 describe('public canonical module payload resources', () => {
   it('returns only the exact pinned common root through the public adapter entry', async () => {
     const bytes = readFileSync(resolve(process.cwd(), 'vendor/formspec-schemas/common.schema.json'));
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe('5045b78db0ebffea56520f6e0b52a1302a65ef39f0a4bb637d61761328a5798a');
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe('1c3153d6b46f332607cfb04879e7999dc8624517caf2ed0930df6d28eb387c08');
     const resources = await loadCanonicalModulePayloadSchemaResources();
     expect(resources).toEqual([{ uri: 'https://formspec.org/schemas/common/1.0', schema: JSON.parse(bytes.toString()) }]);
     const ids = resources.map(resource => resource.uri);
@@ -295,6 +297,41 @@ describe('loadSurfaceBundleSchemaValidators', () => {
         ok: false, issues: expect.arrayContaining([expect.objectContaining({ code: 'SURFACE-BUNDLE-SCHEMA-INVALID' })]),
       });
     }
+  });
+
+  it('admits a protected-address Definition through the vendored schema, and the policy walker reads it', async () => {
+    const validate = await schemaValidator();
+    const definition = {
+      $formspec: '1.0',
+      url: DEFINITION_URL,
+      version: '1.0.0',
+      status: 'draft',
+      title: 'Intake',
+      items: [{
+        key: 'home',
+        type: 'group',
+        label: 'Home',
+        accessControl: { class: 'protected', subjectKind: 'address' },
+        children: [{ key: 'street', type: 'field', label: 'Street', dataType: 'string' }],
+      }],
+    } satisfies FormDefinition;
+    const artifact = { artifactKind: 'definition', schemaId: 'https://formspec.org/schemas/definition/1.0' };
+    expect(validateArtifact(validate, { ...artifact, document: definition }).ok).toBe(true);
+    const withClass = (accessControl: unknown) => ({
+      ...definition,
+      items: [{ ...definition.items[0], accessControl }],
+    });
+    for (const refused of [
+      { class: 'safe-address' },
+      { class: 'unclassified', subjectKind: 'address' },
+      { class: 'protected', plaintextAudiences: ['issuer_verification'] },
+    ]) {
+      expect(validateArtifact(validate, { ...artifact, document: withClass(refused) }).ok).toBe(false);
+    }
+    const policy = extractSafeAddressPolicy(definition);
+    expect(policy?.limits?.safeAddress).toMatchObject({
+      fields: [{ path: '/home/street', subjectKind: 'address' }],
+    });
   });
 
   it('accepts a canonical valid document for every AppGraph artifact kind', async () => {

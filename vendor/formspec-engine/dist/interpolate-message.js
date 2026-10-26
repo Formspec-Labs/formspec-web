@@ -1,5 +1,5 @@
 /** @filedesc Locale §3.3.1 `{{expression}}` interpolation — thin bridges to the Rust template rules. */
-import { wasmInterpolateFELTemplate, wasmInterpolateTemplate, } from './wasm-bridge-runtime.js';
+import { wasmInterpolateFelTemplate, wasmInterpolateTemplate, } from './wasm-bridge-runtime.js';
 /**
  * Resolve `{{expression}}` sequences with a host evaluator.
  *
@@ -17,7 +17,7 @@ export function interpolateMessage(template, evaluator) {
 export function interpolateFELTemplate(template, context, extensions) {
     if (!template || !template.includes('{{'))
         return { text: template, warnings: [] };
-    return toInterpolateResult(wasmInterpolateFELTemplate(template, context, extensions));
+    return toInterpolateResult(wasmInterpolateFelTemplate(template, context, extensions));
 }
 function toEnvelope(outcome) {
     if (outcome !== null &&

@@ -79,7 +79,7 @@ export declare class FormEngine implements IFormEngine {
     private _issuerResolutionEpoch;
     private _resolvedIssuerEpoch;
     private _runtimeContext;
-    constructor(definition: FormDefinition, optionsOrRuntimeContext?: FormEngineOptions | FormEngineRuntimeContext, legacyRegistryEntries?: RegistryEntry[]);
+    constructor(definition: FormDefinition, options?: FormEngineOptions);
     static resolvePinnedDefinition<T extends {
         url?: string;
         version?: string;
@@ -201,7 +201,6 @@ export declare class FormEngine implements IFormEngine {
     setRegistryEntries(entries: RegistryEntry[]): void;
     migrateResponse(responseData: JsonRecord, fromVersion: string): JsonRecord;
     private nowISO;
-    private static normalizeConstructorOptions;
     private initializeOptionSignals;
     private initializeInstances;
     /**
