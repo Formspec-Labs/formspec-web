@@ -1,4 +1,6 @@
 import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
+import { snapshotWire } from './wire-json.ts';
+import { sameResponseDataView } from '../../shared/response-data-view.ts';
 import { decodeBase64 } from '../../shared/base64.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { requireSigningIssuer } from '../../shared/signing-issuer.ts';
@@ -261,7 +263,7 @@ export class HttpResponseSigning implements ResponseSigning {
   }
 
   prepare(input: PrepareResponseSigningInput): Promise<PreparedResponseSigning> {
-    input = structuredClone(input);
+    input = snapshotWire(input);
     return this.config.fence.run(input.draftKey, async generation => {
       this.refuseUnresolved(input.draftKey);
       if (!input.formVersionId || input.response.status !== 'completed' || !input.response.id
@@ -307,7 +309,7 @@ export class HttpResponseSigning implements ResponseSigning {
     const context = this.preparations.get(input.preparation);
     if (!context) return Promise.reject(new Error('Signing requires this cohort’s frozen preparation'));
     this.current(context);
-    input = freeze(structuredClone(input));
+    input = snapshotWire(input);
     const identity = canonicalize({ scope: this.config.fence.scopeFor(input.preparation.draftKey),
       generation: context.generation, preparation: input.preparation, assent: input.assent, action: input.action });
     if (!identity) return Promise.reject(new Error('Invalid signing operation identity'));
@@ -334,14 +336,14 @@ export class HttpResponseSigning implements ResponseSigning {
         const signedAt = (this.config.now ?? (() => new Date().toISOString()))();
         if (!Number.isFinite(Date.parse(signedAt))) throw new Error('Signing time must be RFC3339');
         const version = input.preparation.draft.version + 1;
-        const candidate = structuredClone(input.preparation.response);
+        const candidate = { ...snapshotWire(input.preparation.response) };
         candidate.extensions = { ...candidate.extensions, 'x-formspec-signing-content': {
           version: '1.0', issuer: this.config.expectedIssuer, draftId: input.preparation.draft.id, draftVersion: version,
           actorRef: input.preparation.actor.id, signerName: input.assent.signerName, signedAt,
           consentAccepted: true, content: input.preparation.content,
           documentHash: await hashSigningContent(input.preparation.content, this.config.validateContent), documentHashAlgorithm: 'sha-256',
         } };
-        act = { identity, input: freeze(structuredClone(input)), context, candidate: freeze(candidate), version };
+        act = { identity, input: snapshotWire(input), context, candidate: freeze(candidate), version };
         this.validateAction(act);
         if (!await this.config.validateResponse(candidate)) throw new Error('Signing candidate failed the Response schema');
         this.current(context);
@@ -587,7 +589,7 @@ export class HttpResponseSigning implements ResponseSigning {
       || view.status !== 'in_progress' || view.subject_ref !== actor || !Number.isSafeInteger(view.draft_version) || view.draft_version < 0
       || !response || !await this.config.validateResponse(response)
       || response.id !== context.input.response.id || response.definitionUrl !== context.input.definition.url
-      || response.definitionVersion !== context.input.definition.version || !same(response.data, view.draft_state)) {
+      || response.definitionVersion !== context.input.definition.version || !sameResponseDataView(response.data, view.draft_state)) {
       throw new Error('Owned draft has no matching authoritative Response snapshot');
     }
   }
@@ -596,7 +598,7 @@ export class HttpResponseSigning implements ResponseSigning {
     await this.validateView(context, act.input.preparation.draft.id, view, act.input.preparation.actor.id);
     extractServiceRequestOutputs(this.admittedRequest(act.input.action, act.candidate), view);
     const response = view.canonical_response;
-    const unsigned = structuredClone(response);
+    const unsigned = { ...snapshotWire(response) };
     delete unsigned.authoredSignatures;
     if (view.draft_version !== act.version + 1 || !same(unsigned, candidate)) {
       throw new Error('Delegated signing evidence differs from the frozen candidate');
@@ -656,7 +658,7 @@ export class HttpResponseSigning implements ResponseSigning {
 /** Checks maintained digest/content/mirrors and key metadata, not independent cryptographic verification. */
 export async function assertDelegatedSignedResponseConsistency(response: FormResponse, policy: HttpResponseSigningPolicy): Promise<void> {
   const expectedIssuer = requireSigningIssuer(policy.expectedIssuer);
-  const candidate = structuredClone(response); delete candidate.authoredSignatures;
+  const candidate = { ...snapshotWire(response) }; delete candidate.authoredSignatures;
   const commitment = candidate.extensions?.['x-formspec-signing-content'];
   if (commitment?.issuer !== expectedIssuer) throw new Error('Delegated signing issuer differs from the configured issuer');
   const signatures = response.authoredSignatures; const signature = signatures?.[0]; const payload = signature?.signedPayload;
@@ -695,7 +697,7 @@ function freeze<T>(value: T): T {
 /** Reuses actual owned DraftView evidence; callers must qualify its owner and publication first. */
 export async function savedResponseDraftFromVerifiedRead(key: DraftKey, supplied: VerifiedDraftEvidence): Promise<SavedResponseDraft> {
   const draftKey = freeze(structuredClone(key));
-  const evidence = freeze(structuredClone(supplied));
+  const evidence = snapshotWire(supplied);
   return freeze({ draftKey, response: evidence.canonical_response,
     draft: { id: evidence.draft_id, version: evidence.draft_version, responseHash: await handoffHash(evidence.canonical_response) },
     actor: { id: evidence.subject_ref }, evidence });

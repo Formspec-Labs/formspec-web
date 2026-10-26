@@ -1,5 +1,5 @@
 import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
-import canonicalize from 'canonicalize';
+import { sameResponseDataView } from '../../shared/response-data-view.ts';
 import { snapshotWire } from './wire-json.ts';
 import type { FormResponse } from '@formspec-org/types';
 import type { TaskDraftLaunchSelection } from '../../ports/task-draft.ts';
@@ -63,7 +63,7 @@ export class HttpTaskDraftLaunch {
       || view.status !== 'in_progress' || !Number.isSafeInteger(view.draft_version) || view.draft_version < 1
       || view.taskDraft?.version !== 1 || !/^sha256:[a-f0-9]{64}$/.test(view.taskDraft.associationHash)
       || !/^sha256:[a-f0-9]{64}$/.test(view.taskDraft.taskBindingHash)
-      || !response || canonicalize(response.data) !== canonicalize(view.draft_state) || response.definitionUrl !== this.definition.url || response.definitionVersion !== this.definition.version
+      || !response || !sameResponseDataView(response.data, view.draft_state) || response.definitionUrl !== this.definition.url || response.definitionVersion !== this.definition.version
       || !await this.validateResponse(response)) throw new Error('Task draft launch returned a mismatched owned draft');
     check();
     return view;

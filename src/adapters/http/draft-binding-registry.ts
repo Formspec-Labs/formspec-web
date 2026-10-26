@@ -50,7 +50,7 @@ export function createDraftBindingRegistry(options: {
           || (entry.key.subjectRef !== undefined && typeof entry.key.subjectRef !== 'string')
           || (entry.key.partyRef !== undefined && typeof entry.key.partyRef !== 'string')
           || typeof entry.token !== 'string' || !entry.token.trim()) throw new Error('Stored initialization attempt is invalid');
-        attempts.set(serializeKey(entry.key), { key: copyKey(entry.key), token: entry.token });
+        attempts.set(serializeKey(entry.key), { key: copyDraftKey(entry.key), token: entry.token });
       }
     }
     const saved = options.resumeMetadata?.read('draft-handles');
@@ -68,7 +68,7 @@ export function createDraftBindingRegistry(options: {
           || entry.formId !== resolveFormId(key.formUrl, key.formVersion)) {
           throw new Error('Stored draft handle does not match its form context');
         }
-        map.set(serializeKey(key), { key: copyKey(key), snapshot: { draftId: entry.draftId, draftVersion: entry.draftVersion,
+        map.set(serializeKey(key), { key: copyDraftKey(key), snapshot: { draftId: entry.draftId, draftVersion: entry.draftVersion,
           ...(entry.responseId !== undefined ? { responseId: entry.responseId } : {}) } });
       }
     }
@@ -98,7 +98,7 @@ export function createDraftBindingRegistry(options: {
       const serialized = serializeKey(key);
       let attempt = attempts.get(serialized);
       if (!attempt) {
-        attempt = { key: copyKey(key), token: generateIdempotencyKey() };
+        attempt = { key: copyDraftKey(key), token: generateIdempotencyKey() };
         attempts.set(serialized, attempt);
         // Persist before dispatch; a lost response or reload must reuse this key.
         persistAttempts();
@@ -119,7 +119,7 @@ export function createDraftBindingRegistry(options: {
     },
     put(key, snapshot) {
       restore();
-      map.set(serializeKey(key), { key: copyKey(key), snapshot: { ...snapshot,
+      map.set(serializeKey(key), { key: copyDraftKey(key), snapshot: { ...snapshot,
         ...(snapshot.response?.id ? { responseId: snapshot.response.id } : {}) } });
       persist();
     },
@@ -150,7 +150,7 @@ export function createDraftBindingRegistry(options: {
   };
 }
 
-function copyKey(key: DraftKey): DraftKey {
+export function copyDraftKey(key: DraftKey): DraftKey {
   return { formUrl: key.formUrl,
     ...(key.formVersion !== undefined ? { formVersion: key.formVersion } : {}),
     ...(key.subjectRef !== undefined ? { subjectRef: key.subjectRef } : {}),

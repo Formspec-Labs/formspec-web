@@ -1,3 +1,4 @@
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { describe, expect, it, vi } from 'vitest';
 import { HttpDraftStore } from '../../../src/adapters/http/draft-store.ts';
 import { createDraftBindingRegistry } from '../../../src/adapters/http/draft-binding-registry.ts';
@@ -265,6 +266,25 @@ describe('durable draft initialization (fs-7xqu / ADR 0168)', () => {
     expect(requests[0].headers.get('Idempotency-Key')).toBeTruthy();
     expect(requests[2].headers.get('Idempotency-Key')).toBe(requests[0].headers.get('Idempotency-Key'));
     expect(requests[1].body).toMatchObject({ expected_draft_version: 1, canonical_response: sampleFormResponse });
+  });
+
+  it.each([false, true])('retries a saved initialization with exact numeric answers and rounded display, mismatched field %s', async mismatch => {
+    const text = JSON.stringify(sampleFormResponse).replace('"data":{', '"data":{"amount":1234567890.123456789,"count":9007199254740993,');
+    const exact = parseJsonExact(text) as typeof sampleFormResponse;
+    const display = JSON.parse(JSON.stringify(exact.data));
+    if (mismatch) display.fullName = 'different answer';
+    const { fetch } = recordingFetch(() => jsonResponse({ ...empty, draft_version: 2, is_initialization_only: false,
+      canonical_response: exact, draft_state: display }));
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.example.test', formVersionId: 'published-version', fetchImpl: fetch });
+    if (mismatch) {
+      await expect(adapter.initializeDraft(key)).rejects.toThrow('Retried draft has no matching canonical Response');
+      return;
+    }
+    const initialized = await adapter.initializeDraft(key);
+    expect(initialized).toMatchObject({ draftId: empty.draft_id, isInitializationOnly: false });
+    expect(JSON.stringify(initialized.response)).toBe(text);
+    expect(JSON.stringify(initialized.response)).toContain('1234567890.123456789');
+    expect(JSON.stringify(initialized.response)).toContain('9007199254740993');
   });
 
   it('retains the attempt key before an unknown outcome across fresh adapter and registry instances', async () => {

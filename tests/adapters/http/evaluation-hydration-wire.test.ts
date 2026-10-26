@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { decodeEvaluationHydrationWire } from '../../../src/adapters/http/evaluation-hydration-wire.ts';
 import { testScopeKey as scope } from '../../fixtures/scope.ts';
+import type { EvaluationHydrationWire } from '../../../src/ports/evaluation-hydration.ts';
 
 const digest = `sha256:${'a'.repeat(64)}`;
 const at = '2026-10-09T12:00:00Z';
@@ -28,6 +31,34 @@ function fixture() {
 }
 
 describe('Source evaluation hydration wire decoder (schema only)', () => {
+  it('requires an explicit legacy version narrowing after canonical decoding', () => {
+    const decoded = decodeEvaluationHydrationWire(fixture().value);
+    // @ts-expect-error Canonical schema admission also permits outer version 2.
+    const legacyOnly: EvaluationHydrationWire = decoded;
+    void legacyOnly;
+    if (decoded.version === 1) {
+      const legacy: EvaluationHydrationWire = decoded;
+      expectTypeOf(legacy).toEqualTypeOf<EvaluationHydrationWire>();
+    } else {
+      expectTypeOf(decoded.version).toEqualTypeOf<2>();
+      expectTypeOf(decoded.providerReceipt.version).toEqualTypeOf<2 | 4>();
+    }
+  });
+
+  it.each([
+    ['source-composition-v1/valid-native-hydration.json', 1, 1],
+    ['task-mixed-hydration-v4/hydration.json', 2, 4],
+  ] as const)('admits maintained %s shape and refuses a swapped outer version', (file, version, receiptVersion) => {
+    const value: unknown = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures', file), 'utf8'));
+    const decoded = decodeEvaluationHydrationWire(value);
+    expect(decoded).toEqual(value);
+    expect(decoded.version).toBe(version);
+    expect(decoded.providerReceipt).toMatchObject({ kind: 'composedSources', version: receiptVersion });
+    const invalid = structuredClone(value) as Record<string, unknown>;
+    invalid.version = version === 1 ? 2 : 1;
+    expect(() => decodeEvaluationHydrationWire(invalid)).toThrow();
+  });
+
   it('preserves the distinct native receipt and opaque values as detached deeply frozen data', () => {
     const { value } = fixture();
     const result = decodeEvaluationHydrationWire(value);
@@ -47,6 +78,7 @@ describe('Source evaluation hydration wire decoder (schema only)', () => {
     for (const providerReceipt of [http, null]) {
       const input = { ...value, providerReceipt };
       expect(decodeEvaluationHydrationWire(input)).toEqual(input);
+      expect(() => decodeEvaluationHydrationWire({ ...input, version: 2 })).toThrow();
     }
   });
 

@@ -1,10 +1,15 @@
 /** @filedesc Static wording from admitted original artifacts; never evaluates answers. */
+import { canonicalJsonBytes, parseJsonExact } from '@formspec-org/integrity-canonical';
 import { Path, PathSegmentKind, targetDefinitionMatches } from '@formspec-org/types';
 import { LocaleStore } from './locale.js';
 import { resolveItemLabel, resolveOptionLabel } from './presentation-strings.js';
 import { preactReactiveRuntime } from './reactivity/preact-runtime.js';
 function refuse(reason) {
     throw new Error(`static-response-metadata-${reason}`);
+}
+function isDataObject(value) {
+    const json = JSON;
+    return value !== null && typeof value === 'object' && !Array.isArray(value) && !json.isRawJSON?.(value);
 }
 function staticText(text) {
     if (typeof text !== 'string' || text.includes('{{'))
@@ -18,7 +23,7 @@ function staticText(text) {
  * original metadata instead. Snapshots isolate reads from later caller edits.
  */
 export function createStaticResponseMetadataReader(input) {
-    const { definition, response, locale } = structuredClone(input);
+    const { definition, response, locale } = parseJsonExact(new TextDecoder().decode(canonicalJsonBytes(input)));
     if (response.definitionUrl !== definition.url || response.definitionVersion !== definition.version) {
         refuse('definition-mismatch');
     }
@@ -71,7 +76,7 @@ export function createStaticResponseMetadataReader(input) {
                     || !Object.prototype.hasOwnProperty.call(value, segment.index))
                     refuse('path-invalid');
                 value = value[segment.index];
-                if (!value || typeof value !== 'object' || Array.isArray(value))
+                if (!isDataObject(value))
                     refuse('path-invalid');
             }
             else if (segment.kind === PathSegmentKind.Exact) {
@@ -81,7 +86,7 @@ export function createStaticResponseMetadataReader(input) {
                     items = item.children ?? [];
                 }
                 const matches = items.filter(candidate => candidate.key === segment.key);
-                if (matches.length !== 1 || !value || typeof value !== 'object'
+                if (matches.length !== 1 || !isDataObject(value)
                     || !Object.prototype.hasOwnProperty.call(value, segment.key))
                     refuse('path-unavailable');
                 item = matches[0];

@@ -121,10 +121,15 @@ export class HttpTaskCandidateHydration implements SavedCandidateHydration {
           { draftVersion: saved.draft.version, candidateHash }, { signal, assertCurrent: check, assertBeforeDispatch: check,
             successStatuses: [200], requireJson: true, requireNoStore: true, timeoutMs: NATIVE_SOURCE_OPERATION_MILLISECONDS, maxResponseBytes: 2 * 1024 * 1024 });
         check();
-        // Task compositions use Source's strict TOP2/receipt3 family; legacy
-        // hydration keeps its unchanged TOP1 decoder and proof requirements.
-        const mixed = isRecord(raw.value) && raw.value.version === 2;
-        const view = snapshotWire(mixed ? decodeMixedHydration(raw.value) : decodeEvaluationHydrationWire(raw.value));
+        // Outer version 2 retains its strict receipt-4 decoder and proof requirements.
+        let view: EvaluationHydrationWire | MixedHydrationWire;
+        if (isRecord(raw.value) && raw.value.version === 2) {
+          view = snapshotWire(decodeMixedHydration(raw.value));
+        } else {
+          const decoded = decodeEvaluationHydrationWire(raw.value);
+          if (decoded.version !== 1) fail('unsupported hydration proof family');
+          view = snapshotWire(decoded);
+        }
         const owner = view.owner;
         if (!equal(view.scope, selection.scope) || !equal(view.selection, selection) || view.formVersionHash !== formVersionHash
           || view.draftId !== saved.draft.id || view.draftVersion !== saved.draft.version || view.candidateHash !== candidateHash

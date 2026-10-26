@@ -3,7 +3,7 @@ import type { TaskDraftAssociation } from '../../../src/ports/task-draft.ts';
 import type { HttpResponseSigningPolicy } from '../../../src/adapters/http/response-signing.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { detachedSignatureProtectedHeader, encodeCoseSign1, sigStructureBytes } from '@formspec-org/integrity-cose';
-import { canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
+import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes, parseJsonExact } from '@formspec-org/integrity-canonical';
 import type { FormResponse, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import { createHttpAdapterCohort } from '../../../src/adapters/http/cohort.ts';
 import { assertDelegatedSignedResponseConsistency, handoffHash } from '../../../src/adapters/http/response-signing.ts';
@@ -92,9 +92,12 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
     tokenGate: undefined as Promise<void> | undefined, formVersionId: 'publication-1',
     mutateSigned: undefined as ((response: FormResponse) => void) | undefined,
     createGate: undefined as Promise<void> | undefined, patchGate: undefined as Promise<void> | undefined, signGate: undefined as Promise<void> | undefined, getGate: undefined as Promise<void> | undefined, getStatus: 200,
-    taskDraft: undefined as unknown, applicationStatus: 200, applicationAbsent: false, applicationGate: undefined as Promise<void> | undefined };
+    taskDraft: undefined as unknown, roundedDisplay: false, applicationStatus: 200, applicationAbsent: false, applicationGate: undefined as Promise<void> | undefined };
   const view = () => ({ draft_id: draftId, form_version_id: state.formVersionId, subject_ref: state.actor,
-    status: state.status, draft_version: state.version, is_initialization_only: !state.saved, draft_state: state.saved ? state.response.data : {}, canonical_response: state.saved ? structuredClone(state.response) : null, ...(state.taskDraft === undefined ? {} : { taskDraft: state.taskDraft }) });
+    status: state.status, draft_version: state.version, is_initialization_only: !state.saved,
+    draft_state: state.saved ? (state.roundedDisplay ? JSON.parse(JSON.stringify(state.response.data)) : state.response.data) : {},
+    canonical_response: state.saved ? parseJsonExact(JSON.stringify(state.response)) as FormResponse : null,
+    ...(state.taskDraft === undefined ? {} : { taskDraft: state.taskDraft }) });
   const { fetch, requests } = recordingFetch(async request => {
     if (authenticated && (!state.token || request.headers.get('authorization') !== `Bearer ${state.token}`)) return jsonResponse({ detail: 'unauthorized' }, 401);
     if (request.url.endsWith('/sessions/anonymous')) return jsonResponse({ session_id: 'session', session_token: 'owner-token',
@@ -137,7 +140,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
       state.version++; state.saved = true;
     }
     if (request.method === 'POST') { state.createCount++; await state.createGate; state.version = state.createdVersion; }
-    state.response = structuredClone(body.canonical_response);
+    state.response = parseJsonExact(JSON.stringify(body.canonical_response)) as FormResponse;
     state.mutateSave?.(state.response);
     if (state.lostCreate && request.method === 'POST') { state.lostCreate = false; throw new Error('lost create reply'); }
     if (state.lostPatch) { state.lostPatch = false; throw new Error('lost patch reply'); }
@@ -185,7 +188,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
     return cohort.responseSigning!.saveDraft({
     formId: 'conformance', draftKey, definition, formVersionId: 'publication-1', response: savedResponse, operationId, action: draftAction,
   }); };
-  return { save, cohort, state, requests, prepare, sign, now, values, build, metadata, policy, statePolicy, draftKey, draftId };
+  return { save, directSave, cohort, state, requests, prepare, sign, now, values, build, metadata, policy, statePolicy, draftKey, draftId };
 }
 
 async function signedResponse(unsigned: FormResponse): Promise<FormResponse> {
@@ -194,7 +197,7 @@ async function signedResponse(unsigned: FormResponse): Promise<FormResponse> {
     'urn:formspec:sig-method:ed25519-cose-sign1@1'), null, new Uint8Array(64));
   const signatureValue = btoa(String.fromCharCode(...bytes));
   const digest = await profileDigest(unsigned);
-  return { ...structuredClone(unsigned), authoredSignatures: [{ signatureId: 'sig_test', ceremonyId: 'ceremony_test',
+  return { ...parseJsonExact(JSON.stringify(unsigned)) as FormResponse, authoredSignatures: [{ signatureId: 'sig_test', ceremonyId: 'ceremony_test',
     signatureProvider: 'urn:formspec:provider:delegated-response@1', documentId: content.documentId, signingIntent: content.signingIntent,
     signatureValue, signerId: commitment.actorRef, signerName: commitment.signerName, consentAccepted: true,
     consentTextRef: content.electronicConsent.textRef, consentVersion: content.electronicConsent.version,
@@ -555,6 +558,65 @@ describe('cohort-owned Response Prepare and Sign', () => {
       savedDraft: { response, draft: { id: 'owned-draft', version: 2 } } });
     await expect(test.cohort.draftStore.load(key)).resolves.toEqual(response);
     test.state.status = 'unknown'; await expect(test.cohort.draftStore.readState!(key)).rejects.toThrow();
+  });
+
+  it.each([
+    ['readState', 'omitted'], ['readState', 'undefined'],
+    ['resumeState', 'omitted'], ['resumeState', 'undefined'],
+  ] as const)('copies optional draft key metadata for exact qualified %s: %s', async (method, optional) => {
+    const test = await fixture(true, method === 'resumeState');
+    const text = JSON.stringify(test.state.response).replace('"Ada Lovelace"', '"Ada Lovelace","amount":1234567890.123456789,"count":9007199254740993');
+    const exact = parseJsonExact(text) as FormResponse;
+    const savedKey: DraftKey = method === 'readState'
+      ? { formUrl: test.draftKey.formUrl, formVersion: test.draftKey.formVersion }
+      : test.draftKey;
+    await test.cohort.draftStore.initializeDraft!(savedKey, 'publication-1');
+    await test.directSave(savedKey, exact);
+    const expectedHash = await handoffHash(exact);
+    const supplied: DraftKey = { ...savedKey, ...(optional === 'undefined'
+      ? { subjectRef: savedKey.subjectRef, partyRef: undefined } : {}) };
+    expect(Object.hasOwn(supplied, 'partyRef')).toBe(optional === 'undefined');
+    if (method === 'readState') expect(Object.hasOwn(supplied, 'subjectRef')).toBe(optional === 'undefined');
+    let finish!: () => void;
+    test.state.getGate = new Promise(resolve => { finish = resolve; });
+    const fresh = test.build(); const count = test.requests.length;
+    const reading = method === 'readState' ? fresh.draftStore.readState!(supplied)
+      : fresh.draftStore.resumeState!(supplied, { draftId: test.draftId, expectedResponseId: exact.id! });
+    const active = expect(reading).resolves.toMatchObject({ kind: 'active' });
+    await vi.waitFor(() => expect(test.requests).toHaveLength(count + 1));
+    supplied.formUrl = 'https://different.example.test/form'; supplied.partyRef = 'different-party';
+    finish(); await active;
+    const state = await reading;
+    if (state?.kind !== 'active' || !state.savedDraft) throw new Error('Expected saved signing evidence');
+    const saved = state.savedDraft;
+    expect(saved.draftKey).toEqual(savedKey);
+    expect(Object.hasOwn(saved.draftKey, 'partyRef')).toBe(false);
+    if (method === 'readState') expect(Object.hasOwn(saved.draftKey, 'subjectRef')).toBe(false);
+    expect(saved.actor.id).toBe(test.state.actor);
+    expect(saved.evidence.form_version_id).toBe('publication-1');
+    expect(saved.draft).toEqual({ id: test.draftId, version: 2, responseHash: expectedHash });
+    for (const retained of [state.response, saved.response, saved.evidence.canonical_response]) {
+      expect(JSON.stringify(retained)).toContain('1234567890.123456789');
+      expect(JSON.stringify(retained)).toContain('9007199254740993');
+      expect(await handoffHash(retained)).toBe(expectedHash);
+      expect(retained).not.toBe(test.state.response);
+      expect(retained.data).not.toBe(test.state.response.data);
+      expect(Object.isFrozen(retained)).toBe(true);
+      expect(Object.isFrozen(retained.data)).toBe(true);
+    }
+    expect(Object.isFrozen(state)).toBe(true); expect(Object.isFrozen(saved.evidence)).toBe(true);
+    expect(Object.isFrozen(saved.draftKey)).toBe(true);
+    test.state.response.data.fullName = 'Changed after read';
+    expect(await handoffHash(saved.evidence.canonical_response)).toBe(expectedHash);
+    expect(test.requests.slice(count).map(request => request.method)).toEqual(['GET']);
+    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(1); expect(test.state.signCount).toBe(0);
+  });
+
+  it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY])('keeps exact qualified reader Response data strict for %s', async invalid => {
+    const test = await fixture(true);
+    await expect(test.cohort.draftStore.save(test.draftKey,
+      { ...response, data: { ...response.data, invalid } })).rejects.toThrow(/non-JSON|non-finite/);
+    expect(test.requests).toHaveLength(0);
   });
 
   it('refuses a retained owner handle returning 404 without treating it as a fresh draft', async () => {
@@ -1424,6 +1486,67 @@ describe('explicit owned draft resume without tab metadata', () => {
 
 describe('owned resume admission boundaries', () => {
   const selection = { draftId: 'owned-draft', expectedResponseId: response.id! };
+  it.each(['exact', 'changed-canonical-digit'] as const)('prepares exact fetched data with rounded Source display: %s', async mode => {
+    const test = await fixture(true, true);
+    const text = JSON.stringify(response).replace('"data":{', '"data":{"amount":1234567890.123456789,"count":9007199254740993,');
+    const exact = parseJsonExact(text) as FormResponse;
+    await test.cohort.draftStore.save(test.draftKey, exact);
+    test.state.roundedDisplay = true;
+    if (mode === 'changed-canonical-digit') test.state.mutateSave = saved => {
+      Object.assign(saved, parseJsonExact(JSON.stringify(saved).replace('1234567890.123456789', '1234567890.123456788')));
+    };
+    if (mode === 'changed-canonical-digit') {
+      await expect(test.prepare(exact)).rejects.toThrow('Preparation differs from the exact saved Response');
+      return;
+    }
+    const prepared = await test.prepare(exact);
+    expect(prepared.draft.responseHash).toBe(await handoffHash(exact));
+    expect(await handoffHash(prepared.response)).toBe(await handoffHash(exact));
+    expect(JSON.stringify(prepared.response)).toContain('1234567890.123456789');
+    expect(JSON.stringify(prepared.response)).toContain('9007199254740993');
+    expect(test.state.signCount).toBe(0);
+  });
+  it.each(['exact', 'changed-signed-digit'] as const)('prepares and signs exact numeric answers through actual HTTP adapters: %s', async mode => {
+    const test = await fixture(true, true);
+    const text = JSON.stringify(response).replace('"data":{', '"data":{"amount":1234567890.123456789,"count":9007199254740993,');
+    const exact = parseJsonExact(text) as FormResponse;
+    await test.cohort.draftStore.save(test.draftKey, exact);
+    test.state.roundedDisplay = true;
+    const prepared = await test.prepare(exact);
+    if (mode === 'changed-signed-digit') test.state.mutateSigned = saved => {
+      Object.assign(saved, parseJsonExact(JSON.stringify(saved).replace('1234567890.123456789', '1234567890.123456788')));
+    };
+    if (mode === 'changed-signed-digit') {
+      await expect(test.sign(prepared)).rejects.toThrow('Delegated signing evidence differs from the frozen candidate');
+      return;
+    }
+    const signed = await test.sign(prepared);
+    expect(test.state.signCount).toBe(1);
+    expect(await handoffHash(signed.response)).toBe(await handoffHash(test.state.response));
+    expect(signed.draft.responseHash).toBe(await handoffHash(test.state.response));
+    const request = test.requests.find(request => request.url.endsWith('/sign'))!;
+    const candidate = (request.body as { canonical_response: FormResponse }).canonical_response;
+    const unsigned = { ...signed.response }; delete unsigned.authoredSignatures;
+    expect(new TextDecoder().decode(canonicalResponseHandoffBytes(candidate))).toBe(new TextDecoder().decode(canonicalResponseHandoffBytes(unsigned)));
+    expect(await handoffHash(candidate)).toBe(await handoffHash(unsigned));
+    expect(request.bodyText).toContain('1234567890.123456789');
+    expect(request.bodyText).toContain('9007199254740993');
+    expect(JSON.stringify(signed.response)).toContain('1234567890.123456789');
+    expect(JSON.stringify(signed.response)).toContain('9007199254740993');
+  });
+  it('resumes exact API numeric answers through the actual cohort and saved signing evidence', async () => {
+    const test = await fixture(true, true); test.state.saved = true;
+    const text = JSON.stringify(test.state.response).replace('"Ada Lovelace"', '"Ada Lovelace","amount":1234567890.123456789,"count":9007199254740993');
+    test.state.response = parseJsonExact(text) as FormResponse;
+    const expected = await handoffHash(parseJsonExact(text) as FormResponse);
+    const state = await test.build().draftStore.resumeState!(test.draftKey, selection);
+    expect(state.kind).toBe('active');
+    if (state.kind !== 'active' || !state.savedDraft) throw new Error('Expected saved signing evidence');
+    expect(state.savedDraft.draft.responseHash).toBe(expected);
+    expect(await handoffHash(state.response)).toBe(expected);
+    expect(JSON.stringify(state.savedDraft.evidence.canonical_response)).toContain('1234567890.123456789');
+    expect(test.requests.every(request => request.method === 'GET')).toBe(true);
+  });
   it.each(['owner', 'publication', 'response', 'status'] as const)('refuses wrong %s before installing a fresh registry binding', async kind => {
     const test = await fixture(true, true); test.state.saved = true;
     if (kind === 'owner') test.state.actor = 'another-owner';

@@ -196,6 +196,7 @@ const schemaFiles = [
 
 const sourceSchemaDir = 'src/adapters/http/source-schemas';
 const sourceSchemaFiles = [
+  'evaluation-composition-v2.schema.json',
   'evaluation-composition-v4.schema.json',
   'evaluation-composition.schema.json',
   'evaluation-hydration.schema.json',
@@ -231,7 +232,10 @@ if (selectedSourceSchemas.length > 0) {
   const sumsPath = join(root, sourceSchemaDir, 'SHA256SUMS');
   const sums = readFileSync(sumsPath, 'utf8').trimEnd().split('\n');
   for (const file of selectedSourceSchemas) {
-    if (sums.filter(line => line.endsWith(`  ${file}`)).length !== 1) {
+    const count = sums.filter(line => line.endsWith(`  ${file}`)).length;
+    // An explicit refresh may introduce a newly allowlisted dependency. Checks
+    // require its existing pin; duplicate rows are invalid in either mode.
+    if (count > 1 || (count === 0 && !write)) {
       throw new Error(`${sourceSchemaDir}/SHA256SUMS must contain one entry for ${file}.`);
     }
   }
@@ -257,7 +261,8 @@ if (selectedSourceSchemas.length > 0) {
     for (const { file, bytes } of schemas) {
       const line = `${createHash('sha256').update(bytes).digest('hex')}  ${file}`;
       const index = sums.findIndex(entry => entry.endsWith(`  ${file}`));
-      sums[index] = line;
+      if (index === -1) sums.push(line);
+      else sums[index] = line;
     }
     writeFileSync(sumsPath, `${sums.join('\n')}\n`);
     writeFileSync(refsPath, `${JSON.stringify({ ...refs, 'formspec-server': head.stdout.trim() }, null, 2)}\n`);

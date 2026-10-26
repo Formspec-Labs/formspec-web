@@ -19,7 +19,9 @@ async function rehash(value: ComposedSourcesReceipt) {
   Object.assign(value, { receiptHash: await hash(preimage) });
 }
 async function verifyFixture(value: unknown) {
-  const view = decodeEvaluationHydrationWire(value), proof = receipt(view);
+  const view = decodeEvaluationHydrationWire(value);
+  if (view.version !== 1) throw new Error('Expected a legacy composed fixture');
+  const proof = receipt(view);
   // Static Source fixtures lack original retained run/candidate inputs. This checks composition only.
   return verifyComposedSources({ view, receipt: proof, requestHash: view.requestHash,
     registrationHash: proof.registration.registrationHash, verifyNative: async () => {} });

@@ -1,4 +1,5 @@
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
+import { canonicalResponseHandoffBytes, parseJsonExact } from '@formspec-org/integrity-canonical';
 import { hydrationFixture } from './screener-hydration-fixture.ts';
 import { HttpDraftStore } from '../../../src/adapters/http/draft-store.ts';
 import { createDraftBindingRegistry } from '../../../src/adapters/http/draft-binding-registry.ts';
@@ -17,6 +18,16 @@ const view = { draft_id: 'actual-draft', form_version_id: selection.formVersionI
 const lifetime = () => ({ signal: new AbortController().signal, assertCurrent: () => {} });
 
 describe('Source-owned task launch', () => {
+  it('keeps exact canonical numeric data beside the parsed Source display view', async () => {
+    const text = JSON.stringify(sampleFormResponse).replace('"data":{', '"data":{"amount":1234567890.123456789,"count":9007199254740993,');
+    const body = JSON.stringify({ ...view, canonical_response: 'exact-response', draft_state: JSON.parse(text).data })
+      .replace('"exact-response"', text);
+    const adapter = new HttpTaskDraftLaunch({ baseUrl: 'https://source.example.test', accessToken: 'actual-token',
+      fetchImpl: async () => new Response(body, { headers: { 'content-type': 'application/json' } }), selection,
+      expectedSubjectRef: 'actual-owner', definition: sampleFormDefinition, assertCurrent: () => {}, validateResponse: () => true });
+    const result = await adapter.launch('exact-key', lifetime());
+    expect(canonicalResponseHandoffBytes(result.canonical_response)).toEqual(canonicalResponseHandoffBytes(parseJsonExact(text)));
+  });
   it('forwards actual launch selectors with current bearer and stable idempotency', async () => {
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => Response.json(view));
     const adapter = new HttpTaskDraftLaunch({ baseUrl: 'https://source.example.test', accessToken: 'actual-token',

@@ -1,16 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { HttpScreenerHydration } from '../../../src/adapters/http/screener-hydration.ts';
 import { createEvaluationInstanceResolver } from '../../../src/shared/evaluation-instance-resolver.ts';
 import { computeJcsSha256Digest as hash } from '../../../src/adapters/http/response-action-ledger.ts';
 import { hydrationFixture } from './screener-hydration-fixture.ts';
 import { otherScopeKey } from '../../fixtures/scope.ts';
 import type { NativeScreenerMappingReceipt } from '../../../src/ports/evaluation-hydration.ts';
+import { decodeEvaluationHydrationWire } from '../../../src/adapters/http/evaluation-hydration-wire.ts';
+import * as composition from '../../../src/adapters/http/evaluation-composition.ts';
 
 async function rehashReceipt(receipt: NativeScreenerMappingReceipt) {
   const { receiptHash: _remove, ...preimage } = receipt;
   Object.assign(receipt, { receiptHash: await hash(preimage) });
 }
 describe('authenticated native Screener candidate hydration', () => {
+  it('refuses canonical outer-2 facts before legacy composition verification', async () => {
+    const packet: unknown = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/task-mixed-hydration-v4/hydration.json'), 'utf8'));
+    expect(decodeEvaluationHydrationWire(packet).version).toBe(2);
+    const f = await hydrationFixture();
+    const verify = vi.spyOn(composition, 'verifyComposedSources');
+    try {
+      const adapter = new HttpScreenerHydration({ ...f.config, fetchImpl: async () => Response.json(packet,
+        { headers: { 'cache-control': 'no-store' } }) });
+      await expect(adapter.hydrate(f.input)).rejects.toThrow('unsupported hydration proof family');
+      expect(verify).not.toHaveBeenCalled();
+    } finally { verify.mockRestore(); }
+  });
+
   it('posts the exact unsigned saved revision, verifies frozen Source context and loads false facts only through the public resolver', async () => {
     const f = await hydrationFixture();
     const context = await new HttpScreenerHydration(f.config).hydrate(f.input);

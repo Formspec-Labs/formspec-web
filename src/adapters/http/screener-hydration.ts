@@ -84,6 +84,7 @@ export class HttpScreenerHydration implements ScreenerHydration {
         maxResponseBytes: 2 * 1024 * 1024, successStatuses: [200], requireJson: true, requireNoStore: true });
     check();
     const view = decodeEvaluationHydrationWire(value);
+    if (view.version !== 1) fail('unsupported hydration proof family');
     if (!equal(view.scope, selected.scope) || !equal(view.owner, owner) || !equal(view.selection, selected)
       || view.formVersionHash !== this.selection.formVersionHash || view.draftId !== saved.draft.id
       || view.draftVersion !== saved.draft.version || view.candidateHash !== candidateHash || !equal(view.sources, sources)

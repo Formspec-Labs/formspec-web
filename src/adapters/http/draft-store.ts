@@ -1,10 +1,12 @@
+import { snapshotWire } from './wire-json.ts';
+import { sameResponseDataView } from '../../shared/response-data-view.ts';
 import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { ownedDraftResumeSelection } from '../../config/owned-draft-resume.ts';
 import type { TaskDraftAssociation } from '../../ports/task-draft.ts';
 import canonicalize from 'canonicalize';
 import type { DraftKey, DraftReadState, DraftStore, FormResponse, OwnedDraftResumeSelection } from '../../ports/draft-store.ts';
-import { createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
+import { copyDraftKey, createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
 import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 
@@ -74,15 +76,15 @@ export class HttpDraftStore implements DraftStore {
     const qualify = config.qualifyReadState;
     if (qualify) {
       this.readState = (suppliedKey, current = () => {}) => {
-        const key = structuredClone(suppliedKey);
-        return this.read(key, async view => freeze(structuredClone(await qualify(key, view, current))), current, false);
+        const key = copyDraftKey(suppliedKey);
+        return this.read(key, async view => freeze(snapshotWire(await qualify(key, view, current))), current, false);
       };
       this.resumeState = async (suppliedKey, suppliedSelection, current = () => {}) => {
-        const key = structuredClone(suppliedKey), selection = ownedDraftResumeSelection(suppliedSelection);
+        const key = copyDraftKey(suppliedKey), selection = ownedDraftResumeSelection(suppliedSelection);
         if (!key.subjectRef || key.subjectRef.startsWith('anon:')) throw new Error('Owned draft resume requires an authenticated owner');
         const result = await this.read(key, async view => {
           if (view.taskDraft !== undefined) throw new Error('Task-owned draft requires its maintained task entry');
-          return freeze(structuredClone(await qualify(key, view, current)));
+          return freeze(snapshotWire(await qualify(key, view, current)));
         }, current, false, selection);
         if (!result) throw new Error('Selected owned draft state unavailable');
         return result;
@@ -134,7 +136,7 @@ export class HttpDraftStore implements DraftStore {
         const { validateCanonicalFormResponse } = await import('../schema/surface-bundle-schema-validators.ts');
         if (!draft.canonical_response || !await validateCanonicalFormResponse(draft.canonical_response)
           || draft.canonical_response.definitionUrl !== key.formUrl || draft.canonical_response.definitionVersion !== key.formVersion
-          || canonicalize(draft.canonical_response.data) !== canonicalize(draft.draft_state)) throw new Error('Retried draft has no matching canonical Response');
+          || !sameResponseDataView(draft.canonical_response.data, draft.draft_state)) throw new Error('Retried draft has no matching canonical Response');
       }
       current();
       const previous = this.bindings.get(key);
@@ -142,7 +144,7 @@ export class HttpDraftStore implements DraftStore {
       this.bindings.put(key, { draftId: draft.draft_id, draftVersion: draft.draft_version,
         ...(!draft.is_initialization_only ? { response: draft.canonical_response } : {}) });
       return { draftId: draft.draft_id, isInitializationOnly: draft.is_initialization_only,
-        ...(!draft.is_initialization_only ? { response: structuredClone(draft.canonical_response) } : {}) };
+        ...(!draft.is_initialization_only ? { response: snapshotWire(draft.canonical_response) } : {}) };
     })();
     this.initializations.set(attemptKey, operation);
     try { return await operation; } finally { if (this.initializations.get(attemptKey) === operation) this.initializations.delete(attemptKey); }
@@ -187,7 +189,7 @@ export class HttpDraftStore implements DraftStore {
         || !Number.isInteger(view.draft_version) || (view.draft_version ?? -1) < 0
         || response.definitionUrl !== key.formUrl
         || (key.formVersion !== undefined && response.definitionVersion !== key.formVersion)
-        || canonicalize(response.data) !== canonicalize(view.draft_state)) {
+        || !sameResponseDataView(response.data, view.draft_state)) {
         throw new Error('Server draft has no matching canonical Response snapshot');
       }
       if (selection && response.id !== selection.expectedResponseId) throw new Error('Owned draft resume Response identity differs');
@@ -196,7 +198,7 @@ export class HttpDraftStore implements DraftStore {
         throw new Error('Owned draft state regressed from its retained identity or revision');
       }
       current();
-      const result = await qualify(structuredClone(view));
+      const result = await qualify(snapshotWire(view));
       current();
       if (selection && canonicalize(this.bindings.get(key)) !== canonicalize(previous)) throw new Error('Owned draft binding changed while resuming');
       this.bindings.put(key, { draftId: view.draft_id, draftVersion: view.draft_version, response });
@@ -223,8 +225,8 @@ export class HttpDraftStore implements DraftStore {
   private async saveOnce(key: DraftKey, response: FormResponse, options?: { readonly assertBeforeDispatch?: () => void }): Promise<void> {
     const generation = this.retirementGeneration;
     const current = () => { if (generation !== this.retirementGeneration) throw new Error('Draft state was retired while saving'); };
-    response = structuredClone(response);
-    let existing = this.bindings.get(key);
+    response = snapshotWire(response);
+    const existing = this.bindings.get(key);
     const anonymousSessionToken = await this.resolveAnonymousSessionToken(key);
     current();
     if (!existing) throw new Error('Draft must be initialized before Save or Sign');
