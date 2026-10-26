@@ -40,7 +40,8 @@ FORMSPEC_WEB_SCOPE_KEY="$DEPLOYMENT_SCOPE_KEY" docker compose up --build
 
 With a server URL, `publicPortal` uses the reference anonymous-session draft and
 submit path. `departmentApp` is OIDC-required, renders explicit sign-in, and
-waits for EXT-23 before full server-backed OIDC validation can be claimed.
+needs a server configured with an OIDC trust file (EXT-23) for server-backed
+OIDC validation; the web end-to-end proof is still pending.
 
 Production runtime config is emitted by `docker/40-formspec-runtime-config.sh`
 from `FORMSPEC_WEB_*` environment variables.

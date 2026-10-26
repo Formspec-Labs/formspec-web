@@ -72,7 +72,7 @@ const requiredManualGates = new Map([
   ],
   [
     'Full OIDC server validation',
-    { evidence: 'docs/identity/integration.md', status: 'Blocked by EXT-23' },
+    { evidence: 'docs/identity/integration.md', status: 'Server landed (EXT-23); web end-to-end proof pending' },
   ],
   [
     'Cross-reload or cross-device draft resume',

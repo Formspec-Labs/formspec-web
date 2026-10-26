@@ -154,7 +154,7 @@ describe('check-testing-plan', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      'manual release gate "Full OIDC server validation" status must be "Blocked by EXT-23"',
+      'manual release gate "Full OIDC server validation" status must be "Server landed (EXT-23); web end-to-end proof pending"',
     );
   });
 
@@ -162,14 +162,14 @@ describe('check-testing-plan', () => {
     const result = runCheck(
       createFixture({
         manualStatusOverrides: {
-          'Full OIDC server validation': 'Blocked by EXT-23; advisory only, not a release blocker.',
+          'Full OIDC server validation': 'Server landed (EXT-23); web end-to-end proof pending; advisory only, not a release blocker.',
         },
       }),
     );
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      'manual release gate "Full OIDC server validation" status must be "Blocked by EXT-23"',
+      'manual release gate "Full OIDC server validation" status must be "Server landed (EXT-23); web end-to-end proof pending"',
     );
   });
 
@@ -615,7 +615,7 @@ function manualReleaseRows(options = {}) {
       'docs/ux/i18n.md',
       'Web adapter-proven; refresh live server payload before release tag.',
     ],
-    ['Full OIDC server validation', 'docs/identity/integration.md', 'Blocked by EXT-23.'],
+    ['Full OIDC server validation', 'docs/identity/integration.md', 'Server landed (EXT-23); web end-to-end proof pending.'],
     [
       'Cross-reload or cross-device draft resume',
       'docs/adapters/draft-store.md',

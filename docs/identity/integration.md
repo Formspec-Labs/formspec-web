@@ -45,9 +45,11 @@ before choosing a mapping.
 
 ## Current Gate
 
-Full OIDC production close is blocked by EXT-23 in `formspec-server`: per-tenant
-trusted issuer config, JWKS client, and RS256 verifier. The web-side bridge now
-passes the current OIDC access token into `HttpClient.accessToken` without
-leaking raw tokens into `IdentityClaim`, and production `oidc-required` profiles
-render an explicit sign-in surface. End-to-end sign-off still waits for the
-server verifier.
+EXT-23 landed in `formspec-server` `1bac5ee`: the server reads a per-deployment
+OIDC trust file (issuer, clients, audiences) and verifies RS256 Bearer tokens
+against the issuer's JWKS. The web-side bridge passes the current OIDC access
+token into `HttpClient.accessToken` without leaking raw tokens into
+`IdentityClaim`, and production `oidc-required` profiles render an explicit
+sign-in surface. Full OIDC production close now needs a web end-to-end proof:
+`departmentApp` signs in and its Bearer requests succeed against a server
+configured with a matching trust file.

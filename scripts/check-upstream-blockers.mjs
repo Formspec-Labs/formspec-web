@@ -7,7 +7,6 @@ import process from 'node:process';
 
 const defaultRootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const requiredDocs = new Map([
-  ['EXT-23', ['docs/identity/integration.md', 'docs/testing-plan.md', 'docs/mvp-audit.md']],
   ['EXT-26', ['docs/adapters/draft-store.md', 'docs/testing-plan.md', 'docs/mvp-audit.md']],
   ['EXT-27', ['docs/adapters/draft-store.md', 'docs/testing-plan.md', 'docs/mvp-audit.md']],
 ]);
@@ -23,20 +22,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 export function checkUpstreamBlockers(rootDir, serverDir) {
   assertServerDir(serverDir);
 
-  const authJwt = readServerFile(serverDir, 'crates/formspec-server-auth-jwt/src/lib.rs');
-  const composition = readServerFile(serverDir, 'crates/formspec-server/src/composition.rs');
-  const config = readServerFile(serverDir, 'crates/formspec-server/src/config.rs');
   const responses = readServerFile(serverDir, 'crates/formspec-server/src/services/responses.rs');
   const routes = readServerFile(serverDir, 'crates/formspec-server/src/routes.rs');
 
-  assertExt23StillBlocked(authJwt, composition, config, routes);
   assertExt26StillBlocked(responses, routes);
   assertExt27StillBlocked(responses, routes);
   assertDocsKeepBlockers(rootDir);
 
   return {
-    blockerCount: 3,
-    sourceFileCount: 5,
+    blockerCount: 2,
+    sourceFileCount: 2,
     docCount: Array.from(requiredDocs.values()).reduce((count, paths) => count + paths.length, 0),
   };
 }
@@ -77,34 +72,6 @@ function readRepoFile(rootDir, relativePath) {
     fail(`upstream blocker check failed: missing formspec-web evidence file ${relativePath}`);
   }
   return readFileSync(path, 'utf8');
-}
-
-function assertExt23StillBlocked(authJwt, composition, config, routes) {
-  const jwtConfig = extractRustBlock(authJwt, 'pub struct JwtAuthConfig');
-  if (!jwtConfig.includes('pub jwks_url: Option<String>')) {
-    fail('upstream blocker check failed: EXT-23 evidence changed; JwtAuthConfig no longer exposes jwks_url as inert config shape');
-  }
-  if (!authJwt.includes('JwtVerifier::from_hs256') || !authJwt.includes('algorithm: Algorithm::HS256')) {
-    fail('upstream blocker check failed: EXT-23 may have landed; JWT auth is no longer HS256-only');
-  }
-  if (authJwt.includes('Algorithm::RS256') || /Jwks(Client|Verifier|Provider)/.test(authJwt)) {
-    fail('upstream blocker check failed: EXT-23 may have landed; JWT auth now references RS256/JWKS verifier code');
-  }
-  const authProbe = extractRustFunction(composition, 'fn auth_probe');
-  if (!authProbe.includes('jwks_url: None')) {
-    fail('upstream blocker check failed: EXT-23 may have landed; auth_probe no longer leaves jwks_url unset');
-  }
-  const serverAuthSources = `${composition}\n${config}\n${routes}`;
-  const hasBearerMiddlewarePath = /\bbearer\b/i.test(serverAuthSources);
-  const hasTrustedIssuerPath =
-    /\b(?:Jwks\w*|JWKS|jwks_\w+|Algorithm::RS256|RS256|Trusted\w*Issuer|trusted_issuer|Oidc\w*Verifier|oidc_issuer|JwtBearer\w*)\b/.test(
-      serverAuthSources,
-    );
-  if (hasBearerMiddlewarePath && hasTrustedIssuerPath) {
-    fail(
-      'upstream blocker check failed: EXT-23 may have landed; server routes/config now reference a Bearer/JWKS/RS256 trusted-issuer path',
-    );
-  }
 }
 
 function assertExt26StillBlocked(responses, routes) {

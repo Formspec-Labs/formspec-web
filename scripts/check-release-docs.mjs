@@ -81,7 +81,7 @@ const requiredExtensionQueueEntries = [
   {
     id: 'EXT-23',
     owner: 'formspec-server',
-    statusPrefix: 'filed; gates M7',
+    statusPrefix: 'landed in formspec-server',
   },
   {
     id: 'EXT-24',

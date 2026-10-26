@@ -59,7 +59,7 @@ describe('check-mvp-audit', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      'release boundary "Full OIDC server validation" status must be "Blocked by EXT-23"',
+      'release boundary "Full OIDC server validation" status must be "Server landed (EXT-23); web end-to-end proof pending"',
     );
   });
 
@@ -289,12 +289,11 @@ function mvpAuditDoc(options = {}) {
     ],
     [
       'Full OIDC server validation',
-      options.boundaryStatusOverrides?.['Full OIDC server validation'] ?? 'Blocked by EXT-23.',
+      options.boundaryStatusOverrides?.['Full OIDC server validation'] ?? 'Server landed (EXT-23); web end-to-end proof pending.',
       [
         'docs/identity/integration.md',
         'thoughts/specs/2026-05-22-upstream-extension-queue.md',
         'docs/testing-plan.md',
-        'npm run check:upstream-blockers',
       ],
     ],
     [

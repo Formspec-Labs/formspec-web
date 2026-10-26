@@ -54,4 +54,5 @@ Not exposed by this image:
   now.
 - No production error-reporting sink is wired.
 - No analytics or SLO dashboards are wired.
-- Full server-backed OIDC operations wait for EXT-23 server validation.
+- Server-side OIDC validation landed (EXT-23); full OIDC operations still lack a
+  web end-to-end proof.

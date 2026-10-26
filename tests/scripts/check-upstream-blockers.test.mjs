@@ -33,50 +33,6 @@ describe('check-upstream-blockers', () => {
     expect(result.stderr).toContain('formspec-server checkout not found');
   });
 
-  it('rejects EXT-23 when RS256 or JWKS verifier code appears', () => {
-    const { root, server } = createFixture({
-      authJwtPatch: (text) => `${text}\nstruct JwksClient;\nconst ALG: Algorithm = Algorithm::RS256;\n`,
-    });
-    const result = runCheck(root, server);
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('EXT-23 may have landed');
-  });
-
-  it('rejects EXT-23 when auth_probe starts consuming jwks_url', () => {
-    const { root, server } = createFixture({
-      compositionPatch: (text) => text.replace('jwks_url: None', 'jwks_url: Some("https://idp.example.test/jwks.json".to_owned())'),
-    });
-    const result = runCheck(root, server);
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('auth_probe no longer leaves jwks_url unset');
-  });
-
-  it('rejects EXT-23 when a separate Bearer JWKS middleware path appears', () => {
-    const { root, server } = createFixture({
-      routesPatch: (text) => `${text}
-pub struct TrustedIssuerConfig {
-    pub jwks_url: String,
-}
-
-pub struct JwksClient;
-
-pub async fn bearer_auth_middleware(
-    authorization: Authorization<Bearer>,
-    trusted_issuer: TrustedIssuerConfig,
-) -> Result<(), ProblemJson> {
-    let verifier = JwtBearerVerifier::new(JwksClient, Algorithm::RS256, trusted_issuer);
-    verifier.verify(authorization.token()).await
-}
-`,
-    });
-    const result = runCheck(root, server);
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('Bearer/JWKS/RS256 trusted-issuer path');
-  });
-
   it('rejects EXT-26 when DraftView exposes draft_state', () => {
     const { root, server } = createFixture({
       responsesPatch: (text) => text.replace('pub status: DraftStatus,', 'pub status: DraftStatus,\n    pub draft_state: Value,'),
@@ -184,11 +140,11 @@ pub struct SessionBoundUpdateDraftCommand {
   });
 
   it('rejects docs that stop naming a live blocker', () => {
-    const { root, server } = createFixture({ omitDocBlocker: 'EXT-23' });
+    const { root, server } = createFixture({ omitDocBlocker: 'EXT-26' });
     const result = runCheck(root, server);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('docs/identity/integration.md no longer names EXT-23');
+    expect(result.stderr).toContain('docs/adapters/draft-store.md no longer names EXT-26');
   });
 });
 
@@ -209,21 +165,6 @@ function createFixture(options = {}) {
 
   write(
     server,
-    'crates/formspec-server-auth-jwt/src/lib.rs',
-    patch(options.authJwtPatch, authJwtFixture()),
-  );
-  write(
-    server,
-    'crates/formspec-server/src/composition.rs',
-    patch(options.compositionPatch, compositionFixture()),
-  );
-  write(
-    server,
-    'crates/formspec-server/src/config.rs',
-    patch(options.configPatch, configFixture()),
-  );
-  write(
-    server,
     'crates/formspec-server/src/services/responses.rs',
     patch(options.responsesPatch, responsesFixture()),
   );
@@ -233,10 +174,9 @@ function createFixture(options = {}) {
     patch(options.routesPatch, routesFixture()),
   );
 
-  write(root, 'docs/identity/integration.md', docText(['EXT-23'], options.omitDocBlocker));
   write(root, 'docs/adapters/draft-store.md', docText(['EXT-26', 'EXT-27'], options.omitDocBlocker));
-  write(root, 'docs/testing-plan.md', docText(['EXT-23', 'EXT-26', 'EXT-27'], options.omitDocBlocker));
-  write(root, 'docs/mvp-audit.md', docText(['EXT-23', 'EXT-26', 'EXT-27'], options.omitDocBlocker));
+  write(root, 'docs/testing-plan.md', docText(['EXT-26', 'EXT-27'], options.omitDocBlocker));
+  write(root, 'docs/mvp-audit.md', docText(['EXT-26', 'EXT-27'], options.omitDocBlocker));
 
   return { root, server };
 }
@@ -247,54 +187,6 @@ function patch(fn, text) {
 
 function docText(blockers, omit) {
   return blockers.filter((blocker) => blocker !== omit).join('\n');
-}
-
-function authJwtFixture() {
-  return `
-pub struct JwtAuthConfig {
-    pub issuer: String,
-    pub audience: String,
-    pub jwks_url: Option<String>,
-    pub shared_secret: Option<String>,
-}
-
-pub struct JwtAnonymousSessionIssuer;
-
-impl JwtAnonymousSessionIssuer {
-    pub fn new() {
-        JwtIssuer::from_hs256(config.clone(), secret.as_bytes(), Box::new(OsSecureRandom));
-        JwtVerifier::from_hs256(config, secret.as_bytes());
-    }
-}
-
-fn jwt_config() -> JwtConfig {
-    JwtConfig {
-        algorithm: Algorithm::HS256,
-    }
-}
-`;
-}
-
-function compositionFixture() {
-  return `
-fn auth_probe(config: &ServerConfig) -> Arc<dyn HealthProbe> {
-    Arc::new(JwtAuthReadiness::new(JwtAuthConfig {
-        issuer: config.adapters.jwt_issuer.clone().unwrap_or_default(),
-        audience: config.adapters.jwt_audience.clone().unwrap_or_default(),
-        jwks_url: None,
-        shared_secret: None,
-    }))
-}
-`;
-}
-
-function configFixture() {
-  return `
-pub struct AdapterConfig {
-    pub jwt_issuer: Option<String>,
-    pub jwt_audience: Option<String>,
-}
-`;
 }
 
 function responsesFixture() {

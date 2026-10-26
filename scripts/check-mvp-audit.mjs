@@ -131,11 +131,10 @@ const requiredBoundaries = new Map([
   [
     'Full OIDC server validation',
     [
-      'Blocked by EXT-23',
+      'Server landed (EXT-23); web end-to-end proof pending',
       'docs/identity/integration.md',
       'thoughts/specs/2026-05-22-upstream-extension-queue.md',
       'docs/testing-plan.md',
-      'npm run check:upstream-blockers',
     ],
   ],
   [

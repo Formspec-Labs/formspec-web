@@ -60,5 +60,5 @@ against built nginx containers and observes browser warnings/errors as failures.
 
 Unconfigured compose makes no authentication claim. The respondent runtime only auto-authenticates
 anonymous identity at boot; OIDC redirects and magic-link sends require an
-explicit sign-in surface. Full side-by-side OIDC isolation waits for EXT-23
-server validation.
+explicit sign-in surface. Server-side OIDC validation landed (EXT-23); full
+side-by-side OIDC isolation still lacks a web end-to-end proof.

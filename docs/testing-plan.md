@@ -15,7 +15,7 @@ deployment.
 | Layering and imports | `npm run lint` | Yes | ADR-0009 boundary rules, restricted backend/provider imports, general lint. |
 | Testing-plan integrity | `npm run check:testing-plan` | Yes | Ensures this plan stays wired to package scripts, CI workflow steps, public package exports, manual release gates, and referenced test/script/doc paths. |
 | MVP audit integrity | `npm run check:mvp-audit` | Yes | Ensures the M0-M8 audit matrix remains wired to implemented scripts/docs/tests and keeps manual/server blockers explicit. |
-| Upstream blocker integrity | `npm run check:upstream-blockers` | Local stack | Checks the sibling `formspec-server` source still matches the documented EXT-23, EXT-26, and EXT-27 blocker claims. |
+| Upstream blocker integrity | `npm run check:upstream-blockers` | Local stack | Checks the sibling `formspec-server` source still matches the documented EXT-26 and EXT-27 blocker claims. |
 | Release docs | `npm run check:release-docs` | Yes | Ensures M5 quickstart proof, M8 hosted-demo deferral, static-export recipes, Docker reverse-proxy recipe, README release state, and server-stack blockers stay documented. |
 | Conformance coverage | `npm run check:conformance-coverage` | Yes | Ensures every first-party adapter stays registered in its port conformance suite and that local suites re-export the public harness surface. |
 | Port conformance | `npm run test:conformance` | Yes | First-party adapters for active ports, including `DefinitionSource`, `DraftStore`, `SubmitTransport`, `IdentityProvider`, `NotificationDelivery`, `RespondentPlaceSource`, and `StatusReader`. |
@@ -98,7 +98,7 @@ These checks are not automated yet and block release sign-off:
 | NVDA sweep | `docs/ux/accessibility.md` | Pending manual run. |
 | Lighthouse mobile >= 90 and FCP < 1.5 s | `docs/ux/responsive.md` | Passes on local Docker/nginx evidence; refresh before release tag. |
 | Production Locale Documents from server | `docs/ux/i18n.md` | Web adapter-proven; refresh live server payload before release tag. |
-| Full OIDC server validation | `docs/identity/integration.md` | Blocked by EXT-23. |
+| Full OIDC server validation | `docs/identity/integration.md` | Server landed (EXT-23); web end-to-end proof pending. |
 | Cross-reload or cross-device draft resume | `docs/adapters/draft-store.md` | Blocked by EXT-26. |
 | Session-bound anonymous draft update | `docs/adapters/draft-store.md` | Blocked by EXT-27. |
 

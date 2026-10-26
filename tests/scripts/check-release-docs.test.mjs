@@ -86,12 +86,12 @@ describe('check-release-docs', () => {
     );
   });
 
-  it('rejects EXT-23 if it stops naming the M7 gate', () => {
+  it('rejects EXT-23 if it stops recording where it landed', () => {
     const result = runCheck(createFixture({ ext23Status: 'filed' }));
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      'thoughts/specs/2026-05-22-upstream-extension-queue.md EXT-23 Status is "filed", expected prefix "filed; gates M7"',
+      'thoughts/specs/2026-05-22-upstream-extension-queue.md EXT-23 Status is "filed", expected prefix "landed in formspec-server"',
     );
   });
 
@@ -180,7 +180,7 @@ function deploymentDoc(options) {
     '',
     '## Deferred Server Stack',
     '',
-    'EXT-23 and EXT-25 block the full server stack.',
+    'EXT-23 landed; EXT-25 blocks the full server stack.',
   ].join('\n');
 }
 
@@ -204,7 +204,7 @@ function gettingStartedDoc(options) {
           '```',
           '',
         ]),
-    'Full server-backed OIDC validation waits for EXT-23.',
+    'Server-backed OIDC validation landed in EXT-23.',
   ].join('\n');
 }
 
@@ -215,10 +215,10 @@ function operationsDoc(options) {
     '## Current Operational Gaps',
     '',
     ...(options.omitHostedDemoGap
-      ? ['- Full server-backed OIDC operations wait for EXT-23 server validation.']
+      ? ['- Server-side OIDC validation landed (EXT-23).']
       : [
           '- No hosted demo URL is selected. Local Docker compose is the release proof for now.',
-          '- Full server-backed OIDC operations wait for EXT-23 server validation.',
+          '- Server-side OIDC validation landed (EXT-23).',
         ]),
   ].join('\n');
 }
@@ -264,7 +264,7 @@ function extensionQueueDoc(options) {
       ['EXT-20', 'formspec-server', 'not yet filed'],
       ['EXT-21', 'formspec-server', 'not yet filed'],
       ['EXT-22', 'formspec', 'not yet filed'],
-      ['EXT-23', 'formspec-server', options.ext23Status ?? 'filed; gates M7'],
+      ['EXT-23', 'formspec-server', options.ext23Status ?? 'landed in formspec-server 1bac5ee'],
       ['EXT-24', 'formspec-server', 'not yet filed'],
       ['EXT-25', 'formspec-server', 'not yet filed'],
       ['EXT-26', 'formspec-server', 'not yet filed'],

@@ -65,8 +65,8 @@ Both services leave `FORMSPEC_WEB_SERVER_URL` empty in M7a/M8 local compose, so
 they prove static deployment, profile selection, and brand isolation and the configuration refusal without
 claiming server-backed OIDC. When the URL and scope key are provided, compose forwards them
 to both services: `publicPortal` uses the reference anonymous-session draft and
-submit path, while `departmentApp` renders explicit sign-in and remains blocked
-from full server-backed OIDC proof until EXT-23 server validation lands. Compose
+submit path, while `departmentApp` renders explicit sign-in and still lacks a
+web end-to-end proof against a server with an OIDC trust file (EXT-23 landed). Compose
 also forwards `FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL` when set; use
 the reference `/runtime/response-actions/ledger/capability` route when compose is
 backed by `formspec-server`. That only wires the browser-to-BFF capability seam
@@ -118,7 +118,7 @@ before build, or replace `dist/formspec-runtime-config.js` in the deployment
 pipeline with a generated `window.__FORMSPEC_RUNTIME_CONFIG__` assignment.
 
 When `departmentApp` uses OIDC, the configured redirect URI must match the
-final HTTPS Vercel URL. Full server-validated OIDC remains blocked by EXT-23.
+final HTTPS Vercel URL. Server-side OIDC validation (EXT-23) has landed; the web end-to-end proof is pending.
 
 ## Cloudflare Pages Static Export
 
@@ -173,9 +173,9 @@ startup rather than baking production values into the JS bundle.
 ## Deferred Server Stack
 
 The M8 plan originally calls for one `formspec-server` instance plus its
-dependencies in this compose file. That full stack remains deferred because
-[EXT-23](../thoughts/specs/2026-05-22-upstream-extension-queue.md#ext-23-per-tenant-oidc-trusted-issuer-and-jwks-validation)
-blocks server-side OpenID Connect (OIDC) validation, and
+dependencies in this compose file. Server-side OpenID Connect (OIDC) validation has landed
+([EXT-23](../thoughts/specs/2026-05-22-upstream-extension-queue.md#ext-23-per-tenant-oidc-trusted-issuer-and-jwks-validation)),
+but that full stack remains deferred because
 [EXT-25](../thoughts/specs/2026-05-22-upstream-extension-queue.md#ext-25-production-formspec-server-image)
 tracks a production server image. The current compose file is the shippable
 local web host.

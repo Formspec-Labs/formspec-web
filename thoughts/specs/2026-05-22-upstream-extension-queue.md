@@ -517,9 +517,9 @@ Single filer per submission for slice 1. Multi-party composition extends additiv
 **Owning repo:** formspec-server
 **Closes:** direct token trust decision for the formspec-stack OIDC reference composition.
 **FW rows blocked:** FW-0063 (full M7/M7b production identity close)
-**Shape:** per-tenant trusted issuer config, JWKS client, RS256 verifier, and middleware path that accepts `Authorization: Bearer ...` from formspec-web. The web-side access-token bridge has landed; server validation remains the gating work.
-**Fixture status:** none.
-**Status:** filed; gates M7. Re-verified absent 2026-05-23: `formspec-server-auth-jwt` still constructs HS256 issuers/verifiers, `composition.rs` still passes `jwks_url: None`, and no JWKS/RS256 trusted-issuer path exists.
+**Shape:** trusted issuer config, JWKS client, RS256 verifier, and middleware path that accepts `Authorization: Bearer ...` from formspec-web. The web-side access-token bridge has landed.
+**Fixture status:** `formspec-server` `crates/formspec-server/tests/configured_oidc_http.rs` (fake issuer with discovery, `jwks_uri`, and RS256 key: no token 401, Bearer token 200, discovery and keys cached).
+**Status:** landed in formspec-server `1bac5ee`; gates M7 web proof only. `PreparedAuthentication::load` reads an OIDC trust file naming issuer, clients, and audiences and verifies through `stack-common-auth`'s `oidc` feature. Issuer trust is per deployment (one trust file per server process), which meets this entry under the stack's per-deployment scope model.
 
 ### EXT-24: Per-form tenant resolution for public portal forms
 
