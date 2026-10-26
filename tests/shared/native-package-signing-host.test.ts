@@ -42,7 +42,9 @@ beforeAll(() => initFormspecEngine());
 const hashResponse = async (response: FormResponse) => createHash('sha256').update(canonicalResponseHandoffBytes(response)).digest('hex');
 function fixture(attachment = false, signingScope?: NativePackageSigningHostPolicy['signingScope'], configure?: (policy: NativePackageSigningHostPolicy) => void, subjectRef?: string, engineOptions?: Parameters<typeof createFormEngine>[1]) {
   const definition = { ...sampleFormDefinition, items: attachment ? [{ key: 'fullName', type: 'field' as const, dataType: 'attachment' as const, label: 'Photo' }] : sampleFormDefinition.items, instances: { readiness: { readonly: false, data: { owned: false, ready: false } } } };
-  const response: FormResponse & { id: string } = { ...sampleFormResponse, id: 'stable-id', data: attachment ? { fullName: { kind: 'attachment-ref', uri: 'attachment:owned', mimeType: 'image/png', contentType: 'image/png', filename: 'photo.png', size: 1, hash: `sha256:${'a'.repeat(64)}` } } : sampleFormResponse.data };
+  const locale: LocaleDocument = { $formspecLocale: '2.0', url: 'urn:test:locale:en', version: '1', locale: 'en',
+    target: { kind: 'definition', url: definition.url }, strings: {} };
+  const response: FormResponse & { id: string } = { ...sampleFormResponse, id: 'stable-id', displayedLocale: { url: locale.url, version: locale.version, locale: locale.locale }, data: attachment ? { fullName: { kind: 'attachment-ref', uri: 'attachment:owned', mimeType: 'image/png', contentType: 'image/png', filename: 'photo.png', size: 1, hash: `sha256:${'a'.repeat(64)}` } } : sampleFormResponse.data };
   const source = { ref: `${definition.url}#/extensions/x-formspec-signing-content/entries/en`, version: '1' };
   const content = { source, locale: 'en', documentId: 'doc', signingIntent: 'urn:test:sign', declaration: 'Declaration',
     affirmationText: 'Affirmation', delegatedSigningNotice: 'Notice', paperAlternative: 'Paper', electronicConsent: {
@@ -61,7 +63,7 @@ function fixture(attachment = false, signingScope?: NativePackageSigningHostPoli
       provenance: { kind: 'host-state', source: `${['definition', 'presentation'].includes(name) ? 'admitted-response-review' : 'admitted-signing-cohort'}:${name}` } },
     schema: { type: 'object' } })) as unknown as DataSourcesDocument['sources'] };
   const bundle: BundleExport = { manifest: { modules: [{ id: 'test', version: '0.1.0' }], definitions: [{ url: definition.url }], responseActions: { url: 'urn:test:actions' }, dataSources: [{ url: catalog.id }] },
-    documents: { [definition.url]: definition, 'urn:test:actions': document, [catalog.id]: catalog } };
+    documents: { [definition.url]: definition, 'urn:test:actions': document, [catalog.id]: catalog, [locale.url!]: locale } };
   let version = 0;
   async function saved(value: FormResponse): Promise<SavedResponseDraft> {
     const draft = { id: 'owned-id', version: ++version, responseHash: await hashResponse(value) };
@@ -73,7 +75,7 @@ function fixture(attachment = false, signingScope?: NativePackageSigningHostPoli
   const sign = vi.fn(async (input: Parameters<NativePackageSigningHostPolicy['controller']['signing']['sign']>[0]) => ({ ...input.preparation, ...await saved({ ...input.preparation.response, authoredSignatures: [{}] as unknown as FormResponse['authoredSignatures'] }), verification: { mode: 'delegated-service-key' as const, provider: 'urn:test:delegated', keyId: 'key' } }));
   const read = vi.fn(async () => new Blob(['actual bytes']));
   const invalidateAuthority = vi.fn(); const assertOwner = vi.fn();
-  const policy: NativePackageSigningHostPolicy = { signingScope, bundle, moduleId: 'test', definition, registryEntries: [], locales: [], publication: { formId: 'form', formVersionId: 'publication' },
+  const policy: NativePackageSigningHostPolicy = { signingScope, bundle, moduleId: 'test', definition, registryEntries: [], locales: [locale], publication: { formId: 'form', formVersionId: 'publication' },
     responseId: response.id, initialLocale: 'en', clearDraftAccess: vi.fn(async () => {}), readiness: { instance: 'readiness', readyPath: 'ready', ownedPath: 'owned' },
     controller: { roles: Object.fromEntries([['saveInitial', 'save'], ['prepare', 'prepare'], ['sign', 'sign']].map(([role, actionRef]) => [role,
       { document, actionRef, requestRef: actionRef, artifactRef: 'urn:test:actions', artifactDigest: `sha256:${'b'.repeat(64)}`, ...(role === 'sign' ? { widgetSource: { moduleId: 'test', widgetName: 'SigningCeremony', slotId: 'review', outputName: 'sign', route: { surfaceId: 'surface', routeId: 'review', routeClass: 'ceremony', params: {} } }, responseSource: { inputName: 'response', catalogRef: catalog.id, sourceRef: 'host:response' } } : {}) }])),
@@ -86,7 +88,7 @@ function fixture(attachment = false, signingScope?: NativePackageSigningHostPoli
     reviewResponseDigest: hashResponse, canonicalResponseHandoffBytes };
   configure?.(policy);
   const host = createNativePackageSigningHost(policy);
-  const engine = createFormEngine(definition, engineOptions); engine.loadResponseData(response.data as Parameters<typeof engine.loadResponseData>[0]);
+  const engine = createFormEngine(definition, engineOptions); engine.loadLocale(locale); engine.setLocale(locale.locale); engine.loadResponseData(response.data as Parameters<typeof engine.loadResponseData>[0]);
   const replacements: ReturnType<typeof createFormEngine>[] = [];
   async function attach() { return host.configureRuntime({ engine, definition,
     ...(configure ? { exchangeEngine: async (request: RespondentEngineExchange) => {
@@ -419,7 +421,6 @@ describe('generic native package signing session', () => {
 
   it('registers only explicit matching modules and keeps sibling review on maintained defaults', async () => {
     const test = fixture(); const lease = await test.prepared(); const loaded = await test.reviewData();
-    // Review admits only a Response that names its displayed locale; the fixture's sample omits it.
     const data = { ...loaded, response: { ...loaded.response, displayedLocale: { locale: loaded.presentation.locale } } };
     // Spy on the signing review options' one policy-supplied member: a sibling review that reaches it leaked them.
     const producer = vi.fn(canonicalResponseHandoffBytes);
@@ -821,6 +822,32 @@ describe('generic native package signing session', () => {
     lease.dispose(); engine.dispose(); host.dispose();
   });
 
+  it('refuses late saved-handle adoption after the Prepare-only language lease retires', async () => {
+    const test = fixture(); const first = await test.attach(); await test.invoke(first, 'save');
+    const saved = structuredClone(test.host.getSnapshot().controller!.saved!);
+    first.dispose(); test.host.dispose(); test.engine.dispose();
+    const spanish: LocaleDocument = { ...test.policy.locales[0], url: 'urn:test:locale:es', locale: 'es' };
+    const locales = [...test.policy.locales, spanish]; const roles = { ...test.policy.controller.roles };
+    delete roles.saveInitial; delete roles.saveOwned;
+    let hold: Promise<void> | undefined; let release!: () => void;
+    const digest = vi.fn(async (response: FormResponse) => { await hold; return hashResponse(response); });
+    const host = createNativePackageSigningHost({ ...test.policy, locales,
+      bundle: { ...test.policy.bundle, documents: { ...test.policy.bundle.documents, [spanish.url!]: spanish } },
+      controller: { ...test.policy.controller, roles, hashResponse: digest } });
+    const engine = createFormEngine(test.policy.definition); locales.forEach(document => engine.loadLocale(document)); engine.setLocale('en');
+    engine.loadResponseData(saved.response.data as Parameters<typeof engine.loadResponseData>[0]);
+    try {
+      const lease = await host.configureRuntime({ engine, definition: test.policy.definition, draftKey: saved.draftKey,
+        claim: null, activeLocale: 'en', restoredResponse: saved.response, restoredSavedDraft: saved });
+      hold = new Promise<void>(resolve => { release = resolve; });
+      const changing = host.selectLocale('es');
+      await vi.waitFor(() => expect(digest).toHaveBeenCalledTimes(2));
+      lease.dispose(); release();
+      await expect(changing).rejects.toThrow('native-locale-retired');
+      expect(host.getSnapshot().controller?.saved).toBeUndefined();
+      expect(test.saveDraft).toHaveBeenCalledOnce(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+    } finally { release?.(); host.dispose(); engine.dispose(); }
+  });
   it('rejects saved and signed restoration ambiguity before adopting a saved handle', async () => {
     const test = fixture(); const first = await test.attach();
     await test.invoke(first, 'save');
@@ -1213,6 +1240,47 @@ describe('explicit reviewed-candidate facts renewal', () => {
       host.dispose(); engine.dispose(); replacements.forEach(replacement => replacement.dispose()); test.cleanup();
     } };
   }
+  it('rechecks current unsigned language after pending recovery, explicit selection and an ordinary Save', async () => {
+    const test = nativeFixture();
+    const first = await test.prepared();
+    const preparation = structuredClone(test.host.getSnapshot().controller!.prepared!);
+    first.dispose(); test.host.dispose(); test.engine.dispose();
+    const spanish: LocaleDocument = { ...test.policy.locales[0], url: 'urn:test:locale:es', locale: 'es' };
+    const locales = [...test.policy.locales, spanish];
+    const operationId = '019c7714-3b77-74d1-9866-e1f484aae2ab';
+    const pending = { ...preparation, operationId };
+    const restorePending = vi.fn(async () => ({ kind: 'prepared' as const, preparation, operationId }));
+    const host = createNativePackageSigningHost({ ...test.policy, locales,
+      bundle: { ...test.policy.bundle, documents: { ...test.policy.bundle.documents, [spanish.url!]: spanish } },
+      controller: { ...test.policy.controller, signing: { ...test.policy.controller.signing, restorePending } } });
+    const engine = createFormEngine(test.policy.definition); locales.forEach(document => engine.loadLocale(document));
+    engine.setLocale('en'); engine.loadResponseData(preparation.response.data as Parameters<typeof engine.loadResponseData>[0]);
+    const replacements: ReturnType<typeof createFormEngine>[] = []; let currentEngine: typeof engine = engine;
+    try {
+      const lease = await host.configureRuntime({ engine, definition: test.policy.definition, draftKey: preparation.draftKey,
+        claim: null, activeLocale: 'en', restoredResponse: preparation.response, restoredPendingSign: pending,
+        exchangeEngine: async request => { request.assertCurrent(); request.adopt(); currentEngine = request.engine as typeof engine; replacements.push(currentEngine); } });
+      await lease.afterMount?.();
+      expect(restorePending).toHaveBeenCalledOnce();
+      expect(host.getSnapshot().controller?.phase).toBe('prepared');
+      await host.selectLocale('es');
+      expect(host.getSnapshot().signingLanguageRequired).toBe('save');
+      await expect(test.invoke(lease, 'prepare', 'pending-language')).rejects.toThrow('native-signing-language-save-required');
+      const admission = test.policy.controller.roles.saveOwned!;
+      const result = await lease.responseActionInvoker({ document: admission.document, actionRef: admission.actionRef,
+        invocationContext: { invocationId: 'save-recovered-language' }, ports: { dispatchHostEvent: vi.fn(), submit: () => ({
+          response: currentEngine.getResponse({ profile: 'on-submit', id: preparation.response.id }), validationReport: currentEngine.getValidationReport({ profile: 'on-submit' }) }) } });
+      expect(('invocation' in result ? result.invocation : result).status, JSON.stringify({ result, state: host.getSnapshot().controller })).toBe('completed');
+      expect(host.getSnapshot().controller?.saved?.response.displayedLocale?.locale).toBe('es');
+      expect(host.getSnapshot().signingLanguageRequired).toBeUndefined();
+      await host.selectLocale('en');
+      const calls = [test.qualify.mock.calls.length, test.saveDraft.mock.calls.length, test.prepare.mock.calls.length];
+      await expect(test.invoke(lease, 'prepare', 'new-unsaved-language')).rejects.toThrow('native-signing-language-save-required');
+      expect(host.getSnapshot().signingLanguageRequired).toBe('save');
+      expect([test.qualify.mock.calls.length, test.saveDraft.mock.calls.length, test.prepare.mock.calls.length]).toEqual(calls);
+      lease.dispose();
+    } finally { host.dispose(); engine.dispose(); replacements.forEach(value => value.dispose()); test.cleanup(); }
+  });
   it('qualifies restored native facts and explicitly checks and prepares without another Save', async () => {
     const test = nativeFixture(); const restored = await restoreNative(test);
     const lease = await restored.configure(); await lease.afterMount!();
@@ -1671,7 +1739,7 @@ describe('restored unsigned Screener checkpoints', () => {
     first.dispose(); test.host.dispose(); test.engine.dispose();
     currentRun = { ...currentRun, run: { ...currentRun.run, runId: 'fresh-run', evidenceRef: 'urn:test:fresh-evidence', evidenceHash: 'sha256:' + 'f'.repeat(64) } };
     const host = createNativePackageSigningHost(test.policy);
-    const engine = createFormEngine(test.policy.definition); engine.loadResponseData(saved.response.data as Parameters<typeof engine.loadResponseData>[0]);
+    const engine = createFormEngine(test.policy.definition); test.policy.locales.forEach(document => engine.loadLocale(document)); engine.setLocale('en'); engine.loadResponseData(saved.response.data as Parameters<typeof engine.loadResponseData>[0]);
     const replacements: ReturnType<typeof createFormEngine>[] = [];
     const application = { caseLedgerId: 'urn:test:case', caseReference: 'case-reference', draftRef: `urn:formspec:draft:${saved.draft.id}`, status: 'in-progress' as const };
     if (!renew) await complete(host); associate.mockClear(); hydrate.mockClear();
@@ -1703,6 +1771,29 @@ describe('restored unsigned Screener checkpoints', () => {
       current = false;
       await expect(pending).rejects.toThrow('retired');
       expect(test.host.getSnapshot().controller).toBeUndefined();
+    } finally { test.cleanup(); }
+  });
+  it('refuses an inline saved language before screening renewal or successor Save, including an unsaved explicit choice', async () => {
+    const test = await restoredFixture(true);
+    try {
+      const response = structuredClone(test.saved.response); delete response.displayedLocale;
+      const saved: SavedResponseDraft = { ...test.saved, response, draft: { ...test.saved.draft, responseHash: await hashResponse(response) },
+        evidence: { ...test.saved.evidence, canonical_response: response } };
+      test.engine.setLocale('');
+      const lease = await test.host.configureRuntime({ engine: test.engine, definition: test.policy.definition,
+        draftKey: saved.draftKey, claim: null, activeLocale: '', restoredResponse: saved.response,
+        restoredSavedDraft: saved, restoredApplication: test.application });
+      test.advance(301_000);
+      const calls = () => [test.recover.mock.calls.length, test.renewRun.mock.calls.length, test.hydrate.mock.calls.length, test.saveDraft.mock.calls.length];
+      const before = calls();
+      await expect(test.invoke(lease, 'prepare')).rejects.toThrow('native-signing-language-save-required');
+      expect(calls()).toEqual(before);
+      await test.host.selectLocale('en');
+      await expect(test.invoke(lease, 'prepare', 'unsaved-language')).rejects.toThrow('native-signing-language-save-required');
+      expect(calls()).toEqual(before);
+      expect(test.host.getSnapshot().application).toEqual(test.application);
+      expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+      lease.dispose();
     } finally { test.cleanup(); }
   });
   it('refreshes a saved photo after the 300-second evidence limit and prepares the exact successor', async () => {

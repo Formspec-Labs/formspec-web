@@ -318,6 +318,8 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
       ? <button type="button" className="locale-button" disabled={['locale', 'clearing', 'refreshing', 'renewing-checks'].includes(operation)} onClick={() => void renewSignedChecks()}>
         {operation === 'renewing-checks' ? 'Renewing checks' : 'Renew checks for signed response'}
       </button> : null}
+    {state.signingLanguageRequired && !startupBlocked ? <SessionStatus><p role="status">{state.signingLanguageRequired === 'choose'
+      ? 'Choose a language before preparing to sign.' : 'Choose a language and save before preparing to sign.'}</p></SessionStatus> : null}
     {operation === 'renew-checks-error' ? <SessionStatus><p role="alert">Checks could not be renewed. Your signed response is saved. Try again.</p></SessionStatus> : null}
     {!confirmation && !state.cleared && operation === 'idle' && state.runtime && (state.controller?.signed || state.controller?.pendingSign)
       && ['prepared', 'signed', 'refused', 'failed', 'outcome-unknown'].includes(state.controller.phase)
