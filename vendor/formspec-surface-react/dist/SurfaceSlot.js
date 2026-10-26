@@ -31,6 +31,7 @@ import { FormspecForm } from '@formspec-org/react';
 import { resolveFieldReferences, targetDefinitionMatches, } from '@formspec-org/types';
 import { loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
 import { Heading, nextLevel } from './heading.js';
+import { routeIdentity } from './widget-api.js';
 import { allocateWidgetActionInvocationId, admitSurfaceWidgetActionInput, createWidgetActionCoordinator, responseActionsDocumentForAction, snapshotWidgetResponseContext, normalizeWidgetActionResult, } from './widget-action-runtime.js';
 import { WidgetEmptyState } from './widgets/empty-state.js';
 import { ModuleWidgetStateView, widgetDataMatchesEmptyWhen, } from './widget-state.js';
@@ -741,13 +742,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
             moduleId: plan.key.moduleId,
             widgetName: plan.key.widgetName,
             slotId: plan.slotId,
-            route: {
-                surfaceId: route.surfaceId,
-                surfaceRef: route.surfaceRef,
-                routeId: route.routeId,
-                routeClass: route.routeClass,
-                params: route.params,
-            },
+            route: routeIdentity(route),
             outputName,
         };
         const emittedGeneration = runtimeGeneration;
