@@ -6,7 +6,7 @@ import { createSemanticControlRegistry, type ResponseActionInvoker, type Semanti
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
 import { RespondentDefinitionController, type RespondentOwnedRuntime, type RespondentOwnedRuntimeInput, type ResolvedRespondentFormInput } from '../../src/app/RespondentRuntime.tsx';
 import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
-import { DraftVersionConflictError, type DraftKey } from '../../src/ports/draft-store.ts';
+import { DraftVersionConflictError, type DraftKey, type DraftReadState } from '../../src/ports/draft-store.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
 
 // Same immutable-version recovery shape as the standalone recovery fixtures.
@@ -68,7 +68,7 @@ describe('draft recovery inside a definition-form Surface slot', () => {
       draft: { id: 'retained-owned-draft', version: 7, responseHash: 'qualified-by-reader' }, actor: { id: 'owner' },
       evidence: { draft_id: 'retained-owned-draft', draft_version: 7, form_version_id: 'publication',
         subject_ref: 'owner', status: 'in_progress' as const, draft_state: response.data, canonical_response: response } };
-    const readState = vi.fn<() => Promise<import('../../src/ports/draft-store.ts').DraftReadState | undefined>>(async () => ({ kind: 'active', response, savedDraft: saved }));
+    const readState = vi.fn<() => Promise<DraftReadState | undefined>>(async () => ({ kind: 'active', response, savedDraft: saved }));
     if (mode !== 'retained') readState.mockResolvedValueOnce(undefined);
     if (mode === 'qualification-failure') readState.mockRejectedValueOnce(new Error('Owned recovery qualification refused'));
     const initializeDraft = vi.fn(async () => ({ draftId: saved.draft.id, isInitializationOnly: false, response }));

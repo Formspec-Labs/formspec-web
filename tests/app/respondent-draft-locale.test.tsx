@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { createFormEngine } from '@formspec-org/engine';
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import type { FormDefinition, FormResponse, LocaleDocument } from '@formspec-org/types';
-import { RespondentDefinitionController, RespondentRuntime } from '../../src/app/RespondentRuntime.tsx';
+import { RespondentDefinitionController, RespondentRuntime, type ResolvedRespondentFormInput } from '../../src/app/RespondentRuntime.tsx';
 import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import type { DraftKey, DraftStore } from '../../src/ports/draft-store.ts';
 import type { SubmitTransport } from '../../src/ports/submit-transport.ts';
@@ -185,7 +185,7 @@ describe('durable identity before respondent setup', () => {
     let finish!: (value: { draftId: string; isInitializationOnly: boolean }) => void;
     let initialized = false;
     const initializeDraft = vi.fn(() => new Promise<{ draftId: string; isInitializationOnly: boolean }>(resolve => { finish = value => { initialized = true; resolve(value); }; }));
-    const configureRuntime = vi.fn(async (input: Parameters<NonNullable<import('../../src/app/RespondentRuntime.tsx').ResolvedRespondentFormInput['configureRuntime']>>[0]) => {
+    const configureRuntime = vi.fn(async (input: Parameters<NonNullable<ResolvedRespondentFormInput['configureRuntime']>>[0]) => {
       expect(initialized).toBe(true); expect(input.restoredResponse).toBeUndefined();
       expect(input.engine.getResponse({ profile: 'off' }).data).toMatchObject({ name: 'Prefilled name', defaulted: 'Authored default' });
       expect(input.activeLocale).toBe('es-us');
