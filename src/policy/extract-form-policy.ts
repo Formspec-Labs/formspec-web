@@ -280,18 +280,19 @@ function parseMultiPartyDeadlinePolicy(
 /**
  * FW-0060 safe-address form-policy walker. While EXT-31/EXT-32 are still
  * PROPOSAL-status this accepts the build-slice extension carrier and also
- * discovers items whose Formspec `accessControl.class` is `protected`
- * (Access-Class Registry), reading the optional `accessControl.subjectKind`.
+ * discovers fields whose effective Formspec access class is `protected`
+ * (Core §4.2.1: own class, else nearest ancestor group's). Audiences come only
+ * from the carrier's `fields[]`, merged by path, until a Privacy Profile exists.
  */
 export function extractSafeAddressPolicy(
   definition: FormDefinition,
 ): FormRuntimePolicy | undefined {
   const raw = definition.extensions?.['x-formspec-safe-address'];
   const block = parseSafeAddressBlock(raw);
-  const fields = [
-    ...safeAddressFieldsFromItems(definition.items),
-    ...(block.fields ?? []),
-  ];
+  const fields = mergeFieldPolicies(
+    safeAddressFieldsFromItems(definition.items),
+    block.fields ?? [],
+  );
   if (raw === false && fields.length === 0) {
     return { features: { safeAddress: 'forbidden' } };
   }
@@ -348,40 +349,53 @@ function parseSafeAddressBlock(value: unknown): {
   };
 }
 
+interface EffectiveAccessControl {
+  readonly class?: unknown;
+  readonly subjectKind?: unknown;
+}
+
+/** Fields whose effective class is `protected`; groups pass their class down. */
 function safeAddressFieldsFromItems(
   items: readonly FormItem[] | undefined,
   ancestors: readonly string[] = [],
+  inherited?: EffectiveAccessControl,
 ): readonly SafeAddressFieldPolicy[] {
   if (!items) return [];
   const fields: SafeAddressFieldPolicy[] = [];
   for (const item of items) {
-    const path = `/${[...ancestors, item.key].join('/')}`;
-    const accessControl = item.accessControl as
-      | { class?: unknown; subjectKind?: unknown }
-      | undefined;
-    if (accessControl?.class === 'protected') {
-      fields.push({
-        path,
-        label: item.label,
-        subjectKind: isSafeAddressSubjectKind(accessControl.subjectKind)
-          ? accessControl.subjectKind
-          : undefined,
-        visibleTo: stringArray((item as { visibleTo?: unknown }).visibleTo),
-        plaintextAudiences: stringArray(
-          (item.accessControl as { plaintextAudiences?: unknown } | undefined)
-            ?.plaintextAudiences,
-        ),
-        effectiveAudiences: stringArray(
-          (item.accessControl as { effectiveAudiences?: unknown } | undefined)
-            ?.effectiveAudiences,
-        ),
-      });
-    }
+    if (item.type === 'display') continue;
+    const own = item.accessControl as EffectiveAccessControl | undefined;
+    const effective = own?.class !== undefined ? own : inherited;
     if (item.type === 'group') {
-      fields.push(...safeAddressFieldsFromItems(item.children, [...ancestors, item.key]));
+      fields.push(...safeAddressFieldsFromItems(item.children, [...ancestors, item.key], effective));
+      continue;
+    }
+    if (effective?.class === 'protected') {
+      fields.push({
+        path: `/${[...ancestors, item.key].join('/')}`,
+        label: item.label,
+        subjectKind: isSafeAddressSubjectKind(effective.subjectKind)
+          ? effective.subjectKind
+          : undefined,
+      });
     }
   }
   return fields;
+}
+
+/** Declared carrier `fields[]` refine discovered fields with the same path. */
+function mergeFieldPolicies(
+  discovered: readonly SafeAddressFieldPolicy[],
+  declared: readonly SafeAddressFieldPolicy[],
+): readonly SafeAddressFieldPolicy[] {
+  const byPath = new Map(discovered.map((field) => [field.path, field]));
+  for (const field of declared) {
+    const defined = Object.fromEntries(
+      Object.entries(field).filter(([, value]) => value !== undefined),
+    ) as unknown as SafeAddressFieldPolicy;
+    byPath.set(field.path, { ...byPath.get(field.path), ...defined });
+  }
+  return [...byPath.values()];
 }
 
 function safeAddressFieldArray(value: unknown): readonly SafeAddressFieldPolicy[] | undefined {

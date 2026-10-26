@@ -472,16 +472,19 @@ describe('extractSafeAddressPolicy', () => {
           type: 'field',
           dataType: 'string',
           label: 'Protected home address',
-          accessControl: {
-            class: 'protected', subjectKind: 'address',
-            plaintextAudiences: ['issuer_verification'],
-          },
-          visibleTo: ['issuer_verification'],
+          accessControl: { class: 'protected', subjectKind: 'address' },
         },
       ],
       extensions: {
         'x-formspec-safe-address': {
           acpJurisdictionsAccepted: ['CA-ACP'],
+          fields: [
+            {
+              path: '/protectedHomeAddress',
+              visibleTo: ['issuer_verification'],
+              plaintextAudiences: ['issuer_verification'],
+            },
+          ],
         },
       },
     } as FormDefinition;
@@ -555,6 +558,59 @@ describe('extractSafeAddressPolicy', () => {
     expect(safeAddress.fields).toEqual([expect.objectContaining({ path: '/protectedPhone' })]);
     expect(safeAddress.fields[0]?.subjectKind).toBeUndefined();
     expect(safeAddress.enabledSubjectKinds).toEqual([]);
+  });
+
+  it('applies group class inheritance to child fields (Core §4.2.1 fixture shape)', () => {
+    const definition = {
+      ...baseDefinition,
+      items: [
+        { key: 'name', type: 'field', dataType: 'string', label: 'Name' },
+        {
+          key: 'home',
+          type: 'group',
+          label: 'Home',
+          accessControl: { class: 'protected', subjectKind: 'address' },
+          children: [
+            { key: 'street', type: 'field', dataType: 'string', label: 'Street' },
+            {
+              key: 'county',
+              type: 'field',
+              dataType: 'string',
+              label: 'County',
+              accessControl: { class: 'unclassified' },
+            },
+            {
+              key: 'unit',
+              type: 'group',
+              label: 'Unit',
+              children: [{ key: 'number', type: 'field', dataType: 'string', label: 'Number' }],
+            },
+            { key: 'note', type: 'display', label: 'Shown to you only.' },
+          ],
+        },
+        {
+          key: 'health',
+          type: 'group',
+          label: 'Health',
+          children: [
+            {
+              key: 'diagnosis',
+              type: 'field',
+              dataType: 'string',
+              label: 'Diagnosis',
+              accessControl: { class: 'hipaa.phi' },
+            },
+          ],
+        },
+      ],
+    } as FormDefinition;
+    const safeAddress = extractSafeAddressPolicy(definition)?.limits?.safeAddress as {
+      fields: readonly { path: string; subjectKind?: string }[];
+    };
+    expect(safeAddress.fields).toEqual([
+      expect.objectContaining({ path: '/home/street', subjectKind: 'address' }),
+      expect.objectContaining({ path: '/home/unit/number', subjectKind: 'address' }),
+    ]);
   });
 
   it('treats false as an explicit form-level forbid', () => {

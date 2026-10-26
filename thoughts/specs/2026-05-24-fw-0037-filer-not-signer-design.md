@@ -2,6 +2,7 @@
 
 **Date:** 2026-05-24
 **Status:** PROPOSAL (not ratified). Owner pushback expected during review; framing decisions Q1–Q4 are open until accepted.
+**Vocabulary (2026-10-26, fs-lb8y):** the `safe-address` / `safe-contact` / `safe-employer` classes this doc names were retired by ADR 0157. Read "safe-* class" as the Formspec class `protected` (effective class per Core §4.2.1, inherited from the nearest group), with the renderer-only `accessControl.subjectKind` (`address | contact | employer`) carrying the old suffix.
 **Row:** [FW-0037 in `PLANNING.md:505`](../../PLANNING.md) (design).
 **Journey:** [J-012 in `JOURNEYS.md:343`](../../JOURNEYS.md) — the **human-capacity slice** ("filer ≠ signer ≠ subject"; non-AI variants — paralegal-for-pro-se-client, clinic-staff-for-patient, family-helper-for-elder, tax-preparer-for-taxpayer). AI variant is [FW-0058](2026-05-24-fw-0058-ai-agent-filer-chain-design.md).
 **Anti-patterns:** [AP-014 (coercion) in `JOURNEYS.md:131`](../../JOURNEYS.md), [AP-023 (verified ≠ true) in `JOURNEYS.md:185`](../../JOURNEYS.md).
@@ -457,7 +458,7 @@ FW-0037 is the canonical AP-014 coercion vector in the corpus (a "helpful prepar
 
 Safe-* class fields default to respondent-only-fillable per §3.4 + §6.3 composition. The filer doesn't see the plaintext; the field renders masked in the filer-session and unmasks at signer-review.
 
-**Composition rule.** When `accessControl.class` starts with `safe-*` (per FW-0049 §3.1 taxonomy: `safe-address`, `safe-contact`, `safe-employer`), the field is treated as `respondentOnly: true` AUTOMATICALLY, regardless of form-policy `respondentOnlyFieldPointers[]`. The two mechanisms compose:
+**Composition rule.** When the field's effective `accessControl.class` is `protected` (Formspec Core §4.2.1; replaces the retired FW-0049 §3.1 `safe-address` / `safe-contact` / `safe-employer` taxonomy), the field is treated as `respondentOnly: true` AUTOMATICALLY, regardless of form-policy `respondentOnlyFieldPointers[]`. The two mechanisms compose:
 
 - `respondentOnlyFieldPointers[]` is form-policy-declared per-field.
 - Safe-* class auto-marking is class-derived per FW-0049 mask discipline.

@@ -3,14 +3,15 @@ import type { SafeAddressDirectory } from '../ports/safe-address-directory.ts';
 import type { SafeAddressFieldPolicy, SafeAddressRuntimeConfig } from '../policy/index.ts';
 
 /**
- * A public surface lacks authority for every class but `unclassified`, so it
- * masks them all (Respondent Ledger §7.8; Formspec Access-Class Registry).
+ * Without an audience policy, a public audience (receipt, status, public
+ * verification, third-party export) sees no value whose class is not
+ * `unclassified` (Formspec Core §4.2.1; Respondent Ledger §7.8).
  */
 export function isRestrictedAccessClass(value: string | undefined): boolean {
   return value !== undefined && value !== 'unclassified';
 }
 
-export function renderSafeAddressProtectedText(
+export function renderTextForPublicAudience(
   value: LifecycleProtectedText,
   withheldCopy: string,
 ): string {

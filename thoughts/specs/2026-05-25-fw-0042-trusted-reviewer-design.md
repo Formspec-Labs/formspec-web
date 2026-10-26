@@ -2,6 +2,7 @@
 
 **Date:** 2026-05-25
 **Status:** PROPOSAL (not ratified). Owner pushback expected during review; framing decisions Q1–Q4 are open until accepted.
+**Vocabulary (2026-10-26, fs-lb8y):** the `safe-address` / `safe-contact` / `safe-employer` classes this doc names were retired by ADR 0157. Read "safe-* class" as the Formspec class `protected` (effective class per Core §4.2.1, inherited from the nearest group), with the renderer-only `accessControl.subjectKind` (`address | contact | employer`) carrying the old suffix.
 **Row:** [FW-0042 in `PLANNING.md:545`](../../PLANNING.md) (design).
 **Journey:** [J-014 in `JOURNEYS.md:368`](../../JOURNEYS.md) — "Let me share this draft with my lawyer mid-flight" (lawyer / accountant / advocate / family member sees live draft, leaves field-anchored comments, suggests edits, never signs on the user's behalf, never makes an account).
 **Anti-patterns:** [AP-014 (coercion) in `JOURNEYS.md:131`](../../JOURNEYS.md), [AP-023 (verified ≠ true) in `JOURNEYS.md:185`](../../JOURNEYS.md), [AP-024 (training/aggregation consent) in `JOURNEYS.md:191`](../../JOURNEYS.md).
@@ -455,7 +456,7 @@ FW-0042 carries a real AP-014 vector: the "trusted reviewer" who is also the coe
 
 Mirrors FW-0037 §6.3 verbatim with reviewer-substituted-for-filer. Safe-* class fields default to `respondentOnly: true` for reviewers per §3.4 + §6.3 composition. The reviewer does NOT see the plaintext; the field renders masked in the reviewer session.
 
-**Composition rule.** When `accessControl.class` starts with `safe-*` (per FW-0049 §3.1 taxonomy: `safe-address`, `safe-contact`, `safe-employer`), the field is treated as `respondentOnly: true` for reviewers AUTOMATICALLY, regardless of form-policy `respondentOnlyFieldPointers[]`. The union of form-policy declared pointers + class-derived safe-* auto-marking is the reviewer-non-visible set.
+**Composition rule.** When the field's effective `accessControl.class` is `protected` (Formspec Core §4.2.1; replaces the retired FW-0049 §3.1 `safe-address` / `safe-contact` / `safe-employer` taxonomy), the field is treated as `respondentOnly: true` for reviewers AUTOMATICALLY, regardless of form-policy `respondentOnlyFieldPointers[]`. The union of form-policy declared pointers + class-derived safe-* auto-marking is the reviewer-non-visible set.
 
 **Comment is allowed; suggest is forbidden.** The reviewer can leave a comment on a masked safe-* field ("Mom, double-check the address looks right"); the reviewer CANNOT suggest a value for a field they cannot see.
 

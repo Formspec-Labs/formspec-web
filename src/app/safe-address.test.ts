@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  renderSafeAddressProtectedText,
+  renderTextForPublicAudience,
   safeAddressVerifierLine,
   validateSafeAddressResponseData,
 } from './safe-address.ts';
@@ -9,22 +9,22 @@ import type { SafeAddressRuntimeConfig } from '../policy/index.ts';
 
 describe('safe-address render helpers', () => {
   it('masks safe-* lifecycle text while leaving unclassified text visible', () => {
-    expect(renderSafeAddressProtectedText(
+    expect(renderTextForPublicAudience(
       { text: '123 Private St', accessClass: 'protected' },
       'value withheld',
     )).toBe('value withheld');
-    expect(renderSafeAddressProtectedText(
+    expect(renderTextForPublicAudience(
       { text: 'ordinary note' },
       'value withheld',
     )).toBe('ordinary note');
   });
 
   it('masks every class but unclassified (Respondent Ledger §7.8)', () => {
-    expect(renderSafeAddressProtectedText(
+    expect(renderTextForPublicAudience(
       { text: 'note', accessClass: 'unclassified' },
       'value withheld',
     )).toBe('note');
-    expect(renderSafeAddressProtectedText(
+    expect(renderTextForPublicAudience(
       { text: 'income', accessClass: 'cui.privacy' },
       'value withheld',
     )).toBe('value withheld');
