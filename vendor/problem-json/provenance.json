@@ -1,0 +1,22 @@
+{
+  "sourceRevisions": {
+    "stack-common": "128601cc4fb7d9ff61292fbba6013c8b0afcd850",
+    "formspec-server": "3b0de63ce69611cbbbc72af1307ff5f0d0929900",
+    "workspec-server": "91aba7caf704fe88dd7703fde85a195c5d3d5284"
+  },
+  "scope": "Problem JSON bodies each provider's own serializer emits, captured by its tests (stack-common-error catalog::assert_golden); decoded by tests/shared/problem-json.",
+  "files": {
+    "stack-common.json": {
+      "source": "stack-common/tests/fixtures/problem-json/stack-common.json",
+      "sha256": "28c7543c5cae509dd57beb3f2fec7dad9aa8c45e7dd23522be9ed5e8a192b120"
+    },
+    "formspec-server.json": {
+      "source": "formspec-server/crates/formspec-server-ports/tests/fixtures/problem-json/formspec-server.json",
+      "sha256": "07183f90cab70a8e5ab1245354393afc52efd5f5837c02d77e1c4e62a8801e11"
+    },
+    "wos-server.json": {
+      "source": "workspec-server/crates/wos-server/tests/fixtures/problem-json/wos-server.json",
+      "sha256": "3c80df1b8f2a423157dc02647fd35d655240efae1f9859336f36414624968fb5"
+    }
+  }
+}

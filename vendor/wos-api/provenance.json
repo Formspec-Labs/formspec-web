@@ -1,5 +1,7 @@
 {
-  "sourceRevision": "6d780fe1a2e55da8db706932d507d8ba33ca0802",
+  "sourceRevisions": {
+    "work-spec": "973a73d23c3310970471ebf83342a801d54049e5"
+  },
   "scope": "Exact maintained applicant schema and complete declared API reference closure. Backend owner separately qualifies runtime authority and response behavior.",
   "files": {
     "_common.schema.json": {
@@ -12,7 +14,7 @@
     },
     "error.schema.json": {
       "source": "work-spec/schemas/api/error.schema.json",
-      "sha256": "758d974f3c42e191f17a7ac57f3343d06358ae6622b916dc0e7dc1eccf4b8315"
+      "sha256": "f09ffccb77c4bafdb9f3d41e1b16e9efd77e2e415fccf4bdaefde5f2fe09d3d8"
     },
     "governance.schema.json": {
       "source": "work-spec/schemas/api/governance.schema.json",

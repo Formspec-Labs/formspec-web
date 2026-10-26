@@ -1,31 +1,22 @@
-import { isRecord } from './is-record.ts';
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
+import errorSchema from '../../vendor/wos-api/error.schema.json';
+import type { components } from '../api/generated/wos-public.d.ts';
 
-export interface ProblemJson {
-  type: string;
-  title: string;
-  status: number;
-  error_code: string;
-  detail?: string;
-  instance?: string;
-  context?: Record<string, unknown>;
-}
+/**
+ * Stack Problem JSON (stack-common `schemas/error.schema.json`), as openapi-typescript generates
+ * it from the WOS public document that carries that schema verbatim (ADR 0165 §1.3).
+ */
+export type ProblemJson = components['schemas']['Problem'];
+
+// Admission compiles the same schema from its pinned copy (vendor/wos-api/provenance.json),
+// including its closed error-code prefixes (ADR 0092a).
+const ajv = new Ajv2020({ strict: false });
+addFormats(ajv);
+const validate = ajv.compile<ProblemJson>(errorSchema);
 
 export function isProblemJson(value: unknown): value is ProblemJson {
-  if (!isRecord(value)) {
-    return false;
-  }
-  const status = value.status;
-  return (
-    typeof value.type === 'string' &&
-    typeof value.title === 'string' &&
-    typeof status === 'number' &&
-    Number.isInteger(status) &&
-    status >= 400 &&
-    status <= 599 &&
-    typeof value.error_code === 'string' &&
-    /^[A-Z]+-\d{4}$/.test(value.error_code) &&
-    !('code' in value)
-  );
+  return validate(value);
 }
 
 export function assertProblemJson(value: unknown): asserts value is ProblemJson {
@@ -33,4 +24,3 @@ export function assertProblemJson(value: unknown): asserts value is ProblemJson 
     throw new Error('Expected stack-common Problem JSON with required error_code');
   }
 }
-

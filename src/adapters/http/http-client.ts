@@ -1,6 +1,6 @@
 import { IDEMPOTENCY_KEY_HEADER } from '../../shared/idempotency-key.ts';
 import { parseScopeKey, scopeKeyHeaders, type ScopeKey } from '../../shared/scope-key.ts';
-import { isProblemJson, type ProblemJson } from '../../shared/problem-json.ts';
+import type { ProblemJson } from '../../shared/problem-json.ts';
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export type AccessTokenProvider = () => Promise<string | undefined> | string | undefined;
@@ -165,6 +165,9 @@ export class HttpClient {
       const payload = result.value;
       check();
       if (!response.ok || (options.successStatuses !== undefined && !options.successStatuses.includes(response.status))) {
+        // Admission loads with the first refusal, keeping the schema out of the initial bundle.
+        const { isProblemJson } = await withAbort(import('../../shared/problem-json.ts'), signal);
+        check();
         const problem = isProblemJson(payload) ? payload : undefined;
         const title = response.ok
           ? 'HTTP response status does not match the admitted request'

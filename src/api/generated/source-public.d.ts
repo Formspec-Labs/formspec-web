@@ -1035,6 +1035,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/signature-envelopes/{envelope_id}/certificate-bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_certificate_bundle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/signature-envelopes/{envelope_id}/reminder-policy": {
         parameters: {
             query?: never;
@@ -1061,6 +1077,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["queue_signature_reminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/signature-envelopes/{envelope_id}/signers/{signer_id}/certificate-bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_signer_certificate_bundle"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1398,18 +1430,19 @@ export interface components {
             /** Format: int64 */
             draft_version: number;
             form_version_id: string;
+            is_initialization_only?: boolean | null;
             status: string;
             subject_ref: string;
             taskDraft?: components["schemas"]["TaskDraftView"] | null;
         };
         /**
-         * @description Stable machine-readable stack error code. Prefixes are governed by ADR 0092a.
+         * @description Stable machine-readable stack error code: a prefix from the closed set ADR 0092a governs, then four digits. Adding a prefix amends ADR 0092a and this pattern together.
          *
          *      <details><summary>JSON schema</summary>
          *
          *      ```json
          *     {
-         *       "description": "Stable machine-readable stack error code. Prefixes are governed by ADR 0092a.",
+         *       "description": "Stable machine-readable stack error code: a prefix from the closed set ADR 0092a governs, then four digits. Adding a prefix amends ADR 0092a and this pattern together.",
          *       "examples": [
          *         "WOS-1404",
          *         "FORMSPEC-4001",
@@ -1417,7 +1450,7 @@ export interface components {
          *         "INFRA-5000"
          *       ],
          *       "type": "string",
-         *       "pattern": "^[A-Z]+-\\d{4}$"
+         *       "pattern": "^(FORMSPEC|WOS|STUDIO|INFRA)-\\d{4}$"
          *     }
          *      ```
          *      </details>
@@ -1899,8 +1932,13 @@ export interface components {
             artifact_kind: string;
             disclosure_refs: string[];
             envelope_id: string;
+            /**
+             * @description The sealed bundle is retained, downloadable, and verifies against the deployment's own
+             *     seal pins and issuer; a relying party repeats that check offline.
+             */
             independently_verifiable: boolean;
             key_metadata: Record<string, never>;
+            /** @description How a relying party verifies the bundle offline, and what the seal covers. */
             offline_verification: Record<string, never>;
             proof_state: string;
             signature_metadata: Record<string, never>;
@@ -5518,6 +5556,50 @@ export interface operations {
             };
         };
     };
+    get_certificate_bundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Signature envelope identifier. */
+                envelope_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The retained formspec.signature.certificate.bundle.v2 bytes, exactly as sealed */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Envelope not found or bundle not sealed yet */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Storage unavailable */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_signature_reminder_policy: {
         parameters: {
             query?: never;
@@ -5604,6 +5686,62 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_signer_certificate_bundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Signature envelope identifier. */
+                envelope_id: string;
+                /** @description Signer identifier. */
+                signer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The retained formspec.signature.certificate.bundle.v2 bytes, exactly as sealed */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description The signer token is missing or does not bind this envelope and signer */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Bundle not sealed yet */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Storage unavailable */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {

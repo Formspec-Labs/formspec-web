@@ -12,7 +12,6 @@ import { ResponseSigningUnresolvedError, type AdmittedResponseAction, type SaveR
 import { assertUuidV7IdempotencyKey, isUuidV7IdempotencyKey, generateIdempotencyKey } from '../../shared/idempotency-key.ts';
 import type { DraftResumeMetadataStore } from '../browser/draft-resume-metadata.ts';
 import type { DraftBindingRegistry } from './draft-binding-registry.ts';
-import { isProblemJson } from '../../shared/problem-json.ts';
 import { HttpAdapterError, type HttpClient } from './http-client.ts';
 
 /** Root names and counts only; no applicant answer values enter diagnostics. */
@@ -145,8 +144,9 @@ export class HttpResponseSigning implements ResponseSigning {
         && error.status >= 100 && error.status <= 599 ? error.status : undefined;
       const reason = status !== undefined ? 'http-refused'
         : error instanceof DOMException && error.name === 'TimeoutError' && error.message === 'HTTP request timed out' ? 'http-timeout' : 'save-failed';
-      const problem = error instanceof HttpAdapterError && status !== undefined && isProblemJson(error.problem)
-        && error.problem.status === status ? error.problem : undefined;
+      // HttpClient sets `problem` only on a schema-admitted body.
+      const problem = error instanceof HttpAdapterError && status !== undefined
+        && error.problem?.status === status ? error.problem : undefined;
       console.warn('Native form Save diagnostic', JSON.stringify({ stage, reason, ...(status !== undefined ? { status } : {}),
         ...(problem ? { error_code: problem.error_code, ...(problem.error_code === 'FORMSPEC-4090' && typeof problem.detail === 'string' ? { detail: problem.detail.slice(0, 1024) } : {}) } : {}),
         ...(candidate ? { candidate } : {}) }));

@@ -155,14 +155,14 @@ AgentChainEntry {
 **Fixture status:** none. Conformance fixtures should mirror stack-common-typeid's Rust test corpus when one exists.
 **Status:** not yet filed.
 
-### EXT-12: TS mirror for `stack-common-error::StackError` / Problem JSON envelope
+### EXT-12: Schema-derived Problem JSON and server round trips
 
-**Owning repo:** formspec-web (consumer); upstream source is `stack-common/crates/stack-common-error/`
-**Closes:** typed-error envelope consumption in formspec-web's error chrome (FW-0013 plain-language errors + typed problem detail). Without a TS mirror, the error-rendering layer either hand-parses JSON or shapes its own envelope — both regress against the cross-stack contract.
-**FW rows blocked:** FW-0013
-**Shape:** TS type mirroring `StackError` field set (`code`, `status`, `title`, `detail?`, `type_url`, `instance?`, `context`). Two implementation options: (a) schema-derived codegen from `stack-common-error`'s utoipa OpenAPI output (preferred — stack-common-error already has `utoipa` + `schemars` deps; verify whether the projection is exposed); (b) hand-mirror with conformance fixtures pinning the field set against the Rust struct.
-**Fixture status:** none. Land alongside FW-0013 build; one round-trip fixture per `ErrorCode` variant is a reasonable minimum.
-**Status:** not yet filed.
+**Owning repo:** formspec-web (consumer); the authored schema is `work-spec/schemas/api/error.schema.json`, byte-identical in `stack-common/schemas/error.schema.json`
+**Closes:** typed problem details in formspec-web's error chrome (FW-0013).
+**FW rows blocked:** none (was FW-0013).
+**Shape:** no mirror. `ProblemJson` is `components['schemas']['Problem']` of the openapi-typescript client generated from the WOS public document, which carries the schema verbatim (ADR 0165 §1.3); `isProblemJson` is Ajv over the pinned `vendor/wos-api/error.schema.json`. Error codes are `^(FORMSPEC|WOS|STUDIO|INFRA)-\d{4}$` (ADR 0092a's closed prefixes, now in the schema; Rust `ErrorCode::new` delegates to it). `tests/shared/problem-json` fails if either generated client's Problem gains or loses a member against the schema.
+**Fixture status:** `vendor/problem-json/` pins the golden bodies stack-common, formspec-server and wos-server each capture from their own serializer (`stack_common_error::catalog::assert_golden`); `npm run check:provenance-vendor` checks the pins and upstream bytes, `vendor:refresh` re-copies. Tests admit every emitted body, refuse malformed and ungoverned codes, and render one through FW-0013.
+**Status:** closed (fs-a5er).
 
 ### EXT-18: `@integrity-stack/hpke` — TS wrapper around `hpke-js`
 
@@ -628,4 +628,4 @@ The block sits alongside the existing `governance.amendmentTaxonomy[]` — the t
 
 - **Reference-map regen needed.** `validation-mapping.md` + `validation-mapping.schema.json` landed 2026-05-22 and `experience-spec.md` landed 2026-05-21. Neither is yet in `.claude-plugin/skills/formspec-specs/references/`. Until regenerated (`make` target in `.claude-plugin/skills/formspec-specs/`), the `formspec-specs:spec-expert` agent may give incomplete answers about submit-gate semantics and step/unit organization. Action lives in formspec/ — flag for the next stack-side maintenance pass.
 
-- **stack-common needs a TS package family.** stack-common ships Rust crates only (`stack-common/crates/`) — no `stack-common/packages/` for TS wire-shape mirrors. The integrity-stack precedent (which ships both `crates/` and `packages/` like `@formspec-org/integrity-cose`, `@formspec-org/integrity-signature-port`) is the model. Without TS mirrors, every TS client of stack-common's wire shapes (formspec-web, formspec-cloud, formspec-studio, formspec-react) hand-mirrors independently with drift risk. Queue entries EXT-11 / EXT-12 / EXT-13 / EXT-14 are formspec-web's per-need mirrors; they should be consolidated when stack-common adopts the integrity-stack pattern. **Not formspec-web's to own** — flag for stack-level architecture conversation.
+- **stack-common needs a TS package family.** stack-common ships Rust crates only (`stack-common/crates/`) — no `stack-common/packages/` for TS wire-shape mirrors. The integrity-stack precedent (which ships both `crates/` and `packages/` like `@formspec-org/integrity-cose`, `@formspec-org/integrity-signature-port`) is the model. Without TS mirrors, every TS client of stack-common's wire shapes (formspec-web, formspec-cloud, formspec-studio, formspec-react) hand-mirrors independently with drift risk. Stack ADR 0165 since chose generated clients from provider documents over TS mirror packages; EXT-12 closed that way. Queue entries EXT-11 / EXT-13 / EXT-14 are formspec-web's per-need mirrors; they should be consolidated when stack-common adopts the integrity-stack pattern. **Not formspec-web's to own** — flag for stack-level architecture conversation.

@@ -33,6 +33,7 @@ import {
 } from '../../src/app/respondent-flow.ts';
 import { stubDraftStore } from '../../src/adapters/stub/draft-store.ts';
 import { jsonResponse, recordingFetch } from '../adapters/http/test-fetch.ts';
+import formspecServerProblems from '../../vendor/problem-json/formspec-server.json';
 import {
   RESPONSE_ACTION_LEDGER_CAPABILITY_HEADER,
   createHttpResponseActionLedgerInvokerFactory,
@@ -272,6 +273,25 @@ describe('RespondentRuntime identity sign-in', () => {
     expect(requests.map((request) => request.url)).toEqual([
       'https://formspec-server.example.test/runtime/forms/demo-benefits-intake-live',
     ]);
+  });
+
+  it('renders a server-emitted problem with its plain detail and support reference (FW-0013)', async () => {
+    const [{ body }] = formspecServerProblems.filter(({ case: name }) => name === 'not_found');
+    const { fetch } = recordingFetch(() => new Response(JSON.stringify(body), {
+      status: body.status,
+      headers: { 'content-type': 'application/problem+json' },
+    }));
+    const composition: Composition = {
+      ...testComposition(new TestIdentityProvider()),
+      definitionSource: new HttpDefinitionSource({ baseUrl: 'https://formspec-server.example.test', fetchImpl: fetch }),
+    };
+
+    await renderRuntime(composition);
+    await waitForText('Sign in to continue');
+    await clickButton('Sign in with Example IdP');
+    await waitForText('We could not load this form.');
+    expect(text()).toContain(`${body.title}: ${body.detail}`);
+    expect(text()).toContain(`Support reference: ${body.error_code}`);
   });
 
   it('passes host-supplied Component graph sidecars into the React renderer as inert metadata when AppGraph proof matches', async () => {

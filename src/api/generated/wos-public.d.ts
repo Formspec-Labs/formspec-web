@@ -418,6 +418,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{case_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Appends one registered event to an existing case ledger through the durable Case owner
+         *     (fs-xgxt); the `Idempotency-Key` is the append's retry token.
+         */
+        post: operations["submit_case_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{case_id}/export-fence": {
         parameters: {
             query?: never;
@@ -548,6 +568,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{case_id}/processes/{process_id}/inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submit_process_input"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{case_id}/processes/{process_id}/migrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["migrate_process"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{case_id}/processes/{process_id}/provenance": {
         parameters: {
             query?: never;
@@ -564,6 +616,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{case_id}/processes/{process_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resume_process"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{case_id}/processes/{process_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["suspend_process"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{case_id}/processes/{process_id}/tasks": {
         parameters: {
             query?: never;
@@ -574,6 +658,22 @@ export interface paths {
         get: operations["list_process_tasks"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{case_id}/processes/{process_id}/terminate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["terminate_process"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1822,6 +1922,24 @@ export interface components {
             processes: unknown[];
             readRevision: string;
         };
+        /** @description Receipt returned after a direct case-ledger append commits. */
+        CaseEventAppendReceipt: {
+            /** @description Durable governed case-ledger URN that received the direct append. */
+            caseLedgerId: components["schemas"]["WosResourceUrn"];
+            /** @description Hash-chain digest for the appended event. */
+            eventHash: string;
+            /** @description Identifier of the provenance row the append produced: the event id the Trellis substrate assigned (`CaseViewEvent.eventId` of the same row). */
+            eventId: string;
+            /** @description Monotonic sequence number assigned within the case ledger's event stream. */
+            sequence: number;
+        };
+        /** @description Request body for `POST /api/v1/cases/{case_id}/events`, the direct case-ledger append surface. The case must already exist in the admitted scope, created through application Start or accepted intake. Registered existing-case WOS event literals run relationship authorization and append only after an allow decision plus event-contract validation. The retry token is the `Idempotency-Key` header, scoped to `(scope, case_id, key)`; the acting principal is the bearer's, never a body field. */
+        CaseEventAppendRequest: {
+            /** @description Optional event-contract data. `caseRef` and `caseLedgerId` are supplied from the path for generic direct appends and must match if present. The concrete event contract validates the payload before persistence. */
+            data?: unknown;
+            /** @description Registered WOS event literal. The reference server refuses direct `wos.kernel.case_created` requests and appends existing-case literals only after relationship authorization allows and the direct writer can enforce the event contract. */
+            event: string;
+        };
         /**
          * @description WOS-side source fence for a case-export attempt. Captures the current case-ledger and policy/config high-water marks before downstream bundle assembly.
          * @example {
@@ -1937,6 +2055,32 @@ export interface components {
             sha256: string;
             /** @description Raw case-file JSON value observed immediately before the determination transition fires. */
             value: unknown;
+        };
+        /** @description Single field-level case-state mutation event (ADR 0082 D-6). Replaces the explicit anti-design `caseStateMutations: Record<string, unknown>` from the prior `case-portal/src/ports/types.ts`: the wire shape requires `fieldPath`, `newValue`, `mutationKind`, and `verificationLevel`, so an open-taxonomy mutation bag is structurally inexpressible. */
+        CaseStateMutation: {
+            /** @description Actor URN that authored or attested the mutation. OPTIONAL when the runtime cannot canonically resolve a single actor (for example a `computed` mutation derived purely from prior case state). */
+            actorRef?: components["schemas"]["ActorRef"];
+            /**
+             * @description JSON-pointer or dotted path identifying the case-file field this mutation writes (Kernel S5.4).
+             * @example /applicantName
+             * @example income
+             * @example /medical/recentEvidence/0
+             */
+            fieldPath: string;
+            /** @description Closed-with-vendor-extension origin classification. */
+            mutationKind: components["schemas"]["MutationKind"];
+            /** @description Value at this `fieldPath` immediately after the mutation. Any JSON value, including `null` for an explicit erasure marker. */
+            newValue: unknown;
+            /** @description Value at this `fieldPath` immediately before the mutation. Any JSON value, including `null`. Omitted when the field had no prior value (first write). */
+            previousValue?: unknown;
+            /**
+             * Format: date-time
+             * @description UTC RFC 3339 timestamp when the mutation was applied (ADR 0069).
+             * @example 2026-04-19T12:00:00Z
+             */
+            timestamp?: string;
+            /** @description Closed-with-vendor-extension verification strength. */
+            verificationLevel: components["schemas"]["VerificationLevel"];
         };
         /**
          * @description Current case-file field values, carried as an opaque JSON value (typically an object whose keys are case-file field names declared in the governing Workflow Document's `caseFile.fields` per Kernel S5.2). The case-file shape is workflow-defined, not API-defined: per-workflow structural validation is the reference server's responsibility against the resolved Workflow Document; this contract treats the value as opaque-shaped. Mutation projection is via `CaseStateMutation`, whose `mutationKind` and `verificationLevel` taxonomies are closed (ADR 0082 D-6).
@@ -2169,6 +2313,15 @@ export interface components {
          * @example wos-blob://benefits-adj/2026-05-05/scan-mail-001.pdf
          */
         ContentRef: string;
+        /** @description Per-event fan-out result envelope reported on `EventSubmissionResponse` when the submitted event triggered a correlation-group fan-out (Kernel S9.4). The server runs the kernel transition algorithm against each related instance independently and reports the typed per-instance outcome here -- best-effort-with-typed-failure semantics, NOT all-or-nothing. When `allSucceeded == false`, callers MUST inspect `perInstanceResults` to determine compensation. The shape makes silent partial-failure structurally impossible: every related instance the server attempted is named, and a missing entry is itself a contract bug. */
+        CorrelationGroupResult: {
+            /** @description Convenience marker -- `true` when every entry in `perInstanceResults` has `status == succeeded`, `false` otherwise. When `false`, callers MUST inspect `perInstanceResults` for the per-instance failure surface to drive compensation (cross-cite ADR 0070 cross-layer failure and compensation when ratified). */
+            allSucceeded: boolean;
+            /** @description Cross-case correlation identifier this fan-out group is keyed on (Kernel S9.4). Equals the instance's stored `WorkflowProcess.correlationKey`. */
+            correlationKey: string;
+            /** @description Typed per-instance outcomes, one entry per related instance the server attempted to fan out to. Order follows the kernel's correlation-group enumeration order (deterministic per Kernel S9.4); the originating instance the request targeted MAY be included or omitted at server discretion -- callers MUST NOT depend on its presence here because `EventSubmissionResponse.evaluationResult` already carries that result. */
+            perInstanceResults: components["schemas"]["PerInstanceCorrelationResult"][];
+        };
         /** @description Opaque resume token returned by the previous page (ADR 0082 D-7). */
         CorrespondenceListOptionsCursor: string;
         /** @description Public WOS correspondence message: a single inbound or outbound communication associated with a workflow process. The `contentRef` field is a claim-check pointer; payload bytes never travel through this API resource. */
@@ -2591,7 +2744,7 @@ export interface components {
             reportType: "EquityDisparityRow";
         };
         /**
-         * @description Stable machine-readable stack error code. Prefixes are governed by ADR 0092a.
+         * @description Stable machine-readable stack error code: a prefix from the closed set ADR 0092a governs, then four digits. Adding a prefix amends ADR 0092a and this pattern together.
          * @example WOS-1404
          * @example FORMSPEC-4001
          * @example STUDIO-4091
@@ -2604,6 +2757,40 @@ export interface components {
          * @example $timeout.task
          */
         EvaluationOutcomeEventName: string;
+        /** @description Result of evaluating a single event against an instance (ADR 0082 D-6). Carries the lifecycle configuration before and after the evaluation, the events that fired during the evaluation, and a typed array of case-state mutations. The kernel anti-design `caseStateMutations: Record<string, unknown>` is replaced by `mutations: CaseStateMutation[]`; the closed `mutationKind` and `verificationLevel` taxonomies make the open-bag form structurally inexpressible. */
+        EvaluationResult: {
+            /** @description Events that fired during the evaluation, in evaluation order. */
+            eventsFired: components["schemas"]["EvaluationOutcomeEventName"][];
+            /** @description Typed array of case-state mutations applied during the evaluation. Empty when no mutations occurred. */
+            mutations: components["schemas"]["CaseStateMutation"][];
+            /** @description Active leaf-state configuration immediately after the evaluation. */
+            newConfiguration: components["schemas"]["ConfigurationStateId"][];
+            /** @description Active leaf-state configuration immediately before the evaluation. */
+            previousConfiguration: components["schemas"]["ConfigurationStateId"][];
+        };
+        /** @description Request body for workflow input submission through `POST /api/v1/cases/{case_id}/processes/{process_id}/inputs` (Kernel S4.9 + S11.3 `processEvent`). Submits an authored event for evaluation against the running process; the server runs the kernel transition algorithm and returns the resulting `EvaluationResult` plus the post-evaluation `lifecycleState`. The `Idempotency-Key` HTTP header is REQUIRED (ADR 0082 D-16); a repeat request within the retention window returns the original `EventSubmissionResponse` unchanged. Submissions to a process whose `lifecycleState` is not `active` (Kernel S11.5) are rejected with `WOS-1409`. The acting principal is the bearer's, never a body field. */
+        EventSubmissionRequest: {
+            /** @description Name of the event to deliver. Document-authored events are bare identifiers; kernel-reserved synthetic events (the `$`-prefix family per Kernel S4.10) MUST NOT be submitted by callers -- they are processor-emitted only and the server rejects them with `WOS-1422`. */
+            eventName: components["schemas"]["EvaluationOutcomeEventName"];
+            /** @description Optional event payload, carried as the same opaque-shaped JSON value used for `caseState`. Workflow-defined: validated by the server against the workflow's declared event-payload schema (when present, per Kernel S4.10) before evaluation; rejection is `WOS-1422`. Reusing `CaseStateValue` keeps the wire envelope closed at the API boundary while the per-payload shape stays workflow-driven. */
+            payload?: components["schemas"]["CaseStateValue"];
+        };
+        /** @description Response body for `POST /api/v1/cases/{case_id}/processes/{process_id}/inputs`. Wraps the kernel `EvaluationResult` (which carries `previousConfiguration`, `newConfiguration`, `eventsFired`, `mutations`) plus the post-evaluation lifecycle posture and the URN of the Facts-tier provenance record the evaluation produced. Clients drive the case-portal UI off the embedded `evaluationResult.mutations` typed array (ADR 0082 D-6) -- the kernel anti-design `caseStateMutations: Record<string, unknown>` is structurally inexpressible. When the submission triggered correlation-group fan-out (Kernel S9.4), `correlationGroupResult` carries the typed per-instance outcomes; absence means no fan-out occurred (single-instance evaluation only). */
+        EventSubmissionResponse: {
+            /** @description Typed per-instance fan-out outcomes when the submission triggered a correlation-group fan-out (Kernel S9.4). Present only when fan-out occurred; absent when the event was evaluated against a single instance only. Best-effort-with-typed-failure semantics: when `allSucceeded == false`, callers MUST inspect `perInstanceResults` for compensation. */
+            correlationGroupResult?: components["schemas"]["CorrelationGroupResult"];
+            /**
+             * Format: date-time
+             * @description UTC RFC 3339 timestamp at which the kernel evaluation completed (ADR 0069). Drawn from the server clock.
+             */
+            evaluatedAt: string;
+            /** @description Result of running the kernel transition algorithm against the supplied event. */
+            evaluationResult: components["schemas"]["EvaluationResult"];
+            /** @description Lifecycle posture after this evaluation. Equal to the prior state when the event was unmatched or the transition was within `active`; transitions to `completed` when the firing transition entered a top-level final state (Kernel S11.5). */
+            newLifecycleState: components["schemas"]["LifecycleState"];
+            /** @description URN of the Facts-tier `stateTransition` (or `unmatchedEvent`) provenance record produced by this evaluation (Kernel S11.3). Clients can dereference it via `GET /api/v1/cases/{case_id}/processes/{process_id}/provenance` for full reasoning/counterfactual/narrative tier data (ADR 0082 D-5). Omitted only when the underlying processor cannot canonically resolve a single producer record (e.g., a no-op evaluation against a `completed` instance is rejected upstream with `WOS-1409` and never reaches this shape). */
+            provenanceRecordId?: components["schemas"]["WosResourceUrn"];
+        };
         /**
          * @description Kind of evidence cited in a Reasoning-tier record (governance S6.2). Closed taxonomy. `type: string` matches the kernel `wos-workflow.schema.json#/$defs/EvidenceReference.properties.kind` projection.
          * @example caseField
@@ -3140,12 +3327,23 @@ export interface components {
          * @example webauthn
          */
         MfaChallengeKind: ("totp" | "webauthn" | "sms-otp" | "email-otp" | "push") | string;
+        MigrateProcessRequest: {
+            /** @description The runtime's migration map; absent means the default (identity) map. */
+            migrationMap?: unknown;
+            targetDefinitionVersion: string;
+        };
         /**
          * @description Stable milestone identifier from the workflow document (Kernel S4 milestones; kernel:661-672). Sorted lexicographically when surfaced as a set.
          * @example eligibility-confirmed
          * @example intake-complete
          */
         MilestoneId: string;
+        /**
+         * @description Origin of a case-state mutation (ADR 0082 D-6). Byte-aligned mirror of the kernel `MutationSource` open enum at `wos-workflow.schema.json#/$defs/MutationSource` (ADR 0082 D-13 gate 6). Reserved literals: `agent-extracted` (an agent extracted the value); `system-fetched` (from an external system of record); `human-entered` (direct user entry); `human-corrected` (a corrective edit on a prior value); `computed` (from a derivation expression); `self-attested` (from an applicant assertion). Vendor extensions MUST use an `^x-[a-z][a-z0-9-]*$` prefix per the kernel pattern.
+         * @example agent-extracted
+         * @example human-entered
+         */
+        MutationKind: string & (("human-entered" | "human-corrected" | "agent-extracted" | "system-fetched" | "computed" | "self-attested") | unknown);
         /** @description Narrative-tier provenance record (AI integration S13). Non-authoritative model-generated explanation. MUST carry `authoritative: false`. A conformant implementation MUST NOT treat narrative content as dispositive in adjudicative, audit, or due-process contexts (S13.2). */
         NarrativeTierRecord: {
             /** @description Agent URN that generated the narrative. */
@@ -3302,6 +3500,26 @@ export interface components {
             /** @description Evidence references supporting the override (governance §7.3 item 3). At least one entry MUST be present when the OverrideAuthority policy switch `requireSupportingEvidence` is true; conformant servers always populate it. */
             supportingEvidence: components["schemas"]["EvidenceReference"][];
         };
+        /** @description Per-instance result of a correlation-keyed event fan-out (Kernel S9.4). Records the outcome the server reached against one related instance when a single submitted event was fanned out across the correlation group. `status` is closed-no-extension because the fan-out outcome space is normative — the kernel either evaluated, refused, or skipped the related instance, and inventing a fourth outcome would create a rival case-truth semantics the platform thesis rejects. */
+        PerInstanceCorrelationResult: {
+            /**
+             * Format: date-time
+             * @description UTC RFC 3339 timestamp at which the per-instance evaluation completed (ADR 0069). Omitted on `skipped` because no evaluation occurred. Drawn from the server clock.
+             */
+            evaluatedAt?: string;
+            /** @description Stable WOS error code classifying the per-instance failure. REQUIRED when `status == failed`; absent on `succeeded` or `skipped`. Drawn from the public registry (`error-registry.md`) -- typically `WOS-1409` (lifecycle-posture mismatch) or `WOS-1422` (payload validation against the related instance's workflow event schema). */
+            failureCode?: components["schemas"]["ErrorCode"];
+            /** @description Related workflow process URN the server attempted to fan out to. */
+            processId: components["schemas"]["WosResourceUrn"];
+            /**
+             * @description Closed-no-extension outcome of the per-instance evaluation. `succeeded` -- the server evaluated the event against this instance and committed the resulting transition; `failed` -- the server attempted the evaluation and the kernel refused (lifecycle posture, validation, or runtime error -- `failureCode` carries the WOS error code); `skipped` -- the server elected not to evaluate (e.g., the instance was outside the caller's scope per ADR 0068 or the kernel correlation predicate excluded it). New outcomes require a major schema bump.
+             * @example succeeded
+             * @example failed
+             * @example skipped
+             * @enum {unknown}
+             */
+            status: "succeeded" | "failed" | "skipped";
+        };
         /** @description Canonically hashed policy/config source included in the case export fence. */
         PolicySnapshotSource: {
             /** @description Canonical JSON hash of the source material at fence acquisition. */
@@ -3379,6 +3597,20 @@ export interface components {
             processId: components["schemas"]["WosResourceUrn"];
             /** @description Workflow process lifecycle status at fence acquisition. */
             status: string;
+        };
+        /** @description Optional request envelope for ADR 0093 dual-identity case/process lifecycle routes (`POST /api/v1/cases/{case_id}/processes/{process_id}/suspend|resume|terminate`). These routes validate the case/process binding before applying the lifecycle mutation; the actor is the bearer's principal and the body carries only an optional operator rationale, which the workflow may require (`lifecycle.suspend.reasonRequired`, `lifecycle.terminate.reasonRequired`, Kernel S11.3). */
+        ProcessLifecycleRequest: {
+            /** @description Optional operator-supplied prose rationale for the lifecycle transition. Length-bounded when present; surfaced on the corresponding Facts-tier provenance record when the deployment records one. */
+            reason?: string;
+        };
+        /** @description Response envelope for ADR 0093 dual-identity case/process lifecycle routes after a successful suspend, resume, or terminate. Returns the stable process and case-ledger identifiers together with the resulting `lifecycleState`. */
+        ProcessLifecycleResponse: {
+            /** @description Durable case-ledger resource URN the process is bound to. */
+            caseLedgerId: components["schemas"]["WosResourceUrn"];
+            /** @description Instance lifecycle posture after the mutation commits. */
+            lifecycleState: components["schemas"]["LifecycleState"];
+            /** @description Workflow process resource URN for the bound process. */
+            processId: components["schemas"]["WosResourceUrn"];
         };
         /** @description Path parameter accepted by workflow-process routes. Deployments MAY accept either the full WOS process URN (`urn:wos:<tenant>_process_<ulid>`) or the bare TypeID (`<tenant>_process_<ulid>`) while response bodies always carry the full `WosResourceUrn`. */
         ProcessPathId: string;
@@ -4394,6 +4626,11 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * @description Verification strength of a case-state mutation (ADR 0082 D-6). Byte-aligned mirror of the kernel `VerificationLevel` open enum at `wos-workflow.schema.json#/$defs/VerificationLevel` (ADR 0082 D-13 gate 6). Reserved literals: `independent` (corroborated by an independent source); `attested` (signed attestation by a named actor); `corroborated` (consistent with at least one other recorded source); `authoritative` (carried by an authoritative source of record). Vendor extensions MUST use an `^x-[a-z][a-z0-9-]*$` prefix per the kernel pattern.
+         * @example attested
+         */
+        VerificationLevel: string & (("independent" | "attested" | "corroborated" | "authoritative") | unknown);
         /** @description Public workflow-process resource (ADR 0082 D-3). Carries identity, workflow binding, lifecycle posture, current configuration, `impactLevel` (Kernel S6 proportionality index), and `caseState` only; subresources are accessed via dedicated endpoints or the closed `?include=` aggregation seam (`WorkflowProcessWithIncludes`). Mirrors structural fields from the kernel runtime artifact `wos-process.schema.json` but is a wire projection: identifiers are URNs (D-4), `lifecycleState` is the closed posture taxonomy (not the kernel raw `status`), and subresource fields (`activeTasks`, `timers`, `holds`, etc.) are intentionally absent. */
         WorkflowProcess: {
             /** @description Durable governed case-ledger URN (`urn:wos:<tenant>_case_<ulid>`). Multiple workflow runtime processes may append to the same case ledger. */
@@ -5627,6 +5864,85 @@ export interface operations {
             };
         };
     };
+    submit_case_event: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque token; keep its exact bytes across retries of the same request. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Case ledger identifier, bare or `urn:wos:`. */
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseEventAppendRequest"];
+            };
+        };
+        responses: {
+            /** @description Case-ledger event append receipt */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseEventAppendReceipt"];
+                };
+            };
+            /** @description Original accepted append is pending; follow its receiptUrl */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid event contract, unregistered literal or missing Idempotency-Key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Caller lacks append eligibility or the case relationship */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Case ledger not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The Idempotency-Key names another request, or the original window expired */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The integrity substrate refused the append, or the durable owner is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_case_export_fence: {
         parameters: {
             query?: never;
@@ -6008,6 +6324,144 @@ export interface operations {
             };
         };
     };
+    submit_process_input: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque token; keep its exact bytes across retries of the same request. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Case ledger identifier, bare or `urn:wos:`. */
+                case_id: string;
+                /** @description Workflow process identifier. */
+                process_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventSubmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description The submitted event's committed evaluation */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventSubmissionResponse"];
+                };
+            };
+            /** @description Original accepted command is pending; follow its receiptUrl */
+            202: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing Idempotency-Key */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Case/process binding not found */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The process is not active, has queued work or a due deadline, or the key's body differs (`WOS-1409`) */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Reserved event name (`WOS-1422`) */
+            422: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    migrate_process: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque token; keep its exact bytes across retries of the same request. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Case ledger identifier, bare or `urn:wos:`. */
+                case_id: string;
+                /** @description Workflow process identifier. */
+                process_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MigrateProcessRequest"];
+            };
+        };
+        responses: {
+            /** @description Migration outcome */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Original accepted command is pending; follow its receiptUrl */
+            202: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid target version or migration map */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Case/process binding or target version not found */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The process is not active or has queued events, the target is not the selected workflow, or the key's body differs (`WOS-1409`) */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     provenance_process: {
         parameters: {
             query?: {
@@ -6047,6 +6501,136 @@ export interface operations {
             };
             /** @description Case/process binding not found */
             404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resume_process: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque token; keep its exact bytes across retries of the same request. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Case ledger identifier, bare or `urn:wos:`. */
+                case_id: string;
+                /** @description Workflow process identifier. */
+                process_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProcessLifecycleRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Process resumed */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessLifecycleResponse"];
+                };
+            };
+            /** @description Original accepted command is pending; follow its receiptUrl */
+            202: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing Idempotency-Key */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Case/process binding not found */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The process is not suspended (`WOS-1409`) */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    suspend_process: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque token; keep its exact bytes across retries of the same request. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Case ledger identifier, bare or `urn:wos:`. */
+                case_id: string;
+                /** @description Workflow process identifier. */
+                process_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProcessLifecycleRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Process suspended */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessLifecycleResponse"];
+                };
+            };
+            /** @description Original accepted command is pending; follow its receiptUrl */
+            202: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing Idempotency-Key, or the workflow requires a reason */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Case/process binding not found */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The process is not active (`WOS-1409`) */
+            409: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
@@ -6110,6 +6694,71 @@ export interface operations {
             };
             /** @description Case/process binding not found */
             404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    terminate_process: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque token; keep its exact bytes across retries of the same request. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Case ledger identifier, bare or `urn:wos:`. */
+                case_id: string;
+                /** @description Workflow process identifier. */
+                process_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProcessLifecycleRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Process terminated */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessLifecycleResponse"];
+                };
+            };
+            /** @description Original accepted command is pending; follow its receiptUrl */
+            202: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing Idempotency-Key, or the workflow requires a reason */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Case/process binding not found */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The process is neither active nor suspended (`WOS-1409`) */
+            409: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;

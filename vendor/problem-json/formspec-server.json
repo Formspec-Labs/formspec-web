@@ -1,0 +1,103 @@
+[
+  {
+    "body": {
+      "detail": "DraftId must not be blank",
+      "error_code": "FORMSPEC-4001",
+      "status": 400,
+      "title": "invalid-id",
+      "type": "about:blank"
+    },
+    "case": "invalid_id"
+  },
+  {
+    "body": {
+      "detail": "unknown form version",
+      "error_code": "FORMSPEC-4002",
+      "status": 400,
+      "title": "invalid-config",
+      "type": "about:blank"
+    },
+    "case": "invalid_config"
+  },
+  {
+    "body": {
+      "detail": "response data is not a JSON object",
+      "error_code": "FORMSPEC-4220",
+      "status": 422,
+      "title": "unprocessable",
+      "type": "about:blank"
+    },
+    "case": "unprocessable"
+  },
+  {
+    "body": {
+      "detail": "draft credential is not valid",
+      "error_code": "FORMSPEC-4010",
+      "status": 401,
+      "title": "unauthorized",
+      "type": "about:blank"
+    },
+    "case": "unauthorized"
+  },
+  {
+    "body": {
+      "detail": "draft was submitted",
+      "error_code": "FORMSPEC-4090",
+      "status": 409,
+      "title": "conflict",
+      "type": "about:blank"
+    },
+    "case": "conflict"
+  },
+  {
+    "body": {
+      "detail": "draft not found",
+      "error_code": "FORMSPEC-4040",
+      "status": 404,
+      "title": "not-found",
+      "type": "about:blank"
+    },
+    "case": "not_found"
+  },
+  {
+    "body": {
+      "detail": "evaluator is unavailable",
+      "error_code": "FORMSPEC-5030",
+      "status": 503,
+      "title": "unavailable",
+      "type": "about:blank"
+    },
+    "case": "unavailable"
+  },
+  {
+    "body": {
+      "detail": "retained draft is corrupt",
+      "error_code": "FORMSPEC-5000",
+      "status": 500,
+      "title": "internal",
+      "type": "about:blank"
+    },
+    "case": "internal"
+  },
+  {
+    "body": {
+      "context": {
+        "field_errors": [
+          {
+            "code": "required",
+            "field": "name",
+            "message": "Name is required"
+          }
+        ],
+        "severity": "error",
+        "summary": "1 validation error(s) need attention before submission."
+      },
+      "detail": "draft validation failed",
+      "error_code": "FORMSPEC-4090",
+      "status": 409,
+      "title": "conflict",
+      "type": "about:blank"
+    },
+    "case": "submit_validation_refused"
+  }
+]

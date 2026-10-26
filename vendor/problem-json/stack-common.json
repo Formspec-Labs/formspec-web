@@ -1,0 +1,124 @@
+[
+  {
+    "body": {
+      "detail": "invalid_request_body detail",
+      "error_code": "INFRA-4000",
+      "status": 400,
+      "title": "invalid_request_body",
+      "type": "about:blank"
+    },
+    "case": "bad_request"
+  },
+  {
+    "body": {
+      "detail": "Unauthorized detail",
+      "error_code": "INFRA-4010",
+      "status": 401,
+      "title": "Unauthorized",
+      "type": "about:blank"
+    },
+    "case": "unauthorized"
+  },
+  {
+    "body": {
+      "detail": "Forbidden detail",
+      "error_code": "INFRA-4030",
+      "status": 403,
+      "title": "Forbidden",
+      "type": "about:blank"
+    },
+    "case": "forbidden"
+  },
+  {
+    "body": {
+      "detail": "Resource not found detail",
+      "error_code": "INFRA-4040",
+      "status": 404,
+      "title": "Resource not found",
+      "type": "about:blank"
+    },
+    "case": "not_found"
+  },
+  {
+    "body": {
+      "detail": "Conflict detail",
+      "error_code": "INFRA-4090",
+      "status": 409,
+      "title": "Conflict",
+      "type": "about:blank"
+    },
+    "case": "conflict"
+  },
+  {
+    "body": {
+      "detail": "request_body_too_large detail",
+      "error_code": "INFRA-4130",
+      "status": 413,
+      "title": "request_body_too_large",
+      "type": "about:blank"
+    },
+    "case": "payload_too_large"
+  },
+  {
+    "body": {
+      "detail": "unsupported_media_type detail",
+      "error_code": "INFRA-4150",
+      "status": 415,
+      "title": "unsupported_media_type",
+      "type": "about:blank"
+    },
+    "case": "unsupported_media_type"
+  },
+  {
+    "body": {
+      "detail": "Internal server error detail",
+      "error_code": "INFRA-5000",
+      "status": 500,
+      "title": "Internal server error",
+      "type": "about:blank"
+    },
+    "case": "internal"
+  },
+  {
+    "body": {
+      "detail": "Service unavailable detail",
+      "error_code": "INFRA-5030",
+      "status": 503,
+      "title": "Service unavailable",
+      "type": "about:blank"
+    },
+    "case": "unavailable"
+  },
+  {
+    "body": {
+      "error_code": "INFRA-5000",
+      "status": 500,
+      "title": "Internal server error",
+      "type": "about:blank"
+    },
+    "case": "minimal"
+  },
+  {
+    "body": {
+      "context": {
+        "field": "case_id"
+      },
+      "detail": "The resource changed.",
+      "error_code": "INFRA-4090",
+      "status": 409,
+      "title": "Conflict",
+      "type": "about:blank"
+    },
+    "case": "every_member"
+  },
+  {
+    "body": {
+      "error_code": "INFRA-4040",
+      "instance": "urn:wos:case:C-1",
+      "status": 404,
+      "title": "Resource not found",
+      "type": "https://schemas.formspec.io/wos-api/errors/INFRA-4040"
+    },
+    "case": "instance_and_type"
+  }
+]

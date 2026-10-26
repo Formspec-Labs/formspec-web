@@ -1592,7 +1592,7 @@ describe('typed original Save problem diagnostics', () => {
     const test = await fixture(false, true); await test.save(); test.state.patchStatus = 409;
     const detail = 'protected task prefill data differs from original baseline';
     test.state.patchProblem = { type: 'about:blank', title: 'conflict', status: 409, error_code: 'FORMSPEC-4090', detail,
-      context: { private: 'private context' }, instance: 'https://private.test/token', extra: 'private response' };
+      context: { private: 'private context' }, instance: 'https://private.test/token' };
     const candidate = structuredClone(test.state.response); candidate.data['neutral/field'] = 'private answer';
     const removed = Object.keys(candidate.data)[0]; delete candidate.data[removed];
     await expect(test.save(saveAction('PATCH'), candidate)).rejects.toThrow('Save differs from the exact saved Response');

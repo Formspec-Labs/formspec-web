@@ -1,0 +1,124 @@
+[
+  {
+    "body": {
+      "detail": "unsupported action",
+      "error_code": "WOS-1400",
+      "status": 400,
+      "title": "Bad request",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1400"
+    },
+    "case": "bad_request"
+  },
+  {
+    "body": {
+      "error_code": "WOS-1401",
+      "status": 401,
+      "title": "Unauthorized",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1401"
+    },
+    "case": "unauthorized"
+  },
+  {
+    "body": {
+      "error_code": "WOS-1403",
+      "status": 403,
+      "title": "Forbidden",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1403"
+    },
+    "case": "forbidden"
+  },
+  {
+    "body": {
+      "detail": "task is assigned elsewhere",
+      "error_code": "WOS-1403",
+      "status": 403,
+      "title": "Forbidden",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1403"
+    },
+    "case": "forbidden_with_detail"
+  },
+  {
+    "body": {
+      "error_code": "WOS-1404",
+      "status": 404,
+      "title": "Resource not found",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1404"
+    },
+    "case": "not_found"
+  },
+  {
+    "body": {
+      "detail": "task has expired",
+      "error_code": "WOS-1409",
+      "status": 409,
+      "title": "Conflict",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1409"
+    },
+    "case": "conflict"
+  },
+  {
+    "body": {
+      "error_code": "WOS-1413",
+      "status": 413,
+      "title": "Payload too large",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1413"
+    },
+    "case": "payload_too_large"
+  },
+  {
+    "body": {
+      "context": {
+        "issues": [
+          {
+            "message": "required",
+            "path": "/name"
+          }
+        ]
+      },
+      "error_code": "WOS-1422",
+      "status": 422,
+      "title": "Validation failed",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1422"
+    },
+    "case": "validation_failed"
+  },
+  {
+    "body": {
+      "detail": "case-source lock busy for case_id=case-1",
+      "error_code": "WOS-1423",
+      "status": 423,
+      "title": "Resource lock contention",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1423"
+    },
+    "case": "lock_contention"
+  },
+  {
+    "body": {
+      "error_code": "WOS-1500",
+      "status": 500,
+      "title": "Internal server error",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1500"
+    },
+    "case": "internal"
+  },
+  {
+    "body": {
+      "detail": "direct case appends are not supported on this deployment's storage",
+      "error_code": "WOS-1501",
+      "status": 501,
+      "title": "Not implemented",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1501"
+    },
+    "case": "not_implemented"
+  },
+  {
+    "body": {
+      "detail": "evaluator is unavailable",
+      "error_code": "WOS-1503",
+      "status": 503,
+      "title": "Service unavailable",
+      "type": "https://schemas.formspec.io/wos-api/errors/WOS-1503"
+    },
+    "case": "unavailable"
+  }
+]
