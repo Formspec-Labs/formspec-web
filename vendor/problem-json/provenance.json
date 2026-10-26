@@ -1,8 +1,8 @@
 {
   "sourceRevisions": {
-    "stack-common": "128601cc4fb7d9ff61292fbba6013c8b0afcd850",
-    "formspec-server": "3b0de63ce69611cbbbc72af1307ff5f0d0929900",
-    "workspec-server": "91aba7caf704fe88dd7703fde85a195c5d3d5284"
+    "stack-common": "83b4a51c632b96efb0420f6ec1436da23b0d377c",
+    "formspec-server": "50711a4424d16eb41c295e7bed30232541ef85b0",
+    "workspec-server": "d417b8e5a5d669da92b8ea1feebad528c4413b35"
   },
   "scope": "Problem JSON bodies each provider's own serializer emits, captured by its tests (stack-common-error catalog::assert_golden); decoded by tests/shared/problem-json.",
   "files": {
@@ -17,6 +17,14 @@
     "wos-server.json": {
       "source": "workspec-server/crates/wos-server/tests/fixtures/problem-json/wos-server.json",
       "sha256": "3c80df1b8f2a423157dc02647fd35d655240efae1f9859336f36414624968fb5"
+    },
+    "stack-common-auth.json": {
+      "source": "stack-common/tests/fixtures/problem-json/stack-common-auth.json",
+      "sha256": "ef4023696856e945db25a42bb8eb4ccd0394952fda6f3ddc745e44389d465914"
+    },
+    "stack-common-idempotency.json": {
+      "source": "stack-common/tests/fixtures/problem-json/stack-common-idempotency.json",
+      "sha256": "799d9b95e3eb93317511e6757792f7be851acffe884f74552922af7994429aa2"
     }
   }
 }

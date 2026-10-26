@@ -6,6 +6,8 @@ import { assertProblemJson, isProblemJson } from '../../../src/shared/problem-js
 import errorSchema from '../../../vendor/wos-api/error.schema.json';
 import formspecServer from '../../../vendor/problem-json/formspec-server.json';
 import stackCommon from '../../../vendor/problem-json/stack-common.json';
+import stackCommonAuth from '../../../vendor/problem-json/stack-common-auth.json';
+import stackCommonIdempotency from '../../../vendor/problem-json/stack-common-idempotency.json';
 import wosServer from '../../../vendor/problem-json/wos-server.json';
 
 const schemaProblem = errorSchema.$defs.Problem;
@@ -37,7 +39,7 @@ describe('Problem JSON type', () => {
 });
 
 describe('Problem JSON admission', () => {
-  const emitted = [...stackCommon, ...formspecServer, ...wosServer];
+  const emitted = [...stackCommon, ...stackCommonAuth, ...stackCommonIdempotency, ...formspecServer, ...wosServer];
 
   it.each(emitted.map(({ case: name, body }) => [`${body.error_code} ${name}`, body]))(
     'admits the server-emitted %s', (_name, body) => {

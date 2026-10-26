@@ -2,8 +2,9 @@
 
 // Copies pinned by a `provenance.json`: `files` maps each local file to its stack `source`
 // (`<repo>/<path>`) and sha256; `sourceRevisions` records the commit each repo was copied at.
-// The check always verifies the pins; where the stack siblings are checked out it also compares
-// bytes with each source. `--write` re-copies every file from its committed source and re-pins.
+// The check always verifies the pins and compares bytes with each source found beside this
+// checkout; a lone checkout (public CI) checks pins only. Setting FORMSPEC_STACK_DIR (root CI)
+// makes every source required. `--write` re-copies every file from its committed source and re-pins.
 // Positional arguments narrow the run to those vendor directories.
 
 import { createHash } from 'node:crypto';
@@ -14,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const stackRoot = resolve(root, process.env.FORMSPEC_STACK_DIR ?? '..');
+const requireSources = process.env.FORMSPEC_STACK_DIR !== undefined;
 const args = process.argv.slice(2);
 const write = args.includes('--write');
 const selected = args.filter(arg => !arg.startsWith('--'));
@@ -51,6 +53,8 @@ for (const dir of dirs) {
         throw new Error(`${dir}/${file} differs from ${pin.source}; run \`npm run vendor:refresh\`.`);
       }
       compared += 1;
+    } else if (requireSources) {
+      throw new Error(`${pin.source} is missing under FORMSPEC_STACK_DIR (${stackRoot}).`);
     }
   }
   if (write) {

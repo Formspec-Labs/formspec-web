@@ -1,0 +1,11 @@
+[
+  {
+    "body": {
+      "error_code": "INFRA-4011",
+      "status": 401,
+      "title": "jwt: InvalidToken",
+      "type": "about:blank"
+    },
+    "case": "refused_token"
+  }
+]

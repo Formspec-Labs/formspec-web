@@ -165,10 +165,11 @@ export class HttpClient {
       const payload = result.value;
       check();
       if (!response.ok || (options.successStatuses !== undefined && !options.successStatuses.includes(response.status))) {
-        // Admission loads with the first refusal, keeping the schema out of the initial bundle.
-        const { isProblemJson } = await withAbort(import('../../shared/problem-json.ts'), signal);
+        // Admission loads with the first refusal, keeping the schema out of the initial bundle;
+        // a chunk that fails to load still yields the refusal, without problem details.
+        const admission = await withAbort(import('../../shared/problem-json.ts').catch(() => undefined), signal);
         check();
-        const problem = isProblemJson(payload) ? payload : undefined;
+        const problem = admission?.isProblemJson(payload) ? payload : undefined;
         const title = response.ok
           ? 'HTTP response status does not match the admitted request'
           : (problem?.title ?? response.statusText) || 'HTTP adapter request failed';

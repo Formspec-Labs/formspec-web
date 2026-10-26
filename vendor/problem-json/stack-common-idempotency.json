@@ -1,0 +1,11 @@
+[
+  {
+    "body": {
+      "error_code": "INFRA-4091",
+      "status": 409,
+      "title": "idempotency-key conflict",
+      "type": "about:blank"
+    },
+    "case": "key_conflict"
+  }
+]
