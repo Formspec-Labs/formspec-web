@@ -807,6 +807,19 @@ describe('explicit native package composition', () => {
     expect(test.requests.some(request => request.url.includes('sessions/anonymous'))).toBe(false);
   });
 
+  it('refuses a mapped signing route with path parameters, since its action source pins params {}', async () => {
+    const test = await fixture();
+    const candidate = JSON.parse(test.texts['native.json']) as BundleExport;
+    // Dereferencing returns the document values used by the native graph.
+    const route = dereferenceBundleExport(candidate).surfaces.flatMap(surface => surface.routes)
+      .find(route => route.slots?.some(slot => (slot.binding as Record<string, unknown> | undefined)?.widgetName === 'SigningCeremony'))!;
+    route.path = `${route.path.replace(/\/$/, '')}/{caseId}`; route.params = [{ name: 'caseId', type: 'string' }];
+    test.texts['native.json'] = JSON.stringify(candidate); test.files.nativeBundle.sha256 = await rawDigest(test.texts['native.json']);
+    await expect(createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load())
+      .rejects.toThrow('Native signing route must not declare path parameters');
+    expect(test.requests.some(request => request.url.endsWith('/sessions/anonymous'))).toBe(false);
+  });
+
   it('refuses simultaneous signed-Surface and native package root configuration', async () => {
     const test = await fixture();
     const config = resolveActiveConfig(test.config, { surfaceBundle: {

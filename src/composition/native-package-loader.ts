@@ -12,7 +12,7 @@ import { targetDefinitionMatches } from '@formspec-org/types';
 import { canonicalResponseHandoffBytes as handoffBytes } from '@formspec-org/integrity-canonical';
 import { resolveServiceRequest, resolveAuthoredSigningContent, resolveResponseAction } from '@formspec-org/engine/render';
 import { createSemanticControlRegistry } from '@formspec-org/react';
-import { dereferenceBundleExport, flattenRegistryEntries, type BundleExport } from '@formspec-org/surface';
+import { dereferenceBundleExport, flattenRegistryEntries, routeParamMarkers, type BundleExport } from '@formspec-org/surface';
 import { SIGNING_CEREMONY_WIDGET_SHAPE } from '@formspec-org/surface-react';
 import type { NativePackageSigningConfig } from '../config/native-package-signing.ts';
 import type { FormspecWebConfig } from '../config/types.ts';
@@ -353,6 +353,9 @@ async function qualifyRoles(bundle: BundleExport, pins: NativePackageSigningConf
       const inputName = mapping.responseInput;
       const source = typeof inputName === 'string' ? record(record(record(slot.binding)?.dataBindings)?.[inputName]) : undefined;
       if (!source || !same({ catalogRef: source.catalogRef, sourceRef: source.sourceRef }, pins.bindings[inputName as string])) throw new Error('Native widget Response source differs from the admitted binding');
+      // The host admits this role's emission by an exact source pinned below with params {}; a parameterized
+      // route would emit its resolved params and never match, so it is refused here rather than at Sign.
+      if (routeParamMarkers(route.path).length || route.params?.length) throw new Error('Native signing route must not declare path parameters');
       role.responseSource = { inputName: inputName as string, catalogRef: source.catalogRef as string, sourceRef: source.sourceRef as string };
       role.widgetSource = { moduleId: record(slot.binding)?.moduleId as string, widgetName: record(slot.binding)?.widgetName as string,
         slotId: slot.id, outputName, route: { surfaceId: surface.id, surfaceRef: resolved.surfaceRefs?.get(surface),
