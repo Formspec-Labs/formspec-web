@@ -736,8 +736,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   };
   const checkpointStatus = (): { checkpointState?: 'unsaved' | 'saving' | 'saved' | 'failed' } => policy.controller.applicationLifecycle ? { checkpointState } : {};
   const nativeStatus = (): { nativeReadiness?: 'pending' | 'ready' | 'needs-save' | 'expired' } => native ? { nativeReadiness } : {};
-  let hostSnapshot = { ...signingLanguageStatus(), ...checkpointStatus(), ...applicationStatus(), ...applicantStatusSnapshot(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted };
-  const emit = () => { prepareFlags(); hostSnapshot = Object.freeze({ ...signingLanguageStatus(), ...checkpointStatus(), ...applicationStatus(), ...applicantStatusSnapshot(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && !disposed && !cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
+  let hostSnapshot = { ...signingLanguageStatus(), ...checkpointStatus(), ...applicationStatus(), ...applicantStatusSnapshot(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && rendererLease?.active === true && !disposed && !cleared, controller: publicSnapshot, runtime, submitted };
+  const emit = () => { prepareFlags(); hostSnapshot = Object.freeze({ ...signingLanguageStatus(), ...checkpointStatus(), ...applicationStatus(), ...applicantStatusSnapshot(), ...nativeStatus(), generation, sessionGeneration: authorityGeneration, locale, formTitle, cleared, editableSessionActive: !!rendererEngine && rendererLease?.active === true && !disposed && !cleared, controller: publicSnapshot, runtime, submitted }); for (const listener of listeners) listener(); };
   function fence() {
     generation++; runtime = undefined; review = undefined; expectedReviewIdentity = undefined; reviewState = undefined; reviewValidation = undefined;
     for (const read of reads) read.abort();
@@ -921,7 +921,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const matches = policy.locales.filter(document => document.locale.toLowerCase() === value.toLowerCase()
       && document.target.kind === 'definition' && targetDefinitionMatches(document.target, policy.definition));
     const selected = matches.length === 1 ? matches[0] : undefined;
-    if (disposed || cleared || !input || !selected) throw new Error('native-locale-unavailable');
+    if (disposed || cleared || !input || !selected || !rendererEngine || !rendererLease?.active) throw new Error('native-locale-unavailable');
     value = selected.locale;
     checkpointState = 'unsaved';
     const saved = publicSnapshot?.saved;
@@ -1399,7 +1399,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           }
         });
       }
-      bind();
+      bind(); emit();
       return { responseActionInvoker: async action => {
         const actionDoc = action.document;
         const fullDocument = actionDoc ? bundle.responseActions.find(doc =>

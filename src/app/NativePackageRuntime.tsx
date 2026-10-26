@@ -269,7 +269,7 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
     || state.controller?.phase === 'sign' || state.controller?.phase === 'submit';
   useEffect(() => { if (operation === 'cleared' || startupBlocked && !preparing) heading.current?.focus(); }, [operation, startupBlocked, preparing]);
   async function changeLocale(code: string) {
-    if (operationPending.current || state.cleared) return;
+    if (operationPending.current || state.cleared || !screenerLease && !state.editableSessionActive) return;
     if (screenerLease) {
       if (activeLease.current !== screenerLease || !screenerLease.options.some(option => option.code === code)) return;
       setPresentation({ lease: screenerLease, code }); return;
@@ -305,7 +305,7 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
     <div className="respondent-toolbar">
       <div className="respondent-toolbar__group" role="group" aria-label={text('form.language')}>
         {options.map(option => <button type="button" className="locale-button" key={option.code}
-          disabled={(!screenerLease && (!state.controller || localeLocked)) || state.cleared || operation === 'locale' || operation === 'clearing'}
+          disabled={(!screenerLease && (!state.controller || !state.editableSessionActive || localeLocked)) || state.cleared || operation === 'locale' || operation === 'clearing'}
           aria-pressed={(screenerLease ? screenerLocale : state.locale)?.toLowerCase() === option.code.toLowerCase()} onClick={() => void changeLocale(option.code)}>{option.label}</button>)}
       </div>
       {(!confirmation && state.controller || operation === 'clear-error') && operation !== 'cleared' ? <button type="button" className="locale-button"

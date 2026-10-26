@@ -360,7 +360,7 @@ describe('native package boot and scoped recovery', () => {
     expect(link.getAttribute('href')).toBe('/authored-start?form=selected&package=%2Fpackage.json');
     expect(screen.queryByTestId('native-route')).toBeNull(); expect(observed.props).toBeUndefined();
     expect(screen.queryByText(UI_STRINGS['receipt.clearedDetail'])).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Passport renewal' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Passport renewal' })));
     act(() => { window.history.replaceState(null, '', link.getAttribute('href')!); window.dispatchEvent(new PopStateEvent('popstate')); });
     await screen.findByTestId('native-route'); expect(window.location.pathname).toBe('/authored-start');
     expect(test.boot.resumeSubmitted).toBeDefined(); expect(test.load).toHaveBeenCalledOnce();

@@ -578,8 +578,8 @@ describe('maintained native package Surface host', () => {
     expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled(); expect(test.submit).not.toHaveBeenCalled();
     test.host.dispose();
   });
-  it.each(['es-US', 'inline', 'changed', 'prepare-only', 'no-save', 'no-owned-save'] as const)('restores %s wording and prepares through its supported explicit language persistence path', async savedLocale => {
-    const prepareOnly = savedLocale === 'prepare-only' || savedLocale === 'no-save' || savedLocale === 'no-owned-save';
+  it.each(['es-US', 'inline', 'changed', 'prepare-only', 'no-save', 'no-owned-save', 'prepare-only-held-read'] as const)('restores %s wording and prepares through its supported explicit language persistence path', async savedLocale => {
+    const prepareOnly = savedLocale === 'prepare-only' || savedLocale === 'no-save' || savedLocale === 'no-owned-save' || savedLocale === 'prepare-only-held-read';
     const fixture = await actualFixture(prepareOnly ? { bundle: lifecycleBundle, component: lifecycleComponent, lifecycle: lifecycleFixture(false, savedLocale === 'no-owned-save').lifecycle } : undefined); fixture.host.dispose();
     const selectedComponent = structuredClone(prepareOnly ? lifecycleComponent : component);
     const roles = { ...fixture.policy.controller.roles };
@@ -603,8 +603,13 @@ describe('maintained native package Surface host', () => {
     let response: FormResponse = partial; let revision = 0;
     const view = () => ({ draft_id: 'owned-draft', form_version_id: 'publication', subject_ref: 'server-actor', status: 'in_progress',
       draft_version: revision, is_initialization_only: revision === 1, draft_state: revision === 1 ? {} : response.data, canonical_response: revision === 1 ? null : structuredClone(response) });
+    let reads = 0; let releaseRead!: () => void;
+    const heldRead = new Promise<void>(resolve => { releaseRead = resolve; });
     const transport = recordingFetch(request => {
-      if (request.method === 'GET') return jsonResponse(view());
+      if (request.method === 'GET') {
+        if (++reads === 2 && savedLocale === 'prepare-only-held-read') return heldRead.then(() => jsonResponse(view()));
+        return jsonResponse(view());
+      }
       if (request.method === 'POST') {
         expect(request.body).toEqual({ form_version_id: 'publication' });
         expect(revision).toBe(0); revision = 1; return jsonResponse(view());
@@ -641,6 +646,18 @@ describe('maintained native package Surface host', () => {
       componentRouteResolver: componentResolver(selectedComponent), localeDocuments: fixture.policy.locales, moduleId: host.moduleId, initialLocale: 'en' }) };
     window.history.replaceState(null, '', '/');
     const mounted = render(<NativePackageRuntime composition={composition} config={departmentAppProfile} />);
+    if (savedLocale === 'prepare-only-held-read') {
+      await vi.waitFor(() => expect(reads).toBe(2));
+      const language = screen.getByRole('button', { name: 'English' }) as HTMLButtonElement;
+      try {
+        expect(language.disabled).toBe(true);
+        expect(host.getSnapshot().editableSessionActive).toBe(false);
+        language.removeAttribute('disabled'); fireEvent.click(language); language.setAttribute('disabled', '');
+        await expect(host.selectLocale('en')).rejects.toThrow('native-locale-unavailable');
+        expect(host.getSnapshot().locale).toBe('');
+        expect(reads).toBe(2); expect(revision).toBe(2);
+      } finally { releaseRead(); }
+    }
     if (savedLocale !== 'es-US') {
       await vi.waitFor(() => expect(host.getSnapshot().controller?.saved?.response.id, JSON.stringify(host.getSnapshot())).toBe(partial.id));
       expect(host.getSnapshot().locale).toBe(savedLocale === 'inline' || prepareOnly ? '' : 'es-US');
@@ -650,6 +667,7 @@ describe('maintained native package Surface host', () => {
       if (savedLocale === 'inline') await screen.findByText('Choose a language and save before preparing to sign.');
       if (prepareOnly) await screen.findByText('Choose a language before preparing to sign.');
       const originalHandle = structuredClone(host.getSnapshot().controller?.saved);
+      await vi.waitFor(() => expect((screen.getByRole('button', { name: 'English' }) as HTMLButtonElement).disabled).toBe(false));
       fireEvent.click(screen.getByRole('button', { name: 'English' }));
       await vi.waitFor(() => expect(host.getSnapshot().locale).toBe('en'));
       await screen.findByRole('button', { name: 'Prepare saved response' });
