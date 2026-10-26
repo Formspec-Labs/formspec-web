@@ -12,7 +12,7 @@ import { createFormEngine, hashSigningContent } from '@formspec-org/engine/rende
 import { createSemanticControlRegistry } from '@formspec-org/react';
 import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
 import { composeSurfaceApp, flattenRegistryEntries, dereferenceBundleExport, resolveDataSourceDescriptor, planStaticContent, type BundleExport } from '@formspec-org/surface';
-import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, deriveSurfaceRuntimeGeneration, responseReviewHash, starterWidgetModule, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE, type ResponseReviewData } from '@formspec-org/surface-react';
+import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, deriveSurfaceRuntimeGeneration, responseReviewHash, starterWidgetModule, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, ACCEPTED_RESPONSE_REVIEW_WIDGET_SHAPE, RESPONSE_REVIEW_COPY_KEYS, type ResponseReviewData } from '@formspec-org/surface-react';
 import type { DataSourcesDocument, FormResponse, LocaleDocument, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
 import { createNativePackageSigningHost, captureFields, type NativePackageSigningHostPolicy } from '../../src/shared/native-package-signing-host.ts';
@@ -414,18 +414,29 @@ describe('generic native package signing session', () => {
     host.dispose(); absent.dispose(); expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
   });
 
-  it('registers only explicit matching modules and keeps sibling accepted review on maintained defaults', () => {
-    const test = fixture(); test.host.dispose(); test.engine.dispose();
-    const policy = siblingModulePolicy(test); const host = createNativePackageSigningHost(policy);
-    const signing = host.widgetModules.find(module => module.moduleId === test.policy.moduleId)!;
+  it('registers only explicit matching modules and keeps sibling review on maintained defaults', async () => {
+    const test = fixture(); const lease = await test.prepared(); const loaded = await test.reviewData();
+    // Review admits only a Response that names its displayed locale; the fixture's sample omits it.
+    const data = { ...loaded, response: { ...loaded.response, displayedLocale: { locale: loaded.presentation.locale } } };
+    // Spy on the signing review options' one policy-supplied member: a sibling review that reaches it leaked them.
+    const producer = vi.fn(canonicalResponseHandoffBytes);
+    const host = createNativePackageSigningHost({ ...siblingModulePolicy(test), canonicalResponseHandoffBytes: producer });
     const sibling = host.widgetModules.find(module => module.moduleId === 'x-sibling-review')!;
-    // starterWidgetModule builds its review widgets per call, so compare everything else by identity.
     const starter = starterWidgetModule('x-sibling-review');
     expect(sibling.contracts).toEqual(starter.contracts);
     expect(Object.keys(sibling.widgets)).toEqual(Object.keys(starter.widgets));
     expect(sibling.widgets.StructuredPanel).toBe(starter.widgets.StructuredPanel);
-    expect(signing.widgets.AcceptedResponseReview).not.toBe(sibling.widgets.AcceptedResponseReview);
-    expect(Object.isFrozen(host.widgetModules)).toBe(true); host.dispose();
+    expect(Object.isFrozen(host.widgetModules)).toBe(true);
+    const copy = Object.fromEntries(RESPONSE_REVIEW_COPY_KEYS.map(key => [key, `copy:${key}`]));
+    const renderReview = (moduleId: string) => render(createElement(host.widgetModules.find(module => module.moduleId === moduleId)!.widgets.ResponseReview,
+      { moduleId, widgetName: 'ResponseReview', slot: { id: 'review' }, route: { surfaceId: 'surface', routeId: 'review', routeClass: undefined, params: {} },
+        headingLevel: 2, admitsTenantTheme: false, config: { copy: { en: copy } }, data, emitAction: () => {} }));
+    // Maintained defaults carry no handoff producer, so the sibling's review fails closed without touching the signing one.
+    const siblingReview = renderReview('x-sibling-review');
+    await screen.findByText(copy.unavailable); expect(producer).not.toHaveBeenCalled(); siblingReview.unmount();
+    // Positive control: the same render on the signing module reaches the signing options' producer.
+    renderReview(test.policy.moduleId); await vi.waitFor(() => expect(producer).toHaveBeenCalled());
+    cleanup(); host.dispose(); lease.dispose(); test.host.dispose(); test.engine.dispose();
   });
 
   it.each(['missing', 'extra', 'duplicate', 'wrong-version', 'delivery'] as const)('refuses %s module registration or delivery correspondence', mode => {
