@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import { createElement } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { NATIVE_SOURCE_OPERATION_MILLISECONDS } from '../../src/shared/native-operation-budget.ts';
+import { NativePackageRuntime } from '../../src/app/NativePackageRuntime.tsx';
+import type { NativePackageBoot } from '../../src/composition/native-package.ts';
 import { NativePackageRespondentHost } from '../../src/app/NativePackageRespondentHost.tsx';
 import { createTestComposition, testDefinition } from '../fixtures/composition.ts';
 import { departmentAppProfile } from '../../src/profiles/profiles.ts';
@@ -37,7 +40,7 @@ import type { SurfaceScreenerCompletionRequest } from '@formspec-org/surface-rea
 
 beforeAll(() => initFormspecEngine());
 const hashResponse = async (response: FormResponse) => createHash('sha256').update(canonicalResponseHandoffBytes(response)).digest('hex');
-function fixture(attachment = false, signingScope?: NativePackageSigningHostPolicy['signingScope'], configure?: (policy: NativePackageSigningHostPolicy) => void, subjectRef?: string) {
+function fixture(attachment = false, signingScope?: NativePackageSigningHostPolicy['signingScope'], configure?: (policy: NativePackageSigningHostPolicy) => void, subjectRef?: string, engineOptions?: Parameters<typeof createFormEngine>[1]) {
   const definition = { ...sampleFormDefinition, items: attachment ? [{ key: 'fullName', type: 'field' as const, dataType: 'attachment' as const, label: 'Photo' }] : sampleFormDefinition.items, instances: { readiness: { readonly: false, data: { owned: false, ready: false } } } };
   const response: FormResponse & { id: string } = { ...sampleFormResponse, id: 'stable-id', data: attachment ? { fullName: { kind: 'attachment-ref', uri: 'attachment:owned', mimeType: 'image/png', contentType: 'image/png', filename: 'photo.png', size: 1, hash: `sha256:${'a'.repeat(64)}` } } : sampleFormResponse.data };
   const source = { ref: `${definition.url}#/extensions/x-formspec-signing-content/entries/en`, version: '1' };
@@ -83,7 +86,7 @@ function fixture(attachment = false, signingScope?: NativePackageSigningHostPoli
     reviewResponseDigest: hashResponse, canonicalResponseHandoffBytes };
   configure?.(policy);
   const host = createNativePackageSigningHost(policy);
-  const engine = createFormEngine(definition); engine.loadResponseData(response.data as Parameters<typeof engine.loadResponseData>[0]);
+  const engine = createFormEngine(definition, engineOptions); engine.loadResponseData(response.data as Parameters<typeof engine.loadResponseData>[0]);
   const replacements: ReturnType<typeof createFormEngine>[] = [];
   async function attach() { return host.configureRuntime({ engine, definition,
     ...(configure ? { exchangeEngine: async (request: RespondentEngineExchange) => {
@@ -2102,5 +2105,176 @@ describe('two-tier widget admission and Blocker 3 isolation', () => {
     expect(test.sign).not.toHaveBeenCalled();
 
     visit.dispose(); lease.dispose(); test.host.dispose(); test.engine.dispose();
+  });
+});
+
+
+describe('explicit signed current-check renewal', () => {
+  async function signedRenewalFixture() {
+    const issued = await hydrationFixture({ extraSource: true, taskSource: true });
+    let now = 301_000; let freshAt = 0; let authorityCurrent = true;
+    let holdRefresh: Promise<void> | undefined; let holdHydration: Promise<void> | undefined; let holdExchange: Promise<void> | undefined; let refusal: string | undefined; let loseReply = false;
+    const credential = new AbortController();
+    let run = issued.input.run;
+    const history = structuredClone(run);
+    const recover = vi.fn<NonNullable<ScreenerRetention['recover']>>(async request => { request.assertCurrent(); return { ...run, acceptance: null }; });
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>(async request => {
+      await holdRefresh; request.assertCurrent(); freshAt = now;
+      run = { ...request.run, acceptance: { checkedAt: 'fresh', qualification: request.run.run.qualification },
+        run: { ...request.run.run, revision: request.run.run.revision + 1, runId: 'fresh-owned-run' } };
+      if (loseReply) { loseReply = false; throw new Error('refresh-reply-lost'); }
+      return run;
+    });
+    const associate = vi.fn<ScreenerRetention['associate']>();
+    const loadRun = vi.fn<NonNullable<ScreenerRetention['load']>>(async request => { request.assertCurrent(); return { ...run, acceptance: null }; });
+    const hydrate = vi.fn<ScreenerHydration['hydrate']>(async request => {
+      await holdHydration; request.assertCurrent();
+      const check = () => { request.assertCurrent(); if (now - freshAt > 300_000) throw new Error('current-evidence-expired'); if (refusal && !['changed-findings', 'substituted-selector'].includes(refusal)) throw new Error(refusal); };
+      check();
+      const view = { ...issued.view, selection: { ...issued.view.selection, definitionUrl: request.saved.response.definitionUrl, definitionVersion: request.saved.response.definitionVersion }, draftId: request.saved.draft.id, draftVersion: request.saved.draft.version,
+        candidateHash: await computeJcsSha256Digest(request.saved.response),
+        results: issued.view.results.map(result => ({ status: 'qualified' as const, instanceName: result.instanceName, sourceRef: result.sourceRef, data: { eligible: refusal !== 'changed-findings' }, dataHash: 'qualified', evidenceRef: 'fresh-evidence', issuedAt: 'fresh', expiresAt: 'fresh-expiry' })) };
+      return { view, nativeCurrentCheck: refusal === 'substituted-selector' ? { ...request.nativeCurrentCheck!, runId: 'substituted-run' } : request.nativeCurrentCheck, assertCurrent: request.assertCurrent, assertReady: check,
+        refreshRequired: () => now - freshAt > 300_000, remainingMilliseconds: () => Math.max(0, 300_000 - (now - freshAt)) };
+    });
+    const test = fixture(true, undefined, policy => {
+      policy.definition.instances!.facts = { readonly: true, source: 'screening', schema: { eligible: 'boolean' } };
+      policy.definition.binds = [{ path: 'fullName', constraint: "@instance('facts').eligible", constraintMessage: 'Current check refused' }];
+      policy.nativeScreener = { selectionKey: 'signed-checks', retention: { retain: vi.fn(), associate, recover, refresh, load: loadRun }, hydration: { hydrate },
+        context: () => ({ identity: issued.input.identity, signal: credential.signal, assertCurrent() { if (!authorityCurrent) throw new Error('owner-retired'); } }) };
+    }, undefined, { instanceSourceResolver: async () => ({ status: 'unavailable', reason: 'checks-pending' }) });
+    const content = { source: test.policy.signingContext('en').source, locale: 'en', documentId: 'doc', signingIntent: 'urn:test:sign', declaration: 'Declaration',
+      affirmationText: 'Affirmation', delegatedSigningNotice: 'Notice', paperAlternative: 'Paper', electronicConsent: {
+        text: 'Consent', controlLabel: 'Consent', textRef: 'urn:test:consent', version: '1' } } satisfies SigningContent;
+    // Consistency fixture at the signing port; cryptographic qualification is
+    // covered by the existing delegated-response composition controls.
+    const response = { ...test.response, authoredSignatures: [{ signatureProvider: 'urn:test:delegated' }],
+      extensions: { 'x-formspec-signing-content': { content } } } as unknown as FormResponse;
+    const signed: SignedResponseSigning = { draftKey: { formUrl: response.definitionUrl, formVersion: response.definitionVersion }, response, content,
+      draft: { id: 'owned-id', version: 5, responseHash: await hashResponse(response) }, actor: { id: 'server-actor' },
+      evidence: { draft_id: 'owned-id', draft_version: 5, form_version_id: 'publication', subject_ref: 'server-actor', status: 'in_progress', draft_state: response.data, canonical_response: response },
+      verification: { mode: 'delegated-service-key', provider: 'urn:test:delegated', keyId: 'key' } };
+    await test.host.restoreOwnedDraftAccess(signed, () => { if (!authorityCurrent) throw new Error('owner-retired'); }, 'signed');
+    const lease = await test.host.configureRuntime({ engine: test.engine, definition: test.policy.definition, draftKey: signed.draftKey,
+      claim: null, activeLocale: 'en', restoredResponse: response, restoredSigning: signed,
+      exchangeEngine: async request => { await holdExchange; request.assertCurrent(); request.adopt(); test.replacements.push(request.engine as ReturnType<typeof createFormEngine>); } });
+    await test.host.qualifyCurrentVisit!();
+    expect(test.host.getSnapshot().runtime).toBeUndefined(); expect(refresh).not.toHaveBeenCalled();
+    return { ...test, signed, lease, history, recover, refresh, hydrate, associate, loadRun,
+      loseReply: () => { loseReply = true; }, retireCredential: () => credential.abort(),
+      holdRefresh: (promise: Promise<void>) => { holdRefresh = promise; },
+      holdHydration: (promise: Promise<void>) => { holdHydration = promise; }, holdExchange: (promise: Promise<void>) => { holdExchange = promise; }, retireOwner: () => { authorityCurrent = false; },
+      refuse: (value: string) => { refusal = value; }, advance: (value: number) => { now = value; },
+      cleanup() { cleanup(); lease.dispose(); test.host.dispose(); test.engine.dispose(); test.replacements.forEach(engine => engine.dispose()); } };
+  }
+  it('renews an expired signed restore from the actual shell before review runtime exists, without business writes', async () => {
+    const test = await signedRenewalFixture();
+    const original = JSON.stringify(test.signed); const payload = canonicalResponseSignedPayloadBytes(test.signed.response);
+    // Isolate the shell caller from Surface document rendering: this boundary
+    // deliberately blocks the child until checks have produced a review runtime.
+    vi.spyOn(test.host, 'getStartupRoute').mockReturnValue({ entryHref: '/', requiresHostState: true, requiresScreener: true });
+    const composition = createTestComposition({ definition: test.policy.definition });
+    const boot = { host: test.host, composition, localeDocuments: [], initialLocale: 'en', moduleId: 'test' } as unknown as NativePackageBoot;
+    composition.nativePackageRespondent = { load: async () => boot };
+    render(createElement(NativePackageRuntime, { composition, config: departmentAppProfile }));
+    try {
+      const button = await screen.findByRole('button', { name: 'Renew checks for signed response' });
+      expect(test.refresh).not.toHaveBeenCalled(); expect(test.host.getSnapshot().runtime).toBeUndefined();
+      fireEvent.click(button);
+      await vi.waitFor(() => expect(test.host.getSnapshot().runtime).toBeDefined());
+      expect(test.refresh).toHaveBeenCalledOnce(); expect(test.associate).not.toHaveBeenCalled();
+      const request = test.hydrate.mock.calls.at(-1)![0];
+      expect(request.saved).toEqual(test.signed); expect(request.nativeCurrentCheck).toMatchObject({ runId: 'fresh-owned-run', runRevision: 2 });
+      expect(test.host.getSnapshot().nativeReadiness).toBe('ready');
+      expect(await test.load('review')).toMatchObject({ value: { state: { status: 'pending' } } });
+      expect(await test.reviewData()).toMatchObject({ response: test.signed.response, presentation: { phase: 'before-submit', draft: { id: 'owned-id', version: 5 } } });
+      expect(JSON.stringify(test.host.getSnapshot().controller!.signed)).toBe(original);
+      expect(canonicalResponseSignedPayloadBytes(test.host.getSnapshot().controller!.signed!.response)).toEqual(payload);
+      expect(test.history.run).toEqual(test.refresh.mock.calls[0][0].run.run);
+      expect(test.history.selection).toEqual(test.refresh.mock.calls[0][0].run.selection);
+      expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+      expect(test.policy.controller.submitTransport!.submit).not.toHaveBeenCalled();
+    } finally { test.cleanup(); window.history.replaceState(null, '', '/'); }
+  });
+  it.each(['owner', 'credential', 'visit', 'unmount', 'photo-current-proof', 'context-current-proof', 'expired-current-proof', 'substituted-selector'] as const)('refuses %s retirement or partial evidence during renewal and preserves the signature', async mode => {
+    const test = await signedRenewalFixture();
+    let release!: () => void; test.holdRefresh(new Promise<void>(resolve => { release = resolve; }));
+    const first = test.host.renewSignedChecks!();
+    const rejection = expect(first).rejects.toThrow();
+    await vi.waitFor(() => expect(test.refresh).toHaveBeenCalledOnce());
+    if (mode === 'owner') test.retireOwner();
+    if (mode === 'credential') test.retireCredential();
+    if (mode === 'visit') test.host.createSurfaceVisit('replacement', test.host.getSnapshot().sessionGeneration).activate();
+    if (mode === 'unmount') test.lease.dispose();
+    if (mode.includes('current-proof') || mode === 'substituted-selector') test.refuse(mode);
+    release(); await rejection;
+    expect(test.host.getSnapshot().nativeReadiness).not.toBe('ready'); expect(test.host.getSnapshot().runtime).toBeUndefined();
+    expect(test.host.getSnapshot().controller!.signed).toEqual(test.signed);
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+    test.cleanup();
+  });
+  it.each(['hydration', 'engine-exchange'] as const)('fences a completed review at the whole-operation deadline during %s and refuses late installation', async mode => {
+    const test = await signedRenewalFixture();
+    try {
+      await test.host.renewSignedChecks!(); const data = await test.reviewData();
+      test.host.reviewOptions.onReviewState!({ status: 'ready', contextIdentity: await responseReviewHash(data),
+        responseHash: test.signed.draft.responseHash, actorRef: test.signed.actor.id, draft: { id: test.signed.draft.id, version: 5 }, locale: 'en', phase: 'before-submit' });
+      test.advance(602_000); let release!: () => void;
+      const held = new Promise<void>(resolve => { release = resolve; });
+      if (mode === 'hydration') test.holdHydration(held); else test.holdExchange(held);
+      const replacements = test.replacements.length;
+      vi.useFakeTimers(); let ownerChecks = 0;
+      // The outer action starts first. Model elapsed synchronous work before the
+      // inner review qualifier starts its own deadline, reproducing the gap.
+      test.assertOwner.mockImplementation(() => { if (++ownerChecks === 3) vi.advanceTimersByTime(1); });
+      const renewal = test.host.renewSignedChecks!(); const rejected = expect(renewal).rejects.toThrow('native-facts-deadline');
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(NATIVE_SOURCE_OPERATION_MILLISECONDS - 1); await rejected;
+      expect(test.host.getSnapshot().nativeReadiness).toBe('pending'); expect(test.host.getSnapshot().runtime).toBeUndefined();
+      release(); await vi.advanceTimersByTimeAsync(0);
+      expect(test.replacements).toHaveLength(replacements); expect(test.host.getSnapshot().runtime).toBeUndefined();
+      expect(test.host.getSnapshot().nativeReadiness).toBe('pending'); expect(test.host.getSnapshot().controller!.signed).toEqual(test.signed);
+      expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); test.cleanup(); }
+  });
+  it('recovers the owning latest run after a lost refresh reply before an explicit retry', async () => {
+    const test = await signedRenewalFixture();
+    try {
+      test.loseReply(); await expect(test.host.renewSignedChecks!()).rejects.toThrow('refresh-reply-lost');
+      expect(test.loadRun).not.toHaveBeenCalled(); expect(test.host.getSnapshot().runtime).toBeUndefined();
+      await test.host.renewSignedChecks!();
+      expect(test.loadRun).toHaveBeenCalledOnce(); expect(test.refresh.mock.calls[1][0].run.run.revision).toBe(2);
+      expect(test.hydrate.mock.calls.at(-1)![0].nativeCurrentCheck?.runRevision).toBe(3);
+      expect(test.host.getSnapshot().controller!.signed).toEqual(test.signed); expect(test.saveDraft).not.toHaveBeenCalled();
+    } finally { test.cleanup(); }
+  });
+  it.each(['unchanged', 'changed-findings'] as const)('renews a completed signed review with %s findings', async mode => {
+    const test = await signedRenewalFixture();
+    try {
+      await test.host.renewSignedChecks!();
+      const data = await test.reviewData();
+      test.host.reviewOptions.onReviewState!({ status: 'ready', contextIdentity: await responseReviewHash(data),
+        responseHash: test.signed.draft.responseHash, actorRef: test.signed.actor.id, draft: { id: test.signed.draft.id, version: 5 }, locale: 'en', phase: 'before-submit' });
+      const before = await test.load('review');
+      test.advance(602_000); if (mode === 'changed-findings') test.refuse(mode);
+      if (mode === 'unchanged') {
+        await test.host.renewSignedChecks!(); expect(await test.load('review')).toEqual(before);
+      } else {
+        await expect(test.host.renewSignedChecks!()).rejects.toThrow('native-review-renewed-assent-required');
+        expect(await test.load('review')).toMatchObject({ value: { state: { status: 'pending' } } });
+      }
+      expect(test.refresh).toHaveBeenCalledTimes(2); expect(test.host.getSnapshot().controller!.signed).toEqual(test.signed);
+      expect(test.sign).not.toHaveBeenCalled(); expect(test.saveDraft).not.toHaveBeenCalled();
+    } finally { test.cleanup(); }
+  });
+  it('coalesces concurrent explicit renewal for the exact unchanged signed identity', async () => {
+    const test = await signedRenewalFixture(); let release!: () => void;
+    test.holdRefresh(new Promise<void>(resolve => { release = resolve; }));
+    try {
+      const first = test.host.renewSignedChecks!(); const second = test.host.renewSignedChecks!();
+      await vi.waitFor(() => expect(test.refresh).toHaveBeenCalledOnce()); release();
+      await Promise.all([first, second]); expect(test.refresh).toHaveBeenCalledOnce();
+      expect(test.host.getSnapshot().controller!.signed).toEqual(test.signed);
+    } finally { test.cleanup(); }
   });
 });

@@ -519,15 +519,15 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     if (replacement.status !== 'replaced') throw new Error('native-renderer-replacement-unsupported');
     try {
       assertCurrent();
-      await lease.exchange({ expected: old, engine: replacement.engine, adopt: replacement.adopt, signal,
-        assertCurrent: () => { assertCurrent(); facts.assertCurrent(); } });
+      await abortable(signal, lease.exchange({ expected: old, engine: replacement.engine, adopt: replacement.adopt, signal,
+        assertCurrent: () => { assertCurrent(); facts.assertCurrent(); } }));
       assertCurrent(); lease.rebind(replacement.engine);
     } catch (error) { replacement.dispose(); throw error; }
     return same(responseData(replacement.engine.getResponse({ profile: 'off' }).data, saved), saved.response.data);
   }
   let savedFactsRefresh: Promise<void> | undefined;
   let reviewedRefresh: { identity: string; promise: Promise<void> } | undefined;
-  async function refreshReviewedFacts(saved: SavedResponseDraft) {
+  async function refreshReviewedFacts(saved: SavedResponseDraft, renewal?: { signal: AbortSignal; assertCurrent: () => void }) {
     if (!native) return;
     // Refresh belongs to this explicit action and exact completed review. It is
     // never started by expiry, rendering, or a background timer.
@@ -536,7 +536,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const authority = authorityGeneration; const visit = visitEpoch; const selectedLocale = locale; const deliveryGeneration = generation;
     if (!input || !capturedReview || !reviewValidation || capturedState?.status !== 'ready' || !previous
       || !sameSavedDraft(previous.saved, saved) || !same(capturedReview.response, saved.response)) throw new Error('native-review-refresh-unready');
-    const identity = canonicalize({ saved: savedDraftIdentity(saved), authority, visit, selectedLocale, deliveryGeneration, reviewIdentity: capturedState.contextIdentity })!;
+    const identity = canonicalize({ saved: savedDraftIdentity(saved), authority, visit, selectedLocale, deliveryGeneration, reviewIdentity: capturedState.contextIdentity, renewScreening: !!renewal })!;
     if (reviewedRefresh) {
       if (reviewedRefresh.identity !== identity) throw new Error('native-review-refresh-conflict');
       return reviewedRefresh.promise;
@@ -544,9 +544,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const capturedValidation = structuredClone(reviewValidation);
     const sequence = ++qualificationSequence; nativeStage?.abort();
     const stage = new AbortController(); nativeStage = stage;
-    const signal = AbortSignal.any([stage.signal, nativeLifetime.signal]);
+    const signal = AbortSignal.any([stage.signal, nativeLifetime.signal, ...(renewal ? [renewal.signal] : [])]);
     const checkAuthority = () => {
-      signal.throwIfAborted();
+      signal.throwIfAborted(); renewal?.assertCurrent();
       if (disposed || cleared || authorityGeneration !== authority || visitEpoch !== visit || locale !== selectedLocale
         || sequence !== qualificationSequence || rendererLease !== lease || lease && !lease.active
         || !sameSavedDraft(publicSnapshot?.signed ?? publicSnapshot?.prepared, saved)) throw new Error('native-review-refresh-retired');
@@ -560,6 +560,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const timer = setTimeout(() => stage.abort(new Error('native-facts-deadline')), NATIVE_SOURCE_OPERATION_MILLISECONDS);
     const promise = (async () => {
       try {
+        if (renewal) { await abortable(signal, screener!.refreshSaved(saved, checkAuthority)); check(); }
         const facts = await abortable(signal, qualifySaved(saved, checkAuthority, { allowRefresh: false })); check(); facts.assertReady();
         const outputs = await isolated(saved.response, selectedLocale, engine => ({
           fields: captureFields(engine, saved.response), validationReport: engine.getValidationReport({ profile: 'on-submit' }),
@@ -586,6 +587,55 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     })();
     reviewedRefresh = { identity, promise };
     try { await promise; } finally { if (reviewedRefresh?.promise === promise) reviewedRefresh = undefined; }
+  }
+  let signedChecksRenewal: { identity: string; promise: Promise<void> } | undefined;
+  async function renewSignedChecks() {
+    const saved = publicSnapshot?.signed;
+    const authority = authorityGeneration; const visit = visitEpoch; const selectedLocale = locale;
+    const lease = rendererLease; const lifetime = nativeLifetime;
+    const sourceAuthority = policy.nativeScreener?.context();
+    if (!screener || !policy.nativeScreener?.retention.refresh || !saved || !input
+      || !['signed', 'refused', 'failed'].includes(publicSnapshot!.phase)) throw new Error('native-signed-checks-unavailable');
+    const identity = canonicalize({ saved, authority, visit, selectedLocale })!;
+    const check = () => {
+      lifetime.signal.throwIfAborted(); sourceAuthority!.signal.throwIfAborted();
+      assertSynchronousGuard(sourceAuthority!.assertCurrent.bind(sourceAuthority));
+      if (disposed || cleared || authorityGeneration !== authority || visitEpoch !== visit || locale !== selectedLocale
+        || rendererLease !== lease || lease && !lease.active || !same(publicSnapshot?.signed, saved)
+        || !['signed', 'refused', 'failed'].includes(publicSnapshot!.phase)) throw new Error('native-signed-checks-retired');
+      ownedDraftRestoration?.assertCurrent();
+      policy.assertOwner(saved.draftKey, saved.actor.id);
+      assertRestoredSignedResponseEvidence({ draftKey: saved.draftKey }, saved, policy.signingContext(selectedLocale));
+      if (rendererEngine && !same(responseData(rendererEngine.getResponse({ profile: 'off' }).data, saved), saved.response.data))
+        throw new Error('native-signed-checks-candidate-changed');
+    };
+    check();
+    if (signedChecksRenewal) {
+      if (signedChecksRenewal.identity !== identity) throw new Error('native-signed-checks-conflict');
+      return signedChecksRenewal.promise;
+    }
+    const stage = new AbortController();
+    const signal = AbortSignal.any([stage.signal, lifetime.signal, sourceAuthority!.signal]);
+    const timer = setTimeout(() => stage.abort(new Error('native-facts-deadline')), NATIVE_SOURCE_OPERATION_MILLISECONDS);
+    const assertCurrent = () => { signal.throwIfAborted(); check(); };
+    const promise = (async () => {
+      try {
+        // A completed review retains its assent only when the full current
+        // findings remain identical. Fresh restore builds its first review.
+        if (reviewState?.status === 'ready' && review && reviewValidation && nativeCandidate) {
+          await abortable(signal, refreshReviewedFacts(saved, { signal, assertCurrent })); assertCurrent();
+        } else {
+          clearCandidateExpiry(); nativeCandidate = undefined; nativeReadiness = 'pending'; fence(); emit();
+          await abortable(signal, screener.refreshSaved(saved, assertCurrent)); assertCurrent();
+          await qualifyCommitted(saved, { signal, assertCurrent }); assertCurrent();
+        }
+        if (!nativeCandidate || nativeReadiness !== 'ready' || !sameSavedDraft(nativeCandidate.saved, saved) || !runtime)
+          throw new Error('native-signed-checks-unready');
+        nativeCandidate.facts.assertReady();
+      } finally { clearTimeout(timer); }
+    })();
+    signedChecksRenewal = { identity, promise };
+    try { await promise; } finally { if (signedChecksRenewal?.promise === promise) signedChecksRenewal = undefined; }
   }
   const applicantStatusSlot = Object.freeze({
     moduleId: policy.applicantStatusSlot?.moduleId ?? 'x-case-file-review',
@@ -901,6 +951,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   return {
     bundle, definition: policy.definition,
+    ...(screener && policy.nativeScreener?.retention.refresh ? { renewSignedChecks } : {}),
     restoreOwnedDraftAccess: (value: SavedResponseDraft, assertCurrent: () => void, mode?: 'signed') =>
       restoreOwnedAccess(value, assertCurrent, mode === 'signed' ? value as SignedResponseSigning : undefined),
     ...(native ? { ...(screener ? { screenerCompletion: screener.completionPolicy } : {}), instanceSourceResolver: unavailableSources, retireCandidateAuthority: () => { ownedDraftRestoration = undefined; screener?.retireAuthority(); retireNative(); },

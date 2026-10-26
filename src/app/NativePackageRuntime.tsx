@@ -220,7 +220,7 @@ function NativePackageStatus({ failed, identityChanged, children }: { failed?: b
 /** Recovery controls use the qualified Locale and the host's scoped authority. */
 function NativePackageFrame({ boot, selection, location, outcome, onNavigate, children }: { onNavigate: (href: string) => void; boot: NativePackageBoot; selection: string; location: string; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; children: (screenerLocale?: string) => React.ReactNode }) {
   const state = useSyncExternalStore(boot.host.subscribe, boot.host.getSnapshot, boot.host.getSnapshot);
-  const [operation, setOperation] = useState<'idle' | 'locale' | 'clearing' | 'cleared' | 'clear-error' | 'locale-error' | 'refreshing' | 'refresh-error'>('idle');
+  const [operation, setOperation] = useState<'idle' | 'locale' | 'clearing' | 'cleared' | 'clear-error' | 'locale-error' | 'refreshing' | 'refresh-error' | 'renewing-checks' | 'renew-checks-error'>('idle');
   const heading = useRef<HTMLHeadingElement>(null);
   const operationPending = useRef(false);
   const matchingLocales = boot.localeDocuments.filter(document => document.locale.toLowerCase() === state.locale.toLowerCase()
@@ -286,6 +286,13 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
     catch { setOperation('refresh-error'); }
     finally { operationPending.current = false; }
   }
+  async function renewSignedChecks() {
+    if (operationPending.current || !boot.host.renewSignedChecks) return;
+    operationPending.current = true; setOperation('renewing-checks');
+    try { await boot.host.renewSignedChecks(); setOperation('idle'); }
+    catch { setOperation('renew-checks-error'); }
+    finally { operationPending.current = false; }
+  }
   async function clear() {
     if (operationPending.current) return;
     operationPending.current = true; setOperation('clearing');
@@ -302,10 +309,16 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
           aria-pressed={(screenerLease ? screenerLocale : state.locale)?.toLowerCase() === option.code.toLowerCase()} onClick={() => void changeLocale(option.code)}>{option.label}</button>)}
       </div>
       {(!confirmation && state.controller || operation === 'clear-error') && operation !== 'cleared' ? <button type="button" className="locale-button"
-        disabled={operation === 'locale' || operation === 'clearing' || operation === 'refreshing'} onClick={() => void clear()}>
+        disabled={operation === 'locale' || operation === 'clearing' || operation === 'refreshing' || operation === 'renewing-checks'} onClick={() => void clear()}>
         {text(operation === 'clearing' ? 'receipt.clearing' : 'receipt.clear')}
       </button> : null}
     </div>
+    {!confirmation && !state.cleared && state.controller?.signed && boot.host.renewSignedChecks
+      && state.nativeReadiness !== 'ready' && ['signed', 'refused', 'failed'].includes(state.controller.phase)
+      ? <button type="button" className="locale-button" disabled={['locale', 'clearing', 'refreshing', 'renewing-checks'].includes(operation)} onClick={() => void renewSignedChecks()}>
+        {operation === 'renewing-checks' ? 'Renewing checks' : 'Renew checks for signed response'}
+      </button> : null}
+    {operation === 'renew-checks-error' ? <SessionStatus><p role="alert">Checks could not be renewed. Your signed response is saved. Try again.</p></SessionStatus> : null}
     {!confirmation && !state.cleared && operation === 'idle' && state.runtime && (state.controller?.signed || state.controller?.pendingSign)
       && ['prepared', 'signed', 'refused', 'failed', 'outcome-unknown'].includes(state.controller.phase)
       && startupRoute?.signedReviewHref ? <button type="button" className="locale-button"
@@ -323,7 +336,7 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
         <p role="status">{applicationText(state.application.status === 'submitted' ? 'submitted' : 'inProgress')
           ?? (state.application.status === 'submitted' ? 'Application submitted' : 'Application in progress')}: {state.application.caseReference}</p>
       </> : null}
-      {state.application || state.applicationLookup ? <button type="button" className="locale-button" disabled={operation === 'refreshing' || operation === 'clearing'
+      {state.application || state.applicationLookup ? <button type="button" className="locale-button" disabled={operation === 'refreshing' || operation === 'clearing' || operation === 'renewing-checks'
           || !!state.controller && !['idle', 'saved', 'prepared', 'signed', 'submitted', 'refused', 'failed', 'outcome-unknown'].includes(state.controller.phase)}
           onClick={() => void refreshApplication()}>{applicationText('refresh') ?? 'Refresh application status'}</button> : null}
       {!confirmation && state.editableSessionActive ? <p role="status">{boot.host.applicationCapabilities.persistentSaving
