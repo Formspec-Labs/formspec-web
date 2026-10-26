@@ -115,7 +115,8 @@ contract without parallel-implementation drift.
   available."
 - **Draft hydration / resume.** A `draft` entry today shows as a list item
   with a timestamp; clicking it does NOT resume the form. Draft resume requires
-  EXT-26 + EXT-27 (cross-deployment draft hydration); both are upstream-queued.
+  EXT-26's scoped draft lookup (still upstream-queued) and web adoption of the
+  landed EXT-27 session-bound update.
 - **Receipt-chain detail view for signed records.** FW-0009 / FW-0010
   (verifier surface) territory. The entry carries `receiptRef` but the surface
   does not render the receipt body or the verifier path.

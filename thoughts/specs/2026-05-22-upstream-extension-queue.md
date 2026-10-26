@@ -492,7 +492,7 @@ Single filer per submission for slice 1. Multi-party composition extends additiv
 **FW rows blocked:** FW-0001 (server-backed draft resume) and production release sign-off for the M6 draft-hydration claim.
 **Shape:** expand the draft read surface so web can recover a draft without an in-memory key-to-`draft_id` binding. Acceptable shapes include `DraftView` carrying `draft_state`, a dedicated `GET /drafts/{draft_id}/state`, plus a scoped lookup/list route by form and verified subject. The route must preserve tenant scope and anonymous-session verification.
 **Fixture status:** none.
-**Status:** not yet filed. Re-verified absent 2026-05-23: `DraftView` still carries metadata only and omits `draft_state`; no scoped lookup/list route exists for web draft resume.
+**Status:** not yet filed (partly landed). formspec-server `0f89b45` added `draft_state` to `DraftView`, and `GET /drafts/{draft_id}` returns it to the owning form-bound session Bearer (`crates/formspec-server/tests/canonical_response.rs` `authenticated_resume_preserves_locale_snapshot_answers_and_optimistic_version`). Re-verified absent 2026-10-25: no scoped lookup/list route by form and verified subject, so resume still needs a client-held `draft_id` and token, and cross-device resume stays blocked.
 
 ### EXT-27: Session-bound anonymous draft update
 
@@ -500,8 +500,8 @@ Single filer per submission for slice 1. Multi-party composition extends additiv
 **Closes:** in-place anonymous draft updates for the formspec-stack reference composition.
 **FW rows blocked:** storage-efficient anonymous autosave for FW-0001 and external-audit sign-off of anonymous draft update semantics.
 **Shape:** extend `PATCH /drafts/{draft_id}` or add an equivalent update route that accepts `anonymous_session_token`, verifies it against the draft's form and subject, and rejects mismatches. Until this lands, `HttpDraftStore` creates a fresh anonymous server draft on each save and submits the latest binding instead of using the unbound PATCH route.
-**Fixture status:** none.
-**Status:** not yet filed. Re-verified absent 2026-05-23: `UpdateDraftCommand` carries `draft_state` and optional version only; no `anonymous_session_token` is accepted on the update path.
+**Fixture status:** `formspec-server` `crates/formspec-server/tests/response_submit.rs` `draft_submit_uses_formspec_eval_and_persists_response_intent` (no Bearer 401; another session's Bearer 401 on GET and PATCH; body `anonymous_session_token` that disagrees with the Bearer 401 `draft_token_mismatch`; owner Bearer PATCH 200 with version bump and stale-version 409).
+**Status:** landed in formspec-server `0f89b45`. `PATCH /drafts/{draft_id}` requires the form-bound anonymous session Bearer, authorizes it against the draft (`authorize_access`), and updates through `update_draft_with_session`. Web still creates a fresh anonymous draft per save; moving `HttpDraftStore` to in-place PATCH is web work.
 
 ### EXT-22: Nested-path draft hydration
 
@@ -537,7 +537,7 @@ Single filer per submission for slice 1. Multi-party composition extends additiv
 **FW rows blocked:** M8 hosted/full-stack demo hardening
 **Shape:** production server Dockerfile/image plus documented runtime env for database/object-store dependencies.
 **Fixture status:** n/a.
-**Status:** not yet filed.
+**Status:** not yet filed. Re-verified 2026-10-25, partly met outside this entry's owner: the stack root's `ops/managed-single-cell/docker/Dockerfile.rust` (stack `e5bc09a59`) builds a release formspec-server image that the managed-single-cell compose runs with `FORMSPEC_SERVER_PROFILE=production`, with runtime env documented in `ops/managed-single-cell/RUNBOOK.md`; nothing there uses bind-mounted `cargo run`. Still open: the image is built locally (tagged `:local`) and not published, and formspec-server ships no Dockerfile, so hosted compose and this repo's full-stack compose remain blocked.
 
 ### EXT-35: WOS `governance.recordLifecycle` form-policy block (record lifecycle actions)
 

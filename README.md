@@ -66,9 +66,10 @@ headers, and compose quickstart plus multi-deployment smoke.
 
 Do not treat this as full production release sign-off yet. Manual VoiceOver and
 NVDA sweeps are pending, production Locale Documents need a live server-payload
-refresh before the release tag, full OIDC server validation is blocked by
-EXT-23, and server-backed draft resume/update semantics are blocked by EXT-26
-and EXT-27.
+refresh before the release tag, full OIDC server validation landed upstream
+(EXT-23) but awaits a web end-to-end proof, cross-device draft resume is
+blocked by EXT-26, and in-place anonymous draft update (EXT-27, landed
+upstream) awaits web adoption.
 
 Container smoke:
 

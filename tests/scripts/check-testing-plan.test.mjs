@@ -624,7 +624,7 @@ function manualReleaseRows(options = {}) {
     [
       'Session-bound anonymous draft update',
       'docs/adapters/draft-store.md',
-      'Blocked by EXT-27.',
+      'Server landed (EXT-27); web in-place update pending.',
     ],
   ]
     .filter(([gate]) => gate !== options.omitManualGate)

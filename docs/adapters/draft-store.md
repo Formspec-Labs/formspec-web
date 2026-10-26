@@ -37,10 +37,11 @@ review, including saved attachments, still gates Submit. Ambiguous, colliding,
 or unresolved routes do not produce a recovery control.
 
 Anonymous production saves intentionally create a fresh server draft on each
-save and move the local binding to that new `draft_id`. The current server
-`PATCH /drafts/{draft_id}` command cannot carry or verify the anonymous session
-token, so the reference web composition avoids that route for anonymous drafts
-until the server exposes a session-bound update contract (EXT-27).
+save and move the local binding to that new `draft_id`. The server now binds
+`PATCH /drafts/{draft_id}` to the form-bound anonymous session Bearer (EXT-27,
+landed in formspec-server `0f89b45`); switching anonymous saves to in-place
+PATCH is pending web work. Cross-device resume still waits for a scoped draft
+lookup (EXT-26).
 
 ## Composition pairing
 

@@ -39,7 +39,7 @@ close.
 | Production Locale Documents from server | Web adapter-proven; refresh live server payload before release tag. | `docs/ux/i18n.md`; `docs/testing-plan.md`; `tests/adapters/http/definition-source.test.ts`. |
 | Full OIDC server validation | Server landed (EXT-23); web end-to-end proof pending. | `docs/identity/integration.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`. |
 | Cross-reload or cross-device draft resume | Blocked by EXT-26. | `docs/adapters/draft-store.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`; `npm run check:upstream-blockers`. |
-| Session-bound anonymous draft update | Blocked by EXT-27. | `docs/adapters/draft-store.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`; `npm run check:upstream-blockers`. |
+| Session-bound anonymous draft update | Server landed (EXT-27); web in-place update pending. | `docs/adapters/draft-store.md`; `thoughts/specs/2026-05-22-upstream-extension-queue.md`; `docs/testing-plan.md`. |
 | Hosted demo URL | Deferred to user action. | `docs/deployment.md`; `docs/operations.md`; `README.md`. |
 
 ## Completion Audit
@@ -60,6 +60,6 @@ keeps the release sign-off boundaries explicit, verifies the completion-audit
 rows above, and points each cited evidence path at a real local file or package
 script. `npm run check:upstream-blockers` checks the sibling `formspec-server`
 checkout for the current blocker indicators and documented alternate landing
-shapes for EXT-26 and EXT-27. It is a local stack gate, not a
+shapes for EXT-26. It is a local stack gate, not a
 substitute for reviewing new server architecture after those upstream
 extensions land.

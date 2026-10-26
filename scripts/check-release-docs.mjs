@@ -101,7 +101,7 @@ const requiredExtensionQueueEntries = [
   {
     id: 'EXT-27',
     owner: 'formspec-server',
-    statusPrefix: 'not yet filed',
+    statusPrefix: 'landed in formspec-server',
   },
 ];
 

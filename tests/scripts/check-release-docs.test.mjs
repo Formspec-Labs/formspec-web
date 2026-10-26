@@ -268,7 +268,7 @@ function extensionQueueDoc(options) {
       ['EXT-24', 'formspec-server', 'not yet filed'],
       ['EXT-25', 'formspec-server', 'not yet filed'],
       ['EXT-26', 'formspec-server', 'not yet filed'],
-      ['EXT-27', 'formspec-server', 'not yet filed'],
+      ['EXT-27', 'formspec-server', 'landed in formspec-server 0f89b45'],
     ].flatMap(([id, owner, status]) => {
       if (id === options.omitExtension) {
         return [];

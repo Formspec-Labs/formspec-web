@@ -80,7 +80,7 @@ const requiredManualGates = new Map([
   ],
   [
     'Session-bound anonymous draft update',
-    { evidence: 'docs/adapters/draft-store.md', status: 'Blocked by EXT-27' },
+    { evidence: 'docs/adapters/draft-store.md', status: 'Server landed (EXT-27); web in-place update pending' },
   ],
 ]);
 const requiredCoverageRows = new Map([

@@ -33,110 +33,31 @@ describe('check-upstream-blockers', () => {
     expect(result.stderr).toContain('formspec-server checkout not found');
   });
 
-  it('rejects EXT-26 when DraftView exposes draft_state', () => {
+  it('rejects EXT-26 when a draft lookup endpoint appears', () => {
     const { root, server } = createFixture({
-      responsesPatch: (text) => text.replace('pub status: DraftStatus,', 'pub status: DraftStatus,\n    pub draft_state: Value,'),
+      endpointsPatch: (text) =>
+        `${text}pub(crate) const FORM_DRAFTS: Endpoint<FormPath, Absent, Absent, Vec<DraftView>> =
+    Endpoint::get("/runtime/forms/{form_id}/drafts");
+`,
     });
     const result = runCheck(root, server);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('EXT-26 may have landed');
+    expect(result.stderr).toContain('EXT-26 may have landed; a draft lookup/list endpoint exists');
   });
 
-  it('rejects EXT-26 when a dedicated draft-state route appears', () => {
+  it('rejects EXT-26 when a draft lookup handler appears', () => {
     const { root, server } = createFixture({
       routesPatch: (text) => `${text}
-#[utoipa::path(
-    get,
-    path = "/drafts/{draft_id}/state",
-    responses((status = 200, body = DraftStateView)),
-    tag = "drafts"
-)]
-pub(crate) async fn get_draft_state() -> Result<impl IntoResponse, ProblemJson> {
+pub(crate) async fn list_form_drafts() -> Result<impl IntoResponse, ProblemJson> {
     todo!()
 }
-
-pub struct DraftStateView {
-    pub draft_state: Value,
-}
 `,
     });
     const result = runCheck(root, server);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('dedicated draft-state');
-  });
-
-  it('rejects EXT-26 when a scoped form draft lookup route appears', () => {
-    const { root, server } = createFixture({
-      routesPatch: (text) =>
-        text.replace(
-          '.route("/runtime/forms/{form_id}/drafts", post(create_draft))',
-          '.route("/runtime/forms/{form_id}/drafts", get(list_form_drafts).post(create_draft))',
-        ),
-    });
-    const result = runCheck(root, server);
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('scoped form-draft');
-  });
-
-  it('rejects EXT-27 when UpdateDraftCommand accepts anonymous session tokens', () => {
-    const { root, server } = createFixture({
-      responsesPatch: (text) => text.replace(
-        'pub expected_draft_version: Option<i64>,',
-        'pub expected_draft_version: Option<i64>,\n    pub anonymous_session_token: Option<String>,',
-      ),
-    });
-    const result = runCheck(root, server);
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('UpdateDraftCommand now accepts anonymous_session_token');
-  });
-
-  it('rejects EXT-27 when update_draft verifies anonymous session tokens', () => {
-    const { root, server } = createFixture({
-      responsesPatch: (text) => text.replace(
-        'let draft_id = DraftId::new(draft_id)?;',
-        'let draft_id = DraftId::new(draft_id)?;\n        self.session_verifier.verify_anonymous_session(ctx, &FormId::new("form").unwrap(), "token")?;',
-      ),
-    });
-    const result = runCheck(root, server);
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('update_draft now verifies anonymous session tokens');
-  });
-
-  it('rejects EXT-27 when an equivalent session-bound update route appears', () => {
-    const { root, server } = createFixture({
-      routesPatch: (text) => `${text}
-#[utoipa::path(
-    patch,
-    path = "/drafts/{draft_id}/anonymous",
-    request_body = SessionBoundUpdateDraftCommand,
-    responses((status = 200, body = DraftView)),
-    tag = "drafts"
-)]
-pub(crate) async fn update_anonymous_draft(
-    WithRejection(Json(command), _): WithRejection<Json<SessionBoundUpdateDraftCommand>, ProblemJson>,
-) -> Result<impl IntoResponse, ProblemJson> {
-    state
-        .response_services
-        .drafts
-        .update_anonymous_draft(&ctx, &draft_id, command)
-        .await
-}
-
-pub struct SessionBoundUpdateDraftCommand {
-    pub anonymous_session_token: String,
-    pub draft_state: Value,
-}
-`,
-    });
-    const result = runCheck(root, server);
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('session-bound draft update');
+    expect(result.stderr).toContain('EXT-26 may have landed; a draft lookup/list handler exists');
   });
 
   it('rejects docs that stop naming a live blocker', () => {
@@ -165,8 +86,8 @@ function createFixture(options = {}) {
 
   write(
     server,
-    'crates/formspec-server/src/services/responses.rs',
-    patch(options.responsesPatch, responsesFixture()),
+    'crates/formspec-server/src/endpoints.rs',
+    patch(options.endpointsPatch, endpointsFixture()),
   );
   write(
     server,
@@ -174,9 +95,9 @@ function createFixture(options = {}) {
     patch(options.routesPatch, routesFixture()),
   );
 
-  write(root, 'docs/adapters/draft-store.md', docText(['EXT-26', 'EXT-27'], options.omitDocBlocker));
-  write(root, 'docs/testing-plan.md', docText(['EXT-26', 'EXT-27'], options.omitDocBlocker));
-  write(root, 'docs/mvp-audit.md', docText(['EXT-26', 'EXT-27'], options.omitDocBlocker));
+  write(root, 'docs/adapters/draft-store.md', docText(['EXT-26'], options.omitDocBlocker));
+  write(root, 'docs/testing-plan.md', docText(['EXT-26'], options.omitDocBlocker));
+  write(root, 'docs/mvp-audit.md', docText(['EXT-26'], options.omitDocBlocker));
 
   return { root, server };
 }
@@ -189,89 +110,27 @@ function docText(blockers, omit) {
   return blockers.filter((blocker) => blocker !== omit).join('\n');
 }
 
-function responsesFixture() {
+// Mirrors formspec-server's current draft surface: create, read, and update, but no lookup/list.
+function endpointsFixture() {
   return `
-pub async fn update_draft(
-    &self,
-    ctx: &TenantContext,
-    draft_id: &str,
-    command: UpdateDraftCommand,
-) -> Result<DraftView, PortError> {
-    let draft_id = DraftId::new(draft_id)?;
-    let draft_state_json = command.draft_state.to_string();
-    Ok(DraftView::from(record))
-}
-
-pub struct UpdateDraftCommand {
-    pub draft_state: Value,
-    #[serde(default)]
-    pub expected_draft_version: Option<i64>,
-}
-
-pub struct DraftView {
-    pub draft_id: String,
-    pub form_version_id: String,
-    pub subject_ref: String,
-    pub draft_version: i64,
-    pub status: DraftStatus,
-}
+pub(crate) const CREATE_DRAFT: Endpoint<FormPath, Absent, CreateDraftCommand, DraftView> =
+    Endpoint::post("/runtime/forms/{form_id}/drafts");
+pub(crate) const DRAFT: Endpoint<DraftPath, Absent, Absent, DraftView> =
+    Endpoint::get("/drafts/{draft_id}");
+pub(crate) const UPDATE_DRAFT: Endpoint<DraftPath, Absent, UpdateDraftCommand, DraftView> =
+    Endpoint::patch("/drafts/{draft_id}");
+pub(crate) const RESPONSES: Endpoint<Absent, ResponseListQuery, Absent, Vec<ResponseView>> =
+    Endpoint::get("/responses");
 `;
 }
 
 function routesFixture() {
   return `
-use axum::routing::{get, patch, post};
-use crate::services::responses::{
-    CreateDraftCommand, DraftView, ResponseServices, SubmitDraftCommand, UpdateDraftCommand,
-};
-
-pub fn router() -> Router {
-    Router::new()
-        .route("/runtime/forms/{form_id}/drafts", post(create_draft))
-        .route("/drafts/{draft_id}", get(get_draft).patch(update_draft))
-        .route("/drafts/{draft_id}/submit", post(submit_draft))
-}
-
-#[utoipa::path(
-    post,
-    path = "/runtime/forms/{form_id}/drafts",
-    request_body = CreateDraftCommand,
-    responses((status = 200, body = DraftView)),
-    tag = "drafts"
-)]
-pub(crate) async fn create_draft() -> Result<impl IntoResponse, ProblemJson> {
-    todo!()
-}
-
-#[utoipa::path(
-    patch,
-    path = "/drafts/{draft_id}",
-    request_body = UpdateDraftCommand,
-    responses((status = 200, body = DraftView)),
-    tag = "drafts"
-)]
-pub(crate) async fn update_draft() -> Result<impl IntoResponse, ProblemJson> {
-    todo!()
-}
-
-#[utoipa::path(
-    get,
-    path = "/drafts/{draft_id}",
-    responses((status = 200, body = DraftView)),
-    tag = "drafts"
-)]
 pub(crate) async fn get_draft() -> Result<impl IntoResponse, ProblemJson> {
     todo!()
 }
 
-#[utoipa::path(
-    post,
-    path = "/drafts/{draft_id}/submit",
-    request_body = SubmitDraftCommand,
-    responses((status = 200)),
-    tag = "responses"
-)]
-pub(crate) async fn submit_draft() -> Result<impl IntoResponse, ProblemJson> {
+pub(crate) async fn update_draft() -> Result<impl IntoResponse, ProblemJson> {
     todo!()
 }
 `;

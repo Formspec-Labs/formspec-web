@@ -150,11 +150,10 @@ const requiredBoundaries = new Map([
   [
     'Session-bound anonymous draft update',
     [
-      'Blocked by EXT-27',
+      'Server landed (EXT-27); web in-place update pending',
       'docs/adapters/draft-store.md',
       'thoughts/specs/2026-05-22-upstream-extension-queue.md',
       'docs/testing-plan.md',
-      'npm run check:upstream-blockers',
     ],
   ],
   ['Hosted demo URL', ['Deferred to user action', 'docs/deployment.md', 'docs/operations.md', 'README.md']],
