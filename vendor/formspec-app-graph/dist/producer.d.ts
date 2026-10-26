@@ -3,7 +3,7 @@ import type { HostWidgetContracts } from './widget-runtime-contract.js';
 import type { ArtifactResolutionReport, ModuleResolutionReport } from '@formspec-org/types';
 import { type ArtifactResolverRequest } from './artifact-resolver.js';
 import { type ModuleResolverAdmissionInput, type ModuleResolverSupportInput } from './module-resolver.js';
-import type { AppGraphCrossArtifactValidator, AppGraphDiagnosticReport, AppGraphEvidenceSchemaValidators, AppGraphHostEvidence, AppGraphRenderedNeedTraceMode, AppGraphSchemaValidators, AppGraphValidationOptions, AppGraphValidationReport } from './types.js';
+import type { AppGraphCrossArtifactValidator, AppGraphDiagnosticReport, AppGraphEvidenceSchemaValidators, AppGraphHostEvidence, AppGraphRenderedNeedTraceRequest, AppGraphSchemaValidators, AppGraphValidationOptions, AppGraphValidationReport } from './types.js';
 import { type ComponentRouteResolver } from './component-route-resolution.js';
 export interface AppGraphReportProducerRequest extends ArtifactResolverRequest {
     hostEvidence?: AppGraphHostEvidence;
@@ -19,7 +19,7 @@ export interface AppGraphReportProducerRequest extends ArtifactResolverRequest {
     /** See `AppGraphValidationRequest.hostWidgetContracts`. */
     hostWidgetContracts?: HostWidgetContracts;
     /** See `AppGraphValidationRequest.renderedNeedTrace`. */
-    renderedNeedTrace?: AppGraphRenderedNeedTraceMode;
+    renderedNeedTrace?: AppGraphRenderedNeedTraceRequest;
     validationOptions?: AppGraphValidationOptions;
 }
 export interface AppGraphReportProducerResult {

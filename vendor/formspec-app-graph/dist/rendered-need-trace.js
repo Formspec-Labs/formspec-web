@@ -1,6 +1,7 @@
 /** @filedesc Opt-in strict validation from every authored render node to an adopted, current Need. */
 import { diagnosticSourceForHandle } from './report.js';
 import { NEED_ANCHOR } from './needs-coverage.js';
+import { componentTargetUrl } from './locale-associations.js';
 import { registryWidgetEntries, resolvedWidgetContributionFromEntries, widgetShape, } from './surface-widgets.js';
 const NEEDS_DOCUMENT_VERSION = '1.0';
 const CONFIG_POINTER_PATTERN = /^(?:|\/(?:\*|(?:[^~/]|~[01])+)(?:\/(?:\*|(?:[^~/]|~[01])+))*)$/;
@@ -380,7 +381,7 @@ function appManifestNodes(handle) {
         return [];
     return [generationNode(handle, 'app-manifest-title', '', document, stringProp(document, 'title') ?? 'App title')];
 }
-function collectDefinitionItems(handle, items, pointer, out) {
+function collectDefinitionItems(handle, items, pointer, out, family) {
     if (!Array.isArray(items))
         return;
     items.forEach((rawItem, index) => {
@@ -388,32 +389,32 @@ function collectDefinitionItems(handle, items, pointer, out) {
         if (!item)
             return;
         const itemPointer = `${pointer}/${index}`;
-        out.push(generationNode(handle, 'definition-item', itemPointer, item, `items[${index}]`));
+        out.push(generationNode(handle, `${family}-item`, itemPointer, item, `items[${index}]`));
         if (Array.isArray(item.options)) {
             item.options.forEach((rawOption, optionIndex) => {
                 const option = record(rawOption);
                 if (!option)
                     return;
-                out.push(generationNode(handle, 'definition-option', `${itemPointer}/options/${optionIndex}`, option, `options[${optionIndex}]`));
+                out.push(generationNode(handle, `${family}-option`, `${itemPointer}/options/${optionIndex}`, option, `options[${optionIndex}]`));
             });
         }
-        collectDefinitionItems(handle, item.children, `${itemPointer}/children`, out);
+        collectDefinitionItems(handle, item.children, `${itemPointer}/children`, out, family);
     });
 }
-function definitionNodes(handle) {
+function definitionNodes(handle, family = 'definition') {
     const document = record(handle.document);
     if (!document)
         return [];
     const out = [
-        generationNode(handle, 'definition-document', '', document, stringProp(document, 'title') ?? 'Definition'),
+        generationNode(handle, `${family}-document`, '', document, stringProp(document, 'title') ?? (family === 'screener' ? 'Screener' : 'Definition')),
     ];
-    collectDefinitionItems(handle, document.items, '/items', out);
+    collectDefinitionItems(handle, document.items, '/items', out, family);
     if (Array.isArray(document.binds)) {
         document.binds.forEach((rawBind, bindIndex) => {
             const bind = record(rawBind);
             if (!bind)
                 return;
-            out.push(generationNode(handle, 'definition-bind', `/binds/${bindIndex}`, bind, stringProp(bind, 'path') ?? `binds[${bindIndex}]`));
+            out.push(generationNode(handle, `${family}-bind`, `/binds/${bindIndex}`, bind, stringProp(bind, 'path') ?? `binds[${bindIndex}]`));
         });
     }
     if (Array.isArray(document.shapes)) {
@@ -421,7 +422,7 @@ function definitionNodes(handle) {
             const shape = record(rawShape);
             if (!shape)
                 return;
-            out.push(generationNode(handle, 'definition-shape', `/shapes/${shapeIndex}`, shape, `shapes[${shapeIndex}]`));
+            out.push(generationNode(handle, `${family}-shape`, `/shapes/${shapeIndex}`, shape, `shapes[${shapeIndex}]`));
         });
     }
     const optionSets = record(document.optionSets);
@@ -434,7 +435,7 @@ function definitionNodes(handle) {
                 const option = record(rawOption);
                 if (!option)
                     return;
-                out.push(generationNode(handle, 'definition-option', `/optionSets/${escapePointerSegment(setName)}/options/${optionIndex}`, option, `${setName}.options[${optionIndex}]`));
+                out.push(generationNode(handle, `${family}-option`, `/optionSets/${escapePointerSegment(setName)}/options/${optionIndex}`, option, `${setName}.options[${optionIndex}]`));
             });
         }
     }
@@ -713,6 +714,8 @@ export function collectRenderedNeedTraceNodes(context, previewScenarios = []) {
                 return surfaceNodes(handle, registryEntries);
             case 'definition':
                 return definitionNodes(handle);
+            case 'screener':
+                return definitionNodes(handle, 'screener');
             case 'theme':
                 return themeNodes(handle);
             case 'responseActions':
@@ -863,16 +866,34 @@ function nodeCarriesTrace(node) {
  * report record (Needs spec S10.3) that lets a server check the run instead of
  * re-running it. `definitions` names every loaded Definition the run covered.
  */
-export function runRenderedNeedTrace(context, mode) {
+export function runRenderedNeedTrace(context, request) {
     const paired = pairedNeedsDocuments(context);
     const nodes = collectRenderedNeedTraceNodes(context);
-    const applies = mode === 'required' || paired.length > 0 || nodes.some(nodeCarriesTrace);
-    const definitions = context.handles
-        .filter((handle) => handle.artifactKind === 'definition' && handle.status === 'loaded')
-        .flatMap((handle) => {
+    const applies = request.mode === 'required' || paired.length > 0 || nodes.some(nodeCarriesTrace);
+    const loaded = (kind) => context.handles.filter((handle) => handle.artifactKind === kind && handle.status === 'loaded');
+    const covered = (handle) => {
+        const url = stringProp(record(handle.document), 'url');
+        return url ? [{ url, sha256: request.digest(handle.document) }] : [];
+    };
+    const definitions = loaded('definition').flatMap((handle) => {
         const url = stringProp(record(handle.document), 'url');
         const version = stringProp(record(handle.document), 'version');
-        return url && version ? [{ url, version }] : [];
+        if (!url || !version)
+            return [];
+        return [{
+                url,
+                version,
+                sha256: request.digest(handle.document),
+                locales: loaded('locale')
+                    .filter((locale) => {
+                    const target = record(record(locale.document)?.target);
+                    return stringProp(target, 'kind') === 'definition' && stringProp(target, 'url') === url;
+                })
+                    .flatMap(covered),
+                components: loaded('component')
+                    .filter((component) => componentTargetUrl(record(component.document)) === url)
+                    .flatMap(covered),
+            }];
     });
     return applies
         ? { diagnostics: traceDiagnostics(paired, nodes), record: { status: 'completed', definitions } }
