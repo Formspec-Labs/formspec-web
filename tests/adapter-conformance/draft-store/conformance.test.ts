@@ -9,16 +9,17 @@ defineDraftStoreConformance('stub DraftStore conformance', () => ({
 }));
 
 defineDraftStoreConformance('HTTP DraftStore conformance', () => {
-  const drafts = new Map<string, { draftVersion: number; response: FormResponse; data: Record<string, unknown> }>();
+  const drafts = new Map<string, { draftVersion: number; response?: FormResponse; data: Record<string, unknown> }>();
   let draftCounter = 0;
   const { fetch } = recordingFetch((request) => {
     const path = new URL(request.url).pathname;
     if (request.method === 'POST' && /\/runtime\/forms\/[^/]+\/drafts$/.test(path)) {
       draftCounter += 1;
       const draftId = `draft-http-${draftCounter}`;
-      const body = request.body as { canonical_response: FormResponse; draft_state: Record<string, unknown> };
-      drafts.set(draftId, { draftVersion: 1, response: structuredClone(body.canonical_response), data: structuredClone(body.draft_state) });
-      return jsonResponse({ draft_id: draftId, draft_version: 1 });
+      if (JSON.stringify(request.body) !== JSON.stringify({ form_version_id: 'publication' })) throw new Error('Initialization body changed');
+      drafts.set(draftId, { draftVersion: 1, data: {} });
+      return jsonResponse({ draft_id: draftId, draft_version: 1, form_version_id: 'publication', subject_ref: 'S-1',
+        status: 'in_progress', is_initialization_only: true, canonical_response: null, draft_state: {} });
     }
     const draftId = path.split('/').at(-1) ?? '';
     const draft = drafts.get(draftId);
@@ -37,6 +38,7 @@ defineDraftStoreConformance('HTTP DraftStore conformance', () => {
     adapter: new HttpDraftStore({
       baseUrl: 'https://formspec-server.example.test',
       fetchImpl: fetch,
+      formVersionId: 'publication',
     }),
   };
 });

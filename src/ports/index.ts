@@ -182,7 +182,7 @@ export type { ScreenerSelection, ScreenerOwner, ScreenerAnswer, ScreenerQualific
   RetainedScreenerRun, ScreenerRunView, ScreenerAssociation, ScreenerOperationContext,
   RetainScreenerCompletion, AssociateScreenerCandidate, ScreenerRetention } from './screener-retention.ts';
 
-export type { EvaluationHydrationWire, EvaluationHydrationOwner, EvaluationProviderRegistration,
+export type { CanonicalEvaluationHydrationWire, EvaluationHydrationWire, EvaluationHydrationOwner, EvaluationProviderRegistration,
   HydratedEvaluationCandidate, SavedCandidateHydration, HttpEvaluationProviderReceipt, NativeScreenerMappingReceipt, EvaluationHydrationResult } from './evaluation-hydration.ts';
 
 export type { HydrateScreenerCandidate, ScreenerHydration } from './screener-hydration.ts';

@@ -1,4 +1,6 @@
 import { createSubmitFailureReporter, type SubmitFailureStage } from './submit-diagnostic.ts';
+import { snapshotFiniteJson } from '@formspec-org/surface';
+import { sameResponseDataView } from './response-data-view.ts';
 import { assertSignedTaskDraft } from './task-draft-wire.ts';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
 import { ResponseCompletionRefusal, TaskCompletionOutcomeUnknown } from '../ports/response-completion.ts';
@@ -99,7 +101,7 @@ class ControllerRefusal extends Error {
 export function createResponseActionController(config: ResponseActionControllerConfig) {
   const context = freeze(structuredClone(config.context));
   const roles = freeze(structuredClone(config.roles));
-  const restored = config.restoredResponse ? freeze(structuredClone(config.restoredResponse)) : undefined;
+  const restored = config.restoredResponse ? snapshotFiniteJson(config.restoredResponse) as unknown as FormResponse : undefined;
   const completion = config.completion ?? (config.buildHandoff && config.submitTransport
     ? createIntakeResponseCompletion({ buildHandoff: config.buildHandoff, submitTransport: config.submitTransport }) : undefined);
   const lifetime = new AbortController();
@@ -133,8 +135,8 @@ export function createResponseActionController(config: ResponseActionControllerC
   const deliveries = new Map<string, Delivery>();
 
   function publish(phase: ResponseActionControllerSnapshot['phase'], reason?: ResponseActionControllerReason) {
-    snapshot = freeze(structuredClone({ phase, owned, ...(pendingOperationId ? { pendingSign: true } : {}), ...(retryableSign && !busy ? { retrySignAvailable: true } : {}), ...(reason ? { reason } : {}),
-      ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}), ...(saved ? { saved } : {}), ...(prepared ? { prepared } : {}), ...(signed ? { signed } : {}), ...(completionResult ? { completion: completionResult, ...(completionResult.kind === 'intake' ? { confirmation: completionResult.confirmation } : {}) } : {}) }));
+    snapshot = snapshotFiniteJson({ phase, owned, ...(pendingOperationId ? { pendingSign: true } : {}), ...(retryableSign && !busy ? { retrySignAvailable: true } : {}), ...(reason ? { reason } : {}),
+      ...(application ? { application } : {}), ...(applicationLookup ? { applicationLookup } : {}), ...(saved ? { saved } : {}), ...(prepared ? { prepared } : {}), ...(signed ? { signed } : {}), ...(completionResult ? { completion: completionResult, ...(completionResult.kind === 'intake' ? { confirmation: completionResult.confirmation } : {}) } : {}) }) as unknown as ResponseActionControllerSnapshot;
     for (const listener of listeners) listener();
   }
   function current(generation: number) { if (invalidated || generation !== epoch) throw new ControllerRefusal('context-obsolete'); }
@@ -181,7 +183,7 @@ export function createResponseActionController(config: ResponseActionControllerC
     await assertControllerResponse(context, config.validateResponse, response);
   }
   async function afterCommit(result: SavedResponseDraft) {
-    try { await config.afterCommittedDraft?.(freeze(structuredClone(result))); }
+    try { await config.afterCommittedDraft?.(snapshotFiniteJson(result) as unknown as SavedResponseDraft); }
     catch { /* The host publishes downstream Pending separately; this receipt remains committed. */ }
   }
   async function checkEvidence(result: SavedResponseDraft, expected?: FormResponse) {
@@ -244,8 +246,8 @@ export function createResponseActionController(config: ResponseActionControllerC
     busy = deliveryId;
     publish(role);
     const pending = (async () => {
-      // The cohort owns hidden locator planning on a restored owned Save with no exposed evidence.
-      if (request && role !== 'submit' && role !== 'startApplication' && (role !== 'saveOwned' || saved)) {
+      // The cohort owns initialized locator planning before the first Save and on restored Save without exposed evidence.
+      if (request && role !== 'submit' && role !== 'startApplication' && role !== 'saveInitial' && (role !== 'saveOwned' || saved)) {
         const planned = planServiceRequest(request, { input: { ...input, formId: context.publication.formId,
           draftId: subject?.draft.id, draftVersion: subject?.draft.version,
           frozenResponse: response }, route: {}, session: {} });
@@ -485,7 +487,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         || prepared || signed || saved || busy || pendingOperationId || completionResult) throw new ControllerRefusal('restoration-unresolved');
       busy = 'draft-restoration';
       try {
-        const result = freeze(structuredClone(value));
+        const result = snapshotFiniteJson(value) as unknown as SavedResponseDraft;
         if (result.response.id !== context.responseId || result.response.definitionUrl !== context.definition.url
           || result.response.definitionVersion !== context.definition.version
           || context.draftKey.subjectRef && result.actor.id !== context.draftKey.subjectRef) throw new ControllerRefusal('context-mismatch');
@@ -576,7 +578,7 @@ export async function assertSavedResponseDraftEvidence(
     || result.evidence.subject_ref !== result.actor.id || result.evidence.form_version_id !== context.publication.formVersionId
     || result.evidence.draft_id !== result.draft.id || result.evidence.draft_version !== result.draft.version
     || !Number.isSafeInteger(result.draft.version) || result.draft.version < 1 || result.evidence.status !== 'in_progress'
-    || !same(result.evidence.canonical_response, result.response) || !same(result.evidence.draft_state, result.response.data)
+    || !same(result.evidence.canonical_response, result.response) || !sameResponseDataView(result.response.data, result.evidence.draft_state)
     || (expected && !same(result.response, expected)) || result.draft.responseHash !== await config.hashResponse(result.response)) {
     throw new ControllerRefusal('context-mismatch');
   }

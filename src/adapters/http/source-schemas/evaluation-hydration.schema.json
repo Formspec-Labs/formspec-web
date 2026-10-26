@@ -2,20 +2,230 @@
   "type": "object",
   "properties": {
     "version": {
-      "const": 1
+      "$ref": "#/$defs/HydrationVersion"
     },
     "purpose": {
-      "const": "formspec.instance.hydrate"
+      "$ref": "#/$defs/HydrationPurpose"
     },
     "operation": {
-      "const": "hydrate"
+      "$ref": "#/$defs/EvaluationOperation"
     },
     "scope": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$",
-      "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
+      "$ref": "#/$defs/ScopeKey"
     },
     "owner": {
+      "$ref": "#/$defs/EvaluationInstanceOwner"
+    },
+    "selection": {
+      "$ref": "#/$defs/EvaluationInstanceSelection"
+    },
+    "draftId": {
+      "$ref": "#/$defs/DraftId"
+    },
+    "draftVersion": {
+      "$ref": "#/$defs/DraftVersion"
+    },
+    "candidateHash": {
+      "$ref": "#/$defs/HydrationDigest"
+    },
+    "formVersionHash": {
+      "$ref": "#/$defs/HydrationDigest"
+    },
+    "requestHash": {
+      "$ref": "#/$defs/HydrationDigest"
+    },
+    "sources": {
+      "$ref": "#/$defs/HydrationSources"
+    },
+    "attachmentBindings": {
+      "$ref": "#/$defs/HydrationAttachmentBindings"
+    },
+    "qualifiedAt": {
+      "$ref": "#/$defs/HydrationQualifiedAt"
+    },
+    "results": {
+      "$ref": "#/$defs/HydrationResults"
+    },
+    "providerReceipt": {
+      "$ref": "#/$defs/HydrationProviderReceipt"
+    }
+  },
+  "required": [
+    "version",
+    "purpose",
+    "operation",
+    "scope",
+    "owner",
+    "selection",
+    "draftId",
+    "draftVersion",
+    "candidateHash",
+    "formVersionHash",
+    "requestHash",
+    "sources",
+    "attachmentBindings",
+    "qualifiedAt",
+    "results",
+    "providerReceipt"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:formspec-server:evaluation-hydration:v1",
+  "$defs": {
+    "Association": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The scope key (ADR 0168 \u00a71.1): 64 lowercase hex."
+        },
+        "draftId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "draftVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "candidateHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "selectionHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "subjectRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "authenticated": {
+              "type": "object",
+              "properties": {
+                "issuer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subject": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "principalId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "profile": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "actorRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "subjectRef": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "clientId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "issuer",
+                "subject",
+                "principalId",
+                "profile",
+                "actorRef",
+                "subjectRef",
+                "sessionId",
+                "clientId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sessionId",
+            "subjectRef",
+            "authenticated"
+          ],
+          "additionalProperties": false
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "runRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "evidenceHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "associatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "scope",
+        "draftId",
+        "draftVersion",
+        "candidateHash",
+        "selectionHash",
+        "owner",
+        "runId",
+        "runRevision",
+        "evidenceHash",
+        "associatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "HydrationVersion": {
+      "type": "integer",
+      "enum": [
+        1,
+        2
+      ]
+    },
+    "HydrationPurpose": {
+      "const": "formspec.instance.hydrate"
+    },
+    "EvaluationOperation": {
+      "const": "hydrate"
+    },
+    "ScopeKey": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "The scope key (ADR 0168 \u00a71.1): 64 lowercase hex."
+    },
+    "EvaluationInstanceOwner": {
       "type": "object",
       "properties": {
         "sessionId": {
@@ -96,13 +306,13 @@
       ],
       "additionalProperties": false
     },
-    "selection": {
+    "EvaluationInstanceSelection": {
       "type": "object",
       "properties": {
         "scope": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
-          "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
+          "description": "The scope key (ADR 0168 \u00a71.1): 64 lowercase hex."
         },
         "formId": {
           "type": "string",
@@ -152,27 +362,19 @@
       ],
       "additionalProperties": false
     },
-    "draftId": {
+    "DraftId": {
       "type": "string",
       "minLength": 1
     },
-    "draftVersion": {
+    "DraftVersion": {
       "type": "integer",
       "minimum": 1
     },
-    "candidateHash": {
+    "HydrationDigest": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
-    "formVersionHash": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
-    },
-    "requestHash": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
-    },
-    "sources": {
+    "HydrationSources": {
       "type": "object",
       "minProperties": 1,
       "additionalProperties": {
@@ -180,15 +382,15 @@
         "minLength": 1
       }
     },
-    "attachmentBindings": {
+    "HydrationAttachmentBindings": {
       "type": "array",
       "maxItems": 16
     },
-    "qualifiedAt": {
+    "HydrationQualifiedAt": {
       "type": "string",
       "format": "date-time"
     },
-    "results": {
+    "HydrationResults": {
       "type": "array",
       "minItems": 1,
       "maxItems": 16,
@@ -298,7 +500,7 @@
         ]
       }
     },
-    "providerReceipt": {
+    "HydrationProviderReceipt": {
       "anyOf": [
         {
           "type": "object",
@@ -534,167 +736,60 @@
           "additionalProperties": false
         },
         {
+          "$ref": "urn:formspec:server:evaluation-composition:1#/$defs/ComposedReceipt"
+        },
+        {
+          "$ref": "urn:formspec:server:evaluation-composition:2#/$defs/ComposedReceipt"
+        },
+        {
+          "$ref": "urn:formspec:server:evaluation-composition:4#/$defs/ComposedReceipt"
+        },
+        {
           "type": "null"
         }
       ]
     }
   },
-  "required": [
-    "version",
-    "purpose",
-    "operation",
-    "scope",
-    "owner",
-    "selection",
-    "draftId",
-    "draftVersion",
-    "candidateHash",
-    "formVersionHash",
-    "requestHash",
-    "sources",
-    "attachmentBindings",
-    "qualifiedAt",
-    "results",
-    "providerReceipt"
-  ],
-  "additionalProperties": false,
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:formspec-server:evaluation-hydration:v1",
-  "$defs": {
-    "Association": {
-      "type": "object",
-      "properties": {
-        "scope": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$",
-          "description": "The scope key (ADR 0168 §1.1): 64 lowercase hex."
-        },
-        "draftId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
-        },
-        "draftVersion": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "candidateHash": {
-          "type": "string",
-          "pattern": "^sha256:[0-9a-f]{64}$"
-        },
-        "selectionHash": {
-          "type": "string",
-          "pattern": "^sha256:[0-9a-f]{64}$"
-        },
-        "owner": {
-          "type": "object",
-          "properties": {
-            "sessionId": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "subjectRef": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
-            },
-            "authenticated": {
-              "type": "object",
-              "properties": {
-                "issuer": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "subject": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "principalId": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "profile": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "actorRef": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "subjectRef": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "sessionId": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 2048
-                },
-                "clientId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
+  "title": "EvaluationHydrationView",
+  "description": "Current read-only facts for one exact owned saved unsigned Response. Hydration version 2 identifies mixed receipt versions 2 or 4; all other supported receipts and absent receipts use hydration version 1.",
+  "dependentSchemas": {
+    "providerReceipt": {
+      "if": {
+        "properties": {
+          "providerReceipt": {
+            "type": "object",
+            "required": [
+              "kind",
+              "version"
+            ],
+            "properties": {
+              "kind": {
+                "const": "composedSources"
               },
-              "required": [
-                "issuer",
-                "subject",
-                "principalId",
-                "profile",
-                "actorRef",
-                "subjectRef",
-                "sessionId",
-                "clientId"
-              ],
-              "additionalProperties": false
+              "version": {
+                "enum": [
+                  2,
+                  4
+                ]
+              }
             }
-          },
-          "required": [
-            "sessionId",
-            "subjectRef",
-            "authenticated"
-          ],
-          "additionalProperties": false
-        },
-        "runId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
-        },
-        "runRevision": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "evidenceHash": {
-          "type": "string",
-          "pattern": "^sha256:[0-9a-f]{64}$"
-        },
-        "associatedAt": {
-          "type": "string",
-          "format": "date-time"
+          }
         }
       },
-      "required": [
-        "scope",
-        "draftId",
-        "draftVersion",
-        "candidateHash",
-        "selectionHash",
-        "owner",
-        "runId",
-        "runRevision",
-        "evidenceHash",
-        "associatedAt"
-      ],
-      "additionalProperties": false
+      "then": {
+        "properties": {
+          "version": {
+            "const": 2
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "version": {
+            "const": 1
+          }
+        }
+      }
     }
   }
 }

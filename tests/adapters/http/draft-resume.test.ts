@@ -5,6 +5,7 @@ import { createHttpAdapterCohort } from '../../../src/adapters/http/cohort.ts';
 import { createDraftBindingRegistry } from '../../../src/adapters/http/draft-binding-registry.ts';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../../src/adapter-conformance/fixtures.ts';
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
+import type { DraftStore, DraftKey, FormResponse } from '../../../src/ports/draft-store.ts';
 import { DraftVersionConflictError } from '../../../src/ports/draft-store.ts';
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
 import { otherScopeKey, testScopeKey } from '../../fixtures/scope.ts';
@@ -19,6 +20,17 @@ const context = { baseUrl: 'https://server.example.test/api', scopeKey: testScop
 const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version };
 const grant = { session_id: 'session', session_token: 'server-owner-token', subject_ref: 'anon:owner',
   form_id: 'conformance', expires_at: '2099-01-01T00:00:00Z' };
+
+function initialization(draftId: string, subjectRef = grant.subject_ref) {
+  return jsonResponse({ draft_id: draftId, draft_version: 1, form_version_id: 'publication', subject_ref: subjectRef,
+    status: 'in_progress', is_initialization_only: true, canonical_response: null, draft_state: {} });
+}
+async function initializedSave(store: DraftStore, selected: DraftKey, response: FormResponse) {
+  const result = await store.initializeDraft!(selected, 'publication');
+  expect(result).toMatchObject({ isInitializationOnly: true });
+  expect(result.draftId).toBeTruthy(); expect(result.response).toBeUndefined();
+  await store.save(selected, response);
+}
 
 describe('tab metadata anonymous draft resume', () => {
   it.each([
@@ -75,7 +87,7 @@ describe('tab metadata anonymous draft resume', () => {
     let nextDraft = 0;
     const { fetch, requests } = recordingFetch(request => {
       if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
-      if (request.method === 'POST') return jsonResponse({ draft_id: `draft-${++nextDraft}`, draft_version: 1 });
+      if (request.method === 'POST') return initialization(`draft-${++nextDraft}`);
       return jsonResponse({ draft_id: request.url.split('/').at(-1), draft_version: 2,
         draft_state: response.data, canonical_response: response });
     });
@@ -85,8 +97,8 @@ describe('tab metadata anonymous draft resume', () => {
       return createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
     };
     const initial = build();
-    await initial.draftStore.save(applicant, response);
-    await initial.draftStore.save(preparer, response);
+    await initializedSave(initial.draftStore, applicant, response);
+    await initializedSave(initial.draftStore, preparer, response);
     const owner = metadata.read('grant:conformance');
     await initial.draftStore.delete({ ...applicant, formVersion: '0.1.3' });
     expect(metadata.read('grant:conformance')).toEqual(owner);
@@ -108,7 +120,7 @@ describe('tab metadata anonymous draft resume', () => {
     const { fetch, requests } = recordingFetch(request => {
       if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
       if (delay && request.method === 'PATCH') return new Promise<Response>(resolve => { release = resolve; });
-      if (request.method === 'POST') return jsonResponse({ draft_id: `draft-${requests.length}`, draft_version: 1 });
+      if (request.method === 'POST') return initialization(`draft-${requests.length}`);
       return jsonResponse({ draft_id: request.url.split('/').at(-1), draft_version: 2,
         draft_state: sampleFormResponse.data, canonical_response: sampleFormResponse });
     });
@@ -116,13 +128,13 @@ describe('tab metadata anonymous draft resume', () => {
     const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
     const build = () => createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
     const initial = build();
-    await initial.draftStore.save(applicant, sampleFormResponse);
-    await initial.draftStore.save(preparer, sampleFormResponse);
+    await initializedSave(initial.draftStore, applicant, sampleFormResponse);
+    await initializedSave(initial.draftStore, preparer, sampleFormResponse);
     delay = true;
     const save = initial.draftStore.save(applicant, sampleFormResponse);
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     const clear = initial.draftStore.delete(applicant);
-    release(jsonResponse({ draft_id: 'draft-2', draft_version: 2 }));
+    release(jsonResponse({ draft_id: 'draft-2', draft_version: 3 }));
     await save;
     await clear;
     const reloaded = build();
@@ -136,7 +148,8 @@ describe('tab metadata anonymous draft resume', () => {
     const otherSubject = { ...key, subjectRef: 'authenticated:other' };
     const otherForm = { ...key, formUrl: 'https://forms.example.test/other' };
     const otherResponse = { ...sampleFormResponse, definitionUrl: otherForm.formUrl };
-    const responses = new Map<string, typeof sampleFormResponse>();
+    let authenticated = false;
+    const responses = new Map<string, FormResponse | undefined>();
     const { fetch } = recordingFetch(request => {
       if (request.url.endsWith('/sessions/anonymous')) {
         return jsonResponse(request.url.includes('/other/')
@@ -144,27 +157,32 @@ describe('tab metadata anonymous draft resume', () => {
       }
       if (request.method === 'POST') {
         const id = `draft-${responses.size}`;
-        responses.set(id, (request.body as { canonical_response: typeof sampleFormResponse }).canonical_response);
-        return jsonResponse({ draft_id: id, draft_version: 1 });
+        responses.set(id, undefined);
+        return initialization(id, request.headers.get('authorization') === 'Bearer authenticated-owner-token' ? otherSubject.subjectRef : grant.subject_ref);
       }
       const id = request.url.split('/').at(-1)!;
+      if (request.method === 'PATCH') responses.set(id, (request.body as { canonical_response: FormResponse }).canonical_response);
       const response = responses.get(id)!;
       return jsonResponse({ draft_id: id, draft_version: 2,
         draft_state: response.data, canonical_response: response });
     });
     const metadata = createBrowserDraftResumeMetadataStore(context, storage);
     const build = () => {
-      const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
+      const config = { ...context, accessToken: () => authenticated ? 'authenticated-owner-token' : undefined, fetchImpl: fetch, resumeMetadata: metadata };
       return createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
     };
     const initial = build();
-    await initial.draftStore.save(key, sampleFormResponse);
-    await initial.draftStore.save(otherSubject, sampleFormResponse);
-    await initial.draftStore.save(otherForm, otherResponse);
+    await initializedSave(initial.draftStore, key, sampleFormResponse);
+    authenticated = true;
+    await initializedSave(initial.draftStore, otherSubject, sampleFormResponse);
+    authenticated = false;
+    await initializedSave(initial.draftStore, otherForm, otherResponse);
     await initial.draftStore.delete(key);
     expect(metadata.read('grant:conformance')).toBeDefined();
     const resumed = build();
+    authenticated = true;
     await expect(resumed.draftStore.load(otherSubject)).resolves.toEqual(sampleFormResponse);
+    authenticated = false;
     await expect(resumed.draftStore.load(otherForm)).resolves.toEqual(otherResponse);
     await resumed.draftStore.delete(otherSubject);
     expect(metadata.read('grant:conformance')).toBeUndefined();
@@ -198,7 +216,7 @@ describe('tab metadata anonymous draft resume', () => {
     const oldResponse = { ...sampleFormResponse, definitionVersion: oldKey.formVersion };
     const { fetch, requests } = recordingFetch(request => {
       if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
-      if (request.method === 'POST') return jsonResponse({ draft_id: 'old-version-draft', draft_version: 1 });
+      if (request.method === 'POST') return initialization('old-version-draft');
       return jsonResponse({ draft_id: 'old-version-draft', draft_version: 2,
         draft_state: oldResponse.data, canonical_response: oldResponse });
     });
@@ -207,12 +225,12 @@ describe('tab metadata anonymous draft resume', () => {
         resumeMetadata: createBrowserDraftResumeMetadataStore(context, storage) };
       return createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
     };
-    await build().draftStore.save(oldKey, oldResponse);
+    await initializedSave(build().draftStore, oldKey, oldResponse);
     const retained = [...storage.values];
     await expect(build().draftStore.load(currentKey)).rejects.toThrow(/another form version/);
     await expect(build().draftStore.save(currentKey, { ...oldResponse, definitionVersion: '0.1.3' }))
       .rejects.toThrow(/another form version/);
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
     expect([...storage.values]).toEqual(retained);
     await expect(build().draftStore.load(oldKey)).resolves.toEqual(oldResponse);
     await build().draftStore.delete(currentKey);
@@ -225,11 +243,11 @@ describe('tab metadata anonymous draft resume', () => {
     const oldKey = { ...key, formVersion: '0.1.2', subjectRef: 'anon:owner', partyRef: 'applicant' };
     const oldResponse = { ...sampleFormResponse, definitionVersion: oldKey.formVersion };
     const { fetch, requests } = recordingFetch(request => request.url.endsWith('/sessions/anonymous')
-      ? jsonResponse(grant) : jsonResponse({ draft_id: 'applicant-draft', draft_version: 1 }));
+      ? jsonResponse(grant) : request.method === 'POST' ? initialization('applicant-draft')
+      : jsonResponse({ draft_id: 'applicant-draft', draft_version: 2, canonical_response: oldResponse, draft_state: oldResponse.data }));
     const config = { ...context, fetchImpl: fetch,
       resumeMetadata: createBrowserDraftResumeMetadataStore(context, storage) };
-    await createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) })
-      .draftStore.save(oldKey, oldResponse);
+    await initializedSave(createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) }).draftStore, oldKey, oldResponse);
     const resumed = createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
     await expect(resumed.draftStore.load({ ...oldKey, formVersion: '0.1.3', partyRef: 'preparer' }))
       .resolves.toBeUndefined();
@@ -237,7 +255,7 @@ describe('tab metadata anonymous draft resume', () => {
       .resolves.toBeUndefined();
     await expect(resumed.draftStore.load({ ...oldKey, formVersion: '0.1.3' }))
       .rejects.toThrow(/another form version/);
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
   });
 
   it('clears conflicting version handles only for the same resolved form, subject and party', () => {
@@ -261,7 +279,7 @@ describe('tab metadata anonymous draft resume', () => {
     const storage = tabStorage();
     const { fetch, requests } = recordingFetch(request => {
       if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
-      if (request.method === 'POST') return jsonResponse({ draft_id: 'server-draft', draft_version: 1 });
+      if (request.method === 'POST') return initialization('server-draft');
       return jsonResponse({ draft_id: 'server-draft', draft_version: 2,
         draft_state: sampleFormResponse.data, canonical_response: sampleFormResponse });
     });
@@ -271,7 +289,7 @@ describe('tab metadata anonymous draft resume', () => {
       const anonymousSessions = new AnonymousSessionBridge(config);
       return { bridge: anonymousSessions, ...createHttpAdapterCohort({ ...config, anonymousSessions }) };
     };
-    await build().draftStore.save(key, sampleFormResponse);
+    await initializedSave(build().draftStore, key, sampleFormResponse);
     const persisted = [...storage.values.values()].join('');
     expect(persisted).not.toContain('canonical_response');
     expect(persisted).not.toContain('definitionVersion');
@@ -288,11 +306,12 @@ describe('tab metadata anonymous draft resume', () => {
   it('refuses an expired retained owner or a locator without its grant instead of issuing another subject', async () => {
     const storage = tabStorage();
     const { fetch, requests } = recordingFetch(request => request.url.endsWith('/sessions/anonymous')
-      ? jsonResponse(grant) : jsonResponse({ draft_id: 'server-draft', draft_version: 1 }));
+      ? jsonResponse(grant) : request.method === 'POST' ? initialization('server-draft')
+      : jsonResponse({ draft_id: 'server-draft', draft_version: 2, canonical_response: sampleFormResponse, draft_state: sampleFormResponse.data }));
     const metadata = createBrowserDraftResumeMetadataStore(context, storage);
     const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
     const first = createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
-    await first.draftStore.save(key, sampleFormResponse);
+    await initializedSave(first.draftStore, key, sampleFormResponse);
     metadata.write('grant:conformance', { sessionId: 'session', sessionToken: grant.session_token,
       subjectRef: grant.subject_ref, formId: grant.form_id, expiresAt: '2000-01-01T00:00:00Z' });
     const expired = createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
@@ -303,7 +322,7 @@ describe('tab metadata anonymous draft resume', () => {
     await expect(missing.submitTransport.submit({ ...sampleIntakeHandoff,
       definitionRef: { url: key.formUrl, version: key.formVersion }, subjectRef: undefined,
     }, generateIdempotencyKey())).rejects.toThrow(/no anonymous owner grant/);
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
   });
 
   it('isolates the deployment scope and rejects copied metadata context', () => {
@@ -362,15 +381,16 @@ describe('tab metadata anonymous draft resume', () => {
     const storage = tabStorage();
     let release!: (response: Response) => void;
     const { fetch, requests } = recordingFetch(request => request.url.endsWith('/sessions/anonymous')
-      ? jsonResponse(grant) : new Promise<Response>(resolve => { release = resolve; }));
+      ? jsonResponse(grant) : request.method === 'POST' ? initialization('server-draft') : new Promise<Response>(resolve => { release = resolve; }));
     const resumeMetadata = createBrowserDraftResumeMetadataStore(context, storage);
     const config = { ...context, fetchImpl: fetch, resumeMetadata };
     const cohort = createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
+    await cohort.draftStore.initializeDraft!(key, 'publication');
     const saved = cohort.draftStore.save(key, sampleFormResponse);
-    await vi.waitFor(() => expect(requests).toHaveLength(2));
+    await vi.waitFor(() => expect(requests).toHaveLength(3));
     const cleared = cohort.draftStore.delete(key);
     await expect(cohort.draftStore.save(key, sampleFormResponse)).rejects.toThrow(/being cleared/);
-    release(jsonResponse({ draft_id: 'server-draft', draft_version: 1 }));
+    release(jsonResponse({ draft_id: 'server-draft', draft_version: 2 }));
     await saved;
     await cleared;
     expect(storage.values.size).toBe(0);
@@ -383,15 +403,16 @@ describe('tab metadata anonymous draft resume', () => {
     let release!: (response: Response) => void;
     const { fetch, requests } = recordingFetch(request => {
       if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
-      if (request.method === 'POST') return jsonResponse({ draft_id: 'server-draft', draft_version: 1 });
+      if (request.method === 'POST') return initialization('server-draft');
+      if (request.method === 'PATCH') return jsonResponse({ draft_id: 'server-draft', draft_version: 2 });
       return new Promise<Response>(resolve => { release = resolve; });
     });
     const resumeMetadata = createBrowserDraftResumeMetadataStore(context, storage);
     const config = { ...context, fetchImpl: fetch, resumeMetadata };
     const cohort = createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
-    await cohort.draftStore.save(key, sampleFormResponse);
+    await initializedSave(cohort.draftStore, key, sampleFormResponse);
     const loaded = cohort.draftStore.load(key);
-    await vi.waitFor(() => expect(requests).toHaveLength(3));
+    await vi.waitFor(() => expect(requests).toHaveLength(4));
     await cohort.draftStore.delete(key);
     release(jsonResponse({ draft_id: 'server-draft', draft_version: 1,
       draft_state: sampleFormResponse.data, canonical_response: sampleFormResponse }));
@@ -405,20 +426,20 @@ describe('tab metadata anonymous draft resume', () => {
     let nextDraft = 0;
     const { fetch, requests } = recordingFetch(request => {
       if (request.url.endsWith('/sessions/anonymous')) return jsonResponse(grant);
-      if (request.method === 'POST') return jsonResponse({ draft_id: `draft-${++nextDraft}`, draft_version: 1 });
-      if (request.url.endsWith('/draft-1')) return new Promise<Response>(resolve => { release = resolve; });
-      return jsonResponse({ draft_id: 'draft-2', draft_version: 2,
+      if (request.method === 'POST') return initialization(`draft-${++nextDraft}`);
+      if (request.method === 'GET' && request.url.endsWith('/draft-1')) return new Promise<Response>(resolve => { release = resolve; });
+      return jsonResponse({ draft_id: request.url.split('/').at(-1), draft_version: 2,
         draft_state: sampleFormResponse.data, canonical_response: sampleFormResponse });
     });
     const metadata = createBrowserDraftResumeMetadataStore(context, storage);
     const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
     const build = () => createHttpAdapterCohort({ ...config, anonymousSessions: new AnonymousSessionBridge(config) });
     const cohort = build();
-    await cohort.draftStore.save(key, sampleFormResponse);
+    await initializedSave(cohort.draftStore, key, sampleFormResponse);
     const staleLoad = cohort.draftStore.load(key);
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     await cohort.draftStore.delete(key);
-    await cohort.draftStore.save(key, sampleFormResponse);
+    await initializedSave(cohort.draftStore, key, sampleFormResponse);
     const retained = [...storage.values];
     release(jsonResponse({ detail: 'gone' }, 404));
     await expect(staleLoad).rejects.toThrow(/cleared while loading/);

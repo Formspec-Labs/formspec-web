@@ -25,6 +25,70 @@ afterEach(() => {
 });
 
 describe('surface bundle vendor schema selection', () => {
+  it('bootstraps a newly allowlisted Source copy and checksum only in write mode', () => {
+    const fixture = createFixture();
+    const { dir, upstream, file } = missingSourceSchema(fixture);
+    const before = sourceSnapshot(fixture, dir);
+    const refs = readFileSync(join(fixture.web, 'vendor/upstream-refs.json'), 'utf8');
+    for (const args of [[dir], ['--source-pins-only', dir]]) {
+      const result = run(fixture, ...args);
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).toContain(`SHA256SUMS must contain one entry for ${file}`);
+      expect(sourceSnapshot(fixture, dir)).toEqual(before);
+      expect(readFileSync(join(fixture.web, 'vendor/upstream-refs.json'), 'utf8')).toBe(refs);
+    }
+    const result = run(fixture, '--write', `${dir}/${file}`);
+    expect(result.status, result.stderr).toBe(0);
+    const bytes = readFileSync(join(upstream, 'schemas', file));
+    expect(readFileSync(join(fixture.web, dir, file))).toEqual(bytes);
+    const after = sourceSnapshot(fixture, dir);
+    expect(after.SHA256SUMS.split('\n').filter(line => line.endsWith(`  ${file}`)))
+      .toEqual([`${hash(bytes)}  ${file}`]);
+    expect(after.SHA256SUMS.split('\n').filter(line => !line.endsWith(`  ${file}`)).join('\n'))
+      .toBe(before.SHA256SUMS);
+    for (const [name, content] of Object.entries(before)) {
+      if (name !== 'SHA256SUMS') expect(after[name]).toBe(content);
+    }
+    expect(run(fixture, dir).status).toBe(0);
+    expect(run(fixture, '--source-pins-only', dir).status).toBe(0);
+  });
+
+  it.each([false, true])('refuses duplicate new Source checksum rows without mutation (write=%s)', write => {
+    const fixture = createFixture();
+    const { dir, upstream, file } = missingSourceSchema(fixture);
+    const bytes = readFileSync(join(upstream, 'schemas', file));
+    writeFileSync(join(fixture.web, dir, file), bytes);
+    const sums = join(fixture.web, dir, 'SHA256SUMS');
+    const row = `${hash(bytes)}  ${file}\n`;
+    writeFileSync(sums, `${readFileSync(sums, 'utf8')}${row}${row}`);
+    const before = sourceSnapshot(fixture, dir);
+    const refs = readFileSync(join(fixture.web, 'vendor/upstream-refs.json'), 'utf8');
+    const result = run(fixture, ...(write ? ['--write', dir] : [dir]));
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain(`SHA256SUMS must contain one entry for ${file}`);
+    expect(sourceSnapshot(fixture, dir)).toEqual(before);
+    expect(readFileSync(join(fixture.web, 'vendor/upstream-refs.json'), 'utf8')).toBe(refs);
+  });
+
+  it.each(['dirty selected schema', 'changed unselected cohort'])('checks %s before bootstrapping Source bytes or provenance', mode => {
+    const fixture = createFixture();
+    const { dir, upstream, file, files, git } = missingSourceSchema(fixture);
+    const changed = mode === 'dirty selected schema' ? file : files.find(name => name !== file);
+    const path = join(upstream, 'schemas', changed);
+    writeFileSync(path, `${readFileSync(path, 'utf8')}\n`);
+    if (mode === 'changed unselected cohort') {
+      git('add', 'schemas');
+      git('commit', '-m', 'Change unselected producer schema');
+    }
+    const before = sourceSnapshot(fixture, dir);
+    const refs = readFileSync(join(fixture.web, 'vendor/upstream-refs.json'), 'utf8');
+    const result = run(fixture, '--write', `${dir}/${file}`);
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain('does not match the producer commit');
+    expect(sourceSnapshot(fixture, dir)).toEqual(before);
+    expect(readFileSync(join(fixture.web, 'vendor/upstream-refs.json'), 'utf8')).toBe(refs);
+  });
+
   it('checks Source schema bytes and refreshes only the selected schema without builds', () => {
     const fixture = createFixture();
     const { dir, upstream, files, git } = addSourceFixture(fixture);
@@ -298,6 +362,28 @@ function addSourceFixture(fixture) {
   git('commit', '-m', 'Pin producer schemas');
   writeFileSync(join(fixture.web, 'vendor/upstream-refs.json'), JSON.stringify({ formspec: 'unchanged', 'formspec-server': git('rev-parse', 'HEAD') }));
   return { dir, upstream, files, git };
+}
+
+function missingSourceSchema(fixture) {
+  const source = addSourceFixture(fixture);
+  const file = 'evaluation-composition-v2.schema.json';
+  if (!source.files.includes(file)) {
+    // The isolated producer exercises inventory growth before the local copy exists.
+    writeFileSync(join(source.upstream, 'schemas', file), `${JSON.stringify({ $id: 'urn:fixture:composition:2', type: 'object' })}\n`);
+    source.git('add', 'schemas');
+    source.git('commit', '-m', 'Add producer dependency');
+    source.files.push(file);
+  }
+  rmSync(join(fixture.web, source.dir, file), { force: true });
+  const sums = join(fixture.web, source.dir, 'SHA256SUMS');
+  writeFileSync(sums, readFileSync(sums, 'utf8').split('\n')
+    .filter(line => !line.endsWith(`  ${file}`)).join('\n'));
+  return { ...source, file };
+}
+
+function sourceSnapshot(fixture, dir) {
+  return Object.fromEntries(readdirSync(join(fixture.web, dir)).map(file =>
+    [file, readFileSync(join(fixture.web, dir, file), 'utf8')]));
 }
 
 function hash(content) {

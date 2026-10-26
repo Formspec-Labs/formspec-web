@@ -1,15 +1,20 @@
+import { snapshotWire } from './wire-json.ts';
+import { sameResponseDataView } from '../../shared/response-data-view.ts';
 import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { ownedDraftResumeSelection } from '../../config/owned-draft-resume.ts';
 import type { TaskDraftAssociation } from '../../ports/task-draft.ts';
 import canonicalize from 'canonicalize';
 import type { DraftKey, DraftReadState, DraftStore, FormResponse, OwnedDraftResumeSelection } from '../../ports/draft-store.ts';
-import { createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
+import { copyDraftKey, createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
 import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 
 export interface HttpDraftStoreConfig extends HttpClientConfig {
   formIdResolver?: FormIdResolver;
+  formVersionId?: string;
+  /** Trusted composition owner, resolved independently of the returned Source view. */
+  expectedInitializationOwner?: (key: DraftKey) => Promise<string | undefined> | string | undefined;
   /** Task-owned drafts must never create an ordinary initial draft after losing their binding. */
   requireExistingBinding?: boolean;
   anonymousSessionToken?: string | ((key: DraftKey) => Promise<string | undefined> | string | undefined);
@@ -47,6 +52,9 @@ export class HttpDraftStore implements DraftStore {
   private readonly client: HttpClient;
   private readonly requireExistingBinding: boolean;
   private readonly formIdResolver: FormIdResolver;
+  private readonly formVersionId?: string;
+  private readonly expectedInitializationOwner?: HttpDraftStoreConfig['expectedInitializationOwner'];
+  private readonly initializations = new Map<string, Promise<{ draftId: string; isInitializationOnly: boolean; response?: FormResponse }>>();
   private readonly anonymousSessionToken?: HttpDraftStoreConfig['anonymousSessionToken'];
   private readonly bindings: DraftBindingRegistry;
   private readonly clearAnonymousSession?: HttpDraftStoreConfig['clearAnonymousSession'];
@@ -58,6 +66,8 @@ export class HttpDraftStore implements DraftStore {
 
   constructor(config: HttpDraftStoreConfig) {
     this.client = new HttpClient(config);
+    this.formVersionId = config.formVersionId;
+    this.expectedInitializationOwner = config.expectedInitializationOwner;
     this.requireExistingBinding = config.requireExistingBinding === true;
     this.formIdResolver = config.formIdResolver ?? defaultFormIdResolver;
     this.anonymousSessionToken = config.anonymousSessionToken;
@@ -66,15 +76,15 @@ export class HttpDraftStore implements DraftStore {
     const qualify = config.qualifyReadState;
     if (qualify) {
       this.readState = (suppliedKey, current = () => {}) => {
-        const key = structuredClone(suppliedKey);
-        return this.read(key, async view => freeze(structuredClone(await qualify(key, view, current))), current, false);
+        const key = copyDraftKey(suppliedKey);
+        return this.read(key, async view => freeze(snapshotWire(await qualify(key, view, current))), current, false);
       };
       this.resumeState = async (suppliedKey, suppliedSelection, current = () => {}) => {
-        const key = structuredClone(suppliedKey), selection = ownedDraftResumeSelection(suppliedSelection);
+        const key = copyDraftKey(suppliedKey), selection = ownedDraftResumeSelection(suppliedSelection);
         if (!key.subjectRef || key.subjectRef.startsWith('anon:')) throw new Error('Owned draft resume requires an authenticated owner');
         const result = await this.read(key, async view => {
           if (view.taskDraft !== undefined) throw new Error('Task-owned draft requires its maintained task entry');
-          return freeze(structuredClone(await qualify(key, view, current)));
+          return freeze(snapshotWire(await qualify(key, view, current)));
         }, current, false, selection);
         if (!result) throw new Error('Selected owned draft state unavailable');
         return result;
@@ -86,46 +96,58 @@ export class HttpDraftStore implements DraftStore {
     return this.read(key, view => Promise.resolve(view.canonical_response), assertCurrent);
   }
 
-  async initializeDraft(
-    key: DraftKey,
-    formVersionId?: string,
-  ): Promise<{ draftId: string; isInitializationOnly: boolean }> {
-    const existing = this.bindings.get(key);
-    if (existing) {
-      return { draftId: existing.draftId, isInitializationOnly: false };
-    }
-    const formId = this.formIdResolver(key.formUrl, key.formVersion);
-    const respondentSubject = respondentSubjectRef(key);
-    const anonymousSessionToken = respondentSubject
-      ? undefined
-      : await this.resolveAnonymousSessionToken(key);
-    const draft = await this.client.postJson<DraftView>(
-      `/runtime/forms/${encodeURIComponent(formId)}/drafts`,
-      {
-        anonymous_session_token: anonymousSessionToken,
-        anonymous_subject_ref: anonymousSubjectRef(key),
-        respondent_subject_ref: anonymousSessionToken ? undefined : respondentSubject,
-        party_ref: key.partyRef,
-        draft_state: {},
-        canonical_response: {
-          id: `urn:uuid:${crypto.randomUUID()}`,
-          definitionUrl: key.formUrl,
-          definitionVersion: key.formVersion ?? formVersionId ?? '1.0.0',
-          data: {},
-        },
-      },
-      { headers: bearerHeaders(anonymousSessionToken) },
-    );
-    const isInit = draft.is_initialization_only ?? draft.isInitializationOnly ?? true;
-    this.bindings.put(key, {
-      draftId: draft.draft_id,
-      draftVersion: draft.draft_version ?? 1,
-      response: draft.canonical_response,
-    });
-    return {
-      draftId: draft.draft_id,
-      isInitializationOnly: isInit,
-    };
+  async initializeDraft(key: DraftKey, formVersionId?: string): Promise<{ draftId: string; isInitializationOnly: boolean; response?: FormResponse }> {
+    key = structuredClone(key);
+    if (this.requireExistingBinding) throw new Error('Task drafts require their owning task entry');
+    const generation = this.generation;
+    const current = () => { if (generation !== this.generation || this.clearing) throw new Error('Draft initialization was retired'); };
+    current();
+    const attemptKey = this.bindings.initializationKey(key);
+    const inFlight = this.initializations.get(attemptKey);
+    if (inFlight) return inFlight;
+    const operation = (async () => {
+      const formId = this.formIdResolver(key.formUrl, key.formVersion);
+      let versionId = formVersionId ?? this.formVersionId;
+      if (!versionId) {
+        const publication = await this.client.getJson<{ form_id: string; form_version_id: string; definition_url: string; definition_version: string }>(
+          `/runtime/forms/${encodeURIComponent(formId)}`);
+        current();
+        if (publication.form_id !== formId || publication.definition_url !== key.formUrl
+          || (key.formVersion !== undefined && publication.definition_version !== key.formVersion)
+          || !publication.form_version_id?.trim()) throw new Error('Draft publication differs from its selected Definition');
+        versionId = publication.form_version_id;
+      }
+      const token = await this.resolveAnonymousSessionToken(key); current();
+      const expectedOwner = await this.initializationOwner(key); current();
+      const draft = await this.client.postJson<OwnedDraftView>(`/runtime/forms/${encodeURIComponent(formId)}/drafts`,
+        { form_version_id: versionId },
+        { headers: { ...bearerHeaders(token), 'Idempotency-Key': attemptKey }, assertCurrent: current });
+      current();
+      if (!draft.draft_id?.trim() || !Number.isSafeInteger(draft.draft_version) || draft.draft_version < 1
+        || draft.form_version_id !== versionId || draft.subject_ref !== expectedOwner || draft.status !== 'in_progress'
+        || typeof draft.is_initialization_only !== 'boolean' || draft.taskDraft !== undefined) {
+        throw new Error('Server draft initialization differs from its owned publication');
+      }
+      if (draft.is_initialization_only) {
+        if (draft.draft_version !== 1 || draft.canonical_response != null || canonicalize(draft.draft_state) !== '{}') {
+          throw new Error('Initialized draft already contains a Response');
+        }
+      } else {
+        const { validateCanonicalFormResponse } = await import('../schema/surface-bundle-schema-validators.ts');
+        if (!draft.canonical_response || !await validateCanonicalFormResponse(draft.canonical_response)
+          || draft.canonical_response.definitionUrl !== key.formUrl || draft.canonical_response.definitionVersion !== key.formVersion
+          || !sameResponseDataView(draft.canonical_response.data, draft.draft_state)) throw new Error('Retried draft has no matching canonical Response');
+      }
+      current();
+      const previous = this.bindings.get(key);
+      if (previous && previous.draftId !== draft.draft_id) throw new Error('Draft initialization conflicts with retained identity');
+      this.bindings.put(key, { draftId: draft.draft_id, draftVersion: draft.draft_version,
+        ...(!draft.is_initialization_only ? { response: draft.canonical_response } : {}) });
+      return { draftId: draft.draft_id, isInitializationOnly: draft.is_initialization_only,
+        ...(!draft.is_initialization_only ? { response: snapshotWire(draft.canonical_response) } : {}) };
+    })();
+    this.initializations.set(attemptKey, operation);
+    try { return await operation; } finally { if (this.initializations.get(attemptKey) === operation) this.initializations.delete(attemptKey); }
   }
 
   private async read<T>(key: DraftKey, qualify: (view: OwnedDraftView) => Promise<T>, assertCurrent: () => void = () => {}, missingIsAbsent = true, selection?: OwnedDraftResumeSelection): Promise<T | undefined> {
@@ -150,6 +172,16 @@ export class HttpDraftStore implements DraftStore {
       });
       current();
       const response = view.canonical_response;
+      if (view.is_initialization_only === true) {
+        const expectedOwner = await this.initializationOwner(key); current();
+        if (view.draft_id !== binding.draftId || view.draft_version !== 1 || response != null
+          || view.status !== 'in_progress' || view.subject_ref !== expectedOwner || canonicalize(view.draft_state) !== '{}'
+          || selection || binding.responseId !== undefined) throw new Error('Initialized draft differs from retained identity');
+        current();
+        this.bindings.put(key, { draftId: view.draft_id, draftVersion: view.draft_version });
+        return undefined;
+      }
+
       if (selection && view.taskDraft !== undefined) throw new Error('Task-owned draft requires its maintained task entry');
       assertTaskDraftWire(view?.taskDraft);
       const { validateCanonicalFormResponse } = await import('../schema/surface-bundle-schema-validators.ts');
@@ -157,7 +189,7 @@ export class HttpDraftStore implements DraftStore {
         || !Number.isInteger(view.draft_version) || (view.draft_version ?? -1) < 0
         || response.definitionUrl !== key.formUrl
         || (key.formVersion !== undefined && response.definitionVersion !== key.formVersion)
-        || canonicalize(response.data) !== canonicalize(view.draft_state)) {
+        || !sameResponseDataView(response.data, view.draft_state)) {
         throw new Error('Server draft has no matching canonical Response snapshot');
       }
       if (selection && response.id !== selection.expectedResponseId) throw new Error('Owned draft resume Response identity differs');
@@ -166,7 +198,7 @@ export class HttpDraftStore implements DraftStore {
         throw new Error('Owned draft state regressed from its retained identity or revision');
       }
       current();
-      const result = await qualify(structuredClone(view));
+      const result = await qualify(snapshotWire(view));
       current();
       if (selection && canonicalize(this.bindings.get(key)) !== canonicalize(previous)) throw new Error('Owned draft binding changed while resuming');
       this.bindings.put(key, { draftId: view.draft_id, draftVersion: view.draft_version, response });
@@ -193,21 +225,11 @@ export class HttpDraftStore implements DraftStore {
   private async saveOnce(key: DraftKey, response: FormResponse, options?: { readonly assertBeforeDispatch?: () => void }): Promise<void> {
     const generation = this.retirementGeneration;
     const current = () => { if (generation !== this.retirementGeneration) throw new Error('Draft state was retired while saving'); };
-    response = structuredClone(response);
+    response = snapshotWire(response);
     const existing = this.bindings.get(key);
-    const respondentSubject = respondentSubjectRef(key);
-    const anonymousSessionToken = respondentSubject
-      ? undefined
-      : await this.resolveAnonymousSessionToken(key);
+    const anonymousSessionToken = await this.resolveAnonymousSessionToken(key);
     current();
-    if (!existing) {
-      if (this.requireExistingBinding) throw new Error('Task draft binding is unavailable; relaunch the owning task');
-      await this.createDraft(key, response, {
-        anonymousSessionToken,
-        respondentSubject,
-      }, current, options);
-      return;
-    }
+    if (!existing) throw new Error('Draft must be initialized before Save or Sign');
 
     const update = await this.client.patchJson<DraftView>(
       `/drafts/${encodeURIComponent(existing.draftId)}`,
@@ -244,6 +266,8 @@ export class HttpDraftStore implements DraftStore {
   }
 
   async invalidateSubject(subjectRef: string): Promise<void> {
+    this.generation += 1;
+    this.retirementGeneration += 1;
     for (const { key } of this.bindings.entries()) {
       if (key.subjectRef === subjectRef) {
         await this.delete(key);
@@ -265,38 +289,10 @@ export class HttpDraftStore implements DraftStore {
     } finally { this.clearing -= 1; }
   }
 
-  private async createDraft(
-    key: DraftKey,
-    response: FormResponse,
-    {
-      anonymousSessionToken,
-      respondentSubject,
-    }: {
-      anonymousSessionToken?: string;
-      respondentSubject?: string;
-    },
-    current: () => void = () => {},
-    options?: { readonly assertBeforeDispatch?: () => void },
-  ): Promise<void> {
-    const formId = this.formIdResolver(key.formUrl, key.formVersion);
-    const draft = await this.client.postJson<DraftView>(
-      `/runtime/forms/${encodeURIComponent(formId)}/drafts`,
-      {
-        anonymous_session_token: anonymousSessionToken,
-        anonymous_subject_ref: anonymousSubjectRef(key),
-        respondent_subject_ref: anonymousSessionToken ? undefined : respondentSubject,
-        party_ref: key.partyRef,
-        draft_state: response.data,
-        canonical_response: response,
-      },
-      { headers: bearerHeaders(anonymousSessionToken), assertCurrent: current, assertBeforeDispatch: options?.assertBeforeDispatch },
-    );
-    current();
-    this.bindings.put(key, {
-      draftId: draft.draft_id,
-      draftVersion: draft.draft_version,
-      response,
-    });
+  private async initializationOwner(key: DraftKey): Promise<string> {
+    const owner = this.expectedInitializationOwner ? await this.expectedInitializationOwner(key) : key.subjectRef;
+    if (typeof owner !== 'string' || !owner.trim()) throw new Error('Draft initialization requires a resolved owner');
+    return owner;
   }
 
   private async resolveAnonymousSessionToken(key: DraftKey): Promise<string | undefined> {
@@ -309,17 +305,6 @@ export class HttpDraftStore implements DraftStore {
 
 export function createHttpDraftStore(config: HttpDraftStoreConfig): HttpDraftStore {
   return new HttpDraftStore(config);
-}
-
-function anonymousSubjectRef(key: DraftKey): string | undefined {
-  return key.subjectRef?.startsWith('anon:') ? key.subjectRef : undefined;
-}
-
-function respondentSubjectRef(key: DraftKey): string | undefined {
-  if (!key.subjectRef || key.subjectRef.startsWith('anon:')) {
-    return undefined;
-  }
-  return key.subjectRef;
 }
 
 function bearerHeaders(token: string | undefined): HeadersInit {

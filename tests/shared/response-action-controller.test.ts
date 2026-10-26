@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { dereferenceBundleExport, type BundleExport } from '@formspec-org/surface';
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
+import { canonicalResponseHandoffBytes, parseJsonExact } from '@formspec-org/integrity-canonical';
 import type { FormResponse, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import type { SurfaceWidgetActionExecutorInput, SurfaceWidgetActionSource } from '@formspec-org/surface-react';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../src/adapter-conformance/fixtures.ts';
@@ -451,6 +451,37 @@ describe('generic admitted Response Action controller', () => {
     expect(test.prepare).toHaveBeenCalledOnce();
     expect(test.saveDraft).not.toHaveBeenCalled();
     expect(test.controller.getSnapshot().phase).toBe('prepared');
+  });
+
+  it('restores exact API numeric data with its parsed display view through the real controller', async () => {
+    const text = JSON.stringify(response).replace('"data":{', '"data":{"exactAmount":1234567890.123456789,"exactCount":9007199254740993,');
+    const exact = parseJsonExact(text) as FormResponse;
+    const base = await evidence(exact, 1);
+    const qualified = { ...base, evidence: { ...base.evidence, draft_state: JSON.parse(text).data } };
+    const afterCommittedDraft = vi.fn();
+    const test = fixture({ restoredResponse: exact, afterCommittedDraft });
+    await test.controller.restoreSavedDraft(qualified);
+    expect(test.controller.getSnapshot().saved?.draft.responseHash).toBe(await hashResponse(exact));
+    expect(await hashResponse(afterCommittedDraft.mock.calls[0][0].response)).toBe(await hashResponse(exact));
+    expect(JSON.stringify(test.controller.getSnapshot().saved?.response)).toContain('1234567890.123456789');
+  });
+
+  it.each(['display-value', 'display-shape', 'fake-number', 'canonical-hash'] as const)('refuses changed exact receipt %s', async change => {
+    const text = JSON.stringify(response).replace('"data":{', '"data":{"exactAmount":1234567890.123456789,"exactCount":9007199254740993,');
+    const exact = parseJsonExact(text) as FormResponse;
+    const base = await evidence(exact, 1);
+    const qualified = { ...base, evidence: { ...base.evidence, draft_state: JSON.parse(text).data } };
+    let restored = exact;
+    if (change === 'display-value') qualified.evidence.draft_state.fullName = 'Changed';
+    if (change === 'display-shape') delete qualified.evidence.draft_state.exactAmount;
+    if (change === 'fake-number') qualified.evidence.draft_state.exactAmount = { rawJSON: '1234567890.123456789' };
+    if (change === 'canonical-hash') {
+      restored = parseJsonExact(text.replace('1234567890.123456789', '1234567890.123456788')) as FormResponse;
+      qualified.response = restored;
+      qualified.evidence.canonical_response = restored;
+    }
+    const test = fixture({ restoredResponse: restored });
+    await expect(test.controller.restoreSavedDraft(qualified)).rejects.toMatchObject({ code: 'context-mismatch' });
   });
 
   it.each(['actor', 'publication', 'revision', 'hash', 'response'] as const)('refuses contradictory restored saved %s without publishing a handle', async field => {

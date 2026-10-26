@@ -578,65 +578,155 @@ describe('maintained native package Surface host', () => {
     expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled(); expect(test.submit).not.toHaveBeenCalled();
     test.host.dispose();
   });
-  it('writes restored owned data through the actual authored r5 Save button and HTTP cohort before Prepare', async () => {
-    const fixture = await actualFixture(); fixture.host.dispose();
+  it.each(['es-US', 'inline', 'changed', 'prepare-only', 'no-save', 'no-owned-save', 'prepare-only-held-read'] as const)('restores %s wording and prepares through its supported explicit language persistence path', async savedLocale => {
+    const prepareOnly = savedLocale === 'prepare-only' || savedLocale === 'no-save' || savedLocale === 'no-owned-save' || savedLocale === 'prepare-only-held-read';
+    const fixture = await actualFixture(prepareOnly ? { bundle: lifecycleBundle, component: lifecycleComponent, lifecycle: lifecycleFixture(false, savedLocale === 'no-owned-save').lifecycle } : undefined); fixture.host.dispose();
+    const selectedComponent = structuredClone(prepareOnly ? lifecycleComponent : component);
+    const roles = { ...fixture.policy.controller.roles };
+    if (savedLocale === 'no-save' || savedLocale === 'no-owned-save') {
+      if (savedLocale === 'no-save') delete roles.saveInitial;
+      delete roles.saveOwned;
+      if (!('children' in selectedComponent.tree)) throw new Error('Fixture requires a container root');
+      selectedComponent.tree.children = selectedComponent.tree.children?.filter(node => !('actionRef' in node)
+        || !['save-draft-initial', 'save-draft-owned'].includes(String(node.actionRef)));
+    }
     const definition = fixture.policy.definition;
     const key = { formUrl: definition.url, formVersion: definition.version, subjectRef: 'server-actor' };
-    const seed = createFormEngine(definition); fixture.policy.locales.forEach(locale => seed.loadLocale(locale)); seed.setLocale('es-US');
+    const seed = createFormEngine(definition); fixture.policy.locales.forEach(locale => seed.loadLocale(locale)); seed.setLocale(savedLocale === 'inline' || prepareOnly ? '' : 'es-US');
     seed.setValue('email', ''); seed.setValue('photo', null); seed.setValue('declarationAcknowledged', false);
     const partial = { ...seed.getResponse({ profile: 'off' }), id: '01a114cf-c305-73ff-a317-7f7a92c695ad' };
     const capturedData = { ...structuredClone(partial.data), email: 'complete@example.test', declarationAcknowledged: true,
       photo: { kind: 'attachment-ref', uri: 'urn:formspec:attachment:owned-photo', filename: 'uploaded.png', mimeType: 'image/png', contentType: 'image/png',
         size: fixture.photoBytes.length, hash: `sha256:${createHash('sha256').update(fixture.photoBytes).digest('hex')}` } };
+    if (prepareOnly) partial.data = structuredClone(capturedData);
     seed.dispose();
     let response: FormResponse = partial; let revision = 0;
     const view = () => ({ draft_id: 'owned-draft', form_version_id: 'publication', subject_ref: 'server-actor', status: 'in_progress',
-      draft_version: revision, draft_state: response.data, canonical_response: structuredClone(response) });
+      draft_version: revision, is_initialization_only: revision === 1, draft_state: revision === 1 ? {} : response.data, canonical_response: revision === 1 ? null : structuredClone(response) });
+    let reads = 0; let releaseRead!: () => void;
+    const heldRead = new Promise<void>(resolve => { releaseRead = resolve; });
     const transport = recordingFetch(request => {
-      if (request.method === 'GET') return jsonResponse(view());
+      if (request.method === 'GET') {
+        if (++reads === 2 && savedLocale === 'prepare-only-held-read') return heldRead.then(() => jsonResponse(view()));
+        return jsonResponse(view());
+      }
+      if (request.method === 'POST') {
+        expect(request.body).toEqual({ form_version_id: 'publication' });
+        expect(revision).toBe(0); revision = 1; return jsonResponse(view());
+      }
       const body = request.body as { canonical_response: FormResponse; expected_draft_version?: number };
-      if (request.method === 'PATCH') { expect(request.url).toBe('https://server.example.test/drafts/owned-draft'); expect(body.expected_draft_version).toBe(revision); }
-      else { expect(request.method).toBe('POST'); expect(revision).toBe(0); }
+      expect(request.method).toBe('PATCH'); expect(request.url).toBe('https://server.example.test/drafts/owned-draft');
+      expect(body.expected_draft_version).toBe(revision);
       response = structuredClone(body.canonical_response); revision++; return jsonResponse(view());
     });
     const metadata = new Map<string, unknown>();
     const signingPolicy = { validateResponse: validateCanonicalFormResponse, validateContent: await loadCanonicalSigningContentValidator(),
       signingProfileDigest: async (response: FormResponse) => createHash('sha256').update(canonicalResponseSignedPayloadBytes(response)).digest('hex'), keyId: 'unused-sign-key', expectedIssuer: 'https://source.example.test/tenant/workspace/production' };
     const makeCohort = () => createHttpAdapterCohort({ baseUrl: 'https://server.example.test', fetchImpl: transport.fetch, formIdResolver: () => 'form',
+      scopeKey: testScopeKey, qualifiedDraftState: { definition, formVersionId: 'publication', localeDocuments: fixture.policy.locales },
       resumeMetadata: { read: slot => metadata.get(slot), write: (slot, value) => { metadata.set(slot, structuredClone(value)); }, remove: slot => { metadata.delete(slot); } }, responseSigning: signingPolicy });
-    await makeCohort().draftStore.save(key, partial);
+    const initial = makeCohort();
+    await initial.draftStore.initializeDraft!(key, 'publication');
+    await initial.draftStore.save(key, partial);
     const cohort = makeCohort();
-    const host = createNativePackageSigningHost({ ...fixture.policy, initialLocale: 'es-US',
-      controller: { ...fixture.policy.controller, signing: cohort.responseSigning!, validateResponse: validateCanonicalFormResponse },
+    const signingContext = vi.fn(fixture.policy.signingContext);
+    const host = createNativePackageSigningHost({ ...fixture.policy, initialLocale: 'en', signingContext,
+      controller: { ...fixture.policy.controller, roles, signing: cohort.responseSigning!, validateResponse: validateCanonicalFormResponse },
       invalidateAuthority: (_reason, key) => { if (key) cohort.invalidateResponseSigningScope!(key); }, clearDraftAccess: key => cohort.draftStore.delete(key) });
-    const configure = host.configureRuntime; const invocations: unknown[] = []; let engine!: Parameters<typeof configure>[0]['engine'];
+    const configure = host.configureRuntime; const invocations: unknown[] = []; const failures: unknown[] = []; let engine!: Parameters<typeof configure>[0]['engine'];
     host.configureRuntime = async input => {
       engine = input.engine; const configured = await configure(input);
-      return { ...configured, responseActionInvoker: async action => { const result = await configured.responseActionInvoker(action); invocations.push(result); return result; } };
+      return { ...configured, responseActionInvoker: async action => { try { const result = await configured.responseActionInvoker(action); invocations.push(result); return result; } catch (error) { failures.push(error); throw error; } } };
     };
     const composition = createTestComposition({ definition: testDefinition }); composition.draftStore = cohort.draftStore;
     composition.identityProvider.authenticate = async () => ({ provider: 'test-owner', adapter: 'test', subjectRef: 'server-actor',
       credentialType: 'other', subjectBinding: 'respondent', assuranceLevel: 'L1', privacyTier: 'anonymous' });
     composition.identityProvider.subscribe = () => () => {};
-    const mounted = render(<NativePackageRespondentHost {...fixture.props} host={host} composition={composition} />);
-    await screen.findByRole('button', { name: 'Guardar borrador' });
+    composition.nativePackageRespondent = { load: async () => ({ composition, host, componentDocument: selectedComponent,
+      componentRouteResolver: componentResolver(selectedComponent), localeDocuments: fixture.policy.locales, moduleId: host.moduleId, initialLocale: 'en' }) };
+    window.history.replaceState(null, '', '/');
+    const mounted = render(<NativePackageRuntime composition={composition} config={departmentAppProfile} />);
+    if (savedLocale === 'prepare-only-held-read') {
+      await vi.waitFor(() => expect(reads).toBe(2));
+      const language = screen.getByRole('button', { name: 'English' }) as HTMLButtonElement;
+      try {
+        expect(language.disabled).toBe(true);
+        expect(host.getSnapshot().editableSessionActive).toBe(false);
+        language.removeAttribute('disabled'); fireEvent.click(language); language.setAttribute('disabled', '');
+        await expect(host.selectLocale('en')).rejects.toThrow('native-locale-unavailable');
+        expect(host.getSnapshot().locale).toBe('');
+        expect(reads).toBe(2); expect(revision).toBe(2);
+      } finally { releaseRead(); }
+    }
+    if (savedLocale !== 'es-US') {
+      await vi.waitFor(() => expect(host.getSnapshot().controller?.saved?.response.id, JSON.stringify(host.getSnapshot())).toBe(partial.id));
+      expect(host.getSnapshot().locale).toBe(savedLocale === 'inline' || prepareOnly ? '' : 'es-US');
+      expect(engine.getResponse({ profile: 'off' }).displayedLocale).toEqual(partial.displayedLocale);
+      expect(engine.getResponse({ profile: 'off' }).data).toEqual(partial.data);
+      expect(response).toEqual(partial);
+      if (savedLocale === 'inline') await screen.findByText('Choose a language and save before preparing to sign.');
+      if (prepareOnly) await screen.findByText('Choose a language before preparing to sign.');
+      const originalHandle = structuredClone(host.getSnapshot().controller?.saved);
+      await vi.waitFor(() => expect((screen.getByRole('button', { name: 'English' }) as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(screen.getByRole('button', { name: 'English' }));
+      await vi.waitFor(() => expect(host.getSnapshot().locale).toBe('en'));
+      await screen.findByRole('button', { name: 'Prepare saved response' });
+      if (!prepareOnly) await screen.findByText('Choose a language and save before preparing to sign.');
+      else await vi.waitFor(() => expect(host.getSnapshot().controller?.saved, JSON.stringify(host.getSnapshot().controller)).toEqual(originalHandle));
+      expect(engine.getResponse({ profile: 'off' }).data).toEqual(partial.data);
+      expect(response).toEqual(partial); expect(revision).toBe(2);
+      if (!prepareOnly) await act(async () => { engine.loadResponseData(capturedData as Parameters<typeof engine.loadResponseData>[0]); });
+      fireEvent.click(screen.getByRole('button', { name: 'Prepare saved response' }));
+      if (prepareOnly) {
+        await vi.waitFor(() => expect(host.getSnapshot().controller?.phase, JSON.stringify({ state: host.getSnapshot().controller, invocations, failures, requests: transport.requests })).toBe('prepared'));
+        const selected = fixture.policy.locales.find(document => document.target.kind === 'definition' && document.locale === 'en')!;
+        expect(response.id).toBe(partial.id); expect(response.data).toEqual(partial.data);
+        expect(host.getSnapshot().controller?.prepared?.draft.id).toBe(originalHandle!.draft.id);
+        expect(host.getSnapshot().controller?.prepared?.actor).toEqual(originalHandle!.actor);
+        expect(host.getSnapshot().controller?.prepared?.draftKey).toEqual(originalHandle!.draftKey);
+        expect(response.displayedLocale).toEqual({ url: selected.url, version: selected.version, locale: 'en' });
+        expect(revision).toBe(3); expect(transport.requests.filter(request => request.method === 'PATCH')).toHaveLength(2);
+        expect(transport.requests.slice(-3).map(request => request.method)).toEqual(['GET', 'PATCH', 'GET']);
+        expect(transport.requests.filter(request => request.method === 'POST')).toHaveLength(1);
+        expect(host.getSnapshot().controller?.prepared?.response).toEqual(response);
+        expect(fixture.saveDraft).not.toHaveBeenCalled(); expect(invocations).toHaveLength(1);
+        expect(invocations[0]).toMatchObject({ status: 'completed', resolution: { action: { id: 'prepare' } } });
+        expect(host.getSnapshot().checkpointState).toBe('saved');
+        expect(screen.queryByText('Choose a language and save before preparing to sign.')).toBeNull();
+        expect(screen.queryByRole('button', { name: /Save progress|Save draft/i })).toBeNull();
+        if (savedLocale === 'no-save' || savedLocale === 'no-owned-save') expect(screen.queryByRole('button', { name: 'Prepare signing copy' })).toBeNull();
+        mounted.unmount(); host.dispose(); return;
+      }
+      await vi.waitFor(() => expect(failures).toHaveLength(1));
+      expect((failures[0] as Error).message).toBe('native-signing-language-save-required');
+      expect(invocations).toHaveLength(0);
+      expect(signingContext).not.toHaveBeenCalled();
+      expect(revision).toBe(2); expect(response).toEqual(partial);
+    }
+    const saveLabel = savedLocale !== 'es-US' ? 'Save draft' : 'Guardar borrador';
+    await screen.findByRole('button', { name: saveLabel });
     await act(async () => { engine.loadResponseData(capturedData as Parameters<typeof engine.loadResponseData>[0]); });
     await vi.waitFor(() => expect(engine.getResponse({ profile: 'off' }).data).toEqual(capturedData));
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(engine.getInstanceData('draftReadiness')).toEqual({ ready: true, owned: true });
-    const save = await screen.findByRole('button', { name: 'Guardar borrador' }); save.focus();
+    const save = await screen.findByRole('button', { name: saveLabel }); save.focus();
     // jsdom does not synthesize a button click from Enter; include its native activation click.
     fireEvent.keyDown(save, { key: 'Enter' }); fireEvent.click(save); fireEvent.keyUp(save, { key: 'Enter' });
     await vi.waitFor(() => expect(host.getSnapshot().controller?.phase, JSON.stringify({ invocations, requests: transport.requests, scratch: engine.getInstanceData('draftReadiness'), initialWhen: engine.compileExpression("@instance('draftReadiness').ready and not(@instance('draftReadiness').owned)", '')(), ownedWhen: engine.compileExpression("@instance('draftReadiness').ready and @instance('draftReadiness').owned", '')(), snapshot: host.getSnapshot().controller })).toBe('saved'));
     expect(invocations).toHaveLength(1);
     expect(invocations[0]).toMatchObject({ status: 'completed', resolution: { action: { id: 'save-draft-owned' } } });
-    expect(revision).toBe(2); expect(response.id).toBe(partial.id); expect(response.data).toEqual(capturedData);
+    expect(revision).toBe(3); expect(response.id).toBe(partial.id); expect(response.data).toEqual(capturedData);
     expect(transport.requests.filter(request => request.method === 'POST')).toHaveLength(1);
-    expect(transport.requests.filter(request => request.method === 'PATCH')).toHaveLength(1);
-    expect(transport.requests.filter(request => request.method === 'GET')).toHaveLength(3);
-    fireEvent.click(await screen.findByRole('button', { name: 'Preparar la respuesta guardada' }));
+    expect(transport.requests.filter(request => request.method === 'PATCH')).toHaveLength(2);
+    expect(transport.requests.filter(request => request.method === 'GET')).toHaveLength(savedLocale !== 'es-US' ? 5 : 4);
+    const selected = fixture.policy.locales.find(document => document.target.kind === 'definition' && document.locale === (savedLocale !== 'es-US' ? 'en' : savedLocale))!;
+    expect(response.displayedLocale).toEqual({ url: selected.url, version: selected.version, locale: selected.locale });
+    expect(screen.queryByText('Choose a language and save before preparing to sign.')).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: savedLocale !== 'es-US' ? 'Prepare saved response' : 'Preparar la respuesta guardada' }));
     await vi.waitFor(() => expect(host.getSnapshot().controller?.phase).toBe('prepared'));
-    expect(revision).toBe(3); expect(host.getSnapshot().controller?.prepared?.response).toEqual(response);
+    expect(signingContext).toHaveBeenCalledWith(selected.locale);
+    expect(host.getSnapshot().controller?.prepared?.content).toEqual(Object.values((definition.extensions!['x-formspec-signing-content'] as { entries: Record<string, SigningContent> }).entries).find(content => content.locale === selected.locale));
+    expect(revision).toBe(4); expect(host.getSnapshot().controller?.prepared?.response).toEqual(response);
     mounted.unmount(); host.dispose();
   });
   it('uses the qualified form title and existing provider container across languages without writes', async () => {

@@ -135,7 +135,7 @@ describe('HttpSubmitTransport', () => {
     await expect(adapter.submit(handoff, key)).rejects.toMatchObject({ status: 503 });
     await expect(adapter.submit(handoff, key)).resolves.toMatchObject({ referenceNumber: snapshot.id });
     expect(requests[0]?.body).toEqual(requests[1]?.body);
-    expect(requests[1]?.body).toMatchObject({ canonical_response: snapshot, response_id: snapshot.id, response_data: snapshot.data });
+    expect(requests[1]?.body).toMatchObject({ canonical_response: snapshot, response_data: snapshot.data });
     expect(requests[1]?.headers.get('authorization')).toBe('Bearer test-token');
   });
 
@@ -209,15 +209,15 @@ describe('HttpSubmitTransport', () => {
     expect(requests).toHaveLength(1);
   });
 
-  it('refuses returned identity mismatch and retains the finalized snapshot for retry', async () => {
+  it('refuses missing record identity and retains the canonical document unchanged for retry', async () => {
     const snapshot = { ...sampleFormResponse, id: 'stable-id' };
     const { fetch, requests } = recordingFetch(() =>
-      jsonResponse({ response_id: requests.length === 1 ? 'wrong-id' : snapshot.id, status: 'accepted' }));
+      jsonResponse({ response_id: requests.length === 1 ? '' : 'server-record-id', status: 'accepted' }));
     const adapter = new HttpSubmitTransport({ baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver: () => 'draft-1' });
     const handoff = { ...sampleIntakeHandoff, extensions: { 'x-formspec-response': snapshot } };
     const key = generateIdempotencyKey();
-    await expect(adapter.submit(handoff, key)).rejects.toThrow(/Server response identity differs/);
-    await expect(adapter.submit(handoff, key)).resolves.toMatchObject({ referenceNumber: snapshot.id });
+    await expect(adapter.submit(handoff, key)).rejects.toThrow(/no durable record identity/);
+    await expect(adapter.submit(handoff, key)).resolves.toMatchObject({ referenceNumber: 'server-record-id' });
     expect(requests).toHaveLength(2);
     expect(requests[0]?.body).toEqual(requests[1]?.body);
   });

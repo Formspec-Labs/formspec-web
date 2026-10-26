@@ -106,11 +106,19 @@ async function fixture(subject = 'anon:fixture', lifecycle = false) {
       subject_ref: 'anon:fixture', form_id: 'actual-form', expires_at: '2099-01-01T00:00:00Z' });
     if (url.pathname === '/runtime/forms/actual-form/application-lifecycle') return Response.json(capabilities);
     if (url.pathname === '/runtime/forms/actual-form' && method === 'GET') return Response.json(publication);
-    if (url.pathname === '/runtime/forms/actual-form/drafts' && method === 'POST') saved = structuredClone(body.canonical_response);
+    if (url.pathname === '/runtime/forms/actual-form/drafts' && method === 'POST') {
+      expect(body).toEqual({ form_version_id: publication.form_version_id });
+      expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy();
+      saved = undefined; draftVersion = 1;
+    }
+    if (url.pathname === '/drafts/fixture-draft' && method === 'PATCH') {
+      expect(body.expected_draft_version).toBe(draftVersion);
+      saved = structuredClone(body.canonical_response); draftVersion++;
+    }
     if (url.pathname === '/drafts/fixture-draft' && method === 'GET') await draftReadGate;
     if (url.pathname === '/drafts/fixture-draft' || (url.pathname.endsWith('/drafts') && method === 'POST')) return Response.json({
       draft_id: 'fixture-draft', draft_version: draftVersion, form_version_id: 'actual-publication', subject_ref: subject,
-      canonical_response: saved, draft_state: saved?.data, status: draftStatus });
+      canonical_response: saved ?? null, draft_state: saved?.data ?? {}, status: draftStatus, is_initialization_only: !saved });
     throw new Error(`Unexpected test request ${method} ${url.href}`);
   });
   vi.stubGlobal('fetch', fetch);
@@ -591,6 +599,7 @@ describe('explicit native package composition', () => {
     engine.setValue('declarationAcknowledged', true);
     engine.setValue('photo', { kind: 'attachment-ref', uri: 'attachment:fixture', filename: 'fixture.png', mimeType: 'image/png', contentType: 'image/png', size: 1, hash: `sha256:${'c'.repeat(64)}` });
     const response = engine.getResponse({ profile: 'on-submit', id: generateIdempotencyKey() }); engine.dispose();
+    await first.composition.draftStore.initializeDraft!(key);
     await first.composition.draftStore.save(key, response);
     const content = Object.values((test.definition.extensions!['x-formspec-signing-content'] as { entries: Record<string, SigningContent> }).entries).find(content => content.locale === 'es-US')!;
     const signed = await delegatedSignedResponseFixture({ response, content, actor: 'anon:fixture', draftId: 'fixture-draft', candidateVersion: 4, issuer: test.signing.expectedIssuer, keyId: test.signing.keyId });
@@ -615,6 +624,7 @@ describe('explicit native package composition', () => {
     const initial = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
     const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version,
       status: 'in-progress' as const };
+    await initial.composition.draftStore.initializeDraft!({ formUrl: test.definition.url, formVersion: test.definition.version });
     await initial.composition.draftStore.save({ formUrl: test.definition.url, formVersion: test.definition.version }, response); initial.host.dispose();
     const fresh = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
     const configureSubmitted = vi.spyOn(fresh.host, 'configureSubmittedRuntime'); const count = test.requests.length;
@@ -626,8 +636,9 @@ describe('explicit native package composition', () => {
     const test = await fixture();
     const initial = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
     const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version };
+    await initial.composition.draftStore.initializeDraft!({ formUrl: test.definition.url, formVersion: test.definition.version });
     await initial.composition.draftStore.save({ formUrl: test.definition.url, formVersion: test.definition.version }, response); initial.host.dispose();
-    test.setDraft(response, 'unknown', 1);
+    test.setDraft(response, 'unknown', 2);
     const fresh = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
     const count = test.requests.length; const first = fresh.resumeSubmitted!();
     await expect(first).rejects.toThrow(/qualified publication/);
@@ -687,28 +698,55 @@ describe('explicit native package composition', () => {
     expect(test.requests.every(request => request.method === 'GET')).toBe(true);
     expect(test.requests.some(request => request.url.includes('sessions/anonymous'))).toBe(false);
     const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version, status: 'in-progress' as const };
-    const saveAction = test.document.actions.find(action => action.id === test.signing.roles.saveInitial.actionRef)!;
+    const key = { formUrl: test.definition.url, formVersion: test.definition.version };
+    await boot.composition.draftStore.initializeDraft!(key);
+    const obsolete = test.document.actions.find(action => action.id === test.signing.roles.saveInitial.actionRef)!;
+    const beforeObsolete = test.requests.length;
+    await expect(boot.composition.responseSigning!.saveDraft({ formId: test.publication.form_id,
+      draftKey: key, definition: test.definition, formVersionId: test.publication.form_version_id,
+      response, operationId: generateIdempotencyKey(), action: { ...test.signing.roles.saveInitial,
+        document: test.document, artifactDigest: await computeJcsSha256Digest(test.document),
+        requestRef: (obsolete.effects[0] as { requestRef: string }).requestRef } })).rejects.toThrow('Authored Save request differs');
+    expect(test.requests).toHaveLength(beforeObsolete);
+    boot.host.dispose();
+    // Test-only current action input: update raw fixture bytes and re-admit the complete package.
+    // The retained business D1 bundle is unchanged and its obsolete initial POST remains a blocker.
+    const candidate = JSON.parse(test.texts['native.json']);
+    const selected = candidate.documents[test.signing.roles.saveInitial.artifactRef];
+    const effect = selected.actions.find((action: { id: string }) => action.id === test.signing.roles.saveInitial.actionRef).effects[0];
+    const request = selected['x-formspec-runtime'].requests.find((request: { id: string }) => request.id === effect.requestRef);
+    request.request = { method: 'PATCH', pathTemplate: '/drafts/{draftId}',
+      pathBindings: { draftId: { from: 'input', path: 'draftId' } },
+      bodyBindings: { '/canonical_response': { from: 'input', path: 'frozenResponse' },
+        '/draft_state': { from: 'input', path: 'frozenResponse.data' },
+        '/expected_draft_version': { from: 'input', path: 'draftVersion' } } };
+    test.texts['native.json'] = JSON.stringify(candidate);
+    test.files.nativeBundle.sha256 = await rawDigest(test.texts['native.json']);
+    const current = await createDefaultComposition(test.config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
+    expect((await producer.mock.results.at(-1)!.value).report.ok).toBe(true);
+    const document = dereferenceBundleExport(JSON.parse(test.texts['native.json'])).responseActions.find(document => document.actions.some(action => action.id === test.signing.roles.saveInitial.actionRef))!;
     const saveGuard = vi.fn();
-    await boot.composition.responseSigning!.saveDraft({ formId: test.publication.form_id,
-      draftKey: { formUrl: test.definition.url, formVersion: test.definition.version }, definition: test.definition,
-      formVersionId: test.publication.form_version_id, response, operationId: generateIdempotencyKey(),
-      action: { ...test.signing.roles.saveInitial, document: test.document, artifactDigest: await computeJcsSha256Digest(test.document),
-        requestRef: (saveAction.effects[0] as { requestRef: string }).requestRef } }, { assertBeforeDispatch: saveGuard });
+    await current.composition.responseSigning!.saveDraft({ formId: test.publication.form_id,
+      draftKey: key, definition: test.definition, formVersionId: test.publication.form_version_id,
+      response, operationId: generateIdempotencyKey(), action: { ...test.signing.roles.saveInitial,
+        document, artifactDigest: await computeJcsSha256Digest(document), requestRef: effect.requestRef } }, { assertBeforeDispatch: saveGuard });
     expect(saveGuard).toHaveBeenCalledTimes(2);
     const creates = test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'));
-    expect(creates).toHaveLength(1); expect((creates[0].body as { canonical_response: FormResponse }).canonical_response.id).toBe(response.id);
-    expect(await boot.composition.draftStore.load({ formUrl: test.definition.url, formVersion: test.definition.version })).toEqual(response);
+    expect(creates).toHaveLength(1); expect(creates[0].body).toEqual({ form_version_id: test.publication.form_version_id });
+    const saves = test.requests.filter(request => request.method === 'PATCH');
+    expect(saves).toHaveLength(1); expect(saves[0].body).toMatchObject({ canonical_response: response, expected_draft_version: 1 });
+    expect(await current.composition.draftStore.load(key)).toEqual(response);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const prepareAction = test.document.actions.find(action => action.id === test.signing.roles.prepare.actionRef)!;
-    await expect(boot.composition.responseSigning!.prepare({
+    await expect(current.composition.responseSigning!.prepare({
       draftKey: { formUrl: test.definition.url, formVersion: test.definition.version }, definition: test.definition,
       formVersionId: test.publication.form_version_id, response, source: { ref: 'unused', version: 'unused' }, locale: 'en',
-      action: { ...test.signing.roles.prepare, document: test.document, artifactDigest: await computeJcsSha256Digest(test.document),
+      action: { ...test.signing.roles.prepare, document, artifactDigest: await computeJcsSha256Digest(document),
         requestRef: (prepareAction.effects[0] as { requestRef: string }).requestRef },
     })).rejects.toThrow('Preparation requires a completed unsigned pinned Response');
     expect(warn).toHaveBeenCalledExactlyOnceWith('Native form action failed',
       JSON.stringify({ stage: 'prepare-port', reason: 'candidate-invalid' }));
-    boot.host.dispose();
+    current.host.dispose();
   });
 
   it('supplies actual authored label-reference keys to the maintained ceremony consumer', async () => {
@@ -916,10 +954,12 @@ describe('explicit native package composition', () => {
     expect(boot.composition.identityProvider).toBe(provider); expect(boot.composition.browserAuthSession).toBe(browserAuthSession);
     const key = { formUrl: test.definition.url, formVersion: test.definition.version, subjectRef: claim.subjectRef };
     const response = { ...sampleFormResponse, id: generateIdempotencyKey(), definitionUrl: test.definition.url, definitionVersion: test.definition.version };
+    await boot.composition.draftStore.initializeDraft!(key);
     await boot.composition.draftStore.save(key, response); boot.host.dispose();
     const create = test.requests.find(request => request.method === 'POST' && request.url.endsWith('/drafts'))!;
     expect(create.headers.get('authorization')).toBe('Bearer oidc-bearer');
-    expect(create.body).toMatchObject({ respondent_subject_ref: claim.subjectRef });
+    expect(create.body).toEqual({ form_version_id: test.publication.form_version_id });
+    expect(create.headers.get('idempotency-key')).toBeTruthy();
     test.values.clear(); test.setDraft(response, 'in_progress', 7);
     const count = test.requests.length;
     const fresh = await createDefaultComposition(config, { ...options, ownedDraftResume: { draftId: 'fixture-draft', expectedResponseId: response.id! } }).nativePackageRespondent!.load();

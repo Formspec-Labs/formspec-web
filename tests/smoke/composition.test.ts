@@ -158,7 +158,7 @@ describe('composition root smoke', () => {
   });
 
   it('production publicPortal composition carries server anonymous sessions through draft submit', async () => {
-    let draftCounter = 0;
+    let draftCounter = 0; let revision = 1;
     const { fetch, requests } = recordingFetch((request) => {
       const path = new URL(request.url).pathname;
       if (request.method === 'POST' && path === '/runtime/forms/conformance/sessions/anonymous') {
@@ -171,14 +171,18 @@ describe('composition root smoke', () => {
         });
       }
       if (request.method === 'GET' && path === '/runtime/forms/conformance') {
-        return jsonResponse({ definition: sampleFormDefinition });
+        return jsonResponse({ definition: sampleFormDefinition, form_id: 'conformance', form_version_id: 'publication',
+          definition_url: sampleFormDefinition.url, definition_version: sampleFormDefinition.version });
       }
       if (request.method === 'POST' && path === '/runtime/forms/conformance/drafts') {
         draftCounter += 1;
-        return jsonResponse({ draft_id: `draft-http-${draftCounter}`, draft_version: 1 });
+        expect(request.body).toEqual({ form_version_id: 'publication' });
+        return jsonResponse({ draft_id: `draft-http-${draftCounter}`, draft_version: 1, form_version_id: 'publication',
+          subject_ref: 'anon:server-subject', status: 'in_progress', is_initialization_only: true, canonical_response: null, draft_state: {} });
       }
       if (request.method === 'PATCH' && path === '/drafts/draft-http-1') {
-        return jsonResponse({ draft_id: 'draft-http-1', draft_version: 2 });
+        expect((request.body as { expected_draft_version: number }).expected_draft_version).toBe(revision);
+        revision++; return jsonResponse({ draft_id: 'draft-http-1', draft_version: revision });
       }
       if (request.method === 'POST' && path === '/drafts/draft-http-1/submit') {
         return jsonResponse({ response_id: 'response-http-1', status: 'accepted' });
@@ -205,6 +209,7 @@ describe('composition root smoke', () => {
     if (!option) throw new Error('expected anonymous identity option');
     const claim = await c.identityProvider.authenticate(option);
     const definition = await c.definitionSource.getDefinition(c.initialDefinitionUrl);
+    await c.draftStore.initializeDraft!({ formUrl: definition.url, formVersion: definition.version, subjectRef: claim.subjectRef }, 'publication');
     await c.draftStore.save(
       {
         formUrl: definition.url,
@@ -246,24 +251,19 @@ describe('composition root smoke', () => {
         'GET /runtime/forms/conformance',
         'POST /runtime/forms/conformance/drafts',
         'PATCH /drafts/draft-http-1',
+        'PATCH /drafts/draft-http-1',
         'POST /drafts/draft-http-1/submit',
       ]);
     expect(requests[0]?.body).toEqual({});
-    expect(requests[2]?.body).toMatchObject({
-      anonymous_session_token: 'anonymous-token-1',
-      anonymous_subject_ref: 'anon:server-subject',
-      draft_state: sampleFormResponse.data,
-    });
-    expect(requests[3]?.body).toMatchObject({
-      canonical_response: completedResponse,
-      expected_draft_version: 1,
-      draft_state: completedResponse.data,
-    });
-    expect(requests[4]?.body).toMatchObject({
-      anonymous_session_token: 'anonymous-token-1',
-      subject_ref: 'anon:server-subject',
-      response_data: completedResponse.data,
-    });
+    expect(requests[2]?.body).toEqual({ form_version_id: 'publication' });
+    expect(requests[2]?.headers.get('Idempotency-Key')).toBeTruthy();
+    expect(requests[2]?.headers.get('Authorization')).toBe('Bearer anonymous-token-1');
+    expect(requests[3]?.body).toMatchObject({ canonical_response: sampleFormResponse,
+      expected_draft_version: 1, draft_state: sampleFormResponse.data });
+    expect(requests[4]?.body).toMatchObject({ canonical_response: completedResponse,
+      expected_draft_version: 2, draft_state: completedResponse.data });
+    expect(requests[5]?.body).toMatchObject({ anonymous_session_token: 'anonymous-token-1',
+      subject_ref: 'anon:server-subject', response_data: completedResponse.data });
   });
 
   it('SubmitTransport is idempotent on the same key', async () => {

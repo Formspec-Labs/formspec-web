@@ -1604,6 +1604,30 @@ async function createReadyState(
         ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef)
         : draftKey,
     );
+    if (!draft && composition.draftStore.initializeDraft) {
+      const initialized = await composition.draftStore.initializeDraft(
+        multiPartyState ? multiPartyDraftKey(draftKey, multiPartyState.progress.activePartyRef) : draftKey);
+      // Empty durable identity preserves authored defaults, prefill, and the selected Locale.
+      // A lost initialization response may instead recover a later saved Response.
+      draft = initialized.response;
+      if (draft && form?.configureSubmittedRuntime && composition.draftStore.readState) {
+        // Retry recovery must carry the same qualified Save/Sign evidence as an ordinary resume.
+        const current = await composition.draftStore.readState(draftKey);
+        if (!current) throw new Error('Initialized draft recovery lost its owned state');
+        if (current.kind === 'submitted') {
+          const terminalRuntime = await form.configureSubmittedRuntime({ definition, draftKey, claim, state: current });
+          if (!terminalRuntime || typeof terminalRuntime.invalidate !== 'function' || typeof terminalRuntime.dispose !== 'function') {
+            terminalRuntime?.dispose?.(); throw new Error('Submitted recovery requires lifecycle hooks');
+          }
+          engine.dispose(); return { status: 'submitted', terminalRuntime };
+        }
+        draft = current.response;
+        recoveredSavedDraft = current.savedDraft; recoveredSigning = current.signed;
+        recoveredPendingSign = current.pendingSign; recoveredApplication = current.application;
+        recoveredApplicationLookup = current.applicationLookup;
+      }
+    }
+
 
   } catch (error) {
     if (error instanceof DraftVersionConflictError) {

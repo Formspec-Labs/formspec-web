@@ -46,6 +46,31 @@ function fixture() {
   return { composition, boot, host, load, publish: (next: Partial<typeof state>) => { state = { ...state, ...next }; emit(); } };
 }
 describe('native package boot and scoped recovery', () => {
+  it.each([false, true])('offers signed renewal before runtime only with the maintained refresh capability: %s', async supported => {
+    const test = fixture(); const renew = vi.fn(async () => {});
+    if (supported) test.host.renewSignedChecks = renew;
+    test.publish({ controller: { phase: 'signed', owned: true, signed: {} } as never, nativeReadiness: 'pending', runtime: undefined });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByTestId('native-route');
+    const button = screen.queryByRole('button', { name: 'Renew checks for signed response' });
+    expect(!!button).toBe(supported); expect(renew).not.toHaveBeenCalled();
+    if (button) { fireEvent.click(button); await waitFor(() => expect(renew).toHaveBeenCalledOnce()); }
+  });
+  it('keeps signed renewal explicit, shows its refusal and permits a bounded retry', async () => {
+    const test = fixture(); const gate = deferred<void>();
+    test.host.renewSignedChecks = vi.fn().mockReturnValueOnce(gate.promise).mockResolvedValueOnce(undefined);
+    test.publish({ controller: { phase: 'signed', owned: true, signed: {} } as never, nativeReadiness: 'expired', runtime: undefined });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Renew checks for signed response' }));
+    const pending = await screen.findByRole('button', { name: 'Renewing checks' });
+    expect((pending as HTMLButtonElement).disabled).toBe(true); fireEvent.click(pending);
+    expect(test.host.renewSignedChecks).toHaveBeenCalledOnce();
+    await act(async () => gate.reject(new Error('current proof refused')));
+    await screen.findByText('Checks could not be renewed. Your signed response is saved. Try again.');
+    fireEvent.click(screen.getByRole('button', { name: 'Renew checks for signed response' }));
+    await waitFor(() => expect(test.host.renewSignedChecks).toHaveBeenCalledTimes(2));
+    expect(test.host.widgetExecutor).not.toHaveBeenCalled();
+  });
   it('keeps host chrome on its selected Definition Locale when another Definition has the same language', async () => {
     const test = fixture(); const selected = test.boot.localeDocuments.find(document => document.locale === 'en')!;
     test.boot.localeDocuments = [{ ...selected, url: 'urn:test:sibling-locale', target: { kind: 'definition', url: 'urn:test:sibling' },
@@ -335,7 +360,7 @@ describe('native package boot and scoped recovery', () => {
     expect(link.getAttribute('href')).toBe('/authored-start?form=selected&package=%2Fpackage.json');
     expect(screen.queryByTestId('native-route')).toBeNull(); expect(observed.props).toBeUndefined();
     expect(screen.queryByText(UI_STRINGS['receipt.clearedDetail'])).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Passport renewal' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Passport renewal' })));
     act(() => { window.history.replaceState(null, '', link.getAttribute('href')!); window.dispatchEvent(new PopStateEvent('popstate')); });
     await screen.findByTestId('native-route'); expect(window.location.pathname).toBe('/authored-start');
     expect(test.boot.resumeSubmitted).toBeDefined(); expect(test.load).toHaveBeenCalledOnce();

@@ -1,3 +1,4 @@
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { IDEMPOTENCY_KEY_HEADER } from '../../shared/idempotency-key.ts';
 import { parseScopeKey, scopeKeyHeaders, type ScopeKey } from '../../shared/scope-key.ts';
 import type { ProblemJson } from '../../shared/problem-json.ts';
@@ -287,7 +288,7 @@ async function readResponsePayload(response: Response, options: JsonRequestOptio
       void reader?.cancel().catch(() => {});
     }
   }
-  const value: unknown = !text ? undefined : !contentType.includes('json') ? text : JSON.parse(text);
+  const value: unknown = !text ? undefined : !contentType.includes('json') ? text : parseJsonExact(text);
   return { value, utf8Bytes };
 }
 

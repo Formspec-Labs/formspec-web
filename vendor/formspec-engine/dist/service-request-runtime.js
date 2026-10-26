@@ -33,8 +33,12 @@ export class ServiceRequestRuntimeError extends Error {
 function fail(message) {
     throw new ServiceRequestRuntimeError(message);
 }
+function isRawJson(value) {
+    const json = JSON;
+    return json.isRawJSON?.(value) ?? false;
+}
 function isPlainObject(value) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value))
+    if (value === null || typeof value !== 'object' || Array.isArray(value) || isRawJson(value))
         return false;
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
@@ -43,7 +47,7 @@ function ownDataValue(value, segment, label) {
     if (FORBIDDEN_PROPERTY_NAMES.has(segment)) {
         return fail(`${label} contains a forbidden property segment`);
     }
-    if (value === null || typeof value !== 'object') {
+    if (value === null || typeof value !== 'object' || isRawJson(value)) {
         return fail(`${label} does not resolve through structured data`);
     }
     const descriptor = Object.getOwnPropertyDescriptor(value, segment);
@@ -62,6 +66,9 @@ function cloneJson(value, label, seen = new Set()) {
     }
     if (typeof value !== 'object')
         return fail(`${label} is not JSON data`);
+    // Genuine built-in raw JSON is an immutable primitive, not a traversable object.
+    if (isRawJson(value))
+        return value;
     if (seen.has(value))
         return fail(`${label} contains a cycle`);
     seen.add(value);

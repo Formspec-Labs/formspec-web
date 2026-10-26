@@ -3,7 +3,7 @@ import type { TaskDraftAssociation } from '../../../src/ports/task-draft.ts';
 import type { HttpResponseSigningPolicy } from '../../../src/adapters/http/response-signing.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { detachedSignatureProtectedHeader, encodeCoseSign1, sigStructureBytes } from '@formspec-org/integrity-cose';
-import { canonicalResponseSignedPayloadBytes } from '@formspec-org/integrity-canonical';
+import { canonicalResponseHandoffBytes, canonicalResponseSignedPayloadBytes, parseJsonExact } from '@formspec-org/integrity-canonical';
 import type { FormResponse, ResponseActionsDocument, SigningContent } from '@formspec-org/types';
 import { createHttpAdapterCohort } from '../../../src/adapters/http/cohort.ts';
 import { assertDelegatedSignedResponseConsistency, handoffHash } from '../../../src/adapters/http/response-signing.ts';
@@ -17,7 +17,7 @@ import type { DraftKey } from '../../../src/ports/draft-store.ts';
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
 import { testScopeKey } from '../../fixtures/scope.ts';
 
-const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version };
+const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version, subjectRef: 'anon:owner' };
 const expectedIssuer = 'https://source.example.test/tenant/workspace/production';
 const source = { ref: `${key.formUrl}#/extensions/x-formspec-signing-content/entries/english`, version: '1.0.0' };
 const content: SigningContent = {
@@ -79,22 +79,25 @@ const prepareAction = saveAction('PATCH');
 
 type CandidateGate = (input: { saved: SavedResponseDraft; operationId: string; assertCurrent: () => void }) => Promise<{ assertCurrent: () => void }>;
 async function fixture(stateReading = false, authenticated = false, anonymousSubject = false, earlyCaseCreation?: boolean, preSignCandidate?: CandidateGate, persistentSaving = true, prePrepareCandidate?: HttpResponseSigningPolicy['prePrepareCandidate'], taskAssociation?: TaskDraftAssociation) {
-  const draftId = earlyCaseCreation === undefined ? 'owned-draft' : 'draft_01a11ca26d05793192f9f01f97ba9c0b';
+  const draftId = earlyCaseCreation === undefined ? 'owned-draft' : 'acme_draft_01k80t0800e008000000000002';
   const draftKey: DraftKey = authenticated ? { ...key, subjectRef: 'oidc:owner' }
     : anonymousSubject ? { ...key, subjectRef: 'anon:owner' } : key;
   const values = new Map<string, string>();
   const storage = { getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
   const context = { baseUrl: 'https://server.example.test', scopeKey: testScopeKey };
-  const state = { response: structuredClone(response), version: 1, patchCount: 0, signCount: 0,
+  const state = { initialized: false, saved: false, response: structuredClone(response), version: 1, patchCount: 0, signCount: 0,
     patchProblem: undefined as unknown, patchStatus: 200, createdVersion: 1, mutateSave: undefined as ((response: FormResponse) => void) | undefined, lostCreate: false, createCount: 0, status: 'in_progress' as string | undefined, lostPatch: false, lostSign: false, refuseSign: false, signStatus: 200, persistSign: true,
     actor: authenticated ? 'oidc:owner' : 'anon:owner', token: 'owner-token' as string | undefined,
     tokenGate: undefined as Promise<void> | undefined, formVersionId: 'publication-1',
     mutateSigned: undefined as ((response: FormResponse) => void) | undefined,
     createGate: undefined as Promise<void> | undefined, patchGate: undefined as Promise<void> | undefined, signGate: undefined as Promise<void> | undefined, getGate: undefined as Promise<void> | undefined, getStatus: 200,
-    taskDraft: undefined as unknown, applicationStatus: 200, applicationAbsent: false, applicationGate: undefined as Promise<void> | undefined };
+    taskDraft: undefined as unknown, roundedDisplay: false, applicationStatus: 200, applicationAbsent: false, applicationGate: undefined as Promise<void> | undefined };
   const view = () => ({ draft_id: draftId, form_version_id: state.formVersionId, subject_ref: state.actor,
-    status: state.status, draft_version: state.version, draft_state: state.response.data, canonical_response: structuredClone(state.response), ...(state.taskDraft === undefined ? {} : { taskDraft: state.taskDraft }) });
+    status: state.status, draft_version: state.version, is_initialization_only: !state.saved,
+    draft_state: state.saved ? (state.roundedDisplay ? JSON.parse(JSON.stringify(state.response.data)) : state.response.data) : {},
+    canonical_response: state.saved ? parseJsonExact(JSON.stringify(state.response)) as FormResponse : null,
+    ...(state.taskDraft === undefined ? {} : { taskDraft: state.taskDraft }) });
   const { fetch, requests } = recordingFetch(async request => {
     if (authenticated && (!state.token || request.headers.get('authorization') !== `Bearer ${state.token}`)) return jsonResponse({ detail: 'unauthorized' }, 401);
     if (request.url.endsWith('/sessions/anonymous')) return jsonResponse({ session_id: 'session', session_token: 'owner-token',
@@ -105,6 +108,11 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
       if (state.applicationStatus !== 200) return jsonResponse({ status: state.applicationStatus, title: 'unavailable', type: 'about:blank' }, state.applicationStatus);
       if (state.applicationAbsent) return jsonResponse(null);
       return jsonResponse({ caseLedgerId: 'urn:wos:real-case', caseReference: 'APP-001', draftRef: `urn:formspec:draft:${draftId}`, status: state.status === 'submitted' ? 'submitted' : 'in-progress' });
+    }
+    if (request.method === 'POST' && request.url.endsWith('/drafts')) {
+      state.createCount++; await state.createGate; state.initialized = true;
+      if (state.lostCreate) { state.lostCreate = false; throw new Error('lost create reply'); }
+      return jsonResponse(view());
     }
     if (request.method === 'GET') { await state.getGate; return jsonResponse(view(), state.getStatus); }
     if (request.url.endsWith('/submit')) return jsonResponse({ response_id: response.id, status: 'accepted' });
@@ -129,10 +137,10 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
       await state.patchGate;
       if (state.patchStatus !== 200) return jsonResponse(state.patchProblem ?? { detail: 'private URL token subject response' }, state.patchStatus);
       if (body.expected_draft_version !== state.version) return jsonResponse({ detail: 'stale' }, 409);
-      state.version++;
+      state.version++; state.saved = true;
     }
     if (request.method === 'POST') { state.createCount++; await state.createGate; state.version = state.createdVersion; }
-    state.response = structuredClone(body.canonical_response);
+    state.response = parseJsonExact(JSON.stringify(body.canonical_response)) as FormResponse;
     state.mutateSave?.(state.response);
     if (state.lostCreate && request.method === 'POST') { state.lostCreate = false; throw new Error('lost create reply'); }
     if (state.lostPatch) { state.lostPatch = false; throw new Error('lost patch reply'); }
@@ -153,22 +161,34 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   startAction.document['x-formspec-runtime'] = { version: '1.0', requests: [{ id: 'start', adapter: 'http-json', request: { method: 'POST',
     pathTemplate: '/drafts/{draftId}/application-case', pathBindings: { draftId: { from: 'input', path: 'draftId' } }, bodyDefaults: {} }, successStatuses: [200] }] };
   const build = () => {
-    const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata };
+    const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata, formVersionId: 'publication-1' };
     return createHttpAdapterCohort({ ...config, responseSigning: policy,
-      ...(taskAssociation ? { taskDraft: { key: draftKey, view: { ...view(), status: 'in_progress' as const, taskDraft: structuredClone(taskAssociation) } } } : {}),
+      ...(taskAssociation ? { taskDraft: { key: draftKey, view: { ...view(), status: 'in_progress' as const, taskDraft: structuredClone(taskAssociation), canonical_response: structuredClone(state.response) } } } : {}),
       ...(earlyCaseCreation !== undefined ? { applicationLifecycle: { capabilities: { earlyCaseCreation, persistentSaving, formVersionId: 'publication-1' }, action: startAction } } : {}), ...(stateReading ? { qualifiedDraftState: statePolicy } : {}),
       ...(authenticated ? { accessToken: async () => { await state.tokenGate; return state.token; } } : { anonymousSessions: new AnonymousSessionBridge(config) }) });
   };
-  if (taskAssociation) state.taskDraft = structuredClone(taskAssociation);
+  if (taskAssociation) { state.taskDraft = structuredClone(taskAssociation); state.saved = true; state.initialized = true; }
   const cohort = build();
+  let initializing: Promise<unknown> | undefined;
+  const initialize = async () => {
+    if (!state.initialized) {
+      initializing ??= cohort.draftStore.initializeDraft!(draftKey, 'publication-1');
+      await initializing;
+      requests.length = 0;
+    }
+  };
+  const directSave = cohort.draftStore.save.bind(cohort.draftStore);
+  cohort.draftStore.save = async (...args) => { await initialize(); return directSave(...args); };
   const prepare = (candidate = response) => cohort.responseSigning!.prepare({ draftKey, definition, formVersionId: 'publication-1', response: candidate, source, locale: 'en-US', action: prepareAction });
   const sign = (preparation: PreparedResponseSigning, operationId = generateIdempotencyKey()) => cohort.responseSigning!.sign({
     preparation, assent: { signerName: 'Ada Lovelace', consentAccepted: true }, operationId, action,
   });
-  const save = (draftAction = saveAction('POST'), savedResponse = response, operationId = generateIdempotencyKey()) => cohort.responseSigning!.saveDraft({
+  const save = async (draftAction = saveAction('PATCH'), savedResponse = response, operationId = generateIdempotencyKey()) => {
+    await initialize();
+    return cohort.responseSigning!.saveDraft({
     formId: 'conformance', draftKey, definition, formVersionId: 'publication-1', response: savedResponse, operationId, action: draftAction,
-  });
-  return { save, cohort, state, requests, prepare, sign, now, values, build, metadata, policy, statePolicy, draftKey, draftId };
+  }); };
+  return { save, directSave, cohort, state, requests, prepare, sign, now, values, build, metadata, policy, statePolicy, draftKey, draftId };
 }
 
 async function signedResponse(unsigned: FormResponse): Promise<FormResponse> {
@@ -177,7 +197,7 @@ async function signedResponse(unsigned: FormResponse): Promise<FormResponse> {
     'urn:formspec:sig-method:ed25519-cose-sign1@1'), null, new Uint8Array(64));
   const signatureValue = btoa(String.fromCharCode(...bytes));
   const digest = await profileDigest(unsigned);
-  return { ...structuredClone(unsigned), authoredSignatures: [{ signatureId: 'sig_test', ceremonyId: 'ceremony_test',
+  return { ...parseJsonExact(JSON.stringify(unsigned)) as FormResponse, authoredSignatures: [{ signatureId: 'sig_test', ceremonyId: 'ceremony_test',
     signatureProvider: 'urn:formspec:provider:delegated-response@1', documentId: content.documentId, signingIntent: content.signingIntent,
     signatureValue, signerId: commitment.actorRef, signerName: commitment.signerName, consentAccepted: true,
     consentTextRef: content.electronicConsent.textRef, consentVersion: content.electronicConsent.version,
@@ -258,7 +278,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     const saved = await test.save();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await expect(diagnoseNativePrepare(test.prepare)).rejects.toBe(error);
-    expect(test.state.patchCount).toBe(0); expect(test.state.signCount).toBe(0);
+    expect(test.state.patchCount).toBe(1); expect(test.state.signCount).toBe(0);
     expect(test.state.version).toBe(saved.draft.version); expect(test.state.response).toEqual(saved.response);
     expect(warn).toHaveBeenCalledExactlyOnceWith('Native form action failed', JSON.stringify({ stage: 'prepare-port', reason }));
     warn.mockRestore();
@@ -307,7 +327,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     await vi.waitFor(() => expect(test.requests.length).toBeGreaterThan(before));
     let releaseToken!: () => void; test.state.tokenGate = new Promise<void>(resolve => { releaseToken = resolve; });
     releaseRead(); await Promise.resolve(); current = false; releaseToken(); await refused;
-    expect(test.state.patchCount).toBe(0); expect(test.state.version).toBe(saved.draft.version);
+    expect(test.state.patchCount).toBe(1); expect(test.state.version).toBe(saved.draft.version);
     expect(test.requests.slice(before).some(request => request.method === 'PATCH')).toBe(false);
   });
   it('does not reconcile a dispatch refusal as this Save even when a same-content successor appears', async () => {
@@ -315,14 +335,14 @@ describe('cohort-owned Response Prepare and Sign', () => {
     await expect(test.cohort.responseSigning!.saveDraft({ formId: 'conformance', draftKey: test.draftKey,
       definition, formVersionId: 'publication-1', response, operationId: generateIdempotencyKey(), action: saveAction('PATCH') },
       { assertBeforeDispatch() { if (++calls === 2) { test.state.version++; throw Error('retired before PATCH'); } } })).rejects.toThrow('retired before PATCH');
-    expect(test.state.patchCount).toBe(0); expect(calls).toBe(2);
+    expect(test.state.patchCount).toBe(1); expect(calls).toBe(2);
   });
   it('preserves an undefined dispatch refusal without reconciling a concurrent successor', async () => {
     const test = await fixture(false, true); await test.save(); let calls = 0;
     const pending = test.cohort.responseSigning!.saveDraft({ formId: 'conformance', draftKey: test.draftKey,
       definition, formVersionId: 'publication-1', response, operationId: generateIdempotencyKey(), action: saveAction('PATCH') },
       { assertBeforeDispatch() { if (++calls === 2) { test.state.version++; throw undefined; } } });
-    await expect(pending).rejects.toBeUndefined(); expect(test.state.patchCount).toBe(0);
+    await expect(pending).rejects.toBeUndefined(); expect(test.state.patchCount).toBe(1);
   });
   it('refuses a configured Prepare provider without its required dispatch assertion', async () => {
     const test = await fixture(false, true, false, undefined, undefined, true, async () => undefined as unknown as { assertCurrent: () => void });
@@ -356,20 +376,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
       evidence: { draft_id: 'owned-draft', draft_version: test.state.version, status: 'in_progress' } });
     expect(state.savedDraft?.draft.responseHash).toBe(await handoffHash(response));
     expect(test.requests.slice(before).every(request => request.method === 'GET')).toBe(true);
-    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(0);
-  });
-
-  it('retains and refuses an unresolved create marker before unsigned handle restoration', async () => {
-    const test = await fixture(true, true); await test.save();
-    const marker = { scope: JSON.stringify({ formId: 'conformance', subject: test.draftKey.subjectRef, party: null }),
-      operationId: generateIdempotencyKey(), definitionUrl: response.definitionUrl,
-      definitionVersion: response.definitionVersion, candidateHash: await handoffHash(response) };
-    test.metadata.write('response-draft-create-operations', [marker]);
-    const before = test.requests.length;
-    await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
-    expect(test.metadata.read('response-draft-create-operations')).toEqual([marker]);
-    expect(test.requests.slice(before).every(request => request.method === 'GET')).toBe(true);
-    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(0);
+    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(1);
   });
 
   it('resumes an owned draft with explicit unavailable case status and keeps saving its exact handle', async () => {
@@ -380,7 +387,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     expect(state?.application).toBeUndefined();
     expect(Object.isFrozen(state?.applicationLookup)).toBe(true);
     await test.cohort.draftStore.save(test.draftKey, { ...response, data: { ...response.data, fullName: 'Saved after unavailable lookup' } });
-    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(1);
+    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(2);
     test.state.applicationStatus = 200; test.state.applicationAbsent = true;
     const absent = await test.build().draftStore.readState!(test.draftKey);
     expect(absent?.application).toBeUndefined(); expect(absent?.applicationLookup).toBeUndefined();
@@ -438,7 +445,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     await test.save(); const prepared = await test.prepare(); const signed = await test.sign(prepared);
     await test.cohort.draftStore.invalidateSubject(test.draftKey.subjectRef!);
     const handles = test.metadata.read('draft-handles');
-    expect(handles).toEqual([{ key: test.draftKey, formId: 'conformance', draftId: 'owned-draft', draftVersion: 4, responseId: signed.response.id }]);
+    expect(handles).toEqual([{ key: test.draftKey, formId: 'conformance', draftId: 'owned-draft', draftVersion: 5, responseId: signed.response.id }]);
     expect(JSON.stringify(handles)).not.toContain('These are my actual answers');
     test.state.token = undefined;
     await expect(test.build().draftStore.readState!(test.draftKey)).rejects.toThrow();
@@ -490,7 +497,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
   it('retains unresolved signing markers across retirement and refuses restored submission authority', async () => {
     const test = await fixture(true, true); await test.save(); await test.sign(await test.prepare());
     const marker = { scope: JSON.stringify({ formId: 'conformance', subject: test.draftKey.subjectRef, party: null }),
-      operationId: generateIdempotencyKey(), draftId: 'owned-draft', version: 3 };
+      operationId: generateIdempotencyKey(), draftId: 'owned-draft', version: test.state.version - 1 };
     test.metadata.write('response-signing-operations', [marker]);
     await test.cohort.draftStore.invalidateSubject(test.draftKey.subjectRef!);
     const recovering = test.build(); const state = await recovering.draftStore.readState!(test.draftKey);
@@ -541,16 +548,75 @@ describe('cohort-owned Response Prepare and Sign', () => {
     expect(Object.isFrozen(state!.response.data)).toBe(true);
     expect(test.requests.at(-1)?.headers.get('authorization')).toBe('Bearer owner-token');
     expect(test.requests.at(-1)?.headers.get('x-stack-scope-key')).toBe(testScopeKey);
-    expect(test.requests.filter(request => request.url.endsWith('/sessions/anonymous'))).toHaveLength(1);
-    expect(test.state.signCount).toBe(1); expect(test.state.patchCount).toBe(2);
+    expect(test.requests.filter(request => request.url.endsWith('/sessions/anonymous'))).toHaveLength(0);
+    expect(test.state.signCount).toBe(1); expect(test.state.patchCount).toBe(3);
   });
 
   it('retains legacy active load and returns an active variant under the qualified reader', async () => {
     const test = await fixture(true); await test.cohort.draftStore.save(key, response);
     await expect(test.cohort.draftStore.readState!(key)).resolves.toMatchObject({ kind: 'active', response,
-      savedDraft: { response, draft: { id: 'owned-draft', version: 1 } } });
+      savedDraft: { response, draft: { id: 'owned-draft', version: 2 } } });
     await expect(test.cohort.draftStore.load(key)).resolves.toEqual(response);
     test.state.status = 'unknown'; await expect(test.cohort.draftStore.readState!(key)).rejects.toThrow();
+  });
+
+  it.each([
+    ['readState', 'omitted'], ['readState', 'undefined'],
+    ['resumeState', 'omitted'], ['resumeState', 'undefined'],
+  ] as const)('copies optional draft key metadata for exact qualified %s: %s', async (method, optional) => {
+    const test = await fixture(true, method === 'resumeState');
+    const text = JSON.stringify(test.state.response).replace('"Ada Lovelace"', '"Ada Lovelace","amount":1234567890.123456789,"count":9007199254740993');
+    const exact = parseJsonExact(text) as FormResponse;
+    const savedKey: DraftKey = method === 'readState'
+      ? { formUrl: test.draftKey.formUrl, formVersion: test.draftKey.formVersion }
+      : test.draftKey;
+    await test.cohort.draftStore.initializeDraft!(savedKey, 'publication-1');
+    await test.directSave(savedKey, exact);
+    const expectedHash = await handoffHash(exact);
+    const supplied: DraftKey = { ...savedKey, ...(optional === 'undefined'
+      ? { subjectRef: savedKey.subjectRef, partyRef: undefined } : {}) };
+    expect(Object.hasOwn(supplied, 'partyRef')).toBe(optional === 'undefined');
+    if (method === 'readState') expect(Object.hasOwn(supplied, 'subjectRef')).toBe(optional === 'undefined');
+    let finish!: () => void;
+    test.state.getGate = new Promise(resolve => { finish = resolve; });
+    const fresh = test.build(); const count = test.requests.length;
+    const reading = method === 'readState' ? fresh.draftStore.readState!(supplied)
+      : fresh.draftStore.resumeState!(supplied, { draftId: test.draftId, expectedResponseId: exact.id! });
+    const active = expect(reading).resolves.toMatchObject({ kind: 'active' });
+    await vi.waitFor(() => expect(test.requests).toHaveLength(count + 1));
+    supplied.formUrl = 'https://different.example.test/form'; supplied.partyRef = 'different-party';
+    finish(); await active;
+    const state = await reading;
+    if (state?.kind !== 'active' || !state.savedDraft) throw new Error('Expected saved signing evidence');
+    const saved = state.savedDraft;
+    expect(saved.draftKey).toEqual(savedKey);
+    expect(Object.hasOwn(saved.draftKey, 'partyRef')).toBe(false);
+    if (method === 'readState') expect(Object.hasOwn(saved.draftKey, 'subjectRef')).toBe(false);
+    expect(saved.actor.id).toBe(test.state.actor);
+    expect(saved.evidence.form_version_id).toBe('publication-1');
+    expect(saved.draft).toEqual({ id: test.draftId, version: 2, responseHash: expectedHash });
+    for (const retained of [state.response, saved.response, saved.evidence.canonical_response]) {
+      expect(JSON.stringify(retained)).toContain('1234567890.123456789');
+      expect(JSON.stringify(retained)).toContain('9007199254740993');
+      expect(await handoffHash(retained)).toBe(expectedHash);
+      expect(retained).not.toBe(test.state.response);
+      expect(retained.data).not.toBe(test.state.response.data);
+      expect(Object.isFrozen(retained)).toBe(true);
+      expect(Object.isFrozen(retained.data)).toBe(true);
+    }
+    expect(Object.isFrozen(state)).toBe(true); expect(Object.isFrozen(saved.evidence)).toBe(true);
+    expect(Object.isFrozen(saved.draftKey)).toBe(true);
+    test.state.response.data.fullName = 'Changed after read';
+    expect(await handoffHash(saved.evidence.canonical_response)).toBe(expectedHash);
+    expect(test.requests.slice(count).map(request => request.method)).toEqual(['GET']);
+    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(1); expect(test.state.signCount).toBe(0);
+  });
+
+  it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY])('keeps exact qualified reader Response data strict for %s', async invalid => {
+    const test = await fixture(true);
+    await expect(test.cohort.draftStore.save(test.draftKey,
+      { ...response, data: { ...response.data, invalid } })).rejects.toThrow(/non-JSON|non-finite/);
+    expect(test.requests).toHaveLength(0);
   });
 
   it('refuses a retained owner handle returning 404 without treating it as a fresh draft', async () => {
@@ -665,7 +731,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     const prepared = await test.prepare();
     expect(prepared.response).toEqual(response);
     expect(prepared.actor.id).toBe('anon:owner');
-    expect(prepared.draft).toMatchObject({ id: 'owned-draft', version: 2 });
+    expect(prepared.draft).toMatchObject({ id: 'owned-draft', version: 3 });
     expect(prepared.draft.responseHash).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.isFrozen(prepared.response.data)).toBe(true);
     expect(prepared.response.extensions?.['x-formspec-signing-content']).toBeUndefined();
@@ -681,10 +747,10 @@ describe('cohort-owned Response Prepare and Sign', () => {
     expect(duplicate).toEqual(signed);
     expect(test.state.signCount).toBe(1);
     expect(test.now).toHaveBeenCalledOnce();
-    expect(signed.draft.version).toBe(4);
+    expect(signed.draft.version).toBe(5);
     expect(signed.verification).toEqual({ mode: 'delegated-service-key', provider: 'urn:formspec:provider:delegated-response@1', keyId: 'test-key' });
     expect(test.requests.some(request => request.url.endsWith('/submit'))).toBe(false);
-    await test.cohort.submitTransport.submit({ ...sampleIntakeHandoff, subjectRef: undefined,
+    await test.cohort.submitTransport.submit({ ...sampleIntakeHandoff, subjectRef: test.draftKey.subjectRef,
       extensions: { 'x-formspec-response': signed.response } }, generateIdempotencyKey());
     expect((test.requests.at(-1)!.body as { canonical_response: FormResponse }).canonical_response).toEqual(signed.response);
   });
@@ -696,7 +762,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     await expect(test.cohort.responseSigning!.prepare({ draftKey: key, definition,
       formVersionId: 'publication-1', response: unsigned, source, locale: 'en-US', action: prepareAction }))
       .rejects.toThrow(/completed unsigned pinned Response/);
-    expect(test.state.patchCount).toBe(0);
+    expect(test.state.patchCount).toBe(1);
     expect(test.state.signCount).toBe(0);
   });
 
@@ -707,8 +773,8 @@ describe('cohort-owned Response Prepare and Sign', () => {
     await expect(test.cohort.responseSigning!.prepare({ ...input,
       ...(field === 'source' ? { source: { ...source, version: 'wrong' } } : { locale: 'fr-FR' }),
     })).rejects.toThrow();
-    expect(test.state.patchCount).toBe(0);
-    expect(test.state.version).toBe(1);
+    expect(test.state.patchCount).toBe(1);
+    expect(test.state.version).toBe(2);
     expect(test.state.response).toEqual(response);
   });
 
@@ -736,7 +802,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     test.state.persistSign = false;
     await expect(test.sign(prepared)).rejects.toMatchObject({ status: 201 });
     expect(test.state.response.authoredSignatures).toBeUndefined();
-    await expect(test.cohort.submitTransport.submit({ ...sampleIntakeHandoff, subjectRef: undefined,
+    await expect(test.cohort.submitTransport.submit({ ...sampleIntakeHandoff, subjectRef: test.draftKey.subjectRef,
       extensions: { 'x-formspec-response': test.state.response } }, generateIdempotencyKey()))
       .rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
   });
@@ -786,7 +852,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     await test.cohort.draftStore.save(key, response);
     test.state[field] = 'wrong';
     await expect(test.prepare()).rejects.toThrow(/authoritative Response snapshot/);
-    expect(test.state.patchCount).toBe(0);
+    expect(test.state.patchCount).toBe(1);
   });
 
   it('refuses altered signed payload digest before private writeback', async () => {
@@ -795,7 +861,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     const prepared = await test.prepare();
     test.state.mutateSigned = signed => { signed.authoredSignatures![0].signedPayload.digest = 'a'.repeat(64); };
     await expect(test.sign(prepared)).rejects.toThrow(/evidence differs/);
-    await expect(test.cohort.submitTransport.submit({ ...sampleIntakeHandoff, subjectRef: undefined,
+    await expect(test.cohort.submitTransport.submit({ ...sampleIntakeHandoff, subjectRef: test.draftKey.subjectRef,
       extensions: { 'x-formspec-response': test.state.response } }, generateIdempotencyKey())).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
   });
 
@@ -819,7 +885,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     test.state.response.data.fullName = 'Changed answer';
     await expect(test.sign(prepared)).rejects.toThrow(/candidate changed/);
     expect(test.state.signCount).toBe(0);
-    expect(test.state.patchCount).toBe(1);
+    expect(test.state.patchCount).toBe(2);
   });
 
   it('rejects an unsafe authored path before the candidate PATCH', async () => {
@@ -830,7 +896,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     unsafe.document['x-formspec-runtime']!.requests[0].request.pathTemplate = '//outside.example.test/{draftId}/sign';
     await expect(test.cohort.responseSigning!.sign({ preparation: prepared, assent: { signerName: 'Ada', consentAccepted: true },
       operationId: generateIdempotencyKey(), action: unsafe })).rejects.toThrow(/unsafe/);
-    expect(test.state.patchCount).toBe(1);
+    expect(test.state.patchCount).toBe(2);
     expect(test.state.signCount).toBe(0);
   });
 
@@ -859,7 +925,7 @@ describe('cohort-owned Response Prepare and Sign', () => {
     release();
     await expect(signing).rejects.toThrow(/cleared/);
     await clear;
-    expect(test.values.size).toBe(0);
+    expect([...test.values.values()].join('')).not.toContain(JSON.stringify(response.data));
     await expect(test.build().draftStore.load(key)).resolves.toBeUndefined();
   });
 
@@ -875,9 +941,11 @@ describe('cohort-owned Response Prepare and Sign', () => {
     release();
     await expect(prepared).rejects.toThrow(/cleared/);
     await clear;
-    expect(test.values.size).toBe(0);
+    expect([...test.values.values()].join('')).not.toContain(JSON.stringify(response.data));
     test.state.getStatus = 200;
     test.state.getGate = undefined;
+    test.state.version = 1; test.state.saved = false; test.state.initialized = false;
+    await test.cohort.draftStore.initializeDraft!(key, 'publication-1');
     await test.cohort.draftStore.save(key, response);
     await expect(test.build().draftStore.load(key)).resolves.toEqual(response);
   });
@@ -887,53 +955,53 @@ describe('cohort-owned authored Save', () => {
   it('creates once, joins one frozen operation, returns actual evidence, then saves through owned PATCH', async () => {
     const test = await fixture();
     const operationId = generateIdempotencyKey();
-    const [saved, duplicate] = await Promise.all([test.save(saveAction('POST'), response, operationId), test.save(saveAction('POST'), response, operationId)]);
+    const [saved, duplicate] = await Promise.all([test.save(saveAction('PATCH'), response, operationId), test.save(saveAction('PATCH'), response, operationId)]);
     expect(duplicate).toBe(saved);
     expect(test.state.createCount).toBe(1);
-    expect(saved.draft.version).toBe(1);
-    expect(saved.evidence).toEqual({ draft_id: 'owned-draft', draft_version: 1, form_version_id: 'publication-1',
+    expect(saved.draft.version).toBe(2);
+    expect(saved.evidence).toEqual({ draft_id: 'owned-draft', draft_version: 2, form_version_id: 'publication-1',
       subject_ref: 'anon:owner', canonical_response: response, draft_state: response.data, status: 'in_progress' });
     expect(Object.isFrozen(saved.evidence.canonical_response.data)).toBe(true);
     const changed = { ...response, data: { fullName: 'Changed answer' } };
     const updated = await test.save(saveAction('PATCH'), changed);
-    expect(updated.draft.version).toBe(2);
+    expect(updated.draft.version).toBe(3);
     expect(updated.response).toEqual(changed);
-    expect(test.state.patchCount).toBe(1);
-    const wire = test.requests.find(request => request.url.endsWith('/drafts') && request.method === 'POST')!.body as Record<string, unknown>;
+    expect(test.state.patchCount).toBe(2);
+    const wire = test.requests.find(request => request.url.endsWith('/drafts/owned-draft') && request.method === 'PATCH')!.body as Record<string, unknown>;
     expect(wire.canonical_response).toEqual(response);
-    expect(wire.anonymous_session_token).toBe('owner-token');
+    expect(wire.expected_draft_version).toBe(1);
     expect(test.requests.at(-1)!.method).toBe('GET');
     expect([...test.values.values()].join('')).not.toContain(JSON.stringify(response.data));
   });
 
   it('refuses changed replay inputs rather than writing again', async () => {
     const test = await fixture(); const operationId = generateIdempotencyKey();
-    await test.save(saveAction('POST'), response, operationId);
+    await test.save(saveAction('PATCH'), response, operationId);
     await expect(test.save(saveAction('PATCH'), { ...response, data: { fullName: 'Other' } }, operationId)).rejects.toThrow('preserve its frozen operation');
-    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(0);
+    expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(1);
   });
 
   it.each(['app', 'artifact', 'path', 'body', 'outputs', 'branch', 'version'] as const)('rejects invalid %s before CREATE or session issuance', async field => {
-    const test = await fixture(); const invalid = saveAction('POST');
+    const test = await fixture(); const invalid = saveAction('PATCH');
     if (field === 'app') (invalid.document as ResponseActionsDocument).scope = 'app';
     if (field === 'artifact') invalid.artifactDigest = 'unqualified';
     if (field === 'path') invalid.document['x-formspec-runtime']!.requests[0].request.pathTemplate = '/runtime/forms/wrong/{formId}/drafts';
     if (field === 'body') invalid.document['x-formspec-runtime']!.requests[0].request.bodyDefaults = { arbitrary: 'not supported' };
     if (field === 'outputs') invalid.document['x-formspec-runtime']!.requests[0].outputs = { time: { path: '/acceptedAt' } };
-    if (field === 'branch') invalid.document['x-formspec-runtime']!.requests[0].request.method = 'PATCH';
+    if (field === 'branch') invalid.document['x-formspec-runtime']!.requests[0].request.method = 'POST';
     if (field === 'version') invalid.document.targetDefinition!.compatibleVersions = '^2.0.0';
     await expect(test.save(invalid)).rejects.toThrow();
-    expect(test.requests).toHaveLength(0); expect(test.values.size).toBe(0);
+    expect(test.requests).toHaveLength(0); expect([...test.values.values()].join('')).not.toContain(JSON.stringify(response.data));
   });
 
   it('rejects non-string public output classifications before mutation', async () => {
-    const test = await fixture(); const invalid = saveAction('POST');
+    const test = await fixture(); const invalid = saveAction('PATCH');
     invalid.document['x-formspec-runtime']!.requests[0].outputs = { response: { path: '/canonical_response', exposure: 'transition' } };
     await expect(test.save(invalid)).rejects.toThrow('unsupported outputs'); expect(test.requests).toHaveLength(0);
   });
 
   it('qualifies a declared verified output using actual owned readback', async () => {
-    const test = await fixture(); const configured = saveAction('POST');
+    const test = await fixture(); const configured = saveAction('PATCH');
     configured.document['x-formspec-runtime']!.requests[0].outputs = {
       id: { path: '/draft_id', exposure: 'transition' }, snapshot: { path: '/canonical_response' },
     };
@@ -947,45 +1015,28 @@ describe('cohort-owned authored Save', () => {
     await expect(test.save()).rejects.toThrow('storage unavailable'); expect(test.requests).toHaveLength(0);
   });
 
-  it('persists an ambiguous CREATE fence across reload and ordinary writes until explicit Clear', async () => {
-    const test = await fixture(); test.state.lostCreate = true;
-    await expect(test.save()).rejects.toThrow('lost create reply');
-    expect(test.state.createCount).toBe(1);
-    expect([...test.values.values()].join('')).not.toContain(JSON.stringify(response.data));
-    const fresh = test.build();
-    const input = { formId: 'conformance', draftKey: key, definition, formVersionId: 'publication-1', response, operationId: generateIdempotencyKey(), action: saveAction('POST') };
-    await expect(fresh.responseSigning!.saveDraft(input)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
-    await expect(fresh.draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
-    await expect(fresh.responseSigning!.prepare({ draftKey: key, definition, formVersionId: 'publication-1', response, source, locale: 'en-US', action: prepareAction })).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
-    expect(test.state.createCount).toBe(1);
-    await fresh.draftStore.delete(key);
-    expect(test.values.size).toBe(0);
-    const recovered = await fresh.responseSigning!.saveDraft({ ...input, operationId: generateIdempotencyKey() });
-    expect(recovered.draft.version).toBe(1); expect(test.state.createCount).toBe(2);
-  });
-
   it.each(['actor', 'formVersionId', 'status'] as const)('refuses unqualified initial readback %s and leaves the creation fence', async field => {
     const test = await fixture(); test.state[field] = 'wrong';
-    await expect(test.save()).rejects.toThrow('authoritative Response snapshot');
-    await expect(test.build().draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
+    await expect(test.save()).rejects.toThrow(/authoritative Response snapshot|initialization.*publication/);
+    await expect(test.build().draftStore.save(key, response)).rejects.toThrow();
     expect(test.state.createCount).toBe(1);
   });
 
   it('refuses absent status rather than fabricating evidence', async () => {
     const test = await fixture(); test.state.status = undefined;
-    await expect(test.save()).rejects.toThrow('authoritative Response snapshot');
+    await expect(test.save()).rejects.toThrow(/authoritative Response snapshot|initialization.*publication/);
   });
 
   it('refuses stale owned CAS without mutation or rebasing', async () => {
     const test = await fixture(); await test.save(); test.state.version++;
     await expect(test.save(saveAction('PATCH'))).rejects.toThrow('changed before Save');
-    expect(test.state.patchCount).toBe(0);
+    expect(test.state.patchCount).toBe(1);
   });
 
   it('reconciles one lost PATCH through exact owned GET, without resending', async () => {
     const test = await fixture(); await test.save(); test.state.lostPatch = true;
     const saved = await test.save(saveAction('PATCH'));
-    expect(saved.draft.version).toBe(2); expect(test.state.patchCount).toBe(1);
+    expect(saved.draft.version).toBe(3); expect(test.state.patchCount).toBe(2);
   });
 
   it('qualifies mandatory Prepare request before its PATCH', async () => {
@@ -993,32 +1044,24 @@ describe('cohort-owned authored Save', () => {
     const invalid = structuredClone(prepareAction);
     invalid.document['x-formspec-runtime']!.requests[0].request.bodyDefaults = { expected_draft_version: 99, arbitrary: true };
     await expect(test.cohort.responseSigning!.prepare({ draftKey: key, definition, formVersionId: 'publication-1', response, source, locale: 'en-US', action: invalid })).rejects.toThrow('exact private draft operation');
-    expect(test.state.patchCount).toBe(0);
-    const prepared = await test.prepare(); expect(prepared.evidence.draft_version).toBe(2);
+    expect(test.state.patchCount).toBe(1);
+    const prepared = await test.prepare(); expect(prepared.evidence.draft_version).toBe(3);
   });
 
   it('drains late creation during Clear and prevents returned readiness or handle resurrection', async () => {
     const test = await fixture(); let release!: () => void;
-    test.state.createGate = new Promise<void>(resolve => { release = resolve; });
+    test.state.patchGate = new Promise<void>(resolve => { release = resolve; });
     const saved = test.save(); await vi.waitFor(() => expect(test.state.createCount).toBe(1));
     const clear = test.cohort.draftStore.delete(key); release();
     await expect(saved).rejects.toThrow('cleared'); await clear;
-    expect(test.values.size).toBe(0); expect(await test.build().draftStore.load(key)).toBeUndefined();
+    expect([...test.values.values()].join('')).not.toContain(JSON.stringify(response.data)); expect(await test.build().draftStore.load(key)).toBeUndefined();
   });
 });
 
-
-it('refuses a created draft at an unexpected initial revision', async () => {
-  const test = await fixture(); test.state.createdVersion = 2;
-  await expect(test.save()).rejects.toThrow('exact saved Response');
-  await expect(test.build().draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
-  expect(test.state.createCount).toBe(1);
-});
-
-it('refuses server-altered canonical readback and retains the initial creation fence', async () => {
+it('refuses server-altered canonical readback while retaining the initialized handle', async () => {
   const test = await fixture(); test.state.mutateSave = saved => { saved.data.fullName = 'Altered by server'; };
   await expect(test.save()).rejects.toThrow('exact saved Response');
-  await expect(test.build().draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
+  expect(test.metadata.read('draft-handles')).toBeDefined();
   expect(test.state.createCount).toBe(1);
 });
 
@@ -1026,53 +1069,30 @@ it('does not return owned Save readiness when Clear starts during the PATCH', as
   const test = await fixture(); await test.save(); let release!: () => void;
   test.state.patchGate = new Promise<void>(resolve => { release = resolve; });
   const saving = test.save(saveAction('PATCH'));
-  await vi.waitFor(() => expect(test.state.patchCount).toBe(1));
+  await vi.waitFor(() => expect(test.state.patchCount).toBe(2));
   const clear = test.cohort.draftStore.delete(key); release();
   await expect(saving).rejects.toThrow('cleared'); await clear;
-  expect(test.values.size).toBe(0); expect(await test.build().draftStore.load(key)).toBeUndefined();
+  expect([...test.values.values()].join('')).not.toContain(JSON.stringify(response.data)); expect(await test.build().draftStore.load(key)).toBeUndefined();
 });
 
 it('refuses completed Save replay after a later operation advances the revision', async () => {
   const test = await fixture(); const operationId = generateIdempotencyKey();
-  await test.save(saveAction('POST'), response, operationId);
+  await test.save(saveAction('PATCH'), response, operationId);
   await test.save(saveAction('PATCH'), { ...response, data: { fullName: 'Later answer' } });
   const requestCount = test.requests.length;
-  await expect(test.save(saveAction('POST'), response, operationId)).rejects.toThrow('retired');
+  await expect(test.save(saveAction('PATCH'), response, operationId)).rejects.toThrow('retired');
   expect(test.requests).toHaveLength(requestCount);
-  expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(1);
+  expect(test.state.createCount).toBe(1); expect(test.state.patchCount).toBe(2);
 });
 
 it('qualifies actual publication form_id before any CREATE and binds it through the authored selector', async () => {
   const test = await fixture();
   await expect(test.cohort.responseSigning!.saveDraft({ formId: 'wrong-server-form', draftKey: key, definition,
-    formVersionId: 'publication-1', response, operationId: generateIdempotencyKey(), action: saveAction('POST') }))
+    formVersionId: 'publication-1', response, operationId: generateIdempotencyKey(), action: saveAction('PATCH') }))
     .rejects.toThrow('publication form id');
   expect(test.requests).toHaveLength(0);
   await test.save();
-  expect(test.requests.find(request => request.url.endsWith('/drafts'))?.url).toBe('https://server.example.test/runtime/forms/conformance/drafts');
-});
-
-it('stores full immutable Definition pins and a stable candidate hash in the unresolved CREATE marker', async () => {
-  const test = await fixture(); test.state.lostCreate = true; const operationId = generateIdempotencyKey();
-  await expect(test.save(saveAction('POST'), response, operationId)).rejects.toThrow('lost create reply');
-  const markers = test.metadata.read('response-draft-create-operations') as Record<string, unknown>[];
-  expect(markers).toHaveLength(1);
-  expect(markers[0]).toMatchObject({ operationId, definitionUrl: definition.url, definitionVersion: definition.version });
-  expect(markers[0].candidateHash).toMatch(/^[a-f0-9]{64}$/);
-  expect(Object.keys(markers[0]).sort()).toEqual(['candidateHash', 'definitionUrl', 'definitionVersion', 'operationId', 'scope']);
-  const { canonicalResponseHandoffBytes } = await import('@formspec-org/integrity-canonical');
-  const digest = await crypto.subtle.digest('SHA-256', canonicalResponseHandoffBytes(response));
-  expect(markers[0].candidateHash).toBe([...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join(''));
-});
-
-it.each(['definitionUrl', 'definitionVersion', 'candidateHash'] as const)('fails closed on malformed CREATE marker %s after reload', async field => {
-  const test = await fixture(); test.state.lostCreate = true;
-  await expect(test.save()).rejects.toThrow('lost create reply');
-  const markers = test.metadata.read('response-draft-create-operations') as Record<string, unknown>[];
-  delete markers[0][field]; test.metadata.write('response-draft-create-operations', markers);
-  const requestCount = test.requests.length;
-  await expect(test.build().draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
-  expect(test.requests).toHaveLength(requestCount);
+  expect(test.requests.find(request => request.method === 'PATCH')?.url).toBe('https://server.example.test/drafts/owned-draft');
 });
 
 describe('retiring local response-signing authority', () => {
@@ -1088,33 +1108,17 @@ describe('retiring local response-signing authority', () => {
     expect(test.requests.some(request => request.method === 'DELETE')).toBe(false);
   });
 
-  it('keeps late CREATE serialized and retains its uncertainty marker and binding across reload', async () => {
-    const test = await fixture(); let release!: () => void;
-    test.state.createGate = new Promise<void>(resolve => { release = resolve; });
-    const saving = test.save(); await vi.waitFor(() => expect(test.state.createCount).toBe(1));
-    const markers = test.metadata.read('response-draft-create-operations');
-    test.cohort.invalidateResponseSigningScope!(key);
-    await expect(test.save()).rejects.toThrow('already in progress');
-    await expect(test.cohort.draftStore.load(key)).rejects.toThrow('already in progress');
-    release(); await expect(saving).rejects.toThrow('invalidated');
-    expect(test.metadata.read('response-draft-create-operations')).toEqual(markers);
-    expect(await test.build().draftStore.load(key)).toEqual(response);
-    await expect(test.build().draftStore.save(key, response)).rejects.toBeInstanceOf(ResponseSigningUnresolvedError);
-    expect(test.state.createCount).toBe(1);
-    expect(test.requests.some(request => request.method === 'DELETE')).toBe(false);
-  });
-
   it('refuses readiness from a late owned Save while keeping its updated server binding', async () => {
     const test = await fixture(); await test.save(); let release!: () => void;
     test.state.patchGate = new Promise<void>(resolve => { release = resolve; });
     const changed = { ...structuredClone(response), data: { answer: 'Changed' } };
     const saving = test.save(saveAction('PATCH'), changed);
-    await vi.waitFor(() => expect(test.state.patchCount).toBe(1));
+    await vi.waitFor(() => expect(test.state.patchCount).toBe(2));
     test.cohort.invalidateResponseSigningScope!(key);
     await expect(test.save(saveAction('PATCH'), changed)).rejects.toThrow('already in progress');
     release(); await expect(saving).rejects.toThrow('invalidated');
     expect(await test.build().draftStore.load(key)).toEqual(changed);
-    expect(test.state.version).toBe(2);
+    expect(test.state.version).toBe(3);
     expect(test.requests.some(request => request.method === 'DELETE')).toBe(false);
   });
 
@@ -1466,7 +1470,7 @@ it.each(['formUrl', 'formVersion'] as const)('rejects a pending recovery with mi
 
 describe('explicit owned draft resume without tab metadata', () => {
   it('recovers the same owned persisted response through qualified state reading from an empty registry', async () => {
-    const test = await fixture(true, true); test.state.version = 7;
+    const test = await fixture(true, true); test.state.saved = true; test.state.version = 7;
     expect(test.metadata.read('draft-handles')).toBeUndefined();
     const fresh = test.build();
     const selection = { draftId: 'owned-draft', expectedResponseId: response.id! };
@@ -1482,8 +1486,69 @@ describe('explicit owned draft resume without tab metadata', () => {
 
 describe('owned resume admission boundaries', () => {
   const selection = { draftId: 'owned-draft', expectedResponseId: response.id! };
-  it.each(['owner', 'publication', 'response', 'status'] as const)('refuses wrong %s before installing a fresh registry binding', async kind => {
+  it.each(['exact', 'changed-canonical-digit'] as const)('prepares exact fetched data with rounded Source display: %s', async mode => {
     const test = await fixture(true, true);
+    const text = JSON.stringify(response).replace('"data":{', '"data":{"amount":1234567890.123456789,"count":9007199254740993,');
+    const exact = parseJsonExact(text) as FormResponse;
+    await test.cohort.draftStore.save(test.draftKey, exact);
+    test.state.roundedDisplay = true;
+    if (mode === 'changed-canonical-digit') test.state.mutateSave = saved => {
+      Object.assign(saved, parseJsonExact(JSON.stringify(saved).replace('1234567890.123456789', '1234567890.123456788')));
+    };
+    if (mode === 'changed-canonical-digit') {
+      await expect(test.prepare(exact)).rejects.toThrow('Preparation differs from the exact saved Response');
+      return;
+    }
+    const prepared = await test.prepare(exact);
+    expect(prepared.draft.responseHash).toBe(await handoffHash(exact));
+    expect(await handoffHash(prepared.response)).toBe(await handoffHash(exact));
+    expect(JSON.stringify(prepared.response)).toContain('1234567890.123456789');
+    expect(JSON.stringify(prepared.response)).toContain('9007199254740993');
+    expect(test.state.signCount).toBe(0);
+  });
+  it.each(['exact', 'changed-signed-digit'] as const)('prepares and signs exact numeric answers through actual HTTP adapters: %s', async mode => {
+    const test = await fixture(true, true);
+    const text = JSON.stringify(response).replace('"data":{', '"data":{"amount":1234567890.123456789,"count":9007199254740993,');
+    const exact = parseJsonExact(text) as FormResponse;
+    await test.cohort.draftStore.save(test.draftKey, exact);
+    test.state.roundedDisplay = true;
+    const prepared = await test.prepare(exact);
+    if (mode === 'changed-signed-digit') test.state.mutateSigned = saved => {
+      Object.assign(saved, parseJsonExact(JSON.stringify(saved).replace('1234567890.123456789', '1234567890.123456788')));
+    };
+    if (mode === 'changed-signed-digit') {
+      await expect(test.sign(prepared)).rejects.toThrow('Delegated signing evidence differs from the frozen candidate');
+      return;
+    }
+    const signed = await test.sign(prepared);
+    expect(test.state.signCount).toBe(1);
+    expect(await handoffHash(signed.response)).toBe(await handoffHash(test.state.response));
+    expect(signed.draft.responseHash).toBe(await handoffHash(test.state.response));
+    const request = test.requests.find(request => request.url.endsWith('/sign'))!;
+    const candidate = (request.body as { canonical_response: FormResponse }).canonical_response;
+    const unsigned = { ...signed.response }; delete unsigned.authoredSignatures;
+    expect(new TextDecoder().decode(canonicalResponseHandoffBytes(candidate))).toBe(new TextDecoder().decode(canonicalResponseHandoffBytes(unsigned)));
+    expect(await handoffHash(candidate)).toBe(await handoffHash(unsigned));
+    expect(request.bodyText).toContain('1234567890.123456789');
+    expect(request.bodyText).toContain('9007199254740993');
+    expect(JSON.stringify(signed.response)).toContain('1234567890.123456789');
+    expect(JSON.stringify(signed.response)).toContain('9007199254740993');
+  });
+  it('resumes exact API numeric answers through the actual cohort and saved signing evidence', async () => {
+    const test = await fixture(true, true); test.state.saved = true;
+    const text = JSON.stringify(test.state.response).replace('"Ada Lovelace"', '"Ada Lovelace","amount":1234567890.123456789,"count":9007199254740993');
+    test.state.response = parseJsonExact(text) as FormResponse;
+    const expected = await handoffHash(parseJsonExact(text) as FormResponse);
+    const state = await test.build().draftStore.resumeState!(test.draftKey, selection);
+    expect(state.kind).toBe('active');
+    if (state.kind !== 'active' || !state.savedDraft) throw new Error('Expected saved signing evidence');
+    expect(state.savedDraft.draft.responseHash).toBe(expected);
+    expect(await handoffHash(state.response)).toBe(expected);
+    expect(JSON.stringify(state.savedDraft.evidence.canonical_response)).toContain('1234567890.123456789');
+    expect(test.requests.every(request => request.method === 'GET')).toBe(true);
+  });
+  it.each(['owner', 'publication', 'response', 'status'] as const)('refuses wrong %s before installing a fresh registry binding', async kind => {
+    const test = await fixture(true, true); test.state.saved = true;
     if (kind === 'owner') test.state.actor = 'another-owner';
     if (kind === 'publication') test.state.formVersionId = 'another-publication';
     if (kind === 'response') test.state.response.id = 'another-response';
@@ -1494,20 +1559,20 @@ describe('owned resume admission boundaries', () => {
     expect(test.state.createCount + test.state.patchCount + test.state.signCount).toBe(0);
   });
   it.each([401, 404, 503])('propagates HTTP %s and keeps selected absence from becoming creation', async status => {
-    const test = await fixture(true, true); test.state.getStatus = status;
+    const test = await fixture(true, true); test.state.saved = true; test.state.getStatus = status;
     await expect(test.build().draftStore.resumeState!(test.draftKey, selection)).rejects.toThrow();
     expect(test.metadata.read('draft-handles')).toBeUndefined();
     expect(test.state.createCount).toBe(0);
   });
   it('rejects task-owned returned state before ordinary binding', async () => {
-    const test = await fixture(true, true);
+    const test = await fixture(true, true); test.state.saved = true;
     test.state.taskDraft = { taskId: 'owned-task' };
     // Supply the association through the retained server-view fixture, never through a locator.
     await expect(test.build().draftStore.resumeState!(test.draftKey, selection)).rejects.toThrow('Task-owned');
     expect(test.metadata.read('draft-handles')).toBeUndefined();
   });
   it.each(['account', 'clear'] as const)('fences a pending new binding on %s retirement', async kind => {
-    const test = await fixture(true, true); const fresh = test.build(); let release!: () => void;
+    const test = await fixture(true, true); test.state.saved = true; const fresh = test.build(); let release!: () => void;
     test.state.getGate = new Promise<void>(resolve => { release = resolve; });
     const pending = fresh.draftStore.resumeState!(test.draftKey, selection);
     await vi.waitFor(() => expect(test.requests).toHaveLength(1));
@@ -1516,12 +1581,12 @@ describe('owned resume admission boundaries', () => {
     expect(test.metadata.read('draft-handles')).toBeUndefined();
   });
   it('refuses replacing a conflicting existing locator without a read or write', async () => {
-    const test = await fixture(true, true); await test.save(); const retained = structuredClone(test.metadata.read('draft-handles')); const count = test.requests.length;
+    const test = await fixture(true, true); test.state.saved = true; await test.save(); const retained = structuredClone(test.metadata.read('draft-handles')); const count = test.requests.length;
     await expect(test.build().draftStore.resumeState!(test.draftKey, { ...selection, draftId: 'another-draft' })).rejects.toThrow('conflicts');
     expect(test.requests).toHaveLength(count); expect(test.metadata.read('draft-handles')).toEqual(retained);
   });
   it('does not downgrade a valid pending Source snapshot when local signing evidence is missing', async () => {
-    const test = await fixture(true, true); await test.save();
+    const test = await fixture(true, true); test.state.saved = true; await test.save();
     const prepared = await test.prepare(); test.state.refuseSign = true;
     await expect(test.sign(prepared)).rejects.toThrow('ambiguous signing failure');
     expect(test.state.response.extensions?.['x-formspec-signing-content']).toBeDefined();
@@ -1532,7 +1597,7 @@ describe('owned resume admission boundaries', () => {
     expect(test.metadata.read('draft-handles')).toBeUndefined();
   });
   it.each([true, false])('keeps existing lookup available with creation disabled and persistent saving %s', async persistentSaving => {
-    const test = await fixture(true, true, false, false, undefined, persistentSaving);
+    const test = await fixture(true, true, false, false, undefined, persistentSaving); test.state.saved = true;
     const state = await test.build().draftStore.resumeState!(test.draftKey, { draftId: test.draftId, expectedResponseId: response.id! });
     expect(state.kind).toBe('active'); expect(state.application?.draftRef).toBe(`urn:formspec:draft:${test.draftId}`);
     expect(test.requests.every(request => request.method === 'GET')).toBe(true); expect(test.state.createCount).toBe(0);
@@ -1541,7 +1606,7 @@ describe('owned resume admission boundaries', () => {
 
 
 it('refuses an asynchronous owned-resume guard before credentials or reads', async () => {
-  const test = await fixture(true, true);
+  const test = await fixture(true, true); test.state.saved = true;
   await expect(test.build().draftStore.resumeState!(test.draftKey, { draftId: test.draftId, expectedResponseId: response.id! }, async () => {})).rejects.toThrow('guard must be synchronous');
   expect(test.requests).toHaveLength(0); expect(test.metadata.read('draft-handles')).toBeUndefined();
 });
@@ -1556,14 +1621,14 @@ describe('bounded Save boundary diagnostics', () => {
     await expect(test.save(saveAction('PATCH'))).rejects.toThrow('Save differs from the exact saved Response');
     await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
     expect(warn.mock.calls.map(call => JSON.parse(call[1]))).toEqual([
-      { stage: 'write-dispatch', reason: 'http-refused', status: 403, candidate: { expectedDraftVersion: 1,
+      { stage: 'write-dispatch', reason: 'http-refused', status: 403, candidate: { expectedDraftVersion: 2,
         baselineDataKeyCount: Object.keys(test.state.response.data).length, candidateDataKeyCount: Object.keys(test.state.response.data).length,
         changedDataPaths: [], changedDataPathCount: 0, removedDataPaths: [], addedDataPaths: [] } },
-      { stage: 'readback', reason: 'save-failed', candidate: { expectedDraftVersion: 1,
+      { stage: 'readback', reason: 'save-failed', candidate: { expectedDraftVersion: 2,
         baselineDataKeyCount: Object.keys(test.state.response.data).length, candidateDataKeyCount: Object.keys(test.state.response.data).length,
         changedDataPaths: [], changedDataPathCount: 0, removedDataPaths: [], addedDataPaths: [] } },
     ]);
-    expect(test.state.version).toBe(1); expect(test.state.patchCount).toBe(1);
+    expect(test.state.version).toBe(2); expect(test.state.patchCount).toBe(2);
   });
   it('distinguishes an owned GET refusal and bounds each adapter while isolating observer errors', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => { throw new Error('private observer failure'); });
@@ -1571,14 +1636,14 @@ describe('bounded Save boundary diagnostics', () => {
     for (let index = 0; index < 40; index++) await expect(test.save(saveAction('PATCH'))).rejects.toMatchObject({ status: 503 });
     await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(32));
     expect(warn.mock.calls.every(call => call[1] === JSON.stringify({ stage: 'owned-read', reason: 'http-refused', status: 503 }))).toBe(true);
-    expect(test.state.patchCount).toBe(0);
+    expect(test.state.patchCount).toBe(1);
   });
   it('records an uncertain write reply without preventing successful authoritative reconciliation', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const test = await fixture(false, true); await test.save(); test.state.lostPatch = true;
     const saved = await test.save(saveAction('PATCH'));
-    expect(saved.draft.version).toBe(2);
-    expect(warn).toHaveBeenCalledExactlyOnceWith('Native form Save diagnostic', JSON.stringify({ stage: 'write-dispatch', reason: 'save-failed', candidate: { expectedDraftVersion: 1,
+    expect(saved.draft.version).toBe(3);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('Native form Save diagnostic', JSON.stringify({ stage: 'write-dispatch', reason: 'save-failed', candidate: { expectedDraftVersion: 2,
       baselineDataKeyCount: Object.keys(test.state.response.data).length, candidateDataKeyCount: Object.keys(test.state.response.data).length,
       changedDataPaths: [], changedDataPathCount: 0, removedDataPaths: [], addedDataPaths: [] } }));
   });
@@ -1599,14 +1664,14 @@ describe('typed original Save problem diagnostics', () => {
     await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
     const first = JSON.parse(warn.mock.calls[0][1]);
     expect(first).toEqual({ stage: 'write-dispatch', reason: 'http-refused', status: 409, error_code: 'FORMSPEC-4090', detail,
-      candidate: { expectedDraftVersion: 1, baselineDataKeyCount: Object.keys(test.state.response.data).length,
+      candidate: { expectedDraftVersion: 2, baselineDataKeyCount: Object.keys(test.state.response.data).length,
         candidateDataKeyCount: Object.keys(candidate.data).length, changedDataPaths: [removed, 'neutral/field'].sort()
           .map(key => '/' + key.replace(/~/g, '~0').replace(/\//g, '~1')), changedDataPathCount: 2,
         removedDataPaths: ['/' + removed], addedDataPaths: ['/neutral~1field'] } });
     expect(JSON.stringify(warn.mock.calls)).not.toContain('private answer');
     expect(JSON.stringify(warn.mock.calls)).not.toContain('private context');
     expect(JSON.stringify(warn.mock.calls)).not.toContain('https://private.test/token');
-    expect(test.state.version).toBe(1);
+    expect(test.state.version).toBe(2);
   });
   it('bounds recognized detail to 1024 characters and omits arbitrary response fields', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -1664,4 +1729,16 @@ describe('pinned native task composition metadata', () => {
       expectedSignedResponseHash: `sha256:${'d'.repeat(64)}`, associationHash: association.associationHash, taskBindingHash: association.taskBindingHash } };
     await expect(test.cohort.draftStore.readState!(test.draftKey)).resolves.toHaveProperty('kind', 'active');
   });
+});
+
+
+it('retires a pending anonymous initialization through the actual signed cohort before any handle exists', async () => {
+  const test = await fixture(true, false, true);
+  let release!: () => void; test.state.createGate = new Promise<void>(resolve => { release = resolve; });
+  const initializing = test.cohort.draftStore.initializeDraft!(test.draftKey, 'publication-1');
+  const refused = expect(initializing).rejects.toThrow(/retired|invalidated/);
+  await vi.waitFor(() => expect(test.requests.some(request => request.method === 'POST' && request.url.endsWith('/drafts'))).toBe(true));
+  await test.cohort.draftStore.invalidateSubject(test.draftKey.subjectRef!);
+  release(); await refused;
+  expect(test.metadata.read('draft-handles')).toBeUndefined();
 });

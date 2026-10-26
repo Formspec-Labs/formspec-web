@@ -8,7 +8,7 @@ import { ResponseSigningScopeFence } from '../../../src/adapters/http/response-s
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
 const publication = { formId: 'form', formVersionId: 'publication' };
 const key = { formUrl: 'urn:test:form', formVersion: '1', subjectRef: 'owner' };
-const draftId = '00000000-0000-4000-8000-000000000001';
+const draftId = 'acme_draft_01k80t0800e008000000000002';
 const capabilities = { earlyCaseCreation: true, persistentSaving: true, formVersionId: 'publication' };
 const action: AdmittedResponseAction = { artifactRef: 'urn:test:actions', artifactDigest: 'sha256:verified', actionRef: 'start', requestRef: 'start', document: {
   $formspecResponseActions: '1.0' as const, version: '1', scope: 'response' as const, targetDefinition: { url: key.formUrl },
@@ -27,15 +27,14 @@ function fixture(value: unknown = receipt, savedDraftId = draftId) {
 }
 describe('qualified application lifecycle', () => {
   it('qualifies complete draft ID strings without trimming or creating aliases', () => {
-    const nativeId = 'draft_01a11ca26d05793192f9f01f97ba9c0b';
-    for (const id of [draftId, nativeId]) {
+    const nativeId = 'tenant-test_draft_01k80t0800e008000000000002';
+    for (const id of [draftId, nativeId, 'draft_01a152207f457f42a6a8580a59eccefa']) {
       expect(isApplicationDraftId(id)).toBe(true);
       for (const changed of [`${id}\n`, `${id}\r`, `${id}\u0000`, ` ${id}`, `${id}/other`, `${id}#other`]) expect(isApplicationDraftId(changed)).toBe(false);
     }
     for (const id of [undefined, null, {}, 7]) expect(isApplicationDraftId(id)).toBe(false);
   });
-  it('preserves the actual Source-generated prefixed draft through Start retry and GET', async () => {
-    const nativeId = 'draft_01a11ca26d05793192f9f01f97ba9c0b';
+  it.each(['tenant-test_draft_01k80t0800e008000000000002', 'draft_01a152207f457f42a6a8580a59eccefa'])('preserves exact retained draft %s through Start retry and GET', async nativeId => {
     const nativeReceipt = { ...receipt, draftRef: `urn:formspec:draft:${nativeId}` };
     const f = fixture(nativeReceipt, nativeId);
     expect(await f.port.start(key, 'operation')).toEqual(nativeReceipt);
@@ -52,12 +51,8 @@ describe('qualified application lifecycle', () => {
     expect(alias.bindings.get(key)?.draftId).toBe(nativeId);
   });
   it.each([
-    'response_01a11ca26d05793192f9f01f97ba9c0b', 'DRAFT_01a11ca26d05793192f9f01f97ba9c0b',
-    'draft_01A11ca26d05793192f9f01f97ba9c0b', 'draft_01a11ca26d05493192f9f01f97ba9c0b',
-    'draft_01a11ca26d057931c2f9f01f97ba9c0b', 'draft_01a11ca26d05793192f9f01f97ba9c0',
-    'draft_01a11ca26d05793192f9f01f97ba9c0b0', 'draft_01a11ca2-6d05-7931-92f9-f01f97ba9c0b',
-    'draft_01a11ca26d05793192f9f01f97ba9c0b/other', 'draft_01a11ca26d05793192f9f01f97ba9c0b%2Fother',
-    'draft_01a11ca26d05793192f9f01f97ba9c0b\n', ' draft_01a11ca26d05793192f9f01f97ba9c0b',
+    '', '.', '..', 'a'.repeat(256), 'draft/other', 'draft%2Fother', 'draft?query', 'draft#fragment',
+    'draft\n', 'draft\r', 'draft\u0000', ' draft', 'draft\\other',
   ])('refuses malformed application draft %j before Start or read dispatch', async id => {
     const f = fixture({ ...receipt, draftRef: `urn:formspec:draft:${id}` }, id);
     await expect(f.port.start(key, 'operation')).rejects.toThrow(); await expect(f.port.load(key)).rejects.toThrow();

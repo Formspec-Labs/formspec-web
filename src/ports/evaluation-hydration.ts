@@ -1,4 +1,4 @@
-import type { MixedHydrationWire } from './mixed-proof.ts';
+import type { MixedHydrationReceipt, MixedHydrationWire } from './mixed-proof.ts';
 import type { SavedResponseDraft } from './response-signing.ts';
 import type { CompletionLifetime } from './response-completion.ts';
 import type { ScopeKey } from '../shared/scope-key.ts';
@@ -102,6 +102,12 @@ export interface EvaluationHydrationWire {
   readonly results: readonly EvaluationHydrationResult[];
   readonly providerReceipt: HttpEvaluationProviderReceipt | NativeScreenerMappingReceipt | ComposedSourcesReceipt | null;
 }
+
+/** Canonical schema-shaped input; mixed proof leaves remain opaque until independent verification. */
+export type CanonicalEvaluationHydrationWire = EvaluationHydrationWire | MixedHydrationWire
+  | (Omit<MixedHydrationWire, 'providerReceipt'> & {
+    readonly providerReceipt: Omit<MixedHydrationReceipt, 'version'> & { readonly version: 2 };
+  });
 
 /** Checked facts for one exact saved candidate; Source retains admission authority. */
 export interface HydratedEvaluationCandidate {

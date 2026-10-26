@@ -1,4 +1,6 @@
 import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
+import { snapshotWire } from './wire-json.ts';
+import { sameResponseDataView } from '../../shared/response-data-view.ts';
 import { decodeBase64 } from '../../shared/base64.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { requireSigningIssuer } from '../../shared/signing-issuer.ts';
@@ -176,19 +178,17 @@ export class HttpResponseSigning implements ResponseSigning {
       await this.validateUnsigned(input);
       const context = { input, generation };
       const binding = this.config.bindings.get(input.draftKey);
+      if (!binding) throw new Error('Draft identity must be initialized before Save or Sign');
+      this.qualifySaveAction(input.action, input, binding.draftId, binding.draftVersion);
       stage = 'owned-read';
-      const existing = binding ? await this.read(context, binding.draftId) : undefined;
-      if (binding && (existing!.draft_version !== binding.draftVersion
-        || existing!.canonical_response.authoredSignatures?.length)) throw new Error('Saved draft changed before Save');
-      if (existing) try { candidate = saveCandidateComparison(existing.canonical_response.data, input.response.data, existing.draft_version); }
+      const existing = binding.responseId ? await this.read(context, binding.draftId)
+        : await this.readInitialization(context, binding.draftId);
+      if (existing.draft_version !== binding.draftVersion
+        || existing.canonical_response?.authoredSignatures?.length) throw new Error('Saved draft changed before Save');
+      if (existing.canonical_response) try { candidate = saveCandidateComparison(existing.canonical_response.data, input.response.data, existing.draft_version); }
       catch { /* Comparison cannot change the existing Save path. */ }
       stage = 'action-admission';
       this.qualifySaveAction(input.action, input, binding?.draftId, existing?.draft_version);
-      this.current(context);
-      const scope = this.config.fence.scopeFor(input.draftKey);
-      if (!binding) this.writeCreateMarkers([...this.createMarkers(), { scope, operationId: input.operationId,
-        definitionUrl: input.definition.url, definitionVersion: input.definition.version,
-        candidateHash: await handoffHash(input.response) }]);
       this.current(context);
       let dispatchRefused = false;
       let dispatchRefusal: unknown;
@@ -203,14 +203,13 @@ export class HttpResponseSigning implements ResponseSigning {
       if (!savedBinding) throw new ResponseSigningUnresolvedError();
       stage = 'readback';
       const saved = await this.read(context, savedBinding.draftId);
-      if (saved.draft_version !== (existing ? existing.draft_version + 1 : 1)
+      if (saved.draft_version !== existing.draft_version + 1
         || !same(saved.canonical_response, input.response)) throw new Error('Save differs from the exact saved Response');
       stage = 'saved-evidence';
       extractServiceRequestOutputs(this.admittedRequest(input.action, input.response), saved);
       const result = await this.savedResult(input.draftKey, saved);
       this.current(context);
       this.config.bindings.put(input.draftKey, { draftId: saved.draft_id, draftVersion: saved.draft_version, response: saved.canonical_response });
-      if (!binding) this.writeCreateMarkers(this.createMarkers().filter(marker => marker.scope !== scope));
       return result;
     });
     this.saves.set(input.operationId, { identity, scope: this.config.fence.scopeFor(input.draftKey), generation, settled: false, pending });
@@ -229,12 +228,10 @@ export class HttpResponseSigning implements ResponseSigning {
   private qualifySaveAction(action: Readonly<AdmittedResponseAction>, input: Pick<SaveResponseDraftInput, 'draftKey' | 'response'> & { formId?: string }, id?: string, version?: number): void {
     const request = this.admittedRequest(action, input.response);
     const planned = planServiceRequest(request, { input: { formId: input.formId ?? this.config.formIdFor(input.draftKey), draftId: id, draftVersion: version, frozenResponse: input.response } });
-    const path = id ? `/drafts/${encodeURIComponent(id)}`
-      : `/runtime/forms/${encodeURIComponent(this.config.formIdFor(input.draftKey))}/drafts`;
-    const body = { draft_state: input.response.data, canonical_response: input.response,
-      ...(id ? { expected_draft_version: version } : {}) };
-    // The physical DraftStore adds only its existing private owner/party credentials on CREATE.
-    if (planned.method !== (id ? 'PATCH' : 'POST') || planned.path !== path
+    if (!id || !Number.isSafeInteger(version)) throw new Error('Save requires initialized draft identity and revision');
+    const path = `/drafts/${encodeURIComponent(id)}`;
+    const body = { draft_state: input.response.data, canonical_response: input.response, expected_draft_version: version };
+    if (planned.method !== 'PATCH'  || planned.path !== path
       || Object.keys(planned.headers).length || !same(planned.body, body)
       || !same(planned.successStatuses, [200])) throw new Error('Authored Save request differs from the exact private draft operation');
   }
@@ -266,7 +263,7 @@ export class HttpResponseSigning implements ResponseSigning {
   }
 
   prepare(input: PrepareResponseSigningInput): Promise<PreparedResponseSigning> {
-    input = structuredClone(input);
+    input = snapshotWire(input);
     return this.config.fence.run(input.draftKey, async generation => {
       this.refuseUnresolved(input.draftKey);
       if (!input.formVersionId || input.response.status !== 'completed' || !input.response.id
@@ -312,7 +309,7 @@ export class HttpResponseSigning implements ResponseSigning {
     const context = this.preparations.get(input.preparation);
     if (!context) return Promise.reject(new Error('Signing requires this cohort’s frozen preparation'));
     this.current(context);
-    input = freeze(structuredClone(input));
+    input = snapshotWire(input);
     const identity = canonicalize({ scope: this.config.fence.scopeFor(input.preparation.draftKey),
       generation: context.generation, preparation: input.preparation, assent: input.assent, action: input.action });
     if (!identity) return Promise.reject(new Error('Invalid signing operation identity'));
@@ -339,14 +336,14 @@ export class HttpResponseSigning implements ResponseSigning {
         const signedAt = (this.config.now ?? (() => new Date().toISOString()))();
         if (!Number.isFinite(Date.parse(signedAt))) throw new Error('Signing time must be RFC3339');
         const version = input.preparation.draft.version + 1;
-        const candidate = structuredClone(input.preparation.response);
+        const candidate = { ...snapshotWire(input.preparation.response) };
         candidate.extensions = { ...candidate.extensions, 'x-formspec-signing-content': {
           version: '1.0', issuer: this.config.expectedIssuer, draftId: input.preparation.draft.id, draftVersion: version,
           actorRef: input.preparation.actor.id, signerName: input.assent.signerName, signedAt,
           consentAccepted: true, content: input.preparation.content,
           documentHash: await hashSigningContent(input.preparation.content, this.config.validateContent), documentHashAlgorithm: 'sha-256',
         } };
-        act = { identity, input: freeze(structuredClone(input)), context, candidate: freeze(candidate), version };
+        act = { identity, input: snapshotWire(input), context, candidate: freeze(candidate), version };
         this.validateAction(act);
         if (!await this.config.validateResponse(candidate)) throw new Error('Signing candidate failed the Response schema');
         this.current(context);
@@ -377,7 +374,6 @@ export class HttpResponseSigning implements ResponseSigning {
     }
     for (const [id, act] of this.acts) if (this.config.fence.scopeFor(act.context.input.draftKey) === scope) this.acts.delete(id);
     this.writeMarkers(this.markers().filter(marker => marker.scope !== scope));
-    this.writeCreateMarkers(this.createMarkers().filter(marker => marker.scope !== scope));
   }
   hasPending(key: DraftKey): boolean {
     return this.markers().some(marker => marker.scope === this.config.fence.scopeFor(key));
@@ -385,7 +381,7 @@ export class HttpResponseSigning implements ResponseSigning {
   private pendingMarkerFor(key: DraftKey, draftId: string): PendingMarker {
     const scope = this.config.fence.scopeFor(key);
     const matches = this.markers().filter(marker => marker.scope === scope);
-    if (this.createMarkers().some(marker => marker.scope === scope) || matches.length !== 1
+    if (matches.length !== 1
       || matches[0].draftId !== draftId || !isUuidV7IdempotencyKey(matches[0].operationId)) throw new ResponseSigningUnresolvedError();
     return freeze(structuredClone(matches[0]));
   }
@@ -557,6 +553,19 @@ export class HttpResponseSigning implements ResponseSigning {
     return planned;
   }
 
+  private async readInitialization(context: PreparationContext, id: string): Promise<Omit<DraftView, 'canonical_response'> & { canonical_response: null }> {
+    const owner = await this.config.ownerFor(context.input.draftKey); this.current(context);
+    const view = await this.config.client.getJson<Omit<DraftView, 'canonical_response'> & { canonical_response: null; is_initialization_only: boolean }>(
+      `/drafts/${encodeURIComponent(id)}`, { headers: bearer(owner.token), assertCurrent: () => this.current(context) });
+    this.current(context);
+    if (view.draft_id !== id || view.form_version_id !== context.input.formVersionId || view.subject_ref !== owner.subjectRef
+      || view.status !== 'in_progress' || view.draft_version !== 1 || view.is_initialization_only !== true
+      || view.canonical_response !== null || !same(view.draft_state, {}) || view.taskDraft !== undefined) {
+      throw new Error('Owned initialization changed before first Save');
+    }
+    return view;
+  }
+
   private async read(context: PreparationContext, id: string): Promise<DraftView> {
     const owner = await this.config.ownerFor(context.input.draftKey);
     this.current(context);
@@ -580,7 +589,7 @@ export class HttpResponseSigning implements ResponseSigning {
       || view.status !== 'in_progress' || view.subject_ref !== actor || !Number.isSafeInteger(view.draft_version) || view.draft_version < 0
       || !response || !await this.config.validateResponse(response)
       || response.id !== context.input.response.id || response.definitionUrl !== context.input.definition.url
-      || response.definitionVersion !== context.input.definition.version || !same(response.data, view.draft_state)) {
+      || response.definitionVersion !== context.input.definition.version || !sameResponseDataView(response.data, view.draft_state)) {
       throw new Error('Owned draft has no matching authoritative Response snapshot');
     }
   }
@@ -589,7 +598,7 @@ export class HttpResponseSigning implements ResponseSigning {
     await this.validateView(context, act.input.preparation.draft.id, view, act.input.preparation.actor.id);
     extractServiceRequestOutputs(this.admittedRequest(act.input.action, act.candidate), view);
     const response = view.canonical_response;
-    const unsigned = structuredClone(response);
+    const unsigned = { ...snapshotWire(response) };
     delete unsigned.authoredSignatures;
     if (view.draft_version !== act.version + 1 || !same(unsigned, candidate)) {
       throw new Error('Delegated signing evidence differs from the frozen candidate');
@@ -604,22 +613,6 @@ export class HttpResponseSigning implements ResponseSigning {
     return result;
   }
   private current(context: PreparationContext): void { this.config.fence.assertCurrent(context.input.draftKey, context.generation); }
-  private createMarkers(): { scope: string; operationId: string; definitionUrl: string; definitionVersion: string; candidateHash: string }[] {
-    const value = this.config.resumeMetadata?.read('response-draft-create-operations');
-    if (value === undefined) return [];
-    if (!Array.isArray(value) || value.some(marker => !marker || typeof marker.scope !== 'string'
-      || typeof marker.operationId !== 'string' || !marker.scope || !isUuidV7IdempotencyKey(marker.operationId)
-      || typeof marker.definitionUrl !== 'string' || !marker.definitionUrl.trim()
-      || typeof marker.definitionVersion !== 'string' || !marker.definitionVersion.trim()
-      || typeof marker.candidateHash !== 'string' || !/^[a-f0-9]{64}$/.test(marker.candidateHash)
-      || Object.keys(marker).some(key => !['scope', 'operationId', 'definitionUrl', 'definitionVersion', 'candidateHash'].includes(key)))) throw new ResponseSigningUnresolvedError();
-    return value;
-  }
-  private writeCreateMarkers(markers: { scope: string; operationId: string; definitionUrl: string; definitionVersion: string; candidateHash: string }[]): void {
-    if (!this.config.resumeMetadata) throw new ResponseSigningUnresolvedError();
-    if (markers.length) this.config.resumeMetadata.write('response-draft-create-operations', markers);
-    else this.config.resumeMetadata.remove('response-draft-create-operations');
-  }
   private markers(): PendingMarker[] {
     const value = this.config.resumeMetadata?.read('response-signing-operations');
     if (value === undefined) return [];
@@ -642,7 +635,7 @@ export class HttpResponseSigning implements ResponseSigning {
   }
   private refuseUnresolved(key: DraftKey): void {
     const scope = this.config.fence.scopeFor(key);
-    if (this.createMarkers().some(marker => marker.scope === scope) || this.markers().some(marker => marker.scope === scope)
+    if (this.markers().some(marker => marker.scope === scope)
       || [...this.acts.values()].some(act => !act.result && this.config.fence.scopeFor(act.context.input.draftKey) === scope)) {
       throw new ResponseSigningUnresolvedError();
     }
@@ -665,7 +658,7 @@ export class HttpResponseSigning implements ResponseSigning {
 /** Checks maintained digest/content/mirrors and key metadata, not independent cryptographic verification. */
 export async function assertDelegatedSignedResponseConsistency(response: FormResponse, policy: HttpResponseSigningPolicy): Promise<void> {
   const expectedIssuer = requireSigningIssuer(policy.expectedIssuer);
-  const candidate = structuredClone(response); delete candidate.authoredSignatures;
+  const candidate = { ...snapshotWire(response) }; delete candidate.authoredSignatures;
   const commitment = candidate.extensions?.['x-formspec-signing-content'];
   if (commitment?.issuer !== expectedIssuer) throw new Error('Delegated signing issuer differs from the configured issuer');
   const signatures = response.authoredSignatures; const signature = signatures?.[0]; const payload = signature?.signedPayload;
@@ -704,7 +697,7 @@ function freeze<T>(value: T): T {
 /** Reuses actual owned DraftView evidence; callers must qualify its owner and publication first. */
 export async function savedResponseDraftFromVerifiedRead(key: DraftKey, supplied: VerifiedDraftEvidence): Promise<SavedResponseDraft> {
   const draftKey = freeze(structuredClone(key));
-  const evidence = freeze(structuredClone(supplied));
+  const evidence = snapshotWire(supplied);
   return freeze({ draftKey, response: evidence.canonical_response,
     draft: { id: evidence.draft_id, version: evidence.draft_version, responseHash: await handoffHash(evidence.canonical_response) },
     actor: { id: evidence.subject_ref }, evidence });

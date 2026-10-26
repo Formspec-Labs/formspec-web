@@ -1238,19 +1238,18 @@ export interface components {
         AccessibilityReport: {
             definitionHash: string;
             /** @description The document rules: `{linterVersion, results[{rule, severity, wcag[], outcome, paths[]}]}`. */
-            documentChecks: Record<string, never>;
+            documentChecks: Record<string, unknown>;
             formVersionId: string;
             localeHashes: string[];
             /** @description Criteria no tool decides: a person reviews them. */
-            manualReview: Record<string, never>[];
+            manualReview: Record<string, unknown>[];
             /** @description axe in the reference web renderer: `{checkVersion, axeVersion, adapter, status, states[], violations[], needsReview[]}`. */
-            referenceRendererCheck: Record<string, never>;
+            referenceRendererCheck: Record<string, unknown>;
             /** @description `WCAG 2.2`. */
             standard: string;
             themeHash?: string | null;
         };
         AdminMembershipCreateCommand: {
-            membership_id: string;
             principal_id: string;
             reason: string;
             role: string;
@@ -1350,7 +1349,7 @@ export interface components {
         CompleteSignerCommand: {
             disclosure_accepted: boolean;
             signature_method: string;
-            signed_payload_digest: Record<string, never>;
+            signed_payload_digest: Record<string, unknown>;
             signer_token: string;
         };
         /** @description Request body for staff completing a signer's signature on their behalf. */
@@ -1359,7 +1358,7 @@ export interface components {
             /** @description Why staff sign in the signer's place; recorded with their identity. */
             note: string;
             signature_method: string;
-            signed_payload_digest: Record<string, never>;
+            signed_payload_digest: Record<string, unknown>;
         };
         /** @description Reports readiness for one named dependency or subsystem. */
         ComponentHealth: {
@@ -1397,24 +1396,14 @@ export interface components {
             status: string;
             version: string;
         };
-        /** @description Request body for creating a draft. */
+        /** @description Internal complete-response seed command; public creation uses initialization. */
         CreateAnonymousSessionCommand: {
             session_id?: string | null;
-        };
-        /** @description Request body for creating a draft. */
-        CreateDraftCommand: {
-            anonymous_session_token?: string | null;
-            anonymous_subject_ref?: string | null;
-            canonical_response: unknown;
-            draft_id?: string | null;
-            draft_state?: unknown;
-            respondent_subject_ref?: string | null;
         };
         /** @description Request body for creating a form. */
         CreateFormCommand: {
             created_by: string;
             display_name: string;
-            form_id?: string | null;
             slug: string;
         };
         /** @description Request body for creating a signature envelope. */
@@ -1424,7 +1413,7 @@ export interface components {
         };
         /** @description Response body for a draft. */
         DraftView: {
-            canonical_response?: unknown;
+            canonical_response?: Record<string, unknown> | null;
             draft_id: string;
             draft_state: unknown;
             /** Format: int64 */
@@ -1502,6 +1491,10 @@ export interface components {
             slug: string;
             version_lineage: string[];
         };
+        /** @description Request body for initializing a draft before any canonical Response exists. */
+        InitializeDraftCommand: {
+            form_version_id: string;
+        };
         NotificationAuditView: {
             audit_events: string[];
             delivery_state: string;
@@ -1511,10 +1504,10 @@ export interface components {
         };
         NotificationPolicyView: {
             channels: string[];
-            conditional_routing: Record<string, never>;
+            conditional_routing: Record<string, unknown>;
             dedupe_key_strategy: string;
             events: string[];
-            locale_templates: Record<string, never>;
+            locale_templates: Record<string, unknown>;
             respondent_opt_out: boolean;
         };
         OperatorAuditEventView: {
@@ -1526,7 +1519,7 @@ export interface components {
             resource_ref: string;
             /** @description The scope's key (64 lowercase hex). */
             scope_key: string;
-            support_access_context: Record<string, never>;
+            support_access_context: Record<string, unknown>;
             target_ref?: string | null;
         };
         OperatorAuditEventsView: {
@@ -1541,12 +1534,12 @@ export interface components {
             status: string;
         };
         PostSubmitPreviewCommand: {
-            response_data: Record<string, never>;
+            response_data: Record<string, unknown>;
         };
         PostSubmitPreviewView: {
-            conditional_redirect: Record<string, never>;
-            handoff: Record<string, never>;
-            rule_trace: Record<string, never>;
+            conditional_redirect: Record<string, unknown>;
+            handoff: Record<string, unknown>;
+            rule_trace: Record<string, unknown>;
             thank_you: string;
         };
         /**
@@ -1756,7 +1749,6 @@ export interface components {
             definition_url?: string | null;
             /** @description Transitional compatibility field; must match `definition.version` when present. */
             definition_version?: string | null;
-            form_version_id?: string | null;
             host_evidence?: unknown;
             /** @description The Locale documents the form is published with, one per locale code. */
             locale_documents?: unknown[];
@@ -1885,22 +1877,22 @@ export interface components {
             idempotencyKey: string;
             ledgerScope: string;
             mode: string;
-            opBatch: Record<string, never>;
+            opBatch: Record<string, unknown>;
             opBatchHash: string;
-            sessionRef: Record<string, never>;
+            sessionRef: Record<string, unknown>;
         };
         /** @description Response body for signed-response verification. */
         ResponseSignatureVerificationView: {
             form_version_id: string;
             response_hash: string;
             response_id: string;
-            signed_payload_digest?: Record<string, never> | null;
+            signed_payload_digest?: Record<string, unknown> | null;
             verified: boolean;
         };
         /** @description Response body for an accepted response. */
         ResponseView: {
             accepted_at: string;
-            canonical_response?: unknown;
+            canonical_response?: Record<string, unknown> | null;
             draft_id: string;
             entitlement_effect_on_semantics: string;
             form_version_id: string;
@@ -1911,7 +1903,7 @@ export interface components {
             response_hash: string;
             response_id: string;
             review_before_submit: unknown;
-            signed_payload_digest?: Record<string, never> | null;
+            signed_payload_digest?: Record<string, unknown> | null;
             status: string;
             subject_ref: string;
         };
@@ -1937,14 +1929,14 @@ export interface components {
              *     seal pins and issuer; a relying party repeats that check offline.
              */
             independently_verifiable: boolean;
-            key_metadata: Record<string, never>;
+            key_metadata: Record<string, unknown>;
             /** @description How a relying party verifies the bundle offline, and what the seal covers. */
-            offline_verification: Record<string, never>;
+            offline_verification: Record<string, unknown>;
             proof_state: string;
-            signature_metadata: Record<string, never>;
-            signed_payload_digest?: Record<string, never> | null;
-            signer_events: Record<string, never>[];
-            verifier_output: Record<string, never>;
+            signature_metadata: Record<string, unknown>;
+            signed_payload_digest?: Record<string, unknown> | null;
+            signer_events: Record<string, unknown>[];
+            verifier_output: Record<string, unknown>;
         };
         /** @description Response body for a signature envelope. */
         SignatureEnvelopeView: {
@@ -1954,10 +1946,10 @@ export interface components {
             failure_reason?: string | null;
             form_version_id: string;
             outbox_intents: components["schemas"]["SignatureOutboxIntentView"][];
-            reminder_history: Record<string, never>[];
+            reminder_history: Record<string, unknown>[];
             response_id: string;
             routing_order_enforced: boolean;
-            signed_payload_digest?: Record<string, never> | null;
+            signed_payload_digest?: Record<string, unknown> | null;
             signers: components["schemas"]["SignatureSignerView"][];
             /** Format: int64 */
             version: number;
@@ -1982,7 +1974,7 @@ export interface components {
             envelope_id: string;
             /** @description One delivery job per signer being reminded. */
             outbox_intent_ids: string[];
-            reminder_history: Record<string, never>[];
+            reminder_history: Record<string, unknown>[];
             status: string;
         };
         /** @description Request signer routing input. */
@@ -2014,9 +2006,8 @@ export interface components {
             anonymous_session_token?: string | null;
             canonical_response: unknown;
             /** @description Explicit current run locator, frozen with this Submit idempotency body. */
-            nativeCurrentCheck?: Record<string, never> | null;
+            nativeCurrentCheck?: Record<string, unknown> | null;
             response_data?: unknown;
-            response_id?: string | null;
             signing_requested?: boolean;
             subject_ref?: string | null;
         };
@@ -2101,21 +2092,21 @@ export interface components {
             version: number;
         };
         TenantBrandUpdateCommand: {
-            custom_messages?: Record<string, never>;
-            layout_defaults?: Record<string, never>;
+            custom_messages?: Record<string, unknown>;
+            layout_defaults?: Record<string, unknown>;
             locale_defaults?: string[] | null;
-            respondent_chrome?: Record<string, never>;
-            theme_assets?: Record<string, never>;
+            respondent_chrome?: Record<string, unknown>;
+            theme_assets?: Record<string, unknown>;
         };
         TenantBrandView: {
-            custom_messages: Record<string, never>;
+            custom_messages: Record<string, unknown>;
             environment_id: string;
-            layout_defaults: Record<string, never>;
+            layout_defaults: Record<string, unknown>;
             locale_defaults: string[];
-            respondent_chrome: Record<string, never>;
+            respondent_chrome: Record<string, unknown>;
             tenant_brand_id: string;
             tenant_id: string;
-            theme_assets: Record<string, never>;
+            theme_assets: Record<string, unknown>;
             workspace_id: string;
         };
         /** @description Request body for updating a draft. */
@@ -2255,6 +2246,7 @@ export interface operations {
             /** @description Scoped workspace memberships */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2264,6 +2256,7 @@ export interface operations {
             /** @description Scope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2288,6 +2281,7 @@ export interface operations {
             /** @description Created membership or exact retained grant */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2297,6 +2291,7 @@ export interface operations {
             /** @description Invalid membership grant */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2306,6 +2301,7 @@ export interface operations {
             /** @description Current administrative authority required */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2315,6 +2311,7 @@ export interface operations {
             /** @description Scope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2324,6 +2321,7 @@ export interface operations {
             /** @description Conflicting membership grant */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2333,6 +2331,7 @@ export interface operations {
             /** @description Malformed membership body */
             422: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2342,6 +2341,7 @@ export interface operations {
             /** @description Membership storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2369,6 +2369,7 @@ export interface operations {
             /** @description Updated membership */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2378,6 +2379,7 @@ export interface operations {
             /** @description Invalid membership update */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2387,6 +2389,7 @@ export interface operations {
             /** @description Membership not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2396,6 +2399,7 @@ export interface operations {
             /** @description The scope's last owner cannot be demoted */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2510,6 +2514,7 @@ export interface operations {
             /** @description Draft */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2519,6 +2524,7 @@ export interface operations {
             /** @description Verified draft owner token required */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2528,6 +2534,7 @@ export interface operations {
             /** @description Draft not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2537,6 +2544,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2564,6 +2572,7 @@ export interface operations {
             /** @description Updated draft */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2573,6 +2582,7 @@ export interface operations {
             /** @description Invalid draft update */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2582,6 +2592,7 @@ export interface operations {
             /** @description Verified draft owner token required */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2591,6 +2602,7 @@ export interface operations {
             /** @description Draft not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2600,6 +2612,7 @@ export interface operations {
             /** @description Draft version conflict */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2609,6 +2622,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2907,6 +2921,7 @@ export interface operations {
             /** @description Saved signed canonical Response and new draft revision */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2916,6 +2931,7 @@ export interface operations {
             /** @description Invalid frozen Response or signing evidence */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2925,6 +2941,7 @@ export interface operations {
             /** @description Verified draft owner required */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2934,6 +2951,7 @@ export interface operations {
             /** @description Draft not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2943,6 +2961,7 @@ export interface operations {
             /** @description Revision, source, consent, validation, or replay conflict */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2952,6 +2971,7 @@ export interface operations {
             /** @description Delegated signing unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2982,6 +3002,7 @@ export interface operations {
             /** @description Accepted response */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -2991,6 +3012,7 @@ export interface operations {
             /** @description Invalid submit command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3000,6 +3022,7 @@ export interface operations {
             /** @description Anonymous session token invalid or missing */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3009,6 +3032,7 @@ export interface operations {
             /** @description Draft validation failed */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3018,6 +3042,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3434,6 +3459,7 @@ export interface operations {
             /** @description Post-submit preview */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3443,6 +3469,7 @@ export interface operations {
             /** @description Invalid preview command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3452,6 +3479,7 @@ export interface operations {
             /** @description Form not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3461,6 +3489,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3731,6 +3760,7 @@ export interface operations {
             /** @description Scoped operator audit events */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3740,6 +3770,7 @@ export interface operations {
             /** @description Scope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3749,6 +3780,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3782,6 +3814,7 @@ export interface operations {
             /** @description Scoped operator audit export */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3791,6 +3824,7 @@ export interface operations {
             /** @description Scope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3800,6 +3834,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3964,6 +3999,7 @@ export interface operations {
             /** @description List accepted responses */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -3973,6 +4009,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4010,6 +4047,7 @@ export interface operations {
             /** @description Exported responses */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4019,6 +4057,7 @@ export interface operations {
             /** @description Invalid export mapping query */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4028,6 +4067,7 @@ export interface operations {
             /** @description Synchronous export exceeds the output limit */
             413: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4037,6 +4077,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4060,6 +4101,7 @@ export interface operations {
             /** @description Accepted response */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4069,6 +4111,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4078,6 +4121,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4101,6 +4145,7 @@ export interface operations {
             /** @description Response notification audit */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4110,6 +4155,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4119,6 +4165,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4142,6 +4189,7 @@ export interface operations {
             /** @description The stored tagged PDF/UA receipt; Repr-Digest (RFC 9530) is the SHA-256 of exactly these bytes */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4151,6 +4199,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4160,6 +4209,7 @@ export interface operations {
             /** @description PDF_PENDING: the render job has not finished; see Retry-After */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4169,6 +4219,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4192,6 +4243,7 @@ export interface operations {
             /** @description Response proof-state vocabulary */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4201,6 +4253,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4210,6 +4263,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4233,6 +4287,7 @@ export interface operations {
             /** @description Response receipt proof state */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4242,6 +4297,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4251,6 +4307,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4278,6 +4335,7 @@ export interface operations {
             /** @description Receipt email intent */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4287,6 +4345,7 @@ export interface operations {
             /** @description Invalid receipt email command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4296,6 +4355,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4305,6 +4365,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4332,6 +4393,7 @@ export interface operations {
             /** @description Materialized response receipt */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4341,6 +4403,7 @@ export interface operations {
             /** @description Invalid materialization command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4350,6 +4413,7 @@ export interface operations {
             /** @description Operator simulation command missing or disabled */
             403: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4359,6 +4423,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4368,6 +4433,7 @@ export interface operations {
             /** @description Proof materialization failed */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4377,6 +4443,7 @@ export interface operations {
             /** @description Verifier unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4404,6 +4471,7 @@ export interface operations {
             /** @description Proof remediation queued */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4413,6 +4481,7 @@ export interface operations {
             /** @description Invalid proof remediation command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4422,6 +4491,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4431,6 +4501,7 @@ export interface operations {
             /** @description Proof remediation requires a failed proof state */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4440,6 +4511,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4467,6 +4539,7 @@ export interface operations {
             /** @description RFC 9901 SD-JWT presenting only the listed answers: <issuer-jwt>~<disclosure>~...~ */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4476,6 +4549,7 @@ export interface operations {
             /** @description No path listed, or a path that is not an answer of the response */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4485,6 +4559,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4494,6 +4569,7 @@ export interface operations {
             /** @description The response's proof is not ready, so nothing is anchored to present */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4503,6 +4579,7 @@ export interface operations {
             /** @description The response has no answers, or more than an attestation carries; this never changes */
             422: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4512,6 +4589,7 @@ export interface operations {
             /** @description Attestation key or storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4539,6 +4617,7 @@ export interface operations {
             /** @description Independent proof report */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4548,6 +4627,7 @@ export interface operations {
             /** @description Proof artifact missing */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4557,6 +4637,7 @@ export interface operations {
             /** @description Proof pending or failed */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4566,6 +4647,7 @@ export interface operations {
             /** @description Verifier unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4589,6 +4671,7 @@ export interface operations {
             /** @description Signed-response verification */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4598,6 +4681,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4607,6 +4691,7 @@ export interface operations {
             /** @description Response is not signed */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4616,6 +4701,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4968,7 +5054,10 @@ export interface operations {
     create_draft: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Required stable initialization attempt key; exact retries read the current owned draft */
+                "Idempotency-Key": string;
+            };
             path: {
                 /** @description Form identifier. */
                 form_id: string;
@@ -4977,13 +5066,14 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateDraftCommand"];
+                "application/json": components["schemas"]["InitializeDraftCommand"];
             };
         };
         responses: {
             /** @description Created draft */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -4993,6 +5083,7 @@ export interface operations {
             /** @description Invalid draft command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5002,6 +5093,7 @@ export interface operations {
             /** @description Anonymous session token invalid or missing */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5011,6 +5103,7 @@ export interface operations {
             /** @description Active version not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5020,6 +5113,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5050,6 +5144,7 @@ export interface operations {
             /** @description Runtime Ledger append capability */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5059,6 +5154,7 @@ export interface operations {
             /** @description Invalid Ledger capability command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5068,6 +5164,7 @@ export interface operations {
             /** @description Anonymous session token, mint authority, or append scope invalid */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5077,6 +5174,7 @@ export interface operations {
             /** @description Published form not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5086,6 +5184,7 @@ export interface operations {
             /** @description Malformed Ledger capability request body */
             422: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5095,6 +5194,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5122,6 +5222,7 @@ export interface operations {
             /** @description Anonymous respondent session */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5131,6 +5232,7 @@ export interface operations {
             /** @description Invalid session command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5140,6 +5242,7 @@ export interface operations {
             /** @description Active version not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5149,6 +5252,7 @@ export interface operations {
             /** @description Token issuer unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5173,6 +5277,7 @@ export interface operations {
             /** @description Runtime Ledger append capability */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5182,6 +5287,7 @@ export interface operations {
             /** @description Invalid Ledger capability command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5191,6 +5297,7 @@ export interface operations {
             /** @description Anonymous session token or append scope invalid */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5200,6 +5307,7 @@ export interface operations {
             /** @description Published form not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5209,6 +5317,7 @@ export interface operations {
             /** @description Malformed Ledger capability request body */
             422: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5218,6 +5327,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5245,6 +5355,7 @@ export interface operations {
             /** @description Anchored Response Actions session operation-batch append receipt */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5254,6 +5365,7 @@ export interface operations {
             /** @description Invalid Ledger append command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5263,6 +5375,7 @@ export interface operations {
             /** @description Missing or invalid runtime Ledger append capability */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5272,6 +5385,7 @@ export interface operations {
             /** @description Substrate unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5300,6 +5414,7 @@ export interface operations {
             /** @description The launched task draft */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5309,6 +5424,7 @@ export interface operations {
             /** @description Refusal */
             default: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5409,6 +5525,7 @@ export interface operations {
             /** @description Created signature envelope */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5418,6 +5535,7 @@ export interface operations {
             /** @description Invalid signature envelope command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5427,6 +5545,7 @@ export interface operations {
             /** @description Response not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5436,6 +5555,7 @@ export interface operations {
             /** @description Response is not signature-ready */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5445,6 +5565,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5468,6 +5589,7 @@ export interface operations {
             /** @description Signature envelope status */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5477,6 +5599,7 @@ export interface operations {
             /** @description Envelope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5486,6 +5609,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5512,6 +5636,7 @@ export interface operations {
             /** @description Signature certificate */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5521,6 +5646,7 @@ export interface operations {
             /** @description Invalid certificate query */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5530,6 +5656,7 @@ export interface operations {
             /** @description Envelope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5539,6 +5666,7 @@ export interface operations {
             /** @description Certificate verification conflict */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5548,6 +5676,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5615,6 +5744,7 @@ export interface operations {
             /** @description Signature reminder policy */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5624,6 +5754,7 @@ export interface operations {
             /** @description Envelope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5633,6 +5764,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5659,6 +5791,7 @@ export interface operations {
             /** @description Queued signature reminder */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5668,6 +5801,7 @@ export interface operations {
             /** @description Missing idempotency key */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5677,6 +5811,7 @@ export interface operations {
             /** @description Envelope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5686,6 +5821,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5697,7 +5833,10 @@ export interface operations {
     get_signer_certificate_bundle: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Bearer: the signer's own signing-link token; a token in the URL is refused */
+                Authorization: string;
+            };
             path: {
                 /** @description Signature envelope identifier. */
                 envelope_id: string;
@@ -5708,7 +5847,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The retained formspec.signature.certificate.bundle.v2 bytes, exactly as sealed */
+            /** @description The retained formspec.signature.certificate.bundle.v2 bytes, exactly as sealed. The signing-link token expires with the envelope, 30 days after the envelope was created, and is not reissued: a signer must download before then, however late the last co-signer completes. */
             200: {
                 headers: {
                     "Cache-Control"?: "private, no-store";
@@ -5774,6 +5913,7 @@ export interface operations {
             /** @description Completed signer state */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5783,6 +5923,7 @@ export interface operations {
             /** @description Invalid signer completion command */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5792,6 +5933,7 @@ export interface operations {
             /** @description Invalid signer token; the signer's own token is the only credential, delivered to that signer alone */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5801,6 +5943,7 @@ export interface operations {
             /** @description Envelope or signer not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5810,6 +5953,7 @@ export interface operations {
             /** @description Signer already completed, signing out of routing order, or envelope not open */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5819,6 +5963,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5851,6 +5996,7 @@ export interface operations {
             /** @description Signer completed by staff on their behalf; every record names the staff member */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5860,6 +6006,7 @@ export interface operations {
             /** @description A non-empty note is required */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5869,6 +6016,7 @@ export interface operations {
             /** @description Owner or Admin authority required */
             401: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5878,6 +6026,7 @@ export interface operations {
             /** @description Envelope or signer not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5887,6 +6036,7 @@ export interface operations {
             /** @description Signer already completed, out of routing order, or envelope not open */
             409: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5896,6 +6046,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5920,6 +6071,7 @@ export interface operations {
             /** @description Granted support access */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5929,6 +6081,7 @@ export interface operations {
             /** @description Invalid support access request */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5938,6 +6091,7 @@ export interface operations {
             /** @description Requested support scope is outside configured tenant scope */
             403: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5947,6 +6101,7 @@ export interface operations {
             /** @description Scope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5956,6 +6111,7 @@ export interface operations {
             /** @description Audit unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5984,6 +6140,7 @@ export interface operations {
             /** @description Customer-visible support access events, newest first, paged by cursor, including after the grant has expired */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5993,6 +6150,7 @@ export interface operations {
             /** @description Support access grant not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6002,6 +6160,7 @@ export interface operations {
             /** @description Audit unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6029,6 +6188,7 @@ export interface operations {
             /** @description Audited support impersonation */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6038,6 +6198,7 @@ export interface operations {
             /** @description Reason required */
             400: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6047,6 +6208,7 @@ export interface operations {
             /** @description Support access is expired or inactive */
             403: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6056,6 +6218,7 @@ export interface operations {
             /** @description Support access grant not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6065,6 +6228,7 @@ export interface operations {
             /** @description Audit unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6088,6 +6252,7 @@ export interface operations {
             /** @description Scoped support redaction policy */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6097,6 +6262,7 @@ export interface operations {
             /** @description Support access is expired or inactive */
             403: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6106,6 +6272,7 @@ export interface operations {
             /** @description Support access grant not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6115,6 +6282,7 @@ export interface operations {
             /** @description Audit unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6155,6 +6323,7 @@ export interface operations {
             /** @description Committed usage events */
             200: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6164,6 +6333,7 @@ export interface operations {
             /** @description Scope not found */
             404: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
@@ -6173,6 +6343,7 @@ export interface operations {
             /** @description Storage unavailable */
             503: {
                 headers: {
+                    "Cache-Control"?: "private, no-store";
                     [name: string]: unknown;
                 };
                 content: {
