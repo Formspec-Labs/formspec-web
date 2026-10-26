@@ -419,7 +419,11 @@ describe('generic native package signing session', () => {
     const policy = siblingModulePolicy(test); const host = createNativePackageSigningHost(policy);
     const signing = host.widgetModules.find(module => module.moduleId === test.policy.moduleId)!;
     const sibling = host.widgetModules.find(module => module.moduleId === 'x-sibling-review')!;
-    expect(sibling.widgets.AcceptedResponseReview).toBe(starterWidgetModule('x-sibling-review').widgets.AcceptedResponseReview);
+    // starterWidgetModule builds its review widgets per call, so compare everything else by identity.
+    const starter = starterWidgetModule('x-sibling-review');
+    expect(sibling.contracts).toEqual(starter.contracts);
+    expect(Object.keys(sibling.widgets)).toEqual(Object.keys(starter.widgets));
+    expect(sibling.widgets.StructuredPanel).toBe(starter.widgets.StructuredPanel);
     expect(signing.widgets.AcceptedResponseReview).not.toBe(sibling.widgets.AcceptedResponseReview);
     expect(Object.isFrozen(host.widgetModules)).toBe(true); host.dispose();
   });

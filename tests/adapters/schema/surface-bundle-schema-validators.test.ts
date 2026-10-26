@@ -85,7 +85,7 @@ const signingResultSchema = {
 const validArtifacts = Object.freeze([
   {
     artifactKind: 'appManifest',
-    schemaId: 'https://formspec.org/schemas/bundleManifest/2.4',
+    schemaId: 'https://formspec.org/schemas/bundleManifest/2.5',
     document: {
       $formspecBundle: '2.4',
       version: '1.0.0',
