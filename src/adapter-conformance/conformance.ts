@@ -400,6 +400,7 @@ export function defineDraftStoreConformance(
     it('round-trips a schema-valid FormResponse', async () => {
       const subject = setup();
       const key = { formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef: 'S-1' };
+      await subject.adapter.initializeDraft?.(key);
       await subject.adapter.save(key, sampleFormResponse);
       const loaded = await subject.adapter.load(key);
       expect(isFormResponse(roundTripJson(loaded))).toBe(true);
@@ -415,6 +416,7 @@ export function defineDraftStoreConformance(
     it('invalidates all drafts for a subject', async () => {
       const subject = setup();
       const key = { formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef: 'S-1' };
+      await subject.adapter.initializeDraft?.(key);
       await subject.adapter.save(key, sampleFormResponse);
       await subject.adapter.invalidateSubject('S-1');
       await expect(subject.adapter.load(key)).resolves.toBeUndefined();

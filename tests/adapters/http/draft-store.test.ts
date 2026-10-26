@@ -296,6 +296,23 @@ describe('durable draft initialization (fs-7xqu / ADR 0168)', () => {
     expect(registry.get(key)).toBeUndefined();
   });
 
+  it('fences retirement while trusted initialization ownership is resolving', async () => {
+    let release!: (owner: string) => void;
+    const fetch = vi.fn();
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.test', formVersionId: 'published-version', fetchImpl: fetch,
+      expectedInitializationOwner: () => new Promise<string>(resolve => { release = resolve; }) });
+    const pending = adapter.initializeDraft(key);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    await adapter.retireSubject('S-1'); release('S-1');
+    await expect(pending).rejects.toThrow('retired'); expect(fetch).not.toHaveBeenCalled();
+  });
+  it('refuses initialization when neither the trusted resolver nor caller supplies an owner', async () => {
+    const fetch = vi.fn();
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.test', formVersionId: 'published-version', fetchImpl: fetch });
+    await expect(adapter.initializeDraft({ formUrl: key.formUrl, formVersion: key.formVersion })).rejects.toThrow('resolved owner');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('keeps empty initialized identity available without hydrating an empty Response', async () => {
     const registry = createDraftBindingRegistry(); registry.put(key, { draftId: empty.draft_id, draftVersion: 1 });
     const { fetch } = recordingFetch(() => jsonResponse(empty));

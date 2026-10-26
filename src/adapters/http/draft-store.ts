@@ -11,6 +11,8 @@ import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
 export interface HttpDraftStoreConfig extends HttpClientConfig {
   formIdResolver?: FormIdResolver;
   formVersionId?: string;
+  /** Trusted composition owner, resolved independently of the returned Source view. */
+  expectedInitializationOwner?: (key: DraftKey) => Promise<string | undefined> | string | undefined;
   /** Task-owned drafts must never create an ordinary initial draft after losing their binding. */
   requireExistingBinding?: boolean;
   anonymousSessionToken?: string | ((key: DraftKey) => Promise<string | undefined> | string | undefined);
@@ -49,6 +51,7 @@ export class HttpDraftStore implements DraftStore {
   private readonly requireExistingBinding: boolean;
   private readonly formIdResolver: FormIdResolver;
   private readonly formVersionId?: string;
+  private readonly expectedInitializationOwner?: HttpDraftStoreConfig['expectedInitializationOwner'];
   private readonly initializations = new Map<string, Promise<{ draftId: string; isInitializationOnly: boolean; response?: FormResponse }>>();
   private readonly anonymousSessionToken?: HttpDraftStoreConfig['anonymousSessionToken'];
   private readonly bindings: DraftBindingRegistry;
@@ -62,6 +65,7 @@ export class HttpDraftStore implements DraftStore {
   constructor(config: HttpDraftStoreConfig) {
     this.client = new HttpClient(config);
     this.formVersionId = config.formVersionId;
+    this.expectedInitializationOwner = config.expectedInitializationOwner;
     this.requireExistingBinding = config.requireExistingBinding === true;
     this.formIdResolver = config.formIdResolver ?? defaultFormIdResolver;
     this.anonymousSessionToken = config.anonymousSessionToken;
@@ -112,12 +116,13 @@ export class HttpDraftStore implements DraftStore {
         versionId = publication.form_version_id;
       }
       const token = await this.resolveAnonymousSessionToken(key); current();
+      const expectedOwner = await this.initializationOwner(key); current();
       const draft = await this.client.postJson<OwnedDraftView>(`/runtime/forms/${encodeURIComponent(formId)}/drafts`,
         { form_version_id: versionId },
         { headers: { ...bearerHeaders(token), 'Idempotency-Key': attemptKey }, assertCurrent: current });
       current();
       if (!draft.draft_id?.trim() || !Number.isSafeInteger(draft.draft_version) || draft.draft_version < 1
-        || draft.form_version_id !== versionId || draft.subject_ref !== key.subjectRef || draft.status !== 'in_progress'
+        || draft.form_version_id !== versionId || draft.subject_ref !== expectedOwner || draft.status !== 'in_progress'
         || typeof draft.is_initialization_only !== 'boolean' || draft.taskDraft !== undefined) {
         throw new Error('Server draft initialization differs from its owned publication');
       }
@@ -166,8 +171,9 @@ export class HttpDraftStore implements DraftStore {
       current();
       const response = view.canonical_response;
       if (view.is_initialization_only === true) {
+        const expectedOwner = await this.initializationOwner(key); current();
         if (view.draft_id !== binding.draftId || view.draft_version !== 1 || response != null
-          || view.status !== 'in_progress' || view.subject_ref !== key.subjectRef || canonicalize(view.draft_state) !== '{}'
+          || view.status !== 'in_progress' || view.subject_ref !== expectedOwner || canonicalize(view.draft_state) !== '{}'
           || selection || binding.responseId !== undefined) throw new Error('Initialized draft differs from retained identity');
         current();
         this.bindings.put(key, { draftId: view.draft_id, draftVersion: view.draft_version });
@@ -279,6 +285,12 @@ export class HttpDraftStore implements DraftStore {
           draftVersion: snapshot.draftVersion, responseId: snapshot.responseId });
       }
     } finally { this.clearing -= 1; }
+  }
+
+  private async initializationOwner(key: DraftKey): Promise<string> {
+    const owner = this.expectedInitializationOwner ? await this.expectedInitializationOwner(key) : key.subjectRef;
+    if (typeof owner !== 'string' || !owner.trim()) throw new Error('Draft initialization requires a resolved owner');
+    return owner;
   }
 
   private async resolveAnonymousSessionToken(key: DraftKey): Promise<string | undefined> {

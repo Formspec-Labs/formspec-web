@@ -55,7 +55,9 @@ it('refuses ordinary draft creation after a task-owned binding is lost', async (
   const store = new HttpDraftStore({ baseUrl: 'https://source.example.test', accessToken: 'actual-token', fetchImpl,
     requireExistingBinding: true, bindingRegistry: createDraftBindingRegistry() });
   await expect(store.save({ formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version,
-    subjectRef: 'actual-owner' }, sampleFormResponse)).rejects.toThrow('relaunch the owning task');
+    subjectRef: 'actual-owner' }, sampleFormResponse)).rejects.toThrow('Draft must be initialized before Save or Sign');
+  await expect(store.initializeDraft({ formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version,
+    subjectRef: 'actual-owner' }, selection.formVersionId)).rejects.toThrow('Task drafts require their owning task entry');
   expect(fetchImpl).not.toHaveBeenCalled();
 });
 

@@ -112,6 +112,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     ...httpConfig,
     bindingRegistry: registry,
     formVersionId: statePolicy?.formVersionId ?? config.formVersionId,
+    expectedInitializationOwner: async key => (await ownerFor(key)).subjectRef,
     requireExistingBinding: taskDraftSelection !== undefined,
     qualifyReadState: statePolicy ? async (key, view, current) => {
       const owner = await ownerFor(key); current();
