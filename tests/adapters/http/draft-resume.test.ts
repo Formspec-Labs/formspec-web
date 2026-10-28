@@ -514,3 +514,87 @@ it('retires pending recovery before credentials resolve and refuses task-owned i
   await expect(task.recoverInitialization(selected, 'publication')).rejects.toThrow('Task drafts');
   expect(requests).toHaveLength(1);
 });
+
+describe('explicit owned initialization resume', () => {
+  const ownerKey = { ...key, subjectRef: 'oidc:owner' };
+  const selection = { draftId: 'owned-initial-draft', initializationOnly: true } as const;
+  const view = () => ({ draft_id: selection.draftId, draft_version: 1, form_version_id: 'publication',
+    subject_ref: ownerKey.subjectRef, status: 'in_progress', is_initialization_only: true, canonical_response: null, draft_state: {} });
+
+  it('qualifies only the existing initialized identity without a key, Response or POST', async () => {
+    const registry = createDraftBindingRegistry();
+    const qualify = vi.fn(async () => { throw new Error('Initialization is not a saved Response'); });
+    const { fetch, requests } = recordingFetch(() => jsonResponse(view()));
+    const store = new HttpDraftStore({ ...context, fetchImpl: fetch, bindingRegistry: registry,
+      formVersionId: 'publication', qualifyReadState: qualify });
+    await expect(store.resumeState!(ownerKey, selection)).resolves.toEqual({ kind: 'initialized', initialization: {
+      draftId: selection.draftId, draftVersion: 1, formVersionId: 'publication', subjectRef: ownerKey.subjectRef, isInitializationOnly: true } });
+    expect(requests).toHaveLength(1); expect(requests[0].method).toBe('GET');
+    expect(requests[0].url).toBe(`${context.baseUrl}/drafts/${selection.draftId}`);
+    expect(qualify).not.toHaveBeenCalled();
+    expect(registry.get(ownerKey)).toEqual({ draftId: selection.draftId, draftVersion: 1 });
+    expect(registry.retainedInitializationKey(ownerKey)).toBeUndefined();
+  });
+
+  it.each(['owner', 'publication', 'id', 'revision', 'status', 'task', 'marker', 'missing-marker',
+    'response', 'missing-response', 'state', 'missing-publication'])('refuses changed %s before retaining an identity', async change => {
+    const supplied: Record<string, unknown> = view();
+    if (change === 'owner') supplied.subject_ref = 'oidc:other';
+    if (change === 'publication') supplied.form_version_id = 'other';
+    if (change === 'id') supplied.draft_id = 'other';
+    if (change === 'revision') supplied.draft_version = 2;
+    if (change === 'status') supplied.status = 'submitted';
+    if (change === 'task') supplied.taskDraft = {};
+    if (change === 'marker') supplied.is_initialization_only = false;
+    if (change === 'missing-marker') delete supplied.is_initialization_only;
+    if (change === 'response') supplied.canonical_response = {};
+    if (change === 'missing-response') delete supplied.canonical_response;
+    if (change === 'state') supplied.draft_state = { name: 'changed' };
+    const registry = createDraftBindingRegistry();
+    const { fetch, requests } = recordingFetch(() => jsonResponse(supplied));
+    const store = new HttpDraftStore({ ...context, fetchImpl: fetch, bindingRegistry: registry,
+      ...(change === 'missing-publication' ? {} : { formVersionId: 'publication' }),
+      qualifyReadState: async () => { throw new Error('Unqualified view'); } });
+    await expect(store.resumeState!(ownerKey, selection)).rejects.toThrow();
+    expect(registry.entries()).toHaveLength(0);
+    expect(registry.retainedInitializationKey(ownerKey)).toBeUndefined();
+    expect(requests.every(request => request.method === 'GET')).toBe(true);
+  });
+
+  it.each(['absent', 'foreign-target', 'foreign-response'])('refuses saved-current without its same-target Response pin: %s', async retained => {
+    const registry = createDraftBindingRegistry();
+    if (retained !== 'absent') registry.put(ownerKey, { draftId: retained === 'foreign-target' ? 'other-draft' : selection.draftId,
+      draftVersion: 2, responseId: 'other-response' });
+    const before = registry.entries();
+    const response = { ...sampleFormResponse, id: 'owned-response' };
+    const qualify = vi.fn(async () => { throw new Error('Unpinned Response must not qualify'); });
+    const { fetch, requests } = recordingFetch(() => jsonResponse({ ...view(), draft_version: 2,
+      is_initialization_only: false, canonical_response: response, draft_state: response.data }));
+    const store = new HttpDraftStore({ ...context, fetchImpl: fetch, bindingRegistry: registry,
+      formVersionId: 'publication', qualifyReadState: qualify });
+    await expect(store.resumeState!(ownerKey, selection)).rejects.toThrow();
+    expect(qualify).not.toHaveBeenCalled(); expect(registry.entries()).toEqual(before);
+    expect(registry.retainedInitializationKey(ownerKey)).toBeUndefined();
+    expect(requests.every(request => request.method === 'GET')).toBe(true);
+  });
+
+  it('keeps the saved selector strict and refuses task entry or late owner retirement', async () => {
+    const registry = createDraftBindingRegistry();
+    const { fetch } = recordingFetch(() => jsonResponse(view()));
+    const store = new HttpDraftStore({ ...context, fetchImpl: fetch, bindingRegistry: registry,
+      formVersionId: 'publication', qualifyReadState: async () => { throw new Error('Unqualified view'); } });
+    await expect(store.resumeState!(ownerKey, { draftId: selection.draftId, expectedResponseId: 'saved-response' })).rejects.toThrow();
+    const task = new HttpDraftStore({ ...context, fetchImpl: fetch, requireExistingBinding: true,
+      formVersionId: 'publication', qualifyReadState: async () => { throw new Error('Task entry required'); } });
+    await expect(task.resumeState!(ownerKey, selection)).rejects.toThrow();
+    let release!: () => void; let current = true;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const delayed = recordingFetch(async () => { await gate; return jsonResponse(view()); });
+    const late = new HttpDraftStore({ ...context, fetchImpl: delayed.fetch, bindingRegistry: registry,
+      formVersionId: 'publication', qualifyReadState: async () => { throw new Error('Unqualified view'); } });
+    const pending = late.resumeState!(ownerKey, selection, () => { if (!current) throw new Error('Owner retired'); });
+    await vi.waitFor(() => expect(delayed.requests).toHaveLength(1)); current = false; release();
+    await expect(pending).rejects.toThrow('Owner retired');
+    expect(registry.entries()).toHaveLength(0);
+  });
+});

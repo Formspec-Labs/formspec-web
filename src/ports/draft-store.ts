@@ -34,10 +34,21 @@ export type DraftReadState = { kind: 'active'; response: FormResponse; savedDraf
   subjectRef: string; formVersionId: string; application?: ApplicationCaseReceipt; applicationLookup?: ApplicationCaseLookupUnavailable;
 };
 
-export interface OwnedDraftResumeSelection {
+export type OwnedDraftResumeSelection = {
   readonly draftId: string;
   readonly expectedResponseId: string;
-}
+  readonly initializationOnly?: never;
+} | {
+  readonly draftId: string;
+  readonly initializationOnly: true;
+  readonly expectedResponseId?: never;
+};
+
+/** An initialized identity is separate from saved Response state. */
+export type DraftResumeState = DraftReadState | {
+  kind: 'initialized'; initialization: RecoveredDraftInitialization;
+  application?: never; applicationLookup?: never;
+};
 
 /** A retained draft cannot be resumed against a different immutable form version. */
 export class DraftVersionConflictError extends Error {
@@ -72,7 +83,7 @@ export interface DraftStore {
   /** Optional owner-qualified terminal recovery; omission preserves legacy loading. */
   readState?(key: DraftKey): Promise<DraftReadState | undefined>;
   /** Explicit authenticated lookup of an existing draft; qualification must precede binding. */
-  resumeState?(key: DraftKey, selection: OwnedDraftResumeSelection, assertCurrent?: () => void): Promise<DraftReadState>;
+  resumeState?(key: DraftKey, selection: OwnedDraftResumeSelection, assertCurrent?: () => void): Promise<DraftResumeState>;
   /** Initializes durable draft identity before Save or Sign per ADR 0168. */
   initializeDraft?(key: DraftKey, formVersionId?: string): Promise<{ draftId: string; isInitializationOnly: boolean; response?: FormResponse }>;
   /** Retry only an already retained initialization attempt; absence must never allocate a key or draft. */

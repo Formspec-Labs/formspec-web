@@ -35,7 +35,7 @@ import type { QualifiedResponseActionRole, ResponseActionRole } from '../shared/
 import { admitNativeSigningScope, nativeSigningActionMappings } from '../shared/native-signing-scope.ts';
 import { generateIdempotencyKey } from '../shared/idempotency-key.ts';
 import { buildIntakeHandoff, responseHash } from '../app/respondent-flow.ts';
-import type { DraftKey, DraftReadState } from '../ports/draft-store.ts';
+import type { DraftKey, DraftResumeState, RecoveredDraftInitialization } from '../ports/draft-store.ts';
 import type { AdmittedResponseAction, ResponseSigning, SavedResponseDraft } from '../ports/response-signing.ts';
 import { freezeComposition } from '../policy/index.ts';
 import type { Composition } from './types.ts';
@@ -230,7 +230,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
     sign: input => cohort.responseSigning!.sign(input).then(remember),
     ...(signingPort.restorePending ? { restorePending: (input: Parameters<NonNullable<ResponseSigning['restorePending']>>[0], operationId: string) => signingPort.restorePending!(input, operationId).then(result => result.kind === 'signed' ? { ...result, signed: remember(result.signed) } : { ...result, preparation: remember(result.preparation) }) } : {}),
   };
-  const rememberOwnedState = (state: DraftReadState | undefined) => {
+  const rememberOwnedState = (state: DraftResumeState | undefined) => {
     if (state?.kind === 'active') {
       const saved = state.signed ?? state.savedDraft ?? state.pendingSign;
       if (saved) remember(saved);
@@ -319,16 +319,20 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
         let state = options.ownedDraftResume
           ? await draftStore.resumeState!(draftKey, options.ownedDraftResume, current) : await draftStore.readState(draftKey);
         current();
+        const restoreInitialized = async (initialization: RecoveredDraftInitialization) => {
+          const trustedOwner = claim?.subjectRef ?? (await anonymousSessions!.sessionForForm(definition.url, definition.version, true)).subjectRef;
+          current();
+          if (initialization.subjectRef !== trustedOwner) throw new Error('Native initialization recovery owner mismatch');
+          owner = { key: structuredClone(draftKey), actor: trustedOwner };
+          admittedHost.restoreOwnedInitializationAccess(draftKey, initialization, current);
+          current();
+        };
+        if (state?.kind === 'initialized') { await restoreInitialized(state.initialization); return 'active'; }
         if (!state && !taskPins && !options.ownedDraftResume && draftStore.recoverInitialization) {
           const recovered = await draftStore.recoverInitialization(draftKey, publication.form_version_id, current);
           current();
           if (recovered?.isInitializationOnly) {
-            const trustedOwner = claim?.subjectRef ?? (await anonymousSessions!.sessionForForm(definition.url, definition.version, true)).subjectRef;
-            current();
-            if (recovered.subjectRef !== trustedOwner) throw new Error('Native initialization recovery owner mismatch');
-            owner = { key: structuredClone(draftKey), actor: trustedOwner };
-            admittedHost.restoreOwnedInitializationAccess(draftKey, recovered, current);
-            current(); return 'active';
+            await restoreInitialized(recovered); return 'active';
           }
           if (recovered) {
             state = await draftStore.readState(draftKey); current();

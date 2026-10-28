@@ -24,7 +24,7 @@ import { ResponseSigningUnresolvedError } from '../../ports/response-signing.ts'
 import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
 import { resolveAuthoredSigningContent } from '@formspec-org/engine/render';
 import canonicalize from 'canonicalize';
-import type { DraftKey, DraftReadState, DraftStore } from '../../ports/draft-store.ts';
+import type { DraftKey, DraftResumeState, DraftStore } from '../../ports/draft-store.ts';
 import type { ApplicationLifecycle, ApplicationLifecycleCapabilities } from '../../ports/application-lifecycle.ts';
 import { HttpApplicationLifecycle } from './application-lifecycle.ts';
 import type { AdmittedResponseAction, ResponseSigning, VerifiedDraftEvidence } from '../../ports/response-signing.ts';
@@ -219,14 +219,14 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     expectedTaskDraft: taskDraftSelection?.view.taskDraft ? structuredClone(taskDraftSelection.view.taskDraft) : undefined,
     ownerFor,
   });
-  const readScopedState = (suppliedKey: DraftKey, read: (key: DraftKey, current: () => void) => Promise<DraftReadState | undefined>, assertCurrent: () => void = () => {}) => {
+  const readScopedState = <T extends DraftResumeState>(suppliedKey: DraftKey, read: (key: DraftKey, current: () => void) => Promise<T | undefined>, assertCurrent: () => void = () => {}): Promise<T | undefined> => {
     const key = structuredClone(suppliedKey);
     return fence.run(key, async generation => {
       const current = () => { assertSynchronousGuard(assertCurrent); fence.assertCurrent(key, generation); };
       current();
       const state = await read(key, current);
       let application;
-      if (state && applicationLifecycle) {
+      if (state && state.kind !== 'initialized' && applicationLifecycle) {
         try { application = await applicationLifecycle.loadInCurrentScope(key, generation); }
         catch (error) {
           current();
@@ -256,6 +256,8 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     ...(draftStore.resumeState && config.accessToken && !anonymousSessions && !taskDraftSelection ? {
       resumeState: async (key, suppliedSelection, assertCurrent = () => {}) => {
         const selection = ownedDraftResumeSelection(suppliedSelection);
+        if (!statePolicy || key.formUrl !== statePolicy.definition.url || key.formVersion !== statePolicy.definition.version)
+          throw new Error('Owned draft resume differs from its selected Definition');
         const result = await readScopedState(key, (key, current) => draftStore.resumeState!(key, selection, current), assertCurrent);
         if (!result) throw new Error('Selected owned draft state unavailable');
         return result;

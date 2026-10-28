@@ -8,5 +8,7 @@ const validate = new Ajv2020({ strict: true, coerceTypes: false, useDefaults: fa
 export function ownedDraftResumeSelection(input: unknown): Readonly<OwnedDraftResumeSelection> {
   const selected = snapshotFiniteJson(input);
   if (!validate(selected)) throw new Error('Owned draft resume selection is invalid');
-  return Object.freeze({ draftId: selected.draftId, expectedResponseId: selected.expectedResponseId });
+  return Object.freeze(selected.initializationOnly === true
+    ? { draftId: selected.draftId, initializationOnly: true }
+    : { draftId: selected.draftId, expectedResponseId: selected.expectedResponseId });
 }

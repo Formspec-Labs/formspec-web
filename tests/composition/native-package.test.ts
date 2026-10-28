@@ -1760,7 +1760,7 @@ function throwIfBusinessWrite(url: URL, init?: RequestInit) {
 }
 
 
-it.each(['anonymous', 'oidc'] as const)('retries pending native initialization for %s and preserves defaults through the first Save', async mode => {
+it.each(['anonymous', 'oidc', 'owned-initialization'] as const)('retries pending native initialization for %s and preserves defaults through the first Save', async mode => {
   const test = await fixture(mode === 'anonymous' ? 'anon:fixture' : 'oidc:fixture');
   const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',
     credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
@@ -1796,22 +1796,31 @@ it.each(['anonymous', 'oidc'] as const)('retries pending native initialization f
     return reply;
   };
   vi.stubGlobal('fetch', transport);
-  const options = { packageUrl: '/package.json', initialDefinitionUrl, ...(mode === 'oidc' ? { identityBinding } : {}) };
-  const initial = await createDefaultComposition(config, options).nativePackageRespondent!.load();
-  const key = { formUrl: test.definition.url, formVersion: test.definition.version, ...(mode === 'oidc' ? { subjectRef: claim.subjectRef } : {}) };
-  await expect(initial.composition.draftStore.initializeDraft!(key)).rejects.toThrow('Committed reply lost');
-  const first = test.requests.find(request => request.method === 'POST' && request.url.endsWith('/drafts'))!;
-  initial.host.dispose();
+  const options = { packageUrl: '/package.json', initialDefinitionUrl, ...(mode !== 'anonymous' ? { identityBinding } : {}),
+    ...(mode === 'owned-initialization' ? { ownedDraftResume: { draftId: 'fixture-draft', initializationOnly: true as const } } : {}) };
+  const key = { formUrl: test.definition.url, formVersion: test.definition.version, ...(mode !== 'anonymous' ? { subjectRef: claim.subjectRef } : {}) };
+  if (mode !== 'owned-initialization') {
+    const initial = await createDefaultComposition(config, options).nativePackageRespondent!.load();
+    await expect(initial.composition.draftStore.initializeDraft!(key)).rejects.toThrow('Committed reply lost');
+    initial.host.dispose();
+  }
+  const first = test.requests.find(request => request.method === 'POST' && request.url.endsWith('/drafts'));
+  const expectedPosts = mode === 'owned-initialization' ? 0 : 2;
   const fresh = await createDefaultComposition(config, options).nativePackageRespondent!.load();
   await expect(fresh.resumeSubmitted!()).resolves.toBe('active');
   expect(fresh.host.getSnapshot().controller).toBeUndefined();
   expect(fresh.host.getSnapshot().runtime).toBeUndefined();
   const posts = test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'));
-  expect(posts).toHaveLength(2);
-  expect(posts[1].body).toEqual(first.body);
-  expect(posts[1].headers.get('idempotency-key')).toBe(first.headers.get('idempotency-key'));
+  expect(posts).toHaveLength(expectedPosts);
+  if (first) {
+    expect(posts[1].body).toEqual(first.body);
+    expect(posts[1].headers.get('idempotency-key')).toBe(first.headers.get('idempotency-key'));
+  } else {
+    expect(test.requests.some(request => request.url.endsWith('/drafts/fixture-draft') && request.method === 'GET')).toBe(true);
+    expect([...test.values.keys()].some(key => key.includes('draft-initializations'))).toBe(false);
+  }
   await fresh.composition.draftStore.initializeDraft!(key);
-  expect(test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'))).toHaveLength(2);
+  expect(test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'))).toHaveLength(expectedPosts);
   const formRoute = fresh.host.bundle.surfaces.flatMap(surface => surface.routes).find(route => route.slots?.some(slot =>
     slot.slotType === 'definition-form' && (slot.binding as { definitionRef?: string }).definitionRef === fresh.host.definition.url))!;
   expect(fresh.host.getStartupRoute(formRoute.path!).canRestoreOwnedForm).toBe(true);
@@ -1832,10 +1841,21 @@ it.each(['anonymous', 'oidc'] as const)('retries pending native initialization f
     expect(canonical.data).toEqual(originalDefaults);
     expect(canonical.displayedLocale?.locale).toBe('en');
     expect(canonical.authoredSignatures).toBeUndefined();
-    expect(test.requests.filter(entry => entry.method === 'POST' && entry.url.endsWith('/drafts'))).toHaveLength(2);
+    expect(test.requests.filter(entry => entry.method === 'POST' && entry.url.endsWith('/drafts'))).toHaveLength(expectedPosts);
     await vi.waitFor(() => expect(fresh.host.getSnapshot().controller?.saved?.draft).toMatchObject({ id: 'fixture-draft', version: 2 }));
     const savedKey = fresh.host.getSnapshot().controller!.saved!.draftKey;
     if (mode === 'anonymous') expect(savedKey).not.toHaveProperty('subjectRef');
     else expect(savedKey.subjectRef).toBe(claim.subjectRef);
   } finally { mounted.unmount(); fresh.host.dispose(); }
+  if (mode === 'owned-initialization') {
+    const reopened = await createDefaultComposition(config, options).nativePackageRespondent!.load();
+    try {
+      await expect(reopened.resumeSubmitted!()).resolves.toBe('active');
+      const current = await reopened.composition.draftStore.readState!(key);
+      expect(current?.kind === 'active' && current.savedDraft?.draft).toMatchObject({ id: 'fixture-draft', version: 2 });
+      const canonical = (test.requests.find(request => request.method === 'PATCH')!.body as { canonical_response: FormResponse }).canonical_response;
+      expect(current?.response.id).toBe(canonical.id);
+      expect(test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'))).toHaveLength(0);
+    } finally { reopened.host.dispose(); }
+  }
 });
