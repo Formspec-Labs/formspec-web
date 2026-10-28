@@ -1408,6 +1408,8 @@ export interface components {
         };
         /** @description Request body for creating a signature envelope. */
         CreateSignatureEnvelopeCommand: {
+            /** @description Displayed document Locale when the retained Response has no `displayedLocale` pin. */
+            document_locale?: string | null;
             response_id: string;
             signers: components["schemas"]["SignatureSignerCommand"][];
         };
