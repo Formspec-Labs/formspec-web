@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { TASK_COMPLETION_OUTCOME_UNKNOWN_MESSAGE } from '../ports/response-completion.ts';
 import { useBrowserLocation } from '@formspec-org/surface-react';
 import { createScreenerLocaleResolver } from '@formspec-org/engine/render';
-import { UI_STRINGS, type ChromeStringKey } from '@formspec-org/layout';
+import { UI_STRINGS } from '@formspec-org/layout';
 import { targetDefinitionMatches } from '@formspec-org/types';
 import { localeOptionsForDefinition } from '../demo/locales.ts';
 import type { IdentityBinding } from '../composition/default.ts';
@@ -217,6 +217,15 @@ function NativePackageStatus({ failed, identityChanged, children }: { failed?: b
   </main>;
 }
 
+// Web-owned recovery chrome; the selected Definition Locale can override each key.
+const SIGNING_RECOVERY_STRINGS = {
+  'signing.renewChecks': 'Renew checks for signed response',
+  'signing.renewingChecks': 'Renewing checks',
+  'signing.renewChecksFailed': 'Checks could not be renewed. Your signed response is saved. Try again.',
+  'signing.chooseLanguage': 'Choose a language before preparing to sign.',
+  'signing.saveLanguage': 'Choose a language and save before preparing to sign.',
+} as const;
+
 /** Recovery controls use the qualified Locale and the host's scoped authority. */
 function NativePackageFrame({ boot, selection, location, outcome, onNavigate, children }: { onNavigate: (href: string) => void; boot: NativePackageBoot; selection: string; location: string; outcome?: Awaited<ReturnType<NonNullable<NativePackageBoot['resumeSubmitted']>>>; children: (screenerLocale?: string) => React.ReactNode }) {
   const state = useSyncExternalStore(boot.host.subscribe, boot.host.getSnapshot, boot.host.getSnapshot);
@@ -226,7 +235,8 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
   const matchingLocales = boot.localeDocuments.filter(document => document.locale.toLowerCase() === state.locale.toLowerCase()
     && document.target.kind === 'definition' && targetDefinitionMatches(document.target, boot.host.definition));
   const locale = matchingLocales.length === 1 ? matchingLocales[0] : undefined;
-  const text = (key: ChromeStringKey) => locale?.strings[`$ui.${key}`] ?? UI_STRINGS[key];
+  const chrome = { ...UI_STRINGS, ...SIGNING_RECOVERY_STRINGS };
+  const text = (key: keyof typeof chrome) => locale?.strings[`$ui.${key}`] ?? chrome[key];
   const applicationText = (property: string) => locale?.strings[`$module.${boot.host.moduleId}.application.${property}`];
   const checkpoint = state.checkpointState ?? 'unsaved';
   const checkpointSuffix = { unsaved: 'Unsaved', saving: 'Saving', saved: 'Saved', failed: 'Failed' }[checkpoint];
@@ -316,11 +326,10 @@ function NativePackageFrame({ boot, selection, location, outcome, onNavigate, ch
     {!confirmation && !state.cleared && state.controller?.signed && boot.host.renewSignedChecks
       && state.nativeReadiness !== 'ready' && ['signed', 'refused', 'failed'].includes(state.controller.phase)
       ? <button type="button" className="locale-button" disabled={['locale', 'clearing', 'refreshing', 'renewing-checks'].includes(operation)} onClick={() => void renewSignedChecks()}>
-        {operation === 'renewing-checks' ? 'Renewing checks' : 'Renew checks for signed response'}
+        {text(operation === 'renewing-checks' ? 'signing.renewingChecks' : 'signing.renewChecks')}
       </button> : null}
-    {state.signingLanguageRequired && !startupBlocked ? <SessionStatus><p role="status">{state.signingLanguageRequired === 'choose'
-      ? 'Choose a language before preparing to sign.' : 'Choose a language and save before preparing to sign.'}</p></SessionStatus> : null}
-    {operation === 'renew-checks-error' ? <SessionStatus><p role="alert">Checks could not be renewed. Your signed response is saved. Try again.</p></SessionStatus> : null}
+    {state.signingLanguageRequired && !startupBlocked ? <SessionStatus><p role="status">{text(state.signingLanguageRequired === 'choose' ? 'signing.chooseLanguage' : 'signing.saveLanguage')}</p></SessionStatus> : null}
+    {operation === 'renew-checks-error' ? <SessionStatus><p role="alert">{text('signing.renewChecksFailed')}</p></SessionStatus> : null}
     {!confirmation && !state.cleared && operation === 'idle' && state.runtime && (state.controller?.signed || state.controller?.pendingSign)
       && ['prepared', 'signed', 'refused', 'failed', 'outcome-unknown'].includes(state.controller.phase)
       && startupRoute?.signedReviewHref ? <button type="button" className="locale-button"

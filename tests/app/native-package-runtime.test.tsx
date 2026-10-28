@@ -46,6 +46,30 @@ function fixture() {
   return { composition, boot, host, load, publish: (next: Partial<typeof state>) => { state = { ...state, ...next }; emit(); } };
 }
 describe('native package boot and scoped recovery', () => {
+  it('uses the selected non-English Locale for signed renewal, busy state and refusal', async () => {
+    const test = fixture(); const gate = deferred<void>();
+    const selected = localeDocuments.find(document => document.locale === 'en')!;
+    test.boot.localeDocuments = [{ ...selected, locale: 'es', strings: { ...selected.strings,
+      '$ui.signing.renewChecks': 'Renovar comprobaciones', '$ui.signing.renewingChecks': 'Renovando comprobaciones',
+      '$ui.signing.renewChecksFailed': 'No se pudieron renovar las comprobaciones.' } }];
+    test.host.renewSignedChecks = vi.fn(() => gate.promise);
+    test.publish({ locale: 'es', controller: { phase: 'signed', owned: true, signed: {} } as never, nativeReadiness: 'expired' });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Renovar comprobaciones' }));
+    expect((await screen.findByRole('button', { name: 'Renovando comprobaciones' }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => gate.reject(new Error('refused')));
+    await screen.findByText('No se pudieron renovar las comprobaciones.');
+  });
+
+  it.each(['choose', 'save'] as const)('uses the selected non-English Locale for the signing language prerequisite: %s', async signingLanguageRequired => {
+    const test = fixture(); const selected = localeDocuments.find(document => document.locale === 'en')!;
+    test.boot.localeDocuments = [{ ...selected, locale: 'es', strings: { ...selected.strings,
+      '$ui.signing.chooseLanguage': 'Elija un idioma antes de firmar.', '$ui.signing.saveLanguage': 'Elija un idioma y guarde antes de firmar.' } }];
+    test.publish({ locale: 'es', signingLanguageRequired });
+    render(<NativePackageRuntime composition={test.composition} config={departmentAppProfile} />);
+    await screen.findByText(signingLanguageRequired === 'choose' ? 'Elija un idioma antes de firmar.' : 'Elija un idioma y guarde antes de firmar.');
+  });
+
   it.each([false, true])('offers signed renewal before runtime only with the maintained refresh capability: %s', async supported => {
     const test = fixture(); const renew = vi.fn(async () => {});
     if (supported) test.host.renewSignedChecks = renew;
