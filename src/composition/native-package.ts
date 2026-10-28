@@ -9,7 +9,7 @@ import { parseScopeKey } from '../shared/scope-key.ts';
 import type { HttpTaskCandidateHydrationConfig } from '../adapters/http/task-candidate-hydration.ts';
 import type { TaskDraftLaunchSelection } from '../ports/task-draft.ts';
 import type { TaskCompletionSelection } from '../ports/task-completion.ts';
-import type { ScreenerSelection } from '../ports/screener-retention.ts';
+import type { ScreenerHistoryLocator, ScreenerSelection } from '../ports/screener-retention.ts';
 import type { SurfaceScreenerCompletionPolicy } from '@formspec-org/surface-react';
 import type { ComponentRouteResolver } from '@formspec-org/app-graph';
 import { nativePackageSigningConfig, type NativePackageSigningConfig } from '../config/native-package-signing.ts';
@@ -38,6 +38,8 @@ export interface NativeScreenerCompositionPins {
   readonly selection: ScreenerSelection;
   readonly selectionHash: string;
   readonly selectionKey: string;
+  /** Explicit original run/draft locator; read-only history does not grant current authority. */
+  readonly originalHistory?: ScreenerHistoryLocator;
   /** Explicit host-selected targets that require current accepted screening. */
   readonly entryGate?: { readonly protectedTargets: readonly string[] };
   /** Independently selected Source composition policy; never part of a retained Screener selection. */

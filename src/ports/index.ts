@@ -180,7 +180,7 @@ export type { ApplicationLifecycle, ApplicationLifecycleCapabilities, Applicatio
 
 export type { ScreenerSelection, ScreenerOwner, ScreenerAnswer, ScreenerQualification,
   RetainedScreenerRun, ScreenerRunView, ScreenerAssociation, ScreenerOperationContext,
-  RetainScreenerCompletion, AssociateScreenerCandidate, ScreenerRetention } from './screener-retention.ts';
+  RetainScreenerCompletion, AssociateScreenerCandidate, ScreenerHistoryLocator, ScreenerRetention } from './screener-retention.ts';
 
 export type { CanonicalEvaluationHydrationWire, EvaluationHydrationWire, EvaluationHydrationOwner, EvaluationProviderRegistration,
   HydratedEvaluationCandidate, SavedCandidateHydration, HttpEvaluationProviderReceipt, NativeScreenerMappingReceipt, EvaluationHydrationResult } from './evaluation-hydration.ts';

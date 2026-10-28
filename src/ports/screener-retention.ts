@@ -96,8 +96,17 @@ export interface AssociateScreenerCandidate extends ScreenerOperationContext {
   /** Result of the maintained authenticated save and custody checks. */
   readonly saved: SavedResponseDraft;
 }
+/** Operator-selected original history only; never an accepted run or an evaluation result. */
+export interface ScreenerHistoryLocator {
+  readonly draftId: string;
+  readonly runId: string;
+  readonly revision: number;
+  readonly evidenceHash: string;
+}
 export interface AssociateRecovery extends ScreenerOperationContext {
   readonly saved: SavedResponseDraft;
+  /** Unsigned recovery may read this exact original even when no association was committed. */
+  readonly originalHistory?: ScreenerHistoryLocator;
 }
 export interface RefreshScreenerRun extends ScreenerOperationContext {
   /** Exact port-issued history. Refresh preserves its original answers and owner. */

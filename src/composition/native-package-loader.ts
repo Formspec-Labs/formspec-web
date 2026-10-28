@@ -257,6 +257,7 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
   const definitionDigest = await computeJcsSha256Digest(definition);
     host = createNativePackageSigningHost({ ownedDraftRestorationSites, candidateHydration: taskCohort?.candidateHydration, initialDataSources: options.initialDataSources, hostEvents: options.hostEvents, screenerEntryGate: nativePins?.entryGate,
       ...(nativePins ? { nativeScreener: { selectionKey: nativePins.selectionKey,
+        ...(nativePins.originalHistory ? { originalHistory: nativePins.originalHistory } : {}),
         retention: new HttpScreenerRetention({ ...base, accessToken: ownedAccessToken, ...nativePins }),
         hydration: selectedScreenerHydration = nativePins.hydrationFactory
           ? nativePins.hydrationFactory({ source: { ...base, accessToken: ownedAccessToken }, definition, publication,

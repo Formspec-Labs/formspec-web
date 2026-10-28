@@ -30,6 +30,48 @@ async function fixture(extraSource = false, routingOnly = false, freshness: { ma
 }
 
 describe('same-session native Screener coordination', () => {
+  it('installs selected original history read-only and refreshes only at the explicit current-qualification step', async () => {
+    const f = await fixture(false, true);
+    const history = { ...f.input.run, acceptance: null };
+    const fresh = { ...f.input.run, run: { ...f.input.run.run, revision: f.input.run.run.revision + 1 } };
+    const originalHistory = { draftId: f.input.saved.draft.id, runId: history.run.runId,
+      revision: history.run.revision, evidenceHash: history.run.evidenceHash };
+    const recover = vi.fn<NonNullable<ScreenerRetention['recover']>>(async () => history);
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>(async () => fresh);
+    const coordinator = createNativeScreenerCoordinator({ selectionKey: 'selected', originalHistory,
+      retention: { retain: f.retained, associate: f.associated, recover, refresh }, hydration: { hydrate: f.hydrated },
+      context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent }) });
+    const expectedLocator = structuredClone(originalHistory); originalHistory.runId = 'late-substitution';
+    await expect(coordinator.qualifySaved(f.input.saved, undefined, { allowRefresh: true })).rejects.toThrow('requires explicit refresh');
+    await expect(coordinator.qualifySaved(f.input.saved, undefined, { allowRefresh: true })).rejects.toThrow('requires explicit refresh');
+    expect(recover).toHaveBeenCalledOnce(); expect(recover.mock.calls[0][0].originalHistory).toEqual(expectedLocator);
+    expect(refresh).not.toHaveBeenCalled(); expect(f.associated).not.toHaveBeenCalled(); expect(f.hydrated).not.toHaveBeenCalled();
+    expect(coordinator.routeAllowed(f.request.target, f.request.document)).toBe(false);
+    await expect(coordinator.completionPolicy.complete(f.request)).rejects.toThrow('cannot create a new run');
+    expect(f.retained).not.toHaveBeenCalled();
+    await coordinator.refreshSaved(f.input.saved, () => {});
+    expect(refresh.mock.calls[0][0].run).toBe(history);
+    await coordinator.qualifySaved(f.input.saved);
+    expect(f.associated).toHaveBeenCalledOnce(); expect(f.associated.mock.calls[0][0].run).toBe(fresh);
+    expect(f.hydrated.mock.calls[0][0].run).toBe(fresh);
+    coordinator.dispose(); f.coordinator.dispose();
+  });
+
+  it('allows explicit Prepare refresh to recover history without an earlier startup qualification', async () => {
+    const f = await fixture(false, true); const history = { ...f.input.run, acceptance: null };
+    const originalHistory = { draftId: f.input.saved.draft.id, runId: history.run.runId,
+      revision: history.run.revision, evidenceHash: history.run.evidenceHash };
+    const recover = vi.fn<NonNullable<ScreenerRetention['recover']>>(async () => history);
+    const refresh = vi.fn<NonNullable<ScreenerRetention['refresh']>>(async () => f.input.run);
+    const coordinator = createNativeScreenerCoordinator({ selectionKey: 'selected', originalHistory,
+      retention: { retain: f.retained, associate: f.associated, recover, refresh }, hydration: { hydrate: f.hydrated },
+      context: () => ({ identity: f.input.identity, signal: f.input.signal, assertCurrent: f.input.assertCurrent }) });
+    await coordinator.refreshSaved(f.input.saved, () => {});
+    expect(recover.mock.calls[0][0].originalHistory).toEqual(originalHistory); expect(refresh.mock.calls[0][0].run).toBe(history);
+    expect(f.associated).not.toHaveBeenCalled(); expect(f.retained).not.toHaveBeenCalled();
+    coordinator.dispose(); f.coordinator.dispose();
+  });
+
   it('forwards the selected 117-second proof freshness while the original 900-second route remains valid', async () => {
     const f = await fixture(false, false, { maxEvidenceAgeSeconds: 117, maxValiditySeconds: 900 });
     await f.coordinator.completionPolicy.complete(f.request); const facts = await f.coordinator.qualifySaved(f.input.saved);

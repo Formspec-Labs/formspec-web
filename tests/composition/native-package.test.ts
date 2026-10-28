@@ -294,6 +294,26 @@ async function completeStudioFixture(scoped: boolean, subject = 'anon:fixture', 
 }
 
 describe('explicit native package composition', () => {
+  it('snapshots the selected original history locator through deferred native composition', async () => {
+    const test = await completeStudioFixture(true);
+    const nativeScreener: NonNullable<NativePackageCompositionOptions['nativeScreener']> = {
+      ...test.options.nativeScreener, originalHistory: { draftId: 'owned-existing-draft', runId: 'original-run',
+        revision: 1, evidenceHash: `sha256:${'a'.repeat(64)}` },
+    };
+    const composition = createDefaultComposition(test.config, { ...test.options, nativeScreener });
+    Object.assign(nativeScreener, { originalHistory: undefined });
+    const boot = await composition.nativePackageRespondent!.load();
+    const policy = boot.screenerCompletion;
+    if (policy?.mode !== 'host-required') throw Error('Expected selected native completion policy');
+    const complete = policy.complete;
+    if (!complete) throw Error('Expected selected native completion capability');
+    // No completion request can create a replacement run in the selected recovery composition.
+    await expect(complete({} as Parameters<typeof complete>[0]))
+      .rejects.toThrow('original history selection cannot create a new run');
+    expect(test.requests.filter(request => request.url.includes('/screener-runs'))).toHaveLength(0);
+    boot.host.dispose();
+  });
+
   it.each(['screening', 'both-with-prefill'] as const)('mounts an exact retained unsigned draft through real package admission and Surface with %s startup gates', async gate => {
     const test = await completeStudioFixture(true, 'oidc:fixture', { hostState: gate !== 'screening', initialData: gate === 'both-with-prefill' });
     const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',

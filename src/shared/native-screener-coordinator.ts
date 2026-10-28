@@ -1,13 +1,15 @@
 import canonicalize from 'canonicalize';
+import { snapshotScreenerHistoryLocator } from './screener-history-locator.ts';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
 import type { SurfaceScreenerCompletionPolicy, SurfaceScreenerCompletionRequest } from '@formspec-org/surface-react';
 import type { SavedResponseDraft } from '../ports/response-signing.ts';
-import type { ScreenerOperationContext, ScreenerRetention, ScreenerRunView } from '../ports/screener-retention.ts';
+import type { ScreenerHistoryLocator, ScreenerOperationContext, ScreenerRetention, ScreenerRunView } from '../ports/screener-retention.ts';
 import type { HydratedEvaluationCandidate } from '../ports/evaluation-hydration.ts';
 import type { HydrateScreenerCandidate, ScreenerHydration } from '../ports/screener-hydration.ts';
 
 export interface NativeScreenerCoordinatorConfig {
   readonly selectionKey: string;
+  readonly originalHistory?: ScreenerHistoryLocator;
   readonly retention: ScreenerRetention;
   readonly hydration: ScreenerHydration;
   /** Trusted synchronous capture of the current owner/publication and operation lifetime. */
@@ -25,6 +27,7 @@ interface Operation extends ScreenerOperationContext {
 /** Write-free same-session sequence. Durable draft/signature receipts remain owned by the caller. */
 export function createNativeScreenerCoordinator(config: NativeScreenerCoordinatorConfig) {
   const { selectionKey, retention, hydration, context } = config;
+  const originalHistory = config.originalHistory === undefined ? undefined : snapshotScreenerHistoryLocator(config.originalHistory);
   if (!selectionKey.trim()) throw new Error('Native Screener selection key unavailable');
   let run: ScreenerRunView | undefined;
   let active: Operation | undefined;
@@ -106,6 +109,7 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
   }
   const completionPolicy = Object.freeze({ mode: 'host-required' as const, selectionKey,
     complete: async (request: SurfaceScreenerCompletionRequest) => {
+      if (originalHistory) throw new Error('Native Screener original history selection cannot create a new run');
       // A new attempt cannot fall back to an older run after an ambiguous or refused result.
       run = undefined; retireRoute();
       const started = clock();
@@ -157,7 +161,13 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
     try {
       const candidate = structuredClone(saved);
       const currentCheck = !!candidate.response.authoredSignatures?.length;
-      const allowRefresh = options?.allowRefresh === true && !currentCheck && !candidate.response.extensions?.['x-formspec-signing-content'];
+      const allowRefresh = !originalHistory && options?.allowRefresh === true && !currentCheck && !candidate.response.extensions?.['x-formspec-signing-content'];
+      if (!run && !currentCheck && originalHistory) {
+        if (!retention.recover) throw new Error('Native Screener retained recovery unavailable');
+        const recovered = await operation.wait(retention.recover({ saved: candidate, originalHistory, identity: operation.identity,
+          signal: operation.signal, assertCurrent: operation.assertCurrent }));
+        operation.assertCurrent(); run = recovered;
+      }
       if (!run && currentCheck) {
         if (!retention.recover) throw new Error('Native Screener retained recovery unavailable');
         const recovered = await operation.wait(retention.recover({ saved: candidate, identity: operation.identity,
@@ -185,6 +195,8 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
         }
       }
       const issued = run;
+      if (originalHistory && !currentCheck && issued?.acceptance === null)
+        throw new Error('Native Screener historical run requires explicit refresh');
       if (!issued) throw new Error('Native Screener retained run unavailable');
       const nativeCurrentCheck = currentCheck ? Object.freeze({ selectionHash: issued.run.selectionHash,
         runId: issued.run.runId, runRevision: issued.run.revision }) : undefined;
@@ -210,7 +222,8 @@ export function createNativeScreenerCoordinator(config: NativeScreenerCoordinato
       const candidate = structuredClone(saved);
       if (!run) {
         if (!retention.recover) throw new Error('Native Screener retained recovery unavailable');
-        const recovered = await operation.wait(retention.recover({ saved: candidate, identity: operation.identity,
+        const recovered = await operation.wait(retention.recover({ saved: candidate,
+          ...(!candidate.response.authoredSignatures?.length && originalHistory ? { originalHistory } : {}), identity: operation.identity,
           signal: operation.signal, assertCurrent: operation.assertCurrent }));
         operation.assertCurrent(); run = recovered;
       }

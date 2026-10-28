@@ -1,3 +1,4 @@
+import { snapshotScreenerHistoryLocator } from '../../shared/screener-history-locator.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { selectsScope } from '../../shared/scope-key.ts';
 import { isLosslessHttpIdempotencyKey } from '../../shared/idempotency-key.ts';
@@ -9,7 +10,7 @@ import { computeJcsSha256Digest } from './response-action-ledger.ts';
 import { HttpClient, type HttpClientConfig } from './http-client.ts';
 import type {
   AssociateRecovery, AssociateScreenerCandidate, RefreshScreenerRun, RetainScreenerCompletion, ScreenerAssociation,
-  ScreenerOperationContext, ScreenerRetention, ScreenerRunView, ScreenerSelection,
+  ScreenerOperationContext, ScreenerOwner, ScreenerRetention, ScreenerRunView, ScreenerSelection,
 } from '../../ports/screener-retention.ts';
 
 const ajv = new Ajv2020({ strict: false, strictNumbers: true, allErrors: false });
@@ -28,9 +29,10 @@ export interface HttpScreenerRetentionConfig extends HttpClientConfig {
 }
 
 interface ScreenerRecoveryView {
-  scope: unknown; owner: unknown; formVersionHash: string; draftId: string; draftVersion: number;
+  scope: unknown; owner: ScreenerOwner; formVersionHash: string; draftId: string; draftVersion: number;
   candidateHash: string; selectionHash: string;
-  result: { status: string; relation: string; association: ScreenerAssociation; history: ScreenerRunView };
+  result: { status: 'retained'; relation: 'currentCandidate' | 'priorCandidate'; association: ScreenerAssociation; history: ScreenerRunView }
+    | { status: 'pending'; reason: 'associationNotRetained' };
 }
 /** Admits a Source wire value against its pinned schema; responses narrow to their port type. */
 function requireSchema(name: 'RunView', value: unknown): asserts value is ScreenerRunView;
@@ -47,7 +49,9 @@ function validUntil(run: ScreenerRunView['run']): string | undefined {
 function equal(left: unknown, right: unknown): boolean { return canonicalize(left) === canonicalize(right); }
 function check(context: ScreenerOperationContext): void { context.signal.throwIfAborted(); context.assertCurrent(); }
 function requireIdentity(view: ScreenerRunView, context: ScreenerOperationContext): void {
-  const owner = view.run.owner;
+  requireOwner(view.run.owner, context);
+}
+function requireOwner(owner: ScreenerOwner, context: ScreenerOperationContext): void {
   const identity = owner.authenticated;
   if (identity.issuer !== context.identity.issuer || identity.subject !== context.identity.subject
     || identity.clientId !== context.identity.clientId || owner.sessionId !== identity.sessionId
@@ -130,8 +134,13 @@ export class HttpScreenerRetention implements ScreenerRetention {
   async recover(input: AssociateRecovery): Promise<ScreenerRunView> {
     check(input);
     const saved = structuredClone(input.saved);
+    const identity = Object.freeze(structuredClone(input.identity));
+    const context = { ...input, identity };
+    const original = input.originalHistory === undefined ? undefined : snapshotScreenerHistoryLocator(input.originalHistory);
     const selected = this.selection.evaluationSelection;
-    if (['.', '..'].includes(saved.draft.id)
+    if (original && (original.draftId !== saved.draft.id || saved.response.authoredSignatures?.length
+      || saved.response.extensions?.['x-formspec-signing-content'])) throw new Error('Source Screener original history candidate mismatch');
+    if (!Number.isSafeInteger(saved.draft.version) || saved.draft.version < 1 || ['.', '..'].includes(saved.draft.id)
       || saved.actor.id !== saved.evidence.subject_ref || saved.evidence.status !== 'in_progress'
       || saved.draft.id !== saved.evidence.draft_id || saved.draft.version !== saved.evidence.draft_version
       || saved.evidence.form_version_id !== selected.formVersionId || saved.draftKey.formUrl !== selected.definitionUrl
@@ -147,13 +156,25 @@ export class HttpScreenerRetention implements ScreenerRetention {
     if (!equal(recovered.scope, selected.scope) || recovered.formVersionHash !== body.formVersionHash
       || recovered.draftId !== saved.draft.id || recovered.draftVersion !== saved.draft.version
       || recovered.candidateHash !== candidateHash || recovered.selectionHash !== this.selectionHash
-      || recovered.result.status !== 'retained') throw new Error('Source Screener recovery unavailable');
-    const { association, history } = recovered.result;
+      || recovered.owner.subjectRef !== saved.actor.id) throw new Error('Source Screener recovery unavailable');
+    requireOwner(recovered.owner, context);
+    let originalView: ScreenerRunView | undefined;
+    if (original) {
+      const value = await this.client.getJson<unknown>(`/screener-runs/${encodeURIComponent(original.runId)}?revision=${original.revision}`, options(context));
+      originalView = await this.validateHistory(value, context);
+      if (originalView.run.runId !== original.runId || originalView.run.revision !== original.revision
+        || originalView.run.evidenceHash !== original.evidenceHash || !equal(originalView.run.owner, recovered.owner))
+        throw new Error('Source Screener original history mismatch');
+    }
+    if (recovered.result.status === 'pending') {
+      if (recovered.result.reason !== 'associationNotRetained' || !originalView) throw new Error('Source Screener recovery unavailable');
+      check(input); freeze(originalView); this.issued.add(originalView); return originalView;
+    }
+    const { association } = recovered.result;
+    const history = await this.validateHistory(recovered.result.history, context);
     const run = history.run;
-    requireIdentity(history, input);
-    const { evidenceHash, ...evidence } = run;
-    if (!equal(history.selection, this.selection) || history.acceptance !== null || !equal(run.scope, selected.scope)
-      || !equal(recovered.owner, run.owner) || !equal(association.owner, run.owner) || !equal(association.scope, run.scope)
+    const evidenceHash = run.evidenceHash;
+    if (!equal(recovered.owner, run.owner) || !equal(association.owner, run.owner) || !equal(association.scope, run.scope)
       || run.owner.subjectRef !== saved.actor.id || run.selectionHash !== this.selectionHash
       || association.draftId !== saved.draft.id || association.selectionHash !== this.selectionHash
       || association.draftVersion > saved.draft.version || association.runId !== run.runId
@@ -161,6 +182,21 @@ export class HttpScreenerRetention implements ScreenerRetention {
       || (recovered.result.relation === 'currentCandidate'
         ? association.draftVersion !== saved.draft.version || association.candidateHash !== candidateHash
         : association.draftVersion >= saved.draft.version)
+      || originalView && (run.runId !== originalView.run.runId || run.revision < originalView.run.revision
+        || !equal(run.owner, originalView.run.owner) || !equal(run.answers, originalView.run.answers)
+        || Date.parse(run.evaluatedAt) < Date.parse(originalView.run.evaluatedAt)))
+      throw new Error('Source Screener recovery history mismatch');
+    check(input); freeze(history); this.issued.add(history); return history;
+  }
+
+  /** Historical reads preserve original qualification, but never provide current acceptance. */
+  private async validateHistory(value: unknown, context: ScreenerOperationContext): Promise<ScreenerRunView> {
+    check(context); requireSchema('RunView', value); requireIdentity(value, context);
+    const run = value.run;
+    const { evidenceHash, ...evidence } = run;
+    if (!equal(value.selection, this.selection) || value.acceptance !== null
+      || !equal(run.scope, this.selection.evaluationSelection.scope) || run.selectionHash !== this.selectionHash
+      || await computeJcsSha256Digest(this.selection) !== this.selectionHash
       || run.answersHash !== await computeJcsSha256Digest(run.answers)
       || run.determinationHash !== await computeJcsSha256Digest(run.determination)
       || evidenceHash !== await computeJcsSha256Digest(evidence)
@@ -168,7 +204,7 @@ export class HttpScreenerRetention implements ScreenerRetention {
       || run.determination.timestamp !== run.evaluatedAt
       || !equal(run.determination.screener, { url: this.selection.screenerUrl, version: this.selection.screenerVersion }))
       throw new Error('Source Screener recovery history mismatch');
-    check(input); freeze(history); this.issued.add(history); return history;
+    check(context); return value;
   }
 
   async refresh(input: RefreshScreenerRun): Promise<ScreenerRunView> {

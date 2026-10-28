@@ -17,7 +17,7 @@ const placeholder = `sha256:${'a'.repeat(64)}`;
 function response(value: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 }
-async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpRequest) => unknown, instanceMappingHash?: string, recoveryMutation?: (value: Record<string, unknown>) => unknown) {
+async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpRequest) => unknown, instanceMappingHash?: string, recoveryMutation?: (value: Record<string, unknown>) => unknown, historicalMutation?: (view: ScreenerRunView) => ScreenerRunView) {
   const owner = structuredClone(ownerTemplate);
   const selection: ScreenerSelection = {
     evaluationSelection: { scope, formId: 'form/id', formVersionId: 'version', definitionUrl: 'urn:example:form',
@@ -39,6 +39,7 @@ async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpReque
   Object.assign(saved, { evidence: { draft_id: saved.draft.id, form_version_id: 'version', subject_ref: owner.subjectRef,
     draft_version: 7, status: 'in_progress', draft_state: {}, canonical_response: saved.response } });
   let lastRun: ScreenerRunView['run'];
+  const revisions = new Map<number, ScreenerRunView['run']>();
   const { fetch, requests } = recordingFetch(async request => {
     if (request.url.endsWith('/screener-recovery')) {
       const body = request.body as { candidateHash: string; draftVersion: number; formVersionHash: string };
@@ -50,8 +51,12 @@ async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpReque
           history: { version: 1, purpose: 'formspec.screener.run', selection, run: lastRun, acceptance: null } } };
       return response(recoveryMutation ? recoveryMutation(structuredClone(recovery)) : recovery);
     }
-    if (request.method === 'GET') return response({ version: 1, purpose: 'formspec.screener.run', selection,
-      run: lastRun, acceptance: null });
+    if (request.method === 'GET') {
+      const revision = new URL(request.url).searchParams.get('revision');
+      const history: ScreenerRunView = { version: 1, purpose: 'formspec.screener.run', selection,
+        run: revision === null ? lastRun : revisions.get(Number(revision))!, acceptance: null };
+      return response(historicalMutation ? historicalMutation(structuredClone(history)) : history);
+    }
     if (request.url.endsWith('/screener-associations')) {
       const body = request.body as { candidateHash: string; draftVersion: number };
       return response({ scope, draftId: saved.draft.id, draftVersion: body.draftVersion, candidateHash: body.candidateHash,
@@ -66,6 +71,7 @@ async function setup(mutate?: (view: ScreenerRunView, request: CapturedHttpReque
       determination, determinationHash: await hash(determination), qualification: { status: 'ready' as const, target },
       evidenceRef: `urn:formspec:source:screener:run_123:revision:${revision}` };
     lastRun = { ...original, evidenceHash: await hash(original) };
+    revisions.set(revision, structuredClone(lastRun));
     const view: ScreenerRunView = { version: 1, purpose: 'formspec.screener.run', selection, run: lastRun,
       acceptance: { checkedAt: at, qualification: { status: 'ready', target } } };
     return response(mutate ? mutate(view, request) : view);
@@ -165,6 +171,103 @@ describe('public Source Screener retention adapter', () => {
     const run = await f.adapter.retain(f.completion);
     await expect(f.adapter.refresh({ ...f.context, run })).rejects.toThrow();
   });
+  it('admits pinned original unassociated history through authenticated GET into only the reading adapter', async () => {
+    const f = await setup(undefined, undefined, value => ({ ...value, result: { status: 'pending', reason: 'associationNotRetained' } }));
+    const original = await f.adapter.retain(f.completion);
+    const reader = new HttpScreenerRetention(f.config);
+    const originalHistory = { draftId: f.saved.draft.id, runId: original.run.runId, revision: 1, evidenceHash: original.run.evidenceHash };
+    const count = f.requests.length;
+    const history = await reader.recover({ ...f.context, saved: f.saved, originalHistory });
+    expect(history.run).toEqual(original.run); expect(history.acceptance).toBeNull();
+    expect(Object.isFrozen(history.run.answers)).toBe(true);
+    expect(f.requests.slice(count).map(request => [request.method, request.url])).toEqual([
+      ['POST', 'https://source.example/drafts/draft_123/screener-recovery'],
+      ['GET', 'https://source.example/screener-runs/run_123?revision=1'],
+    ]);
+    expect(f.requests.at(-1)!.headers.get('authorization')).toBe('Bearer owner-token');
+    expect(f.requests.at(-1)!.headers.get('x-stack-scope-key')).toBe(scope);
+    await expect(reader.associate({ ...f.context, saved: f.saved, run: history })).rejects.toThrow('current retained');
+    await expect(reader.refresh({ ...f.context, run: structuredClone(history) })).rejects.toThrow('Port-issued');
+    expect((await reader.refresh({ ...f.context, run: history })).run).toMatchObject({ runId: original.run.runId, revision: 2, answers: original.run.answers });
+  });
+
+  it.each(['run', 'revision', 'scope', 'owner', 'selection', 'answers hash', 'determination hash', 'evidence hash', 'timestamp', 'reference', 'acceptance', 'retired'] as const)(
+    'refuses substituted original history %s without issuing a refreshable handle', async field => {
+      let current = true;
+      const f = await setup(undefined, undefined, value => ({ ...value, result: { status: 'pending', reason: 'associationNotRetained' } }), history => {
+        if (field === 'run') Object.assign(history.run, { runId: 'foreign' });
+        if (field === 'revision') Object.assign(history.run, { revision: 2 });
+        if (field === 'scope') Object.assign(history.run, { scope: otherScopeKey });
+        if (field === 'owner') Object.assign(history.run.owner.authenticated, { subject: 'foreign' });
+        if (field === 'selection') Object.assign(history.selection, { formVersionHash: `sha256:${'b'.repeat(64)}` });
+        if (field === 'answers hash') Object.assign(history.run, { answersHash: placeholder });
+        if (field === 'determination hash') Object.assign(history.run, { determinationHash: placeholder });
+        if (field === 'evidence hash') Object.assign(history.run, { evidenceHash: placeholder });
+        if (field === 'timestamp') Object.assign(history.run, { evaluatedAt: '2026-10-08T12:00:00Z' });
+        if (field === 'reference') Object.assign(history.run, { evidenceRef: 'urn:foreign' });
+        if (field === 'acceptance') Object.assign(history, { acceptance: { checkedAt: at, qualification: { status: 'ready', target } } });
+        if (field === 'retired') current = false;
+        return history;
+      });
+      const original = await f.adapter.retain(f.completion);
+      const reader = new HttpScreenerRetention(f.config);
+      const originalHistory = { draftId: f.saved.draft.id, runId: original.run.runId, revision: 1, evidenceHash: original.run.evidenceHash };
+      await expect(reader.recover({ ...f.context, saved: f.saved, originalHistory,
+        assertCurrent() { if (!current) throw Error('retired'); } })).rejects.toThrow();
+      expect(f.requests.slice(1).every(request => request.method !== 'PUT')).toBe(true);
+    });
+
+  it('reloads a later same-run same-answer association against the exact pinned original revision', async () => {
+    const f = await setup(); const original = await f.adapter.retain(f.completion);
+    const originalHistory = { draftId: f.saved.draft.id, runId: original.run.runId, revision: 1, evidenceHash: original.run.evidenceHash };
+    const fresh = await f.adapter.refresh({ ...f.context, run: original });
+    await f.adapter.associate({ ...f.context, run: fresh, saved: f.saved });
+    const reader = new HttpScreenerRetention(f.config);
+    const history = await reader.recover({ ...f.context, saved: f.saved, originalHistory });
+    expect(history.run).toEqual(fresh.run); expect(history.acceptance).toBeNull();
+    expect(f.requests.at(-1)!.url).toBe('https://source.example/screener-runs/run_123?revision=1');
+    expect((await reader.refresh({ ...f.context, run: history })).run.revision).toBe(3);
+  });
+
+  it.each(['run', 'answers'] as const)('refuses an integrity-valid associated successor with changed original %s', async field => {
+    const f = await setup(undefined, undefined, value => {
+      const result = value.result as { association: Record<string, unknown>; history: ScreenerRunView };
+      const run = result.history.run;
+      // Hashes are recomputed below so rejection proves lineage, rather than hash corruption.
+      if (field === 'run') Object.assign(run, { runId: 'different-run', evidenceRef: `urn:formspec:source:screener:different-run:revision:${run.revision}` });
+      else Object.assign(run, { answers: { yes: { state: 'answered', value: true } } });
+      return value;
+    });
+    const original = await f.adapter.retain(f.completion);
+    const reader = new HttpScreenerRetention({ ...f.config, fetchImpl: async (input, init) => {
+      const reply = await f.config.fetchImpl(input, init);
+      if (!String(input).endsWith('/screener-recovery')) return reply;
+      const value = await reply.json(); const result = value.result; const run = result.history.run;
+      run.answersHash = await hash(run.answers);
+      const { evidenceHash: _previous, ...evidence } = run;
+      run.evidenceHash = await hash(evidence);
+      Object.assign(result.association, { runId: run.runId, evidenceHash: run.evidenceHash });
+      return response(value);
+    } });
+    await expect(reader.recover({ ...f.context, saved: f.saved, originalHistory: {
+      draftId: f.saved.draft.id, runId: original.run.runId, revision: 1, evidenceHash: original.run.evidenceHash,
+    } })).rejects.toThrow('recovery history mismatch');
+    expect(f.requests.filter(request => request.method === 'PUT')).toHaveLength(0);
+  });
+
+  it.each(['draft', 'signed', 'signing-content', 'missing pin', 'wrong revision'] as const)('refuses invalid original locator selection %s before transport', async mode => {
+    const f = await setup(); const original = await f.adapter.retain(f.completion);
+    const originalHistory = { draftId: f.saved.draft.id, runId: original.run.runId, revision: 1, evidenceHash: original.run.evidenceHash };
+    if (mode === 'draft') originalHistory.draftId = 'another-draft';
+    if (mode === 'signed') Object.assign(f.saved.response, { authoredSignatures: [{}] });
+    if (mode === 'signing-content') Object.assign(f.saved.response, { extensions: { 'x-formspec-signing-content': {} } });
+    if (mode === 'missing pin') Reflect.deleteProperty(originalHistory, 'evidenceHash');
+    if (mode === 'wrong revision') originalHistory.revision = 0;
+    const count = f.requests.length;
+    await expect(new HttpScreenerRetention(f.config).recover({ ...f.context, saved: f.saved, originalHistory })).rejects.toThrow();
+    expect(f.requests).toHaveLength(count);
+  });
+
   it('retains the original mapping-bound selection without changing legacy omission', async () => {
     const legacy = await setup();
     const unbound = await legacy.adapter.retain(legacy.completion);
