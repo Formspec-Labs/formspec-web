@@ -77,6 +77,8 @@ export interface NativePackageCompositionOptions {
 
 /** Deferred local hash-pinned package admission, separate from signed-release verification. */
 export function createNativePackageComposition(config: FormspecWebConfig, options: NativePackageCompositionOptions): Composition {
+  if (validatedAttachmentMaxUploadBytes(config.referenceAdapters?.formspecStack?.attachments?.maxUploadBytes) === undefined)
+    throw new Error('Native package attachments require a finite limit from the selected Source deployment');
   const task = options.nativeTask;
   const sourceScopeKey = task ? parseScopeKey(config.scopeKey) : config.scopeKey;
   const wosScopeKey = task ? parseScopeKey(task.wos.scopeKey) : undefined;
@@ -95,8 +97,7 @@ export function createNativePackageComposition(config: FormspecWebConfig, option
         receiptVerifier: task.hydration.receiptVerifier ? Object.freeze({ verify: task.hydration.receiptVerifier.verify.bind(task.hydration.receiptVerifier) }) : undefined } };
     if (options.nativeScreener || options.screenerCompletion || options.signing.applicationLifecycle)
       throw new Error('Native task correction cannot select initial application capabilities');
-    if (validatedAttachmentMaxUploadBytes(config.referenceAdapters?.formspecStack?.attachments?.maxUploadBytes) === undefined
-      || Object.entries(task.attachmentFieldPaths).some(([field, path]) => !field.trim()
+    if (Object.entries(task.attachmentFieldPaths).some(([field, path]) => !field.trim()
         || path !== '/' + field.replace(/\[(\d+)\]/g, '.$1').split('.').map(part => part.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')))
       throw new Error('Native task attachments require actual authored paths and a finite limit');
     if (!options.identityBinding?.accessToken || !options.identityBinding.browserAuthSession || !config.identity.oidc)

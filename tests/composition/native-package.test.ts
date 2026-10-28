@@ -250,7 +250,7 @@ async function completeStudioFixture(scoped: boolean, subject = 'anon:fixture', 
     ...(scoped ? { signingScope: { surface: { url: 'urn:formspec:demo:d1:signing-app:surface', version: '0.3.3' },
       route: 'signing', ceremonySlot: 'ceremony', reviewSlot: 'review' } } : {}) };
   const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
-    scopeKey: testScopeKey });
+    attachmentMaxUploadBytes: 1024 * 1024, scopeKey: testScopeKey });
   const screenerSlot = intakeSurface.routes.flatMap(route => route.slots ?? []).find(slot => slot.slotType === 'screener')!;
   const screenerRef = (screenerSlot.binding as { screenerRef: string }).screenerRef;
   const screener = resolved.screenerHandles!.find(handle => handle.ref.url === screenerRef)!.document;
@@ -294,6 +294,15 @@ async function completeStudioFixture(scoped: boolean, subject = 'anon:fixture', 
 }
 
 describe('explicit native package composition', () => {
+  it.each([undefined, 0, -1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1])('refuses a missing or invalid attachment bound before package effects: %s', async maxUploadBytes => {
+    const test = await fixture();
+    const config = structuredClone(test.config);
+    config.referenceAdapters!.formspecStack!.attachments = { maxUploadBytes };
+    expect(() => createNativePackageComposition(config, { packageUrl: 'https://package.example.test/package.json',
+      initialDefinitionUrl, signing: test.signing })).toThrow(/attachment.*(positive safe integer|finite limit)/i);
+    expect(test.fetch).not.toHaveBeenCalled();
+  });
+
   it('snapshots the selected original history locator through deferred native composition', async () => {
     const test = await completeStudioFixture(true);
     const nativeScreener: NonNullable<NativePackageCompositionOptions['nativeScreener']> = {
@@ -468,7 +477,7 @@ describe('explicit native package composition', () => {
     const signing = { ...test.signing, signingScope: { surface: { ...test.bundle.manifest.surfaces![0], version: test.bundle.manifest.surfaces![0].version! },
       route: 'signing', ceremonySlot: 'ceremony', reviewSlot: 'review' } };
     const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: signing,
-      scopeKey: testScopeKey });
+      attachmentMaxUploadBytes: 1024 * 1024, scopeKey: testScopeKey });
     const boot = await createDefaultComposition(config, { packageUrl: '/package.json', initialDefinitionUrl }).nativePackageRespondent!.load();
     const policy = factory.mock.calls[0][0];
     expect(policy.signingScope).toMatchObject({ ...signing.signingScope, surfaceId: 'surface', moduleId: signing.module.id });
@@ -842,7 +851,7 @@ describe('explicit native package composition', () => {
         definition_hash: await computeJcsSha256Digest(definition), definition });
       throw new Error(`Unexpected package admission request ${url.href}`);
     });
-    const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: selected.signing, scopeKey: testScopeKey });
+    const config = resolveActiveConfig(publicPortalProfile, { formspecServerUrl: 'https://server.example.test', nativePackageSigning: selected.signing, attachmentMaxUploadBytes: 1024 * 1024, scopeKey: testScopeKey });
     const factory = vi.spyOn(nativeHostModule, 'createNativePackageSigningHost');
     const boot = await createDefaultComposition(config, { packageUrl: '/staff-review-package-manifest.json', initialDefinitionUrl }).nativePackageRespondent!.load();
     expect(factory.mock.calls[0][0].definition).toEqual(definition);
