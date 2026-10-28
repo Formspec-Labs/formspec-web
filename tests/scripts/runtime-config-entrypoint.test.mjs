@@ -93,9 +93,9 @@ describe('container runtime-config entrypoint', () => {
       FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI: 'https://web.example.gov/signed-out',
     };
     expect(runEntrypoint(target, values).status).toBe(0);
-    const previous = window.__FORMSPEC_RUNTIME_CONFIG__;
+    const previous = globalThis.window.__FORMSPEC_RUNTIME_CONFIG__;
     try {
-      window.__FORMSPEC_RUNTIME_CONFIG__ = evaluateRuntimeConfig(target);
+      globalThis.window.__FORMSPEC_RUNTIME_CONFIG__ = evaluateRuntimeConfig(target);
       const oidc = resolveActiveConfig(publicPortalProfile, readRuntimeConfig()).identity.oidc;
       expect(oidc).toMatchObject({ issuer: values.FORMSPEC_WEB_OIDC_ISSUER, clientId: 'web',
         redirectUri: values.FORMSPEC_WEB_OIDC_REDIRECT_URI, scope: 'openid profile custom',
@@ -103,10 +103,10 @@ describe('container runtime-config entrypoint', () => {
         resource: values.FORMSPEC_WEB_OIDC_RESOURCE, silentRedirectUri: values.FORMSPEC_WEB_OIDC_SILENT_REDIRECT_URI,
         postLogoutRedirectUri: values.FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI });
       for (const invalid of [{ oidcMinAssurance: 'unknown' }, { oidcAcrAssuranceMapJson: '{"acr":"unknown"}' }]) {
-        window.__FORMSPEC_RUNTIME_CONFIG__ = { ...evaluateRuntimeConfig(target), ...invalid };
+        globalThis.window.__FORMSPEC_RUNTIME_CONFIG__ = { ...evaluateRuntimeConfig(target), ...invalid };
         expect(() => resolveActiveConfig(publicPortalProfile, readRuntimeConfig())).toThrow(/L1-L4/);
       }
-    } finally { window.__FORMSPEC_RUNTIME_CONFIG__ = previous; }
+    } finally { globalThis.window.__FORMSPEC_RUNTIME_CONFIG__ = previous; }
   });
 
   it.each(['departmentApp', 'publicPortal'])('requires an explicit deployment scope for %s', profile => {
