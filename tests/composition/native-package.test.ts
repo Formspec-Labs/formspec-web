@@ -1760,8 +1760,8 @@ function throwIfBusinessWrite(url: URL, init?: RequestInit) {
 }
 
 
-it('retries pending native initialization on startup and mounts only its qualified empty identity', async () => {
-  const test = await fixture('oidc:fixture');
+it.each(['anonymous', 'oidc'] as const)('retries pending native initialization for %s and preserves defaults through the first Save', async mode => {
+  const test = await fixture(mode === 'anonymous' ? 'anon:fixture' : 'oidc:fixture');
   const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',
     credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
   const session = { issuer: claim.provider, subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
@@ -1772,7 +1772,7 @@ it('retries pending native initialization on startup and mounts only its qualifi
     completeSilentCallback: async () => {}, renew: async () => session, logout: async () => {}, completeLogoutCallback: async () => {},
     accessToken: async () => 'same-owner-bearer', subscribe: () => () => {}, dispose: () => {} };
   const identityBinding: IdentityBinding = { provider, browserAuthSession, accessToken: async () => 'same-owner-bearer' };
-  const config = { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: {
+  const config = mode === 'anonymous' ? test.config : { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: {
     mode: 'oidc-required' as const, oidc: { issuer: claim.provider, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const } } };
   await initFormspecEngine();
   // Current test-only authored Save input, re-admitted before load; historical fixture bytes remain untouched.
@@ -1796,9 +1796,9 @@ it('retries pending native initialization on startup and mounts only its qualifi
     return reply;
   };
   vi.stubGlobal('fetch', transport);
-  const options = { packageUrl: '/package.json', initialDefinitionUrl, identityBinding };
+  const options = { packageUrl: '/package.json', initialDefinitionUrl, ...(mode === 'oidc' ? { identityBinding } : {}) };
   const initial = await createDefaultComposition(config, options).nativePackageRespondent!.load();
-  const key = { formUrl: test.definition.url, formVersion: test.definition.version, subjectRef: claim.subjectRef };
+  const key = { formUrl: test.definition.url, formVersion: test.definition.version, ...(mode === 'oidc' ? { subjectRef: claim.subjectRef } : {}) };
   await expect(initial.composition.draftStore.initializeDraft!(key)).rejects.toThrow('Committed reply lost');
   const first = test.requests.find(request => request.method === 'POST' && request.url.endsWith('/drafts'))!;
   initial.host.dispose();
@@ -1834,5 +1834,8 @@ it('retries pending native initialization on startup and mounts only its qualifi
     expect(canonical.authoredSignatures).toBeUndefined();
     expect(test.requests.filter(entry => entry.method === 'POST' && entry.url.endsWith('/drafts'))).toHaveLength(2);
     await vi.waitFor(() => expect(fresh.host.getSnapshot().controller?.saved?.draft).toMatchObject({ id: 'fixture-draft', version: 2 }));
+    const savedKey = fresh.host.getSnapshot().controller!.saved!.draftKey;
+    if (mode === 'anonymous') expect(savedKey).not.toHaveProperty('subjectRef');
+    else expect(savedKey.subjectRef).toBe(claim.subjectRef);
   } finally { mounted.unmount(); fresh.host.dispose(); }
 });

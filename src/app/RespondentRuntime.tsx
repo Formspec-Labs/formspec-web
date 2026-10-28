@@ -1550,7 +1550,7 @@ async function createReadyState(
   const draftKey: DraftKey = {
     formUrl: definition.url,
     formVersion: definition.version,
-    subjectRef: claim?.subjectRef,
+    ...(claim ? { subjectRef: claim.subjectRef } : {}),
   };
   let recoveredDraft: FormResponse | undefined;
   let recoveredSavedDraft: SavedResponseDraft | undefined;
