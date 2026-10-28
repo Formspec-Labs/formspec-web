@@ -1,3 +1,5 @@
+import { readRuntimeConfig, resolveActiveConfig } from '../../src/config/runtime.ts';
+import { publicPortalProfile } from '../../src/profiles/profiles.ts';
 import { spawnSync } from 'node:child_process';
 import {
   mkdtempSync,
@@ -71,10 +73,40 @@ describe('container runtime-config entrypoint', () => {
       oidcIssuer: '',
       oidcClientId: '',
       oidcRedirectUri: '',
+      oidcScope: '', oidcSilentRedirectUri: '', oidcPostLogoutRedirectUri: '',
+      oidcAcrValues: '', oidcMinAssurance: '', oidcAcrAssuranceMapJson: '', oidcResource: '',
       magicLinkCallbackPath: '',
       surfaceBundle,
     });
     expect(statSync(target).mode & 0o777).toBe(0o644);
+  });
+
+  it('roundtrips every extended OIDC setting through the browser config resolver', () => {
+    const target = join(temporaryRoot(), 'formspec-runtime-config.js');
+    const values = {
+      FORMSPEC_WEB_OIDC_ISSUER: 'https://identity.example.gov', FORMSPEC_WEB_OIDC_CLIENT_ID: 'web',
+      FORMSPEC_WEB_OIDC_REDIRECT_URI: 'https://web.example.gov/callback',
+      FORMSPEC_WEB_OIDC_SCOPE: 'openid profile custom', FORMSPEC_WEB_OIDC_ACR_VALUES: 'urn:example:high',
+      FORMSPEC_WEB_OIDC_MIN_ASSURANCE: 'L3', FORMSPEC_WEB_OIDC_ACR_ASSURANCE_MAP_JSON: '{"urn:example:high":"L3"}',
+      FORMSPEC_WEB_OIDC_RESOURCE: 'https://source.example.gov',
+      FORMSPEC_WEB_OIDC_SILENT_REDIRECT_URI: 'https://web.example.gov/silent',
+      FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI: 'https://web.example.gov/signed-out',
+    };
+    expect(runEntrypoint(target, values).status).toBe(0);
+    const previous = window.__FORMSPEC_RUNTIME_CONFIG__;
+    try {
+      window.__FORMSPEC_RUNTIME_CONFIG__ = evaluateRuntimeConfig(target);
+      const oidc = resolveActiveConfig(publicPortalProfile, readRuntimeConfig()).identity.oidc;
+      expect(oidc).toMatchObject({ issuer: values.FORMSPEC_WEB_OIDC_ISSUER, clientId: 'web',
+        redirectUri: values.FORMSPEC_WEB_OIDC_REDIRECT_URI, scope: 'openid profile custom',
+        acrValues: 'urn:example:high', minAssurance: 'L3', acrAssuranceMap: { 'urn:example:high': 'L3' },
+        resource: values.FORMSPEC_WEB_OIDC_RESOURCE, silentRedirectUri: values.FORMSPEC_WEB_OIDC_SILENT_REDIRECT_URI,
+        postLogoutRedirectUri: values.FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI });
+      for (const invalid of [{ oidcMinAssurance: 'unknown' }, { oidcAcrAssuranceMapJson: '{"acr":"unknown"}' }]) {
+        window.__FORMSPEC_RUNTIME_CONFIG__ = { ...evaluateRuntimeConfig(target), ...invalid };
+        expect(() => resolveActiveConfig(publicPortalProfile, readRuntimeConfig())).toThrow(/L1-L4/);
+      }
+    } finally { window.__FORMSPEC_RUNTIME_CONFIG__ = previous; }
   });
 
   it.each(['departmentApp', 'publicPortal'])('requires an explicit deployment scope for %s', profile => {

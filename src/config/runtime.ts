@@ -1,3 +1,4 @@
+import scalarRuntimeEnvMap from './runtime-env-map.json';
 import type {} from '../browser-environment.d.ts';
 import type { AssuranceLevel } from '../ports/identity-provider.ts';
 import { readNativePackageSigningConfig } from './native-package-signing.ts';
@@ -14,31 +15,8 @@ import type {
 
 type RuntimeEnvRecord = Record<string, string | boolean | undefined>;
 
-const runtimeEnvMap = {
-  profileName: ['FORMSPEC_WEB_PROFILE', 'VITE_FORMSPEC_WEB_PROFILE'],
-  formspecServerUrl: ['FORMSPEC_WEB_SERVER_URL', 'VITE_FORMSPEC_WEB_SERVER_URL'],
-  responseActionLedgerCapabilityUrl: [
-    'FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL',
-    'VITE_FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL',
-  ],
-  oidcIssuer: ['FORMSPEC_WEB_OIDC_ISSUER', 'VITE_FORMSPEC_WEB_OIDC_ISSUER'],
-  oidcClientId: ['FORMSPEC_WEB_OIDC_CLIENT_ID', 'VITE_FORMSPEC_WEB_OIDC_CLIENT_ID'],
-  oidcRedirectUri: ['FORMSPEC_WEB_OIDC_REDIRECT_URI', 'VITE_FORMSPEC_WEB_OIDC_REDIRECT_URI'],
-  oidcScope: ['FORMSPEC_WEB_OIDC_SCOPE', 'VITE_FORMSPEC_WEB_OIDC_SCOPE'],
-  oidcSilentRedirectUri: ['FORMSPEC_WEB_OIDC_SILENT_REDIRECT_URI', 'VITE_FORMSPEC_WEB_OIDC_SILENT_REDIRECT_URI'],
-  oidcPostLogoutRedirectUri: ['FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI', 'VITE_FORMSPEC_WEB_OIDC_POST_LOGOUT_REDIRECT_URI'],
-  oidcAcrValues: ['FORMSPEC_WEB_OIDC_ACR_VALUES', 'VITE_FORMSPEC_WEB_OIDC_ACR_VALUES'],
-  oidcMinAssurance: ['FORMSPEC_WEB_OIDC_MIN_ASSURANCE', 'VITE_FORMSPEC_WEB_OIDC_MIN_ASSURANCE'],
-  oidcAcrAssuranceMapJson: ['FORMSPEC_WEB_OIDC_ACR_ASSURANCE_MAP_JSON', 'VITE_FORMSPEC_WEB_OIDC_ACR_ASSURANCE_MAP_JSON'],
-  oidcResource: ['FORMSPEC_WEB_OIDC_RESOURCE', 'VITE_FORMSPEC_WEB_OIDC_RESOURCE'],
-  magicLinkCallbackPath: [
-    'FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
-    'VITE_FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH',
-  ],
-} as const satisfies Record<
-  Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'scopeKey' | 'attachmentMaxUploadBytes' | 'nativePackageSigning'>,
-  readonly string[]
->;
+type ScalarRuntimeKey = Exclude<keyof RuntimeConfig, 'surfaceBundle' | 'scopeKey' | 'attachmentMaxUploadBytes' | 'nativePackageSigning'>;
+const runtimeEnvMap: Record<ScalarRuntimeKey, readonly string[]> = scalarRuntimeEnvMap;
 
 export function readRuntimeConfig(): RuntimeConfig {
   const viteConfig = runtimeConfigFromEnvRecord(import.meta.env);

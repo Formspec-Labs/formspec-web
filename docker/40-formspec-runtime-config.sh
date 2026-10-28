@@ -48,28 +48,19 @@ else
   attachment_max_upload_bytes="null"
 fi
 
+mapping_path="$(dirname "$0")/runtime-env-map.json"
+# The image ships the same scalar mapping that the browser uses.
+if [ ! -f "$mapping_path" ]; then
+  mapping_path="$(dirname "$0")/../src/config/runtime-env-map.json"
+fi
 runtime_config="$(
   jq -c -n \
-    --arg profile_name "${FORMSPEC_WEB_PROFILE:-}" \
-    --arg formspec_server_url "${FORMSPEC_WEB_SERVER_URL:-}" \
+    --slurpfile scalar_mapping "$mapping_path" \
     --arg scope_key "$scope_key" \
-    --arg response_action_ledger_capability_url \
-      "${FORMSPEC_WEB_RESPONSE_ACTION_LEDGER_CAPABILITY_URL:-}" \
-    --arg oidc_issuer "${FORMSPEC_WEB_OIDC_ISSUER:-}" \
-    --arg oidc_client_id "${FORMSPEC_WEB_OIDC_CLIENT_ID:-}" \
-    --arg oidc_redirect_uri "${FORMSPEC_WEB_OIDC_REDIRECT_URI:-}" \
-    --arg magic_link_callback_path "${FORMSPEC_WEB_MAGIC_LINK_CALLBACK_PATH:-}" \
     --argjson attachment_max_upload_bytes "$attachment_max_upload_bytes" \
     --argjson surface_bundle "$surface_bundle_json" \
-    '{
-      profileName: $profile_name,
-      formspecServerUrl: $formspec_server_url,
-      responseActionLedgerCapabilityUrl: $response_action_ledger_capability_url,
-      oidcIssuer: $oidc_issuer,
-      oidcClientId: $oidc_client_id,
-      oidcRedirectUri: $oidc_redirect_uri,
-      magicLinkCallbackPath: $magic_link_callback_path
-    } + (
+    '(reduce ($scalar_mapping[0] | to_entries[]) as $entry ({};
+      .[$entry.key] = ([ $entry.value[] | env[.] | select(. != null and . != "") ][0] // ""))) + (
       if $scope_key == ""
       then {}
       else {scopeKey: $scope_key}
