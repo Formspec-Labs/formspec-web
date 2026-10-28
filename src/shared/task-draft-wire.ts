@@ -1,3 +1,4 @@
+import { isRecord } from './is-record.ts';
 import type { SignedTaskDraft, TaskDraftAssociation } from '../ports/task-draft.ts';
 
 /** Exact selectors from an authenticated Source read or Sign result, never a task grant.
@@ -16,13 +17,13 @@ export function assertSignedTaskDraft(association: TaskDraftAssociation | undefi
 }
 
 /** Optional authenticated composition metadata; never a freshness or write grant. */
-export function assertTaskDraftWire(value: TaskDraftAssociation | undefined): void {
+export function assertTaskDraftWire(value: unknown): asserts value is TaskDraftAssociation | undefined {
   if (value === undefined) return;
-  if (value.version !== 1 || !/^sha256:[a-f0-9]{64}$/.test(value.associationHash)
-    || !/^sha256:[a-f0-9]{64}$/.test(value.taskBindingHash)) throw new Error('Invalid task draft association');
+  if (!isRecord(value) || value.version !== 1 || (typeof value.associationHash !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.associationHash))
+    || (typeof value.taskBindingHash !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.taskBindingHash))) throw new Error('Invalid task draft association');
   const prefill = value.taskPrefill;
   if (prefill === undefined) return;
-  if (!prefill || Object.keys(prefill).sort().join(',') !== 'editableDataPaths,readOnlyDataPaths,version' || prefill.version !== 1)
+  if (!isRecord(prefill) || Object.keys(prefill).sort().join(',') !== 'editableDataPaths,readOnlyDataPaths,version' || prefill.version !== 1)
     throw new Error('Invalid task prefill metadata');
   const seen = new Set<string>();
   for (const paths of [prefill.editableDataPaths, prefill.readOnlyDataPaths]) {

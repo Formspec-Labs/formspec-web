@@ -1,4 +1,4 @@
-import { assertTaskDraftWire } from '../../shared/task-draft-wire.ts';
+import { savedSourceDraftView, type SourceDraftView, type SavedSourceDraftView, type InitializedSourceDraftView } from './source-draft-view.ts';
 import { snapshotWire } from './wire-json.ts';
 import { sameResponseDataView } from '../../shared/response-data-view.ts';
 import { decodeBase64 } from '../../shared/base64.ts';
@@ -89,16 +89,7 @@ export class ResponseSigningScopeFence {
   }
 }
 
-interface DraftView {
-  draft_id: string;
-  form_version_id: string;
-  subject_ref: string;
-  draft_version: number;
-  draft_state: Record<string, unknown>;
-  canonical_response: FormResponse;
-  status: 'in_progress';
-  taskDraft?: VerifiedDraftEvidence['taskDraft'];
-}
+type DraftView = SavedSourceDraftView & { status: 'in_progress' };
 interface PreparationContext {
   input: PrepareResponseSigningInput | SaveResponseDraftInput;
   generation: number;
@@ -512,9 +503,9 @@ export class HttpResponseSigning implements ResponseSigning {
     }
     const owner = await this.config.ownerFor(context.input.draftKey);
     this.current(context);
-    let signed: DraftView;
+    let signed: SourceDraftView;
     try {
-      signed = await this.config.client.postJson<DraftView>(planned.path, planned.body, {
+      signed = await this.config.client.postJson<SourceDraftView>(planned.path, planned.body, {
         headers: { ...planned.headers, ...bearer(owner.token) }, idempotencyKey: input.operationId,
         successStatuses: planned.successStatuses,
         assertCurrent: () => this.current(context),
@@ -553,9 +544,9 @@ export class HttpResponseSigning implements ResponseSigning {
     return planned;
   }
 
-  private async readInitialization(context: PreparationContext, id: string): Promise<Omit<DraftView, 'canonical_response'> & { canonical_response: null }> {
+  private async readInitialization(context: PreparationContext, id: string): Promise<InitializedSourceDraftView> {
     const owner = await this.config.ownerFor(context.input.draftKey); this.current(context);
-    const view = await this.config.client.getJson<Omit<DraftView, 'canonical_response'> & { canonical_response: null; is_initialization_only: boolean }>(
+    const view = await this.config.client.getJson<SourceDraftView>(
       `/drafts/${encodeURIComponent(id)}`, { headers: bearer(owner.token), assertCurrent: () => this.current(context) });
     this.current(context);
     if (view.draft_id !== id || view.form_version_id !== context.input.formVersionId || view.subject_ref !== owner.subjectRef
@@ -563,23 +554,23 @@ export class HttpResponseSigning implements ResponseSigning {
       || view.canonical_response !== null || !same(view.draft_state, {}) || view.taskDraft !== undefined) {
       throw new Error('Owned initialization changed before first Save');
     }
-    return view;
+    return { ...view, canonical_response: null, is_initialization_only: true };
   }
 
   private async read(context: PreparationContext, id: string): Promise<DraftView> {
     const owner = await this.config.ownerFor(context.input.draftKey);
     this.current(context);
-    let view: DraftView;
-    try { view = await this.config.client.getJson<DraftView>(`/drafts/${encodeURIComponent(id)}`, { headers: bearer(owner.token), assertCurrent: () => this.current(context) }); }
+    let view: SourceDraftView;
+    try { view = await this.config.client.getJson<SourceDraftView>(`/drafts/${encodeURIComponent(id)}`, { headers: bearer(owner.token), assertCurrent: () => this.current(context) }); }
     catch (error) { this.current(context); throw error; }
     this.current(context);
-    await this.validateView(context, id, view, owner.subjectRef);
+    const saved = await this.validateView(context, id, view, owner.subjectRef);
     this.current(context);
-    return view;
+    return saved;
   }
-  private async validateView(context: PreparationContext, id: string, view: DraftView, actor: string): Promise<void> {
-    const response = view?.canonical_response;
-    assertTaskDraftWire(view?.taskDraft);
+  private async validateView(context: PreparationContext, id: string, wire: SourceDraftView, actor: string): Promise<DraftView> {
+    const view = await savedSourceDraftView(wire, this.config.validateResponse, 'Owned draft has no matching authoritative Response snapshot');
+    const response = view.canonical_response;
     const expectedTask = this.config.expectedTaskDraft;
     if (expectedTask && (view.taskDraft?.associationHash !== expectedTask.associationHash
       || view.taskDraft?.taskBindingHash !== expectedTask.taskBindingHash
@@ -587,15 +578,16 @@ export class HttpResponseSigning implements ResponseSigning {
       throw new Error('Task draft composition metadata changed');
     if (!view || view.draft_id !== id || view.form_version_id !== context.input.formVersionId
       || view.status !== 'in_progress' || view.subject_ref !== actor || !Number.isSafeInteger(view.draft_version) || view.draft_version < 0
-      || !response || !await this.config.validateResponse(response)
+      || !response
       || response.id !== context.input.response.id || response.definitionUrl !== context.input.definition.url
       || response.definitionVersion !== context.input.definition.version || !sameResponseDataView(response.data, view.draft_state)) {
       throw new Error('Owned draft has no matching authoritative Response snapshot');
     }
+    return { ...view, status: 'in_progress' };
   }
-  private async acceptSigned(act: FrozenAct, view: DraftView): Promise<SignedResponseSigning> {
+  private async acceptSigned(act: FrozenAct, wire: SourceDraftView): Promise<SignedResponseSigning> {
     const { context, candidate } = act;
-    await this.validateView(context, act.input.preparation.draft.id, view, act.input.preparation.actor.id);
+    const view = await this.validateView(context, act.input.preparation.draft.id, wire, act.input.preparation.actor.id);
     extractServiceRequestOutputs(this.admittedRequest(act.input.action, act.candidate), view);
     const response = view.canonical_response;
     const unsigned = { ...snapshotWire(response) };
