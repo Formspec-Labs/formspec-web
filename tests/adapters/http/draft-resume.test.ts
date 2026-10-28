@@ -561,12 +561,12 @@ describe('explicit owned initialization resume', () => {
     expect(requests.every(request => request.method === 'GET')).toBe(true);
   });
 
-  it.each(['absent', 'foreign-target', 'foreign-response'])('refuses saved-current without its same-target Response pin: %s', async retained => {
+  it.each(['absent', 'foreign-target', 'foreign-response', 'idless'])('refuses saved-current without its same-target Response pin: %s', async retained => {
     const registry = createDraftBindingRegistry();
-    if (retained !== 'absent') registry.put(ownerKey, { draftId: retained === 'foreign-target' ? 'other-draft' : selection.draftId,
+    if (retained !== 'absent' && retained !== 'idless') registry.put(ownerKey, { draftId: retained === 'foreign-target' ? 'other-draft' : selection.draftId,
       draftVersion: 2, responseId: 'other-response' });
     const before = registry.entries();
-    const response = { ...sampleFormResponse, id: 'owned-response' };
+    const response = retained === 'idless' ? sampleFormResponse : { ...sampleFormResponse, id: 'owned-response' };
     const qualify = vi.fn(async () => { throw new Error('Unpinned Response must not qualify'); });
     const { fetch, requests } = recordingFetch(() => jsonResponse({ ...view(), draft_version: 2,
       is_initialization_only: false, canonical_response: response, draft_state: response.data }));

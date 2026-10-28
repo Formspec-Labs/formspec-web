@@ -223,7 +223,8 @@ export class HttpDraftStore implements DraftStore {
         || !sameResponseDataView(response.data, view.draft_state)) {
         throw new Error('Server draft has no matching canonical Response snapshot');
       }
-      if (selection && response.id !== (selection.expectedResponseId ?? binding.responseId)) throw new Error('Owned draft resume Response identity differs');
+      const expectedResponseId = selection?.expectedResponseId ?? binding.responseId;
+      if (selection && (!expectedResponseId?.trim() || response.id !== expectedResponseId)) throw new Error('Owned draft resume Response identity differs');
       if (!missingIsAbsent && ((binding.draftVersion !== undefined && view.draft_version < binding.draftVersion)
         || (binding.responseId !== undefined && response.id !== binding.responseId))) {
         throw new Error('Owned draft state regressed from its retained identity or revision');
