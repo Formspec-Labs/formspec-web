@@ -245,6 +245,12 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
       fence.assertCurrent(key, generation);
       return result;
     }) } : {}),
+    ...(!taskDraftSelection ? { recoverInitialization: (key: DraftKey, version: string, assertCurrent: () => void = () => {}) => fence.run(key, async generation => {
+      const current = () => { assertSynchronousGuard(assertCurrent); fence.assertCurrent(key, generation); };
+      current(); responseSigning.assertEditable(key);
+      const recovered = await draftStore.recoverInitialization(key, version, current);
+      current(); return recovered;
+    }) } : {}),
     load: key => fence.run(key, async generation => draftStore.load(key, () => fence.assertCurrent(key, generation))),
     ...(draftStore.readState ? { readState: (key: DraftKey) => readScopedState(key, (key, current) => draftStore.readState!(key, current)) } : {}),
     ...(draftStore.resumeState && config.accessToken && !anonymousSessions && !taskDraftSelection ? {

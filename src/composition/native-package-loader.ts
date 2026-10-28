@@ -316,9 +316,25 @@ async function loadQualifiedNativePackage(config: FormspecWebConfig, options: Na
         const draftKey = { formUrl: definition.url, formVersion: definition.version, subjectRef: claim?.subjectRef };
         if (taskPins && claim?.subjectRef !== taskPins.subjectRef) throw new Error('Native task recovery owner mismatch');
         if (options.ownedDraftResume && !draftStore.resumeState) throw new Error('Owned draft resume capability unavailable');
-        const state = options.ownedDraftResume
+        let state = options.ownedDraftResume
           ? await draftStore.resumeState!(draftKey, options.ownedDraftResume, current) : await draftStore.readState(draftKey);
         current();
+        if (!state && !taskPins && !options.ownedDraftResume && draftStore.recoverInitialization) {
+          const recovered = await draftStore.recoverInitialization(draftKey, publication.form_version_id, current);
+          current();
+          if (recovered?.isInitializationOnly) {
+            const trustedOwner = claim?.subjectRef ?? (await anonymousSessions!.sessionForForm(definition.url, definition.version, true)).subjectRef;
+            current();
+            if (recovered.subjectRef !== trustedOwner) throw new Error('Native initialization recovery owner mismatch');
+            owner = { key: structuredClone(draftKey), actor: trustedOwner };
+            admittedHost.restoreOwnedInitializationAccess(draftKey, recovered, current);
+            current(); return 'active';
+          }
+          if (recovered) {
+            state = await draftStore.readState(draftKey); current();
+            if (!state) throw new Error('Recovered initialization lost its qualified current draft');
+          }
+        }
         if (state?.kind === 'active' && state.savedDraft && !state.signed && !state.pendingSign)
           await admittedHost.restoreOwnedDraftAccess(state.savedDraft, current);
         if (state?.kind === 'active' && state.signed && !state.savedDraft && !state.pendingSign)

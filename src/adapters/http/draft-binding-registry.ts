@@ -22,6 +22,7 @@ export interface DraftBindingSnapshot {
 
 export interface DraftBindingRegistry {
   initializationKey(key: DraftKey): string;
+  retainedInitializationKey(key: DraftKey): string | undefined;
   get(key: DraftKey): DraftBindingSnapshot | undefined;
   put(key: DraftKey, snapshot: DraftBindingSnapshot): void;
   delete(key: DraftKey): void;
@@ -93,6 +94,7 @@ export function createDraftBindingRegistry(options: {
     else options.resumeMetadata?.remove('draft-initializations');
   };
   return {
+    retainedInitializationKey(key) { restore(); return attempts.get(serializeKey(key))?.token; },
     initializationKey(key) {
       restore();
       const serialized = serializeKey(key);

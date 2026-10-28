@@ -16,7 +16,7 @@ import { captureResponseFieldMetadata, composeSurfaceApp, matchRoute, routeHref,
 import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, responseReviewHash, starterWidgetModule, type ResponseReviewData, type ResponseReviewOptions, type ResponseReviewState, type SurfaceWidgetModule } from '@formspec-org/surface-react';
 import { targetDefinitionMatches, type FormDefinition, type FormResponse, type LocaleDocument, type ScreenerDocument, type ValidationReport } from '@formspec-org/types';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
-import type { DraftKey } from '../ports/draft-store.ts';
+import type { DraftKey, RecoveredDraftInitialization } from '../ports/draft-store.ts';
 import type { RespondentOwnedRuntimeInput, RespondentOwnedRuntime, RespondentSubmittedRuntimeInput } from '../app/RespondentRuntime.tsx';
 import { createResponseActionController, assertSavedResponseDraftEvidence, assertRestoredSignedResponseEvidence, type ResponseActionControllerConfig, type ResponseActionControllerSnapshot } from './response-action-controller.ts';
 import { createFrozenHostStateDataSourceRuntime } from './frozen-host-state-data.ts';
@@ -395,7 +395,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     };
     observe(); prepareFlags();
   }
-  let ownedDraftRestoration: { saved: SavedResponseDraft; signed?: true; assertCurrent: () => void; visit?: number } | undefined;
+  let ownedDraftRestoration: ({ kind: 'saved'; saved: SavedResponseDraft; signed?: true }
+    | { kind: 'initialized'; draftKey: DraftKey; initialization: RecoveredDraftInitialization })
+    & { assertCurrent: () => void; visit?: number } | undefined;
   let restoredScreenerCheckpoint: Pick<SavedResponseDraft, 'draftKey' | 'draft' | 'actor' | 'response'> | undefined;
 
   let locale = policy.initialLocale;
@@ -858,7 +860,16 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
     unsubscribeController = controller.subscribe(() => {
       publicSnapshot = controller!.getSnapshot();
-      if (ownedDraftRestoration && publicSnapshot.saved && !sameSavedDraft(ownedDraftRestoration.saved, publicSnapshot.saved)) {
+      if (ownedDraftRestoration?.kind === 'initialized' && publicSnapshot.saved) {
+        const access = ownedDraftRestoration, saved = publicSnapshot.saved;
+        if (same(access.draftKey, saved.draftKey) && access.initialization.draftId === saved.draft.id
+          && access.initialization.subjectRef === saved.actor.id
+          && access.initialization.formVersionId === saved.evidence.form_version_id) {
+          ownedDraftRestoration = { kind: 'saved', saved: structuredClone(saved), assertCurrent: access.assertCurrent, visit: access.visit };
+          freezeMetadata(ownedDraftRestoration.saved);
+        } else ownedDraftRestoration = undefined;
+      }
+      if (ownedDraftRestoration?.kind === 'saved' && publicSnapshot.saved && !sameSavedDraft(ownedDraftRestoration.saved, publicSnapshot.saved)) {
         const previous = ownedDraftRestoration.saved, saved = publicSnapshot.saved;
         if (same(previous.draftKey, saved.draftKey) && previous.draft.id === saved.draft.id && previous.actor.id === saved.actor.id
           && previous.response.id === saved.response.id && previous.evidence.form_version_id === saved.evidence.form_version_id) {
@@ -955,6 +966,14 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     if (!access || !ownedDraftFormRoutes.has(route)) return false;
     try {
       access.assertCurrent();
+      if (access.kind === 'initialized') {
+        const identity = access.initialization;
+        if (identity.formVersionId !== policy.publication.formVersionId || identity.draftVersion !== 1
+          || !identity.isInitializationOnly || identity.response !== undefined
+          || input && !same(input.draftKey, access.draftKey)) throw new Error('native-initialization-restoration-changed');
+        policy.assertOwner(access.draftKey, identity.subjectRef);
+        return access.visit === undefined || access.visit === visitEpoch;
+      }
       const saved = publicSnapshot?.saved ?? access.saved;
       if (!same(saved.draftKey, access.saved.draftKey) || saved.draft.id !== access.saved.draft.id
         || saved.actor.id !== access.saved.actor.id || saved.response.id !== access.saved.response.id
@@ -963,6 +982,27 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return access.visit === undefined || access.visit === visitEpoch;
     } catch { return false; }
   }
+  function restoreOwnedInitializationAccess(draftKey: DraftKey, initialization: RecoveredDraftInitialization, assertCurrent: () => void): void {
+    assertSynchronousGuard(assertCurrent);
+    if (disposed || cleared || controller || input || submitted || !initialization.draftId?.trim()
+      || initialization.draftVersion !== 1 || !initialization.isInitializationOnly || initialization.response !== undefined
+      || initialization.formVersionId !== policy.publication.formVersionId
+      || draftKey.formUrl !== policy.definition.url || draftKey.formVersion !== policy.definition.version
+      || draftKey.subjectRef !== undefined && draftKey.subjectRef !== initialization.subjectRef) throw new Error('native-initialization-restoration-refused');
+    const key = structuredClone(draftKey), identity = structuredClone(initialization);
+    freezeMetadata(key); freezeMetadata(identity);
+    const sourceAuthority = policy.nativeScreener?.context();
+    const current = () => {
+      assertSynchronousGuard(assertCurrent); sourceAuthority?.signal.throwIfAborted();
+      if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
+      if (disposed || cleared) throw new Error('native-initialization-restoration-retired');
+      policy.assertOwner(key, identity.subjectRef);
+    };
+    current();
+    ownedDraftRestoration = { kind: 'initialized', draftKey: key, initialization: identity, assertCurrent: current };
+    emit();
+  }
+
   async function restoreOwnedAccess(value: SavedResponseDraft, assertCurrent: () => void, signed?: SignedResponseSigning): Promise<void> {
     assertSynchronousGuard(assertCurrent);
     if (disposed || cleared || controller || input || submitted || !value.response.id
@@ -987,7 +1027,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       assertRestoredSignedResponseEvidence({ draftKey: saved.draftKey }, captured, policy.signingContext(captured.content.locale));
       check();
     }
-    ownedDraftRestoration = { saved, ...(signed ? { signed: true as const } : {}), assertCurrent: () => {
+    ownedDraftRestoration = { kind: 'saved', saved, ...(signed ? { signed: true as const } : {}), assertCurrent: () => {
       assertSynchronousGuard(assertCurrent);
       sourceAuthority?.signal.throwIfAborted();
       if (sourceAuthority) assertSynchronousGuard(sourceAuthority.assertCurrent.bind(sourceAuthority));
@@ -997,7 +1037,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     emit();
   }
   return {
-    bundle, definition: policy.definition,
+    bundle, definition: policy.definition, restoreOwnedInitializationAccess,
     ...(screener && policy.nativeScreener?.retention.refresh ? { renewSignedChecks } : {}),
     restoreOwnedDraftAccess: (value: SavedResponseDraft, assertCurrent: () => void, mode?: 'signed') =>
       restoreOwnedAccess(value, assertCurrent, mode === 'signed' ? value as SignedResponseSigning : undefined),
@@ -1316,7 +1356,11 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         if (admission !== rendererAdmission || disposed || cleared || expectedAuthority !== authorityGeneration || expectedVisit !== visitEpoch)
           throw new Error('native-renderer-admission-retired');
       };
-      if (!input && ownedDraftRestoration && !sameSavedDraft(ownedDraftRestoration.signed ? next.restoredSigning : next.restoredSavedDraft, ownedDraftRestoration.saved)) {
+      if (!input && ownedDraftRestoration?.kind === 'initialized'
+        && (!same(next.draftKey, ownedDraftRestoration.draftKey) || next.restoredResponse || next.restoredSavedDraft || next.restoredSigning)) {
+        ownedDraftRestoration = undefined; throw new Error('native-initialization-restoration-changed');
+      }
+      if (!input && ownedDraftRestoration?.kind === 'saved' && !sameSavedDraft(ownedDraftRestoration.signed ? next.restoredSigning : next.restoredSavedDraft, ownedDraftRestoration.saved)) {
         ownedDraftRestoration = undefined; throw new Error('native-owned-restoration-changed');
       }
       if (disposed || cleared || submitted || !same(next.definition, policy.definition) || (responseId && next.restoredResponse && next.restoredResponse.id !== responseId)

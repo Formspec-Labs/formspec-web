@@ -57,6 +57,16 @@ export class DraftVersionConflictError extends Error {
   }
 }
 
+/** Source-qualified draft identity; an initialization-only marker is not a Response or screening authority. */
+export interface RecoveredDraftInitialization {
+  draftId: string;
+  draftVersion: number;
+  formVersionId: string;
+  subjectRef: string;
+  isInitializationOnly: boolean;
+  response?: FormResponse;
+}
+
 export interface DraftStore {
   load(key: DraftKey): Promise<FormResponse | undefined>;
   /** Optional owner-qualified terminal recovery; omission preserves legacy loading. */
@@ -65,6 +75,8 @@ export interface DraftStore {
   resumeState?(key: DraftKey, selection: OwnedDraftResumeSelection, assertCurrent?: () => void): Promise<DraftReadState>;
   /** Initializes durable draft identity before Save or Sign per ADR 0168. */
   initializeDraft?(key: DraftKey, formVersionId?: string): Promise<{ draftId: string; isInitializationOnly: boolean; response?: FormResponse }>;
+  /** Retry only an already retained initialization attempt; absence must never allocate a key or draft. */
+  recoverInitialization?(key: DraftKey, formVersionId: string, assertCurrent?: () => void): Promise<RecoveredDraftInitialization | undefined>;
   /** Trusted synchronous guard checked immediately before persistence dispatch. */
   save(key: DraftKey, response: FormResponse, options?: { readonly assertBeforeDispatch?: () => void }): Promise<void>;
   list(subjectRef: string): Promise<DraftKey[]>;

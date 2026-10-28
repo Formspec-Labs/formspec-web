@@ -1758,3 +1758,81 @@ it.skipIf(!process.env.FORMSPEC_TASK_PACKAGE_PUBLIC_ROOT)('admits exported corre
 function throwIfBusinessWrite(url: URL, init?: RequestInit) {
   if ((init?.method ?? 'GET') !== 'GET' && url.pathname !== '/runtime/task-drafts') throw new Error('Offline package admission prohibits business writes');
 }
+
+
+it('retries pending native initialization on startup and mounts only its qualified empty identity', async () => {
+  const test = await fixture('oidc:fixture');
+  const claim = { provider: 'https://idp.test', adapter: 'oidc-client-ts', subjectRef: 'oidc:fixture',
+    credentialType: 'oidc-token' as const, subjectBinding: 'respondent' as const, assuranceLevel: 'L2' as const };
+  const session = { issuer: claim.provider, subject: 'fixture', revision: 1, expiresAt: '2099-01-01T00:00:00Z' };
+  const provider = { discover: vi.fn(async () => [{ kind: 'oidc' as const, issuer: claim.provider, displayName: 'Sign in', minAssurance: 'L2' as const }]),
+    authenticate: vi.fn(async () => claim), revoke: vi.fn(async () => {}),
+    subscribe: vi.fn((listener: (value: typeof claim | null) => void) => { listener(claim); return () => {}; }) };
+  const browserAuthSession = { getSession: async () => session, begin: async () => {}, completeCallback: async () => session,
+    completeSilentCallback: async () => {}, renew: async () => session, logout: async () => {}, completeLogoutCallback: async () => {},
+    accessToken: async () => 'same-owner-bearer', subscribe: () => () => {}, dispose: () => {} };
+  const identityBinding: IdentityBinding = { provider, browserAuthSession, accessToken: async () => 'same-owner-bearer' };
+  const config = { ...test.config, ports: { ...test.config.ports, identityProvider: 'oidc' as const }, identity: {
+    mode: 'oidc-required' as const, oidc: { issuer: claim.provider, clientId: 'fixture', redirectUri: '/callback', minAssurance: 'L2' as const } } };
+  await initFormspecEngine();
+  // Current test-only authored Save input, re-admitted before load; historical fixture bytes remain untouched.
+  const candidate = JSON.parse(test.texts['native.json']);
+  const actions = candidate.documents[test.signing.roles.saveInitial.artifactRef];
+  const request = actions['x-formspec-runtime'].requests.find((entry: { id: string }) => entry.id === 'save-draft-initial');
+  request.request = { method: 'PATCH', pathTemplate: '/drafts/{draftId}',
+    pathBindings: { draftId: { from: 'input', path: 'draftId' } },
+    bodyBindings: { '/canonical_response': { from: 'input', path: 'frozenResponse' },
+      '/draft_state': { from: 'input', path: 'frozenResponse.data' },
+      '/expected_draft_version': { from: 'input', path: 'draftVersion' } } };
+  test.texts['native.json'] = JSON.stringify(candidate);
+  test.files.nativeBundle.sha256 = await rawDigest(test.texts['native.json']);
+  const original = test.fetch.getMockImplementation()!;
+  let lost = false;
+  const transport: typeof fetch = async (input, init) => {
+    const reply = await original(input, init);
+    if (!lost && init?.method === 'POST' && String(input).endsWith('/runtime/forms/actual-form/drafts')) {
+      lost = true; throw new Error('Committed reply lost');
+    }
+    return reply;
+  };
+  vi.stubGlobal('fetch', transport);
+  const options = { packageUrl: '/package.json', initialDefinitionUrl, identityBinding };
+  const initial = await createDefaultComposition(config, options).nativePackageRespondent!.load();
+  const key = { formUrl: test.definition.url, formVersion: test.definition.version, subjectRef: claim.subjectRef };
+  await expect(initial.composition.draftStore.initializeDraft!(key)).rejects.toThrow('Committed reply lost');
+  const first = test.requests.find(request => request.method === 'POST' && request.url.endsWith('/drafts'))!;
+  initial.host.dispose();
+  const fresh = await createDefaultComposition(config, options).nativePackageRespondent!.load();
+  await expect(fresh.resumeSubmitted!()).resolves.toBe('active');
+  expect(fresh.host.getSnapshot().controller).toBeUndefined();
+  expect(fresh.host.getSnapshot().runtime).toBeUndefined();
+  const posts = test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'));
+  expect(posts).toHaveLength(2);
+  expect(posts[1].body).toEqual(first.body);
+  expect(posts[1].headers.get('idempotency-key')).toBe(first.headers.get('idempotency-key'));
+  await fresh.composition.draftStore.initializeDraft!(key);
+  expect(test.requests.filter(request => request.method === 'POST' && request.url.endsWith('/drafts'))).toHaveLength(2);
+  const formRoute = fresh.host.bundle.surfaces.flatMap(surface => surface.routes).find(route => route.slots?.some(slot =>
+    slot.slotType === 'definition-form' && (slot.binding as { definitionRef?: string }).definitionRef === fresh.host.definition.url))!;
+  expect(fresh.host.getStartupRoute(formRoute.path!).canRestoreOwnedForm).toBe(true);
+  const defaults = createFormEngine(test.definition); fresh.localeDocuments.forEach(locale => defaults.loadLocale(locale)); defaults.setLocale('en');
+  const originalDefaults = defaults.getResponse({ profile: 'off' }).data; defaults.dispose();
+  window.history.replaceState(null, '', formRoute.path!);
+  const composition = createDefaultComposition(config, options);
+  const restored = { ...composition, nativePackageRespondent: { load: async () => fresh } };
+  const mounted = render(createElement(NativePackageRuntime, { composition: restored, config }));
+  try {
+    const save = await screen.findByRole('button', { name: 'Save draft' });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => { fireEvent.click(save); });
+    await vi.waitFor(() => expect(test.requests.some(entry => entry.method === 'PATCH' && entry.url.endsWith('/drafts/fixture-draft'))).toBe(true));
+    const saved = test.requests.find(entry => entry.method === 'PATCH' && entry.url.endsWith('/drafts/fixture-draft'))!;
+    expect(saved.body).toMatchObject({ expected_draft_version: 1 });
+    const canonical = (saved.body as { canonical_response: FormResponse }).canonical_response;
+    expect(canonical.data).toEqual(originalDefaults);
+    expect(canonical.displayedLocale?.locale).toBe('en');
+    expect(canonical.authoredSignatures).toBeUndefined();
+    expect(test.requests.filter(entry => entry.method === 'POST' && entry.url.endsWith('/drafts'))).toHaveLength(2);
+    await vi.waitFor(() => expect(fresh.host.getSnapshot().controller?.saved?.draft).toMatchObject({ id: 'fixture-draft', version: 2 }));
+  } finally { mounted.unmount(); fresh.host.dispose(); }
+});

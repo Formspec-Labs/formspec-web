@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBrowserDraftResumeMetadataStore } from '../../../src/adapters/browser/draft-resume-metadata.ts';
+import { HttpDraftStore } from '../../../src/adapters/http/draft-store.ts';
 import { AnonymousSessionBridge } from '../../../src/adapters/http/anonymous-session.ts';
 import { createHttpAdapterCohort } from '../../../src/adapters/http/cohort.ts';
 import { createDraftBindingRegistry } from '../../../src/adapters/http/draft-binding-registry.ts';
@@ -447,4 +448,69 @@ describe('tab metadata anonymous draft resume', () => {
     await expect(build().draftStore.load(key)).resolves.toEqual(sampleFormResponse);
     expect(requests.at(-1)?.url).toContain('/draft-2');
   });
+});
+
+
+it('recovers only a retained initialization after cohort recreation without minting or a renderer third POST', async () => {
+  const storage = tabStorage();
+  const metadata = createBrowserDraftResumeMetadataStore(context, storage);
+  const selected = { ...key, subjectRef: 'oidc:owner' };
+  let lose = true;
+  const { fetch, requests } = recordingFetch(request => {
+    if (request.method === 'POST' && lose) { lose = false; throw new Error('Actual reply lost'); }
+    return initialization('retained-initial-draft', selected.subjectRef);
+  });
+  const build = () => createHttpAdapterCohort({ ...context, fetchImpl: fetch, resumeMetadata: metadata,
+    formVersionId: 'publication', accessToken: 'same-owner' });
+  await expect(build().draftStore.initializeDraft!(selected, 'publication')).rejects.toThrow('Actual reply lost');
+  const initial = requests[0];
+  const rebuilt = build();
+  await expect(rebuilt.draftStore.recoverInitialization!(selected, 'publication')).resolves.toMatchObject({
+    draftId: 'retained-initial-draft', draftVersion: 1, formVersionId: 'publication', subjectRef: selected.subjectRef,
+    isInitializationOnly: true,
+  });
+  expect(requests[1].headers.get('idempotency-key')).toBe(initial.headers.get('idempotency-key'));
+  expect(requests[1].body).toEqual(initial.body);
+  await rebuilt.draftStore.initializeDraft!(selected, 'publication');
+  expect(requests.filter(request => request.method === 'POST')).toHaveLength(2);
+  expect(requests.at(-1)?.method).toBe('GET');
+  const count = requests.length;
+  await expect(build().draftStore.recoverInitialization!({ ...selected, subjectRef: 'foreign' }, 'publication')).resolves.toBeUndefined();
+  expect(requests).toHaveLength(count);
+});
+
+
+it('refuses a changed publication on pending replay without replacing retained metadata or binding', async () => {
+  const storage = tabStorage(); const metadata = createBrowserDraftResumeMetadataStore(context, storage);
+  const selected = { ...key, subjectRef: 'oidc:owner' }; let first = true;
+  const { fetch, requests } = recordingFetch(() => {
+    if (first) { first = false; throw new Error('lost'); }
+    return jsonResponse({ title: 'Changed initialization input' }, 409);
+  });
+  const build = () => createHttpAdapterCohort({ ...context, fetchImpl: fetch, resumeMetadata: metadata,
+    formVersionId: 'publication', accessToken: 'same-owner' });
+  await expect(build().draftStore.initializeDraft!(selected)).rejects.toThrow('lost');
+  const before = [...storage.values];
+  await expect(build().draftStore.recoverInitialization!(selected, 'different-publication')).rejects.toThrow();
+  expect(requests[1].headers.get('idempotency-key')).toBe(requests[0].headers.get('idempotency-key'));
+  expect([...storage.values]).toEqual(before);
+  expect(metadata.read('draft-handles')).toBeUndefined();
+});
+
+it('retires pending recovery before credentials resolve and refuses task-owned initialization recovery', async () => {
+  const storage = tabStorage(); const metadata = createBrowserDraftResumeMetadataStore(context, storage);
+  const selected = { ...key, subjectRef: 'oidc:owner' }; let hold = false;
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  const { fetch, requests } = recordingFetch(() => { throw new Error('lost'); });
+  const config = { ...context, fetchImpl: fetch, resumeMetadata: metadata, formVersionId: 'publication',
+    accessToken: async () => { if (hold) await gate; return 'same-owner'; } };
+  await expect(createHttpAdapterCohort(config).draftStore.initializeDraft!(selected)).rejects.toThrow('lost');
+  hold = true; const resumed = createHttpAdapterCohort(config);
+  const pending = resumed.draftStore.recoverInitialization!(selected, 'publication');
+  await Promise.resolve(); await resumed.draftStore.invalidateSubject(selected.subjectRef); release();
+  await expect(pending).rejects.toThrow(/retired|cleared/);
+  expect(requests).toHaveLength(1);
+  const task = new HttpDraftStore({ ...context, fetchImpl: fetch, requireExistingBinding: true });
+  await expect(task.recoverInitialization(selected, 'publication')).rejects.toThrow('Task drafts');
+  expect(requests).toHaveLength(1);
 });

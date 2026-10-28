@@ -2369,3 +2369,25 @@ describe('explicit signed current-check renewal', () => {
     } finally { test.cleanup(); }
   });
 });
+
+
+it.each(['exact', 'owner', 'publication', 'marker', 'response', 'retired'] as const)(
+  'keeps initialized-only restoration separate from saved/signing authority: %s', mode => {
+    const test = fixture(false, undefined, undefined, 'server-actor');
+    const key = { formUrl: test.policy.definition.url, formVersion: test.policy.definition.version, subjectRef: 'server-actor' };
+    const initialization = { draftId: 'empty-owned-draft', draftVersion: 1, formVersionId: 'publication',
+      subjectRef: 'server-actor', isInitializationOnly: true };
+    if (mode === 'owner') initialization.subjectRef = 'other';
+    if (mode === 'publication') initialization.formVersionId = 'other';
+    if (mode === 'marker') initialization.isInitializationOnly = false;
+    const candidate = mode === 'response' ? { ...initialization, response: test.response } : initialization;
+    const current = () => { if (mode === 'retired') throw new Error('retired'); };
+    if (mode === 'exact') {
+      expect(() => test.host.restoreOwnedInitializationAccess(key, candidate, current)).not.toThrow();
+      expect(test.policy.assertOwner).toHaveBeenCalledWith(key, 'server-actor');
+    } else expect(() => test.host.restoreOwnedInitializationAccess(key, candidate, current)).toThrow();
+    expect(test.host.getSnapshot().controller).toBeUndefined();
+    expect(test.host.getSnapshot().runtime).toBeUndefined();
+    expect(test.saveDraft).not.toHaveBeenCalled(); expect(test.prepare).not.toHaveBeenCalled(); expect(test.sign).not.toHaveBeenCalled();
+    test.host.dispose(); test.engine.dispose();
+  });

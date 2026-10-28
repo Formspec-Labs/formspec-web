@@ -5,7 +5,7 @@ import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { ownedDraftResumeSelection } from '../../config/owned-draft-resume.ts';
 import type { TaskDraftAssociation } from '../../ports/task-draft.ts';
 import canonicalize from 'canonicalize';
-import type { DraftKey, DraftReadState, DraftStore, FormResponse, OwnedDraftResumeSelection } from '../../ports/draft-store.ts';
+import type { DraftKey, DraftReadState, DraftStore, FormResponse, OwnedDraftResumeSelection, RecoveredDraftInitialization } from '../../ports/draft-store.ts';
 import { copyDraftKey, createDraftBindingRegistry, type DraftBindingRegistry } from './draft-binding-registry.ts';
 import { HttpAdapterError, HttpClient, type HttpClientConfig } from './http-client.ts';
 import { defaultFormIdResolver, type FormIdResolver } from './form-id.ts';
@@ -54,7 +54,7 @@ export class HttpDraftStore implements DraftStore {
   private readonly formIdResolver: FormIdResolver;
   private readonly formVersionId?: string;
   private readonly expectedInitializationOwner?: HttpDraftStoreConfig['expectedInitializationOwner'];
-  private readonly initializations = new Map<string, Promise<{ draftId: string; isInitializationOnly: boolean; response?: FormResponse }>>();
+  private readonly initializations = new Map<string, Promise<RecoveredDraftInitialization>>();
   private readonly anonymousSessionToken?: HttpDraftStoreConfig['anonymousSessionToken'];
   private readonly bindings: DraftBindingRegistry;
   private readonly clearAnonymousSession?: HttpDraftStoreConfig['clearAnonymousSession'];
@@ -99,11 +99,29 @@ export class HttpDraftStore implements DraftStore {
   async initializeDraft(key: DraftKey, formVersionId?: string): Promise<{ draftId: string; isInitializationOnly: boolean; response?: FormResponse }> {
     key = structuredClone(key);
     if (this.requireExistingBinding) throw new Error('Task drafts require their owning task entry');
+    const result = await this.initializeWithKey(key, formVersionId,
+      this.bindings.get(key) ? undefined : this.bindings.initializationKey(key));
+    return { draftId: result.draftId, isInitializationOnly: result.isInitializationOnly,
+      ...(result.response ? { response: result.response } : {}) };
+  }
+
+  async recoverInitialization(key: DraftKey, formVersionId: string, assertCurrent: () => void = () => {}): Promise<RecoveredDraftInitialization | undefined> {
+    if (this.requireExistingBinding) throw new Error('Task drafts require their owning task entry');
+    key = copyDraftKey(key); assertSynchronousGuard(assertCurrent);
+    const retained = this.bindings.retainedInitializationKey(key);
+    if (!retained) return undefined;
+    return this.initializeWithKey(key, formVersionId, retained, assertCurrent);
+  }
+
+  private async initializeWithKey(key: DraftKey, formVersionId: string | undefined, attemptKey?: string,
+    assertCurrent: () => void = () => {}): Promise<RecoveredDraftInitialization> {
     const generation = this.generation;
-    const current = () => { if (generation !== this.generation || this.clearing) throw new Error('Draft initialization was retired'); };
+    const current = () => { assertSynchronousGuard(assertCurrent); if (generation !== this.generation || this.clearing) throw new Error('Draft initialization was retired'); };
     current();
-    const attemptKey = this.bindings.initializationKey(key);
-    const inFlight = this.initializations.get(attemptKey);
+    const existing = this.bindings.get(key);
+    if (!existing && (!attemptKey || this.bindings.retainedInitializationKey(key) !== attemptKey)) throw new Error('Retained initialization attempt unavailable');
+    const operationKey = existing ? `draft:${existing.draftId}` : attemptKey!;
+    const inFlight = this.initializations.get(operationKey);
     if (inFlight) return inFlight;
     const operation = (async () => {
       const formId = this.formIdResolver(key.formUrl, key.formVersion);
@@ -119,9 +137,12 @@ export class HttpDraftStore implements DraftStore {
       }
       const token = await this.resolveAnonymousSessionToken(key); current();
       const expectedOwner = await this.initializationOwner(key); current();
-      const draft = await this.client.postJson<OwnedDraftView>(`/runtime/forms/${encodeURIComponent(formId)}/drafts`,
-        { form_version_id: versionId },
-        { headers: { ...bearerHeaders(token), 'Idempotency-Key': attemptKey }, assertCurrent: current });
+      const draft = existing
+        ? await this.client.getJson<OwnedDraftView>(`/drafts/${encodeURIComponent(existing.draftId)}`,
+          { headers: bearerHeaders(token), assertCurrent: current })
+        : await this.client.postJson<OwnedDraftView>(`/runtime/forms/${encodeURIComponent(formId)}/drafts`,
+          { form_version_id: versionId },
+          { headers: { ...bearerHeaders(token), 'Idempotency-Key': attemptKey! }, assertCurrent: current });
       current();
       if (!draft.draft_id?.trim() || !Number.isSafeInteger(draft.draft_version) || draft.draft_version < 1
         || draft.form_version_id !== versionId || draft.subject_ref !== expectedOwner || draft.status !== 'in_progress'
@@ -143,11 +164,12 @@ export class HttpDraftStore implements DraftStore {
       if (previous && previous.draftId !== draft.draft_id) throw new Error('Draft initialization conflicts with retained identity');
       this.bindings.put(key, { draftId: draft.draft_id, draftVersion: draft.draft_version,
         ...(!draft.is_initialization_only ? { response: draft.canonical_response } : {}) });
-      return { draftId: draft.draft_id, isInitializationOnly: draft.is_initialization_only,
+      return { draftId: draft.draft_id, draftVersion: draft.draft_version, formVersionId: versionId, subjectRef: expectedOwner,
+        isInitializationOnly: draft.is_initialization_only,
         ...(!draft.is_initialization_only ? { response: snapshotWire(draft.canonical_response) } : {}) };
     })();
-    this.initializations.set(attemptKey, operation);
-    try { return await operation; } finally { if (this.initializations.get(attemptKey) === operation) this.initializations.delete(attemptKey); }
+    this.initializations.set(operationKey, operation);
+    try { return await operation; } finally { if (this.initializations.get(operationKey) === operation) this.initializations.delete(operationKey); }
   }
 
   private async read<T>(key: DraftKey, qualify: (view: OwnedDraftView) => Promise<T>, assertCurrent: () => void = () => {}, missingIsAbsent = true, selection?: OwnedDraftResumeSelection): Promise<T | undefined> {
