@@ -1,4 +1,3 @@
-/** @filedesc Runtime WASM — init, accessors, and wrappers that use only the runtime `formspec_wasm_runtime` module. */
 /** Parsed JSON from `fel_analysis_to_json_value` (Rust) — pass through to {@link normalizeFelAnalysisError}. */
 export type WasmFelAnalysisResultJson = {
     valid: boolean;

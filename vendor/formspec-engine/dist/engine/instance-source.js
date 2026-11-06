@@ -1,3 +1,5 @@
+/** @filedesc Runtime JSON admission and detached metadata for host instance sources. */
+import { isRawJson, jsonNumberText, isJsonRecord } from '../json-values.js';
 export function sourceErrorMessage(error) {
     try {
         return String(error);
@@ -19,6 +21,8 @@ export function cloneSourceJson(value, ancestors = new Set()) {
     if (value === null || typeof value === 'string' || typeof value === 'boolean')
         return value;
     if (typeof value === 'number' && Number.isFinite(value))
+        return value;
+    if (isRawJson(value) && jsonNumberText(value) !== undefined)
         return value;
     if (typeof value !== 'object' || ancestors.has(value))
         throw new Error('Instance source must be finite acyclic JSON');
@@ -43,7 +47,7 @@ export function cloneSourceJson(value, ancestors = new Set()) {
 }
 export function readSourceResult(value) {
     const result = cloneSourceJson(value);
-    if (!result || typeof result !== 'object' || Array.isArray(result))
+    if (!isJsonRecord(result))
         throw new Error('Invalid instance source result');
     if (result.status === 'loaded' && Object.prototype.hasOwnProperty.call(result, 'value'))
         return { status: 'loaded', value: result.value };

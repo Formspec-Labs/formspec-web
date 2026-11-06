@@ -1,4 +1,4 @@
-/** @filedesc Pure planning and output extraction for host-admitted Response Action service requests. */
+import { jsonNumberText } from './json-values.js';
 const FORBIDDEN_PROPERTY_NAMES = new Set(['__proto__', 'prototype', 'constructor']);
 const FORBIDDEN_HEADERS = new Set([
     'accept',
@@ -130,6 +130,9 @@ function scalar(value, label) {
         return value;
     if (typeof value === 'number' && Number.isFinite(value))
         return value;
+    const exact = jsonNumberText(value);
+    if (exact !== undefined)
+        return exact;
     return fail(`${label} must resolve to a scalar string, number, or boolean`);
 }
 function safeRequestPath(path) {

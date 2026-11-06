@@ -1,6 +1,7 @@
 /** @filedesc Rating stars/hearts with keyboard and half-step support. */
 'use client';
 import { jsx as _jsx } from "react/jsx-runtime";
+import { jsonValueText } from '@formspec-org/engine';
 const RATING_ICON_MAP = {
     star: ['\u2605', '\u2606'],
     heart: ['\u2665', '\u2661'],
@@ -19,8 +20,8 @@ export function RatingControl({ field, node, isReadonly, describedBy, }) {
     const iconName = node.props?.icon;
     const [selectedIcon, unselectedIcon] = resolveRatingIcons(iconName);
     const isInteger = node.fieldItem?.dataType === 'integer';
-    const raw = field.value;
-    const currentValue = typeof raw === 'number' && !Number.isNaN(raw) ? raw : 0;
+    const raw = Number(jsonValueText(field.value));
+    const currentValue = Number.isFinite(raw) ? raw : 0;
     const setRating = (v) => {
         let next = Math.max(0, Math.min(v, maxRating));
         if (isInteger)

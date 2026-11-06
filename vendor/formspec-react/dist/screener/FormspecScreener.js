@@ -1,5 +1,6 @@
 'use client';
 import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsonValueText, parseJsonNumber } from '@formspec-org/engine';
 /** @filedesc FormspecScreener — standalone eligibility gate component. */
 import { NativeSelectControl } from '../defaults/fields/controls/native-select';
 import { useId } from 'react';
@@ -44,21 +45,21 @@ function ScreenerField({ fieldIdPrefix, presentation, explicitBoolean, disabled,
                     return _jsxs(_Fragment, { children: [_jsxs("label", { className: "formspec-label", htmlFor: id, children: [label, required && _jsx("span", { className: "formspec-required", "aria-hidden": "true", children: "*" })] }), _jsxs(NativeSelectControl, { disabled: disabled, id: id, value: value === true ? 'yes' : value === false ? 'no' : '', "aria-invalid": showError, "aria-required": required, "aria-describedby": showError ? `${id}-error` : undefined, onChange: e => onChange(e.target.value === '' ? undefined : e.target.value === 'yes'), children: [_jsx("option", { value: "", children: chrome('select.placeholder') }), _jsx("option", { value: "yes", children: chrome('screener.yes') }), _jsx("option", { value: "no", children: chrome('screener.no') })] })] });
                 return (_jsxs("div", { className: "formspec-field--inline", children: [_jsx("input", { disabled: disabled, className: "formspec-input", id: id, type: "checkbox", checked: !!value, onChange: (e) => onChange(e.target.checked), "aria-invalid": showError, "aria-required": required, "aria-describedby": showError ? `${id}-error` : undefined }), _jsx("label", { className: "formspec-label", htmlFor: id, children: label })] }));
             case 'choice':
-                return (_jsxs(_Fragment, { children: [_jsxs("label", { className: "formspec-label", htmlFor: id, children: [label, required && _jsx("span", { className: "formspec-required", "aria-hidden": "true", children: "*" })] }), _jsxs(NativeSelectControl, { disabled: disabled, id: id, value: typeof value === 'string' || typeof value === 'number' ? String(value) : '', onChange: (e) => onChange(e.target.value), "aria-invalid": showError, "aria-required": required, "aria-describedby": showError ? `${id}-error` : undefined, children: [_jsx("option", { value: "", disabled: true, hidden: true, children: chrome('select.placeholder') }), itemOptions(item).map((c) => (_jsx("option", { value: String(c.value ?? c), children: text(screenerOptionLocaleKey(item.key, String(c.value ?? c)), c.label ?? String(c.value ?? c), answers, item.key) }, String(c.value ?? c))))] })] }));
+                return (_jsxs(_Fragment, { children: [_jsxs("label", { className: "formspec-label", htmlFor: id, children: [label, required && _jsx("span", { className: "formspec-required", "aria-hidden": "true", children: "*" })] }), _jsxs(NativeSelectControl, { disabled: disabled, id: id, value: typeof value === 'string' || typeof value === 'number' ? jsonValueText(value) : '', onChange: (e) => onChange(e.target.value), "aria-invalid": showError, "aria-required": required, "aria-describedby": showError ? `${id}-error` : undefined, children: [_jsx("option", { value: "", disabled: true, hidden: true, children: chrome('select.placeholder') }), itemOptions(item).map((c) => (_jsx("option", { value: String(c.value ?? c), children: text(screenerOptionLocaleKey(item.key, String(c.value ?? c)), c.label ?? String(c.value ?? c), answers, item.key) }, String(c.value ?? c))))] })] }));
             case 'integer':
             case 'decimal':
-                return (_jsxs(_Fragment, { children: [_jsxs("label", { className: "formspec-label", htmlFor: id, children: [label, required && _jsx("span", { className: "formspec-required", "aria-hidden": "true", children: "*" })] }), _jsx("input", { disabled: disabled, className: "formspec-input", id: id, type: "number", step: dt === 'decimal' ? 'any' : '1', value: value === null || value === undefined ? '' : Number(value), onChange: (e) => onChange(e.target.value === '' ? null : Number(e.target.value)), "aria-invalid": showError, "aria-required": required, "aria-describedby": showError ? `${id}-error` : undefined })] }));
+                return (_jsxs(_Fragment, { children: [_jsxs("label", { className: "formspec-label", htmlFor: id, children: [label, required && _jsx("span", { className: "formspec-required", "aria-hidden": "true", children: "*" })] }), _jsx("input", { disabled: disabled, className: "formspec-input", id: id, type: "number", step: dt === 'decimal' ? 'any' : '1', value: jsonValueText(value), onChange: (e) => onChange(e.target.value === '' ? null : parseJsonNumber(e.target.value)), "aria-invalid": showError, "aria-required": required, "aria-describedby": showError ? `${id}-error` : undefined })] }));
             case 'money': {
                 const moneyItem = item;
                 return (_jsxs(_Fragment, { children: [_jsxs("label", { className: "formspec-label", htmlFor: id, children: [label, required && _jsx("span", { className: "formspec-required", "aria-hidden": "true", children: "*" })] }), _jsxs("div", { className: "formspec-money-field", children: [_jsx("span", { className: "formspec-money-currency", children: moneyItem.currency || 'USD' }), _jsx("input", { disabled: disabled, className: "formspec-input", id: id, type: "text", inputMode: "decimal", value: typeof value === 'object' && value !== null && !Array.isArray(value)
-                                        ? String(value.amount ?? '')
+                                        ? jsonValueText(value.amount)
                                         : typeof value === 'string' || typeof value === 'number'
-                                            ? String(value)
+                                            ? jsonValueText(value)
                                             : '', onChange: (e) => {
                                         const raw = e.target.value;
                                         onChange(raw === ''
                                             ? null
-                                            : { amount: Number(raw), currency: moneyItem.currency || 'USD' });
+                                            : { amount: raw, currency: moneyItem.currency || 'USD' });
                                     }, "aria-invalid": showError, "aria-required": required, "aria-describedby": showError ? `${id}-error` : undefined })] })] }));
             }
             case 'text':

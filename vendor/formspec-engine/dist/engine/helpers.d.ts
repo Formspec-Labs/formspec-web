@@ -1,4 +1,5 @@
 /** @filedesc Internal helpers shared by FormEngine (paths, coercion, validation shaping, FEL path rewriting). */
+export { cloneValue, deepEqual, isJsonRecord } from '../json-values.js';
 import type { EngineSignal } from '../reactivity/types.js';
 import type { FormBind, FormDefinition, FormItem, OptionEntry, ValidationResult } from '@formspec-org/types';
 import type { EvalValidation } from '../diff.js';
@@ -21,13 +22,10 @@ export declare function toRuntimeMappingResult(result: {
     diagnostics: MappingDiagnostic[];
 }): RuntimeMappingResult;
 export declare function emptyValueForItem(item: FormItem): FormFieldValue;
-export declare function coerceInitialValue(item: FormItem, value: FormFieldValue): FormFieldValue;
+export declare function coerceInitialValue(item: FormItem, value: FormFieldValue, definition: FormDefinition): FormFieldValue;
 export declare function coerceFieldValue(item: FormItem, bind: EngineBindConfig | undefined, definition: FormDefinition, value: FormFieldValue): FormFieldValue;
 export declare function validateDataType(value: FormFieldValue, dataType: string): boolean;
-export declare function cloneValue<T>(value: T): T;
-export declare function isJsonRecord(value: unknown): value is JsonRecord;
 export declare function normalizeWasmValue<T>(value: T): T;
-export declare function deepEqual(left: unknown, right: unknown): boolean;
 export declare function resolveNowProvider(now: FormEngineRuntimeContext['now']): () => Date;
 export declare function coerceDate(value: RuntimeNowInput): Date;
 export declare function toBasePath(path: string): string;
@@ -42,7 +40,6 @@ export declare function getAncestorBasePaths(path: string): string[];
 export declare function getScopeAncestors(scopePath: string): string[];
 export declare function getNestedValue(target: unknown, path: string): FormFieldValue;
 export declare function setNestedPathValue(target: JsonRecord, path: string, value: FormFieldValue): void;
-export declare function setResponsePathValue(target: JsonRecord, path: string, value: FormFieldValue): void;
 export declare function replaceBareCurrentFieldRefs(expression: string, currentFieldName: string): string;
 export declare function flattenObject(value: JsonValue, prefix?: string, output?: JsonRecord): JsonRecord;
 export declare function isEmptyValue(value: unknown): boolean;
@@ -73,4 +70,3 @@ export declare function resolveQualifiedGroupRefs(expression: string, currentIte
     count: number;
 }>): string;
 export declare function resolveRelativeDependency(dep: string, parentPath: string, selfPath: string): string | null;
-export {};

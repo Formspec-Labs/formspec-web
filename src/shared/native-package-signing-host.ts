@@ -1,3 +1,4 @@
+import { cloneJsonValue } from './exact-json.ts';
 import { createSubmitFailureReporter } from './submit-diagnostic.ts';
 import { assembleNativeTaskPrefill } from './native-task-prefill.ts';
 import { NATIVE_SOURCE_OPERATION_MILLISECONDS } from './native-operation-budget.ts';
@@ -9,12 +10,12 @@ export type { NativeInitialDataSourcePorts } from './native-initial-data-source.
 import { createProtectedScreenerRoutes } from './protected-screener-routes.ts';
 import { signingScopeAllows, type NativeSigningScopeIdentity } from './native-signing-scope.ts';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
-import canonicalize from 'canonicalize';
+import { canonicalJsonIdentity as canonicalize } from './exact-json.ts';
 import { createFormEngine, preactReactiveRuntime, type IFormEngine, type RegistryEntry } from '@formspec-org/engine/render';
 import type { SemanticControlScope } from '@formspec-org/react';
 import { captureResponseFieldMetadata, composeSurfaceApp, matchRoute, routeHref, createThemeAuthority, createWidgetRegistry, dataSourceAvailableToWidget, dereferenceBundleExport, flattenRegistryEntries, planMatchedRoute, resolveDataSourceDescriptor, type BundleExport, type DataSourceDescriptor, type SlotPlan, type SurfaceStaticAssetResolver } from '@formspec-org/surface';
 import { RESPONSE_REVIEW_WIDGET_SHAPE, SIGNING_CEREMONY_WIDGET_SHAPE, STRUCTURED_PANEL_CONFIG_SCHEMA, STRUCTURED_PANEL_DELIVERY_CONTRACT_ID, STRUCTURED_PANEL_RENDERED_CONFIG_NODES, responseReviewHash, starterWidgetModule, type ResponseReviewData, type ResponseReviewOptions, type ResponseReviewState, type SurfaceWidgetModule } from '@formspec-org/surface-react';
-import { targetDefinitionMatches, type FormDefinition, type FormResponse, type LocaleDocument, type ScreenerDocument, type ValidationReport } from '@formspec-org/types';
+import { targetDefinitionMatches, type FormDefinition, type FormResponse, type LocaleDocument, type ScreenerDocument, type ValidationReport, type ValidationProfile } from '@formspec-org/types';
 import type { AttachmentStore } from '../ports/attachment-store.ts';
 import type { DraftKey, RecoveredDraftInitialization } from '../ports/draft-store.ts';
 import type { RespondentOwnedRuntimeInput, RespondentOwnedRuntime, RespondentSubmittedRuntimeInput } from '../app/RespondentRuntime.tsx';
@@ -113,7 +114,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     ? Object.freeze(policy.domainWidgetModules.map(module => Object.freeze({
         moduleId: module.moduleId,
         widgets: Object.freeze({ ...module.widgets }),
-        ...(module.contracts ? { contracts: structuredClone(module.contracts) } : {}),
+        ...(module.contracts ? { contracts: cloneJsonValue(module.contracts) } : {}),
       })))
     : undefined;
   policy = { ...policy, candidateHydration: selectedHydration ? Object.freeze({
@@ -122,11 +123,11 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     dispose: selectedHydration.dispose.bind(selectedHydration),
   }) : undefined, statusReader: selectedStatusReader ? Object.freeze({
     readStatus: selectedStatusReader.readStatus.bind(selectedStatusReader),
-  }) : undefined, applicantStatus: policy.applicantStatus !== undefined ? structuredClone(policy.applicantStatus) : undefined, screenerEntryGate: policy.screenerEntryGate ? structuredClone(policy.screenerEntryGate) : undefined, signingScope: policy.signingScope ? structuredClone(policy.signingScope) : undefined, modules: structuredClone(policy.modules), structuredPanelWidgets: structuredClone(policy.structuredPanelWidgets), domainWidgetModules: selectedDomainWidgetModules, allowedWidgetShapes: policy.allowedWidgetShapes ? structuredClone(policy.allowedWidgetShapes) : undefined, staticAssets: structuredClone(policy.staticAssets), bundle: structuredClone(policy.bundle), definition: structuredClone(policy.definition),
-    registryEntries: structuredClone(policy.registryEntries), locales: structuredClone(policy.locales), bindings: structuredClone(policy.bindings),
-    applicationReadiness: structuredClone(policy.applicationReadiness), readiness: structuredClone(policy.readiness), publication: structuredClone(policy.publication),
+  }) : undefined, applicantStatus: policy.applicantStatus !== undefined ? cloneJsonValue(policy.applicantStatus) : undefined, screenerEntryGate: policy.screenerEntryGate ? cloneJsonValue(policy.screenerEntryGate) : undefined, signingScope: policy.signingScope ? cloneJsonValue(policy.signingScope) : undefined, modules: cloneJsonValue(policy.modules), structuredPanelWidgets: cloneJsonValue(policy.structuredPanelWidgets), domainWidgetModules: selectedDomainWidgetModules, allowedWidgetShapes: policy.allowedWidgetShapes ? cloneJsonValue(policy.allowedWidgetShapes) : undefined, staticAssets: cloneJsonValue(policy.staticAssets), bundle: cloneJsonValue(policy.bundle), definition: cloneJsonValue(policy.definition),
+    registryEntries: cloneJsonValue(policy.registryEntries), locales: cloneJsonValue(policy.locales), bindings: cloneJsonValue(policy.bindings),
+    applicationReadiness: cloneJsonValue(policy.applicationReadiness), readiness: cloneJsonValue(policy.readiness), publication: cloneJsonValue(policy.publication),
     nativeScreener: policy.nativeScreener ? Object.freeze({ ...policy.nativeScreener }) : undefined,
-    controller: { ...policy.controller, roles: structuredClone(policy.controller.roles) } };
+    controller: { ...policy.controller, roles: cloneJsonValue(policy.controller.roles) } };
   freezeMetadata(policy.structuredPanelWidgets); freezeMetadata(policy.allowedWidgetShapes); freezeMetadata(policy.modules); freezeMetadata(policy.staticAssets); freezeMetadata(policy.bundle); freezeMetadata(policy.definition); freezeMetadata(policy.registryEntries); freezeMetadata(policy.locales);
   if (policy.domainWidgetModules) { for (const module of policy.domainWidgetModules) freezeMetadata(module.contracts); }
   freezeMetadata(policy.signingScope); freezeMetadata(policy.screenerEntryGate); freezeMetadata(policy.applicantStatus);
@@ -502,7 +503,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       if (!await installFacts(facts, saved, old, lease, AbortSignal.any([stage.signal, nativeLifetime.signal, ...(caller ? [caller.signal] : [])]), assertCurrent)) {
         nativeReadiness = 'needs-save'; emit(); return;
       }
-      nativeCandidate = { saved: structuredClone(saved), facts };
+      nativeCandidate = { saved: cloneJsonValue(saved), facts };
       diagnosticStage = 'source-ready';
       facts.assertReady(); nativeReadiness = 'ready'; observeCandidateLifetime();
       reportQualification(diagnosticStage);
@@ -543,7 +544,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       if (reviewedRefresh.identity !== identity) throw new Error('native-review-refresh-conflict');
       return reviewedRefresh.promise;
     }
-    const capturedValidation = structuredClone(reviewValidation);
+    const capturedValidation = cloneJsonValue(reviewValidation);
     const sequence = ++qualificationSequence; nativeStage?.abort();
     const stage = new AbortController(); nativeStage = stage;
     const signal = AbortSignal.any([stage.signal, nativeLifetime.signal, ...(renewal ? [renewal.signal] : [])]);
@@ -571,7 +572,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         const unchanged = same(outputs.fields, capturedReview.presentation.fields) && same(validationMeaning(outputs.validationReport), validationMeaning(capturedValidation));
         if (!await installFacts(facts, saved, old, lease, signal, check)) throw new Error('native-isolated-candidate-changed');
         check(); facts.assertReady();
-        nativeCandidate = { saved: structuredClone(saved), facts }; nativeReadiness = 'ready'; observeCandidateLifetime();
+        nativeCandidate = { saved: cloneJsonValue(saved), facts }; nativeReadiness = 'ready'; observeCandidateLifetime();
         if (!unchanged) {
           await delivery(publicSnapshot!);
           throw new Error('native-review-renewed-assent-required');
@@ -659,7 +660,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     }
   }
   if (policy.applicantStatus) {
-    applicantStatus = structuredClone(policy.applicantStatus);
+    applicantStatus = cloneJsonValue(policy.applicantStatus);
     freezeMetadata(applicantStatus);
     updateApplicantStatusRevision(applicantStatus);
   }
@@ -667,7 +668,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     if (reader) activeStatusReader = Object.freeze({ readStatus: reader.readStatus.bind(reader) });
     if (disposed || cleared) return;
     if (policy.applicantStatus !== undefined) {
-      const next = policy.applicantStatus ? structuredClone(policy.applicantStatus) : undefined;
+      const next = policy.applicantStatus ? cloneJsonValue(policy.applicantStatus) : undefined;
       if (next) { freezeMetadata(next); updateApplicantStatusRevision(next); }
       if (!same(applicantStatus, next)) { applicantStatus = next; emit(); }
       return;
@@ -751,7 +752,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     if ((reason === 'edit' || reason === 'locale') && ownedDraftRestoration) ownedDraftRestoration.visit = undefined;
     retireNative();
     rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.readyPath, false);
-    authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? structuredClone(input.draftKey) : submittedKey ? structuredClone(submittedKey) : undefined);
+    authorityGeneration++; deliveryIdentity = undefined; fence(); controller?.invalidate(); policy.invalidateAuthority(reason, input ? cloneJsonValue(input.draftKey) : submittedKey ? cloneJsonValue(submittedKey) : undefined);
   }
   async function isolated(response: FormResponse, activeLocale: string, run: (engine: IFormEngine) => unknown, saved?: SavedResponseDraft, qualifiedFacts?: HydratedEvaluationCandidate) {
     const facts = native ? qualifiedFacts ?? await exactFacts(response, saved) : undefined;
@@ -775,6 +776,11 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       return await run(engine);
     } finally { clearTimeout(timer); engine.dispose(); }
   }
+  function frozenValidationReport(engine: IFormEngine, response: FormResponse, profile: ValidationProfile, saved?: SavedResponseDraft) {
+    const snapshot = engine.getResponseSnapshot({ profile: 'off' }, profile);
+    if (!same(responseData(snapshot.response.data, saved), response.data)) throw new Error('native-isolated-candidate-changed');
+    return snapshot.validationReport;
+  }
   async function delivery(snapshot: ResponseActionControllerSnapshot) {
     const selected = snapshot.signed ?? snapshot.prepared;
     if (!selected || !input) return;
@@ -785,12 +791,12 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const fields = capturedOutputs.fields;
     current(expected); policy.assertOwner(input.draftKey, selected.actor.id);
     if (await policy.reviewResponseDigest(selected.response) !== selected.draft.responseHash) throw new Error('native-review-digest-profile-mismatch');
-    const captured: ResponseReviewData = structuredClone({ definition: policy.definition, response: selected.response,
+    const captured: ResponseReviewData = cloneJsonValue({ definition: policy.definition, response: selected.response,
       presentation: { responseHash: selected.draft.responseHash, definitionUrl: selected.response.definitionUrl,
         definitionVersion: selected.response.definitionVersion, locale, actorRef: selected.actor.id,
         draft: { id: selected.draft.id, version: selected.draft.version }, phase, fields } });
     const identity = await responseReviewHash(captured); current(expected);
-    review = captured; reviewValidation = structuredClone(capturedOutputs.validationReport); expectedReviewIdentity = identity;
+    review = captured; reviewValidation = cloneJsonValue(capturedOutputs.validationReport); expectedReviewIdentity = identity;
     reviewState = { status: 'pending', responseHash: selected.draft.responseHash, actorRef: selected.actor.id,
       draft: { id: selected.draft.id, version: selected.draft.version }, locale, phase };
     rebuildRuntime(snapshot, expected); emit();
@@ -816,7 +822,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
   }
   function start(restoredResponse?: FormResponse, assertRestorationCurrent?: () => void) {
     if (!input) throw new Error('native-runtime-not-attached');
-    if (restoredResponse) { ownedResponseSeed = structuredClone(restoredResponse); freezeMetadata(ownedResponseSeed); }
+    if (restoredResponse) { ownedResponseSeed = cloneJsonValue(restoredResponse); freezeMetadata(ownedResponseSeed); }
     unsubscribeController?.();
     const expected = authorityGeneration;
     controller = createResponseActionController({ ...policy.controller, ...(assertRestorationCurrent ? { hashResponse: async response => {
@@ -830,22 +836,23 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       validateFrozenResponse: async (response, validationTuple) => {
         const selected = publicSnapshot?.signed ?? publicSnapshot?.prepared;
         if (native && selected && same(response, selected.response) && (reviewedRefresh || nativeCandidate?.facts.refreshRequired?.())) await refreshReviewedFacts(selected);
-        const result = await isolated(response, locale, engine => ({ response, validationTuple,
-          validationReport: engine.getValidationReport({ profile: validationTuple.profile }) }), publicSnapshot?.signed ?? publicSnapshot?.prepared);
+        const result = await isolated(response, locale, engine => {
+          return { response, validationTuple, validationReport: frozenValidationReport(engine, response, validationTuple.profile, publicSnapshot?.signed ?? publicSnapshot?.prepared) };
+        }, publicSnapshot?.signed ?? publicSnapshot?.prepared);
         if (disposed || authorityGeneration !== expected) throw new Error('native-context-obsolete');
         return result as Awaited<ReturnType<ResponseActionControllerConfig['validateFrozenResponse']>>;
       },
       captureSubmitOptions: async signed => {
         if (!native) return {};
         const facts = await exactFacts(signed.response, signed);
-        return facts.nativeCurrentCheck ? { nativeCurrentCheck: structuredClone(facts.nativeCurrentCheck) } : {};
+        return facts.nativeCurrentCheck ? { nativeCurrentCheck: cloneJsonValue(facts.nativeCurrentCheck) } : {};
       },
       buildHandoff: async response => {
-        const report = await isolated(response, locale, engine => engine.getValidationReport({ profile: 'on-submit' }), publicSnapshot?.signed) as ValidationReport;
+        const report = await isolated(response, locale, engine => frozenValidationReport(engine, response, 'on-submit', publicSnapshot?.signed), publicSnapshot?.signed) as ValidationReport;
         if (disposed || authorityGeneration !== expected || !report.valid || report.definitionUrl !== response.definitionUrl
           || report.definitionVersion !== response.definitionVersion) throw new Error('native-handoff-validation-refused');
         if (!policy.buildHandoff) throw new Error('Intake handoff builder is unavailable');
-        return policy.buildHandoff(response, report, structuredClone({ draftKey: input!.draftKey, claim: input!.claim }));
+        return policy.buildHandoff(response, report, cloneJsonValue({ draftKey: input!.draftKey, claim: input!.claim }));
       },
       reviewReady: (context, stage) => {
         if (!review || !reviewState || reviewState.status !== 'ready' || reviewState.contextIdentity !== expectedReviewIdentity
@@ -865,7 +872,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         if (same(access.draftKey, saved.draftKey) && access.initialization.draftId === saved.draft.id
           && access.initialization.subjectRef === saved.actor.id
           && access.initialization.formVersionId === saved.evidence.form_version_id) {
-          ownedDraftRestoration = { kind: 'saved', saved: structuredClone(saved), assertCurrent: access.assertCurrent, visit: access.visit };
+          ownedDraftRestoration = { kind: 'saved', saved: cloneJsonValue(saved), assertCurrent: access.assertCurrent, visit: access.visit };
           freezeMetadata(ownedDraftRestoration.saved);
         } else ownedDraftRestoration = undefined;
       }
@@ -873,7 +880,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         const previous = ownedDraftRestoration.saved, saved = publicSnapshot.saved;
         if (same(previous.draftKey, saved.draftKey) && previous.draft.id === saved.draft.id && previous.actor.id === saved.actor.id
           && previous.response.id === saved.response.id && previous.evidence.form_version_id === saved.evidence.form_version_id) {
-          ownedDraftRestoration.saved = structuredClone(saved); freezeMetadata(ownedDraftRestoration.saved);
+          ownedDraftRestoration.saved = cloneJsonValue(saved); freezeMetadata(ownedDraftRestoration.saved);
         } else ownedDraftRestoration = undefined;
       }
       application = publicSnapshot.application; applicationLookup = publicSnapshot.applicationLookup; applicationFlags(); syncApplicantStatus();
@@ -885,8 +892,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       }
       if (publicSnapshot.phase === 'prepared') checkpointState = 'saved';
       if (authorityGeneration === expected && publicSnapshot.saved) {
-        ownedResponseSeed = structuredClone(publicSnapshot.saved.response); freezeMetadata(ownedResponseSeed);
-        if (input) input = { ...input, restoredSavedDraft: structuredClone(publicSnapshot.saved) };
+        ownedResponseSeed = cloneJsonValue(publicSnapshot.saved.response); freezeMetadata(ownedResponseSeed);
+        if (input) input = { ...input, restoredSavedDraft: cloneJsonValue(publicSnapshot.saved) };
       }
       rendererEngine?.setInstanceValue(policy.readiness.instance, policy.readiness.ownedPath, publicSnapshot.owned);
       const selected = publicSnapshot.signed ?? publicSnapshot.prepared;
@@ -906,10 +913,10 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       if (!review || !same({ ...state, status: 'pending', contextIdentity: undefined },
         { ...reviewState, status: 'pending', contextIdentity: undefined }) || (state.status === 'ready' && state.contextIdentity !== expectedReviewIdentity)) return;
       if (same(state, reviewState)) return;
-      reviewState = structuredClone(state); rebuildRuntime(publicSnapshot!, generation); emit();
+      reviewState = cloneJsonValue(state); rebuildRuntime(publicSnapshot!, generation); emit();
     },
     async readAttachment(request, options) {
-      request = structuredClone(request); freezeMetadata(request);
+      request = cloneJsonValue(request); freezeMetadata(request);
       const expected = generation;
       const expectedVisit = visitEpoch;
       if (!input || !review || !same(request.definition, review.definition) || !same(request.response, review.response)
@@ -989,7 +996,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       || initialization.formVersionId !== policy.publication.formVersionId
       || draftKey.formUrl !== policy.definition.url || draftKey.formVersion !== policy.definition.version
       || draftKey.subjectRef !== undefined && draftKey.subjectRef !== initialization.subjectRef) throw new Error('native-initialization-restoration-refused');
-    const key = structuredClone(draftKey), identity = structuredClone(initialization);
+    const key = cloneJsonValue(draftKey), identity = cloneJsonValue(initialization);
     freezeMetadata(key); freezeMetadata(identity);
     const sourceAuthority = policy.nativeScreener?.context();
     const current = () => {
@@ -1008,7 +1015,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     if (disposed || cleared || controller || input || submitted || !value.response.id
       || (signed ? !value.response.authoredSignatures?.length : value.response.authoredSignatures?.length || value.response.extensions?.['x-formspec-signing-content']))
       throw new Error('native-owned-restoration-refused');
-    const saved = structuredClone(value); freezeMetadata(saved);
+    const saved = cloneJsonValue(value); freezeMetadata(saved);
     const sourceAuthority = policy.nativeScreener?.context();
     const check = () => {
       assertSynchronousGuard(assertCurrent);
@@ -1097,7 +1104,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         const receipt = await policy.controller.applicationLifecycle!.load(submittedKey);
         if (disposed || cleared || authorityGeneration !== expected || application && (!receipt || receipt.caseLedgerId !== application.caseLedgerId
           || receipt.draftRef !== application.draftRef || application.status === 'submitted' && receipt.status !== 'submitted')) throw new Error('native-application-context-retired');
-        application = receipt ? structuredClone(receipt) : undefined; applicationLookup = undefined; freezeMetadata(application); syncApplicantStatus(); emit();
+        application = receipt ? cloneJsonValue(receipt) : undefined; applicationLookup = undefined; freezeMetadata(application); syncApplicantStatus(); emit();
       } } : {}), reviewOptions, selectLocale,
     getStartupRoute(pathname: string): { entryHref: string; entryTitle?: string; requiresHostState: boolean; requiresScreener?: boolean; canRestoreOwnedForm?: boolean; screenerDocuments?: readonly ScreenerDocument[]; signedReviewHref?: string; signedReviewTitle?: string } {
       const match = matchRoute(app, pathname).match;
@@ -1257,7 +1264,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
                   const recordId = typeof applicantStatus.caseReference === 'string' && applicantStatus.caseReference.trim()
                     ? applicantStatus.caseReference
                     : application?.caseLedgerId ?? 'applicant-status';
-                  return { status: 'loaded', value: structuredClone(applicantStatus), freshness: 'fresh', recordId, revision };
+                  return { status: 'loaded', value: cloneJsonValue(applicantStatus), freshness: 'fresh', recordId, revision };
                 } catch {
                   return { status: 'unavailable', reason: 'native-visit-retired' };
                 }
@@ -1313,7 +1320,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       if (clearing) return clearing;
       const selectedKey = input?.draftKey ?? submittedKey;
       if (disposed || !selectedKey) throw new Error('native-runtime-unavailable');
-      const key = structuredClone(selectedKey);
+      const key = cloneJsonValue(selectedKey);
       if (!cleared) { stop('clear'); cleared = true; emit(); }
       clearing = policy.clearDraftAccess(key);
       try { await clearing; } finally { clearing = undefined; }
@@ -1341,9 +1348,9 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         || response.definitionUrl !== policy.definition.url || response.definitionVersion !== policy.definition.version) {
         throw new Error('native-submitted-context-refused');
       }
-      application = next.state.application ? structuredClone(next.state.application) : undefined; freezeMetadata(application);
-      applicationLookup = next.state.applicationLookup ? structuredClone(next.state.applicationLookup) : undefined; freezeMetadata(applicationLookup);
-      submittedKey = structuredClone(next.draftKey); freezeMetadata(submittedKey);
+      application = next.state.application ? cloneJsonValue(next.state.application) : undefined; freezeMetadata(application);
+      applicationLookup = next.state.applicationLookup ? cloneJsonValue(next.state.applicationLookup) : undefined; freezeMetadata(applicationLookup);
+      submittedKey = cloneJsonValue(next.draftKey); freezeMetadata(submittedKey);
       responseId = response.id; locale = selectedLocale.locale;
       submitted = Object.freeze({ referenceNumber: response.id, recordKind: 'response' });
       fence(); syncApplicantStatus(); emit();
@@ -1370,14 +1377,14 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
       // lease alone adopts Runtime's already-qualified saved Locale pin.
       if (input) next.engine.setLocale(locale);
       else locale = next.activeLocale;
-      next = { ...next, draftKey: structuredClone(next.draftKey), claim: structuredClone(next.claim),
-        restoredResponse: next.restoredResponse ? structuredClone(next.restoredResponse) : undefined,
-        restoredSavedDraft: next.restoredSavedDraft ? structuredClone(next.restoredSavedDraft) : undefined,
-        restoredSigning: next.restoredSigning ? structuredClone(next.restoredSigning) : undefined,
-        restoredPendingSign: next.restoredPendingSign ? structuredClone(next.restoredPendingSign) : undefined, activeLocale: locale };
+      next = { ...next, draftKey: cloneJsonValue(next.draftKey), claim: cloneJsonValue(next.claim),
+        restoredResponse: next.restoredResponse ? cloneJsonValue(next.restoredResponse) : undefined,
+        restoredSavedDraft: next.restoredSavedDraft ? cloneJsonValue(next.restoredSavedDraft) : undefined,
+        restoredSigning: next.restoredSigning ? cloneJsonValue(next.restoredSigning) : undefined,
+        restoredPendingSign: next.restoredPendingSign ? cloneJsonValue(next.restoredPendingSign) : undefined, activeLocale: locale };
       if (!input) checkpointState = next.restoredResponse ? 'saved' : 'unsaved';
-      if (!input && next.restoredApplication) { application = structuredClone(next.restoredApplication); freezeMetadata(application); }
-      if (!input && next.restoredApplicationLookup) { applicationLookup = structuredClone(next.restoredApplicationLookup); freezeMetadata(applicationLookup); }
+      if (!input && next.restoredApplication) { application = cloneJsonValue(next.restoredApplication); freezeMetadata(application); }
+      if (!input && next.restoredApplicationLookup) { applicationLookup = cloneJsonValue(next.restoredApplicationLookup); freezeMetadata(applicationLookup); }
       input = next;
       freezeMetadata(input.draftKey); freezeMetadata(input.claim); freezeMetadata(input.restoredResponse);
       rendererEngine = next.engine;
@@ -1391,7 +1398,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
           // Only the user's ordinary Save may create a successor for a new screening act.
           if (screener) {
             const { draftKey, draft, actor, response } = next.restoredSavedDraft;
-            restoredScreenerCheckpoint = structuredClone({ draftKey, draft, actor, response });
+            restoredScreenerCheckpoint = cloneJsonValue({ draftKey, draft, actor, response });
           }
           const expected = authorityGeneration;
           await controller!.restoreSavedDraft(next.restoredSavedDraft); assertAdmission();
@@ -1499,7 +1506,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
                 invocationContext: { invocationId: generateIdempotencyKey() }, ports: { ...action.ports,
                   submit: options => {
                     assertSavedCurrent();
-                    return { response: structuredClone(saved.response), validationReport: leasedEngine.getValidationReport({ profile: options.profile }) };
+                    return { response: cloneJsonValue(saved.response), validationReport: frozenValidationReport(leasedEngine, saved.response, options.profile ?? 'live', saved) };
                   } } }, { assertBeforeDispatch: () => assertSavedCurrent(true) });
               lifetime.signal.throwIfAborted(); lifetime.assertCurrent(); assertCurrent();
               if (('invocation' in result ? result.invocation : result).status !== 'completed') throw new Error('native-saved-facts-save-failed');
@@ -1526,9 +1533,8 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
         // Prepare must capture validation and Response from the installed engine.
         const invocation = refreshedPrepare ? { ...action, ports: { ...action.ports, submit: (options: Parameters<NonNullable<typeof action.ports.submit>>[0]) => {
           assertCurrent();
-          const validationReport = leasedEngine.getValidationReport({ profile: options.profile });
-          const response = leasedEngine.getResponse({ profile: options.validationTuple.persistence === 'complete-response' ? 'on-submit' : 'off', id: responseId });
-          assertCurrent(); return { response, validationReport };
+          const detail = leasedEngine.getResponseSnapshot({ profile: options.validationTuple.persistence === 'complete-response' ? 'on-submit' : 'off', id: responseId }, options.profile);
+          assertCurrent(); return detail;
         } } } : action;
         const taskPrefill = (publicSnapshot?.saved ?? input?.restoredSavedDraft)?.evidence.taskDraft?.taskPrefill;
         const assembledInvocation = policy.controller.completion?.kind === 'task' && taskPrefill && invocation.ports.submit
@@ -1615,7 +1621,7 @@ function toQualifiedApplicantStatus(
   activeLocale: string,
 ): Readonly<Record<string, unknown>> {
   if ('caseReference' in resource && 'notices' in resource && 'freeHelp' in resource && 'paperAlternative' in resource && 'retention' in resource) {
-    return structuredClone(resource as Record<string, unknown>);
+    return cloneJsonValue(resource as Record<string, unknown>);
   }
   const detail = resource as ApplicantCaseDetail;
   const status = detail.summary.lifecycleState === 'completed'

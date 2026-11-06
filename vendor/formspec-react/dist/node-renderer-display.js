@@ -1,6 +1,7 @@
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 /** @filedesc Display-category LayoutNode rendering (Text, DataTable, Summary, etc.). */
+import { jsonValueText, clampJsonNumber } from '@formspec-org/engine';
 import { useCallback, useMemo, useState } from 'react';
 import { computed, signal as createSignal } from '@preact/signals-core';
 import { useChromeText } from './use-chrome-text';
@@ -145,13 +146,13 @@ function BoundText({ bind }) {
     const { engine } = useFormspecContext();
     const sig = engine.signals[bind] ?? NO_VALUE;
     const rawValue = useSignal(sig);
-    return _jsx(_Fragment, { children: rawValue != null ? String(rawValue) : '' });
+    return _jsx(_Fragment, { children: rawValue != null ? jsonValueText(rawValue) : '' });
 }
 function BoundProgressBar({ bind, max, showPercent, progressLabel, cssClass, style, metadataAttrs }) {
     const { engine } = useFormspecContext();
     const sig = engine.signals[bind] ?? NO_VALUE;
     const rawValue = useSignal(sig);
-    const value = typeof rawValue === 'number' ? rawValue : 0;
+    const value = Number(jsonValueText(rawValue)) || 0; // Display-only progress approximation.
     const pct = Math.round((value / max) * 100);
     return (_jsxs("div", { className: `formspec-progress-bar${cssClass ? ' ' + cssClass : ''}`, style: style, ...metadataAttrs, children: [_jsx("progress", { value: value, max: max, "aria-label": progressLabel }), showPercent && (_jsxs("span", { className: "formspec-progress-percent", children: [pct, "%"] }))] }));
 }
@@ -171,13 +172,13 @@ function formatMoney(value, locale = 'en-US') {
             return new Intl.NumberFormat(locale, {
                 style: 'currency',
                 currency: money.currency || 'USD',
-            }).format(Number(money.amount));
+            }).format(jsonValueText(money.amount));
         }
         catch {
-            return String(money.amount);
+            return jsonValueText(money.amount);
         }
     }
-    return String(value);
+    return jsonValueText(value);
 }
 function SummaryItem({ label, bind, metadataAttrs, }) {
     const { engine } = useFormspecContext();
@@ -185,7 +186,7 @@ function SummaryItem({ label, bind, metadataAttrs, }) {
     const displayValue = rawValue != null
         ? (typeof rawValue === 'object' && rawValue !== null && 'amount' in rawValue
             ? formatMoney(rawValue)
-            : String(rawValue))
+            : jsonValueText(rawValue))
         : '\u2014';
     return (_jsxs(_Fragment, { children: [_jsx("dt", { ...metadataAttrs, children: label }), _jsx("dd", { ...metadataAttrs, children: displayValue })] }));
 }
@@ -212,14 +213,14 @@ function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, metadata
         return (_jsxs("div", { className: "formspec-datatable-cell-wrapper", children: [prefix ? _jsx("span", { className: "formspec-datatable-prefix", children: prefix }) : null, control, suffix ? _jsx("span", { className: "formspec-datatable-prefix", children: suffix }) : null] }));
     };
     if (!isEditable) {
-        let displayValue = rawValue != null ? String(rawValue) : '';
+        let displayValue = rawValue != null ? jsonValueText(rawValue) : '';
         if (dataType === 'money' && rawValue != null && typeof rawValue === 'object') {
             try {
                 const money = rawValue;
                 displayValue = new Intl.NumberFormat('en-US', {
                     style: 'currency',
                     currency: money.currency || fieldDef?.currency || column.currency || defaultCurrency,
-                }).format(Number(money.amount ?? rawValue));
+                }).format(jsonValueText(money.amount ?? rawValue));
             }
             catch { /* fall through */ }
         }
@@ -234,30 +235,27 @@ function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, metadata
         return (_jsx("td", { ...metadataAttrs, children: _jsx("input", { className: "formspec-datatable-input", type: "checkbox", checked: !!rawValue, "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.checked) }) }));
     }
     if ((dataType === 'choice' || dataType === 'select') && choices.length > 0) {
-        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsxs("select", { className: "formspec-datatable-input", name: signalPath, value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value || null), children: [_jsx("option", { value: "" }), choices.map((c) => (_jsx("option", { value: c.value, children: c.label ?? c.value }, c.value)))] })) }));
+        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsxs("select", { className: "formspec-datatable-input", name: signalPath, value: rawValue != null ? jsonValueText(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value || null), children: [_jsx("option", { value: "" }), choices.map((c) => (_jsx("option", { value: c.value, children: c.label ?? c.value }, c.value)))] })) }));
     }
     if (dataType === 'number' || dataType === 'integer' || dataType === 'decimal' || dataType === 'money') {
         const moneyValue = rawValue != null && typeof rawValue === 'object' && 'amount' in rawValue
             ? rawValue.amount
             : undefined;
-        const numericDisplay = moneyValue ?? (typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : '');
-        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "number", step: column.step != null ? String(column.step) : (dataType === 'integer' ? '1' : 'any'), min: column.min != null ? String(column.min) : undefined, max: column.max != null ? String(column.max) : undefined, value: numericDisplay, "aria-label": column.header, disabled: readonly, onChange: (e) => {
+        const numericDisplay = jsonValueText(moneyValue ?? rawValue);
+        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "number", step: column.step != null ? jsonValueText(column.step) : (dataType === 'integer' ? '1' : 'any'), min: column.min != null ? jsonValueText(column.min) : undefined, max: column.max != null ? jsonValueText(column.max) : undefined, value: numericDisplay, "aria-label": column.header, disabled: readonly, onChange: (e) => {
                     const value = e.target.value.trim();
                     if (!value) {
                         engine.setValue(signalPath, null);
                         return;
                     }
-                    const parsed = dataType === 'integer' ? Number.parseInt(value, 10) : Number.parseFloat(value);
-                    let next = Number.isFinite(parsed) ? parsed : null;
-                    if (typeof next === 'number') {
-                        if (column.min != null && next < column.min)
-                            next = column.min;
-                        if (column.max != null && next > column.max)
-                            next = column.max;
+                    let next = value;
+                    try {
+                        next = clampJsonNumber(value, column.min, column.max);
                     }
+                    catch { /* Preserve invalid text for the native field validator. */ }
                     if (dataType === 'money' && next != null) {
                         engine.setValue(signalPath, {
-                            amount: next,
+                            amount: jsonValueText(next),
                             currency: fieldDef?.currency || column.currency || defaultCurrency,
                         });
                     }
@@ -267,9 +265,9 @@ function DataTableCell({ signalPath, column, fieldDef, defaultCurrency, metadata
                 } })) }));
     }
     if (dataType === 'date') {
-        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "date", value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value) })) }));
+        return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "date", value: rawValue != null ? jsonValueText(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value) })) }));
     }
-    return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "text", value: rawValue != null ? String(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value) })) }));
+    return (_jsx("td", { ...metadataAttrs, children: wrapControl(_jsx("input", { className: "formspec-datatable-input", name: signalPath, type: "text", value: rawValue != null ? jsonValueText(rawValue) : '', "aria-label": column.header, disabled: readonly, onChange: (e) => engine.setValue(signalPath, e.target.value) })) }));
 }
 function DataTableDisplay({ node, cssClass, style, metadataAttrs, }) {
     const chrome = useChromeText();

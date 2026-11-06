@@ -1,7 +1,7 @@
 import { createBrowserScopedMetadataStore, type ScopedMetadataStore } from '../../shared/browser-scoped-metadata.ts';
 import type { HttpClientConfig } from '../http/http-client.ts';
 
-/** Tab-local credentials and server handles only. Response documents never enter this store. */
+/** Tab-local credentials, server handles, and exact Response renewal checkpoints. */
 export type DraftResumeMetadataStore = ScopedMetadataStore;
 
 export function createBrowserDraftResumeMetadataStore(

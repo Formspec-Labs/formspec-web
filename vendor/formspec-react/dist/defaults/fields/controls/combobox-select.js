@@ -3,6 +3,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { optionMatchesComboboxQuery } from '@formspec-org/engine';
 import { useChromeText } from '../../../use-chrome-text';
+import { jsonValueText } from '@formspec-org/engine';
 import { useMemo, useRef, useEffect, useState } from 'react';
 import { needTraceAttrs } from '../../../projection-metadata.js';
 function comboboxValuePresent(v) {
@@ -23,17 +24,17 @@ export function ComboboxSelect({ field, node, common, isReadonly }) {
             return [];
         const v = field.value;
         if (Array.isArray(v))
-            return v.map(String);
+            return v.map(jsonValueText);
         if (v == null || v === '')
             return [];
-        return [String(v)];
+        return [jsonValueText(v)];
     }, [field.value, multiple]);
     const selectedSingle = multiple ? undefined : field.value;
-    const selectedSingleOption = useMemo(() => field.options.find((option) => option.value === String(selectedSingle ?? '')), [field.options, selectedSingle]);
+    const selectedSingleOption = useMemo(() => field.options.find((option) => option.value === jsonValueText(selectedSingle ?? '')), [field.options, selectedSingle]);
     const selectedLabel = useMemo(() => {
         if (multiple || selectedSingle == null || selectedSingle === '')
             return '';
-        const s = String(selectedSingle);
+        const s = jsonValueText(selectedSingle);
         return field.options.find((o) => o.value === s)?.label ?? s;
     }, [field.options, multiple, selectedSingle]);
     const filtered = useMemo(() => {
@@ -182,7 +183,7 @@ export function ComboboxSelect({ field, node, common, isReadonly }) {
                             const isHighlighted = index === highlightedIndex;
                             const isChosen = multiple
                                 ? selectedValues.includes(opt.value)
-                                : String(selectedSingle ?? '') === opt.value;
+                                : jsonValueText(selectedSingle ?? '') === opt.value;
                             return (_jsxs("li", { id: optId, role: "option", "aria-selected": multiple
                                     ? isChosen
                                     : isHighlighted, className: [

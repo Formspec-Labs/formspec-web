@@ -1,7 +1,7 @@
 'use client';
 /** @filedesc useScreener — React hook for the Formspec screener gate. */
 import { useState, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
-import { evalFEL, wasmEvaluateScreenerDocument } from '@formspec-org/engine';
+import { cloneJsonValue, evalFEL, wasmEvaluateScreenerDocument } from '@formspec-org/engine';
 import { useScreenerText } from './use-screener-text';
 /**
  * Read the item's data type, supporting both the canonical schema field
@@ -208,11 +208,11 @@ export function useScreener(options = {}) {
             try {
                 if (!act.current) {
                     const evaluationTime = new Date().toISOString();
-                    const snapshot = structuredClone(answers);
+                    const snapshot = cloneJsonValue(answers);
                     act.current = { completionId: crypto.randomUUID(), evaluationTime, answers: snapshot,
                         record: wasmEvaluateScreenerDocument(screenerDoc, snapshot, { nowIso: evaluationTime }) };
                 }
-                const attempt = structuredClone(act.current);
+                const attempt = cloneJsonValue(act.current);
                 const disposition = options.onDetermination(attempt.record, attempt.answers, attempt.evaluationTime, { signal: controller.signal, completionId: attempt.completionId });
                 if ('then' in disposition)
                     void Promise.resolve(disposition).then(settle, fail);

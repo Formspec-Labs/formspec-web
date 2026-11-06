@@ -1,4 +1,5 @@
-import canonicalize from 'canonicalize';
+import { cloneJsonValue } from './exact-json.ts';
+import { canonicalJsonIdentity as canonicalize } from './exact-json.ts';
 import type { FormDefinition } from '@formspec-org/types';
 import type { SavedResponseDraft } from '../ports/response-signing.ts';
 import { assertTaskDraftWire } from './task-draft-wire.ts';
@@ -28,11 +29,11 @@ export function assembleNativeTaskPrefill(definition: FormDefinition, saved: Sav
   for (const bind of definition.binds ?? []) {
     if (bind.readonly === 'true' && editable.has(bind.path)) throw new Error('Task prefill editable partition includes readonly field');
   }
-  const result = structuredClone(data);
+  const result = cloneJsonValue(data);
   for (const key of prefill.readOnlyDataPaths.map(decode)) {
     if (own(data, key) && (!own(baseline, key) || canonicalize(data[key]) !== canonicalize(baseline[key])))
       throw new Error('Task prefill protected value differs');
-    if (own(baseline, key)) Object.defineProperty(result, key, { value: structuredClone(baseline[key]), enumerable: true, writable: true, configurable: true });
+    if (own(baseline, key)) Object.defineProperty(result, key, { value: cloneJsonValue(baseline[key]), enumerable: true, writable: true, configurable: true });
     else delete result[key];
   }
   return result;

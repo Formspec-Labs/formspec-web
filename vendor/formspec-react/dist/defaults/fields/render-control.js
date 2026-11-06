@@ -1,6 +1,7 @@
 /** @filedesc Standard (non-group) field control switch — dispatches by component type. */
 'use client';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { jsonValueText, stepJsonNumber } from '@formspec-org/engine';
 import { useChromeText } from '../../use-chrome-text';
 import { NativeSelectControl } from './controls/native-select';
 import { ComboboxSelect } from './controls/combobox-select';
@@ -65,22 +66,23 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
                 inputType = 'datetime-local';
             else if (variant === 'time' || dataType === 'time')
                 inputType = 'time';
-            return (_jsx("input", { ...common, type: inputType, value: value ?? '', readOnly: isReadonly, placeholder: placeholder, min: minDate, max: maxDate, onChange: isReadonly ? undefined : (e) => field.setValue(e.target.value) }));
+            return (_jsx("input", { ...common, type: inputType, value: jsonValueText(value), readOnly: isReadonly, placeholder: placeholder, min: minDate, max: maxDate, onChange: isReadonly ? undefined : (e) => field.setValue(e.target.value) }));
         }
         case 'NumberInput': {
-            const min = node.props?.min != null ? Number(node.props.min) : undefined;
-            const max = node.props?.max != null ? Number(node.props.max) : undefined;
-            const step = node.props?.step != null ? Number(node.props.step) : undefined;
+            const min = node.props?.min;
+            const max = node.props?.max;
+            const step = node.props?.step;
             const showStepper = node.props?.showStepper;
             const placeholder = resolvePlaceholder(node.props?.placeholder);
             // Prefix/suffix hug the input; stepper buttons sit outside them.
-            const numberInput = withAdornments(_jsx("input", { ...common, "aria-describedby": adornedDescribedBy(describedBy, id, itemAdornments), type: "number", value: value ?? '', readOnly: isReadonly, placeholder: placeholder, min: min != null ? String(min) : undefined, max: max != null ? String(max) : undefined, step: step != null ? String(step) : undefined, onChange: isReadonly
+            const numberInput = withAdornments(_jsx("input", { ...common, "aria-describedby": adornedDescribedBy(describedBy, id, itemAdornments), type: "number", value: jsonValueText(value), readOnly: isReadonly, placeholder: placeholder, min: min != null ? jsonValueText(min) : undefined, max: max != null ? jsonValueText(max) : undefined, step: step != null ? jsonValueText(step) : dataType === 'integer' ? '1' : 'any', onChange: isReadonly
                     ? undefined
-                    : (e) => field.setValue(e.target.value === '' ? null : Number(e.target.value)) }), id, itemAdornments);
+                    : (e) => field.setValue(e.target.value === '' ? null : e.target.value) }), id, itemAdornments);
             if (showStepper) {
                 const stepVal = step ?? 1;
-                const numVal = typeof value === 'number' ? value : 0;
-                return (_jsxs("div", { className: "formspec-stepper", children: [_jsx("button", { type: "button", className: "formspec-stepper-decrement", "aria-label": `Decrease ${field.label}`, disabled: isReadonly || (min != null && numVal - stepVal < min), onClick: () => { field.setValue(numVal - stepVal); field.touch(); }, children: "\u2212" }), numberInput, _jsx("button", { type: "button", className: "formspec-stepper-increment", "aria-label": `Increase ${field.label}`, disabled: isReadonly || (max != null && numVal + stepVal > max), onClick: () => { field.setValue(numVal + stepVal); field.touch(); }, children: "+" })] }));
+                const decrement = stepJsonNumber(value, stepVal, -1, min, max);
+                const increment = stepJsonNumber(value, stepVal, 1, min, max);
+                return (_jsxs("div", { className: "formspec-stepper", children: [_jsx("button", { type: "button", className: "formspec-stepper-decrement", "aria-label": `Decrease ${field.label}`, disabled: isReadonly || decrement === undefined, onClick: () => { field.setValue(decrement); field.touch(); }, children: "\u2212" }), numberInput, _jsx("button", { type: "button", className: "formspec-stepper-increment", "aria-label": `Increase ${field.label}`, disabled: isReadonly || increment === undefined, onClick: () => { field.setValue(increment); field.touch(); }, children: "+" })] }));
             }
             return numberInput;
         }
@@ -103,7 +105,7 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
             // Theme widgetConfig.maxLength is a count display, not a cap; a registry constraint stays a native cap.
             const countLimit = widgetMaxLength(node);
             const maxLength = countLimit === undefined ? extensionAttrs.maxLength : undefined;
-            const length = String(value ?? '').length;
+            const length = jsonValueText(value).length;
             // Component prop wins; else the definition item's prefix/suffix.
             const adornments = {
                 prefix: node.props?.prefix ?? itemAdornments.prefix,
@@ -115,7 +117,7 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
                 // Invalid while Formspec validation shows an error or the text is over the count limit.
                 'aria-invalid': common['aria-invalid'] || (countLimit !== undefined && length > countLimit),
             };
-            const control = isTextarea ? (_jsx("textarea", { ...controlProps, rows: maxLines, placeholder: resolvePlaceholder(placeholder), value: value ?? '', readOnly: isReadonly, maxLength: maxLength, onChange: (e) => field.setValue(e.target.value) })) : (_jsx("input", { ...controlProps, type: extensionAttrs.type || 'text', value: value ?? '', readOnly: isReadonly, placeholder: resolvePlaceholder(placeholder), inputMode: (extensionAttrs.inputMode || inputMode), maxLength: maxLength, pattern: extensionAttrs.pattern, autoComplete: extensionAttrs.autoComplete || autoComplete, onChange: (e) => field.setValue(e.target.value) }));
+            const control = isTextarea ? (_jsx("textarea", { ...controlProps, rows: maxLines, placeholder: resolvePlaceholder(placeholder), value: jsonValueText(value), readOnly: isReadonly, maxLength: maxLength, onChange: (e) => field.setValue(e.target.value) })) : (_jsx("input", { ...controlProps, type: extensionAttrs.type || 'text', value: jsonValueText(value), readOnly: isReadonly, placeholder: resolvePlaceholder(placeholder), inputMode: (extensionAttrs.inputMode || inputMode), maxLength: maxLength, pattern: extensionAttrs.pattern, autoComplete: extensionAttrs.autoComplete || autoComplete, onChange: (e) => field.setValue(e.target.value) }));
             const adorned = withAdornments(control, id, adornments);
             if (countLimit === undefined)
                 return adorned;
@@ -129,5 +131,5 @@ export function renderControl(field, node, describedBy, isProtected = false, ext
  */
 function NativeSelect({ field, common, value, isReadonly, clearable, placeholder }) {
     const chrome = useChromeText();
-    return (_jsxs(NativeSelectControl, { ...common, value: value ?? '', onChange: isReadonly ? undefined : (e) => field.setValue(e.target.value), disabled: isReadonly, afterControl: clearable && value != null && value !== '' && !isReadonly && (_jsx("button", { type: "button", className: "formspec-select-clear", "aria-label": chrome('select.clearSelection'), onClick: () => { field.setValue(null); field.touch(); }, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), children: [_jsx("option", { value: "", disabled: true, hidden: true, children: placeholder || chrome('select.placeholder') }), field.options.map((opt) => (_jsx("option", { value: opt.value, ...needTraceAttrs(opt.needAnchors), children: opt.label }, opt.value)))] }));
+    return (_jsxs(NativeSelectControl, { ...common, value: jsonValueText(value), onChange: isReadonly ? undefined : (e) => field.setValue(e.target.value), disabled: isReadonly, afterControl: clearable && value != null && value !== '' && !isReadonly && (_jsx("button", { type: "button", className: "formspec-select-clear", "aria-label": chrome('select.clearSelection'), onClick: () => { field.setValue(null); field.touch(); }, children: _jsx("span", { "aria-hidden": "true", children: "\u00D7" }) })), children: [_jsx("option", { value: "", disabled: true, hidden: true, children: placeholder || chrome('select.placeholder') }), field.options.map((opt) => (_jsx("option", { value: opt.value, ...needTraceAttrs(opt.needAnchors), children: opt.label }, opt.value)))] }));
 }

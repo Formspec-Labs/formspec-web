@@ -1,4 +1,5 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { freezeSourceMetadata, readSourceResult, sourceErrorMessage } from './instance-source.js';
 import { diffEvalResults } from '../diff.js';
 import { FelExtensionFunctions } from '../extension-functions.js';
@@ -17,7 +18,7 @@ import { applyRepeatGroupTreeSnapshot, clearRepeatIndexedSubtree, snapshotRepeat
 import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
 import { mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
 import { felContextSchema, felContextSnapshot } from './fel-context.js';
-import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getAncestorBasePaths, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, setNestedPathValue, setResponsePathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
+import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, setNestedPathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
 import { collectSeedFromGroups, repeatHasHostData, resolvePrePopulateFromInstance, } from './instance-seeding.js';
 import { DefaultValidationProfileResolver, } from '../validation/index.js';
 export class FormEngine {
@@ -363,7 +364,7 @@ export class FormEngine {
             this.instanceVersion.value;
             this.structureVersion.value;
             // compileExpression is a public API — propagate errors (unlike internal evaluation).
-            return JSON.parse(this.felContext().evaluate(expression, currentItemName, false, this.nowISO(), this._extensionFunctions)).value;
+            return parseJsonExact(this.felContext().evaluate(expression, currentItemName, false, this.nowISO(), this._extensionFunctions)).value;
         };
     }
     setValue(name, value, options = {}) {
@@ -499,7 +500,7 @@ export class FormEngine {
             return cached.trace.map((step) => cloneValue(step));
         }
         try {
-            const result = JSON.parse(this.felContext().evaluateTrace(calculate, basePath, false, this.nowISO(), this._extensionFunctions));
+            const result = parseJsonExact(this.felContext().evaluateTrace(calculate, basePath, false, this.nowISO(), this._extensionFunctions));
             const trace = Array.isArray(result.trace) ? result.trace : [];
             this._derivationTraceCache.set(basePath, {
                 version,
@@ -572,59 +573,31 @@ export class FormEngine {
         };
     }
     getResponse(meta) {
+        return this.getResponseSnapshot(meta).response;
+    }
+    /** One evaluation and clock for response data and its requested validation report. */
+    getResponseSnapshot(meta, validationProfile) {
         this.assertNoRemovedModeOption(meta, 'getResponse');
-        const data = {};
         const profile = meta?.profile ?? 'live';
-        const trigger = this._validationProfileResolver.resolve(profile);
-        const defaultBehavior = this.definition.nonRelevantBehavior ?? 'remove';
-        // A node's behavior is its own Bind's, else its nearest ancestor's, else the Definition's.
-        const behaviorOf = (path) => {
-            for (const ancestor of getAncestorBasePaths(path)) {
-                const behavior = this._bindConfigs[ancestor]?.nonRelevantBehavior;
-                if (behavior) {
-                    return behavior;
-                }
-            }
-            return defaultBehavior;
-        };
-        for (const [path, signalRef] of Object.entries(this.signals)) {
-            if (this._displaySignalPaths.has(path)) {
-                continue;
-            }
-            const relevant = this.isPathRelevant(path);
-            const behavior = relevant ? null : behaviorOf(path);
-            if (behavior === 'remove') {
-                continue;
-            }
-            const value = behavior === 'empty' ? null : cloneValue(signalRef.value);
-            setResponsePathValue(data, path, value);
-        }
-        // Core §2.1.2: a repeatable group is an array of row objects, so a repeat the Response keeps
-        // is an array even with no rows, and a row whose every field was removed is still `{}`.
-        for (const [path, count] of Object.entries(this.repeats)) {
-            if (!this.isPathRelevant(path) && behaviorOf(path) === 'remove') {
-                continue;
-            }
-            const existing = getNestedValue(data, path);
-            const rows = Array.isArray(existing) ? existing : [];
-            for (let index = 0; index < count.value; index += 1) {
-                rows[index] ?? (rows[index] = {});
-            }
-            if (rows !== existing) {
-                setResponsePathValue(data, path, rows);
-            }
-        }
-        const report = trigger === 'disabled' ? null : this.produceValidation(trigger).report;
-        return buildFormspecResponseEnvelope({
+        const responseTrigger = this._validationProfileResolver.resolve(profile);
+        const trigger = this._validationProfileResolver.resolve(validationProfile ?? profile);
+        const timestamp = this.nowISO();
+        const result = this.evaluateResultForTrigger(trigger, timestamp);
+        const data = cloneValue(result.data);
+        const report = trigger === 'disabled' ? null : buildValidationReportEnvelope((trigger === 'demand'
+            ? collectTimedShapeValidationResults(result, this._shapeTiming, 'demand')
+            : result.validations.filter(validation => validation.shapeId || !result.nonRelevant.some(path => validation.path === path || validation.path.startsWith(`${path}.`) || validation.path.startsWith(`${path}[`))).map(toValidationResult)), timestamp, this.definition.url, this.definition.version);
+        const response = buildFormspecResponseEnvelope({
             definition: this.definition,
             data,
-            report,
-            completionEligible: trigger === 'submit',
-            timestamp: this.nowISO(),
+            report: responseTrigger === 'disabled' ? null : report,
+            completionEligible: responseTrigger === 'submit' && trigger === 'submit',
+            timestamp,
             displayedIssuer: this.getDisplayedIssuerPin(),
             displayedLocale: this.getDisplayedLocalePin(),
             meta,
         });
+        return { response, validationReport: report };
     }
     getDiagnosticsSnapshot(options = { profile: 'live' }) {
         this.assertValidationReportOptions(options, 'getDiagnosticsSnapshot');
@@ -1029,7 +1002,7 @@ export class FormEngine {
                     const response = await fetch(source, { signal });
                     if (!response.ok)
                         throw new Error(`Instance source fetch failed (${response.status})`);
-                    payload = await response.json();
+                    payload = parseJsonExact(await response.text());
                 }
                 if (this._disposed)
                     return;
@@ -1250,7 +1223,7 @@ export class FormEngine {
             return emptyValueForItem(item);
         }
         if (item.initialValue !== undefined) {
-            return coerceInitialValue(item, item.initialValue);
+            return coerceInitialValue(item, item.initialValue, this.definition);
         }
         return emptyValueForItem(item);
     }
@@ -1605,9 +1578,9 @@ export class FormEngine {
             this._evaluationVersion.value += 1;
         });
     }
-    evaluateResultForTrigger(trigger) {
+    evaluateResultForTrigger(trigger, nowIso = this.nowISO()) {
         return this.shapedEvalResult(wasmEvaluateDefinition(this.definition, this._data, wasmEvaluateDefinitionPayload({
-            nowIso: this.nowISO(),
+            nowIso,
             trigger,
             previousResult: this._fullResult,
             instances: this.instanceData,
@@ -1701,7 +1674,7 @@ export class FormEngine {
         if (!template.includes('{{')) {
             return template;
         }
-        return JSON.parse(this.felContext().interpolate(template, itemPath, bindScope, this.nowISO(), this._extensionFunctions)).text;
+        return parseJsonExact(this.felContext().interpolate(template, itemPath, bindScope, this.nowISO(), this._extensionFunctions)).text;
     }
     getDisplayedIssuerPin() {
         if (this._resolvedIssuer

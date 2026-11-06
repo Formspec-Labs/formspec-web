@@ -1,4 +1,3 @@
-/** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
 import type { FormDefinition, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
 import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
 import type { SetValueOptions, WriteSource, AuthoredSignatureInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
@@ -133,7 +132,9 @@ export declare class FormEngine implements IFormEngine {
     getDownstreamImpact(path: string): string[];
     getFieldPaths(): string[];
     getProgress(): import('../interfaces.js').FormProgress;
-    getResponse(meta?: {
+    getResponse(meta?: Parameters<FormEngine['getResponseSnapshot']>[0]): FormResponse;
+    /** One evaluation and clock for response data and its requested validation report. */
+    getResponseSnapshot(meta?: {
         id?: string;
         author?: {
             id: string;
@@ -145,7 +146,10 @@ export declare class FormEngine implements IFormEngine {
         };
         authoredSignatures?: AuthoredSignatureInput[];
         profile?: ValidationProfile;
-    }): FormResponse;
+    }, validationProfile?: ValidationProfile): {
+        response: FormResponse;
+        validationReport: ValidationReport | null;
+    };
     getDiagnosticsSnapshot(options?: ValidationReportOptions): FormEngineDiagnosticsSnapshot;
     applyReplayEvent(event: EngineReplayEvent): EngineReplayApplyResult;
     replay(events: EngineReplayEvent[], options?: {

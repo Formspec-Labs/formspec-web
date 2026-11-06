@@ -10,12 +10,14 @@ import { assertDelegatedSignedResponseConsistency, handoffHash } from '../../../
 import { AnonymousSessionBridge } from '../../../src/adapters/http/anonymous-session.ts';
 import { createBrowserDraftResumeMetadataStore } from '../../../src/adapters/browser/draft-resume-metadata.ts';
 import { loadCanonicalSigningContentValidator, validateCanonicalFormResponse } from '../../../src/adapters/schema/index.ts';
-import { ResponseSigningUnresolvedError, type PreparedResponseSigning, type SavedResponseDraft } from '../../../src/ports/response-signing.ts';
+import { ResponseSigningUnresolvedError, type AdmittedResponseAction, type PreparedResponseSigning, type SavedResponseDraft } from '../../../src/ports/response-signing.ts';
 import { sampleFormDefinition, sampleFormResponse, sampleIntakeHandoff } from '../../../src/adapter-conformance/fixtures.ts';
 import { generateIdempotencyKey } from '../../../src/shared/idempotency-key.ts';
 import type { DraftKey } from '../../../src/ports/draft-store.ts';
 import { jsonResponse, recordingFetch } from './test-fetch.ts';
 import { testScopeKey } from '../../fixtures/scope.ts';
+import { createResponseActionController } from '../../../src/shared/response-action-controller.ts';
+import { FormEngine, initFormspecEngine } from '@formspec-org/engine/render';
 
 const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version, subjectRef: 'anon:owner' };
 const expectedIssuer = 'https://source.example.test/tenant/workspace/production';
@@ -183,7 +185,7 @@ async function fixture(stateReading = false, authenticated = false, anonymousSub
   const sign = (preparation: PreparedResponseSigning, operationId = generateIdempotencyKey()) => cohort.responseSigning!.sign({
     preparation, assent: { signerName: 'Ada Lovelace', consentAccepted: true }, operationId, action,
   });
-  const save = async (draftAction = saveAction('PATCH'), savedResponse = response, operationId = generateIdempotencyKey()) => {
+  const save = async (draftAction: Readonly<AdmittedResponseAction> = saveAction('PATCH'), savedResponse = response, operationId: string = generateIdempotencyKey()) => {
     await initialize();
     return cohort.responseSigning!.saveDraft({
     formId: 'conformance', draftKey, definition, formVersionId: 'publication-1', response: savedResponse, operationId, action: draftAction,
@@ -1486,6 +1488,43 @@ describe('explicit owned draft resume without tab metadata', () => {
 
 describe('owned resume admission boundaries', () => {
   const selection = { draftId: 'owned-draft', expectedResponseId: response.id! };
+  it('saves calculated thirds through the action controller and HTTP, then reloads and recalculates', async () => {
+    await initFormspecEngine();
+    const test = await fixture();
+    const exactDefinition = { ...definition, items: [
+      { key: 'input', label: 'Input', type: 'field' as const, dataType: 'decimal' as const, initialValue: 1 },
+      { key: 'ratio', label: 'Ratio', type: 'field' as const, dataType: 'decimal' as const },
+    ], binds: [{ path: 'ratio', calculate: '$input / 3' }] };
+    const engine = new FormEngine(exactDefinition);
+    const admission = saveAction('PATCH');
+    const controller = createResponseActionController({
+      context: { definition: exactDefinition, draftKey: test.draftKey,
+        publication: { formId: 'conformance', formVersionId: 'publication-1' },
+        responseId: response.id!, generation: 'exact-save' },
+      roles: { saveInitial: admission },
+      signing: { ...test.cohort.responseSigning!, saveDraft: input => test.save(input.action, input.response, input.operationId) },
+      validateResponse: validateCanonicalFormResponse, hashResponse: handoffHash,
+      validateFrozenResponse: (value, validationTuple) => ({ response: value, validationReport: null, validationTuple }),
+      signingContext: () => ({ source, locale: 'en-US' }), reviewReady: () => true,
+    });
+    const invoke = () => controller.definitionInvoker({ document: admission.document, actionRef: admission.actionRef,
+      invocationContext: { invocationId: 'exact-save-delivery' }, ports: {
+        submit: () => engine.getResponseSnapshot({ id: response.id, profile: 'on-submit' }),
+        validationReportValid: result => result.validationReport?.valid ?? true, dispatchHostEvent: () => {},
+      } });
+    expect(await invoke()).toMatchObject({ status: 'completed' });
+    const third = '0.3333333333333333333333333333';
+    expect(test.requests.find(request => request.method === 'PATCH')!.bodyText).toContain(`"ratio":${third}`);
+    expect(JSON.stringify(controller.getSnapshot().saved!.response.data.ratio)).toBe(third);
+    const loaded = await test.cohort.draftStore.load(test.draftKey);
+    expect(JSON.stringify(loaded!.data.ratio)).toBe(third);
+    const reloaded = new FormEngine(exactDefinition);
+    reloaded.loadResponseData(loaded!.data as Parameters<FormEngine['loadResponseData']>[0]);
+    expect(JSON.stringify(reloaded.getResponse().data.ratio)).toBe(third);
+    reloaded.setValue('input', 2);
+    expect(JSON.stringify(reloaded.getResponse().data.ratio)).toBe('0.6666666666666666666666666667');
+    controller.invalidate(); engine.dispose(); reloaded.dispose();
+  });
   it.each(['exact', 'changed-canonical-digit'] as const)('prepares exact fetched data with rounded Source display: %s', async mode => {
     const test = await fixture(true, true);
     const text = JSON.stringify(response).replace('"data":{', '"data":{"amount":1234567890.123456789,"count":9007199254740993,');

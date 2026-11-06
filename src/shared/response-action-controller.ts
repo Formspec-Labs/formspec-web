@@ -1,10 +1,11 @@
+import { cloneJsonValue } from './exact-json.ts';
 import { createSubmitFailureReporter, type SubmitFailureStage } from './submit-diagnostic.ts';
 import { snapshotFiniteJson } from '@formspec-org/surface';
 import { sameResponseDataView } from './response-data-view.ts';
 import { assertSignedTaskDraft } from './task-draft-wire.ts';
 import { assertSynchronousGuard } from './synchronous-guard.ts';
 import { ResponseCompletionRefusal, TaskCompletionOutcomeUnknown } from '../ports/response-completion.ts';
-import canonicalize from 'canonicalize';
+import { canonicalJsonIdentity as canonicalize } from './exact-json.ts';
 import { extractServiceRequestOutputs, invokeResponseActionAsync, planServiceRequest, resolveResponseAction, resolveResponseActionValidationTuple, resolveServiceRequest, type ResponseActionInvocationResult } from '@formspec-org/engine/render';
 import type { ResponseActionInvoker, SubmitResult } from '@formspec-org/react';
 import type { SurfaceWidgetActionExecutor, SurfaceWidgetActionSource } from '@formspec-org/surface-react';
@@ -99,8 +100,8 @@ class ControllerRefusal extends Error {
 
 /** Port-only controller. Loaded artifacts select roles; no product IDs or transport paths select them. */
 export function createResponseActionController(config: ResponseActionControllerConfig) {
-  const context = freeze(structuredClone(config.context));
-  const roles = freeze(structuredClone(config.roles));
+  const context = freeze(cloneJsonValue(config.context));
+  const roles = freeze(cloneJsonValue(config.roles));
   const restored = config.restoredResponse ? snapshotFiniteJson(config.restoredResponse) as unknown as FormResponse : undefined;
   const completion = config.completion ?? (config.buildHandoff && config.submitTransport
     ? createIntakeResponseCompletion({ buildHandoff: config.buildHandoff, submitTransport: config.submitTransport }) : undefined);
@@ -111,8 +112,8 @@ export function createResponseActionController(config: ResponseActionControllerC
   let invalidated = false;
   let owned = restored !== undefined;
   let actor = context.expectedActor;
-  let application = config.restoredApplication ? freeze(structuredClone(config.restoredApplication)) : undefined;
-  let applicationLookup = config.restoredApplicationLookup ? freeze(structuredClone(config.restoredApplicationLookup)) : undefined;
+  let application = config.restoredApplication ? freeze(cloneJsonValue(config.restoredApplication)) : undefined;
+  let applicationLookup = config.restoredApplicationLookup ? freeze(cloneJsonValue(config.restoredApplicationLookup)) : undefined;
   let saved: SavedResponseDraft | undefined;
   // Keep the actual cohort preparation privately: its WeakMap identity authorizes Sign.
   let prepared: PreparedResponseSigning | undefined;
@@ -191,7 +192,7 @@ export function createResponseActionController(config: ResponseActionControllerC
   }
   function review(result: PreparedResponseSigning | SignedResponseSigning, stage: 'unsigned' | 'signed', wording: { source: SigningContentSource; locale: string }) {
     if (!same(result.content.source, wording.source) || result.content.locale !== wording.locale
-      || !config.reviewReady(freeze(structuredClone({ response: result.response, draft: result.draft, actor: result.actor,
+      || !config.reviewReady(freeze(cloneJsonValue({ response: result.response, draft: result.draft, actor: result.actor,
         ...wording, generation: context.generation })), stage)) throw new ControllerRefusal('review-unready');
   }
   async function perform(role: ResponseActionRole, admission: QualifiedResponseActionRole, response: FormResponse,
@@ -207,7 +208,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       || config.applicationLifecycle.capabilities.formVersionId !== context.publication.formVersionId || signed)) throw new ControllerRefusal('branch-mismatch');
     if (restored?.authoredSignatures?.length && !signed) throw new ControllerRefusal('restoration-unresolved');
     const unsignedCheckpoint = role === 'saveInitial' || role === 'saveOwned' || role === 'startApplication';
-    const wording = unsignedCheckpoint ? null : freeze(structuredClone(config.signingContext()));
+    const wording = unsignedCheckpoint ? null : freeze(cloneJsonValue(config.signingContext()));
     const subject = role === 'sign' ? prepared : role === 'submit' ? signed : saved;
     if (role === 'sign' || role === 'submit') {
       if (!subject || !same(subject.response, response)) throw new ControllerRefusal('context-mismatch');
@@ -275,7 +276,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         current(generation);
         if (application && (application.caseLedgerId !== receipt.caseLedgerId || application.draftRef !== receipt.draftRef)) throw new ControllerRefusal('context-mismatch');
         if (saved && receipt.draftRef !== `urn:formspec:draft:${saved.draft.id}`) throw new ControllerRefusal('context-mismatch');
-        application = freeze(structuredClone(receipt));
+        application = freeze(cloneJsonValue(receipt));
         publish('saved');
         return { ...extractServiceRequestOutputs(request!, application).transitionBindings };
       }
@@ -321,7 +322,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         if (diagnostic) diagnostic.stage = 'controller-review';
         review(signed!, 'signed', wording!);
         if (diagnostic) diagnostic.stage = 'controller-effect';
-        const result = freeze(structuredClone(await completion!.complete(operation.completionPreparation, operation.operationId, completionLifetime)));
+        const result = freeze(cloneJsonValue(await completion!.complete(operation.completionPreparation, operation.operationId, completionLifetime)));
         current(generation);
         if (result.kind !== completion!.kind) throw new ControllerRefusal('context-mismatch');
         completionResult = result;
@@ -371,7 +372,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         dispatchEffect: async (_effect, detail) => {
           effect = true;
           try {
-            const transitionBindings = await perform(role, admission, freeze(structuredClone(detail.response)), {}, deliveryId,
+            const transitionBindings = await perform(role, admission, freeze(cloneJsonValue(detail.response)), {}, deliveryId,
               { nodeId: input.nodeId ?? null }, generation, undefined, execution);
             return { outcome: { type: 'serviceRequest', status: 'succeeded' }, transitionBindings };
           } catch (error) { const reason = fail(error, generation); if (save) reportSaveFailure('controller-effect', reason);
@@ -409,8 +410,8 @@ export function createResponseActionController(config: ResponseActionControllerC
         || input.responseContext.inputName !== admission.responseSource.inputName
         || !same(input.responseContext.source, { catalogRef: admission.responseSource.catalogRef, sourceRef: admission.responseSource.sourceRef })
         || !same(input.responseContext.definition, context.definition)) throw new ControllerRefusal('context-mismatch');
-      const response = freeze(structuredClone(input.responseContext.response));
-      const selected = freeze(structuredClone(input.input ?? {}));
+      const response = freeze(cloneJsonValue(input.responseContext.response));
+      const selected = freeze(cloneJsonValue(input.input ?? {}));
       requestFor(role, admission);
       await validateResponse(response);
       current(generation);
@@ -419,7 +420,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       const retainedRetry = role === 'sign' && config.reconcileSignRetries ? deliveries.get(input.invocationId)?.signRetry : undefined;
       if (retainedRetry && retainedRetry.identity !== identity) throw new ControllerRefusal('operation-conflict');
       diagnostic.stage = 'controller-frozen-validation';
-      const validated = retainedRetry?.validated ?? freeze(structuredClone(await config.validateFrozenResponse(response, freeze(structuredClone(tuple)))));
+      const validated = retainedRetry?.validated ?? freeze(cloneJsonValue(await config.validateFrozenResponse(response, freeze(cloneJsonValue(tuple)))));
       current(generation);
       if (!same(validated.response, response) || !same(validated.validationTuple, tuple)
         || !validated.validationReport || validated.validationReport.definitionUrl !== response.definitionUrl
@@ -431,7 +432,7 @@ export function createResponseActionController(config: ResponseActionControllerC
           effect = true; diagnostic.stage = 'controller-admission';
           try {
             const transitionBindings = await perform(role, admission, response, selected, input.invocationId, input.source, generation,
-              role === 'sign' && config.reconcileSignRetries ? retainedRetry ?? freeze(structuredClone({ request: input, identity, validated })) : undefined, undefined, submit ? diagnostic : undefined);
+              role === 'sign' && config.reconcileSignRetries ? retainedRetry ?? freeze(cloneJsonValue({ request: input, identity, validated })) : undefined, undefined, submit ? diagnostic : undefined);
             return { outcome: { type: 'serviceRequest', status: 'succeeded' }, transitionBindings };
           } catch (error) { if (submit) reportSubmitFailure(diagnostic.stage);
             return { type: 'serviceRequest', status: 'failed', reason: fail(error, generation) }; }
@@ -444,7 +445,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       }
       if (role === 'submit' && invocation.status === 'completed' && completionResult) {
         current(generation);
-        completedSubmit = { identity, result: freeze(structuredClone(invocation)) };
+        completedSubmit = { identity, result: freeze(cloneJsonValue(invocation)) };
       }
       if (invocation.status === 'blocked' && generation === epoch && !invalidated && !completionResult) publish('refused', 'response-invalid');
       return invocation;
@@ -475,7 +476,7 @@ export function createResponseActionController(config: ResponseActionControllerC
         const receipt = await config.applicationLifecycle.load(context.draftKey); current(generation);
         if (application && (!receipt || receipt.caseLedgerId !== application.caseLedgerId || receipt.draftRef !== application.draftRef
           || application.status === 'submitted' && receipt.status !== 'submitted')) throw new ControllerRefusal('context-mismatch');
-        application = receipt ? freeze(structuredClone(receipt)) : undefined;
+        application = receipt ? freeze(cloneJsonValue(receipt)) : undefined;
         applicationLookup = undefined;
         publish(snapshot.phase, snapshot.reason);
       } finally { busy = undefined; }
@@ -498,7 +499,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       } finally { busy = undefined; }
     },
     async restorePending(value: PendingResponseSigning, renewUnsignedRevision?: true) {
-      value = freeze(structuredClone(value));
+      value = freeze(cloneJsonValue(value));
       const generation = epoch; current(generation);
       if (completion?.kind === 'task' || !restored || prepared || signed || saved || busy || completionResult || !config.signing.restorePending
         || !same(value.response, restored)) throw new ControllerRefusal('restoration-unresolved');
@@ -513,14 +514,14 @@ export function createResponseActionController(config: ResponseActionControllerC
       await checkEvidence(selected, selected.response); current(generation);
       if (!same(selected.content, value.content)) throw new ControllerRefusal('context-mismatch');
       if (result.kind === 'signed') {
-        const unsigned = structuredClone(selected.response); delete unsigned.authoredSignatures;
-        const previous = structuredClone(value.response); delete previous.authoredSignatures;
+        const unsigned = cloneJsonValue(selected.response); delete unsigned.authoredSignatures;
+        const previous = cloneJsonValue(value.response); delete previous.authoredSignatures;
         if (!same(unsigned, previous)) throw new ControllerRefusal('context-mismatch');
         assertRestoredSignedResponseEvidence(context, result.signed, wording);
         signed = result.signed; saved = signed; actor = signed.actor.id; publish('signed');
         await afterCommit(signed);
       } else {
-        const successor = structuredClone(value.response); delete successor.extensions?.['x-formspec-signing-content'];
+        const successor = cloneJsonValue(value.response); delete successor.extensions?.['x-formspec-signing-content'];
         if (!same(selected.response, successor) || !isUuidV7IdempotencyKey(result.operationId)) throw new ControllerRefusal('context-mismatch');
         prepared = result.preparation; saved = prepared; actor = prepared.actor.id; pendingOperationId = result.operationId; publish('prepared');
       }
@@ -529,7 +530,7 @@ export function createResponseActionController(config: ResponseActionControllerC
       const generation = epoch;
       current(generation);
       if (!restored?.authoredSignatures?.length || prepared || signed || saved || busy || completionResult) throw new ControllerRefusal('restoration-unresolved');
-      const result = freeze(structuredClone(value));
+      const result = freeze(cloneJsonValue(value));
       await checkEvidence(result, restored); current(generation);
       const wording = config.signingContext();
       assertRestoredSignedResponseEvidence(context, result, wording);

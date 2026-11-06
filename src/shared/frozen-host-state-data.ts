@@ -1,3 +1,4 @@
+import { cloneJsonValue } from './exact-json.ts';
 import {
   canonicalFiniteJson,
   dataSourceAvailableToWidget,
@@ -72,7 +73,7 @@ export function createFrozenHostStateDataSourceRuntime(input: FrozenHostStateDat
     dataSourceLoader: request => {
       const entry = admitted(request);
       if (!entry) return { status: 'unavailable', reason: 'Host-state source is outside the current admitted session' };
-      return { status: 'loaded', value: structuredClone(entry.value), freshness: 'fresh', recordId, revision };
+      return { status: 'loaded', value: cloneJsonValue(entry.value), freshness: 'fresh', recordId, revision };
     },
     validateDataSourcePayload: input.validatePayload,
   };

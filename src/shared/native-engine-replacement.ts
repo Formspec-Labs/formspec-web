@@ -1,3 +1,4 @@
+import { cloneJsonValue } from './exact-json.ts';
 import { createFormEngine, type FormEngineOptions, type IFormEngine, type InstanceSourceLoadOutcome, type InstanceSourceResolver, type WriteSource } from '@formspec-org/engine/render';
 import type { FormDefinition, FormItem, LocaleDocument } from '@formspec-org/types';
 
@@ -41,11 +42,11 @@ export async function replaceNativeFormEngine(input: NativeEngineReplacementInpu
   }
   const writes: { path: string; value: FormFieldValue; source: WriteSource }[] = [];
   const responseData = capture(currentEngine.definition.items, '', currentEngine, writes);
-  const definition = structuredClone(currentEngine.definition);
-  const locales = structuredClone(input.localeDocuments);
+  const definition = cloneJsonValue(currentEngine.definition);
+  const locales = cloneJsonValue(input.localeDocuments);
   const locale = currentEngine.getActiveLocale();
   const options: FormEngineOptions = { ...input.engineOptions,
-    registryEntries: input.engineOptions.registryEntries ? structuredClone(input.engineOptions.registryEntries) : undefined,
+    registryEntries: input.engineOptions.registryEntries ? cloneJsonValue(input.engineOptions.registryEntries) : undefined,
     runtimeContext: { ...input.engineOptions.runtimeContext, locale }, responseData };
   const engine = (input.createEngine ?? createFormEngine)(definition, options);
   let disposed = false;
@@ -89,7 +90,7 @@ function capture(items: readonly FormItem[], prefix: string, engine: IFormEngine
     const path = prefix ? `${prefix}.${item.key}` : item.key;
     if (item.type === 'field') {
       if (!engine.signals[path]) throw new Error('Native replacement field state unavailable');
-      const value = structuredClone(engine.signals[path].value);
+      const value = cloneJsonValue(engine.signals[path].value);
       if (value !== undefined) put(item.key, value);
       const source = engine.getFieldVM(path)?.writeSource.value;
       if (source === 'user' || source === 'assist') writes.push({ path, value, source });

@@ -1,3 +1,4 @@
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 /** Values are parsed JSON; each caller validates its own metadata meaning and scope. */
 export interface ScopedMetadataStore {
   read(slot: string): unknown | undefined;
@@ -25,7 +26,7 @@ export function createBrowserScopedMetadataStore(
   try {
     if (!isRecord(config.context)) throw new Error('Scoped metadata context must be an object');
     const serialized = JSON.stringify(config.context);
-    if (serialized === undefined || !isRecord(JSON.parse(serialized))) {
+    if (serialized === undefined || !isRecord(parseJsonExact(serialized))) {
       throw new Error('Scoped metadata context must serialize to a JSON object');
     }
     context = serialized;
@@ -48,7 +49,7 @@ export function createBrowserScopedMetadataStore(
         const key = keyFor(slot);
         const raw = (storage ?? window.sessionStorage).getItem(key);
         if (raw === null) return undefined;
-        const record: unknown = JSON.parse(raw);
+        const record: unknown = parseJsonExact(raw);
         if (!isRecord(record) || !Object.hasOwn(record, 'context') || !Object.hasOwn(record, 'slot')
           || !Object.hasOwn(record, 'value') || record.context !== context || record.slot !== slot) {
           throw new Error('Stored metadata does not match this context and slot');
@@ -60,7 +61,8 @@ export function createBrowserScopedMetadataStore(
       access(() => {
         const key = keyFor(slot);
         const raw = JSON.stringify({ context, slot, value });
-        if (!Object.hasOwn(JSON.parse(raw), 'value')) {
+        const serialized = parseJsonExact(raw);
+        if (!isRecord(serialized) || !Object.hasOwn(serialized, 'value')) {
           throw new Error('Scoped metadata value must survive JSON serialization');
         }
         const target = storage ?? window.sessionStorage;

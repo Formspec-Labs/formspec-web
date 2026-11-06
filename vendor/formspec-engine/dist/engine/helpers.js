@@ -1,6 +1,9 @@
 /** @filedesc Internal helpers shared by FormEngine (paths, coercion, validation shaping, FEL path rewriting). */
+import { cloneValue, isJsonRecord, isRawJson, jsonNumberText } from '../json-values.js';
+export { cloneValue, deepEqual, isJsonRecord } from '../json-values.js';
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { Path, PathSegmentKind } from '@formspec-org/types';
-import { wasmCoerceFieldValue, wasmNormalizeIndexedPath, } from '../wasm-bridge-runtime.js';
+import { wasmCoerceFieldValue, wasmEvalFel, wasmNormalizeIndexedPath, } from '../wasm-bridge-runtime.js';
 export function normalizeRemoteOptions(payload) {
     const record = payload !== null && typeof payload === 'object'
         ? payload
@@ -77,22 +80,14 @@ export function emptyValueForItem(item) {
             return '';
     }
 }
-export function coerceInitialValue(item, value) {
+export function coerceInitialValue(item, value, definition) {
+    if (item.dataType === 'money')
+        return coerceFieldValue(item, undefined, definition, value);
     if (item.dataType === 'boolean' && value === '') {
         return false;
     }
     if (['integer', 'decimal'].includes(item.dataType ?? '') && value === '') {
         return null;
-    }
-    if (item.dataType === 'money' && typeof value === 'number') {
-        return { amount: value, currency: item.currency ?? '' };
-    }
-    if (item.dataType === 'money' && isJsonRecord(value) && typeof value.amount === 'string') {
-        const parsed = value.amount === '' ? null : Number(value.amount);
-        return {
-            ...value,
-            amount: parsed === null || !Number.isNaN(parsed) ? parsed : value.amount,
-        };
     }
     return cloneValue(value);
 }
@@ -102,7 +97,7 @@ export function coerceFieldValue(item, bind, definition, value) {
     }
     const bindJson = bind === undefined ? '' : JSON.stringify(bind);
     const out = wasmCoerceFieldValue(JSON.stringify(item), bindJson, JSON.stringify(definition), JSON.stringify(value));
-    return JSON.parse(out);
+    return parseJsonExact(out);
 }
 export function validateDataType(value, dataType) {
     switch (dataType) {
@@ -111,33 +106,22 @@ export function validateDataType(value, dataType) {
         case 'boolean':
             return typeof value === 'boolean';
         case 'integer':
-            return typeof value === 'number' && Number.isInteger(value);
+            return jsonNumberText(value) !== undefined && wasmEvalFel('floor($value) = $value', { value }) === true;
         case 'decimal':
-            return typeof value === 'number' && !Number.isNaN(value);
+            return jsonNumberText(value) !== undefined;
         case 'money':
-            return isJsonRecord(value) && typeof value.amount === 'number';
+            return isJsonRecord(value) && typeof value.amount === 'string' && typeof value.currency === 'string';
         case 'array':
             return Array.isArray(value);
         case 'object':
-            return value !== null && typeof value === 'object' && !Array.isArray(value);
+            return isJsonRecord(value);
         default:
             return true;
     }
 }
-export function cloneValue(value) {
-    if (value === null || value === undefined || typeof value !== 'object') {
-        return value;
-    }
-    const copier = globalThis.structuredClone;
-    if (typeof copier === 'function') {
-        return copier(value);
-    }
-    return JSON.parse(JSON.stringify(value));
-}
-export function isJsonRecord(value) {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 export function normalizeWasmValue(value) {
+    if (isRawJson(value))
+        return value;
     if (Array.isArray(value)) {
         return value.map((entry) => normalizeWasmValue(entry));
     }
@@ -153,23 +137,6 @@ export function normalizeWasmValue(value) {
         return Object.fromEntries(Object.entries(record).map(([key, entry]) => [key, normalizeWasmValue(entry)]));
     }
     return cloneValue(value);
-}
-export function deepEqual(left, right) {
-    if (Object.is(left, right)) {
-        return true;
-    }
-    if (Array.isArray(left) && Array.isArray(right)) {
-        return left.length === right.length && left.every((entry, index) => deepEqual(entry, right[index]));
-    }
-    if (left && right && typeof left === 'object' && typeof right === 'object') {
-        const leftKeys = Object.keys(left).sort();
-        const rightKeys = Object.keys(right).sort();
-        if (!deepEqual(leftKeys, rightKeys)) {
-            return false;
-        }
-        return leftKeys.every((key) => deepEqual(left[key], right[key]));
-    }
-    return false;
 }
 export function resolveNowProvider(now) {
     if (typeof now === 'function') {
@@ -312,47 +279,6 @@ export function setNestedPathValue(target, path, value) {
     }
     else {
         current[last.key] = value;
-    }
-}
-export function setResponsePathValue(target, path, value) {
-    const tokens = path.match(/[^.[\]]+|\[(\d+)\]/g) ?? [];
-    if (tokens.length === 0) {
-        return;
-    }
-    let current = target;
-    for (let index = 0; index < tokens.length - 1; index += 1) {
-        const token = tokens[index];
-        const next = tokens[index + 1];
-        if (token.startsWith('[')) {
-            const arrayIndex = Number(token.slice(1, -1));
-            const existing = current[arrayIndex];
-            if (existing !== undefined && (existing === null || typeof existing !== 'object')) {
-                const fallbackPath = tokens.slice(index + 1).join('.');
-                setResponsePathValue(target, fallbackPath, value);
-                return;
-            }
-            current[arrayIndex] ?? (current[arrayIndex] = next?.startsWith('[') ? [] : {});
-            current = current[arrayIndex];
-            continue;
-        }
-        const existing = current[token];
-        if (existing !== undefined && (existing === null || typeof existing !== 'object')) {
-            const fallbackPath = tokens
-                .slice(0, index)
-                .concat(tokens.slice(index + 1))
-                .join('.');
-            setResponsePathValue(target, fallbackPath, value);
-            return;
-        }
-        current[token] ?? (current[token] = next?.startsWith('[') ? [] : {});
-        current = current[token];
-    }
-    const last = tokens[tokens.length - 1];
-    if (last.startsWith('[')) {
-        current[Number(last.slice(1, -1))] = value;
-    }
-    else {
-        current[last] = value;
     }
 }
 export function replaceBareCurrentFieldRefs(expression, currentFieldName) {

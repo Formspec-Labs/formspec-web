@@ -1,8 +1,8 @@
-/** @filedesc Definition constructor helpers: option-set inlining and static FEL cycle detection. */
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { wasmAnalyzeFel, wasmGetFelDependencies, wasmResolveOptionSetsOnDefinition, } from '../wasm-bridge-runtime.js';
 import { detectNamedCycle, parentPathOf, resolveRelativeDependency, toBasePath, } from './helpers.js';
 export function resolveOptionSetsOnDefinition(definition) {
-    return JSON.parse(wasmResolveOptionSetsOnDefinition(JSON.stringify(definition)));
+    return parseJsonExact(wasmResolveOptionSetsOnDefinition(JSON.stringify(definition)));
 }
 export function validateVariableDefinitionCycles(variableDefs) {
     const graph = new Map();

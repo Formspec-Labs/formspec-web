@@ -1,3 +1,4 @@
+import { cloneJsonValue } from '../../shared/exact-json.ts';
 import { ownedDraftResumeSelection } from '../../config/owned-draft-resume.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 /**
@@ -23,7 +24,7 @@ import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { ResponseSigningUnresolvedError } from '../../ports/response-signing.ts';
 import type { FormDefinition, LocaleDocument } from '@formspec-org/types';
 import { resolveAuthoredSigningContent } from '@formspec-org/engine/render';
-import canonicalize from 'canonicalize';
+import { canonicalJsonIdentity as canonicalize } from '../../shared/exact-json.ts';
 import type { DraftKey, DraftResumeState, DraftStore } from '../../ports/draft-store.ts';
 import type { ApplicationLifecycle, ApplicationLifecycleCapabilities } from '../../ports/application-lifecycle.ts';
 import { HttpApplicationLifecycle } from './application-lifecycle.ts';
@@ -83,7 +84,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
   const resolveFormId = config.formIdResolver ?? defaultFormIdResolver;
   const registry = createDraftBindingRegistry({ resumeMetadata: config.resumeMetadata, formIdResolver: config.formIdResolver });
   if (config.taskDraft) {
-    const { key, view } = structuredClone(config.taskDraft);
+    const { key, view } = cloneJsonValue(config.taskDraft);
     if (!config.responseSigning || !config.qualifiedDraftState || config.anonymousSessions || config.applicationLifecycle
       || !view.taskDraft || key.subjectRef !== view.subject_ref
       || key.formUrl !== config.qualifiedDraftState.definition.url || key.formVersion !== config.qualifiedDraftState.definition.version
@@ -93,7 +94,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
   const { applicationLifecycle: lifecycleCapabilities, anonymousSessions, responseIdResolver, responseDataResolver, signingRequested,
     taskDraft: taskDraftSelection, resumeMetadata: _resumeMetadata, responseSigning: signingPolicyInput, qualifiedDraftState: statePolicyInput, ...httpConfig } = config;
   const signingPolicy = signingPolicyInput ? Object.freeze({ ...signingPolicyInput }) : undefined;
-  const statePolicy = statePolicyInput ? structuredClone(statePolicyInput) : undefined;
+  const statePolicy = statePolicyInput ? cloneJsonValue(statePolicyInput) : undefined;
   const ownerFor = async (key: DraftKey) => {
     if (taskDraftSelection) {
       if (key.subjectRef !== taskDraftSelection.view.subject_ref || key.formUrl !== taskDraftSelection.key.formUrl
@@ -216,11 +217,11 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
     ...signingPolicy, client: new HttpClient(httpConfig), drafts: draftStore, bindings: registry, fence,
     formIdFor: key => resolveFormId(key.formUrl, key.formVersion),
     resumeMetadata: config.resumeMetadata,
-    expectedTaskDraft: taskDraftSelection?.view.taskDraft ? structuredClone(taskDraftSelection.view.taskDraft) : undefined,
+    expectedTaskDraft: taskDraftSelection?.view.taskDraft ? cloneJsonValue(taskDraftSelection.view.taskDraft) : undefined,
     ownerFor,
   });
   const readScopedState = <T extends DraftResumeState>(suppliedKey: DraftKey, read: (key: DraftKey, current: () => void) => Promise<T | undefined>, assertCurrent: () => void = () => {}): Promise<T | undefined> => {
-    const key = structuredClone(suppliedKey);
+    const key = cloneJsonValue(suppliedKey);
     return fence.run(key, async generation => {
       const current = () => { assertSynchronousGuard(assertCurrent); fence.assertCurrent(key, generation); };
       current();
@@ -288,7 +289,7 @@ export function createHttpAdapterCohort(config: HttpAdapterCohortConfig): HttpAd
   };
   const scopedSubmit: SubmitTransport = {
     submit: (handoff, operationId, assertCurrent = () => {}, options) => {
-      const capturedOptions = options === undefined ? undefined : structuredClone(options);
+      const capturedOptions = options === undefined ? undefined : cloneJsonValue(options);
       assertSynchronousGuard(assertCurrent);
       const key = draftKeyFromHandoff(handoff);
       return fence.run(key, async generation => {

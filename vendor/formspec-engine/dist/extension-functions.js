@@ -1,3 +1,4 @@
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 /** @filedesc Host FEL extension functions (Core §3.12) registered on an engine and handed to WASM. */
 import { wasmCheckFelExtensionName } from './wasm-bridge-runtime.js';
 /**
@@ -25,6 +26,6 @@ export class FelExtensionFunctions {
         if (!registration) {
             throw new Error(`extension '${name}' is not registered`);
         }
-        return JSON.stringify(registration.implementation(...JSON.parse(argsJson)) ?? null);
+        return JSON.stringify(registration.implementation(...parseJsonExact(argsJson)) ?? null);
     }
 }

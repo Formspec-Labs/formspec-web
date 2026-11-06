@@ -20,14 +20,12 @@ export function useForm() {
     const submit = useCallback((options) => {
         touchAllFields();
         const profile = options?.profile ?? options?.validationTuple?.profile ?? 'on-submit';
-        const report = engine.getValidationReport({ profile });
-        const response = engine.getResponse({
+        return engine.getResponseSnapshot({
             profile: responseProfileForTuple(options?.validationTuple),
             id: options?.id,
             author: options?.author,
             subject: options?.subject,
-        });
-        return { response, validationReport: report };
+        }, profile);
     }, [engine, touchAllFields]);
     const getResponse = useCallback((meta) => {
         return engine.getResponse(meta);

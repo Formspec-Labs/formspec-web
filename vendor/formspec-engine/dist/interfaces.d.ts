@@ -4,7 +4,7 @@ import type { FormDefinition, FormInstance, FormItem, FormResponse, ValidationRe
 import type { EnabledValidationProfile, ValidationReportOptions } from './validation/index.js';
 /** JSON-compatible scalar. */
 export type JsonPrimitive = string | number | boolean | null;
-/** JSON-compatible value crossing engine / mapping boundaries. */
+/** JSON-compatible value. Exact numbers use immutable raw JSON leaves; use jsonNumberText to read their digits. */
 export type JsonValue = JsonPrimitive | JsonValue[] | {
     [key: string]: JsonValue;
 };
@@ -437,6 +437,11 @@ export interface IFormEngine {
         authoredSignatures?: AuthoredSignatureInput[];
         profile?: ValidationProfile;
     }): FormResponse;
+    /** Capture response data and validation from one evaluation and clock. */
+    getResponseSnapshot(meta?: Parameters<IFormEngine['getResponse']>[0], validationProfile?: ValidationProfile): {
+        response: FormResponse;
+        validationReport: ValidationReport | null;
+    };
     getDiagnosticsSnapshot(options?: ValidationReportOptions): FormEngineDiagnosticsSnapshot;
     applyReplayEvent(event: EngineReplayEvent): EngineReplayApplyResult;
     replay(events: EngineReplayEvent[], options?: {

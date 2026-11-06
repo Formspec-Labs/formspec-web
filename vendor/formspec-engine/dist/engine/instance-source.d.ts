@@ -1,4 +1,3 @@
-/** @filedesc Runtime JSON admission and detached metadata for host instance sources. */
 import type { InstanceSourceResult, JsonValue } from '../interfaces.js';
 export declare function sourceErrorMessage(error: unknown): string;
 export declare function freezeSourceMetadata<T>(value: T): T;

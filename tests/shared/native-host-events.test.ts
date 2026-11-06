@@ -1,5 +1,6 @@
 import { initFormspecEngine } from '@formspec-org/engine/init-formspec-engine';
 import { createFormEngine } from '@formspec-org/engine/render';
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { sampleFormDefinition, sampleFormResponse } from '../../src/adapter-conformance/fixtures.ts';
 beforeAll(() => initFormspecEngine());
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -17,6 +18,13 @@ function fixture() {
   return { handle, capability, admission, context, input, ports };
 }
 describe('explicit native host event capabilities', () => {
+  it('preserves exact numeric Response detail through the trusted host capability copy', async () => {
+    const f = fixture();
+    const third = '0.3333333333333333333333333333';
+    f.ports.submit.mockReturnValue({ response: { ...sampleFormResponse, data: { ratio: parseJsonExact(third) } }, validationReport: null });
+    await admitNativeHostEvents(f.admission).invoke(f.input, f.context);
+    expect(JSON.stringify(f.handle.mock.calls[0][0].detail)).toContain(`"ratio":${third}`);
+  });
   it('refuses missing required authored event capability before rendering', () => { const f = fixture(); expect(() => admitNativeHostEvents({ ...f.admission, capabilities: [] })).toThrow('native-host-event-capability-unavailable'); });
   it('refuses wrong event and ambiguous or controller-owned registrations', () => { const f = fixture();
     expect(() => admitNativeHostEvents({ ...f.admission, capabilities: [{ ...f.capability, eventName: 'other' }] })).toThrow('native-host-event-unadmitted');

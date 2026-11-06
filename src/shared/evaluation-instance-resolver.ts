@@ -1,3 +1,4 @@
+import { cloneJsonValue } from './exact-json.ts';
 import type { InstanceSourceResolver } from '@formspec-org/engine/render';
 import type { HydratedEvaluationCandidate } from '../ports/evaluation-hydration.ts';
 
@@ -15,7 +16,7 @@ export function createEvaluationInstanceResolver(context: HydratedEvaluationCand
     const result = view.results.find(result => result.instanceName === request.instanceName && result.sourceRef === request.source);
     if (!result || result.status !== 'qualified') return { status: 'unavailable', reason: (result as { readonly reason: string } | undefined)?.reason ?? 'evaluation-source-unavailable' };
     // Decoder guarantees JSON-compatible data; the public engine owns instance schema admission.
-    const value = structuredClone(result.data) as Extract<Awaited<ReturnType<InstanceSourceResolver>>, { status: 'loaded' }>['value'];
+    const value = cloneJsonValue(result.data) as Extract<Awaited<ReturnType<InstanceSourceResolver>>, { status: 'loaded' }>['value'];
     options.signal.throwIfAborted(); assertCurrent();
     return { status: 'loaded', value };
   };

@@ -1,4 +1,3 @@
-/** @filedesc Diffs batch evaluation snapshots into per-signal patch payloads. */
 export interface EvalValidation {
     path: string;
     shapeId?: string;
@@ -17,6 +16,7 @@ export interface EvalDiagnostic {
 }
 export interface EvalResult {
     values: Record<string, unknown>;
+    data: Record<string, unknown>;
     validations: EvalValidation[];
     diagnostics: EvalDiagnostic[];
     nonRelevant: string[];

@@ -1,4 +1,5 @@
 /** @filedesc Response Actions resolution helpers for renderers and hosts. */
+import { cloneValue } from './json-values.js';
 import { VALIDATION_MAPPING_MASTER_TABLE } from '@formspec-org/types';
 import { ResponseActionsPreconditionCatalog } from './precondition-catalog.js';
 /**
@@ -57,7 +58,7 @@ export function planResponseActionEffects(action) {
     }));
 }
 function immutableSnapshot(value) {
-    const snapshot = structuredClone(value);
+    const snapshot = cloneValue(value);
     const seen = new WeakSet();
     const freeze = (item) => {
         if (!item || typeof item !== 'object' || seen.has(item))

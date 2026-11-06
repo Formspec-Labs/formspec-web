@@ -1,5 +1,6 @@
 import { NATIVE_SOURCE_OPERATION_MILLISECONDS } from './native-operation-budget.ts';
 import { abortable } from './abortable.ts';
+import { cloneJsonValue } from './exact-json.ts';
 import { invokeResponseActionAsync } from '@formspec-org/engine';
 import type { ResponseActionInvoker, ResponseActionInvokerResult, SubmitResult } from '@formspec-org/react';
 import type { ResponseActionsDocument } from '@formspec-org/types';
@@ -74,7 +75,7 @@ export function admitNativeHostEvents(input: {
           dispatchHostEvent(eventName, detail) {
             assertCurrent();
             if (eventName !== selected.capability.eventName) throw new Error('native-host-event-unadmitted');
-            calls.push(freezeDetail(structuredClone(detail)));
+            calls.push(freezeDetail(cloneJsonValue(detail)));
           },
         }, input.nodeId, input.invocationContext));
         assertCurrent();

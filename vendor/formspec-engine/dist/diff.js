@@ -1,37 +1,5 @@
 /** @filedesc Diffs batch evaluation snapshots into per-signal patch payloads. */
-function isPlainObject(value) {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-function deepEqual(left, right) {
-    if (Object.is(left, right)) {
-        return true;
-    }
-    if (Array.isArray(left) && Array.isArray(right)) {
-        if (left.length !== right.length) {
-            return false;
-        }
-        for (let index = 0; index < left.length; index += 1) {
-            if (!deepEqual(left[index], right[index])) {
-                return false;
-            }
-        }
-        return true;
-    }
-    if (isPlainObject(left) && isPlainObject(right)) {
-        const leftKeys = Object.keys(left).sort();
-        const rightKeys = Object.keys(right).sort();
-        if (!deepEqual(leftKeys, rightKeys)) {
-            return false;
-        }
-        for (const key of leftKeys) {
-            if (!deepEqual(left[key], right[key])) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return false;
-}
+import { deepEqual } from './json-values.js';
 function diffRecord(previous, next) {
     const changed = {};
     const removed = [];

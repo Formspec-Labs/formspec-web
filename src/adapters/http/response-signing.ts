@@ -1,10 +1,11 @@
+import { cloneJsonValue } from '../../shared/exact-json.ts';
 import { savedSourceDraftView, type SourceDraftView, type SavedSourceDraftView, type InitializedSourceDraftView } from './source-draft-view.ts';
 import { snapshotWire } from './wire-json.ts';
 import { sameResponseDataView } from '../../shared/response-data-view.ts';
 import { decodeBase64 } from '../../shared/base64.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import { requireSigningIssuer } from '../../shared/signing-issuer.ts';
-import canonicalize from 'canonicalize';
+import { canonicalJsonIdentity as canonicalize } from '../../shared/exact-json.ts';
 import { extractServiceRequestOutputs, hashSigningContent, planServiceRequest, resolveAuthoredSigningContent, resolveServiceRequest } from '@formspec-org/engine/render';
 import { canonicalResponseHandoffBytes } from '@formspec-org/integrity-canonical';
 import { decodeCoseSign1WithMethodUri } from '@formspec-org/integrity-cose';
@@ -151,7 +152,7 @@ export class HttpResponseSigning implements ResponseSigning {
     assertUuidV7IdempotencyKey(input.operationId);
     const dispatchGuard = options?.assertBeforeDispatch;
     if (dispatchGuard) assertSynchronousGuard(dispatchGuard);
-    input = structuredClone(input);
+    input = cloneJsonValue(input);
     const identity = canonicalize(input)!;
     const generation = this.config.fence.capture(input.draftKey);
     const previous = this.saves.get(input.operationId);
@@ -374,13 +375,13 @@ export class HttpResponseSigning implements ResponseSigning {
     const matches = this.markers().filter(marker => marker.scope === scope);
     if (matches.length !== 1
       || matches[0].draftId !== draftId || !isUuidV7IdempotencyKey(matches[0].operationId)) throw new ResponseSigningUnresolvedError();
-    return freeze(structuredClone(matches[0]));
+    return freeze(cloneJsonValue(matches[0]));
   }
   async pendingRecoveryFor(key: DraftKey, draftId: string, version: number, response: FormResponse) {
     const marker = this.pendingMarkerFor(key, draftId);
-    const unsigned = structuredClone(response); delete unsigned.authoredSignatures;
+    const unsigned = cloneJsonValue(response); delete unsigned.authoredSignatures;
     const original = marker.renewal?.originalCandidate ?? unsigned;
-    const successor = structuredClone(original); delete successor.extensions?.['x-formspec-signing-content'];
+    const successor = cloneJsonValue(original); delete successor.extensions?.['x-formspec-signing-content'];
     if (marker.renewal && (await handoffHash(original) !== marker.renewal.originalHash
       || await handoffHash(successor) !== marker.renewal.successorHash)) throw new ResponseSigningUnresolvedError();
     if (response.authoredSignatures?.length) {
@@ -394,7 +395,7 @@ export class HttpResponseSigning implements ResponseSigning {
   }
 
   restorePending(input: PrepareResponseSigningInput & { readonly renewUnsignedRevision?: true }, operationId: string): Promise<RestoredPendingResponseSigning> {
-    input = freeze(structuredClone(input));
+    input = freeze(cloneJsonValue(input));
     assertUuidV7IdempotencyKey(operationId);
     return this.config.fence.run(input.draftKey, async generation => {
       if (!input.formVersionId || !input.response.id || !input.response.displayedLocale
@@ -688,7 +689,7 @@ function freeze<T>(value: T): T {
 }
 /** Reuses actual owned DraftView evidence; callers must qualify its owner and publication first. */
 export async function savedResponseDraftFromVerifiedRead(key: DraftKey, supplied: VerifiedDraftEvidence): Promise<SavedResponseDraft> {
-  const draftKey = freeze(structuredClone(key));
+  const draftKey = freeze(cloneJsonValue(key));
   const evidence = snapshotWire(supplied);
   return freeze({ draftKey, response: evidence.canonical_response,
     draft: { id: evidence.draft_id, version: evidence.draft_version, responseHash: await handoffHash(evidence.canonical_response) },

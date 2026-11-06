@@ -144,6 +144,35 @@ function siblingModulePolicy(test: ReturnType<typeof fixture>) {
 }
 
 describe('generic native package signing session', () => {
+  it('refuses signing when the validation snapshot has different calculated data from the saved Response', async () => {
+    let changed = false;
+    const test = fixture(false, undefined, policy => { policy.createEngine = (definition, options) => {
+      const engine = createFormEngine(definition, options);
+      const capture = engine.getResponseSnapshot.bind(engine);
+      engine.getResponseSnapshot = (meta, profile) => {
+        const snapshot = capture(meta, profile);
+        if (changed && profile === 'on-submit') snapshot.response.data.fullName = 'Changed during validation';
+        return snapshot;
+      };
+      return engine;
+    }; });
+    const lease = await test.prepared(); const data = await test.reviewData();
+    test.host.reviewOptions.onReviewState!({ status: 'ready', contextIdentity: await responseReviewHash(data),
+      responseHash: data.presentation.responseHash, actorRef: data.presentation.actorRef, draft: data.presentation.draft,
+      locale: data.presentation.locale, phase: data.presentation.phase });
+    const prepared = test.host.getSnapshot().controller!.prepared!;
+    const admission = test.policy.controller.roles.sign!;
+    changed = true;
+    const result = await test.host.widgetExecutor({ document: admission.document, actionRef: admission.actionRef, invocationId: 'changed-validation',
+      source: admission.widgetSource!, responseContext: { inputName: 'response', source: { catalogRef: 'urn:test:catalog', sourceRef: 'host:response' },
+        definition: test.policy.definition, response: prepared.response }, input: { draftId: prepared.draft.id, draftVersion: prepared.draft.version,
+        responseId: prepared.response.id!, responseHash: prepared.draft.responseHash, source: prepared.content.source as never,
+        locale: 'en', signerName: 'Actual signer', consentAccepted: true } });
+    expect('invocation' in result ? result.invocation.status : result.status).not.toBe('completed');
+    expect(test.sign).not.toHaveBeenCalled();
+    expect(prepared.response.data.fullName).not.toBe('Changed during validation');
+    lease.dispose(); test.host.dispose(); test.engine.dispose();
+  });
   it.each(['current', 'retired during read', 'delayed outcome unknown'] as const)('reads and restores only a current Source signed task in a fresh native host: %s', async mode => {
     const baseline = fixture(); baseline.host.dispose(); baseline.engine.dispose();
     const { policy } = baseline;

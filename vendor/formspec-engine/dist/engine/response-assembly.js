@@ -1,4 +1,4 @@
-/** @filedesc Response envelope, validation report, changelog migration, and pinned-definition resolution. */
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { wasmApplyMigrationsToResponseData } from '../wasm-bridge-runtime.js';
 import { cloneValue, toValidationResult } from './helpers.js';
 function resolveResponseId(explicitId, authoredSignatures) {
@@ -309,7 +309,7 @@ export function migrateResponseData(definition, responseData, fromVersion, optio
     if (!definition.migrations?.from?.[fromVersion]) {
         return responseData;
     }
-    return JSON.parse(wasmApplyMigrationsToResponseData(JSON.stringify(definition), JSON.stringify(responseData), fromVersion, options.nowIso));
+    return parseJsonExact(wasmApplyMigrationsToResponseData(JSON.stringify(definition), JSON.stringify(responseData), fromVersion, options.nowIso));
 }
 export function resolvePinnedDefinition(response, definitions) {
     const exact = definitions.find((definition) => definition.url === response.definitionUrl
