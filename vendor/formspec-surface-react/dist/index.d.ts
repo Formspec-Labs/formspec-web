@@ -6,10 +6,13 @@
  * the same reason: the slot taxonomy, the route graph and the theme boundary are
  * not React facts, and a second renderer must not have to re-derive them.
  */
-export { SurfaceApp, SurfaceNav, useBrowserLocation, useSurfaceApp, type FireTransition, type SurfaceTransitionSource, type SurfaceTransitionOutcome, type SurfaceCurrentRouteState, type SurfaceAppModel, type SurfaceAppProps, type SurfaceNavProps, type UseSurfaceAppInput, } from './SurfaceApp.js';
+export { SurfaceApp, SurfaceNav, useSurfaceApp, type FireTransition, type SurfaceTransitionSource, type SurfaceTransitionOutcome, type SurfaceCurrentRouteState, type SurfaceAppModel, type SurfaceAppProps, type SurfaceNavProps, type UseSurfaceAppInput, } from './SurfaceApp.js';
+export { BrowserSurfaceApp, type BrowserSurfaceAppProps, type SurfaceBrowserVisit, type SurfacePreviewEdition, } from './BrowserSurfaceApp.js';
+export { useBrowserLocation, type SurfaceBrowserMode } from './browser-location.js';
+export { SURFACE_APPEARANCE_SCRIPT } from './browser-appearance.js';
 export { SurfaceRouteView, type SurfaceRouteViewProps } from './SurfaceRoute.js';
 export { createSurfaceSemanticOutputScopeResolver, surfaceSemanticOutputSubjectRef, useSurfaceSemanticOutputs, type SurfaceSemanticOutputPairing, type SurfaceSemanticOutputScopeRequest, type SurfaceSemanticOutputScopeResolver, } from './semantic-output.js';
-export { SurfaceSlot, SurfaceSlotFrame, completedWidgetAction, createSurfaceSemanticControlScopeResolver, renderDefaultDefinitionForm, rendersOwnHeading, type ResolvedDefinitionFormPlan, type SurfaceDefinitionFormRenderer, type SurfaceDefinitionFormInitialData, type SurfaceDefinitionFormRenderInput, type SurfaceSemanticControlScopeRequest, type SurfaceSemanticControlScopeResolver, type SurfaceSemanticControlPairing, type SurfaceSlotProps, } from './SurfaceSlot.js';
+export { SurfaceSlot, SurfaceSlotFrame, completedWidgetAction, createSurfaceSemanticControlScopeResolver, renderDefaultDefinitionForm, rendersOwnHeading, type ResolvedDefinitionFormPlan, type SurfaceDefinitionFormRenderer, type SurfaceDefinitionFormInitialData, type SurfaceDefinitionFormRenderInput, type SurfaceSemanticControlScopeRequest, type SurfaceSemanticControlScopeResolver, type SurfaceSemanticControlPairing, type SurfaceSlotProps, type SurfaceSaveNotice, } from './SurfaceSlot.js';
 export { SurfaceTransitions, type SurfaceTransitionsProps } from './SurfaceTransitions.js';
 export { Heading, nextLevel, type HeadingProps } from './heading.js';
 export { MODULE_WIDGET_STATE_RENDERED_CONFIG_NODES, ModuleWidgetStateView, widgetDataMatchesEmptyWhen, type ModuleWidgetEmptyWhen, type ModuleWidgetOutputStateAction, type ModuleWidgetRetryStateAction, type ModuleWidgetStateAction, type ModuleWidgetStateName, type ModuleWidgetStateViewConfig, type ModuleWidgetStateViewProps, type ModuleWidgetStateViewsConfig, } from './widget-state.js';

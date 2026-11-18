@@ -35,6 +35,7 @@ export const getFelDependencies: (a: number, b: number, c: number) => void;
 export const interpolateFelTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const interpolateTemplate: (a: number, b: number, c: number, d: number) => void;
 export const isValidFelIdentifier: (a: number, b: number) => number;
+export const isValidResponseAuthored: (a: number, b: number) => number;
 export const itemAtPath: (a: number, b: number, c: number, d: number, e: number) => void;
 export const itemLocationAtPath: (a: number, b: number, c: number, d: number, e: number) => void;
 export const jsonPointerToJsonPath: (a: number, b: number, c: number) => void;
@@ -51,6 +52,8 @@ export const rewriteFelForAssembly: (a: number, b: number, c: number, d: number,
 export const rewriteFelReferences: (a: number, b: number, c: number, d: number, e: number) => void;
 export const rewriteMessageTemplate: (a: number, b: number, c: number, d: number, e: number) => void;
 export const sanitizeFelIdentifier: (a: number, b: number, c: number) => void;
+export const selectResponsesJson: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+export const subjectIdJson: (a: number, b: number, c: number, d: number, e: number) => void;
 export const tokenizeFel: (a: number, b: number, c: number) => void;
 export const tryLiftConditionGroup: (a: number, b: number, c: number) => void;
 export const validateExtensionUsage: (a: number, b: number, c: number, d: number, e: number) => void;

@@ -1,4 +1,5 @@
-import type { SurfaceScreenerCompletionPolicy } from './screener-completion.js';
+import type { AdvanceTransition } from './SurfaceApp.js';
+import type { NativeScreenerSlotProps, SurfaceScreenerCompletionPolicy } from './screener-completion.js';
 /**
  * @filedesc `SurfaceSlot` — one planned slot, rendered — and `SurfaceSlotFrame`,
  * the ONE place a slot's own title becomes a heading.
@@ -39,6 +40,18 @@ export type ResolvedDefinitionFormPlan = Extract<SlotPlan<SurfaceWidget>, {
         slotType: 'definition-form';
     }>['definition']>;
 };
+export type SurfaceSaveNotice = 'saved' | 'savedLocally' | 'saveFailed';
+export interface SurfaceFormSession {
+    appearance: 'light' | 'dark';
+    previewScope: string | undefined;
+    reportSave: (notice: SurfaceSaveNotice) => void;
+    workspace?: {
+        slot: string | undefined;
+        activeSection: string | undefined;
+        hrefForSection: (slot: string, section: string) => string | undefined;
+        onActiveSectionChange: (slot: string, section: string) => void;
+    } | undefined;
+}
 export interface SurfaceDefinitionFormRenderInput {
     plan: ResolvedDefinitionFormPlan;
     grant: ThemeGrant;
@@ -51,6 +64,14 @@ export interface SurfaceDefinitionFormRenderInput {
     /** Host-admitted Locale documents; only matching Definition targets apply. */
     localeDocuments?: readonly LocaleDocument[] | undefined;
     activeLocale?: string | undefined;
+    appearance?: 'light' | 'dark' | undefined;
+    /** Exact local draft scope when the browser app is previewing an edition. */
+    previewScope?: string | undefined;
+    /** Report committed saves and failed writes to the single shell live region. */
+    reportSave?: ((notice: SurfaceSaveNotice) => void) | undefined;
+    activeSection?: string | undefined;
+    hrefForSection?: ((section: string) => string | undefined) | undefined;
+    onActiveSectionChange?: ((section: string) => void) | undefined;
     /**
      * Data Source payload admitted before mount. Record identity, route/session
      * generation, and owner revision remain separate from Definition field data.
@@ -104,6 +125,8 @@ export interface SurfaceSemanticControlPairing {
  */
 export declare function createSurfaceSemanticControlScopeResolver(pairing: SurfaceSemanticControlPairing): SurfaceSemanticControlScopeResolver;
 export interface SurfaceSlotProps {
+    formSession?: SurfaceFormSession | undefined;
+    activeSection?: string | undefined;
     localeDocuments?: readonly LocaleDocument[] | undefined;
     activeLocale?: string | undefined;
     screenerCompletion?: SurfaceScreenerCompletionPolicy | undefined;
@@ -115,12 +138,7 @@ export interface SurfaceSlotProps {
         status: 'refused';
         reason: string;
     }) | undefined;
-    onScreenerTarget?: ((target: string) => {
-        status: 'accepted';
-    } | {
-        status: 'refused';
-        reason: string;
-    }) | undefined;
+    onScreenerTarget?: NativeScreenerSlotProps['navigate'];
     plan: SlotPlan<SurfaceWidget>;
     grant: ThemeGrant;
     route: SurfaceWidgetRouteContext;
@@ -162,7 +180,7 @@ export interface SurfaceSlotProps {
     onDefinitionActionResult?: ((result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
     /** A published Action completed under its resolved validation policy. */
     onActionCompleted?: ((action: ResponseAction, result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
-    onAdvance?: ((transition: PlannedTransition, result?: Pick<ResponseActionInvocationResult<SurfaceWidgetActionDetail>, 'transitionBindings'>) => 'advanced' | 'refused' | void) | undefined;
+    onAdvance?: AdvanceTransition | undefined;
 }
 /** The completed action whose declared policy permits route advancement. */
 export declare function completedFormAction(result: ResponseActionInvocationResult<SubmitResult>): ResponseAction | undefined;
@@ -190,6 +208,6 @@ export declare function rendersOwnHeading(plan: SlotPlan<SurfaceWidget>): boolea
  * landmark — which is the honest shape for a slot the author did not name.
  */
 export declare function SurfaceSlotFrame(props: SurfaceSlotProps): import("react/jsx-runtime").JSX.Element | null;
-export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, }: SurfaceSlotProps): ReactNode;
-export declare function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, }: SurfaceDefinitionFormRenderInput): ReactNode;
+export declare function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, }: SurfaceSlotProps): ReactNode;
+export declare function renderDefaultDefinitionForm(input: SurfaceDefinitionFormRenderInput): ReactNode;
 export { nextLevel };

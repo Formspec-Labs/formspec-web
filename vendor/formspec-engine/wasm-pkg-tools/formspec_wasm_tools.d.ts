@@ -220,6 +220,11 @@ export function interpolateTemplate(template: string, evaluate: Function): strin
  */
 export function isValidFelIdentifier(s: string): boolean;
 
+/**
+ * Check whether a Response's authored timestamp identifies an instant.
+ */
+export function isValidResponseAuthored(authored: string): boolean;
+
 export function itemAtPath(items_json: string, path: string): string;
 
 export function itemLocationAtPath(items_json: string, path: string): string;
@@ -281,6 +286,21 @@ export function rewriteMessageTemplate(message: string, rewrites_json: string): 
  */
 export function sanitizeFelIdentifier(s: string): string;
 
+/**
+ * Select an authorized Response read and return its exact JSON value and evidence.
+ *
+ * # Errors
+ *
+ * Returns an error for invalid input JSON, including an omitted `upstreamSubject`.
+ * Supply JSON null when the upstream Definition declares no subject.
+ */
+export function selectResponsesJson(records_json: string, selection_json: string, context_json: string): string;
+
+/**
+ * Derive the canonical id of a typed Response subject.
+ */
+export function subjectIdJson(subject_type: string, keys_json: string): string;
+
 export function tokenizeFel(expression: string): string;
 
 /**
@@ -332,6 +352,7 @@ export interface InitOutput {
     readonly interpolateFelTemplate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly interpolateTemplate: (a: number, b: number, c: number, d: number) => void;
     readonly isValidFelIdentifier: (a: number, b: number) => number;
+    readonly isValidResponseAuthored: (a: number, b: number) => number;
     readonly itemAtPath: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly itemLocationAtPath: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly jsonPointerToJsonPath: (a: number, b: number, c: number) => void;
@@ -348,6 +369,8 @@ export interface InitOutput {
     readonly rewriteFelReferences: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly rewriteMessageTemplate: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly sanitizeFelIdentifier: (a: number, b: number, c: number) => void;
+    readonly selectResponsesJson: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly subjectIdJson: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly tokenizeFel: (a: number, b: number, c: number) => void;
     readonly tryLiftConditionGroup: (a: number, b: number, c: number) => void;
     readonly validateExtensionUsage: (a: number, b: number, c: number, d: number, e: number) => void;

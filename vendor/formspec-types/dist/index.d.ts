@@ -9,6 +9,7 @@
  * Re-run: npm run types:generate
  */
 export * from './generated/index.js';
+export * from './evaluated-form-state.js';
 export { KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT, COMPONENT_TO_HINT, COMPATIBILITY_MATRIX, PRESENTATION_WIDGETS, REPEAT_PRESENTATION_WIDGETS, isRepeatPresentationWidget, widgetTokenToComponent, } from './widget-vocabulary.js';
 export { UI_POLICY } from './ui-policy.js';
 export type { UiPolicy } from './ui-policy.js';
@@ -75,7 +76,7 @@ export type FormItem = Item & {
     constraint?: string;
     message?: string;
 };
-type FormDefinitionKnownFields = Pick<GeneratedFormDefinition, '$formspec' | 'url' | 'version' | 'versionAlgorithm' | 'derivedFrom' | 'name' | 'title' | 'description' | 'documents' | 'date' | 'metadata' | 'shapes' | 'instances' | 'subject' | 'variables' | 'nonRelevantBehavior' | 'issuer' | 'optionSets' | 'migrations' | 'fees' | 'extensions'>;
+type FormDefinitionKnownFields = Pick<GeneratedFormDefinition, '$formspec' | 'url' | 'version' | 'versionAlgorithm' | 'derivedFrom' | 'name' | 'title' | 'description' | 'documents' | 'date' | 'metadata' | 'warningExplanation' | 'shapes' | 'subject' | 'instances' | 'subject' | 'variables' | 'nonRelevantBehavior' | 'issuer' | 'optionSets' | 'migrations' | 'fees' | 'extensions'>;
 export type FormDefinition = FormDefinitionKnownFields & {
     items: FormItem[];
     status?: GeneratedFormDefinition['status'];
@@ -136,3 +137,4 @@ export interface ProjectBundle {
      */
     references?: ReferencesDocument;
 }
+export type { NewerSelectedResponse, ResponseSelectionContext, ResponseSelectionDelivery, ResponseSelectionOutcome, ResponseSelectionRecord, SelectResponses, } from './response-selection.js';

@@ -1,14 +1,14 @@
-import type { FormResponse } from "@formspec-org/types";
-import type { DataSourceCatalogHandle, DataSourceLoader, DataSourceLoadResult } from "./data-source-loader.js";
+import type { FormResponse, ResponseSelection, ResponseSelectionContext, SelectResponses } from "@formspec-org/types";
+import type { DataSourceActiveContext, DataSourceCatalogHandle, DataSourceLoader, DataSourceLoadResult } from "./data-source-loader.js";
 /** An exact source identity within one manifested Data Sources catalog. */
 export interface DefinitionResponseSourceBinding {
     catalogRef: string;
     sourceRef: string;
 }
-export type DefinitionResponseRecordRefusalReason = "source-unavailable" | "selection-unsupported" | "invocation-id-missing" | "invocation-payload-conflict" | "response-definition-mismatch" | "response-version-mismatch" | "response-status-mismatch" | "response-id-missing" | "response-authored-invalid" | "response-data-not-finite-json";
+export type DefinitionResponseRecordRefusalReason = "source-unavailable" | "invocation-id-missing" | "invocation-payload-conflict" | "response-definition-mismatch" | "response-status-mismatch" | "response-id-missing" | "response-authored-invalid" | "response-data-not-finite-json";
 export type DefinitionResponseRecordResult = {
     status: "recorded";
-    /** Whether this delivery is now the source's selected latest Response. */
+    /** Whether this delivery is among the selected Responses for this read. */
     selected: boolean;
 } | {
     status: "duplicate";
@@ -16,35 +16,30 @@ export type DefinitionResponseRecordResult = {
     status: "refused";
     reason: DefinitionResponseRecordRefusalReason;
 };
+type ReadInputs = Pick<DataSourceActiveContext, "params" | "subject">;
 export interface RecordDefinitionResponseInput {
     binding: DefinitionResponseSourceBinding;
-    /**
-     * Stable action-effect delivery identity. Deduplication is scoped to the
-     * exact source so two independent sources cannot suppress one another.
-     */
+    /** Stable action-effect delivery identity within the exact source. */
     invocationId: string;
     response: FormResponse;
+    context?: ReadInputs;
+    /** Host-owned respondent identity for a subjectless catalog delivery. */
+    implicitSubjectId?: string;
 }
-/**
- * Small host-facing API for preview and test infrastructure.
- *
- * `overlay` replaces a fresh baseline payload with the selected Response data.
- * It returns unavailable and stale baselines unchanged. `wrapLoader` applies
- * the same rule to an existing generic DataSourceLoader.
- */
+export interface PreviewDefinitionResponseStoreOptions {
+    /** Use the initialized engine's tools WebAssembly selector. */
+    selectResponses: SelectResponses;
+    /** Use the engine's Response timestamp check at delivery admission. */
+    isValidResponseAuthored(authored: string): boolean;
+    /** Supply facts for a known upstream Definition, or undefined when it is unavailable. */
+    selectionContext(binding: DefinitionResponseSourceBinding, selection: ResponseSelection, inputs?: ReadInputs): Pick<ResponseSelectionContext, "upstreamSubject" | "dispositions" | "pin"> | undefined;
+}
+/** Overlays observed preview deliveries on the host's fresh baseline. */
 export interface PreviewDefinitionResponseStore {
     record(input: RecordDefinitionResponseInput): DefinitionResponseRecordResult;
-    overlay(binding: DefinitionResponseSourceBinding, baseline: DataSourceLoadResult): Promise<DataSourceLoadResult>;
+    overlay(binding: DefinitionResponseSourceBinding, baseline: DataSourceLoadResult, inputs?: ReadInputs): DataSourceLoadResult;
     wrapLoader(baselineLoader: DataSourceLoader): DataSourceLoader;
 }
-export interface PreviewDefinitionResponseCanonicalization {
-    canonicalJsonBytes(value: unknown): Uint8Array<ArrayBuffer>;
-    canonicalResponseHandoffBytes(response: unknown): Uint8Array<ArrayBuffer>;
-}
-/**
- * Create an isolated in-memory store for preview and test use.
- *
- * Production hosts must use durable, authorized persistence instead. This
- * helper intentionally loses all data when its process ends.
- */
-export declare function createPreviewDefinitionResponseStore(catalogs: readonly DataSourceCatalogHandle[], canonical?: PreviewDefinitionResponseCanonicalization): PreviewDefinitionResponseStore;
+/** Create an isolated in-memory store for an already admitted preview catalog. */
+export declare function createPreviewDefinitionResponseStore(catalogs: readonly DataSourceCatalogHandle[], options: PreviewDefinitionResponseStoreOptions): PreviewDefinitionResponseStore;
+export {};

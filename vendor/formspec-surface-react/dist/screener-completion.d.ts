@@ -40,8 +40,9 @@ export interface NativeScreenerSlotProps {
     policy?: SurfaceScreenerCompletionPolicy | undefined;
     localeDocuments?: FormspecScreenerProps['localeDocuments'];
     activeLocale?: string | undefined;
+    appearance?: 'light' | 'dark' | undefined;
     checkTarget?: ((target: string) => ScreenerCompletionDisposition) | undefined;
-    navigate?: ((target: string) => ScreenerCompletionDisposition) | undefined;
+    navigate?: ((target: string) => ScreenerCompletionDisposition | Promise<ScreenerCompletionDisposition>) | undefined;
 }
 /** Keep answer state mounted across Locale and host port replacement. */
 export declare function NativeScreenerSlot(props: NativeScreenerSlotProps): import("react/jsx-runtime").JSX.Element;

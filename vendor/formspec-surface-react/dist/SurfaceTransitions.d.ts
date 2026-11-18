@@ -1,5 +1,5 @@
 import { type PlannedTransition, type SurfaceStrings } from '@formspec-org/surface';
-import type { FireTransition, SurfaceTransitionOutcome, SurfaceTransitionSource } from './SurfaceApp.js';
+import type { AdvanceTransition, FireTransition, SurfaceTransitionSource } from './SurfaceApp.js';
 export interface SurfaceTransitionsProps {
     from: SurfaceTransitionSource;
     transitions: readonly PlannedTransition[];
@@ -12,6 +12,6 @@ export interface SurfaceTransitionsProps {
      */
     onFire?: FireTransition | undefined;
     /** Navigate. Called only after `onFire` reports the action actually succeeded. */
-    onAdvance?: ((transition: PlannedTransition, outcome: SurfaceTransitionOutcome) => void) | undefined;
+    onAdvance?: AdvanceTransition | undefined;
 }
 export declare function SurfaceTransitions({ from, transitions, strings, onFire, onAdvance, }: SurfaceTransitionsProps): import("react/jsx-runtime").JSX.Element | null;

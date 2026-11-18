@@ -21,7 +21,7 @@ export function collectAssignedTopLevelKeys(items, pages) {
     }
     return assigned;
 }
-export function buildThemePageNodes(planRegionNode, items, ctx) {
+export function buildThemePageNodes(planRegionNode, items, ctx, options = {}) {
     const pages = Array.isArray(ctx.theme?.pages) ? ctx.theme.pages : [];
     const nodes = [];
     const { nextId } = preparePlanContext(ctx);
@@ -34,18 +34,18 @@ export function buildThemePageNodes(planRegionNode, items, ctx) {
             const plannedNode = planRegionNode(regionPath);
             if (!plannedNode)
                 continue;
-            if (regionPath.includes('.') && plannedNode.props?.bind) {
+            if (!options.preserveBinding && regionPath.includes('.') && plannedNode.props?.bind) {
                 plannedNode.props.bind = regionPath;
                 if (plannedNode.bindPath && plannedNode.bindPath !== regionPath) {
                     plannedNode.bindPath = regionPath;
                 }
             }
-            const wrapped = wrapRegionNode(plannedNode, region, ctx.activeBreakpoint ?? null, nextId);
+            const wrapped = wrapRegionNode(plannedNode, region, ctx.activeBreakpoint ?? null, nextId, options.retainHiddenRegions);
             if (wrapped) {
                 regionNodes.push(wrapped);
             }
         }
-        if (regionNodes.length === 0)
+        if (regionNodes.length === 0 && !(options.retainRegionlessPages && !page.regions?.length))
             continue;
         nodes.push({
             id: nextId('page'),
@@ -57,7 +57,7 @@ export function buildThemePageNodes(planRegionNode, items, ctx) {
                 ...(page.description ? { description: page.description } : {}),
             },
             cssClasses: [],
-            children: [
+            children: regionNodes.length ? [
                 {
                     id: nextId('grid'),
                     component: 'Grid',
@@ -66,20 +66,21 @@ export function buildThemePageNodes(planRegionNode, items, ctx) {
                     cssClasses: [],
                     children: regionNodes,
                 },
-            ],
+            ] : [],
         });
     }
     return nodes;
 }
-export function wrapRegionNode(node, region, activeBreakpoint, nextId) {
+export function wrapRegionNode(node, region, activeBreakpoint, nextId, retainHidden = false) {
     const resolved = resolveRegionPlacement(region, activeBreakpoint);
-    if (resolved.hidden) {
+    if (resolved.hidden && !retainHidden) {
         return null;
     }
     const style = {
         gridColumn: resolved.start !== undefined
             ? `${resolved.start} / span ${resolved.span}`
             : `span ${resolved.span}`,
+        ...(resolved.hidden ? { display: 'none' } : {}),
     };
     return {
         id: nextId('region'),

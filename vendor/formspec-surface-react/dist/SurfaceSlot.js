@@ -169,7 +169,7 @@ export function SurfaceSlotFrame(props) {
         (plan.slotType !== 'experience-unit' || showExperienceNeeds);
     return (_jsxs("section", { className: "fs-surface-slot", "data-slot": plan.slotId, "data-slot-type": plan.slotType, ...needTraceAttributes(plan.needAnchors), ...(showsAuthoredTitle ? { 'aria-label': plan.title } : {}), children: [showsAuthoredTitle && !rendersOwnHeading(plan) && (_jsx(Heading, { level: plan.headingBaseLevel, className: "fs-surface-slot__title", children: plan.title })), _jsx(SurfaceSlot, { ...props })] }));
 }
-export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, }) {
+export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, showExperienceNeeds = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, transitions, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, semanticOutputScope, onDefinitionActionResult, onActionCompleted, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, activeSection, }) {
     const subjectPrefix = surfaceSemanticOutputSubjectRef(route.routeId, plan.slotId);
     const slotSemanticOutputScope = semanticOutputScope && subjectPrefix
         ? { ...semanticOutputScope, subjectPrefix }
@@ -178,7 +178,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
         case 'screener': {
             if (plan.status !== 'ready' || !plan.screener)
                 return _jsx(UnavailableSlot, { children: plan.reason ?? 'screener-unavailable' });
-            return _jsx(NativeScreenerSlot, { document: plan.screener.document, screenerRef: { url: plan.screener.ref.url, version: plan.screener.document.version }, allowedTargets: plan.allowedTargets, route: route, slotId: plan.slotId, runtimeGeneration: runtimeGeneration, visitId: screenerInstanceId, policy: screenerCompletion, localeDocuments: localeDocuments, activeLocale: activeLocale, checkTarget: checkScreenerTarget, navigate: onScreenerTarget }, `${screenerInstanceId ?? runtimeGeneration ?? ''}/${plan.screener.ref.url}/${plan.screener.ref.version}`);
+            return _jsx(NativeScreenerSlot, { document: plan.screener.document, screenerRef: { url: plan.screener.ref.url, version: plan.screener.document.version }, allowedTargets: plan.allowedTargets, route: route, slotId: plan.slotId, runtimeGeneration: runtimeGeneration, visitId: screenerInstanceId, policy: screenerCompletion, localeDocuments: localeDocuments, activeLocale: activeLocale, appearance: formSession?.appearance, checkTarget: checkScreenerTarget, navigate: onScreenerTarget }, `${screenerInstanceId ?? runtimeGeneration ?? ''}/${plan.screener.ref.url}/${plan.screener.ref.version}`);
         }
         case 'definition-form': {
             if (plan.status === 'unresolved' || plan.definition === undefined) {
@@ -196,6 +196,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
             // directly. On a refusing route that object was built from the platform
             // token registry and never saw a tenant token — which is what makes the
             // boundary structural rather than a styling choice.
+            const workspace = formSession?.workspace;
             const renderInput = {
                 plan: {
                     ...plan,
@@ -212,6 +213,16 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
                 responseActionInvoker: definitionActionInvoker,
                 localeDocuments,
                 activeLocale,
+                ...(formSession && {
+                    appearance: formSession.appearance,
+                    previewScope: formSession.previewScope,
+                    reportSave: formSession.reportSave,
+                }),
+                ...(workspace && {
+                    activeSection,
+                    hrefForSection: section => workspace.hrefForSection(plan.slotId, section),
+                    onActiveSectionChange: section => workspace.onActiveSectionChange(plan.slotId, section),
+                }),
             };
             const semanticControlScope = resolveSemanticControlScope?.({
                 plan: renderInput.plan,
@@ -268,7 +279,7 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
             // the host's grant — an embedded route cannot restore branding the host
             // refuses. Headings step down a level, which `planRoute` already decided;
             // this renders the level it was handed and re-derives nothing.
-            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, onAdvance: onAdvance }, child.slotId))) }));
+            return (_jsx("div", { className: "fs-surface-embed", "data-embed-route": plan.routeRef, "data-embed-mode": plan.mode, children: plan.slots.map((child) => (_jsx(SurfaceSlotFrame, { plan: child, grant: grant, route: route, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, formSession: formSession && { ...formSession, workspace: undefined }, onAdvance: onAdvance }, child.slotId))) }));
         }
         case 'unknown':
             return _jsx(UnavailableSlot, { children: strings('slotUnavailableStaticContent') });
@@ -304,8 +315,8 @@ function SurfaceStaticContent({ content, needAnchors, routeId, slotId, semanticO
             return (_jsx("hr", { className: "fs-surface-static-divider", ...needTraceAttributes(needAnchors) }));
     }
 }
-export function renderDefaultDefinitionForm({ plan, grant, route, initialData, referencesDocuments, ontologyDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, }) {
-    return (_jsx(DefaultSurfaceDefinitionForm, { plan: plan, grant: grant, route: route, initialData: initialData, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, responseActionsDocument: responseActionsDocument, semanticControlScope: semanticControlScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: onActionCompleted, responseActionInvoker: responseActionInvoker, componentDocument: componentDocument, localeDocuments: localeDocuments, activeLocale: activeLocale }));
+export function renderDefaultDefinitionForm(input) {
+    return _jsx(DefaultSurfaceDefinitionForm, { ...input });
 }
 /** Stop later owner phases when this effect retires; host authority stays in the ports. */
 function currentEffectDataSourcePorts(isCurrent, { loader, authorize, validatePayload }) {
@@ -471,7 +482,7 @@ function DefaultDefinitionFormSlot({ input, semanticOutputScope, }) {
         : []);
     return renderDefaultDefinitionForm(input);
 }
-function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, }) {
+function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, appearance, }) {
     const engine = useMemo(() => {
         const created = createFormEngine(plan.definition);
         if (initialData?.data !== undefined) {
@@ -516,7 +527,7 @@ function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocu
             return [];
         }
     }, [references]);
-    return (_jsx(FormspecForm, { engine: engine, componentDocument: componentDocument, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, responseActionInvoker: responseActionInvoker ?? null, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
+    return (_jsx(FormspecForm, { ...(appearance && { className: `formspec-appearance-${appearance}` }), engine: engine, componentDocument: componentDocument, themeDocument: grant.themeDocument, registryEntries: [...plan.registryEntries], resolveFieldHelp: resolveFieldHelp, responseActionsDocument: responseActionsDocument ?? null, responseActionInvoker: responseActionInvoker ?? null, ...(semanticControlScope ? { semanticControlScope } : {}), emitThemeTokens: false, ...(onActionCompleted || onDefinitionActionResult
             ? {
                 // `onSubmit` requests the renderer's declared submit control. It is
                 // a no-op because durable effects have not reached a terminal yet.
@@ -779,7 +790,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
             };
         }
         const completion = emission.completion
-            .then(({ invocationId, result }) => {
+            .then(async ({ invocationId, result }) => {
             if (activeGeneration.current !== emittedGeneration) {
                 onWidgetActionReport?.({
                     invocationId,
@@ -836,7 +847,7 @@ function SurfaceWidgetSlot({ plan, grant, route, strings, dataSourceLoader, data
                 return { status: 'completed' };
             }
             navigatedInvocations.current.add(invocationId);
-            const navigation = onAdvance?.(transition, bindingMerge.transitionBindings
+            const navigation = await onAdvance?.(transition, bindingMerge.transitionBindings
                 ? { transitionBindings: bindingMerge.transitionBindings }
                 : undefined);
             onWidgetActionReport?.({

@@ -263,6 +263,10 @@ export function buildFormspecResponseEnvelope(options) {
     }
     return response;
 }
+/** Keep findings visible in the report produced for evaluated response data. */
+export function collectRelevantValidationResults(result) {
+    return result.validations.filter(validation => validation.shapeId || !result.nonRelevant.some(path => validation.path === path || validation.path.startsWith(`${path}.`) || validation.path.startsWith(`${path}[`))).map(toValidationResult);
+}
 /** Shape validations for a specific timing, from a WASM eval with the matching trigger. */
 export function collectTimedShapeValidationResults(evalResult, shapeTiming, timing) {
     const results = [];

@@ -36,7 +36,7 @@ export type SurfaceStringVars = Readonly<Record<string, string>>;
  * The closed key set. Small enough to translate in one sitting, which is the
  * property that makes F7 closable.
  */
-export declare const SURFACE_STRING_KEYS: readonly ["slotUnavailableDefinitionForm", "slotUnavailableExperienceUnit", "slotUnavailableWidgetUnimplemented", "slotUnavailableWidgetIncompatible", "slotUnavailableWidgetUndeclared", "slotUnavailableWidgetData", "slotUnavailableStaticContent", "slotUnavailableEmbedUnresolved", "slotUnavailableEmbedCycle", "widgetEmpty", "notFoundTitle", "notFoundBody", "navigationLabel", "transitionContinue", "transitionPending", "transitionFailed", "transitionTargetUnresolved", "transitionTargetCollision", "transitionNoResponseActions", "transitionTriggerUnresolved", "transitionTriggerAmbiguous", "transitionNoExecutor", "transitionSuppliedBySlot", "transitionFireable"];
+export declare const SURFACE_STRING_KEYS: readonly ["slotUnavailableDefinitionForm", "slotUnavailableExperienceUnit", "slotUnavailableWidgetUnimplemented", "slotUnavailableWidgetIncompatible", "slotUnavailableWidgetUndeclared", "slotUnavailableWidgetData", "slotUnavailableStaticContent", "slotUnavailableEmbedUnresolved", "slotUnavailableEmbedCycle", "widgetEmpty", "notFoundTitle", "notFoundBody", "navigationLabel", "transitionContinue", "transitionPending", "transitionFailed", "transitionTargetUnresolved", "transitionTargetCollision", "transitionNoResponseActions", "transitionTriggerUnresolved", "transitionTriggerAmbiguous", "transitionNoExecutor", "transitionSuppliedBySlot", "transitionFireable", "previewEditionLabel", "appearanceLabel", "appearanceSystem", "appearanceLight", "appearanceDark", "saved", "savedLocally", "saveFailed"];
 export type SurfaceStringKey = (typeof SURFACE_STRING_KEYS)[number];
 /** One string, possibly interpolated from the vars its call site supplies. */
 export type SurfaceStringTemplate = (vars: SurfaceStringVars) => string;
@@ -93,6 +93,14 @@ export declare const DEFAULT_SURFACE_STRINGS: {
     readonly transitionNoExecutor: (vars: Readonly<Record<string, string>>) => string;
     readonly transitionSuppliedBySlot: (vars: Readonly<Record<string, string>>) => string;
     readonly transitionFireable: (vars: Readonly<Record<string, string>>) => string;
+    readonly previewEditionLabel: () => string;
+    readonly appearanceLabel: () => string;
+    readonly appearanceSystem: () => string;
+    readonly appearanceLight: () => string;
+    readonly appearanceDark: () => string;
+    readonly saved: () => string;
+    readonly savedLocally: () => string;
+    readonly saveFailed: () => string;
 };
 /**
  * The table a shell reads. Overrides win; anything the host leaves out falls

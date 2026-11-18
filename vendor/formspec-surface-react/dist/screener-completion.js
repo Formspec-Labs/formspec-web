@@ -74,5 +74,5 @@ export function NativeScreenerSlot(props) {
             throw error;
         }
     }, [epoch, mode, key, complete]);
-    return _jsx(FormspecScreener, { screenerDocument: props.document, localeDocuments: props.localeDocuments, activeLocale: props.activeLocale, completionKey: `${mode}/${key ?? ''}`, onDetermination: onDetermination });
+    return _jsx(FormspecScreener, { screenerDocument: props.document, localeDocuments: props.localeDocuments, ...(props.appearance && { className: `formspec-appearance-${props.appearance}` }), activeLocale: props.activeLocale, completionKey: `${mode}/${key ?? ''}`, onDetermination: onDetermination });
 }

@@ -1,4 +1,5 @@
 /** @filedesc Tools WASM — lazy init and wrappers for `formspec_wasm_tools` (lint, mapping, assembly, FEL authoring helpers). */
+import { parseJsonExact } from '@formspec-org/integrity-canonical';
 import { nodeFsModuleName, resolveWasmAssetPathForNode, } from './wasm-bridge-shared.js';
 import { getWasmModule, isWasmReady } from './wasm-bridge-runtime.js';
 let _wasmToolsReady = false;
@@ -106,6 +107,22 @@ export function resetToolsWasmDynamicImportCountForTest() {
 // ---------------------------------------------------------------------------
 // Typed wrappers — tools `formspec_wasm_tools` only
 // ---------------------------------------------------------------------------
+/**
+ * Execute an authorized preview Response selection after initializing tools WASM.
+ * Set `context.upstreamSubject` to null when the upstream Definition has no subject.
+ */
+export const selectResponses = (records, selection, context) => {
+    const resultJson = wasmTools().selectResponsesJson(JSON.stringify(records), JSON.stringify(selection), JSON.stringify(context));
+    return parseJsonExact(resultJson);
+};
+/** Calculate a filing-unit id from the declared type and exact typed keys. */
+export function responseSubjectId(subjectType, keys) {
+    return wasmTools().subjectIdJson(subjectType, JSON.stringify(keys));
+}
+/** Check whether authored specifies a valid Response ordering instant. */
+export function isValidResponseAuthored(authored) {
+    return wasmTools().isValidResponseAuthored(authored);
+}
 /** Parse a FEL expression and return whether it's valid. */
 export function wasmParseFel(expression) {
     assertWasmToolsReadySync();

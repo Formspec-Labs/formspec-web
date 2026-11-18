@@ -1,5 +1,5 @@
 /** @filedesc ValidationSummary rows every renderer draws: which results show, deduped, worded as the field shows them, linked to their control. */
-import type { ValidationResult } from '@formspec-org/types';
+import { type ValidationResult } from '@formspec-org/types';
 import type { ChromeStringKey } from './ui-strings';
 /** The ValidationSummary component's own props (component spec), as the planner carries them. */
 export interface ValidationSummaryComp {
@@ -41,6 +41,7 @@ export interface ValidationSummarySource {
     chrome(key: ChromeStringKey, params?: Record<string, string | number>): string;
 }
 export interface ValidationSummaryRow {
+    identity: string;
     severity: string;
     /** The path the finding names; empty for a form-level finding. */
     path: string;
@@ -69,4 +70,5 @@ export declare function validationResultPath(result: ValidationResult): string;
  */
 export declare function readValidationSummaryRows(comp: ValidationSummaryComp, source: ValidationSummarySource, options: {
     showFieldErrorsByDefault: boolean;
+    path?: (result: ValidationResult) => string;
 }): ValidationSummaryRow[];

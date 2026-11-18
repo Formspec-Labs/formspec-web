@@ -1,4 +1,5 @@
 /** @filedesc Tools WASM — lazy init and wrappers for `formspec_wasm_tools` (lint, mapping, assembly, FEL authoring helpers). */
+import type { FormResponse, SelectResponses } from '@formspec-org/types';
 import type { FELConditionGroupLiftResult } from './interfaces.js';
 export type WasmToolsModule = typeof import('../wasm-pkg-tools/formspec_wasm_tools.js');
 /** Whether the tools WASM module has been initialized and is ready for use. */
@@ -17,6 +18,15 @@ export declare function assertRuntimeToolsSplitAbiMatch(runtimeVersion: string, 
 export declare function getToolsWasmDynamicImportCountForTest(): number;
 /** @internal Reset import counter (use only in isolated test processes). */
 export declare function resetToolsWasmDynamicImportCountForTest(): void;
+/**
+ * Execute an authorized preview Response selection after initializing tools WASM.
+ * Set `context.upstreamSubject` to null when the upstream Definition has no subject.
+ */
+export declare const selectResponses: SelectResponses;
+/** Calculate a filing-unit id from the declared type and exact typed keys. */
+export declare function responseSubjectId(subjectType: string, keys: NonNullable<NonNullable<FormResponse['subject']>['keys']>): string;
+/** Check whether authored specifies a valid Response ordering instant. */
+export declare function isValidResponseAuthored(authored: string): boolean;
 /** Parse a FEL expression and return whether it's valid. */
 export declare function wasmParseFel(expression: string): boolean;
 /** Tokenize a FEL expression and return positioned token records. */

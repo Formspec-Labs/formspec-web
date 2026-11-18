@@ -6,7 +6,10 @@
  * the same reason: the slot taxonomy, the route graph and the theme boundary are
  * not React facts, and a second renderer must not have to re-derive them.
  */
-export { SurfaceApp, SurfaceNav, useBrowserLocation, useSurfaceApp, } from './SurfaceApp.js';
+export { SurfaceApp, SurfaceNav, useSurfaceApp, } from './SurfaceApp.js';
+export { BrowserSurfaceApp, } from './BrowserSurfaceApp.js';
+export { useBrowserLocation } from './browser-location.js';
+export { SURFACE_APPEARANCE_SCRIPT } from './browser-appearance.js';
 export { SurfaceRouteView } from './SurfaceRoute.js';
 export { createSurfaceSemanticOutputScopeResolver, surfaceSemanticOutputSubjectRef, useSurfaceSemanticOutputs, } from './semantic-output.js';
 export { SurfaceSlot, SurfaceSlotFrame, completedWidgetAction, createSurfaceSemanticControlScopeResolver, renderDefaultDefinitionForm, rendersOwnHeading, } from './SurfaceSlot.js';

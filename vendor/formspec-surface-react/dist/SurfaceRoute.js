@@ -33,31 +33,21 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  *    would mean inventing one. Authored order is the only thing defined.
  */
 import { presentedRouteTitle } from './title-presentation.js';
-import { useLayoutEffect, useRef } from 'react';
-import { emitMergedThemeCssVars } from '@formspec-org/layout';
+import { useRef } from 'react';
 import { generationNeedAnchors, resolveRouteTitleLevel, resolveSurfaceStrings, } from '@formspec-org/surface';
 import { Heading } from './heading.js';
 import { SurfaceSlotFrame, } from './SurfaceSlot.js';
 import { SurfaceTransitions } from './SurfaceTransitions.js';
 import { needTraceAttributes } from './need-trace.js';
-export function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, }) {
+import { useSurfaceThemeTokens } from './surface-theme.js';
+export function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceLoader, dataSourceRevision, authorizeDataSource, validateDataSourcePayload, widgetActionExecutor, widgetActionOutcomeStore, widgetActionCoordinator, runtimeGeneration, onWidgetActionReport, onRuntimeDiagnosticsChange, renderDefinitionForm, definitionActionInvoker, resolveSemanticControlScope, resolveSemanticOutputScope, onDefinitionActionResult, showExperienceNeeds, showThemeNotice = false, responseActionsDocuments, referencesDocuments, ontologyDocuments, onFireTransition, onAdvance, onScreenerTarget, checkScreenerTarget, screenerInstanceId, screenerCompletion, localeDocuments, activeLocale, formSession, }) {
     const container = useRef(null);
     const { handle, grant, params } = plan;
     const text = strings ?? resolveSurfaceStrings();
-    useLayoutEffect(() => {
-        const element = container.current;
-        if (!element)
-            return;
-        const tokens = grant.themeDocument.tokens;
-        emitMergedThemeCssVars(element, { themeTokens: tokens ?? {} });
-        return () => {
-            for (let index = element.style.length - 1; index >= 0; index -= 1) {
-                const property = element.style[index];
-                if (property?.startsWith('--formspec-'))
-                    element.style.removeProperty(property);
-            }
-        };
-    }, [grant]);
+    useSurfaceThemeTokens(container, grant.themeDocument);
+    const workspace = formSession?.workspace;
+    const formSlots = plan.slots.filter(slot => slot.slotType === 'definition-form');
+    const activeSlot = workspace?.slot ?? (formSlots.length === 1 ? formSlots[0]?.slotId : undefined);
     const titleLevel = resolveRouteTitleLevel(plan.headingBaseLevel);
     const titleText = presentedRouteTitle(handle, resolveRouteTitle);
     const titleId = `fs-surface-title-${handle.routeId}`;
@@ -83,9 +73,9 @@ export function SurfaceRouteView({ plan, resolveRouteTitle, strings, dataSourceL
             hasDecisionFormSlot)
         ? 'split'
         : undefined;
-    return (_jsxs("article", { ref: container, className: `fs-surface-route fs-surface-route--${grant.admitsTenantTheme ? 'branded' : 'platform'}`, "data-route": handle.routeId, "data-surface": handle.surfaceId, "data-route-class": handle.route.routeClass ?? 'unclassified', "data-route-layout": routeLayout, "data-tenant-theme": grant.admitsTenantTheme ? 'admitted' : 'refused', "data-tenant-token-count": grant.tenantTokenKeys.length, ...needTraceAttributes(generationNeedAnchors(handle.route)), ...(titleLevel === undefined
+    return (_jsxs("article", { ref: container, className: `fs-surface-route fs-surface-route--${grant.admitsTenantTheme ? 'branded' : 'platform'}`, "data-route": handle.routeId, "data-surface": handle.surfaceId, "data-route-class": handle.route.routeClass ?? 'unclassified', "data-route-layout": routeLayout, "data-fs-appearance": formSession?.appearance, "data-tenant-theme": grant.admitsTenantTheme ? 'admitted' : 'refused', "data-tenant-token-count": grant.tenantTokenKeys.length, ...needTraceAttributes(generationNeedAnchors(handle.route)), ...(titleLevel === undefined
             ? { 'aria-label': titleText }
-            : { 'aria-labelledby': titleId }), children: [titleLevel !== undefined && (_jsx(Heading, { level: titleLevel, className: "fs-surface-route__title", id: titleId, children: titleText })), showThemeNotice && (_jsx("p", { className: `fs-surface-themenote fs-surface-themenote--${grant.posture}`, "data-probe": "theme-note", children: grant.reason })), _jsx("div", { className: "fs-surface-route__slots", children: plan.slots.map((slotPlan) => (_jsx(SurfaceSlotFrame, { plan: slotPlan, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, grant: grant, route: route, strings: text, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: plan.transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, definitionActionInvoker: definitionActionInvoker, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: (action, result) => {
+            : { 'aria-labelledby': titleId }), children: [titleLevel !== undefined && (_jsx(Heading, { level: titleLevel, className: "fs-surface-route__title", id: titleId, children: titleText })), showThemeNotice && (_jsx("p", { className: `fs-surface-themenote fs-surface-themenote--${grant.posture}`, "data-probe": "theme-note", children: grant.reason })), _jsx("div", { className: "fs-surface-route__slots", children: plan.slots.map((slotPlan) => (_jsx(SurfaceSlotFrame, { plan: slotPlan, screenerCompletion: screenerCompletion, checkScreenerTarget: checkScreenerTarget, onScreenerTarget: onScreenerTarget, screenerInstanceId: screenerInstanceId, localeDocuments: localeDocuments, activeLocale: activeLocale, formSession: formSession, activeSection: slotPlan.slotId === activeSlot ? workspace?.activeSection : undefined, grant: grant, route: route, strings: text, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, showExperienceNeeds: showExperienceNeeds, responseActionsDocuments: responseActionsDocuments, referencesDocuments: referencesDocuments, ontologyDocuments: ontologyDocuments, transitions: plan.transitions, widgetActionExecutor: widgetActionExecutor, widgetActionOutcomeStore: widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator, runtimeGeneration: runtimeGeneration, onWidgetActionReport: onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, definitionActionInvoker: definitionActionInvoker, resolveSemanticControlScope: resolveSemanticControlScope, semanticOutputScope: semanticOutputScope, onDefinitionActionResult: onDefinitionActionResult, onActionCompleted: (action, result) => {
                         // The form's own submit ran under Response Actions authority and
                         // reported success. THAT is what advances the route — not the
                         // click that started it.

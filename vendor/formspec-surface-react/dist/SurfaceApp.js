@@ -38,11 +38,12 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * ## Navigation is a port, not a router
  *
  * `location` and `onNavigate` are props. This package ships
- * {@link useBrowserLocation} for hosts that want the address bar, and stays out
+ * BrowserSurfaceApp for hosts that want the address bar, and stays out
  * of the way of hosts that already have a router — which every host of any size
  * does. A shell that owned history would be a shell that could not be embedded.
  */
 import { presentedRouteTitle } from './title-presentation.js';
+import { useHostAppearance } from './browser-appearance.js';
 import { deriveSurfaceRuntimeGeneration } from "./runtime-generation.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
 import { canonicalFiniteJson, composeSurfaceApp, createThemeAuthority, createWidgetRegistry, documentRootContaminationDiagnostic, flattenRegistryEntries, generationNeedAnchors, matchRoute, mergeNeedAnchors, planMatchedRoute, resolveSurfaceStrings, routeHref, } from "@formspec-org/surface";
@@ -50,6 +51,7 @@ import { SurfaceRouteView } from "./SurfaceRoute.js";
 import { createWidgetActionCoordinator } from "./widget-action-runtime.js";
 import { diagnosticListsEqual, useDiagnosticDelivery, } from "./diagnostic-delivery.js";
 import { needTraceAttributes } from "./need-trace.js";
+import { useSurfaceThemeTokens } from "./surface-theme.js";
 export function navigateAfterCompletedAction(transition, routeParams, transitionBindingsOrNavigate, maybeNavigate) {
     if (!transition.target)
         return "refused";
@@ -76,11 +78,14 @@ export function navigateAfterCompletedAction(transition, routeParams, transition
     const destination = routeHref(transition.target, nextParams);
     if (destination.refusal !== undefined)
         return "refused";
-    onNavigate(destination.href);
-    return "advanced";
+    const navigation = onNavigate(destination.href);
+    const disposition = (accepted) => accepted === false ? "refused" : "advanced";
+    return typeof navigation === "object" && navigation !== null && typeof navigation.then === "function"
+        ? navigation.then(disposition)
+        : disposition(navigation);
 }
 export function useSurfaceApp(input) {
-    const { bundle, surfaceLabel, tokenAliases, widgetModules } = input;
+    const { bundle, surfaceLabel, tokenAliases, platformTheme, widgetModules } = input;
     return useMemo(() => {
         const compositionOptions = {
             ...(surfaceLabel ? { surfaceLabel } : {}),
@@ -90,6 +95,7 @@ export function useSurfaceApp(input) {
         const registry = flattenRegistryEntries(bundle.registries);
         const themeAuthority = createThemeAuthority({
             tenantTheme: bundle.tenantTheme,
+            platformTheme,
             tokenAliases,
         });
         const widgets = createWidgetRegistry({
@@ -108,7 +114,7 @@ export function useSurfaceApp(input) {
                 ...themeAuthority.diagnostics,
             ],
         };
-    }, [bundle, surfaceLabel, tokenAliases, widgetModules]);
+    }, [bundle, surfaceLabel, tokenAliases, platformTheme, widgetModules]);
 }
 /**
  * Inline `--formspec-*` custom properties on the document root, in a DOM
@@ -136,20 +142,33 @@ function routeNavigationScope(handle) {
     return handle.route.navigation?.scope ?? DEFAULT_NAVIGATION_SCOPE;
 }
 export function SurfaceApp(props) {
-    const model = useSurfaceApp(props);
+    return _jsx(SurfaceAppView, { ...props, model: useSurfaceApp(props) });
+}
+/** Shared rendering for controlled hosts and the maintained browser binding. */
+export function SurfaceAppView(props) {
+    const { model, browser } = props;
     const { bundle, location, onNavigate, onDiagnostics } = props;
     const setDocumentTitle = props.setDocumentTitle ?? true;
     const widgetActionCoordinator = useRef(createWidgetActionCoordinator());
+    const appRoot = useRef(null);
+    const main = useRef(null);
+    const hostAppearance = useHostAppearance(appRoot, browser !== undefined);
+    const formSession = browser && { ...browser, appearance: hostAppearance ?? browser.appearance };
     const strings = useMemo(() => typeof props.strings === "function"
         ? props.strings
         : resolveSurfaceStrings(props.strings), [props.strings]);
-    const resolution = useMemo(() => matchRoute(model.app, location), [model.app, location]);
+    const resolution = useMemo(() => browser?.addressAvailable === false
+        ? { match: undefined, diagnostics: [] }
+        : matchRoute(model.app, location), [model.app, location, browser?.addressAvailable]);
     const activeNavigationScope = resolution.match
         ? routeNavigationScope(resolution.match.handle)
         : DEFAULT_NAVIGATION_SCOPE;
     // Keep the route plan and its data inputs stable across equivalent parameter objects.
     const routeParamsKey = canonicalFiniteJson(props.routeParams ?? {});
     const routeParams = useMemo(() => JSON.parse(routeParamsKey), [routeParamsKey]);
+    const navigationParams = useMemo(() => browser && resolution.match
+        ? { ...routeParams, ...resolution.match.params }
+        : routeParams, [browser !== undefined, resolution.match, routeParams]);
     const runtimeGeneration = useMemo(() => deriveSurfaceRuntimeGeneration({
         sessionGeneration: props.sessionGeneration,
         location,
@@ -211,6 +230,7 @@ export function SurfaceApp(props) {
         props.staticAssetResolver,
         strings,
     ]);
+    useSurfaceThemeTokens(appRoot, browser ? routePlan?.grant.themeDocument ?? props.platformTheme : undefined);
     // One pure destination resolver is shared by preflight and navigation.
     const screenerDestination = (target) => {
         if (!screenerVisit.active || liveScreenerVisit.current !== screenerVisit || !routePlan)
@@ -250,7 +270,7 @@ export function SurfaceApp(props) {
     const navigationDiagnostics = useMemo(() => model.app.routes
         .filter((handle) => handle.route.navigation?.visible !== false &&
         routeNavigationScope(handle) === activeNavigationScope)
-        .flatMap((handle) => routeHref(handle, props.routeParams ?? {}).diagnostics), [activeNavigationScope, model.app, props.routeParams]);
+        .flatMap((handle) => routeHref(handle, navigationParams).diagnostics), [activeNavigationScope, model.app, navigationParams]);
     // Read after the route's `useLayoutEffect` has emitted its own tokens, so a
     // property found here is one something ELSE wrote globally. `join` is the
     // dependency so a re-render with the same root state does not loop.
@@ -298,21 +318,45 @@ export function SurfaceApp(props) {
         return () => deliver(undefined);
     }, [props.onCurrentRouteStateChange, routePlan, runtimeGeneration]);
     const appTitle = props.appTitle ?? bundle.title;
-    useEffect(() => {
-        if (!setDocumentTitle || typeof document === "undefined")
+    const entryPath = browser?.entryPath;
+    const entryHref = entryPath === undefined || !props.resolveNavigationHref
+        ? entryPath
+        : props.resolveNavigationHref(entryPath);
+    const brandTrace = needTraceAttributes(generationNeedAnchors(bundle.manifest));
+    const routeTitle = browser && routePlan ? presentedRouteTitle(routePlan.handle, props.resolveRouteTitle) : undefined;
+    const title = routeTitle && appTitle ? `${routeTitle} – ${appTitle}` : routeTitle ?? appTitle;
+    const match = resolution.match;
+    const routeIdentity = browser && JSON.stringify([browser.previewScope, match
+            ? [match.handle.surfaceId, match.handle.routeId, match.params]
+            : location]);
+    const previousRoute = useRef(undefined);
+    useLayoutEffect(() => {
+        const previous = previousRoute.current;
+        previousRoute.current = routeIdentity;
+        if (routeIdentity === undefined || previous === undefined || routeIdentity === previous || browser?.anchor)
             return;
-        if (!appTitle)
-            return;
-        const previous = document.title;
-        document.title = appTitle;
-        return () => {
-            document.title = previous;
-        };
-    }, [appTitle, setDocumentTitle]);
-    return (_jsxs("div", { className: "fs-surface-app", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: [(props.header !== undefined || appTitle) && (_jsx("header", { className: "fs-surface-header", children: _jsx("div", { className: "fs-surface-header__inner", children: props.header ?? (_jsx("span", { className: "fs-surface-brand", ...needTraceAttributes(generationNeedAnchors(bundle.manifest)), children: appTitle })) }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: props.routeParams, onNavigate: onNavigate, resolveNavigationHref: props.resolveNavigationHref, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, screenerCompletion: props.screenerCompletion, screenerInstanceId: screenerVisit.id, localeDocuments: props.localeDocuments ?? props.bundle.localeDocuments, activeLocale: props.activeLocale, resolveRouteTitle: props.resolveRouteTitle, strings: strings, dataSourceLoader: props.dataSourceLoader, dataSourceRevision: props.dataSourceRevision, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, checkScreenerTarget: screenerDestination, onScreenerTarget: (target) => {
+        const target = main.current?.querySelector('.fs-surface-route__title, h1, [role="heading"][aria-level="1"]') ?? main.current;
+        target?.setAttribute('tabindex', '-1');
+        target?.focus({ preventScroll: true });
+    }, [routeIdentity, browser?.anchor]);
+    return (_jsxs("div", { ref: appRoot, className: "fs-surface-app", "data-fs-appearance": formSession?.appearance, lang: browser ? props.activeLocale : undefined, dir: browser && props.activeLocale ? browser.direction : undefined, ...brandTrace, children: [setDocumentTitle && title && _jsx(SurfaceDocumentTitle, { title: title }), (props.header !== undefined || appTitle || browser) && (_jsx("header", { className: "fs-surface-header", children: _jsxs("div", { className: "fs-surface-header__inner", children: [props.header ?? (appTitle && (entryPath !== undefined && entryHref !== undefined
+                            ? _jsx("a", { className: "fs-surface-brand", href: entryHref, ...brandTrace, onClick: event => {
+                                    if (!isPlainLinkClick(event))
+                                        return;
+                                    event.preventDefault();
+                                    onNavigate(entryPath);
+                                }, children: appTitle })
+                            : _jsx("span", { className: "fs-surface-brand", ...brandTrace, children: appTitle }))), browser && (browser.editionPicker || hostAppearance === undefined) && (_jsxs("div", { className: "fs-surface-masthead-controls", children: [browser.editionPicker, hostAppearance === undefined && browser.appearancePicker] })), browser && _jsx("p", { className: "fs-surface-save-notice", role: "status", children: browser.saveNotice })] }) })), _jsxs("div", { className: "fs-surface-shell", children: [_jsx(SurfaceNav, { app: model.app, location: location, routeParams: navigationParams, onNavigate: onNavigate, resolveNavigationHref: props.resolveNavigationHref, label: props.navigationLabel ?? strings("navigationLabel"), menuLabel: props.navigationLabel ?? strings("navigationLabel"), resolveRouteTitle: props.resolveRouteTitle }), _jsx("main", { ref: main, className: "fs-surface-main", children: routePlan ? (_jsx(SurfaceRouteView, { plan: routePlan, formSession: formSession, screenerCompletion: props.screenerCompletion, screenerInstanceId: screenerVisit.id, localeDocuments: props.localeDocuments ?? props.bundle.localeDocuments, activeLocale: props.activeLocale, resolveRouteTitle: props.resolveRouteTitle, strings: strings, dataSourceLoader: props.dataSourceLoader, dataSourceRevision: props.dataSourceRevision, authorizeDataSource: props.authorizeDataSource, validateDataSourcePayload: props.validateDataSourcePayload, widgetActionExecutor: props.widgetActionExecutor, widgetActionOutcomeStore: props.widgetActionOutcomeStore, widgetActionCoordinator: widgetActionCoordinator.current, runtimeGeneration: runtimeGeneration, onWidgetActionReport: props.onWidgetActionReport, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: props.renderDefinitionForm, definitionActionInvoker: props.definitionActionInvoker, resolveSemanticControlScope: props.resolveSemanticControlScope, resolveSemanticOutputScope: props.resolveSemanticOutputScope, onDefinitionActionResult: props.onDefinitionActionResult, showExperienceNeeds: props.showExperienceNeeds, showThemeNotice: props.showThemeNotice, responseActionsDocuments: bundle.responseActions, referencesDocuments: bundle.references ?? [], ontologyDocuments: bundle.ontologies ?? [], onFireTransition: props.onFireTransition, checkScreenerTarget: screenerDestination, onScreenerTarget: (target) => {
                                 const destination = screenerDestination(target);
                                 if (destination.status === 'refused')
                                     return destination;
+                                if (browser) {
+                                    const dispose = (navigated) => navigated
+                                        ? { status: 'accepted' }
+                                        : { status: 'refused', reason: 'screener-navigation-unavailable' };
+                                    const navigated = browser.navigate(destination.href);
+                                    return typeof navigated === 'boolean' ? dispose(navigated) : navigated.then(dispose);
+                                }
                                 onNavigate(destination.href);
                                 return { status: 'accepted' };
                             }, onAdvance: (transition, outcome) => {
@@ -321,12 +365,27 @@ export function SurfaceApp(props) {
                                 // Defensive final boundary. Planning withholds collision-targeted
                                 // transition controls, and this check prevents a future or
                                 // slot-supplied path from publishing the same refused address.
-                                return navigateAfterCompletedAction(transition, routePlan.params, outcome?.transitionBindings, onNavigate);
-                            } }, `${routePlan.handle.surfaceId}/${routePlan.handle.routeId}`)) : (props.renderNotFound?.(location) ?? _jsx(NotFound, { strings: strings })) })] }), props.footer] }));
+                                return browser
+                                    ? navigateAfterCompletedAction(transition, routePlan.params, outcome?.transitionBindings, browser.navigate)
+                                    : navigateAfterCompletedAction(transition, routePlan.params, outcome?.transitionBindings, onNavigate);
+                            } }, browser ? runtimeGeneration : `${routePlan.handle.surfaceId}/${routePlan.handle.routeId}`)) : (props.renderNotFound?.(location) ?? _jsx(NotFound, { strings: strings })) })] }), props.footer] }));
+}
+function SurfaceDocumentTitle({ title }) {
+    useLayoutEffect(() => {
+        const previous = document.title;
+        document.title = title;
+        return () => { document.title = previous; };
+    }, [title]);
+    return null;
+}
+function isPlainLinkClick(event) {
+    return !event.defaultPrevented && event.button === 0 &&
+        !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
 export function SurfaceNav({ app, location, routeParams, onNavigate, resolveNavigationHref, label, menuLabel, resolveRouteTitle, }) {
     const [menuOpen, setMenuOpen] = useState(false);
-    const activeRoute = matchRoute(app, location).match?.handle;
+    const activeMatch = matchRoute(app, location).match;
+    const activeRoute = activeMatch?.handle;
     const activeNavigationScope = activeRoute
         ? routeNavigationScope(activeRoute)
         : DEFAULT_NAVIGATION_SCOPE;
@@ -372,14 +431,18 @@ export function SurfaceNav({ app, location, routeParams, onNavigate, resolveNavi
                                 const traceAttributes = needTraceAttributes(handle.route.navigation?.label === undefined
                                     ? mergeNeedAnchors(navigationAnchors, generationNeedAnchors(handle.route))
                                     : navigationAnchors);
+                                const navigationHref = refusal
+                                    ? undefined
+                                    : resolveNavigationHref ? resolveNavigationHref(href) : href;
                                 const unavailableReason = refusal === "collision"
                                     ? "route-collision"
                                     : refusal === "parameters"
                                         ? "route-params"
-                                        : undefined;
-                                return (_jsx("li", { children: unavailableReason ? (_jsx("span", { role: "link", "data-nav-route": handle.routeId, "data-nav-unavailable": unavailableReason, "aria-disabled": "true", ...traceAttributes, children: navigationLabel })) : (_jsx("a", { href: resolveNavigationHref ? resolveNavigationHref(href) : href, "data-nav-route": handle.routeId, "aria-current": href === location ? "page" : undefined, ...traceAttributes, onClick: (event) => {
-                                            if (event.defaultPrevented || event.button !== 0 || event.ctrlKey ||
-                                                event.metaKey || event.shiftKey || event.altKey)
+                                        : navigationHref === undefined ? "browser-path" : undefined;
+                                return (_jsx("li", { children: unavailableReason ? (_jsx("span", { role: "link", "data-nav-route": handle.routeId, "data-nav-unavailable": unavailableReason, "aria-disabled": "true", ...traceAttributes, children: navigationLabel })) : (_jsx("a", { href: navigationHref, "data-nav-route": handle.routeId, "aria-current": activeMatch?.handle === handle &&
+                                            handle.markers.every(({ name }) => activeMatch.params[name] === routeParams?.[name])
+                                            ? "page" : undefined, ...traceAttributes, onClick: (event) => {
+                                            if (!isPlainLinkClick(event))
                                                 return;
                                             event.preventDefault();
                                             setMenuOpen(false);
@@ -389,31 +452,4 @@ export function SurfaceNav({ app, location, routeParams, onNavigate, resolveNavi
 }
 function NotFound({ strings }) {
     return (_jsxs("div", { className: "fs-surface-notfound", "data-probe": "route-not-found", children: [_jsx("h1", { children: strings("notFoundTitle") }), _jsx("p", { children: strings("notFoundBody") })] }));
-}
-/**
- * Address-bar location plus a navigate function, for hosts with no router.
- *
- * Deliberately minimal — `pushState` + `popstate`. A host with a real router
- * passes its own `location`/`onNavigate` and never calls this.
- */
-export function useBrowserLocation(fallback = "/") {
-    const read = useCallback(() => typeof window === "undefined"
-        ? fallback
-        : window.location.pathname || fallback, [fallback]);
-    const [location, setLocation] = useState(read);
-    useEffect(() => {
-        if (typeof window === "undefined")
-            return;
-        const onPop = () => setLocation(read());
-        window.addEventListener("popstate", onPop);
-        return () => window.removeEventListener("popstate", onPop);
-    }, [read]);
-    const navigate = useCallback((href) => {
-        if (typeof window !== "undefined") {
-            window.history.pushState({}, "", href);
-            window.scrollTo(0, 0);
-        }
-        setLocation(href);
-    }, []);
-    return [location, navigate];
 }

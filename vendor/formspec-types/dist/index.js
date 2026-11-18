@@ -10,6 +10,7 @@
  */
 // Re-export everything from generated schemas
 export * from './generated/index.js';
+export * from './evaluated-form-state.js';
 // Widget vocabulary — canonical widget ↔ component mappings
 export { KNOWN_COMPONENT_TYPES, SPEC_WIDGET_TO_COMPONENT, COMPONENT_TO_HINT, COMPATIBILITY_MATRIX, PRESENTATION_WIDGETS, REPEAT_PRESENTATION_WIDGETS, isRepeatPresentationWidget, widgetTokenToComponent, } from './widget-vocabulary.js';
 export { UI_POLICY } from './ui-policy.js';

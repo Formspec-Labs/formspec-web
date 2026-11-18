@@ -165,6 +165,8 @@ export interface FormspecProviderProps {
      * when the documents place none. Off by default: a Component document decides where a summary goes.
      */
     showValidationSummary?: boolean;
+    /** The embedding draft writer announces Save Draft and autosave outcomes. */
+    draftSaveFeedback?: 'external' | undefined;
     /** Callback invoked for every declared hostEvent effect. */
     onHostEvent?: (eventName: string, detail: unknown, action: ResponseAction) => void;
     /** Callback for ActionButton actionRef resolution findings. */

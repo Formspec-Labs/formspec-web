@@ -51,9 +51,9 @@ function SurfaceTransition({ from, transition, strings, onFire, onAdvance, }) {
                     void onFire(transition, from)
                         .then((outcome) => {
                         if (outcome.advanced)
-                            onAdvance?.(transition, outcome);
-                        else
-                            setFailure(outcome.reason ?? strings('transitionFailed'));
+                            return onAdvance?.(transition, outcome);
+                        setFailure(outcome.reason ?? strings('transitionFailed'));
+                        return undefined;
                     })
                         .catch((error) => {
                         setFailure(error instanceof Error ? error.message : String(error));

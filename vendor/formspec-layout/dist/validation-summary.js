@@ -1,3 +1,5 @@
+/** @filedesc ValidationSummary rows every renderer draws: which results show, deduped, worded as the field shows them, linked to their control. */
+import { validationResultIdentity } from '@formspec-org/types';
 /** The path a finding names: its source when it has one, else its path. */
 export function validationResultPath(result) {
     const raw = result.sourceId || result.path || '';
@@ -30,7 +32,7 @@ export function readValidationSummaryRows(comp, source, options) {
     for (const result of results) {
         if (!showFieldErrors && result.source !== 'shape' && result.constraintKind !== 'shape')
             continue;
-        const rawPath = validationResultPath(result);
+        const rawPath = (options.path ?? validationResultPath)(result);
         const formLevel = rawPath === '' || rawPath === '#';
         const path = formLevel ? '' : rawPath;
         const severity = result.severity || 'error';
@@ -46,6 +48,7 @@ export function readValidationSummaryRows(comp, source, options) {
         const cleanLabel = label === null ? null : label.replace(/\.$/, '');
         const canJump = jumpLinks && !formLevel && (source.jumpable ? source.jumpable(path) : field !== null);
         rows.push({
+            identity: validationResultIdentity(result),
             severity,
             path,
             formLevel,

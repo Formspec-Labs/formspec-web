@@ -1,4 +1,4 @@
-import type { FormDefinition, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
+import type { EvaluatedFormState, FormDefinition, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
 import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
 import type { SetValueOptions, WriteSource, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
 import { type FelTraceStep } from '../fel/fel-api-runtime.js';
@@ -129,13 +129,15 @@ export declare class FormEngine implements IFormEngine {
     getValidationReport(options?: ValidationReportOptions): ValidationReport | null;
     /** Report for `trigger` plus the expression diagnostics of the evaluation that produced it. */
     private produceValidation;
+    private hasSubmitValidation;
     evaluateShape(shapeId: string): ValidationResult[];
     isPathRelevant(path: string): boolean;
     whyRelevant(path: string): RelevanceExplanation;
     getDerivationTree(path: string): FelTraceStep[];
     getDownstreamImpact(path: string): string[];
     getFieldPaths(): string[];
-    getProgress(): import('../interfaces.js').FormProgress;
+    /** Read the current field flags and the requested validation profile, which defaults to live. */
+    getEvaluatedFormState(options?: ValidationReportOptions): EvaluatedFormState;
     getResponse(meta?: Parameters<FormEngine['getResponseSnapshot']>[0]): FormResponse;
     /** One evaluation and clock for response data and its requested validation report. */
     getResponseSnapshot(meta?: Parameters<IFormEngine['getResponse']>[0], validationProfile?: ValidationProfile): {

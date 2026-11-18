@@ -38,7 +38,7 @@ import type { SurfaceScreenerCompletionPolicy } from './screener-completion.js';
  * ## Navigation is a port, not a router
  *
  * `location` and `onNavigate` are props. This package ships
- * {@link useBrowserLocation} for hosts that want the address bar, and stays out
+ * BrowserSurfaceApp for hosts that want the address bar, and stays out
  * of the way of hosts that already have a router — which every host of any size
  * does. A shell that owned history would be a shell that could not be embedded.
  */
@@ -46,9 +46,9 @@ import { type SurfaceRouteTitleResolver } from './title-presentation.js';
 import type { DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from "react";
 import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type HeadingLevel, type PlannedTransition, type ResolvedBundle, type SurfaceApp as ComposedSurfaceApp, type SurfaceCompositionOptions, type SurfaceDiagnostic, type SurfaceRouteHandle, type SurfaceStringOverrides, type SurfaceStrings, type SurfaceStaticAssetResolver, type ThemeAuthority, type TransitionConditionEvaluator, type WidgetRegistry } from "@formspec-org/surface";
-import type { RegistryEntry, LocaleDocument } from "@formspec-org/types";
+import type { RegistryEntry, LocaleDocument, ThemeDocument } from "@formspec-org/types";
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetModule } from "./widget-api.js";
-import type { SurfaceDefinitionFormRenderInput, SurfaceDefinitionFormRenderer, SurfaceSemanticControlScopeResolver } from "./SurfaceSlot.js";
+import type { SurfaceDefinitionFormRenderInput, SurfaceDefinitionFormRenderer, SurfaceFormSession, SurfaceSemanticControlScopeResolver } from "./SurfaceSlot.js";
 import type { SurfaceSemanticOutputScopeResolver } from "./semantic-output.js";
 export interface SurfaceTransitionOutcome {
     advanced: boolean;
@@ -66,6 +66,8 @@ export type SurfaceTransitionSource = SurfaceRouteHandle & Readonly<{
     params: Readonly<Record<string, string>>;
 }>;
 export type FireTransition = (transition: PlannedTransition, from: SurfaceTransitionSource) => Promise<SurfaceTransitionOutcome>;
+type AdvanceResult = "advanced" | "refused";
+export type AdvanceTransition = (transition: PlannedTransition, outcome?: Pick<SurfaceTransitionOutcome, "transitionBindings">) => AdvanceResult | Promise<AdvanceResult> | void;
 /**
  * Final navigation boundary after a Response Action reports completion.
  *
@@ -73,6 +75,7 @@ export type FireTransition = (transition: PlannedTransition, from: SurfaceTransi
  * This rechecks the target so a future binding path, stale plan, or adversarial
  * completed-action report still cannot publish an unusable address.
  */
+export declare function navigateAfterCompletedAction(transition: PlannedTransition, routeParams: Readonly<Record<string, string>>, transitionBindings: Readonly<Record<string, string>> | undefined, onNavigate: (href: string) => boolean | Promise<boolean>): AdvanceResult | Promise<AdvanceResult>;
 export declare function navigateAfterCompletedAction(transition: PlannedTransition, routeParams: Readonly<Record<string, string>>, onNavigate: (href: string) => void): "advanced" | "refused";
 export declare function navigateAfterCompletedAction(transition: PlannedTransition, routeParams: Readonly<Record<string, string>>, transitionBindings: Readonly<Record<string, string>> | undefined, onNavigate: (href: string) => void): "advanced" | "refused";
 export interface UseSurfaceAppInput {
@@ -82,6 +85,8 @@ export interface UseSurfaceAppInput {
     surfaceLabel?: SurfaceCompositionOptions["surfaceLabel"] | undefined;
     /** Host-supplied token aliases. Not a platform rule — see `createThemeAuthority`. */
     tokenAliases?: Readonly<Record<string, readonly string[]>> | undefined;
+    /** Theme supplied by the trusted platform, independent of the admitted bundle. */
+    platformTheme?: ThemeDocument | undefined;
 }
 /**
  * Host/router-owned current route after a committed Surface render.
@@ -114,8 +119,8 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
     /** Current path, e.g. `window.location.pathname`. */
     location: string;
     onNavigate: (href: string) => void;
-    /** Pure host link destination; callbacks still receive the admitted route. */
-    resolveNavigationHref?: ((href: string) => string) | undefined;
+    /** Pure host link destination. Undefined makes the route unavailable as a link. */
+    resolveNavigationHref?: ((href: string) => string | undefined) | undefined;
     /**
      * Values for route parameters, so parameterised routes can be linked.
      *
@@ -219,6 +224,21 @@ export interface SurfaceAppProps extends UseSurfaceAppInput {
     onCurrentRouteStateChange?: ((state: SurfaceCurrentRouteState | undefined) => void) | undefined;
 }
 export declare function SurfaceApp(props: SurfaceAppProps): import("react/jsx-runtime").JSX.Element;
+interface BrowserPresentation extends SurfaceFormSession {
+    addressAvailable: boolean;
+    anchor: boolean;
+    direction: 'ltr' | 'rtl';
+    entryPath: string | undefined;
+    editionPicker: ReactNode;
+    appearancePicker: ReactNode;
+    saveNotice: string;
+    navigate: (href: string) => boolean | Promise<boolean>;
+}
+/** Shared rendering for controlled hosts and the maintained browser binding. */
+export declare function SurfaceAppView(props: SurfaceAppProps & {
+    model: SurfaceAppModel;
+    browser?: BrowserPresentation;
+}): import("react/jsx-runtime").JSX.Element;
 export interface SurfaceNavProps {
     app: ComposedSurfaceApp;
     location: string;
@@ -228,17 +248,11 @@ export interface SurfaceNavProps {
      * parameter values render as unavailable text with no link or click handler.
      */
     onNavigate: (href: string) => void;
-    /** Pure host link destination; callbacks still receive the admitted route. */
-    resolveNavigationHref?: ((href: string) => string) | undefined;
+    /** Pure host link destination. Undefined makes the route unavailable as a link. */
+    resolveNavigationHref?: ((href: string) => string | undefined) | undefined;
     label?: string | undefined;
     menuLabel?: string | undefined;
     resolveRouteTitle?: SurfaceRouteTitleResolver | undefined;
 }
 export declare function SurfaceNav({ app, location, routeParams, onNavigate, resolveNavigationHref, label, menuLabel, resolveRouteTitle, }: SurfaceNavProps): import("react/jsx-runtime").JSX.Element | null;
-/**
- * Address-bar location plus a navigate function, for hosts with no router.
- *
- * Deliberately minimal — `pushState` + `popstate`. A host with a real router
- * passes its own `location`/`onNavigate` and never calls this.
- */
-export declare function useBrowserLocation(fallback?: string): [string, (href: string) => void];
+export {};

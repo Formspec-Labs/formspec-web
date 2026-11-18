@@ -1,5 +1,6 @@
 /** @filedesc Reactive FormEngine: field signals, WASM-backed FEL evaluation, validation, and response assembly. */
 import { parseJsonExact } from '@formspec-org/integrity-canonical';
+import { validationResultIdentity } from '@formspec-org/types';
 import { freezeSourceMetadata, readSourceResult, sourceErrorMessage } from './instance-source.js';
 import { diffEvalResults } from '../diff.js';
 import { FelExtensionFunctions } from '../extension-functions.js';
@@ -16,7 +17,7 @@ import { captureDraftData } from './draft-snapshot.js';
 import { validateInstanceDataAgainstSchema } from './instance-schema.js';
 import { patchDeltaSignalsFromWasm, patchErrorSignalsFromWasm, patchValueSignalsFromWasm, } from './reactive-patches.js';
 import { clearRepeatIndexedSubtree, snapshotRepeatRow, } from './repeat-ops.js';
-import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
+import { buildFormspecResponseEnvelope, buildValidationReportEnvelope, collectRelevantValidationResults, collectTimedShapeValidationResults, migrateResponseData, resolvePinnedDefinition, } from './response-assembly.js';
 import { mergeWasmEvalWithExternalValidations, normalizeExpressionForWasmEvaluation, visibleScopedVariableValues, wasmEvaluateDefinitionPayload, } from './wasm-fel.js';
 import { felContextSchema, felContextSnapshot } from './fel-context.js';
 import { appendPath, cloneValue, coerceFieldValue, coerceInitialValue, deepEqual, emptyValueForItem, extractInlineBind, getNestedValue, getScopeAncestors, isJsonRecord, isEmptyValue, makeValidationResult, normalizeRemoteOptions, parseInstanceTarget, resolveNowProvider, setNestedPathValue, splitIndexedPath, toBasePath, toValidationResult, } from './helpers.js';
@@ -466,8 +467,9 @@ export class FormEngine {
     produceValidation(trigger) {
         const results = [];
         let diagnostics = this._fullResult?.diagnostics ?? [];
+        const timestamp = this.nowISO();
         if (trigger === 'demand') {
-            const demandResult = this.evaluateResultForTrigger('demand');
+            const demandResult = this.evaluateResultForTrigger('demand', timestamp);
             diagnostics = demandResult.diagnostics;
             results.push(...collectTimedShapeValidationResults(demandResult, this._shapeTiming, 'demand'));
         }
@@ -480,16 +482,31 @@ export class FormEngine {
             for (const signalRef of Object.values(this.shapeResults)) {
                 results.push(...signalRef.value);
             }
-            if (trigger === 'submit') {
-                const submitResult = this.evaluateResultForTrigger('submit');
+            if (trigger === 'submit' && this.hasSubmitValidation()) {
+                const submitResult = this.evaluateResultForTrigger('submit', timestamp);
                 diagnostics = submitResult.diagnostics;
-                results.push(...collectTimedShapeValidationResults(submitResult, this._shapeTiming, 'submit'));
+                const seen = new Set(results.map(validationResultIdentity));
+                for (const result of collectRelevantValidationResults(submitResult)) {
+                    const identity = validationResultIdentity(result);
+                    if (seen.has(identity))
+                        continue;
+                    seen.add(identity);
+                    results.push(result);
+                }
             }
         }
         return {
-            report: buildValidationReportEnvelope(results, this.nowISO(), this.definition.url, this.definition.version),
+            report: buildValidationReportEnvelope(results, timestamp, this.definition.url, this.definition.version),
             diagnostics: diagnostics.map((diagnostic) => ({ ...diagnostic })),
         };
+    }
+    hasSubmitValidation() {
+        const { warningExplanation, shapes } = this.definition;
+        if (warningExplanation && warningExplanation !== 'none') {
+            return true;
+        }
+        return shapes?.some(({ timing, explanation }) => timing === 'submit'
+            || (explanation && explanation !== 'none')) ?? false;
     }
     evaluateShape(shapeId) {
         const timing = this._shapeTiming.get(shapeId) ?? 'continuous';
@@ -587,40 +604,18 @@ export class FormEngine {
     getFieldPaths() {
         return Object.keys(this._fieldViewModels).sort();
     }
-    getProgress() {
-        let total = 0;
-        let filled = 0;
-        let valid = 0;
-        let required = 0;
-        let requiredFilled = 0;
-        for (const path of this.getFieldPaths()) {
-            if (!this.isPathRelevant(path)) {
-                continue;
-            }
-            total += 1;
-            const fieldFilled = !isEmptyValue(this.signals[path]?.value);
-            const fieldValid = !(this.validationResults[path]?.value ?? []).some((result) => result.severity === 'error');
-            if (fieldFilled) {
-                filled += 1;
-            }
-            if (fieldValid) {
-                valid += 1;
-            }
-            if (this.requiredSignals[path]?.value) {
-                required += 1;
-                if (fieldFilled) {
-                    requiredFilled += 1;
-                }
-            }
-        }
-        return {
-            total,
-            filled,
-            valid,
-            required,
-            requiredFilled,
-            complete: required === requiredFilled && this.getValidationReport().valid,
-        };
+    /** Read the current field flags and the requested validation profile, which defaults to live. */
+    getEvaluatedFormState(options = {}) {
+        // A repeat can add or remove the only field signals between evaluations.
+        this._evaluationVersion.value;
+        const fields = Object.keys(this._fieldViewModels).map(path => ({
+            path,
+            relevant: this.isPathRelevant(path),
+            readonly: this.readonlySignals[path]?.value ?? false,
+            required: this.requiredSignals[path]?.value ?? false,
+            empty: isEmptyValue(this.signals[path]?.value),
+        }));
+        return { fields, report: this.getValidationReport(options) };
     }
     getResponse(meta) {
         return this.getResponseSnapshot(meta).response;
@@ -639,7 +634,7 @@ export class FormEngine {
         const data = cloneValue(result.data);
         const report = trigger === 'disabled' ? null : buildValidationReportEnvelope((trigger === 'demand'
             ? collectTimedShapeValidationResults(result, this._shapeTiming, 'demand')
-            : result.validations.filter(validation => validation.shapeId || !result.nonRelevant.some(path => validation.path === path || validation.path.startsWith(`${path}.`) || validation.path.startsWith(`${path}[`))).map(toValidationResult)), timestamp, this.definition.url, this.definition.version);
+            : collectRelevantValidationResults(result)), timestamp, this.definition.url, this.definition.version);
         const response = buildFormspecResponseEnvelope({
             definition: this.definition,
             data,

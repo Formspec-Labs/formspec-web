@@ -1,6 +1,6 @@
 /** @filedesc Engine public interfaces and shared exported types. */
 import type { EngineSignal, ReadonlyEngineSignal } from './reactivity/types.js';
-import type { FormDefinition, FormInstance, FormItem, FormResponse, ValidationResult, ValidationReport, ValidationProfile, OptionEntry } from '@formspec-org/types';
+import type { EvaluatedFormState, FormDefinition, FormInstance, FormItem, FormResponse, ValidationResult, ValidationReport, ValidationProfile, OptionEntry } from '@formspec-org/types';
 import type { EnabledValidationProfile, ValidationReportOptions } from './validation/index.js';
 /** JSON-compatible scalar. */
 export type JsonPrimitive = string | number | boolean | null;
@@ -231,14 +231,6 @@ export interface PinnedResponseReference {
     definitionUrl: string;
     definitionVersion: string;
 }
-export interface FormProgress {
-    total: number;
-    filled: number;
-    valid: number;
-    required: number;
-    requiredFilled: number;
-    complete: boolean;
-}
 export interface AuthoredSignatureIdentityBinding {
     method: string;
     assuranceLevel: 'none' | 'low' | 'standard' | 'high' | 'very-high';
@@ -442,7 +434,7 @@ export interface IFormEngine {
     getDerivationTree(path: string): FelTraceStep[];
     getDownstreamImpact(path: string): string[];
     getFieldPaths(): string[];
-    getProgress(): FormProgress;
+    getEvaluatedFormState(options?: ValidationReportOptions): EvaluatedFormState;
     getResponse(meta?: {
         id?: string;
         author?: {

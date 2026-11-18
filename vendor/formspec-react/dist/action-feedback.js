@@ -88,7 +88,7 @@ function captureFocusedOrigin(source, onCancel) {
     };
 }
 /** No response, payload, findings, translated copy or saved flag enters this store. */
-export function createActionFeedbackStore(engine) {
+export function createActionFeedbackStore(engine, draftSaveFeedback) {
     const state = signal(undefined);
     const outlets = new Set();
     let active = false;
@@ -131,6 +131,8 @@ export function createActionFeedbackStore(engine) {
             retireFocus();
             const next = ++token;
             state.value = undefined;
+            if (draftSaveFeedback === 'external' && (intent === 'save-draft' || intent === 'autosave'))
+                return undefined;
             if (!active || !outlets.has(outlet) || !refresh())
                 return undefined;
             if (intent !== undefined && intent.length > 256)
@@ -173,8 +175,8 @@ export function createActionFeedbackStore(engine) {
 }
 const StoreContext = createContext(undefined);
 const OutletContext = createContext(undefined);
-export function ActionFeedbackProvider({ engine, responseId, renderInstanceId, children }) {
-    const store = useMemo(() => createActionFeedbackStore(engine), [engine, responseId, renderInstanceId]);
+export function ActionFeedbackProvider({ engine, responseId, renderInstanceId, draftSaveFeedback, children }) {
+    const store = useMemo(() => createActionFeedbackStore(engine, draftSaveFeedback), [engine, responseId, renderInstanceId, draftSaveFeedback]);
     useLayoutEffect(() => store.connect(), [store]);
     return _jsx(StoreContext.Provider, { value: store, children: children });
 }
