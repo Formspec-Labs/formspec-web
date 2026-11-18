@@ -1,6 +1,7 @@
 /** @filedesc Bind maintained filing widget actions to the committed form draft. */
 import { resolveResponseAction } from '@formspec-org/engine';
-import { filingAction, usesDraftCheckpoint } from './draft-writer.js';
+import { filingAction } from '@formspec-org/surface';
+import { usesDraftCheckpoint } from './draft-writer.js';
 export function fenceDraftWidgetActions(executor, session, definitions, current) {
     return async (input) => {
         if (input.document.scope === 'app')

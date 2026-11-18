@@ -1,6 +1,3 @@
-/** @filedesc Deliver only committed filtered Response data to authorized draft consumers. */
-import { initFormspecEngine, initFormspecEngineTools, selectResponses } from '@formspec-org/engine';
-import { catalogResponseProjection } from '@formspec-org/surface';
 const unavailable = { status: 'unavailable', reason: 'Draft unavailable' };
 async function loadDraft(session, definition, request) {
     const { subject } = request.context;
@@ -22,50 +19,4 @@ export async function readSessionDraft(session, definitions, request) {
     catch {
         return unavailable;
     }
-}
-/** Preview can overlay an open draft for an exact same-unit selection. */
-export async function readCurrentDraft(session, definitions, request, baseline) {
-    const { responseSelection: selection, descriptor, context } = request;
-    if (selection?.status !== 'current' || selection.pin !== 'none' || selection.mapping !== undefined ||
-        selection.disposition !== undefined)
-        return baseline(request);
-    const definition = definitions.get(selection.definition.url);
-    if (!definition)
-        return baseline(request);
-    const keys = Object.keys(definition.subject?.keys ?? {});
-    const predicates = new Map(selection.subject.map(predicate => [predicate.key, predicate]));
-    if (selection.subject.length !== keys.length ||
-        keys.some(key => predicates.get(key)?.op !== 'eq') ||
-        (definition.subject && context.subject?.type !== definition.subject.type))
-        return baseline(request);
-    try {
-        const loaded = await loadDraft(session, definition, request);
-        if (loaded.status === 'loaded') {
-            const { response, revision } = loaded;
-            await initFormspecEngine();
-            await initFormspecEngineTools();
-            const projection = catalogResponseProjection(descriptor.source.schema, selection.cardinality);
-            const selected = selectResponses([{
-                    scope: session.scope, response, ...(!definition.subject && { implicitSubjectId: 'browser-respondent' }),
-                }], selection, {
-                scope: session.scope, authorized: true, source: 'catalog',
-                upstreamSubject: definition.subject ?? null, routeParams: context.params,
-                ...(context.subject && { consumerSubject: context.subject.keys }),
-                ...(projection && { projection }),
-            });
-            if (selected.status === 'available' && !selected.none) {
-                const { value, records, valueDigest, none } = selected;
-                return {
-                    catalogRef: descriptor.catalogRef, sourceRef: descriptor.sourceRef,
-                    status: 'loaded', freshness: 'fresh', value, records, valueDigest, none, revision,
-                };
-            }
-        }
-        else if (loaded.status !== 'absent')
-            return unavailable;
-    }
-    catch {
-        return unavailable;
-    }
-    return baseline(request);
 }

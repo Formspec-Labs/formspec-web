@@ -23,6 +23,11 @@ export type ResponseActionInvoker<TDetail = SubmitResult> = (input: ResponseActi
 export interface SubmitResult {
     response: FormResponse;
     validationReport: ValidationReport | null;
+    /** Receipt and label for a completed local preview filing. */
+    previewFiling?: {
+        receiptRef: string;
+        label: string;
+    };
 }
 /** Human-facing help resolved from manifested References sidecars. */
 export interface FormspecHumanReference {

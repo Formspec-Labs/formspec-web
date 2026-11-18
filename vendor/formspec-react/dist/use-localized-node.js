@@ -33,11 +33,13 @@ export function plannedTitle(engine, props) {
     if (localeKey) {
         if (localeKey.startsWith('$ui.'))
             return chromeText(engine, localeKey.slice(4));
-        return engine.resolveLocaleString(localeKey, typeof props?.title === 'string' ? props.title : '');
+        const localized = engine.resolveLocaleString(localeKey, typeof props?.title === 'string' ? props.title : '');
+        if (localized)
+            return localized;
     }
     return (titleBind && engine.getItemLabelSignal(titleBind)?.value)
         || (titleKey && chromeText(engine, titleKey))
-        || undefined;
+        || (typeof props?.titleIndex === 'number' ? chromeText(engine, 'wizard.stepTitle', { index: props.titleIndex }) : undefined);
 }
 function literalOf(value) {
     if (typeof value === 'string')
@@ -61,7 +63,7 @@ export function useLocalizedNode(node) {
         const props = node.props ?? {};
         const id = typeof props.id === 'string' ? props.id : null;
         const groupPath = node.scopeChange && node.bindPath && typeof props.title === 'string' ? node.bindPath : null;
-        const planned = typeof props.titleBind === 'string' || typeof props.titleKey === 'string' || typeof props.titleLocaleKey === 'string';
+        const planned = typeof props.titleBind === 'string' || typeof props.titleKey === 'string' || typeof props.titleLocaleKey === 'string' || typeof props.titleIndex === 'number';
         if (!id && !groupPath && !planned)
             return UNCHANGED;
         const group = groupPath ? findItemByKey(engine.getDefinition().items ?? [], groupPath) : null;

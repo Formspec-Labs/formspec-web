@@ -1,15 +1,15 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 /** @filedesc Mount an admitted Surface with browser navigation, Locale, and a shared masthead. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { composeSurfaceApp, matchRoute, routeHref } from '@formspec-org/surface';
+import { composeSurfaceApp, matchRoute, responseSourceLoader, routeHref } from '@formspec-org/surface';
 import { SurfaceAppView, useSurfaceApp } from './SurfaceApp.js';
 import { pushBrowserAddress, splitSurfaceLocation, surfaceBrowserLocation, useSurfaceBrowserAddress, } from './browser-location.js';
 import { useBrowserAppearance } from './browser-appearance.js';
 import { resolveBrowserLocale } from './browser-locale.js';
-import { createBrowserDraftPort } from './browser-draft-port.js';
+import { createBrowserFilingStore } from './browser-draft-port.js';
 import { createDraftSession } from './draft-session.js';
 import { fenceDraftWidgetActions } from './draft-widget-action.js';
-import { readCurrentDraft, readSessionDraft } from './draft-data-source.js';
+import { readSessionDraft } from './draft-data-source.js';
 export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeave, previewEditions, draftStorage, checkpointPorts, ...props }) {
     const browser = surfaceBrowserLocation(mode, basePath);
     const { address, routeAddress, anchor, currentRouteAddress } = useSurfaceBrowserAddress(mode);
@@ -19,13 +19,20 @@ export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeav
     const edition = previewEditions?.find(option => option.scope === requestedScope) ?? previewEditions?.[0];
     const bundle = edition?.bundle ?? props.bundle;
     const previewScope = edition?.scope;
-    const localPreview = previewEditions !== undefined && draftStorage === undefined;
-    const localPort = useMemo(() => localPreview ? createBrowserDraftPort() : undefined, [localPreview]);
+    // A host can recreate the list while an editor still holds unsaved answers.
+    const [storeEditions, setStoreEditions] = useState(previewEditions);
+    if (storeEditions !== previewEditions && (storeEditions?.length !== previewEditions?.length ||
+        storeEditions?.some(loaded => !previewEditions?.some(candidate => candidate.scope === loaded.scope && candidate.bundle === loaded.bundle)))) {
+        setStoreEditions(previewEditions);
+    }
+    const localStores = useMemo(() => new Map(storeEditions?.map(({ scope, bundle }) => [scope, createBrowserFilingStore({ scope, definitions: bundle.definitions, catalogs: bundle.dataSources })])), [storeEditions]);
+    const localStore = !draftStorage && previewScope ? localStores.get(previewScope) : undefined;
+    const localPort = localStore?.drafts;
     const port = draftStorage?.port ?? localPort;
     const author = draftStorage?.author;
     const checkpoint = useRef(checkpointPorts);
     useLayoutEffect(() => { checkpoint.current = checkpointPorts; }, [checkpointPorts]);
-    const sessions = useMemo(() => new Map(), [port, props.sessionGeneration, author?.id, author?.name]);
+    const sessions = useMemo(() => new Map(), [draftStorage?.port, localStores, props.sessionGeneration, author?.id, author?.name]);
     const scope = draftStorage?.scope ?? previewScope;
     const drafts = useMemo(() => {
         if (!scope || !port)
@@ -56,12 +63,13 @@ export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeav
         if (!drafts)
             return props.dataSourceLoader;
         const baseline = props.dataSourceLoader ?? (() => ({ status: 'unavailable', reason: 'Data source unavailable' }));
+        const readResponse = localStore ? responseSourceLoader(localStore.responses) : undefined;
         return request => {
             if (request.descriptor.source.runtime.delivery === 'draft')
                 return readSessionDraft(drafts, bundle.definitions, request);
-            return localPort ? readCurrentDraft(drafts, bundle.definitions, request, baseline) : baseline(request);
+            return readResponse && request.responseSelection ? readResponse(request) : baseline(request);
         };
-    }, [drafts, localPort, bundle.definitions, props.dataSourceLoader]);
+    }, [drafts, localStore, bundle.definitions, props.dataSourceLoader]);
     const model = useSurfaceApp({ ...props, bundle });
     const entry = model.app.entry ? routeHref(model.app.entry, props.routeParams) : undefined;
     const entryPath = entry?.refusal === undefined ? entry?.href : undefined;
@@ -139,7 +147,7 @@ export function BrowserSurfaceApp({ mode = 'history', basePath = '/', beforeLeav
     return _jsx(SurfaceAppView, { ...props, bundle: bundle, model: model, location: path ?? '', dataSourceLoader: dataSourceLoader, widgetActionExecutor: widgetActionExecutor, dataSourceRevision: request => {
             const ownerRevision = props.dataSourceRevision?.(request);
             const tracksDraft = drafts && (request.descriptor.source.runtime.delivery === 'draft' ||
-                (localPort && request.responseSelection?.status === 'current'));
+                (localStore && request.responseSelection !== undefined));
             if (!tracksDraft)
                 return ownerRevision;
             if (ownerRevision === undefined)

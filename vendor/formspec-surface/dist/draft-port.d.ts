@@ -1,4 +1,5 @@
 /** @filedesc Qualified draft storage and progress reads for Surface hosts. */
+import type { DecidedDisposition, ResponseSelectionDelivery, Sha256Digest } from '@formspec-org/types';
 import type { ProgressCounts } from '@formspec-org/layout';
 import type { DataSourceSubject } from './data-source-loader.js';
 export interface DraftKey {
@@ -32,10 +33,26 @@ export type CurrentDraftProgress = {
 export type FilingDraftObservation = CurrentDraftProgress | {
     status: 'absent' | 'denied' | 'stale' | 'unavailable';
 };
+export type FilingObservation = {
+    status: 'none';
+} | {
+    status: 'denied' | 'unavailable';
+} | {
+    status: 'filed' | DecidedDisposition['review'];
+    receiptRef: string;
+    responseHash: Sha256Digest;
+    review: 'available' | 'unavailable';
+    comments: readonly string[];
+    sample?: 'preview-submit' | 'fixture';
+};
+export interface FilingStatusObservation {
+    draft: FilingDraftObservation;
+    filing: FilingObservation;
+}
 export type FilingStatusReader = (queries: readonly FilingDraftQuery[], input: {
     previewScope: string | undefined;
     signal: AbortSignal;
-}) => Promise<ReadonlyMap<string, FilingDraftObservation>>;
+}) => Promise<ReadonlyMap<string, FilingStatusObservation>>;
 export interface DraftRecord {
     /** Opaque compare-and-save token, unique across discard and recreation. */
     revision: string;
@@ -43,8 +60,9 @@ export interface DraftRecord {
     snapshotJson: string;
     /** Exact filtered in-progress Response JSON for authorized sibling reads. */
     responseJson: string;
+    pins: Readonly<Record<string, ResponseSelectionDelivery>>;
 }
-export interface DraftSaveInput extends Omit<DraftRecord, 'revision'> {
+export interface DraftSaveInput extends Omit<DraftRecord, 'revision' | 'pins'> {
     key: DraftKey;
     definitionVersion: string;
     /** Null means the caller observed no draft. */
@@ -74,6 +92,9 @@ export type DraftLoadResult = {
 export type DraftSaveResult = {
     status: 'saved';
     revision: string;
+} | {
+    status: 'pin-unavailable';
+    instance: string;
 } | DraftWriteRefusal;
 export type DraftRestartResult = {
     status: 'discarded';

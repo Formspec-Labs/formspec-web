@@ -1,15 +1,18 @@
 /** @filedesc Plans renderable sections and stable Item ownership in Core page-authority order. */
 import { componentTreeOwnsPages, findItemAtPath, getParentPath } from './planner-path-utils.js';
 import { buildThemePageNodes, planComponentTree, planDefinitionFallback, planDefinitionItem, preparePlanContext, } from './planner.js';
+import { mergeFormPresentationForPlanning } from './form-presentation.js';
+import { UI_STRINGS } from './ui-strings.js';
 function stringProp(value) {
     return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
-function walkNodes(nodes, visit, parents = []) {
-    for (const node of nodes) {
-        visit(node, parents);
+function walkNodes(nodes, visit, parents = [], painted = nodes) {
+    nodes.forEach((node, index) => {
+        const paintedNode = painted[index];
+        visit(node, parents, paintedNode);
         if (node.children.length)
-            walkNodes(node.children, visit, [...parents, node]);
-    }
+            walkNodes(node.children, visit, [...parents, node], paintedNode?.children ?? []);
+    });
 }
 function authoredSection(node, localePrefix) {
     const id = stringProp(node.props.id);
@@ -84,7 +87,16 @@ function themeSections(nodes, ctx) {
     if (!pages.length)
         return undefined;
     const remaining = removePlacements(nodes, assigned);
-    return [...pages.map(node => authoredSection(node, '$page')), ...splitSections(remaining, () => undefined)];
+    const unassigned = remaining.filter(hasItem);
+    const loose = remaining.filter(node => !hasItem(node));
+    return [
+        ...pages.map(node => authoredSection(node, '$page')),
+        ...(loose.length ? [{ nodes: loose, loose: true }] : []),
+        ...(unassigned.length ? [{ nodes: unassigned, loose: true, themeRemainder: true }] : []),
+    ];
+}
+function hasItem(node) {
+    return !!node.bindPath || node.children.some(hasItem);
 }
 /** Convert only indices introduced by a template to wildcards. */
 function templatePath(path, repeats) {
@@ -198,6 +210,9 @@ function definitionSections(nodes, ctx) {
     let nextGroup = 0;
     return order.map(section => section ?? generated[nextGroup++]);
 }
+function isSharedControl(node) {
+    return node.component === 'ActionButton' || node.component === 'ValidationSummary';
+}
 function planSections(ctx) {
     const tree = ctx.componentDocument?.tree;
     const root = tree && planComponentTree(tree, ctx, '', undefined, false);
@@ -205,7 +220,12 @@ function planSections(ctx) {
     const container = root && (!root.bindPath || authoredPages) && root.component !== 'Section' && root.children.length
         ? { ...root, children: [] }
         : undefined;
-    const base = container ? root.children : root ? [root] : planDefinitionFallback(ctx.items, ctx, '', false);
+    const nodes = container ? root.children : root ? [root] : planDefinitionFallback(ctx.items, ctx, '', false);
+    // Studio can place unbound instructions beside actions intended for every step.
+    const lastContent = [...nodes].reverse().findIndex(node => !(node.category === 'display' && !node.bindPath) && !isSharedControl(node));
+    const suffix = lastContent < 0 ? nodes : nodes.slice(nodes.length - lastContent);
+    const sharedNodes = suffix.length < nodes.length && suffix.some(isSharedControl) ? suffix : [];
+    const base = nodes.slice(0, nodes.length - sharedNodes.length);
     let sections;
     if (authoredPages) {
         sections = splitSections(base, node => node.component === 'Section' ? authoredSection(node, '$component') : undefined);
@@ -221,46 +241,97 @@ function planSections(ctx) {
         sections = themeSections([...base, ...planDefinitionFallback(unplaced, ctx, '', false)], ctx);
     }
     sections ?? (sections = definitionSections(base, ctx));
-    return sections.map(section => ({ ...section, container }));
+    return { sections: sections.map(section => ({ ...section, container })), sharedNodes };
+}
+function nameLooseSections(sections, painted, ctx) {
+    const ids = new Set(sections.flatMap(section => section.id ? [section.id] : []));
+    sections.forEach((section, index) => {
+        if (!section.loose)
+            return;
+        let id;
+        walkNodes(section.nodes, (node, _parents, paintedNode) => {
+            if (id && section.title)
+                return;
+            const item = node.bindPath ? ctx.findItem(node.bindPath) : null;
+            if (!id && item?.key && !ids.has(item.key))
+                id = item.key;
+            if (section.title || node.component !== 'Heading' || node.bindPath && item?.type !== 'display')
+                return;
+            const title = stringProp(node.props.text);
+            if (!title?.trim())
+                return;
+            const paintedTitle = stringProp(paintedNode?.props.text);
+            section.title = paintedTitle?.trim() ? paintedTitle : title;
+            section.titleHeadingId = paintedNode?.id;
+            section.titleBind = node.bindPath;
+            const componentId = stringProp(node.props.id);
+            if (!node.bindPath && componentId)
+                section.titleLocaleKey = `$component.${componentId}.text`;
+        }, [], painted[index].nodes);
+        if (!id)
+            return;
+        if (section.themeRemainder && !section.title) {
+            section.title = UI_STRINGS['wizard.otherItems'];
+            section.titleLocaleKey = '$ui.wizard.otherItems';
+        }
+        if (section.title) {
+            section.id = id;
+            ids.add(id);
+        }
+    });
+}
+function attachLooseSections(sections, definitionTitle, workspace) {
+    const pages = [];
+    let leading = [];
+    sections.forEach((section, index) => {
+        if (!section.id && (section.loose || workspace)) {
+            (pages.at(-1)?.indexes ?? leading).push(index);
+        }
+        else {
+            pages.push({ section, owner: index, indexes: [...leading, index] });
+            leading = [];
+        }
+    });
+    if (!pages.length && leading.length) {
+        pages.push({
+            section: { nodes: [], title: definitionTitle, titleLocaleKey: '$form.title', container: sections[0].container },
+            owner: 0, indexes: leading,
+        });
+    }
+    return pages;
 }
 export function resolvePageSequence(definition, options = {}) {
+    const componentPresentation = options.component && 'formPresentation' in options.component
+        ? options.component.formPresentation : undefined;
+    const presentation = options.context?.formPresentation
+        ?? mergeFormPresentationForPlanning(definition.formPresentation, componentPresentation);
     const ctx = preparePlanContext({
         ...options.context,
         items: definition.items,
         componentDocument: options.component,
         theme: options.theme,
         // Retain presentation hints while collecting unpaginated nodes for this section plan.
-        formPresentation: { ...(options.context?.formPresentation ?? definition.formPresentation), pageMode: 'single' },
+        formPresentation: { ...presentation, pageMode: 'single' },
         activeBreakpoint: null,
         findItem: path => findItemAtPath(definition.items, path),
     });
-    const sections = planSections(ctx);
+    const structural = planSections(ctx);
+    const { sections } = structural;
     // Responsive overrides affect paint. Bindings and children are authored structure (Component §9.2).
     const painted = options.context?.activeBreakpoint
         ? planSections({ ...ctx, activeBreakpoint: options.context.activeBreakpoint })
-        : sections;
-    const ids = new Set(sections.flatMap(section => section.id ? [section.id] : []));
+        : structural;
+    nameLooseSections(sections, painted.sections, ctx);
     const placements = new Map();
     const templates = new Set();
-    return sections.map(({ loose, ...section }, index) => {
-        if (loose) {
-            walkNodes(section.nodes, node => {
-                if (section.id || !node.bindPath)
-                    return;
-                const key = ctx.findItem(node.bindPath)?.key;
-                if (key && !ids.has(key)) {
-                    section.id = key;
-                    section.title = 'Additional items';
-                    section.titleLocaleKey = '$ui.wizard.otherItems';
-                    ids.add(key);
-                }
-            });
-        }
+    const pages = attachLooseSections(sections, definition.title, presentation?.pageMode === 'workspace')
+        .map(({ section: { loose, themeRemainder: _themeRemainder, ...section }, owner, indexes }) => {
         const fields = new Set();
         const groups = new Set();
-        if (section.titleBind)
+        if (!loose && section.titleBind)
             groups.add(section.titleBind);
-        const structuralNodes = section.container ? [{ ...section.container, children: section.nodes }] : section.nodes;
+        const nodes = indexes.flatMap(index => sections[index].nodes);
+        const structuralNodes = section.container ? [{ ...section.container, children: nodes }] : nodes;
         readPlacements(structuralNodes, ctx, fields, groups);
         const ownedFields = [...fields].filter(path => {
             const key = placementKey(path);
@@ -276,7 +347,15 @@ export function resolvePageSequence(definition, options = {}) {
             templates.add(path);
             return true;
         });
-        return { ...section, nodes: painted[index].nodes, container: painted[index].container,
+        const paintedOwner = painted.sections[owner];
+        const title = section.nodes[0]?.component === 'Section'
+            ? paintedOwner.title : section.title;
+        return { ...section, title,
+            nodes: indexes.flatMap(index => painted.sections[index].nodes), container: paintedOwner.container,
             fields: ownedFields, fieldTemplates, groups: [...groups] };
     });
+    const last = pages.at(-1);
+    if (last && painted.sharedNodes.length)
+        last.sharedNodes = painted.sharedNodes;
+    return pages;
 }

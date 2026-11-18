@@ -12,7 +12,7 @@
  * catalog by filename, a source by unqualified id, or a value from widget
  * configuration.
  */
-import type { DataSource, DataSourceFreshness, DataSourceLoadState, DataSourcesDocument, ResolvedInstanceRecord, ResponseSelection, Sha256Digest, WidgetDataInput } from "@formspec-org/types";
+import type { DataSource, DataSourceFreshness, DataSourceLoadState, DataSourcesDocument, ResolvedInstanceRecord, ResponseSelection, ResponseSelectionDelivery, Sha256Digest, WidgetDataInput } from "@formspec-org/types";
 import { type SurfaceDiagnostic, type SurfaceDiagnosticSite } from "./diagnostics.js";
 /** A loaded catalog together with the exact App Manifest URL that admitted it. */
 export interface DataSourceCatalogHandle {
@@ -54,6 +54,7 @@ export interface DataSourceLoadRequest {
     descriptor: DataSourceDescriptor;
     context: DataSourceActiveContext;
     responseSelection?: ResponseSelection | undefined;
+    pin?: ResponseSelectionDelivery | undefined;
 }
 export interface DataSourceSelectionEvidence {
     records: readonly ResolvedInstanceRecord[];

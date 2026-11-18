@@ -7,7 +7,11 @@ export interface PageSequenceEntry {
     /** Item whose Locale-resolved label supplies the generated title. */
     titleBind?: string;
     titleLocaleKey?: string;
+    /** Layout node ID of the Heading promoted to the page title. */
+    titleHeadingId?: string;
     nodes: LayoutNode[];
+    /** Trailing instructions and controls shown on every page. */
+    sharedNodes?: LayoutNode[];
     /** The Component root to wrap the selected nodes in when the authored root is split. */
     container?: LayoutNode;
     /** Unique field placement paths. A repeat template uses [*], an explicit index stays concrete. */

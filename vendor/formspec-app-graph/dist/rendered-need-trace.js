@@ -625,16 +625,25 @@ function previewScenarioNodes(handle) {
     if (profiles) {
         Object.keys(profiles).sort().forEach((profileName) => {
             const profile = record(profiles[profileName]);
-            if (!profile || !Array.isArray(profile.sources))
+            if (!profile)
                 return;
-            profile.sources.forEach((rawOutcome, outcomeIndex) => {
+            const profilePointer = `/profiles/${escapePointerSegment(profileName)}`;
+            const sources = Array.isArray(profile.sources) ? profile.sources : [];
+            sources.forEach((rawOutcome, outcomeIndex) => {
                 const outcome = record(rawOutcome);
                 if (!outcome)
                     return;
-                const outcomePointer = (`/profiles/${escapePointerSegment(profileName)}/sources/${outcomeIndex}`);
+                const outcomePointer = `${profilePointer}/sources/${outcomeIndex}`;
                 const catalogRef = stringProp(outcome, 'catalogRef');
                 const sourceRef = stringProp(outcome, 'sourceRef');
                 out.push(generationNode(handle, 'surface-preview-source-outcome', outcomePointer, outcome, `${catalogRef ?? '<missing-catalog>'}#${sourceRef ?? '<missing-source>'}`));
+            });
+            const filings = Array.isArray(profile.filings) ? profile.filings : [];
+            filings.forEach((rawFiling, filingIndex) => {
+                const filing = record(rawFiling);
+                if (!filing || !Object.prototype.hasOwnProperty.call(filing, 'x-generation'))
+                    return;
+                out.push(generationNode(handle, 'surface-preview-filing', `${profilePointer}/filings/${filingIndex}`, filing, 'Preview filing fixture'));
             });
         });
     }

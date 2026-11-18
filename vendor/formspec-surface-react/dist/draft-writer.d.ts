@@ -1,7 +1,8 @@
 /** @filedesc Serialize checkpoints and fence filing actions against one editable form revision. */
 import { type IFormEngine, type ResponseAction, type ResponseActionAsyncInvocationPorts, type ResponseActionEffectDispatchContext, type ResponseActionInvocationPorts } from '@formspec-org/engine';
 import { type PageSequenceEntry } from '@formspec-org/layout';
-import type { DraftKey, DraftPort, DraftRecord } from '@formspec-org/surface';
+import { type DraftFencedAction, type DraftKey, type DraftPort, type DraftRecord } from '@formspec-org/surface';
+export type { DraftFencedAction } from '@formspec-org/surface';
 import type { ResponseActionInvokerInput, ResponseActionInvokerResult, ResponseActionsDocument, SubmitResult } from '@formspec-org/react';
 import type { EffectRequest, FormResponse } from '@formspec-org/types';
 import type { SurfaceSaveNotice } from './SurfaceSlot.js';
@@ -26,7 +27,6 @@ export interface DraftWriterOptions {
     checkpointPorts?: DraftCheckpointPorts | undefined;
     responseId?: string | undefined;
 }
-export type DraftFencedAction = 'prepare' | 'sign' | 'submit';
 /** Pass the expected revision through to the durable Prepare, Sign or Submit operation. */
 export interface SurfaceDraftFence {
     key: DraftKey;
@@ -51,7 +51,6 @@ type DraftActionPorts = Omit<ResponseActionInvocationPorts<SubmitResult>, 'dispa
 type DraftActionInput = Omit<ResponseActionInvokerInput<SubmitResult>, 'ports'> & {
     ports: DraftActionPorts;
 };
-export declare function filingAction(document: ResponseActionsDocument | null | undefined, action: ResponseAction | null | undefined): DraftFencedAction | undefined;
 export declare function usesDraftCheckpoint(action: ResponseAction): boolean;
 export declare function createDraftWriter(options: DraftWriterOptions): {
     invoke: (input: DraftActionInput, { invoker, current }?: {
@@ -78,4 +77,3 @@ export declare function createDraftWriter(options: DraftWriterOptions): {
     dispose(): void;
 };
 export type DraftWriter = ReturnType<typeof createDraftWriter>;
-export {};

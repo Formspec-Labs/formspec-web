@@ -2,43 +2,6 @@
 import { validationResultIdentity } from '@formspec-org/types';
 import { placementCovers, placementKey } from './page-sequence.js';
 import { readValidationSummaryRows } from './validation-summary.js';
-/** Attach unkeyed fragments to adjacent identified sections without changing their order. */
-export function workspaceSections(plan) {
-    const sections = [];
-    let leading = [];
-    function append(section, fragment) {
-        section.nodes.push(...fragment.nodes);
-        section.fields.push(...fragment.fields);
-        section.fieldTemplates.push(...fragment.fieldTemplates);
-        section.groups.push(...fragment.groups);
-    }
-    for (const fragment of plan) {
-        if (fragment.id === undefined) {
-            const previous = sections[sections.length - 1];
-            if (previous)
-                append(previous, fragment);
-            else
-                leading.push(fragment);
-        }
-        else {
-            const section = { ...fragment, nodes: [], fields: [], fieldTemplates: [], groups: [] };
-            for (const entry of leading)
-                append(section, entry);
-            leading = [];
-            append(section, fragment);
-            sections.push(section);
-        }
-    }
-    if (leading.length) {
-        const section = {
-            container: leading[0].container, nodes: [], fields: [], fieldTemplates: [], groups: [],
-        };
-        for (const entry of leading)
-            append(section, entry);
-        sections.push(section);
-    }
-    return sections;
-}
 function addPlacements(owners, paths, section) {
     for (const placement of paths) {
         const key = placementKey(placement);
@@ -99,10 +62,9 @@ function countField(counts, field, hasError) {
 export function summarizeFormProgress(sectionPlan, state) {
     const fieldOwners = new Map();
     const groupOwners = new Map();
-    const plan = workspaceSections(sectionPlan);
     const hasReport = state.report !== null;
     const form = freshCounts(hasReport);
-    const sections = plan.map(({ id, fields, groups }, index) => {
+    const sections = sectionPlan.map(({ id, fields, groups }, index) => {
         addPlacements(fieldOwners, fields, index);
         addPlacements(groupOwners, groups, index);
         return { id, counts: freshCounts(hasReport), filled: false };

@@ -379,9 +379,6 @@ function LayoutNodeInner({ node }) {
                     component: 'Tabs',
                     category: 'layout',
                     props: {
-                        tabLabels: pages.map((p) => p.props?.title
-                            || p.props?.label
-                            || p.fieldItem?.label),
                         placement: fp.tabPosition || 'top',
                         defaultTab: fp.defaultTab ?? 0,
                     },

@@ -12,6 +12,7 @@ export declare function plannedTitle(engine: IFormEngine, props: {
     titleBind?: unknown;
     titleKey?: unknown;
     titleLocaleKey?: unknown;
+    titleIndex?: unknown;
 } | undefined): string | undefined;
 /**
  * The node renderers see, live:

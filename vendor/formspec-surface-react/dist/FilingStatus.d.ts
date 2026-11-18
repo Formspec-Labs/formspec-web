@@ -1,8 +1,11 @@
-import { type FilingDraftObservation, type FilingDraftQuery, type FilingStatusReader, type FilingStatusPlan, type HeadingLevel, type SlotPlan, type SurfaceStrings } from '@formspec-org/surface';
+import { type FilingDraftQuery, type FilingStatusObservation, type FilingStatusReader, type FilingStatusPlan, type HeadingLevel, type SlotPlan, type SurfaceStrings } from '@formspec-org/surface';
 import { type SurfaceRouteTitleResolver } from './title-presentation.js';
-type DraftReads = (query: FilingDraftQuery) => FilingDraftObservation | {
-    status: 'loading';
+type Observation = Omit<FilingStatusObservation, 'draft'> & {
+    draft: FilingStatusObservation['draft'] | {
+        status: 'loading';
+    };
 };
+type DraftReads = (query: FilingDraftQuery) => Observation;
 export interface FilingStatusNavigation {
     navigate: (href: string) => void;
     formatHref?: ((href: string) => string | undefined) | undefined;

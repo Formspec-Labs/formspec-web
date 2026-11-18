@@ -33,8 +33,6 @@ export interface FormProgressSummary {
     }>;
     findings: ProgressFinding[];
 }
-/** Attach unkeyed fragments to adjacent identified sections without changing their order. */
-export declare function workspaceSections(plan: readonly PageSequenceEntry[]): PageSequenceEntry[];
 export declare function summarizeFormProgress(sectionPlan: readonly PageSequenceEntry[], state: EvaluatedFormState): FormProgressSummary;
 export declare function pageProgressIssue(counts: ProgressCounts): 'required' | 'unavailable' | 'invalid' | 'empty' | 'blocked-readonly' | undefined;
 export interface ProgressFindingRow extends ValidationSummaryRow {

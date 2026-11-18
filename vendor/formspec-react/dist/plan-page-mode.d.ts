@@ -7,12 +7,14 @@ export interface WorkspacePage extends PageSequenceEntry {
 export declare function planPageMode(definition: FormDefinition, ctx: PlanContext, mode: 'wizard' | 'tabs' | 'workspace'): {
     root: LayoutNode;
     workspace: {
-        title: string | undefined;
         content: LayoutNode;
         id?: string;
+        title?: string;
         titleBind?: string;
         titleLocaleKey?: string;
+        titleHeadingId?: string;
         nodes: LayoutNode[];
+        sharedNodes?: LayoutNode[];
         container?: LayoutNode;
         fields: string[];
         fieldTemplates: string[];

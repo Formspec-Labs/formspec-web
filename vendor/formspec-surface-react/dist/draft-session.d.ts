@@ -60,7 +60,7 @@ export declare function createDraftSession(storage: SurfaceDraftStorage, browser
             current?: () => boolean;
         }) => Promise<import("@formspec-org/engine").ResponseActionInvocationResult<import("@formspec-org/react").SubmitResult>>;
         flush: (create?: boolean) => Promise<boolean>;
-        runFenced: <T>(kind: import("./draft-writer.js").DraftFencedAction, operation: (draft: Readonly<import("./draft-writer.js").SurfaceDraftFence>, isCurrent: () => boolean) => Promise<T>, { completed, committedRevision, current }?: {
+        runFenced: <T>(kind: import("@formspec-org/surface").DraftFencedAction, operation: (draft: Readonly<import("./draft-writer.js").SurfaceDraftFence>, isCurrent: () => boolean) => Promise<T>, { completed, committedRevision, current }?: {
             completed?: ((result: T) => boolean) | undefined;
             committedRevision?: ((result: T) => string | undefined) | undefined;
             current?: () => boolean;

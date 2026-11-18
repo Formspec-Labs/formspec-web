@@ -1,6 +1,6 @@
 /** @filedesc Plans exact filing-status destinations and section links without opening forms. */
 import { resolveFilingStatusTargets } from '@formspec-org/app-graph';
-import { resolvePageSequence, workspaceSections } from '@formspec-org/layout';
+import { fillUiParams, resolvePageSequence, UI_STRINGS } from '@formspec-org/layout';
 import { matchRoute, routeHref } from './composition.js';
 import { generationNeedAnchors } from './need-trace.js';
 function subjectIdentity(subject) {
@@ -65,17 +65,18 @@ export function planFilingStatus(input) {
             const component = input.resolveDefinitionComponent?.({
                 surfaceRef: input.surfaceRef, routeId: route.id, slotId: slot.id, definition,
             });
-            const sequence = workspaceSections(resolvePageSequence(definition, {
+            const sequence = resolvePageSequence(definition, {
                 ...(theme ? { theme } : {}), ...(component ? { component } : {}),
-            }));
+            });
             const sections = sequence.map(({ id, fields }) => ({ ...(id === undefined ? {} : { id }), fields }));
             const queryKey = JSON.stringify([definition.url, definition.version, identity, sections]);
-            const segments = sequence.flatMap(({ id, title, titleBind, titleLocaleKey, fieldTemplates }) => {
+            const segments = sequence.flatMap(({ id, title, titleBind, titleLocaleKey, fieldTemplates }, index) => {
                 if (id === undefined)
                     return [];
                 const localeKey = titleBind === undefined ? titleLocaleKey : `${titleBind}.label`;
                 const localized = localeKey === undefined ? null : input.resolveDefinitionLocaleString?.(definition, localeKey);
-                return [{ id, label: localized ?? title ?? id, href: formHref(link.href, slot.id, id), weight: fieldTemplates.length }];
+                const label = localized || title || fillUiParams(input.resolveDefinitionLocaleString?.(definition, '$ui.wizard.stepTitle') ?? UI_STRINGS['wizard.stepTitle'], { index: index + 1 });
+                return [{ id, label, href: formHref(link.href, slot.id, id), weight: fieldTemplates.length }];
             });
             const description = input.resolveDefinitionLocaleString?.(definition, '$form.description') ?? definition.description;
             return {

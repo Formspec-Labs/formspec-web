@@ -8,9 +8,10 @@
  */
 import type { SurfaceScenarioActionOutcome, SurfacePreviewScenario } from '@formspec-org/types';
 import type { ResolvedBundle } from './bundle.js';
+import { type ResponseRecordTools } from './response-records.js';
 import type { DataSourceAuthorizer, DataSourceDescriptor, DataSourceLoader, DataSourcePayloadValidationResult } from './data-source-loader.js';
 import type { TransitionExecutor } from './transitions.js';
-export declare const SURFACE_SCENARIO_DIAGNOSTIC_CODES: readonly ["SURFACE-SCENARIO-SCHEMA", "SURFACE-SCENARIO-PROFILE-UNRESOLVED", "SURFACE-SCENARIO-INITIAL-ROUTE-UNRESOLVED", "SURFACE-SCENARIO-SOURCE-UNRESOLVED", "SURFACE-SCENARIO-SOURCE-AMBIGUOUS", "SURFACE-SCENARIO-ACTION-UNRESOLVED", "SURFACE-SCENARIO-ACTION-AMBIGUOUS", "SURFACE-SCENARIO-PAYLOAD-SCHEMA"];
+export declare const SURFACE_SCENARIO_DIAGNOSTIC_CODES: readonly ["SURFACE-SCENARIO-SCHEMA", "SURFACE-SCENARIO-PROFILE-UNRESOLVED", "SURFACE-SCENARIO-INITIAL-ROUTE-UNRESOLVED", "SURFACE-SCENARIO-SOURCE-UNRESOLVED", "SURFACE-SCENARIO-SOURCE-AMBIGUOUS", "SURFACE-SCENARIO-ACTION-UNRESOLVED", "SURFACE-SCENARIO-ACTION-AMBIGUOUS", "SURFACE-SCENARIO-PAYLOAD-SCHEMA", "SURFACE-SCENARIO-FILING-FIXTURE"];
 export type SurfaceScenarioDiagnosticCode = (typeof SURFACE_SCENARIO_DIAGNOSTIC_CODES)[number];
 export interface SurfaceScenarioDiagnostic {
     code: SurfaceScenarioDiagnosticCode;
@@ -44,6 +45,7 @@ export interface ValidateSurfacePreviewScenarioInput {
     bundle: ResolvedBundle;
     validateSchema?: SurfaceScenarioSchemaValidator | undefined;
     validatePayload?: SurfaceScenarioPayloadValidator | undefined;
+    responseTools?: ResponseRecordTools | undefined;
 }
 export type SurfaceScenarioValidationResult = {
     valid: true;
@@ -56,6 +58,7 @@ export type SurfaceScenarioValidationResult = {
 export interface SurfacePreviewRuntime {
     profileId: string;
     loader: DataSourceLoader;
+    withResponseLoader(load: DataSourceLoader): DataSourceLoader;
     authorize: DataSourceAuthorizer;
     actionOutcome(actionId: string): SurfaceScenarioActionOutcome;
     executeTransition: TransitionExecutor;

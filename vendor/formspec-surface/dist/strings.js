@@ -131,6 +131,15 @@ export const SURFACE_STRING_KEYS = [
     'filingSummaryToCheck',
     'filingLegendCaption',
     'filingSections',
+    'filingFiled',
+    'filingReturned',
+    'filingAccepted',
+    'filingClosedWithoutAcceptance',
+    'filingReopened',
+    'filingReceiptReference',
+    'filingFixture',
+    'filingPreviewSubmit',
+    'filingReviewUnavailable',
 ];
 /** Canonical Locale 2.0 prefix for the closed shell string family. */
 export const SURFACE_LOCALE_KEY_PREFIX = '$module.x-formspec-surface.shell.';
@@ -212,6 +221,15 @@ export const DEFAULT_SURFACE_STRINGS = {
     filingSummaryToCheck: () => 'To check',
     filingLegendCaption: () => 'Each strip is one form, cut into its sections. Longer strips are bigger forms.',
     filingSections: ({ count }) => `Sections (${count})`,
+    filingFiled: () => 'Filed',
+    filingReturned: () => 'Returned',
+    filingAccepted: () => 'Accepted',
+    filingClosedWithoutAcceptance: () => 'Closed without acceptance',
+    filingReopened: () => 'Reopened',
+    filingReceiptReference: ({ reference }) => `Receipt reference: ${reference}`,
+    filingFixture: () => 'Sample filing',
+    filingPreviewSubmit: () => 'Preview filing. Nothing was sent.',
+    filingReviewUnavailable: () => 'Review status unavailable',
 };
 /**
  * The table a shell reads. Overrides win; anything the host leaves out falls

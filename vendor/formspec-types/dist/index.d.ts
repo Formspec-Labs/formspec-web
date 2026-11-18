@@ -137,4 +137,4 @@ export interface ProjectBundle {
      */
     references?: ReferencesDocument;
 }
-export type { NewerSelectedResponse, ResponseSelectionContext, ResponseSelectionDelivery, ResponseSelectionOutcome, ResponseSelectionRecord, SelectResponses, } from './response-selection.js';
+export type { DispositionAuthority, ResponseSelector, ResponseSelectionContext, ResponseSelectionRecord, SelectResponses, } from './response-selection.js';

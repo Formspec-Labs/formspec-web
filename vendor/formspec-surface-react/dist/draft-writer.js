@@ -1,20 +1,8 @@
 /** @filedesc Serialize checkpoints and fence filing actions against one editable form revision. */
-import { deepEqual, invokeResponseActionAsync, preactReactiveRuntime, resolveResponseAction, resolveResponseActionValidationTuple, resolveServiceRequest, } from '@formspec-org/engine';
-import { summarizeFormProgress, workspaceSections, } from '@formspec-org/layout';
+import { deepEqual, invokeResponseActionAsync, preactReactiveRuntime, resolveResponseAction, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
+import { summarizeFormProgress, } from '@formspec-org/layout';
+import { filingAction } from '@formspec-org/surface';
 import { parseJsonExact } from '@formspec-org/integrity-canonical';
-export function filingAction(document, action) {
-    if (!action || document?.scope === 'app')
-        return undefined;
-    const catalog = document?.['x-formspec-runtime'];
-    for (const effect of action.effects ?? []) {
-        if (!catalog || effect.type !== 'serviceRequest')
-            continue;
-        const operation = resolveServiceRequest(catalog, effect.requestRef).operation;
-        if (operation === 'prepare' || operation === 'sign')
-            return operation;
-    }
-    return action.intent === 'submit' ? 'submit' : undefined;
-}
 export function usesDraftCheckpoint(action) {
     try {
         return resolveResponseActionValidationTuple(action).persistence === 'draft-checkpoint';
@@ -29,7 +17,7 @@ function counts({ total, filled, toFix, toCheck }) {
 export function createDraftWriter(options) {
     const { engine, key, port, report } = options;
     const definitionVersion = engine.definition.version;
-    const placements = workspaceSections(options.sections).map(({ id, fields }) => ({
+    const placements = options.sections.map(({ id, fields }) => ({
         ...(id === undefined ? {} : { id }), fields,
     }));
     const authoredAutosave = options.actions?.actions?.find(action => action.intent === 'autosave' &&
@@ -147,7 +135,7 @@ export function createDraftWriter(options) {
                     observeConflict();
                 return false;
             }
-            committed = { revision: result.revision, snapshotJson: input.snapshotJson, responseJson: input.responseJson };
+            committed = { revision: result.revision };
             savedEdit = savingEdit;
             conflicted = false;
             report?.(options.locally ? 'savedLocally' : 'saved');
