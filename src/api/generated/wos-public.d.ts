@@ -455,6 +455,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{case_id}/notices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["retained_notice_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{case_id}/processes": {
         parameters: {
             query?: never;
@@ -1954,7 +1970,10 @@ export interface components {
         CaseAlternative: {
             /** @description Retained changes value under referenceDueProcess/1. */
             changes: components["schemas"]["CaseChange"][];
-            /** @description Retained description value under referenceDueProcess/1. */
+            /**
+             * @description Authored policy text describing this hypothetical set of case changes, copied verbatim into counterfactual provenance; it is not an evaluation result.
+             * @example Verified household income at or below the program limit.
+             */
             description: string;
             /** @description Retained id value under referenceDueProcess/1. */
             id: components["schemas"]["Id"];
@@ -2134,6 +2153,34 @@ export interface components {
              *     }
              */
             value: unknown;
+        };
+        /** @description One current page for the independently authorized filing process. No frozen complete-history claim across pages. */
+        CaseRetainedNoticePage: {
+            /** @description Independently authorized durable case ledger URN. */
+            caseLedgerId: string;
+            /**
+             * @description No same-process next candidate existed in this statement snapshot.
+             * @constant
+             */
+            hasMore: false;
+            /** @description Zero or one retained notice: the last candidate for the authorized process in this statement snapshot. */
+            items: components["schemas"]["RetainedNoticeContent"][];
+            /** @description Independently authorized retained filing process URN. */
+            processId: string;
+        } | {
+            /** @description Independently authorized durable case ledger URN. */
+            caseLedgerId: string;
+            /** @description Pass the returned notice's intent identity to read the next page, starting after this notice. */
+            cursor: components["schemas"]["RetainedNoticeCursor"];
+            /**
+             * @description A same-process next candidate existed in this statement snapshot.
+             * @constant
+             */
+            hasMore: true;
+            /** @description The complete retained notice selected for this page of the authorized process. */
+            items: components["schemas"]["RetainedNoticeContent"][];
+            /** @description Independently authorized retained filing process URN. */
+            processId: string;
         };
         /** @description Single field-level case-state mutation event (ADR 0082 D-6). Replaces the explicit anti-design `caseStateMutations: Record<string, unknown>` from the prior `case-portal/src/ports/types.ts`: the wire shape requires `fieldPath`, `newValue`, `mutationKind`, and `verificationLevel`, so an open-taxonomy mutation bag is structurally inexpressible. */
         CaseStateMutation: {
@@ -2567,7 +2614,12 @@ export interface components {
             /** @description Whether this counterfactual is positive (would change outcome) or negative (did not affect outcome). */
             polarity: components["schemas"]["CounterfactualPolarity"];
         };
-        /** @enum {string} */
+        /**
+         * @description Direction of a tested case change in the reference determination's counterfactual evidence.
+         * @example positive
+         * @example negative
+         * @enum {string}
+         */
         CounterfactualKind: "positive" | "negative";
         /**
          * @description Counterfactual polarity (governance S6.4). `positive` records controllable factors that would change the outcome; `negative` records irrelevant factors that did not affect the outcome.
@@ -2575,7 +2627,11 @@ export interface components {
          * @enum {unknown}
          */
         CounterfactualPolarity: "positive" | "negative";
-        /** @enum {string} */
+        /**
+         * @description Structured audit tier marking this record as Counterfactual-tier provenance for the original determination.
+         * @example counterfactual
+         * @enum {string}
+         */
         CounterfactualTier: "counterfactual";
         /** @description Counterfactual-tier provenance record (governance S6.4). Authoritative due-process layer recording what would change the outcome (positive) and which protected characteristics did not affect the outcome (negative). REQUIRED for transitions tagged `adverse-decision` in `rights-impacting` workflows. */
         CounterfactualTierRecord: {
@@ -2793,7 +2849,10 @@ export interface components {
             alternateSnapshotSha256: components["schemas"]["SnapshotDigest"];
             /** @description Retained alternative value under referenceDueProcess/1. */
             alternative: components["schemas"]["CaseAlternative"];
-            /** @description Retained description value under referenceDueProcess/1. */
+            /**
+             * @description The selected alternative's authored description, copied verbatim; the evaluation results are retained separately in originalEvaluation and alternateEvaluation.
+             * @example Verified household income at or below the program limit.
+             */
             description: string;
             /** @description Retained factor value under referenceDueProcess/1. */
             factor: components["schemas"]["Id"];
@@ -2801,7 +2860,10 @@ export interface components {
             originalEvaluation: components["schemas"]["NativeDecisionEvaluation"];
             /** @description Retained originalSnapshotSha256 value under referenceDueProcess/1. */
             originalSnapshotSha256: components["schemas"]["SnapshotDigest"];
-            /** @description Retained relatedTransition value under referenceDueProcess/1. */
+            /**
+             * @description Identity of the saved determination whose firing the counterfactual evidence describes.
+             * @example default_prov_01m5bkbfjke3r9p9589gy8zggh
+             */
             relatedTransition: string;
             /** @description Retained sourceRefs value under referenceDueProcess/1. */
             sourceRefs: components["schemas"]["SourceRef"][];
@@ -2814,11 +2876,17 @@ export interface components {
         DeterminationReasoningData: {
             /** @description Retained authority value under referenceDueProcess/1. */
             authority: components["schemas"]["SourceAuthority"];
-            /** @description Retained description value under referenceDueProcess/1. */
+            /**
+             * @description The selected row's reason binding description, copied verbatim as policy text; actual inputs and outputs are retained separately in evaluation.
+             * @example Countable household income exceeds the program limit.
+             */
             description: string;
             /** @description Retained evaluation value under referenceDueProcess/1. */
             evaluation: components["schemas"]["NativeDecisionEvaluation"];
-            /** @description Retained relatedTransition value under referenceDueProcess/1. */
+            /**
+             * @description Identity of the saved determination whose firing the retained reasoning evidence explains.
+             * @example default_prov_01m5bkbfjke3r9p9589gy8zggh
+             */
             relatedTransition: string;
             /** @description Retained ruleId value under referenceDueProcess/1. */
             ruleId: components["schemas"]["Id"];
@@ -2829,6 +2897,10 @@ export interface components {
             /** @description Retained timestamp value under referenceDueProcess/1. */
             timestamp: components["schemas"]["Timestamp"];
         };
+        /**
+         * @description SHA-256 digest encoded with a sha256 prefix and lowercase hexadecimal bytes.
+         * @example sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+         */
         Digest: string;
         /**
          * @description Typed public payload for `driftAlert`. Records an alert threshold crossing from the workflow's drift monitoring policy.
@@ -3184,6 +3256,10 @@ export interface components {
             /** @description Kernel event name that resumes the case from this hold. Omitted when `holdType == legal-hold`. */
             resumeTrigger?: components["schemas"]["EvaluationOutcomeEventName"];
         };
+        /**
+         * @description Authored identifier starting with a letter and scoped to the containing reference document.
+         * @example appeal-review
+         */
         Id: string;
         /**
          * @description Closed kernel impact level (Kernel §6 proportionality index). Byte-aligned mirror of `wos-workflow.schema.json#/$defs/ImpactLevel` (ADR 0082 D-13 gate 6). Defaults to the workflow's declared `impactLevel` when not overridden on the task pattern. Closed-no-extension by design: the four-literal taxonomy is normative across kernel, governance, AI-oversight, and review-protocol gating.
@@ -3657,7 +3733,10 @@ export interface components {
         };
         /** @description Closed NativeDecisionEvaluation shape from Governance native reference execution. */
         NativeDecisionEvaluation: {
-            /** @description Retained guardResult value under referenceDueProcess/1. */
+            /**
+             * @description Actual Boolean result of the transition guard in the retained native evaluation.
+             * @example true
+             */
             guardResult: boolean;
             /** @description Retained inputs value under referenceDueProcess/1. */
             inputs: components["schemas"]["NamedScalar"][];
@@ -3667,7 +3746,10 @@ export interface components {
             matchedRowIds: string[];
             /** @description Retained outputs value under referenceDueProcess/1. */
             outputs: components["schemas"]["NamedScalar"][];
-            /** @description Retained selectedRowId value under referenceDueProcess/1. */
+            /**
+             * @description Identifier of the decision table row selected by the retained native evaluation.
+             * @example income-over-limit
+             */
             selectedRowId?: string;
             /** @description Retained tableRef value under referenceDueProcess/1. */
             tableRef: components["schemas"]["Id"];
@@ -4079,6 +4161,11 @@ export interface components {
              */
             status: "succeeded" | "failed" | "skipped";
         };
+        /**
+         * @description JSON Pointer that selects a location in the JSON document identified by the containing field.
+         * @example /householdSize
+         * @example /lifecycle/states/review
+         */
         Pointer: string;
         /** @description Canonically hashed policy/config source included in the case export fence. */
         PolicySnapshotSource: {
@@ -4265,7 +4352,11 @@ export interface components {
              */
             sourceRef: string;
         };
-        /** @enum {string} */
+        /**
+         * @description Structured audit tier marking this record as Reasoning-tier provenance for the original determination.
+         * @example reasoning
+         * @enum {string}
+         */
         ReasoningTier: "reasoning";
         /** @description Reasoning-tier provenance record (governance S6.2). Authoritative interpretive layer recording how a decision was reached: which rules applied, which evidence was consulted, which criteria were checked. REQUIRED for transitions tagged `determination`. */
         ReasoningTierRecord: {
@@ -4610,6 +4701,43 @@ export interface components {
          *     }
          */
         ResponseValue: unknown;
+        /** @description One exact immutable retained plaintext notice. Retention does not assert sending, delivery or recipient acknowledgment. */
+        RetainedNoticeContent: {
+            /** @description Exact original attempt identity; distinct attempts remain distinct. */
+            attemptId: string;
+            /** @description Exact original plaintext; at most 262144 UTF-8 bytes, with whitespace and Unicode preserved. */
+            body: string;
+            /** @description Digest of exact TextEncoder UTF-8 plaintext bytes. */
+            bodySha256: string;
+            /** @description Identity of the original notice intent. This value orders notices within the authorized process. */
+            intentId: components["schemas"]["RetainedNoticeCursor"];
+            /** @description Exact original language tag, never inferred from the viewer. */
+            language: string;
+            /** @description Identity and digests of the source document and template used to render the original notice. */
+            sourceIdentity: components["schemas"]["RetainedNoticeSourceIdentity"];
+            /** @description Exact original subject, bounded to 998 UTF-8 bytes by the reader. */
+            subject: string;
+        };
+        /** @description Exclusive last returned intent identity. A selector only; not authority. Intent order is not chronological. */
+        RetainedNoticeCursor: string;
+        /** @description Finite identities of the original notice source and template; no private variables or witnesses. */
+        RetainedNoticeSourceIdentity: {
+            /** @description Digest of exact original sidecar source bytes. */
+            documentSha256: string;
+            /** @description Original sidecar document version. */
+            documentVersion: string;
+            /** @description Original selected template identity. */
+            templateKey: string;
+            /** @description Canonical digest of original selected template. */
+            templateSha256: string;
+            /**
+             * Format: uri
+             * @description Original workflow absolute URI, checked against original outbound binding.
+             */
+            workflowUrl: string;
+            /** @description Original outbound workflow version. */
+            workflowVersion: string;
+        };
         /**
          * @description Closed-with-vendor-extension review-protocol classification (governance §4.1 Protocol Definitions, §4.2 Protocol Combination; workflow-governance.md:248-260). Reserved literals: `independentFirst` (the reviewer's independent assessment MUST be recorded before any agent/upstream recommendation is accessible — §4.2 enforcement obligation); `considerOpposite` (the reviewer is required to consider the opposite outcome before settling); `calibratedConfidence` (the reviewer's confidence is calibrated against historical accuracy); `dualBlind` (two independent reviewers without cross-visibility); `unassisted` (the reviewer is not exposed to upstream recommendations). Vendor extensions MUST use an `^x-[a-z][a-z0-9-]*$` prefix per ADR 0082 D-12.
          * @example independentFirst
@@ -4693,17 +4821,26 @@ export interface components {
         Scalar: {
             /** @constant */
             kind: "string";
-            /** @description Retained value value under referenceDueProcess/1. */
+            /**
+             * @description String value carried by a scalar whose kind is "string"; used exactly as written, without type conversion.
+             * @example pending-review
+             */
             value: string;
         } | {
             /** @constant */
             kind: "number";
-            /** @description Retained value value under referenceDueProcess/1. */
+            /**
+             * @description Numeric value carried by a scalar whose kind is "number"; used exactly as written, without type conversion.
+             * @example 125
+             */
             value: number;
         } | {
             /** @constant */
             kind: "boolean";
-            /** @description Retained value value under referenceDueProcess/1. */
+            /**
+             * @description Boolean value carried by a scalar whose kind is "boolean"; used exactly as written, without type conversion.
+             * @example true
+             */
             value: boolean;
         };
         /** @description Current scope context for the bearer token, returned by `GET /api/v1/auth/scope`. Carries the scope tuple per VISION §V and ADR 0082 D-9: Tenant -> Organization -> Workspace -> Environment. The shape reuses `ActorScope` from `actor.schema.json` so the wire form is canonical; per ADR 0082 D-14 inline redefinition would be a contract bug. The `actorRef` field identifies the principal the token authenticates; consumers that need the principal class can read it from the URN's principal-class segment without a second round-trip. */
@@ -4819,6 +4956,10 @@ export interface components {
             /** @description Tasks completed within their declared SLA. */
             withinSlaCount: number;
         };
+        /**
+         * @description SHA-256 digest of a retained snapshot using lowercase hexadecimal without an algorithm prefix.
+         * @example aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+         */
         SnapshotDigest: string;
         /**
          * @description Authority rank for an applied rule (governance S6.2). Closed taxonomy (ADR 0082 D-12). `type: string` matches the kernel `wos-workflow.schema.json#/$defs/RuleReference.properties.sourceAuthority` projection.
@@ -4831,7 +4972,10 @@ export interface components {
         SourceRef: {
             /** @description Retained retainedSha256 value under referenceDueProcess/1. */
             retainedSha256: components["schemas"]["Digest"];
-            /** @description Retained sectionAnchor value under referenceDueProcess/1. */
+            /**
+             * @description Section identifier within the retained source version that supports this policy reference.
+             * @example eligibility-review
+             */
             sectionAnchor: string;
             /** @description Retained sourceVersion value under referenceDueProcess/1. */
             sourceVersion: components["schemas"]["Id"];
@@ -5258,7 +5402,11 @@ export interface components {
             /** @description Timer URN when breachKind is timer-fired. */
             timerId?: components["schemas"]["WosResourceUrn"];
         };
-        /** Format: date-time */
+        /**
+         * Format: date-time
+         * @description UTC date and time in the canonical format required for native reference records.
+         * @example 2026-01-15T12:00:00Z
+         */
         Timestamp: string;
         /** @description Token introspection response returned by `GET /api/v1/auth/introspect` for the bearer token presented on the request. Modeled after RFC 7662 (OAuth 2.0 Token Introspection) with WOS-specific scope and assurance fields. The `active` flag is the load-bearing field: when false, all other fields except possibly `expiresAt` MAY be omitted (the server is asserting the token does not authenticate). Service-account and workload calls (per VISION §V) use this endpoint to verify their token's continuing validity without round-tripping a real read. */
         TokenIntrospection: {
@@ -5297,7 +5445,10 @@ export interface components {
         TransitionLocation: {
             /** @description Retained statePointer value under referenceDueProcess/1. */
             statePointer: components["schemas"]["Pointer"];
-            /** @description Retained transitionIndex value under referenceDueProcess/1. */
+            /**
+             * @description Zero-based position of the transition in the source state's authored transition list.
+             * @example 0
+             */
             transitionIndex: number;
         };
         /** @description Unread notification count response. */
@@ -5726,8 +5877,10 @@ export interface operations {
             header?: never;
             path: {
                 /**
-                 * @description Source-owned draft ID: native draft_ plus compact lowercase UUIDv7, or canonical
-                 *     hyphenated UUID.
+                 * @description Opaque Source record locator for the draft.
+                 *
+                 *     Contains 1 to 255 ASCII letters, digits, underscores, hyphens, or periods.
+                 *     A single period or two periods alone are invalid.
                  */
                 draft_uuid: string;
             };
@@ -6749,6 +6902,113 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    retained_notice_page: {
+        parameters: {
+            query?: {
+                /** @description Exclusive last returned intent, bounded and checked before storage. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Case ledger identifier, bare or `urn:wos:`. */
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One complete retained content page for the independently admitted filing process; no delivery claim. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseRetainedNoticePage"];
+                };
+            };
+            /** @description Invalid closed query or case selector. */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Current authentication refused. */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Output not selected or current filing reader refused. */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Case or process unavailable. */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Retained association changed. */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Retained integrity failure. */
+            500: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Storage capability unsupported. */
+            501: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Notice page unavailable, oversized or timed out. */
+            503: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
         };
     };
