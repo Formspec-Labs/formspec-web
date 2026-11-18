@@ -86,6 +86,28 @@ describe('HttpDraftStore', () => {
     expect(bindingRegistry.get(key)).toEqual(original);
   });
 
+  it('keeps a newer draft revision when an older read finishes later', async () => {
+    const key = { formUrl: sampleFormDefinition.url, formVersion: '1.0.0', subjectRef: 'S-1' };
+    const bindingRegistry = createDraftBindingRegistry();
+    bindingRegistry.put(key, { draftId: 'known', draftVersion: 4, responseId: sampleFormResponse.id });
+    const view = (revision: number) => jsonResponse({
+      draft_id: 'known', draft_version: revision,
+      canonical_response: sampleFormResponse, draft_state: sampleFormResponse.data,
+    });
+    let finishFirst!: (response: Response) => void;
+    const { fetch, requests } = recordingFetch(() => requests.length === 1
+      ? new Promise<Response>(resolve => { finishFirst = resolve; })
+      : view(5));
+    const adapter = new HttpDraftStore({ baseUrl: 'https://source.test', fetchImpl: fetch, bindingRegistry });
+
+    const older = adapter.load(key);
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    await expect(adapter.load(key)).resolves.toEqual(sampleFormResponse);
+    finishFirst(view(4));
+    await expect(older).rejects.toThrow('Draft binding changed while loading');
+    expect(bindingRegistry.get(key)?.draftVersion).toBe(5);
+  });
+
   it('soft-deletes local draft mappings because formspec-server has no DELETE route', async () => {
     const { fetch, requests } = recordingFetch(() =>
       jsonResponse({ draft_id: 'draft-http-1', draft_version: 1, canonical_response: sampleFormResponse, draft_state: sampleFormResponse.data }),
@@ -252,6 +274,28 @@ describe('HttpDraftStore', () => {
 });
 
 describe('qualified explicit locator binding', () => {
+  it('accepts an equivalent retained binding refreshed during qualification', async () => {
+    const registry = createDraftBindingRegistry();
+    const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version, subjectRef: 'owner' };
+    const response = { ...sampleFormResponse, id: 'stable-response' };
+    const binding = { draftId: 'selected', draftVersion: 6, responseId: response.id };
+    registry.put(key, binding);
+    const { fetch } = recordingFetch(() => jsonResponse({
+      draft_id: 'selected', draft_version: 7, canonical_response: response, draft_state: response.data,
+    }));
+    const adapter = new HttpDraftStore({
+      baseUrl: 'https://server.test', fetchImpl: fetch, bindingRegistry: registry,
+      qualifyReadState: async () => {
+        registry.put(key, binding);
+        return { kind: 'active', response };
+      },
+    });
+
+    await expect(adapter.resumeState!(key, { draftId: 'selected', expectedResponseId: response.id }))
+      .resolves.toMatchObject({ kind: 'active', response });
+    expect(registry.get(key)?.draftVersion).toBe(7);
+  });
+
   it('refuses a competing binding installed while owning qualification is pending', async () => {
     const registry = createDraftBindingRegistry(); const key = { formUrl: sampleFormDefinition.url, formVersion: sampleFormDefinition.version, subjectRef: 'owner' };
     const response = { ...sampleFormResponse, id: 'stable-response' };

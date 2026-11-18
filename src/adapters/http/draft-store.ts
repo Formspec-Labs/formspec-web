@@ -189,6 +189,21 @@ export class HttpDraftStore implements DraftStore {
       });
       current();
       const response = view.canonical_response;
+      const assertBindingCurrent = () => {
+        const retained = this.bindings.get(key);
+        if (selection) {
+          if (canonicalize(retained) !== canonicalize(previous)) {
+            throw new Error('Owned draft binding changed while resuming');
+          }
+          return;
+        }
+        if (retained === previous) return;
+        if (!retained || retained.draftId !== view.draft_id
+          || (retained.draftVersion !== undefined && view.draft_version < retained.draftVersion)
+          || (retained.responseId !== undefined && response?.id !== retained.responseId)) {
+          throw new Error('Draft binding changed while loading');
+        }
+      };
       if (view.is_initialization_only === true) {
         const expectedOwner = await this.initializationOwner(key); current();
         if (view.draft_id !== binding.draftId || view.draft_version !== 1 || response != null
@@ -199,7 +214,7 @@ export class HttpDraftStore implements DraftStore {
             || view.form_version_id !== this.formVersionId || view.taskDraft !== undefined)) throw new Error('Initialized draft differs from retained identity');
         const initialized = qualifyInitialization ? await qualifyInitialization(snapshotWire({ ...view, canonical_response: null, is_initialization_only: true })) : undefined;
         current();
-        if (selection && canonicalize(this.bindings.get(key)) !== canonicalize(previous)) throw new Error('Owned draft binding changed while resuming');
+        assertBindingCurrent();
         this.bindings.put(key, { draftId: view.draft_id, draftVersion: view.draft_version });
         return initialized;
       }
@@ -223,7 +238,7 @@ export class HttpDraftStore implements DraftStore {
       current();
       const result = await qualify(snapshotWire(saved));
       current();
-      if (selection && canonicalize(this.bindings.get(key)) !== canonicalize(previous)) throw new Error('Owned draft binding changed while resuming');
+      assertBindingCurrent();
       this.bindings.put(key, { draftId: view.draft_id, draftVersion: view.draft_version, response: saved.canonical_response });
       return result;
     } catch (error) {
