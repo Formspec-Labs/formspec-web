@@ -7,7 +7,7 @@ type FormFieldValue = Parameters<IFormEngine['setValue']>[1];
 
 export interface NativeEngineReplacementInput {
   readonly currentEngine: IFormEngine;
-  readonly engineOptions: Omit<FormEngineOptions, 'responseData'> & { instanceSourceResolver: InstanceSourceResolver };
+  readonly engineOptions: Omit<FormEngineOptions, 'responseData' | 'savedResponseData'> & { instanceSourceResolver: InstanceSourceResolver };
   readonly localeDocuments: readonly LocaleDocument[];
   /** Host owns the bounded deadline and retires this signal on owner, edit or publication changes. */
   readonly signal: AbortSignal;
@@ -41,13 +41,14 @@ export async function replaceNativeFormEngine(input: NativeEngineReplacementInpu
     return Object.freeze({ status: 'unsupported', reason: 'dependent-field-children' });
   }
   const writes: { path: string; value: FormFieldValue; source: WriteSource }[] = [];
-  const responseData = capture(currentEngine.definition.items, '', currentEngine, writes);
+  const savedResponseData = currentEngine.getDraftSnapshot().data;
+  collectWrites(currentEngine.definition.items, '', currentEngine, savedResponseData, writes);
   const definition = cloneJsonValue(currentEngine.definition);
   const locales = cloneJsonValue(input.localeDocuments);
   const locale = currentEngine.getActiveLocale();
   const options: FormEngineOptions = { ...input.engineOptions,
     registryEntries: input.engineOptions.registryEntries ? cloneJsonValue(input.engineOptions.registryEntries) : undefined,
-    runtimeContext: { ...input.engineOptions.runtimeContext, locale }, responseData };
+    runtimeContext: { ...input.engineOptions.runtimeContext, locale }, savedResponseData };
   const engine = (input.createEngine ?? createFormEngine)(definition, options);
   let disposed = false;
   let adopted = false;
@@ -81,28 +82,22 @@ function hasCreationTimeSeeding(items: readonly FormItem[]): boolean {
   return items.some(item => Object.hasOwn(item, 'prePopulate') || Object.hasOwn(item, 'seedFrom')
     || hasCreationTimeSeeding(item.children ?? []));
 }
-function capture(items: readonly FormItem[], prefix: string, engine: IFormEngine,
-  writes: { path: string; value: FormFieldValue; source: WriteSource }[]): JsonRecord {
-  const data: JsonRecord = {};
-  const put = (key: string, value: JsonRecord[string]) => Object.defineProperty(data, key,
-    { value, enumerable: true, writable: true, configurable: true });
+function collectWrites(items: readonly FormItem[], prefix: string, engine: IFormEngine,
+  data: JsonRecord, writes: { path: string; value: FormFieldValue; source: WriteSource }[]): void {
+  const rowData = (value: FormFieldValue): JsonRecord =>
+    value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {};
   for (const item of items) {
     const path = prefix ? `${prefix}.${item.key}` : item.key;
+    const value = Object.hasOwn(data, item.key) ? data[item.key] : undefined;
     if (item.type === 'field') {
-      if (!engine.signals[path]) throw new Error('Native replacement field state unavailable');
-      const value = cloneJsonValue(engine.signals[path].value);
-      if (value !== undefined) put(item.key, value);
       const source = engine.getFieldVM(path)?.writeSource.value;
       if (source === 'user' || source === 'assist') writes.push({ path, value, source });
-    } else if (item.type === 'group') {
-      if (item.repeatable) {
-        const count = engine.repeats[path]?.value;
-        if (!Number.isSafeInteger(count) || count < 0) throw new Error('Native replacement repeat state unavailable');
-        put(item.key, Array.from({ length: count }, (_, index) => capture(item.children ?? [], `${path}[${index}]`, engine, writes)));
-      } else put(item.key, capture(item.children ?? [], path, engine, writes));
+    } else if (item.type === 'group' && item.repeatable && Array.isArray(value)) {
+      value.forEach((row, index) => collectWrites(item.children ?? [], `${path}[${index}]`, engine, rowData(row), writes));
+    } else if (item.type === 'group' && !item.repeatable) {
+      collectWrites(item.children ?? [], path, engine, rowData(value), writes);
     }
   }
-  return data;
 }
 
 function hasDependentFieldChildren(items: readonly FormItem[]): boolean {

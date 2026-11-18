@@ -32,7 +32,7 @@ describe('bounded public native engine replacement', () => {
     const old = current();
     await old.waitForInstanceSources();
     const photo = { kind: 'attachment-ref', uri: 'urn:formspec:attachment:one', hash: 'opaque', metadata: { approved: false } };
-    old.loadResponseData({ hidden: 'keep while hidden', flag: false, nullable: null, photo });
+    old.loadResponseData({ quantity: 3, hidden: 'keep while hidden', flag: false, nullable: null, photo });
     old.setValue('cleared', undefined, { source: 'user' });
     old.setValue('flag', false, { source: 'assist' });
     expect(old.getResponse({ profile: 'off' }).data).not.toHaveProperty('hidden');
@@ -46,10 +46,14 @@ describe('bounded public native engine replacement', () => {
       expect(result.engine.signals.flag.value).toBe(false);
       expect(result.engine.signals.nullable.value).toBeNull();
       expect(result.engine.signals.photo.value).toEqual(photo);
-      expect(result.engine.signals.cleared.value).toBeUndefined();
+      expect(result.engine.signals.cleared.value).toBeNull();
+      expect(result.engine.getDraftSnapshot().data).not.toHaveProperty('cleared');
       expect(result.engine.getFieldVM('cleared')!.writeSource.value).toBe('user');
       expect(result.engine.getFieldVM('flag')!.writeSource.value).toBe('assist');
-      expect(result.engine.signals.untouched.value).toBe('untouched default');
+      // The saved data omitted this authored default. Resume keeps it absent.
+      expect(result.engine.signals.untouched.value).toBeNull();
+      expect(result.engine.getDraftSnapshot().data).not.toHaveProperty('untouched');
+      expect(result.engine.getDraftSnapshot().data.nullable).toBeNull();
       expect(result.engine.getFieldVM('untouched')!.writeSource.value).toBeNull();
       expect(result.engine.signals.derived.value).toBe(21);
       expect(result.engine.getInstanceData('facts')).toEqual({ rate: 7 });

@@ -1120,6 +1120,12 @@ async function correctionFixture(taskRequest = true) {
 describe('explicit correction host through the maintained native loader', () => {
   it.each(['current', 'retired', 'cleared', 'disposed', 'wrong-site', 'wrong-route', 'prepare'] as const)('qualifies a mixed form/signing entry only through exact restored task access: %s', async mode => {
     const f = await correctionFixture();
+    // The existing draft needs the saved eligibility answer for the name field to be relevant.
+    if (mode === 'current' || mode === 'cleared') {
+      const data = { renewalEligible: true };
+      Object.assign(f.launched.canonical_response, { data });
+      f.launched.draft_state = data;
+    }
     if (mode === 'prepare') {
       const omitControls = (value: unknown): unknown => Array.isArray(value)
         ? value.filter(child => !child || typeof child !== 'object' || !('component' in child) || child.component !== 'ActionButton').map(omitControls)

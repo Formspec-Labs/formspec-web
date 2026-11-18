@@ -44,7 +44,10 @@ describe('draft recovery inside a definition-form Surface slot', () => {
     const composition = anonymousComposition(base);
     composition.draftStore.load = vi.fn(async () => structuredClone(restored));
     const view = render(<RespondentDefinitionController composition={composition} config={departmentAppProfile}
-      form={{ ...resolvedForm(), configureRuntime, componentDocument: {
+      form={{ ...resolvedForm(), definition: { ...definition, items: [
+        ...definition.items,
+        { key: 'omitted', type: 'field', dataType: 'string', label: 'Omitted', initialValue: 'For new Responses' },
+      ] }, configureRuntime, componentDocument: {
         $formspecComponent: '1.2', url: 'urn:test:owned-component', version: '1.0',
         targetDefinition: { url: definition.url }, tree: { component: 'Stack', children: [
           { component: 'TextInput', bind: 'name', placeholder: 'Authored Component field' },

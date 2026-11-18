@@ -42,11 +42,10 @@ import {
   type IdempotencyKey,
 } from '../shared/idempotency-key.ts';
 
-export function hydrateEngineFromResponse(engine: IFormEngine, response?: FormResponse, initialData?: Record<string, unknown>): void {
-  // Draft lookup has already completed. A restored response owns all its answers,
-  // including absent fields; prefill never patches or replaces saved data.
-  const data = response ? response.data : initialData;
-  if (data) hydrateEngineFromData(engine, data);
+export function respondentEngineDataOptions(response?: FormResponse, initialData?: Record<string, unknown>) {
+  type Data = Parameters<IFormEngine['loadResponseData']>[0];
+  if (response) return { savedResponseData: response.data as Data };
+  return { responseData: initialData as Data | undefined };
 }
 
 /** The engine owns hydration: one row per saved repeat entry, even past maxRepeat. */

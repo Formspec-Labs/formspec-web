@@ -626,7 +626,9 @@ describe('generic native package signing session', () => {
       const capturedData = structuredClone(engine.getResponse({ profile: 'off' }).data);
       lease.dispose(); host.dispose(); engine.dispose();
       const restored = await cohort.draftStore.load(key);
-      expect(restored?.data.photo).toBeNull(); expect(version).toBe(2);
+      // An untouched attachment is absent in the saved Response.
+      expect(restored?.data).not.toHaveProperty('photo');
+      expect(version).toBe(2);
       host = createNativePackageSigningHost(policy);
       engine = createFormEngine(definition); engine.loadLocale(locale); engine.setLocale('en');
       engine.loadResponseData(restored!.data as Parameters<typeof engine.loadResponseData>[0]);

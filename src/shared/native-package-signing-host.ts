@@ -765,7 +765,7 @@ export function createNativePackageSigningHost(policy: NativePackageSigningHostP
     const signal = AbortSignal.any([stage.signal, lifetime.signal]);
     const check = () => { signal.throwIfAborted(); facts?.assertCurrent(); if (disposed || expected !== authorityGeneration || visit !== visitEpoch) throw new Error('native-isolated-retired'); };
     const engine = engineFactory(policy.definition, { registryEntries: [...policy.registryEntries], runtimeContext: { locale: activeLocale },
-      responseData: response.data as Parameters<IFormEngine['loadResponseData']>[0],
+      savedResponseData: response.data as Parameters<IFormEngine['loadResponseData']>[0],
       ...(native ? { instanceSourceResolver: facts ? createEvaluationInstanceResolver(facts) : unavailableSources } : {}) });
     try {
       for (const document of policy.locales) engine.loadLocale(document);

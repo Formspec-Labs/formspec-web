@@ -106,7 +106,7 @@ import {
   buildConfirmationTrackingUri,
   buildIntakeHandoff,
   formAssuranceFloorForDefinition,
-  hydrateEngineFromResponse,
+  respondentEngineDataOptions,
   identityClaimMeetsAssurance,
   identitySubjectChanged,
   idpOptionMeetsAssurance,
@@ -1584,19 +1584,28 @@ async function createReadyState(
     recoveredApplication = state?.application;
     recoveredApplicationLookup = state?.applicationLookup;
   }
-  const engine = createFormEngine(definition, {
-    runtimeContext: { locale: activeLocale },
-    ...(form ? { registryEntries: [...form.registryEntries], instanceSourceResolver: form.instanceSourceResolver,
-      ...(form.responseSubject ? { responseSubject: form.responseSubject } : {}),
-      ...(form.instanceSourceResolver && recoveredDraft ? { responseData: recoveredDraft.data as Parameters<IFormEngine['loadResponseData']>[0] } : {}) } : {}),
-  });
+  const openEngine = (draft?: FormResponse) => {
+    const engine = createFormEngine(definition, {
+      runtimeContext: { locale: activeLocale },
+      ...(form ? {
+        registryEntries: [...form.registryEntries],
+        instanceSourceResolver: form.instanceSourceResolver,
+        ...(form.responseSubject ? { responseSubject: form.responseSubject } : {}),
+      } : {}),
+      ...respondentEngineDataOptions(draft, form?.initialData?.data),
+    });
+    try {
+      for (const localeDocument of localeDocuments ?? []) engine.loadLocale(localeDocument);
+      return engine;
+    } catch (error) {
+      engine.dispose();
+      throw error;
+    }
+  };
   let multiPartyState: MultiPartyPersistedState | null;
   let draft: FormResponse | undefined;
   let ownedRuntime: RespondentOwnedRuntime | undefined;
   try {
-    for (const localeDocument of localeDocuments ?? []) {
-      engine.loadLocale(localeDocument);
-    }
     multiPartyState = runtimeProfile.multiParty
       ? multiPartyStateFromDraft(
           await composition.draftStore.load(multiPartyProgressDraftKey(draftKey)),
@@ -1623,7 +1632,7 @@ async function createReadyState(
           if (!terminalRuntime || typeof terminalRuntime.invalidate !== 'function' || typeof terminalRuntime.dispose !== 'function') {
             terminalRuntime?.dispose?.(); throw new Error('Submitted recovery requires lifecycle hooks');
           }
-          engine.dispose(); return { status: 'submitted', terminalRuntime };
+          return { status: 'submitted', terminalRuntime };
         }
         draft = current.response;
         recoveredSavedDraft = current.savedDraft; recoveredSigning = current.signed;
@@ -1635,22 +1644,22 @@ async function createReadyState(
 
   } catch (error) {
     if (error instanceof DraftVersionConflictError) {
+      const engine = openEngine();
       engine.setLocale(activeLocale);
       return {
         status: 'draft-conflict', error, engine, definition,
         localeDocuments: localeDocuments ?? [], activeLocale,
       };
     }
-    engine.dispose();
     throw error;
   }
+  const engine = openEngine(draft);
   try {
     if (draft && options.locale === undefined) {
       activeLocale = restoreDraftLocale(engine, draft, definition, localeDocuments ?? []);
     } else {
       engine.setLocale(activeLocale);
     }
-    hydrateEngineFromResponse(engine, draft, form?.initialData?.data);
     const resolvedIssuer = await engine.getResolvedIssuer();
     if (form?.configureRuntime) {
       const configured = await form.configureRuntime({ engine, definition, exchangeEngine,
