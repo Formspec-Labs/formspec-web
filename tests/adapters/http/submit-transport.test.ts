@@ -10,16 +10,18 @@ import { receiptRecordFromConfirmation } from '../../../src/verifying-surface/re
 
 describe('HttpSubmitTransport', () => {
   it.each([
-    ['known', '2020-04-15T13:00:00Z'],
-    ['unknown', undefined],
-  ] as const)('retains only the service-reported receipt time (%s)', async (_label, acceptedAt) => {
+    ['known', '2020-04-15T13:00:00Z', '2020-04-15T13:00:00Z'],
+    ['unknown', undefined, undefined],
+    ['invalid', '2026', undefined],
+  ] as const)('retains only the service-reported receipt time (%s)', async (_label, rawTime, acceptedAt) => {
     const { fetch } = recordingFetch(() => jsonResponse({
-      response_id: 'server-response', status: 'accepted', accepted_at: acceptedAt,
+      response_id: 'server-response', status: 'accepted', accepted_at: rawTime,
     }));
     const transport = new HttpSubmitTransport({
       baseUrl: 'https://server.test', fetchImpl: fetch, draftIdResolver: () => 'draft-1',
     });
     const confirmation = await transport.submit(sampleIntakeHandoff, generateIdempotencyKey());
+    expect(confirmation.acceptedAt).toBe(acceptedAt);
     const record = receiptRecordFromConfirmation('app', 'release', confirmation);
     expect(record.confirmation.acceptedAt).toBe(acceptedAt);
     // A browser-side timestamp cannot establish when the service accepted a filing.

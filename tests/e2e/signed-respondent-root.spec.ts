@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import {
+  ACCEPTED_AT,
   BUNDLE_TITLE,
   CEREMONY_SENTINEL,
   INTAKE_TITLE,
@@ -106,6 +107,9 @@ test.describe('signed respondent production root', () => {
     ).toBeVisible();
     await expect(page.getByText(responseId)).toBeVisible();
     await expect(page.getByText('accepted')).toBeVisible();
+    const sentAt = page.getByText('Sent', { exact: true }).locator('..').locator('dd');
+    const expectedSentAt = await page.evaluate(value => new Date(value).toLocaleString(), ACCEPTED_AT);
+    await expect(sentAt).toHaveText(expectedSentAt);
     await expect(page.getByLabel('App verification')).toBeVisible();
     await expect(page.locator('h1')).toHaveCount(1);
     expect((await wcagScan(page)).violations).toEqual([]);
@@ -161,6 +165,7 @@ test.describe('signed respondent production root', () => {
     ).toBeVisible();
     await expect(page.getByText(responseId)).toBeVisible();
     await expect(page.getByText('accepted')).toBeVisible();
+    await expect(sentAt).toHaveText(expectedSentAt);
     await expect(page.getByLabel('App verification')).toBeVisible();
     await expect(page).toHaveTitle(BUNDLE_TITLE);
   });

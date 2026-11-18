@@ -39,6 +39,7 @@ export const RECEIPT_RESOURCE_URL =
   `${FORMSPEC_SERVER_URL}/runtime/respondent/receipt`;
 export const MODULE_ID = 'x-respondent-e2e';
 export const TENANT_COLOR = '#7A1F3D';
+export const ACCEPTED_AT = '2026-07-28T20:00:00Z';
 export const BUNDLE_TITLE = 'Verified respondent E2E sentinel';
 export const INTAKE_TITLE = 'Apply for benefits E2E sentinel';
 export const STAFF_SENTINEL = 'Staff Queue E2E sentinel';
@@ -701,7 +702,7 @@ async function fulfillFormspecServerRoute(
     if (typeof body.canonical_response?.id !== 'string' || body.response_id !== body.canonical_response.id) {
       throw new Error('E2E submission must preserve the canonical Response identifier');
     }
-    await json(route, { response_id: body.canonical_response.id, status: 'accepted', accepted_at: '2026-07-28T20:00:00Z' });
+    await json(route, { response_id: body.canonical_response.id, status: 'accepted', accepted_at: ACCEPTED_AT });
     return;
   }
   if (

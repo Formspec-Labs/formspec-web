@@ -31,6 +31,21 @@ describe('respondent receipt session store', () => {
     expect(refreshed.read(APP_ID, RELEASE_B, 'CASE-204')).toBeUndefined();
   });
 
+  it.each(['not-a-time', '2026', '2026-02-30T20:00:00Z'])(
+    'retains the confirmation when the acceptance time is invalid (%s)',
+    (acceptedAt) => {
+      const store = createBrowserRespondentReceiptSessionStore(memoryStorage());
+      const record = receiptRecordFromConfirmation(APP_ID, RELEASE_A, {
+        referenceNumber: 'CASE-204', status: 'accepted', acceptedAt,
+      });
+
+      expect(store.write(record)).toBe('stored');
+      expect(store.read(APP_ID, RELEASE_A, 'CASE-204')?.confirmation).toEqual({
+        referenceNumber: 'CASE-204', status: 'accepted',
+      });
+    },
+  );
+
   it('turns blocked browser storage into unavailable state without throwing', () => {
     const blocked = {
       getItem(): string | null {

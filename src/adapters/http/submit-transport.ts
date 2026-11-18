@@ -1,4 +1,5 @@
 import type { components } from '../../api/generated/source-public.d.ts';
+import { isAcceptanceTime } from '../../shared/acceptance-time.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { assertSynchronousGuard } from '../../shared/synchronous-guard.ts';
 import canonicalize from 'canonicalize';
@@ -115,7 +116,7 @@ export class HttpSubmitTransport implements SubmitTransport {
       recordKind: 'response',
       referenceNumber: response.response_id,
       status: response.status,
-      ...(typeof response.accepted_at === 'string' && Number.isFinite(Date.parse(response.accepted_at))
+      ...(isAcceptanceTime(response.accepted_at)
         ? { acceptedAt: response.accepted_at } : {}),
     };
     return confirmation;

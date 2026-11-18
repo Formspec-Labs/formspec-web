@@ -1,3 +1,4 @@
+import { isAcceptanceTime } from '../../shared/acceptance-time.ts';
 import type { SubmitConfirmation } from '../../ports/submit-transport.ts';
 
 const STORAGE_PREFIX = 'formspec-web:respondent-receipt:v1';
@@ -92,7 +93,7 @@ export function receiptRecordFromConfirmation(
     confirmation: {
       referenceNumber: confirmation.referenceNumber,
       status: confirmation.status,
-      ...(confirmation.acceptedAt === undefined ? {} : { acceptedAt: confirmation.acceptedAt }),
+      ...(isAcceptanceTime(confirmation.acceptedAt) ? { acceptedAt: confirmation.acceptedAt } : {}),
       ...(confirmation.trackingUri ? { trackingUri: confirmation.trackingUri } : {}),
       ...(confirmation.caseUrn ? { caseUrn: confirmation.caseUrn } : {}),
     },
@@ -146,8 +147,7 @@ function isSubmitConfirmation(value: unknown): value is SubmitConfirmation {
   ) {
     return false;
   }
-  if (value.acceptedAt !== undefined
-    && (typeof value.acceptedAt !== 'string' || !Number.isFinite(Date.parse(value.acceptedAt)))) return false;
+  if (value.acceptedAt !== undefined && !isAcceptanceTime(value.acceptedAt)) return false;
   if (value.trackingUri !== undefined && typeof value.trackingUri !== 'string') return false;
   return value.caseUrn === undefined || typeof value.caseUrn === 'string';
 }
