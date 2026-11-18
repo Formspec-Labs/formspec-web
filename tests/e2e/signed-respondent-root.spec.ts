@@ -131,11 +131,14 @@ test.describe('signed respondent production root', () => {
       url.endsWith('/runtime/forms/demo-intake/drafts'));
     expect(draftRequest).toMatchObject({
       method: 'POST',
-      body: {
-        anonymous_session_token: 'anonymous-session-token-e2e',
-      },
+      headers: { authorization: 'Bearer anonymous-session-token-e2e' },
+      body: { form_version_id: 'published-demo-intake-v1', resume_existing: false },
     });
-    expect(JSON.stringify(draftRequest?.body)).toContain('Ada Lovelace');
+    expect(draftRequest?.body).not.toHaveProperty('draft_state');
+    const saveRequest = routes.requests.find(({ method, url }) =>
+      method === 'PATCH' && url.endsWith('/drafts/DRAFT-301'));
+    expect(saveRequest?.body).toMatchObject({ expected_draft_version: 1 });
+    expect(JSON.stringify(saveRequest?.body)).toContain('Ada Lovelace');
     const submitRequest = routes.requests.find(({ url }) =>
       url.endsWith('/drafts/DRAFT-301/submit'));
     expect(submitRequest?.method).toBe('POST');

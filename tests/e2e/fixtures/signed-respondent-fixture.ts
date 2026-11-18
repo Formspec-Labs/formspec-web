@@ -56,6 +56,8 @@ const DEFINITION_LOCALE_ES =
   'https://demo.formspec.org/locales/demo-intake/es';
 const CHECKED_AT = '2026-07-28T20:00:00.000Z';
 const DEMO_FORM = sampleForm as FormDefinition;
+const DEMO_FORM_VERSION_ID = 'published-demo-intake-v1';
+const ANONYMOUS_SUBJECT = 'anon:respondent-e2e';
 
 export type AdmissionCase =
   | 'unsigned'
@@ -666,14 +668,30 @@ async function fulfillFormspecServerRoute(
     ...(bodyText ? { body: JSON.parse(bodyText) as unknown } : {}),
   });
   const path = new URL(request.url()).pathname;
-  const writes = requests.filter(({ method, url }) =>
-    method === 'POST' && url.endsWith('/runtime/forms/demo-intake/drafts')
-    || method === 'PATCH' && url.endsWith('/drafts/DRAFT-301'));
-  const saved = writes.at(-1)?.body as { canonical_response: FormResponse; draft_state: Record<string, unknown> } | undefined;
-  const draft = saved && {
-    draft_id: 'DRAFT-301', draft_version: writes.length,
-    canonical_response: saved.canonical_response, draft_state: saved.draft_state,
+  const created = requests.some(({ method, url }) =>
+    method === 'POST' && url.endsWith('/runtime/forms/demo-intake/drafts'));
+  const saves = requests.filter(({ method, url }) =>
+    method === 'PATCH' && url.endsWith('/drafts/DRAFT-301'));
+  const saved = saves.at(-1)?.body as { canonical_response: FormResponse; draft_state: Record<string, unknown> } | undefined;
+  const draft = {
+    draft_id: 'DRAFT-301',
+    draft_version: 1 + saves.length,
+    form_version_id: DEMO_FORM_VERSION_ID,
+    subject_ref: ANONYMOUS_SUBJECT,
+    status: 'in_progress',
+    is_initialization_only: saved === undefined,
+    canonical_response: saved?.canonical_response ?? null,
+    draft_state: saved?.draft_state ?? {},
   };
+  if (request.method() === 'GET' && path.endsWith('/runtime/forms/demo-intake')) {
+    await json(route, {
+      form_id: 'demo-intake',
+      form_version_id: DEMO_FORM_VERSION_ID,
+      definition_url: DEMO_FORM.url,
+      definition_version: DEMO_FORM.version,
+    });
+    return;
+  }
   if (
     request.method() === 'POST'
     && /\/runtime\/forms\/demo-intake\/sessions\/anonymous$/u.test(path)
@@ -681,7 +699,7 @@ async function fulfillFormspecServerRoute(
     await json(route, {
       session_id: 'server-session-id-e2e',
       session_token: 'anonymous-session-token-e2e',
-      subject_ref: 'anon:respondent-e2e',
+      subject_ref: ANONYMOUS_SUBJECT,
       form_id: 'demo-intake',
       expires_at: '2027-01-01T00:00:00.000Z',
     });
@@ -699,7 +717,7 @@ async function fulfillFormspecServerRoute(
     && /\/drafts\/DRAFT-301\/submit$/u.test(path)
   ) {
     const body = request.postDataJSON();
-    if (typeof body.canonical_response?.id !== 'string' || body.response_id !== body.canonical_response.id) {
+    if (typeof body.canonical_response?.id !== 'string' || saved?.canonical_response.id !== body.canonical_response.id) {
       throw new Error('E2E submission must preserve the canonical Response identifier');
     }
     await json(route, { response_id: body.canonical_response.id, status: 'accepted', accepted_at: ACCEPTED_AT });
@@ -716,7 +734,7 @@ async function fulfillFormspecServerRoute(
     request.method() === 'GET'
     && /\/drafts\/DRAFT-301$/u.test(path)
   ) {
-    await json(route, draft ?? { title: 'Draft not found' }, draft ? 200 : 404);
+    await json(route, created ? draft : { title: 'Draft not found' }, created ? 200 : 404);
     return;
   }
   await json(route, { title: 'Unexpected E2E route' }, 404);
