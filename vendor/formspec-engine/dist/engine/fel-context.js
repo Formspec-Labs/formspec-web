@@ -62,5 +62,6 @@ export function felContextSnapshot(options) {
         locale: options.locale,
         dateFormats: options.dateFormats,
         meta: options.meta,
+        subjectKeys: options.subjectKeys,
     };
 }

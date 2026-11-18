@@ -7,6 +7,7 @@ export const analyzeFelWithFieldTypes: (a: number, b: number, c: number, d: numb
 export const applyMigrationsToResponseData: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
 export const assembleDefinition: (a: number, b: number, c: number, d: number, e: number) => void;
 export const checkFelExtensionName: (a: number, b: number, c: number) => void;
+export const checkInstanceProjection: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const coerceFieldValue: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
 export const collectFelRewriteTargets: (a: number, b: number, c: number) => void;
 export const computeDependencyGroups: (a: number, b: number, c: number) => void;

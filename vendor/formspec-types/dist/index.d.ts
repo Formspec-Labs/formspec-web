@@ -75,7 +75,7 @@ export type FormItem = Item & {
     constraint?: string;
     message?: string;
 };
-type FormDefinitionKnownFields = Pick<GeneratedFormDefinition, '$formspec' | 'url' | 'version' | 'versionAlgorithm' | 'derivedFrom' | 'name' | 'title' | 'description' | 'documents' | 'date' | 'metadata' | 'shapes' | 'instances' | 'variables' | 'nonRelevantBehavior' | 'issuer' | 'optionSets' | 'migrations' | 'fees' | 'extensions'>;
+type FormDefinitionKnownFields = Pick<GeneratedFormDefinition, '$formspec' | 'url' | 'version' | 'versionAlgorithm' | 'derivedFrom' | 'name' | 'title' | 'description' | 'documents' | 'date' | 'metadata' | 'shapes' | 'instances' | 'subject' | 'variables' | 'nonRelevantBehavior' | 'issuer' | 'optionSets' | 'migrations' | 'fees' | 'extensions'>;
 export type FormDefinition = FormDefinitionKnownFields & {
     items: FormItem[];
     status?: GeneratedFormDefinition['status'];

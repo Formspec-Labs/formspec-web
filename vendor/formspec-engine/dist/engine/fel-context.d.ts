@@ -2,7 +2,7 @@
 import type { FormVariable } from '@formspec-org/types';
 import type { ValidationResult } from '@formspec-org/types';
 import type { EvalResult } from '../diff.js';
-import type { JsonRecord } from '../interfaces.js';
+import type { JsonRecord, ResponseSubjectKeys } from '../interfaces.js';
 import type { EngineSignal } from '../reactivity/types.js';
 import type { EngineBindConfig } from './helpers.js';
 /**
@@ -33,6 +33,7 @@ export interface FelContextSnapshot {
     /** The active Locale document's `formats.date` patterns by `formatDate` style (Locale §2.4). */
     dateFormats?: Record<string, string>;
     meta?: Record<string, string | number | boolean>;
+    subjectKeys?: ResponseSubjectKeys;
 }
 export declare function felContextSchema(fieldDataTypes: Record<string, string | undefined>, bindConfigs: Record<string, EngineBindConfig>): FelContextSchema;
 export interface FelContextSnapshotInput {
@@ -51,6 +52,7 @@ export interface FelContextSnapshotInput {
     /** The active Locale document's `formats.date` patterns by `formatDate` style (Locale §2.4). */
     dateFormats?: Record<string, string>;
     meta?: Record<string, string | number | boolean>;
+    subjectKeys?: FelContextSnapshot['subjectKeys'];
 }
 /**
  * The whole form's FEL state in one payload, built O(fields + rows) per evaluation. Values stay untagged —

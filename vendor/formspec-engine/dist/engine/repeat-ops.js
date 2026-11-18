@@ -1,7 +1,6 @@
-/** @filedesc Repeat-row subtree clearing and snapshot/restore of nested group field values. */
-/** Remove indexed paths under a repeat root from signal stores and `_data` (reactive structure only). */
+/** @filedesc Repeat-row subtree clearing and capture of field state and nested repeats. */
+/** Remove the selected repeat paths from signal stores and primary data. */
 export function clearRepeatIndexedSubtree(options) {
-    const prefix = `${options.rootRepeatPath}[`;
     const stores = [
         options.signals,
         options.relevantSignals,
@@ -13,64 +12,39 @@ export function clearRepeatIndexedSubtree(options) {
         options.optionSignals,
         options.optionStateSignals,
         options.repeats,
+        options.data,
     ];
     for (const store of stores) {
         for (const key of Object.keys(store)) {
-            if (key.startsWith(prefix)) {
+            if (options.includesPath(key)) {
                 delete store[key];
             }
         }
     }
-    for (const key of Object.keys(options.data)) {
-        if (key.startsWith(prefix)) {
-            delete options.data[key];
-        }
-    }
 }
-/** Snapshot nested field values under a repeat prefix (used when removing a repeat row). */
-export function snapshotRepeatGroupTree(items, prefix, readFieldValue, getRepeatCount) {
-    const snapshot = {};
-    for (const item of items) {
-        const path = `${prefix}.${item.key}`;
-        if (item.type === 'field') {
-            snapshot[item.key] = readFieldValue(path);
-            continue;
-        }
-        if (item.type === 'group') {
-            if (item.repeatable) {
-                const count = getRepeatCount(path);
-                const rows = [];
+/** Capture paths relative to the row so the same state can be restored at its new index. */
+export function snapshotRepeatRow(items, rowPath, readField, getRepeatCount) {
+    const snapshot = { fields: [], repeats: [] };
+    function visit(items, prefix) {
+        for (const item of items) {
+            if (item.type === 'display')
+                continue;
+            const path = prefix ? `${prefix}.${item.key}` : item.key;
+            const children = item.children ?? [];
+            if (item.type === 'group' && item.repeatable) {
+                const count = getRepeatCount(`${rowPath}.${path}`);
+                snapshot.repeats.push({ path, item, count });
                 for (let index = 0; index < count; index += 1) {
-                    rows.push(snapshotRepeatGroupTree(item.children ?? [], `${path}[${index}]`, readFieldValue, getRepeatCount));
+                    visit(children, `${path}[${index}]`);
                 }
-                snapshot[item.key] = rows;
             }
             else {
-                snapshot[item.key] = snapshotRepeatGroupTree(item.children ?? [], path, readFieldValue, getRepeatCount);
+                if (item.type === 'field')
+                    snapshot.fields.push({ path, ...readField(`${rowPath}.${path}`) });
+                visit(children, path);
             }
         }
     }
+    visit(items, '');
     return snapshot;
-}
-/** Restore nested field values and, when requested, repeat structure after rows were reindexed. */
-export function applyRepeatGroupTreeSnapshot(items, prefix, snapshot, writeField, prepareRepeat) {
-    for (const item of items) {
-        const path = `${prefix}.${item.key}`;
-        if (item.type === 'field') {
-            writeField(path, snapshot?.[item.key]);
-            continue;
-        }
-        if (item.type === 'group') {
-            if (item.repeatable) {
-                const rows = Array.isArray(snapshot?.[item.key]) ? snapshot[item.key] : [];
-                prepareRepeat?.(path, item, rows.length);
-                for (let index = 0; index < rows.length; index += 1) {
-                    applyRepeatGroupTreeSnapshot(item.children ?? [], `${path}[${index}]`, rows[index] ?? {}, writeField, prepareRepeat);
-                }
-            }
-            else {
-                applyRepeatGroupTreeSnapshot(item.children ?? [], path, snapshot?.[item.key], writeField, prepareRepeat);
-            }
-        }
-    }
 }

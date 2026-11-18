@@ -2,7 +2,7 @@
 import type { FormDefinition } from '@formspec-org/types';
 import type { ValidationReport, ValidationResult } from '@formspec-org/types';
 import type { EvalResult } from '../diff.js';
-import type { AuthoredSignatureInput, PinnedResponseReference } from '../interfaces.js';
+import type { AuthoredSignatureInput, FormEngineOptions, PinnedResponseReference } from '../interfaces.js';
 import type { EvalShapeTiming } from './wasm-fel.js';
 /** Emit only JSON-Schema–declared AuthoredSignature properties (additionalProperties: false). */
 export declare function toNormalizedAuthoredSignatureRecord(signature: AuthoredSignatureInput, index: number, responseId: string, definitionUrl: string, definitionVersion: string, meta: {
@@ -36,15 +36,12 @@ export declare function buildFormspecResponseEnvelope(options: {
         version: string;
         locale: string;
     };
+    subject?: FormEngineOptions['responseSubject'];
     meta?: {
         id?: string;
         author?: {
             id: string;
             name?: string;
-        };
-        subject?: {
-            id: string;
-            type?: string;
         };
         authoredSignatures?: AuthoredSignatureInput[];
     };

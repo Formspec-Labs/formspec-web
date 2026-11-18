@@ -41,7 +41,7 @@ import { type ExperienceDocumentHandle, type ExperienceUnitPlan } from './experi
 import { type HeadingLevel, type StaticContentPlan, type SurfaceStaticAssetResolver } from './static-content.js';
 import type { WidgetKey, WidgetRegistry, WidgetResolution } from './registry.js';
 import type { ResponseActionsDocumentLike } from './transitions.js';
-import { type DataSourceCatalogHandle, type WidgetDataInputPlan, type DataSourceDescriptor } from './data-source-loader.js';
+import { type DataSourceCatalogHandle, type WidgetDataInputPlan, type DataSourceDescriptor, type DataSourceSubject } from './data-source-loader.js';
 import { type DefinitionFormInitialDataPlan, type MappingDocumentHandle } from './definition-form-initial-data.js';
 export type SurfaceSlot = SurfaceRoute['slots'][number];
 export interface SlotPlanBase {
@@ -61,6 +61,7 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
     /** Qualified Data Source plan used before the form engine mounts. */
     initialData?: DefinitionFormInitialDataPlan;
     definition?: FormDefinition;
+    subject?: DataSourceSubject;
     registryEntries: readonly RegistryEntry[];
     status: 'ready' | 'unresolved';
 } | {
@@ -100,6 +101,7 @@ export type SlotPlan<TComponent> = SlotPlanBase & ({
 });
 export interface SlotPlanContext<TComponent> {
     handle: SurfaceRouteHandle;
+    params?: Readonly<Record<string, string>> | undefined;
     screenerHandles?: readonly ScreenerDocumentHandle[] | undefined;
     experiences: readonly ExperienceDocument[];
     /** Exact manifested source identity for qualified Experience bindings. */

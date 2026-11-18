@@ -45,7 +45,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { presentedRouteTitle } from './title-presentation.js';
 import { deriveSurfaceRuntimeGeneration } from "./runtime-generation.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
-import { composeSurfaceApp, createThemeAuthority, createWidgetRegistry, documentRootContaminationDiagnostic, flattenRegistryEntries, generationNeedAnchors, matchRoute, mergeNeedAnchors, planMatchedRoute, resolveSurfaceStrings, routeHref, } from "@formspec-org/surface";
+import { canonicalFiniteJson, composeSurfaceApp, createThemeAuthority, createWidgetRegistry, documentRootContaminationDiagnostic, flattenRegistryEntries, generationNeedAnchors, matchRoute, mergeNeedAnchors, planMatchedRoute, resolveSurfaceStrings, routeHref, } from "@formspec-org/surface";
 import { SurfaceRouteView } from "./SurfaceRoute.js";
 import { createWidgetActionCoordinator } from "./widget-action-runtime.js";
 import { diagnosticListsEqual, useDiagnosticDelivery, } from "./diagnostic-delivery.js";
@@ -147,12 +147,15 @@ export function SurfaceApp(props) {
     const activeNavigationScope = resolution.match
         ? routeNavigationScope(resolution.match.handle)
         : DEFAULT_NAVIGATION_SCOPE;
+    // Keep the route plan and its data inputs stable across equivalent parameter objects.
+    const routeParamsKey = canonicalFiniteJson(props.routeParams ?? {});
+    const routeParams = useMemo(() => JSON.parse(routeParamsKey), [routeParamsKey]);
     const runtimeGeneration = useMemo(() => deriveSurfaceRuntimeGeneration({
         sessionGeneration: props.sessionGeneration,
         location,
         app: model.app,
-        routeParams: props.routeParams,
-    }), [model.app, location, props.routeParams, props.sessionGeneration]);
+        routeParams,
+    }), [model.app, location, routeParams, props.sessionGeneration]);
     const routeInstance = useRef(undefined);
     if (!resolution.match) {
         routeInstance.current = undefined;
@@ -177,7 +180,7 @@ export function SurfaceApp(props) {
         return planMatchedRoute({
             handle: resolution.match.handle,
             app: model.app,
-            params: { ...(props.routeParams ?? {}), ...resolution.match.params },
+            params: { ...routeParams, ...resolution.match.params },
             experiences: bundle.experiences,
             screenerHandles: bundle.screenerHandles,
             experienceHandles: bundle.experienceHandles,
@@ -200,7 +203,7 @@ export function SurfaceApp(props) {
         resolution,
         model,
         bundle,
-        props.routeParams,
+        routeParams,
         props.onFireTransition,
         props.widgetActionExecutor,
         props.evaluateTransitionCondition,

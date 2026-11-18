@@ -249,8 +249,8 @@ export function buildFormspecResponseEnvelope(options) {
     if (options.meta?.author) {
         response.author = options.meta.author;
     }
-    if (options.meta?.subject) {
-        response.subject = options.meta.subject;
+    if (options.subject) {
+        response.subject = options.subject;
     }
     if (options.displayedIssuer) {
         response.displayedIssuer = options.displayedIssuer;

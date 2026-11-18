@@ -27,7 +27,7 @@ import { type DataSourceRevisionSelector } from './data-source-revision.js';
 import { type ReactNode } from 'react';
 import type { ResponseAction, ResponseActionInvocationResult, ResponseActionInvoker, ResponseActionsDocument as ReactResponseActionsDocument, SemanticArtifactIdentity, SemanticControlRegistry, SemanticControlScope, SemanticResponseBinding, SubmitResult } from '@formspec-org/react';
 import { type FormDefinition, type ComponentDocument, type LocaleDocument, type OntologyDocument, type ReferencesDocument, type ResponseActionsDocument as GeneratedResponseActionsDocument } from '@formspec-org/types';
-import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourcePayloadValidator, type PlannedTransition, type SlotPlan, type SurfaceDiagnostic, type SurfaceSemanticOutputScope, type SurfaceStrings, type ThemeGrant } from '@formspec-org/surface';
+import { type DataSourceAuthorizer, type DataSourceLoader, type DataSourceSelectionEvidence, type DataSourcePayloadValidator, type PlannedTransition, type SlotPlan, type SurfaceDiagnostic, type SurfaceSemanticOutputScope, type SurfaceStrings, type ThemeGrant } from '@formspec-org/surface';
 import { nextLevel } from './heading.js';
 import type { SurfaceWidget, SurfaceWidgetActionExecutor, SurfaceWidgetActionDetail, SurfaceWidgetActionOutcomeStore, SurfaceWidgetActionReport, SurfaceWidgetRouteContext } from './widget-api.js';
 import { type WidgetActionCoordinator } from './widget-action-runtime.js';
@@ -70,7 +70,8 @@ export interface SurfaceDefinitionFormRenderInput {
     onActionCompleted?: ((action: ResponseAction, result: ResponseActionInvocationResult<SubmitResult>) => void) | undefined;
 }
 export interface SurfaceDefinitionFormInitialData {
-    data: Readonly<Record<string, unknown>>;
+    data?: Readonly<Record<string, unknown>> | undefined;
+    selection?: DataSourceSelectionEvidence | undefined;
     freshness: 'fresh' | 'stale';
     recordId?: string | undefined;
     generation?: string | number | undefined;

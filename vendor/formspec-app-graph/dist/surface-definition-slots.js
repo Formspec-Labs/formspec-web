@@ -1,5 +1,7 @@
 /** @filedesc Surface definition-form slot binding cross-artifact validation against loaded Definitions. */
 import { diagnosticSourceForHandle } from './report.js';
+import { exactDefinitionResolution } from './data-sources.js';
+import { escapeJsonPointerToken, ownProp } from './surface-widgets.js';
 function record(value) {
     return value && typeof value === 'object' && !Array.isArray(value)
         ? value
@@ -40,6 +42,7 @@ function definitionFormSlots(route) {
                 slotIndex,
                 slotId: stringProp(slotRecord, 'id'),
                 definitionRef: stringProp(record(slotRecord?.binding), 'definitionRef'),
+                subjectKeys: ownProp(record(slotRecord?.binding), 'subjectKeys'),
             }];
     });
 }
@@ -81,6 +84,46 @@ function undeclaredDiagnostic(surfaceHandle, manifest, slot, declaredUrls) {
         },
     };
 }
+function subjectKeyDiagnostics(surface, slot, definition) {
+    const declared = record(record(record(definition.document)?.subject)?.keys);
+    const bound = record(slot.subjectKeys) ?? {};
+    const params = Array.isArray(slot.route.route.params) ? slot.route.route.params : [];
+    const paramNames = new Set(params.map(param => stringProp(record(param), 'name')));
+    const diagnostics = [];
+    const pointer = `/routes/${slot.route.index}/slots/${slot.slotIndex}/binding/subjectKeys`;
+    function report(reason, message, key, parameter) {
+        diagnostics.push({
+            code: 'APP-GRAPH-SURFACE-SUBJECT-KEYS',
+            severity: 'error',
+            phase: 'cross-artifact',
+            origin: 'app-graph-validator',
+            message,
+            primarySource: diagnosticSourceForHandle(surface, key === undefined || reason === 'subject-key-unbound' ? pointer : `${pointer}/${escapeJsonPointerToken(key)}`),
+            relatedSources: [diagnosticSourceForHandle(definition, '/subject')],
+            details: { reason, routeId: routeId(slot.route), slotId: slot.slotId, key, parameter },
+        });
+    }
+    if (!declared) {
+        if (slot.subjectKeys !== undefined) {
+            report('subject-not-declared', 'This Definition has no subject declaration. Omit subjectKeys.');
+        }
+        return diagnostics;
+    }
+    for (const key of Object.keys(declared)) {
+        if (ownProp(bound, key) === undefined) {
+            report('subject-key-unbound', `Bind the Definition subject key "${key}" to a route parameter.`, key);
+        }
+    }
+    for (const [key, parameter] of Object.entries(bound)) {
+        if (ownProp(declared, key) === undefined) {
+            report('subject-key-undeclared', `The Definition does not declare subject key "${key}".`, key, parameter);
+        }
+        else if (typeof parameter !== 'string' || !paramNames.has(parameter)) {
+            report('subject-route-parameter-undeclared', `The route does not declare parameter "${String(parameter)}" for subject key "${key}".`, key, parameter);
+        }
+    }
+    return diagnostics;
+}
 /**
  * Surface `definition-form` slot binding URLs MUST appear in App Manifest
  * `definitions[].url` — every form-bearing slot in an app graph references a
@@ -102,9 +145,13 @@ export function validateSurfaceDefinitionSlots(context) {
             for (const slot of definitionFormSlots(route)) {
                 if (slot.definitionRef === undefined)
                     continue;
-                if (declaredUrls.has(slot.definitionRef))
+                if (!declaredUrls.has(slot.definitionRef)) {
+                    diagnostics.push(undeclaredDiagnostic(surfaceHandle, context.manifest, slot, declaredUrls));
                     continue;
-                diagnostics.push(undeclaredDiagnostic(surfaceHandle, context.manifest, slot, declaredUrls));
+                }
+                for (const definition of exactDefinitionResolution(context, slot.definitionRef).candidates) {
+                    diagnostics.push(...subjectKeyDiagnostics(surfaceHandle, slot, definition));
+                }
             }
         }
     }

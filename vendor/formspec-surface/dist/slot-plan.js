@@ -54,7 +54,7 @@ export function planRoute(context) {
     const slots = context.handle.route.slots.map((slot) => planSlot(slot, context, base, new Set([context.handle.routeId]), diagnostics));
     return { handle: context.handle, slots, diagnostics };
 }
-function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
+function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics, bindingRoute = context.handle.route) {
     const site = {
         surfaceId: context.handle.surfaceId,
         routeId: context.handle.routeId,
@@ -110,7 +110,14 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
             if (typeof binding.presentation === 'string')
                 plan.presentation = binding.presentation;
             if (definition !== undefined) {
+                const subject = resolveFormSubject(definition, binding, bindingRoute, context.params ?? {});
+                if (subject === false) {
+                    diagnostics.push(surfaceDiagnostic('SLOT-BINDING-INCOMPLETE', 'The form cannot open because its filing-unit keys do not match the route parameters.', site, { reason: 'subject-keys-invalid' }));
+                    return { ...plan, status: 'unresolved' };
+                }
                 plan.definition = definition;
+                if (subject)
+                    plan.subject = subject;
                 if (binding.initialData !== undefined) {
                     const initialData = planDefinitionFormInitialData({
                         binding: binding.initialData,
@@ -313,7 +320,15 @@ function planSlot(slot, context, headingBaseLevel, visitedRoutes, diagnostics) {
             // never outranks its host.
             const nested = new Set([...visitedRoutes, routeRef]);
             const nestedBase = Math.min(headingBaseLevel + 1, 6);
-            const slots = embedded.slots.map((child) => planSlot(child, context, nestedBase, nested, diagnostics));
+            const supplied = ownRecord(binding, 'params') ?? {};
+            const params = [];
+            for (const [target, source] of Object.entries(supplied)) {
+                const value = typeof source === 'string' ? ownString(context.params ?? {}, source) : undefined;
+                if (value !== undefined)
+                    params.push([target, value]);
+            }
+            const childContext = { ...context, params: Object.fromEntries(params) };
+            const slots = embedded.slots.map((child) => planSlot(child, childContext, nestedBase, nested, diagnostics, embedded));
             return { ...plan, slots, status: 'ready' };
         }
     }
@@ -370,6 +385,47 @@ function resolveWidgetAction(documents, actionRef, responseInput, inputs, defini
         ...(needAnchors.length > 0 ? { needAnchors } : {}),
     };
     return { action: metadata, ...(responseContext ? { responseContext } : {}) };
+}
+function resolveFormSubject(definition, binding, route, params) {
+    const hasBinding = Object.hasOwn(binding, 'subjectKeys');
+    if (definition.subject === undefined)
+        return hasBinding ? false : undefined;
+    const declared = ownRecord(definition, 'subject');
+    const declaredKeys = ownRecord(declared, 'keys');
+    const type = declared && ownString(declared, 'type');
+    if (!declaredKeys || !type)
+        return false;
+    const mapping = ownRecord(binding, 'subjectKeys');
+    if (hasBinding && mapping === undefined)
+        return false;
+    const entries = Object.keys(declaredKeys);
+    if (Object.keys(mapping ?? {}).length !== entries.length)
+        return false;
+    const declaredParams = new Set(route.params?.map(parameter => parameter.name));
+    const keys = [];
+    for (const key of entries) {
+        const schema = ownRecord(declaredKeys, key);
+        const dataType = schema && ownString(schema, 'dataType');
+        const parameter = ownString(mapping ?? {}, key);
+        if (parameter === undefined || !declaredParams.has(parameter))
+            return false;
+        const value = ownString(params, parameter);
+        if (value === undefined)
+            return false;
+        if (dataType === 'string') {
+            keys.push([key, value]);
+            continue;
+        }
+        if (dataType !== 'integer' || !/^(?:0|-?[1-9][0-9]*)$/u.test(value))
+            return false;
+        const integer = BigInt(value);
+        const number = Number(integer);
+        // Core §2.1.6 and ADR 0172 §11 item 9 require the I-JSON integer range.
+        if (!Number.isSafeInteger(number))
+            return false;
+        keys.push([key, number]);
+    }
+    return Object.freeze({ type, keys: Object.freeze(Object.fromEntries(keys)) });
 }
 function ownRecord(value, key) {
     if (!value || !Object.prototype.hasOwnProperty.call(value, key))

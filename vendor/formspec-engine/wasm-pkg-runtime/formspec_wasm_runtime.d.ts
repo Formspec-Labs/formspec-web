@@ -35,7 +35,7 @@ export class FelContext {
     interpolate(template: string, item_path: string, replace_self_ref: boolean, now_iso?: string | null, extensions?: FelExtensionHost | null): string;
     /**
      * Replaces the form-scope snapshot:
-     * `{ values, mips, repeatCounts, variables, instances, locale, dateFormats, meta }`.
+     * `{ values, mips, repeatCounts, variables, instances, locale, dateFormats, meta, subjectKeys }`.
      */
     load(snapshot_json: string): void;
     /**
@@ -117,6 +117,7 @@ export function evalFelWithTrace(expression: string, fields_json: string): strin
  * Evaluate a Formspec definition against provided data (4-phase batch processor).
  * Returns JSON: { values, validations, nonRelevant, variables, required, readonly }
  *
+ * `context_json.subjectType` and `context_json.subjectKeys` supply the current Response's subject.
  * `extensions` resolves Definition calls to host extension functions (Core §3.12).
  */
 export function evaluateDefinition(definition_json: string, data_json: string, context_json?: string | null, extensions?: FelExtensionHost | null): string;

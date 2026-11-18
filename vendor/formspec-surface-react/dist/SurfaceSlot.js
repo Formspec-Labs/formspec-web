@@ -25,11 +25,11 @@ import { NativeScreenerSlot } from './screener-completion.js';
  * deeper. {@link SurfaceSlotFrame} is both paths now.
  */
 import { selectDataSourceRevisions } from './data-source-revision.js';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from 'react';
 import { createFormEngine, createMappingEngine, resolveResponseActionValidationTuple, } from '@formspec-org/engine';
 import { FormspecForm } from '@formspec-org/react';
 import { resolveFieldReferences, targetDefinitionMatches, } from '@formspec-org/types';
-import { loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
+import { canonicalFiniteJson, loadWidgetDataInputs, loadDefinitionFormInitialData, responseActionsDocumentForDefinition, surfaceDiagnostic, } from '@formspec-org/surface';
 import { Heading, nextLevel } from './heading.js';
 import { routeIdentity } from './widget-api.js';
 import { allocateWidgetActionInvocationId, admitSurfaceWidgetActionInput, createWidgetActionCoordinator, responseActionsDocumentForAction, snapshotWidgetResponseContext, normalizeWidgetActionResult, } from './widget-action-runtime.js';
@@ -184,6 +184,11 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
             if (plan.status === 'unresolved' || plan.definition === undefined) {
                 return _jsx(UnavailableSlot, { children: strings('slotUnavailableDefinitionForm') });
             }
+            // Form state belongs to the resolved filing unit, even on the same route and slot.
+            const subjectKey = plan.subject && canonicalFiniteJson({
+                type: plan.subject.type,
+                keys: plan.subject.keys,
+            });
             // This annotation is the compile-time cross-package contract: the
             // generated schema document must pass directly into React's engine seam.
             const responseActionsDocument = responseActionsDocumentForDefinition(responseActionsDocuments ?? [], plan.definitionRef);
@@ -221,11 +226,9 @@ export function SurfaceSlot({ plan, grant, route, strings, dataSourceLoader, dat
                 return (_jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') }));
             }
             if (plan.initialData?.status === 'ready') {
-                return (_jsx(DefinitionFormDataSlot, { input: renderInput, initialDataPlan: plan.initialData, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }));
+                return (_jsx(DefinitionFormDataSlot, { input: renderInput, initialDataPlan: plan.initialData, strings: strings, dataSourceLoader: dataSourceLoader, dataSourceRevision: dataSourceRevision, authorizeDataSource: authorizeDataSource, validateDataSourcePayload: validateDataSourcePayload, runtimeGeneration: runtimeGeneration ?? `${route.surfaceId}/${route.routeId}`, onRuntimeDiagnosticsChange: onRuntimeDiagnosticsChange, renderDefinitionForm: renderDefinitionForm, semanticOutputScope: slotSemanticOutputScope }, subjectKey));
             }
-            return renderDefinitionForm
-                ? renderDefinitionForm(renderInput)
-                : (_jsx(DefaultDefinitionFormSlot, { input: renderInput, semanticOutputScope: slotSemanticOutputScope }));
+            return (_jsx(Fragment, { children: renderDefinitionForm ? renderDefinitionForm(renderInput) : (_jsx(DefaultDefinitionFormSlot, { input: renderInput, semanticOutputScope: slotSemanticOutputScope })) }, subjectKey));
         }
         case 'experience-unit': {
             const { unit } = plan;
@@ -352,7 +355,7 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
             descriptor: initialDataPlan.descriptor,
             context: { surfaceId: input.route.surfaceId, surfaceRef: input.route.surfaceRef,
                 routeId: input.route.routeId, slotId: input.plan.slotId,
-                definitionRef: input.plan.definitionRef, params: input.route.params,
+                definitionRef: input.plan.definitionRef, params: input.route.params, subject: input.plan.subject,
                 sessionGeneration: runtimeGeneration },
         }], dataSourceRevision);
     useEffect(() => {
@@ -379,6 +382,7 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
                 slotId: input.plan.slotId,
                 definitionRef: input.plan.definitionRef,
                 params: input.route.params,
+                subject: input.plan.subject,
                 sessionGeneration: requestedGeneration,
             },
             ...currentEffectDataSourcePorts(() => current, {
@@ -420,6 +424,7 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
         input.plan.definition,
         input.plan.definitionRef,
         input.plan.slotId,
+        input.plan.subject,
         input.route.params,
         input.route.routeId,
         input.route.surfaceId,
@@ -435,7 +440,8 @@ function DefinitionFormDataSlot({ input, initialDataPlan, strings, dataSourceLoa
         return (_jsx(UnavailableSlot, { children: strings('slotUnavailableWidgetData') }));
     }
     const initialData = {
-        data: delivery.data,
+        ...(delivery.data === undefined ? {} : { data: delivery.data }),
+        ...(delivery.selection === undefined ? {} : { selection: delivery.selection }),
         freshness: delivery.freshness,
         ...(delivery.recordId === undefined
             ? {}
@@ -468,7 +474,7 @@ function DefaultDefinitionFormSlot({ input, semanticOutputScope, }) {
 function DefaultSurfaceDefinitionForm({ plan, grant, initialData, referencesDocuments, responseActionsDocument, semanticControlScope, onDefinitionActionResult, onActionCompleted, responseActionInvoker, componentDocument, localeDocuments, activeLocale, }) {
     const engine = useMemo(() => {
         const created = createFormEngine(plan.definition);
-        if (initialData) {
+        if (initialData?.data !== undefined) {
             // Before any field component subscribes; keeps every saved repeat row.
             created.loadResponseData(initialData.data);
         }

@@ -19,6 +19,7 @@ import type { IssuerFetcher } from './issuer/IssuerFetcher.js';
 import type { IssuerSource, ResolvedIssuer } from './issuer/types.js';
 import type { FelTraceStep } from './fel/fel-api-runtime.js';
 import type { EvalDiagnostic } from './diff.js';
+import type { ExactJsonNumber } from './json-values.js';
 export interface FELBuiltinFunctionCatalogEntry {
     name: string;
     category: string;
@@ -192,7 +193,21 @@ export interface FormEngineOptions {
     issuerOverride?: IssuerSource;
     /** Host primary Response data installed before seedFrom. */
     responseData?: JsonRecord;
+    /** Resume an editable snapshot before the first evaluation. Mutually exclusive with responseData. */
+    draftSnapshot?: FormDraftSnapshot;
+    /** Host-supplied Response identity, available to FEL from the first evaluation. */
+    responseSubject?: Omit<NonNullable<FormResponse['subject']>, 'keys'> & {
+        keys?: ResponseSubjectKeys;
+    };
 }
+/** Editable data pinned to a Definition, including hidden answers and exact repeat arrays. */
+export interface FormDraftSnapshot {
+    definitionUrl: string;
+    definitionVersion: string;
+    data: JsonRecord;
+}
+/** Filing-unit keys, including exact integers represented by raw JSON numbers. */
+export type ResponseSubjectKeys = Readonly<Record<string, string | number | ExactJsonNumber>>;
 export interface RegistryEntry {
     name: string;
     category?: string;
@@ -407,6 +422,10 @@ export interface IFormEngine {
     removeRepeatInstance(itemName: string, index: number): void;
     /** Loads Response `data` in one evaluation, one row per loaded array entry regardless of min/maxRepeat. */
     loadResponseData(data: JsonRecord): void;
+    /** Restores editable data from a draft pinned to this Definition. */
+    loadDraftSnapshot(snapshot: FormDraftSnapshot): void;
+    /** Captures editable data without evaluation. Use exact JSON for persistence. */
+    getDraftSnapshot(): FormDraftSnapshot;
     compileExpression(expression: string, currentItemName?: string): () => FormFieldValue;
     setValue(name: string, value: FormFieldValue, options?: SetValueOptions): void;
     getValidationReport(): ValidationReport;
@@ -430,6 +449,7 @@ export interface IFormEngine {
             id: string;
             name?: string;
         };
+        /** Unkeyed subject metadata. Supply filing-unit identity through `FormEngineOptions.responseSubject`. */
         subject?: {
             id: string;
             type?: string;

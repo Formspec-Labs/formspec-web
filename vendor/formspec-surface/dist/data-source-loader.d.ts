@@ -12,7 +12,7 @@
  * catalog by filename, a source by unqualified id, or a value from widget
  * configuration.
  */
-import type { DataSource, DataSourceFreshness, DataSourceLoadState, DataSourcesDocument, WidgetDataInput } from "@formspec-org/types";
+import type { DataSource, DataSourceFreshness, DataSourceLoadState, DataSourcesDocument, ResolvedInstanceRecord, ResponseSelection, Sha256Digest, WidgetDataInput } from "@formspec-org/types";
 import { type SurfaceDiagnostic, type SurfaceDiagnosticSite } from "./diagnostics.js";
 /** A loaded catalog together with the exact App Manifest URL that admitted it. */
 export interface DataSourceCatalogHandle {
@@ -42,15 +42,37 @@ export interface DataSourceActiveContext {
     /** Present for a module-widget consumer. */
     widgetName?: string | undefined;
     params: Readonly<Record<string, string>>;
+    /** Typed keys of the consuming filing unit, when available. */
+    subject?: DataSourceSubject | undefined;
     sessionGeneration?: string | number | undefined;
+}
+export interface DataSourceSubject {
+    type: string;
+    keys: Readonly<Record<string, string | number>>;
 }
 export interface DataSourceLoadRequest {
     descriptor: DataSourceDescriptor;
     context: DataSourceActiveContext;
+    responseSelection?: ResponseSelection | undefined;
+}
+export interface DataSourceSelectionEvidence {
+    records: readonly ResolvedInstanceRecord[];
+    valueDigest: Sha256Digest;
+    none: boolean;
+    newer?: {
+        responseId: string;
+        responseHash: Sha256Digest;
+    } | undefined;
 }
 export type DataSourceLoadResult = {
     status: Extract<DataSourceLoadState, "loaded">;
     value: unknown;
+    catalogRef?: string | undefined;
+    sourceRef?: string | undefined;
+    records?: DataSourceSelectionEvidence["records"] | undefined;
+    valueDigest?: Sha256Digest | undefined;
+    none?: boolean | undefined;
+    newer?: DataSourceSelectionEvidence["newer"] | undefined;
     /** Loaders must state staleness; the shell never infers it from time. */
     freshness: DataSourceFreshness;
     /**
@@ -63,7 +85,18 @@ export type DataSourceLoadResult = {
 } | {
     status: Extract<DataSourceLoadState, "unavailable">;
     reason: string;
+    catalogRef?: string | undefined;
+    sourceRef?: string | undefined;
 };
+export declare function isCatalogResponseSource(source: DataSource): boolean;
+/** The shared selector applies to catalog reads, while draft uses the session. */
+export declare function catalogResponseSelection(source: DataSource): ResponseSelection | undefined;
+export declare function responseDefinitionVersionAdmitted(selection: ResponseSelection, version: string): boolean;
+export declare function dataSourceLoadRequest(descriptor: DataSourceDescriptor, context: DataSourceActiveContext): DataSourceLoadRequest;
+export declare function dataSourceSelectionInputIssue(request: DataSourceLoadRequest): string | undefined;
+export declare function readDataSourceSelection(descriptor: DataSourceDescriptor, loaded: Extract<DataSourceLoadResult, {
+    status: "loaded";
+}>): DataSourceSelectionEvidence | undefined;
 /** The sole payload-loading port. Authorization is deliberately not folded in. */
 export type DataSourceLoader = (request: DataSourceLoadRequest) => DataSourceLoadResult | Promise<DataSourceLoadResult>;
 export type DataSourceAuthorizationResult = {
@@ -120,6 +153,7 @@ export type WidgetDataDelivery = {
     data: Readonly<Record<string, unknown>>;
     /** Optional `degraded-widget` failures omitted from `data`. */
     degradedInputs: readonly WidgetDataInputFailure[];
+    selections?: Readonly<Record<string, DataSourceSelectionEvidence>> | undefined;
     diagnostics: readonly SurfaceDiagnostic[];
 } | {
     status: "unavailable";

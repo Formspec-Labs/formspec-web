@@ -1,6 +1,7 @@
 /** @filedesc WASM definition-eval payload, EvalResult merge, FEL normalization, and scoped variable visibility. */
 import type { FormVariable } from '@formspec-org/types';
 import type { EvalResult, EvalValidation } from '../diff.js';
+import type { ResponseSubjectKeys } from '../interfaces.js';
 import type { EngineSignal } from '../reactivity/types.js';
 /** Subset of validation objects passed back into WASM as previous state. */
 export type WasmPreviousValidation = Array<{
@@ -20,6 +21,8 @@ export declare function wasmEvaluateDefinitionPayload(options: {
     previousResult: EvalResult | null;
     instances: Record<string, unknown>;
     registryDocuments: unknown[];
+    subjectType?: string | null;
+    subjectKeys?: ResponseSubjectKeys;
     /** Authoritative repeat row counts by group base path (matches engine repeat signals). */
     repeatCounts: Record<string, number>;
 }): {
@@ -29,6 +32,8 @@ export declare function wasmEvaluateDefinitionPayload(options: {
     previousNonRelevant: string[] | undefined;
     instances: Record<string, unknown>;
     registryDocuments: unknown[];
+    subjectType?: string | null;
+    subjectKeys?: ResponseSubjectKeys;
     repeatCounts: Record<string, number>;
 };
 export type EvalShapeTiming = 'continuous' | 'submit' | 'demand';

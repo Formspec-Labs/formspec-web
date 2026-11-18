@@ -10,6 +10,8 @@ export function wasmEvaluateDefinitionPayload(options) {
         previousNonRelevant: options.previousResult?.nonRelevant,
         instances: options.instances,
         registryDocuments: options.registryDocuments,
+        subjectType: options.subjectType,
+        subjectKeys: options.subjectKeys,
         repeatCounts: options.repeatCounts,
     };
 }

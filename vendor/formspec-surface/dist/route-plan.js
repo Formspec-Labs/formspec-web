@@ -9,6 +9,7 @@ export function planMatchedRoute(input) {
     const grant = input.themeAuthority.grantFor(input.handle.route, site);
     const route = planRoute({
         handle: input.handle,
+        params: input.params,
         experiences: input.experiences,
         screenerHandles: input.screenerHandles,
         experienceHandles: input.experienceHandles,

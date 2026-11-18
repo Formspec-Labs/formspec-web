@@ -1,4 +1,87 @@
+import { satisfies } from "semver";
 import { surfaceDiagnostic, } from "./diagnostics.js";
+export function isCatalogResponseSource(source) {
+    return source.kind === "definition-response" && source.runtime.delivery !== "draft";
+}
+/** The shared selector applies to catalog reads, while draft uses the session. */
+export function catalogResponseSelection(source) {
+    if (!isCatalogResponseSource(source))
+        return undefined;
+    const selection = source.responseSelection;
+    if (typeof selection?.definition?.url !== "string" || !selection.definition.url
+        || !Array.isArray(selection.subject)
+        || (selection.status !== "completed" && selection.status !== "current")
+        || (selection.cardinality !== "latest" && selection.cardinality !== "latest-per-subject")
+        || (selection.pin !== "none" && selection.pin !== "at-open"))
+        return undefined;
+    return selection;
+}
+export function responseDefinitionVersionAdmitted(selection, version) {
+    const range = selection.definition.compatibleVersions;
+    return typeof version === "string" && version.length > 0
+        && (range === undefined || satisfies(version, range, { includePrerelease: true }));
+}
+export function dataSourceLoadRequest(descriptor, context) {
+    const responseSelection = catalogResponseSelection(descriptor.source);
+    return { descriptor, context, ...(responseSelection === undefined ? {} : { responseSelection }) };
+}
+export function dataSourceSelectionInputIssue(request) {
+    if (!isCatalogResponseSource(request.descriptor.source))
+        return undefined;
+    if (!request.responseSelection)
+        return "the source has no valid Response selection";
+    for (const predicate of request.responseSelection.subject) {
+        const from = predicate?.from;
+        if (!from || Object.keys(from).length !== 1)
+            return "a Response predicate has an invalid input";
+        if (typeof from.routeParam === "string"
+            && own(request.context.params, from.routeParam)
+            && typeof request.context.params[from.routeParam] === "string")
+            continue;
+        const keys = request.context.subject?.keys;
+        if (typeof from.subject === "string" && keys && own(keys, from.subject)) {
+            const value = keys[from.subject];
+            if (typeof value === "string" || Number.isSafeInteger(value))
+                continue;
+        }
+        return "a Response predicate has no valid route parameter or subject key";
+    }
+    return undefined;
+}
+const SHA256_DIGEST = /^sha256:[a-f0-9]{64}$/u;
+export function readDataSourceSelection(descriptor, loaded) {
+    const responseSelection = catalogResponseSelection(descriptor.source);
+    const { records, valueDigest, none, newer } = loaded;
+    const value = loaded.value;
+    if (!responseSelection
+        || loaded.catalogRef !== descriptor.catalogRef || loaded.sourceRef !== descriptor.sourceRef
+        || (loaded.freshness !== "fresh" && loaded.freshness !== "stale")
+        || own(loaded, "recordId")
+        || !Array.isArray(records) || typeof valueDigest !== "string" || !SHA256_DIGEST.test(valueDigest)
+        || typeof none !== "boolean"
+        || (none && (records.length !== 0 || responseSelection.whenNone !== "empty" || loaded.value !== null))
+        || (!none && (records.length === 0
+            || (responseSelection.cardinality === "latest" && records.length !== 1)
+            || (responseSelection.mapping === undefined && (responseSelection.cardinality === "latest"
+                ? value === null || typeof value !== "object" || Array.isArray(value)
+                : !Array.isArray(value) || value.length !== records.length))))
+        || records.some(record => !record || typeof record.responseId !== "string" || !record.responseId
+            || !responseDefinitionVersionAdmitted(responseSelection, record.definitionVersion)
+            || (record.responseHash === undefined
+                ? responseSelection.status === "completed"
+                : typeof record.responseHash !== "string" || !SHA256_DIGEST.test(record.responseHash)))
+        || (newer !== undefined && (none || responseSelection.pin !== "at-open"
+            || !newer || typeof newer.responseId !== "string" || !newer.responseId
+            || typeof newer.responseHash !== "string" || !SHA256_DIGEST.test(newer.responseHash)))) {
+        return undefined;
+    }
+    return {
+        records: Object.freeze(records.map(record => Object.freeze({ ...record }))),
+        valueDigest,
+        none,
+        ...(newer === undefined ? {} : { newer: Object.freeze({ ...newer }) }),
+    };
+}
 function own(record, key) {
     return Object.prototype.hasOwnProperty.call(record, key);
 }
@@ -97,6 +180,7 @@ function errorText(error) {
  */
 export async function loadWidgetDataInputs(request) {
     const data = {};
+    const selections = new Map();
     const failures = [];
     const degradedInputs = [];
     for (const input of request.inputs) {
@@ -135,12 +219,10 @@ export async function loadWidgetDataInputs(request) {
             }
             continue;
         }
+        const loadRequest = dataSourceLoadRequest(input.descriptor, request.context);
         let authorization;
         try {
-            authorization = await request.authorize({
-                descriptor: input.descriptor,
-                context: request.context,
-            });
+            authorization = await request.authorize(loadRequest);
         }
         catch (error) {
             authorization = { status: "refused", reason: errorText(error) };
@@ -155,8 +237,9 @@ export async function loadWidgetDataInputs(request) {
             }
             continue;
         }
-        if (!request.loader) {
-            const failure = runtimeFailure(input, "load-failed", "the host supplied no DataSourceLoader");
+        const selectionIssue = dataSourceSelectionInputIssue(loadRequest);
+        if (selectionIssue || !request.loader) {
+            const failure = runtimeFailure(input, selectionIssue ? "unavailable" : "load-failed", selectionIssue ?? "the host supplied no DataSourceLoader");
             if (!input.required && failure.failureMode === "degraded-widget") {
                 degradedInputs.push(failure);
             }
@@ -167,10 +250,7 @@ export async function loadWidgetDataInputs(request) {
         }
         let loaded;
         try {
-            loaded = await request.loader({
-                descriptor: input.descriptor,
-                context: request.context,
-            });
+            loaded = await request.loader(loadRequest);
         }
         catch (error) {
             const failure = runtimeFailure(input, "load-failed", errorText(error));
@@ -203,8 +283,11 @@ export async function loadWidgetDataInputs(request) {
             }
             continue;
         }
-        const schema = input.descriptor.source.schema;
-        if (schema !== undefined) {
+        const source = input.descriptor.source;
+        const selection = readDataSourceSelection(input.descriptor, loaded);
+        let invalid = isCatalogResponseSource(source) && !selection ? "the loader omitted or returned invalid selection evidence" : undefined;
+        const schema = source.schema;
+        if (!invalid && schema !== undefined && !selection?.none) {
             let validation;
             if (!request.validatePayload) {
                 validation = {
@@ -215,8 +298,7 @@ export async function loadWidgetDataInputs(request) {
             else {
                 try {
                     validation = await request.validatePayload({
-                        descriptor: input.descriptor,
-                        context: request.context,
+                        ...loadRequest,
                         schema,
                         value: loaded.value,
                     });
@@ -225,20 +307,24 @@ export async function loadWidgetDataInputs(request) {
                     validation = { valid: false, reason: errorText(error) };
                 }
             }
-            if (!validation.valid) {
-                const failure = runtimeFailure(input, "payload-invalid", validation.reason ?? "payload validation failed");
-                if (!input.required && failure.failureMode === "degraded-widget") {
-                    degradedInputs.push(failure);
-                }
-                else {
-                    failures.push(failure);
-                }
-                continue;
+            if (!validation.valid)
+                invalid = validation.reason ?? "payload validation failed";
+        }
+        if (invalid) {
+            const failure = runtimeFailure(input, "payload-invalid", invalid);
+            if (!input.required && failure.failureMode === "degraded-widget") {
+                degradedInputs.push(failure);
             }
+            else {
+                failures.push(failure);
+            }
+            continue;
         }
         // The name came from a Registry declaration. `own` prevents a malformed
         // declaration named `__proto__` from mutating the result object.
         if (!own(data, input.name)) {
+            if (selection)
+                selections.set(input.name, selection);
             Object.defineProperty(data, input.name, {
                 value: loaded.value,
                 enumerable: true,
@@ -260,6 +346,7 @@ export async function loadWidgetDataInputs(request) {
         status: "ready",
         data: Object.freeze(data),
         degradedInputs,
+        ...(selections.size === 0 ? {} : { selections: Object.freeze(Object.fromEntries(selections)) }),
         diagnostics,
     };
 }

@@ -137,7 +137,7 @@ export class FelContext {
     }
     /**
      * Replaces the form-scope snapshot:
-     * `{ values, mips, repeatCounts, variables, instances, locale, dateFormats, meta }`.
+     * `{ values, mips, repeatCounts, variables, instances, locale, dateFormats, meta, subjectKeys }`.
      * @param {string} snapshot_json
      */
     load(snapshot_json) {
@@ -369,6 +369,51 @@ export function checkFelExtensionName(name) {
         }
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
+ * Return projection diagnostics for every eligible published upstream Definition version.
+ *
+ * Pass the consuming Definition's subject as JSON, or `null` for catalog route
+ * parameters. Pass all published Definitions for the upstream URL as a JSON array.
+ *
+ * # Errors
+ *
+ * Returns a JavaScript error on invalid input JSON.
+ * @param {string} instance_json
+ * @param {string} consumer_subject_json
+ * @param {string} upstream_definitions_json
+ * @returns {string}
+ */
+export function checkInstanceProjection(instance_json, consumer_subject_json, upstream_definitions_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(instance_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(consumer_subject_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(upstream_definitions_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len2 = WASM_VECTOR_LEN;
+        wasm.checkInstanceProjection(retptr, ptr0, len0, ptr1, len1, ptr2, len2);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        var ptr4 = r0;
+        var len4 = r1;
+        if (r3) {
+            ptr4 = 0; len4 = 0;
+            throw takeObject(r2);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred5_0, deferred5_1, 1);
     }
 }
 
@@ -699,6 +744,7 @@ export function evalFelWithTrace(expression, fields_json) {
  * Evaluate a Formspec definition against provided data (4-phase batch processor).
  * Returns JSON: { values, validations, nonRelevant, variables, required, readonly }
  *
+ * `context_json.subjectType` and `context_json.subjectKeys` supply the current Response's subject.
  * `extensions` resolves Definition calls to host extension functions (Core §3.12).
  * @param {string} definition_json
  * @param {string} data_json

@@ -7,7 +7,7 @@
  * only when the authored binding names it; mapping rules never live here.
  */
 import type { FormDefinition, MappingDocument } from '@formspec-org/types';
-import { type DataSourceActiveContext, type DataSourceAuthorizer, type DataSourceCatalogHandle, type DataSourceDescriptor, type DataSourceLoader, type DataSourcePayloadValidator } from './data-source-loader.js';
+import { type DataSourceActiveContext, type DataSourceAuthorizer, type DataSourceCatalogHandle, type DataSourceDescriptor, type DataSourceLoader, type DataSourcePayloadValidator, type DataSourceSelectionEvidence } from './data-source-loader.js';
 import { type SurfaceDiagnostic, type SurfaceDiagnosticSite } from './diagnostics.js';
 /** The authored, exact Data Source identity for one form's initial data. */
 export interface DefinitionFormInitialDataBinding {
@@ -52,11 +52,12 @@ export declare function dataSourceAvailableToDefinitionForm(descriptor: DataSour
  * unqualified source fallbacks.
  */
 export declare function planDefinitionFormInitialData(input: PlanDefinitionFormInitialDataInput): DefinitionFormInitialDataPlan;
-export type DefinitionFormInitialDataFailureReason = 'unresolved' | 'unavailable' | 'unauthorized' | 'load-failed' | 'stale-disallowed' | 'record-id-missing' | 'payload-invalid' | 'mapping-failed' | 'payload-not-object';
+export type DefinitionFormInitialDataFailureReason = 'unresolved' | 'unavailable' | 'unauthorized' | 'load-failed' | 'stale-disallowed' | 'payload-invalid' | 'mapping-failed' | 'payload-not-object';
 /** Data and record identity stay separate; no field is packed into another. */
 export type DefinitionFormInitialDataDelivery = {
     status: 'ready';
-    data: Readonly<Record<string, unknown>>;
+    data?: Readonly<Record<string, unknown>> | undefined;
+    selection?: DataSourceSelectionEvidence | undefined;
     freshness: 'fresh' | 'stale';
     recordId?: string | undefined;
     generation?: string | number | undefined;

@@ -1,5 +1,5 @@
 import { satisfies, valid, validRange } from 'semver';
-import { resolveDataSourceDescriptor, } from './data-source-loader.js';
+import { catalogResponseSelection, dataSourceLoadRequest, dataSourceSelectionInputIssue, isCatalogResponseSource, readDataSourceSelection, resolveDataSourceDescriptor, responseDefinitionVersionAdmitted, } from './data-source-loader.js';
 import { surfaceDiagnostic, } from './diagnostics.js';
 function isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -80,23 +80,35 @@ export function planDefinitionFormInitialData(input) {
             reason: 'The Data Source availability selector does not cover this form.',
         };
     }
+    const source = descriptor.source;
+    const selection = catalogResponseSelection(source);
+    if (isCatalogResponseSource(source) && !selection) {
+        return { status: 'unavailable', binding, reason: 'The source must declare an upstream Definition selection.' };
+    }
     if (binding.mappingRef === undefined) {
-        if (descriptor.source.kind === 'definition-response' &&
-            descriptor.source.definitionRef !== input.definitionRef) {
-            return {
-                status: 'unavailable',
-                binding,
-                reason: 'A direct Definition Response source must target the form Definition.',
-            };
-        }
-        if (descriptor.source.kind === 'definition-response' &&
-            descriptor.source.runtime.delivery !== 'draft' &&
-            descriptor.source.definitionVersion !== input.definition.version) {
-            return {
-                status: 'unavailable',
-                binding,
-                reason: 'A direct Definition Response source must select the form Definition version.',
-            };
+        if (source.kind === 'definition-response' && selection?.mapping === undefined) {
+            const targetUrl = selection?.definition.url ?? source.definitionRef;
+            if (targetUrl !== input.definitionRef) {
+                return {
+                    status: 'unavailable',
+                    binding,
+                    reason: 'A direct Definition Response source must target the form Definition.',
+                };
+            }
+            if (selection && !responseDefinitionVersionAdmitted(selection, input.definition.version)) {
+                return {
+                    status: 'unavailable',
+                    binding,
+                    reason: 'A direct Definition Response source must admit the form Definition version.',
+                };
+            }
+            if (selection?.cardinality === 'latest-per-subject') {
+                return {
+                    status: 'unavailable',
+                    binding,
+                    reason: 'Form initial data requires one object. A list selection needs a Mapping.',
+                };
+            }
         }
         return { status: 'ready', binding, descriptor };
     }
@@ -168,12 +180,10 @@ export async function loadDefinitionFormInitialData(input) {
     if (!input.authorize) {
         return unavailable('unauthorized', 'the host supplied no authorization decision', input.site);
     }
+    const request = dataSourceLoadRequest(descriptor, input.context);
     let authorization;
     try {
-        authorization = await input.authorize({
-            descriptor,
-            context: input.context,
-        });
+        authorization = await input.authorize(request);
     }
     catch (error) {
         return unavailable('unauthorized', errorText(error), input.site);
@@ -181,12 +191,15 @@ export async function loadDefinitionFormInitialData(input) {
     if (authorization.status !== 'authorized') {
         return unavailable('unauthorized', authorization.reason ?? 'the host refused access', input.site);
     }
+    const selectionIssue = dataSourceSelectionInputIssue(request);
+    if (selectionIssue)
+        return unavailable('unavailable', selectionIssue, input.site);
     if (!input.loader) {
         return unavailable('load-failed', 'the host supplied no DataSourceLoader', input.site);
     }
     let loaded;
     try {
-        loaded = await input.loader({ descriptor, context: input.context });
+        loaded = await input.loader(request);
     }
     catch (error) {
         return unavailable('load-failed', errorText(error), input.site);
@@ -198,11 +211,21 @@ export async function loadDefinitionFormInitialData(input) {
         descriptor.source.runtime.failureMode !== 'stale-ok') {
         return unavailable('stale-disallowed', 'the loader returned stale data and this source does not admit it', input.site);
     }
-    if (descriptor.source.kind === 'definition-response' &&
-        descriptor.source.runtime.delivery !== 'draft' &&
-        (typeof loaded.recordId !== 'string' || loaded.recordId.length === 0)) {
-        return unavailable('record-id-missing', 'the selected Definition Response omitted its owner-produced recordId', input.site);
+    const selection = readDataSourceSelection(descriptor, loaded);
+    if (isCatalogResponseSource(descriptor.source) && !selection) {
+        return unavailable('payload-invalid', 'the loader omitted or returned invalid selection evidence', input.site);
     }
+    const metadata = {
+        status: 'ready',
+        freshness: loaded.freshness,
+        ...(selection === undefined ? {} : { selection }),
+        ...(loaded.recordId === undefined ? {} : { recordId: loaded.recordId }),
+        ...(input.context.sessionGeneration === undefined ? {} : { generation: input.context.sessionGeneration }),
+        ...(loaded.revision === undefined ? {} : { revision: loaded.revision }),
+        diagnostics: [],
+    };
+    if (selection?.none)
+        return metadata;
     const schema = descriptor.source.schema;
     if (schema !== undefined) {
         if (!input.validatePayload) {
@@ -211,8 +234,7 @@ export async function loadDefinitionFormInitialData(input) {
         let validation;
         try {
             validation = await input.validatePayload({
-                descriptor,
-                context: input.context,
+                ...request,
                 schema,
                 value: loaded.value,
             });
@@ -248,15 +270,5 @@ export async function loadDefinitionFormInitialData(input) {
     if (!isRecord(data)) {
         return unavailable('payload-not-object', 'the delivered value is not Definition-shaped object data', input.site);
     }
-    return {
-        status: 'ready',
-        data: Object.freeze({ ...data }),
-        freshness: loaded.freshness,
-        ...(loaded.recordId === undefined ? {} : { recordId: loaded.recordId }),
-        ...(input.context.sessionGeneration === undefined
-            ? {}
-            : { generation: input.context.sessionGeneration }),
-        ...(loaded.revision === undefined ? {} : { revision: loaded.revision }),
-        diagnostics: [],
-    };
+    return { ...metadata, data: Object.freeze({ ...data }) };
 }

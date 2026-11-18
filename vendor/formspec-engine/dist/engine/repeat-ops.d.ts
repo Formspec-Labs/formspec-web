@@ -1,12 +1,12 @@
-/** @filedesc Repeat-row subtree clearing and snapshot/restore of nested group field values. */
+/** @filedesc Repeat-row subtree clearing and capture of field state and nested repeats. */
 import type { FormItem } from '@formspec-org/types';
 import type { ValidationResult } from '@formspec-org/types';
 import type { OptionEntry } from '@formspec-org/types';
 import type { EngineSignal } from '../reactivity/types.js';
-import type { WriteSource, RemoteOptionsState } from '../interfaces.js';
-/** Remove indexed paths under a repeat root from signal stores and `_data` (reactive structure only). */
+import type { FormFieldValue, RemoteOptionsState, WriteSource } from '../interfaces.js';
+/** Remove the selected repeat paths from signal stores and primary data. */
 export declare function clearRepeatIndexedSubtree(options: {
-    rootRepeatPath: string;
+    includesPath: (path: string) => boolean;
     signals: Record<string, EngineSignal<any>>;
     relevantSignals: Record<string, EngineSignal<boolean>>;
     requiredSignals: Record<string, EngineSignal<boolean>>;
@@ -19,7 +19,21 @@ export declare function clearRepeatIndexedSubtree(options: {
     repeats: Record<string, EngineSignal<number>>;
     data: Record<string, any>;
 }): void;
-/** Snapshot nested field values under a repeat prefix (used when removing a repeat row). */
-export declare function snapshotRepeatGroupTree(items: FormItem[], prefix: string, readFieldValue: (path: string) => unknown, getRepeatCount: (path: string) => number): Record<string, unknown>;
-/** Restore nested field values and, when requested, repeat structure after rows were reindexed. */
-export declare function applyRepeatGroupTreeSnapshot(items: FormItem[], prefix: string, snapshot: Record<string, unknown> | undefined, writeField: (path: string, value: unknown) => void, prepareRepeat?: (path: string, item: FormItem, count: number) => void): void;
+interface RepeatFieldState {
+    value: FormFieldValue;
+    writeSource: WriteSource | null;
+    preserveSourceSeed: boolean;
+}
+export interface RepeatRowSnapshot {
+    fields: Array<RepeatFieldState & {
+        path: string;
+    }>;
+    repeats: Array<{
+        path: string;
+        item: FormItem;
+        count: number;
+    }>;
+}
+/** Capture paths relative to the row so the same state can be restored at its new index. */
+export declare function snapshotRepeatRow(items: FormItem[], rowPath: string, readField: (path: string) => RepeatFieldState, getRepeatCount: (path: string) => number): RepeatRowSnapshot;
+export {};

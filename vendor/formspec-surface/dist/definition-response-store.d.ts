@@ -5,7 +5,7 @@ export interface DefinitionResponseSourceBinding {
     catalogRef: string;
     sourceRef: string;
 }
-export type DefinitionResponseRecordRefusalReason = "source-unavailable" | "invocation-id-missing" | "invocation-payload-conflict" | "response-definition-mismatch" | "response-version-mismatch" | "response-status-mismatch" | "response-id-missing" | "response-authored-invalid" | "response-data-not-finite-json";
+export type DefinitionResponseRecordRefusalReason = "source-unavailable" | "selection-unsupported" | "invocation-id-missing" | "invocation-payload-conflict" | "response-definition-mismatch" | "response-version-mismatch" | "response-status-mismatch" | "response-id-missing" | "response-authored-invalid" | "response-data-not-finite-json";
 export type DefinitionResponseRecordResult = {
     status: "recorded";
     /** Whether this delivery is now the source's selected latest Response. */
@@ -34,8 +34,12 @@ export interface RecordDefinitionResponseInput {
  */
 export interface PreviewDefinitionResponseStore {
     record(input: RecordDefinitionResponseInput): DefinitionResponseRecordResult;
-    overlay(binding: DefinitionResponseSourceBinding, baseline: DataSourceLoadResult): DataSourceLoadResult;
+    overlay(binding: DefinitionResponseSourceBinding, baseline: DataSourceLoadResult): Promise<DataSourceLoadResult>;
     wrapLoader(baselineLoader: DataSourceLoader): DataSourceLoader;
+}
+export interface PreviewDefinitionResponseCanonicalization {
+    canonicalJsonBytes(value: unknown): Uint8Array<ArrayBuffer>;
+    canonicalResponseHandoffBytes(response: unknown): Uint8Array<ArrayBuffer>;
 }
 /**
  * Create an isolated in-memory store for preview and test use.
@@ -43,4 +47,4 @@ export interface PreviewDefinitionResponseStore {
  * Production hosts must use durable, authorized persistence instead. This
  * helper intentionally loses all data when its process ends.
  */
-export declare function createPreviewDefinitionResponseStore(catalogs: readonly DataSourceCatalogHandle[]): PreviewDefinitionResponseStore;
+export declare function createPreviewDefinitionResponseStore(catalogs: readonly DataSourceCatalogHandle[], canonical?: PreviewDefinitionResponseCanonicalization): PreviewDefinitionResponseStore;

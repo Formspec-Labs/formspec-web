@@ -13,6 +13,7 @@ interface DefinitionResolution {
     candidates: ResolvedArtifactHandle[];
 }
 export declare const DATA_SOURCE_CONTRACT_CODES: {
+    readonly definitionSelectionUnresolved: "DATA-SOURCE-DEFINITION-SELECTION-UNRESOLVED";
     readonly definitionDataSchemaMismatch: "DATA-SOURCE-DEFINITION-DATA-SCHEMA";
     readonly definitionDataSchemaIndeterminate: "DATA-SOURCE-DEFINITION-DATA-SCHEMA-INDETERMINATE";
 };

@@ -11,39 +11,50 @@
  * the supplied Data Source catalog handles. It never derives a target from a
  * Definition URL, a filename, or an unqualified source id.
  */
+import { validRange } from "semver";
 import { snapshotFiniteJson, canonicalFiniteJson } from "./finite-json.js";
-function isDraftDefinitionResponseSource(source) {
-    return source.runtime.delivery === "draft";
-}
+import { catalogResponseSelection, responseDefinitionVersionAdmitted } from "./data-source-loader.js";
 const utf8Encoder = new TextEncoder();
 const RFC_3339_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?([Zz]|([+-])(\d{2}):(\d{2}))$/u;
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function isDefinitionResponseSource(source) {
-    if (source.kind !== "definition-response" ||
-        typeof source.definitionRef !== "string" ||
-        source.definitionRef.length === 0) {
-        return false;
-    }
+function sourceTarget(source) {
+    if (source.kind !== "definition-response")
+        return undefined;
     if (source.runtime.delivery === "draft") {
-        return (source.runtime.cache.mode === "draft" &&
-            !("responseSelection" in source));
+        if (source.runtime.cache.mode !== "draft" || Object.hasOwn(source, "responseSelection")
+            || typeof source.definitionRef !== "string" || !source.definitionRef)
+            return undefined;
+        return { kind: "draft", definitionUrl: source.definitionRef };
     }
-    if (source.runtime.delivery !== "snapshot" &&
-        source.runtime.delivery !== "live") {
-        return false;
-    }
-    const candidate = source;
-    const selection = candidate.responseSelection;
-    return (typeof candidate.definitionVersion === "string" &&
-        candidate.definitionVersion.length > 0 &&
-        isRecord(selection) &&
-        selection.status === "completed" &&
-        selection.cardinality === "latest" &&
-        selection.orderBy === "authored-desc" &&
-        selection.tieBreak === "response-id-asc" &&
-        selection.partitionBy === "definition");
+    const selection = catalogResponseSelection(source);
+    if (!selection
+        || (selection.definition.compatibleVersions !== undefined
+            && validRange(selection.definition.compatibleVersions) === null))
+        return undefined;
+    return { kind: "selection", selection };
+}
+/** The preview overlay owns the existing latest-completed path until fs-m1sf. */
+function supportsPreviewSelection(selection) {
+    return selection.status === "completed"
+        && selection.cardinality === "latest"
+        && selection.subject.length === 0
+        && selection.pin === "none"
+        && selection.disposition === undefined
+        && selection.mapping === undefined;
+}
+async function sha256(bytes) {
+    const hash = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+    return "sha256:" + Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+function instanceValueBytes(canonical, value) {
+    const domain = utf8Encoder.encode("formspec.instance.value.v1\0");
+    const json = canonical.canonicalJsonBytes(value);
+    const bytes = new Uint8Array(domain.length + json.length);
+    bytes.set(domain);
+    bytes.set(json, domain.length);
+    return bytes;
 }
 function daysInMonth(year, month) {
     if (month === 2) {
@@ -211,10 +222,14 @@ function admittedBuckets(catalogs) {
             if (sources.length !== 1)
                 continue;
             const source = sources[0];
-            if (!source || !isDefinitionResponseSource(source))
+            if (!source)
+                continue;
+            const target = sourceTarget(source);
+            if (!target)
                 continue;
             buckets.set(sourceRef, {
                 source,
+                target,
                 invocationFingerprints: new Map(),
                 responses: [],
             });
@@ -230,7 +245,7 @@ function admittedBuckets(catalogs) {
  * Production hosts must use durable, authorized persistence instead. This
  * helper intentionally loses all data when its process ends.
  */
-export function createPreviewDefinitionResponseStore(catalogs) {
+export function createPreviewDefinitionResponseStore(catalogs, canonical) {
     const buckets = admittedBuckets(catalogs);
     const bucketFor = (binding) => buckets.get(binding.catalogRef)?.get(binding.sourceRef);
     const record = (input) => {
@@ -241,17 +256,19 @@ export function createPreviewDefinitionResponseStore(catalogs) {
             return { status: "refused", reason: "invocation-id-missing" };
         }
         const { response } = input;
-        if (response.definitionUrl !== bucket.source.definitionRef) {
+        const { target } = bucket;
+        const selection = target.kind === "selection" ? target.selection : undefined;
+        const definitionUrl = target.kind === "draft" ? target.definitionUrl : target.selection.definition.url;
+        if (response.definitionUrl !== definitionUrl) {
             return { status: "refused", reason: "response-definition-mismatch" };
         }
-        const draft = isDraftDefinitionResponseSource(bucket.source);
-        if (!draft &&
-            response.definitionVersion !== bucket.source.definitionVersion) {
+        if (selection && (!canonical || !supportsPreviewSelection(selection))) {
+            return { status: "refused", reason: "selection-unsupported" };
+        }
+        if (selection && !responseDefinitionVersionAdmitted(selection, response.definitionVersion)) {
             return { status: "refused", reason: "response-version-mismatch" };
         }
-        const expectedStatus = draft
-            ? "in-progress"
-            : bucket.source.responseSelection.status;
+        const expectedStatus = target.kind === "draft" ? "in-progress" : "completed";
         if (response.status !== expectedStatus) {
             return { status: "refused", reason: "response-status-mismatch" };
         }
@@ -264,9 +281,12 @@ export function createPreviewDefinitionResponseStore(catalogs) {
         }
         let dataSnapshot;
         let fingerprint;
+        let handoffBytes;
         try {
             dataSnapshot = cloneResponseData(response.data, true);
             fingerprint = responseFingerprint(response);
+            if (selection && canonical)
+                handoffBytes = canonical.canonicalResponseHandoffBytes(response);
         }
         catch {
             return {
@@ -285,21 +305,23 @@ export function createPreviewDefinitionResponseStore(catalogs) {
             authoredInstant,
             responseId: response.id,
             responseIdBytes: utf8Encoder.encode(response.id),
+            definitionVersion: response.definitionVersion,
+            handoffBytes,
         };
         bucket.responses.push(stored);
         bucket.responses.sort(compareStoredResponses);
         bucket.invocationFingerprints.set(input.invocationId, fingerprint);
-        const selection = selectedResponse(bucket);
+        const outcome = selectedResponse(bucket);
         return {
             status: "recorded",
-            selected: selection.status === "selected" && selection.response === stored,
+            selected: outcome.status === "selected" && outcome.response === stored,
         };
     };
-    const overlay = (binding, baseline) => {
+    const overlay = async (binding, baseline) => {
         const bucket = bucketFor(binding);
         if (!bucket)
             return baseline;
-        const draft = bucket.source.runtime.delivery === "draft";
+        const draft = bucket.target.kind === "draft";
         if (!draft &&
             (baseline.status !== "loaded" || baseline.freshness !== "fresh")) {
             return baseline;
@@ -315,35 +337,52 @@ export function createPreviewDefinitionResponseStore(catalogs) {
         }
         if (selection.status === "ambiguous") {
             return {
+                ...binding,
                 status: "unavailable",
                 reason: "Definition Response selection is ambiguous because candidates share the same authored instant and Response id.",
             };
         }
-        let value;
+        const response = selection.response;
         try {
-            // Never expose the immutable stored snapshot itself. Each consumer gets
-            // a detached value, so local mutation cannot affect a later load.
-            value = cloneResponseData(selection.response.dataSnapshot, false);
+            // A consumer gets a detached JSON value, so writes cannot affect later loads.
+            let value = cloneResponseData(response.dataSnapshot, false);
+            if (draft) {
+                return { status: "loaded", freshness: "fresh", recordId: response.responseId, value };
+            }
+            const properties = bucket.source.schema?.properties;
+            if (isRecord(properties)) {
+                value = Object.fromEntries(Object.entries(value).filter(([key]) => Object.hasOwn(properties, key)));
+            }
+            if (!canonical || !response.handoffBytes)
+                throw new TypeError("Missing completed Response handoff bytes");
+            const [responseHash, valueDigest] = await Promise.all([
+                sha256(response.handoffBytes),
+                sha256(instanceValueBytes(canonical, value)),
+            ]);
+            return {
+                ...binding,
+                status: "loaded",
+                freshness: "fresh",
+                records: [{ responseId: response.responseId, definitionVersion: response.definitionVersion, responseHash }],
+                valueDigest,
+                none: false,
+                value,
+            };
         }
         catch {
             return {
+                ...binding,
                 status: "unavailable",
                 reason: "The stored Definition Response snapshot is unavailable.",
             };
         }
-        return {
-            status: "loaded",
-            freshness: "fresh",
-            recordId: selection.response.responseId,
-            value,
-        };
     };
     const wrapLoader = (baselineLoader) => async (request) => {
-        const baseline = await baselineLoader(request);
-        return overlay({
+        const binding = {
             catalogRef: request.descriptor.catalogRef,
             sourceRef: request.descriptor.sourceRef,
-        }, baseline);
+        };
+        return overlay(binding, await baselineLoader(request));
     };
     return Object.freeze({ record, overlay, wrapLoader });
 }

@@ -137,7 +137,7 @@ export class FelContext {
     }
     /**
      * Replaces the form-scope snapshot:
-     * `{ values, mips, repeatCounts, variables, instances, locale, dateFormats, meta }`.
+     * `{ values, mips, repeatCounts, variables, instances, locale, dateFormats, meta, subjectKeys }`.
      * @param {string} snapshot_json
      */
     load(snapshot_json) {
@@ -572,6 +572,7 @@ export function evalFelWithTrace(expression, fields_json) {
  * Evaluate a Formspec definition against provided data (4-phase batch processor).
  * Returns JSON: { values, validations, nonRelevant, variables, required, readonly }
  *
+ * `context_json.subjectType` and `context_json.subjectKeys` supply the current Response's subject.
  * `extensions` resolves Definition calls to host extension functions (Core §3.12).
  * @param {string} definition_json
  * @param {string} data_json

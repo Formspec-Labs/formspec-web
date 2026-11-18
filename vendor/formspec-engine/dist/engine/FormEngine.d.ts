@@ -1,6 +1,6 @@
 import type { FormDefinition, FormItem, FormResponse, OptionEntry, ValidationReport, ValidationResult, ValidationProfile } from '@formspec-org/types';
 import { type FelExtensionFunctionRegistration } from '../extension-functions.js';
-import type { SetValueOptions, WriteSource, AuthoredSignatureInput, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
+import type { SetValueOptions, WriteSource, EngineReplayApplyResult, EngineReplayEvent, EngineReplayResult, FormDraftSnapshot, FormEngineDiagnosticsSnapshot, FormEngineOptions, FormEngineRuntimeContext, FormFieldValue, IFormEngine, InstanceSourceLoadOutcome, JsonRecord, JsonValue, PinnedResponseReference, RelevanceExplanation, RegistryEntry, RemoteOptionsState } from '../interfaces.js';
 import { type FelTraceStep } from '../fel/fel-api-runtime.js';
 import type { EngineSignal, ReadonlyEngineSignal } from '../reactivity/types.js';
 import { type LocaleDocument } from '../locale.js';
@@ -46,6 +46,7 @@ export declare class FormEngine implements IFormEngine {
     private readonly _registryEntries;
     /** Host FEL extension functions (Core §3.12), passed to every Rust evaluation. */
     private readonly _extensionFunctions;
+    private readonly _responseSubject;
     private _registryDocuments;
     private readonly _remoteOptionsTasks;
     private readonly _instanceSourceResolver?;
@@ -106,14 +107,18 @@ export declare class FormEngine implements IFormEngine {
      * calculated fields and undeclared keys are ignored.
      */
     loadResponseData(data: JsonRecord): void;
+    getDraftSnapshot(): FormDraftSnapshot;
+    loadDraftSnapshot(snapshot: FormDraftSnapshot): void;
+    private assertDraftSnapshot;
     private loadItemsData;
     private appendRepeatRow;
-    /** Re-keys repeat `path` to the rows `select` keeps, preserving nested shape, values, and write sources. */
+    /** Reindex the surviving rows with their nested shape, values and prefill protection. */
     private rebuildRepeatRows;
     compileExpression(expression: string, currentItemName?: string): () => FormFieldValue;
     setValue(name: string, value: FormFieldValue, options?: SetValueOptions): void;
     /** Coerces and stores a field value without evaluating; false for calculated or undeclared fields. */
     private writeFieldData;
+    private storeFieldValue;
     getValidationReport(): ValidationReport;
     getValidationReport(options: {
         profile?: EnabledValidationProfile;
@@ -133,19 +138,7 @@ export declare class FormEngine implements IFormEngine {
     getProgress(): import('../interfaces.js').FormProgress;
     getResponse(meta?: Parameters<FormEngine['getResponseSnapshot']>[0]): FormResponse;
     /** One evaluation and clock for response data and its requested validation report. */
-    getResponseSnapshot(meta?: {
-        id?: string;
-        author?: {
-            id: string;
-            name?: string;
-        };
-        subject?: {
-            id: string;
-            type?: string;
-        };
-        authoredSignatures?: AuthoredSignatureInput[];
-        profile?: ValidationProfile;
-    }, validationProfile?: ValidationProfile): {
+    getResponseSnapshot(meta?: Parameters<IFormEngine['getResponse']>[0], validationProfile?: ValidationProfile): {
         response: FormResponse;
         validationReport: ValidationReport | null;
     };
